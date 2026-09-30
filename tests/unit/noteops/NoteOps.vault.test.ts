@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice, TFolder } from 'obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { NoteOps } from '../../../src/services/data/NoteOps';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { t } from '../../../src/i18n';
 import { refusalClause, refusalNotice } from '../../../src/services/core/RefusalClause';
@@ -21,7 +20,7 @@ afterEach(() => { live?.dispose(); live = undefined; });
 
 async function open(lines: string[], others: Record<string, string[]> = {}) {
     const { contents, session } = await openLiveVault({ [FILE]: lines, ...others }, s => { live = s; });
-    const ops = new NoteOps(session.app, new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }), {
+    const ops = new NoteOps(session.app, session.ops, () => ({ ...DEFAULT_SETTINGS }), {
         getTask: (id) => session.index.getTask(id),
         timers: () => null,
     });

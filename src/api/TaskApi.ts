@@ -2,7 +2,7 @@ import { TFile } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import type { Task, DisplayTask } from '../types';
 import type { TaskReadService } from '../services/data/TaskReadService';
-import type { TaskWriteService } from '../services/data/TaskWriteService';
+import type { Operations } from '../services/operations/Operations';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { splitTasks } from '../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
@@ -361,11 +361,11 @@ export interface ApiHost {
 
 export class TaskApi {
     private readService: TaskReadService;
-    private writeService: TaskWriteService;
+    private operations: Operations;
 
     constructor(private plugin: PluginContext) {
         this.readService = plugin.getTaskReadService();
-        this.writeService = plugin.getTaskWriteService();
+        this.operations = plugin.getOperations();
     }
 
     private readonly lookup: TaskLookup = (name) => this.readService.getTask(name);
@@ -401,12 +401,12 @@ export class TaskApi {
      * (`freshByAnchor`: the note is read again first when the disk holds
      * another content than the index read), and the write goes on with the
      * row the anchor finds there. A name is checked by the write itself,
-     * which turns it away when the note changed (`TaskIndex.copyToPlan`).
+     * which turns it away when the note changed (`Operations.copyToPlan`).
      */
     private async rowToWrite(id: string): Promise<Task> {
         const read = readApiId(id);
         if (read.kind !== 'anchor') return this.rowOf(id);
-        const found = await this.writeService.freshByAnchor(read.file, read.anchor);
+        const found = await this.operations.freshByAnchor(read.file, read.anchor);
         switch (found.kind) {
             case 'row': return found.task;
             case 'none': throw new TaskApiError(anchorNotFound(id, read.file, read.anchor));
@@ -536,7 +536,7 @@ export class TaskApi {
             due: due?.date ? (due.time ? `${due.date}T${due.time}` : due.date) : undefined,
         });
 
-        const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
+        const insertedLine = await this.operations.createTask(params.file, line, params.heading);
         if (insertedLine === null) throw new TaskApiError(`Task could not be written to: ${params.file}`);
 
         const created = this.readService.getTaskByFileLine(params.file, insertedLine);
@@ -601,7 +601,7 @@ export class TaskApi {
         // A write that could not be placed leaves the index reverted to the
         // former values, so reading the task back would describe a change that
         // never reached the file and report it as a success.
-        const written = await this.writeService.updateTask(task.id, updates);
+        const written = await this.operations.updateTask(task.id, updates);
         if (!written) throw new TaskApiError(`Task could not be written: ${params.id}`);
 
         // The row's name now: our write moved its file on, and the name is
@@ -622,7 +622,7 @@ export class TaskApi {
         const task = await this.rowToWrite(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
-        const removed = await this.writeService.deleteTask(task.id);
+        const removed = await this.operations.deleteTask(task.id);
         if (!removed) throw new TaskApiError(`Task could not be deleted: ${params.id}`);
         return { deleted: params.id };
     }
@@ -656,7 +656,7 @@ export class TaskApi {
             if (!Number.isInteger(params.count)) throw new TaskApiError('count must be a whole number');
             if (params.count < 1) throw new TaskApiError('count must be at least 1');
         }
-        const written = await this.writeService.duplicateTask(task.id, {
+        const written = await this.operations.duplicateTask(task.id, {
             dayOffset: params.dayOffset,
             count: params.count,
         });
@@ -718,7 +718,7 @@ export class TaskApi {
         if (holdsLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
         const task = await this.rowToWrite(params.parentId);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        const written = await this.writeService.insertLine(task.id, formatTaskLine({ statusChar: ' ', content: params.content }), 'firstChild');
+        const written = await this.operations.insertLine(task.id, formatTaskLine({ statusChar: ' ', content: params.content }), 'firstChild');
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }

@@ -3,7 +3,7 @@ import type { FilterState } from '../filter/FilterTypes';
 import type { FilterContext } from '../filter/FilterContext';
 import { hasConditions } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
-import type { TaskIndex } from '../core/TaskIndex';
+import type { IndexReads } from '../core/TaskIndex';
 import type { ContentKey } from '../core/ContentKey';
 import type { TFile } from 'obsidian';
 import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
@@ -27,7 +27,7 @@ export class TaskReadService {
     private weekStartDay: 0 | 1 = 1;
 
     constructor(
-        private taskIndex: TaskIndex,
+        private taskIndex: IndexReads,
         private startHour: number
     ) {}
 

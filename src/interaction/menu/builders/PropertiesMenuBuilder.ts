@@ -1,6 +1,6 @@
 import type { App, Menu } from 'obsidian';
 import type { Task, DisplayTask, PropertyType } from '../../../types';
-import type { TaskWriteService } from '../../../services/data/TaskWriteService';
+import type { Operations } from '../../../services/operations/Operations';
 import type { PluginContext } from '../../../PluginContext';
 import type { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import type { PropertyFormatter } from '../PropertyFormatter';
@@ -25,7 +25,7 @@ type OpenHub = (field: TaskHubFocusField) => void;
 export class PropertiesMenuBuilder {
     constructor(
         private app: App,
-        private writeService: TaskWriteService,
+        private operations: Operations,
         private plugin: PluginContext,
         private propertyCalculator: PropertyCalculator,
         private propertyFormatter: PropertyFormatter
@@ -93,7 +93,7 @@ export class PropertiesMenuBuilder {
                         .setChecked(task.statusChar === s.char)
                         .onClick(async () => {
                             menu.close();
-                            await this.writeService.updateTask(task.id, {
+                            await this.operations.updateTask(task.id, {
                                 statusChar: s.char
                             });
                         });

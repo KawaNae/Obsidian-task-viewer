@@ -6,7 +6,7 @@ import type TaskViewerPlugin from '../../../src/main';
 import type { App } from 'obsidian';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
-import { heldByAnchor, rowOf } from '../helpers/anchoredRow';
+import { opsOver, rowOf } from '../helpers/anchoredRow';
 
 /**
  * デイリーノート起点のタイマーも、起動と同時に走行中の行を持つ。
@@ -68,9 +68,9 @@ function makeHarness(): Harness {
 
     const plugin = {
         settings: { taskHeading: 'Tasks', taskHeadingLevel: 2, sectionSide: 'head' },
-        getTaskIndex: () => taskIndex,
-        getTaskWriteService: () => ({
-            freshByAnchor: heldByAnchor(taskIndex),
+        getIndex: () => taskIndex,
+        getOperations: () => ({
+            ...opsOver(taskIndex),
             insertLine: async (afterTaskId: string, line: string) => {
                 siblings.push({ afterTaskId, line });
                 registerWrittenLine(line);

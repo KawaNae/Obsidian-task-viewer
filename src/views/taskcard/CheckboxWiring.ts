@@ -1,5 +1,5 @@
 import type { TaskViewerSettings } from '../../types';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import type { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
@@ -15,7 +15,7 @@ import { touchCard } from './CardHold';
  */
 export class CheckboxWiring {
     constructor(
-        private writeService: TaskWriteService,
+        private operations: Operations,
         private menuPresenter: MenuPresenter
     ) {}
 
@@ -94,7 +94,7 @@ export class CheckboxWiring {
                 this.putBack(input, !isChecked, previousChar);
                 return;
             }
-            void this.writeService.updateTask(name, { statusChar: newStatusChar }).then(written => {
+            void this.operations.updateTask(name, { statusChar: newStatusChar }).then(written => {
                 if (!written) this.putBack(input, !isChecked, previousChar);
             });
         });
@@ -108,7 +108,7 @@ export class CheckboxWiring {
             this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
                 const name = nameOf();
                 if (name === undefined) return;
-                await this.writeService.updateTask(name, { statusChar });
+                await this.operations.updateTask(name, { statusChar });
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });

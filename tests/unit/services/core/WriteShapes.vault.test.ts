@@ -95,7 +95,7 @@ function writeOutside(contents: Map<string, string>, at: number, line = OUTSIDE,
 
 /** Run `edit` once, just before the next call to the repository's `method`. */
 function editBefore(session: VaultSession, method: keyof TaskRepository, edit: () => void): void {
-    const repository = session.index.getRepository() as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    const repository = session.repository as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
     const original = repository[method].bind(repository);
     repository[method] = async (...args: unknown[]) => {
         repository[method] = original;
@@ -106,7 +106,7 @@ function editBefore(session: VaultSession, method: keyof TaskRepository, edit: (
 
 /** The flow queue has drained and the scans it asked for have run. */
 async function check(session: VaultSession, id: string): Promise<void> {
-    expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+    expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
 }
 
 const NOTE = (...target: string[]) => ['# note', '- [ ] 上 @2026-09-21', ...target, '- [ ] 下 @2026-09-21', ''];
@@ -130,7 +130,7 @@ describe('1. an update', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
         const before = rows(session);
 
-        expect(await session.index.updateTask(idOf(session, '対象'), { color: 'ff0000' })).toBe(true);
+        expect(await session.ops.updateTask(idOf(session, '対象'), { color: 'ff0000' })).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- tv-color:: ff0000').join('\n'));
@@ -144,7 +144,7 @@ describe('1. an update', () => {
         const target = idOf(session, '対象');
 
         session.index.setDraggingFile(FILE);
-        expect(await session.index.updateTask(target, { startTime: '12:00', endTime: '13:00' })).toBe(true);
+        expect(await session.ops.updateTask(target, { startTime: '12:00', endTime: '13:00' })).toBe(true);
         session.index.setDraggingFile(null);
         await vi.waitFor(() => expect(session.index.getTask(target)!.originalText).toBe('- [ ] 対象 @2026-09-21T12:00>13:00'));
         await session.settle(FILE);
@@ -159,7 +159,7 @@ describe('1. an update', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -171,7 +171,7 @@ describe('1. an update', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.updateTask(idOf(session, '対象'), { color: 'ff0000' })).toBe(false);
+        expect(await session.ops.updateTask(idOf(session, '対象'), { color: 'ff0000' })).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -212,7 +212,7 @@ describe('2. stripFlow (a completion consuming its command)', () => {
         const held = { target: idOf(session, '対象') };
 
         editBefore(session, 'write', () => writeOutside(contents, 1));
-        expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
         const expected = NOTE('- [ ] 対象 @2026-09-21 ==> every mon');
@@ -229,7 +229,7 @@ describe('3. remove (deleteTask)', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
-        expect(await session.index.deleteTask(idOf(session, '対象'))).toBe(true);
+        expect(await session.ops.deleteTask(idOf(session, '対象'))).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE().join('\n'));
@@ -242,7 +242,7 @@ describe('3. remove (deleteTask)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.deleteTask(idOf(session, '対象'))).toBe(false);
+        expect(await session.ops.deleteTask(idOf(session, '対象'))).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -258,7 +258,7 @@ describe('4. a deletion fire (the instance and the removal, one write)', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
-        expect(await session.index.deleteTask(held.target, { fireFlow: true })).toBe(true);
+        expect(await session.ops.deleteTask(held.target, { fireFlow: true })).toBe(true);
         await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
@@ -277,7 +277,7 @@ describe('4. a deletion fire (the instance and the removal, one write)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.deleteTask(held.target, { fireFlow: true })).toBe(false);
+        expect(await session.ops.deleteTask(held.target, { fireFlow: true })).toBe(false);
         await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -293,7 +293,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
-        const at = await session.index.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
+        const at = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
         await session.settle(FILE);
 
         expect(at).toBe(true);
@@ -308,7 +308,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const { contents, session } = await open({ [FILE]: NOTE(...target) });
         const before = rows(session).map(row => row.id);
 
-        const at = await session.index.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
+        const at = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
         await session.settle(FILE);
 
         expect(at).toBe(true);
@@ -323,7 +323,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        const at = await session.index.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
+        const at = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
         await session.settle(FILE);
 
         expect(at).toBe(false);
@@ -337,7 +337,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        const at = await session.index.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
+        const at = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
         await session.settle(FILE);
 
         expect(at).toBe(false);
@@ -353,7 +353,7 @@ describe('7. insertLine, firstChild (a child from a card, the API or the CLI)', 
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
-        expect(await session.index.insertLine(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21', 'firstChild')).toBe(true);
+        expect(await session.ops.insertLine(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21', 'firstChild')).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 先頭 @2026-09-21', '\t- [ ] 子 @2026-09-21').join('\n'));
@@ -367,7 +367,7 @@ describe('7. insertLine, firstChild (a child from a card, the API or the CLI)', 
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.insertLine(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21', 'firstChild')).toBe(false);
+        expect(await session.ops.insertLine(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21', 'firstChild')).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -406,7 +406,7 @@ describe('8. a move within the note (the move op, in the completing write)', () 
 
         // A move within one file is in the completing write.
         editBefore(session, 'write', () => writeOutside(contents, 1));
-        expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
         const expected = [...MOVING];
@@ -425,7 +425,7 @@ describe('9. duplicate with a day offset (a copy on another day)', () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET) });
         const before = rows(session).map(row => row.id);
 
-        expect(await session.index.duplicateTask(before[1], { dayOffset: 1 })).toBe(true);
+        expect(await session.ops.duplicateTask(before[1], { dayOffset: 1 })).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-22T10:00>11:00', '\t- [ ] 子 @2026-09-21', ...TARGET).join('\n'));
@@ -442,7 +442,7 @@ describe('9. duplicate with a day offset (a copy on another day)', () => {
         const line = '- [ ] 対象 @2026-09-21T10:00>2026-09-21T11:00>2026-09-25 #tag ==> until @2026-09-30';
         const { contents, session } = await open({ [FILE]: NOTE(line) });
 
-        expect(await session.index.duplicateTask(rows(session)[1].id, { dayOffset: 1 })).toBe(true);
+        expect(await session.ops.duplicateTask(rows(session)[1].id, { dayOffset: 1 })).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE(
@@ -457,7 +457,7 @@ describe('9. duplicate with a day offset (a copy on another day)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.duplicateTask(before[1], { dayOffset: 1 })).toBe(false);
+        expect(await session.ops.duplicateTask(before[1], { dayOffset: 1 })).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -474,7 +474,7 @@ describe('10. duplicate in place (a copy that continues)', () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET) });
         const before = rows(session).map(row => row.id);
 
-        expect(await session.index.duplicateTask(before[1])).toBe(true);
+        expect(await session.ops.duplicateTask(before[1])).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE(...TARGET, '- [ ] 対象 @2026-09-21T11:00>12:00', '\t- [ ] 子 @2026-09-21').join('\n'));
@@ -489,7 +489,7 @@ describe('10. duplicate in place (a copy that continues)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.duplicateTask(before[1])).toBe(false);
+        expect(await session.ops.duplicateTask(before[1])).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -526,7 +526,7 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
         const held = { target: idOf(session, '対象') };
 
         editBefore(session, 'write', () => writeOutside(contents, 1));
-        expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
         const expected = NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon');
@@ -572,7 +572,7 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
         const held = { target: idOf(session, '対象') };
 
         editBefore(session, 'write', () => writeOutside(contents, 1));
-        expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
         const expected = SOURCE();
@@ -598,7 +598,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.updateTask(second, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(second, { statusChar: 'x' })).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -611,7 +611,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect(await session.index.deleteTask(second)).toBe(false);
+        expect(await session.ops.deleteTask(second)).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
@@ -629,7 +629,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
             contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [x] 子'));
             writeOutside(contents, 1);
         });
-        expect(await session.index.updateTask(second, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(second, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([

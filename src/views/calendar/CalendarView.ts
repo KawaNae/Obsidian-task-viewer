@@ -9,7 +9,7 @@ import { getEffectiveAstronomyDisplay } from '../../services/astronomy/Astronomy
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
 import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
@@ -80,7 +80,7 @@ interface CalendarViewState {
 export class CalendarView extends ItemView {
     private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
-    private readonly writeService: TaskWriteService;
+    private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly filterMenu = new FilterMenuComponent();
@@ -124,8 +124,8 @@ export class CalendarView extends ItemView {
         super(leaf);
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
-        this.writeService = plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
+        this.operations = plugin.getOperations();
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
@@ -320,7 +320,7 @@ export class CalendarView extends ItemView {
             this.registerDomEvent(el, ev, handler),
         );
 
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
@@ -352,7 +352,7 @@ export class CalendarView extends ItemView {
         this.dragHandler = new DragHandler(
             this.container,
             this.readService,
-            this.writeService,
+            this.operations,
             this.plugin,
             this.selectionController,
             (taskId: string) => {
@@ -371,7 +371,7 @@ export class CalendarView extends ItemView {
         await this.renderSerializer.request();
 
         // Clear selection when the selected task is deleted via the UI.
-        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.operations);
 
         // Initialize render dispatch controller (rAF coalesce only). Every
         // change runs a full render(), which reconciles cards by key.
@@ -418,7 +418,7 @@ export class CalendarView extends ItemView {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,
-            writeService: this.writeService,
+            operations: this.operations,
             plugin: this.plugin,
         }, () => setTimeout(() => this.handleManager?.selectTask(null), 0))(task, options);
     }
@@ -752,7 +752,7 @@ export class CalendarView extends ItemView {
         dateLink.setAttribute('href', dayTarget);
         dateLink.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
-            void openPeriodicNoteInLeaf(this.app, dailyNotes(this.app), dateKey, this.plugin.getTaskWriteService().writeChannel);
+            void openPeriodicNoteInLeaf(this.app, dailyNotes(this.app), dateKey, this.plugin.getOperations().writeChannel);
         });
 
         this.linkInteractionManager.bind(cell, {
@@ -950,7 +950,7 @@ export class CalendarView extends ItemView {
             hoverParent: this.hoverParent,
         }, { bindClick: false });
         weekNumberEl.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(this.app, periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate), this.plugin.getTaskWriteService().writeChannel);
+            void openPeriodicNoteInLeaf(this.app, periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate), this.plugin.getOperations().writeChannel);
         });
     }
 

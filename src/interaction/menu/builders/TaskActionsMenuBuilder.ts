@@ -1,6 +1,6 @@
 import type { App, Menu } from 'obsidian';
 import type { Task } from '../../../types';
-import type { TaskWriteService } from '../../../services/data/TaskWriteService';
+import type { Operations } from '../../../services/operations/Operations';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
 import { CreateTaskModal } from '../../../modals/CreateTaskModal';
@@ -22,7 +22,7 @@ import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 export class TaskActionsMenuBuilder {
     constructor(
         private app: App,
-        private writeService: TaskWriteService,
+        private operations: Operations,
         private plugin: PluginContext & TimerHost
     ) { }
 
@@ -120,7 +120,7 @@ export class TaskActionsMenuBuilder {
                     menu.close();
                     new CreateTaskModal(this.app, async (result) => {
                         const taskLine = formatTaskLine({ statusChar: ' ', ...result });
-                        await this.writeService.insertLine(task.id, taskLine, 'firstChild');
+                        await this.operations.insertLine(task.id, taskLine, 'firstChild');
                     }, {}, { startHour: this.plugin.settings.startHour }).open();
                 });
         });
@@ -178,7 +178,7 @@ export class TaskActionsMenuBuilder {
                     .setIcon('copy')
                     .onClick(async () => {
                         menu.close();
-                        await this.writeService.duplicateTask(task.id);
+                        await this.operations.duplicateTask(task.id);
                     });
             });
 
@@ -187,7 +187,7 @@ export class TaskActionsMenuBuilder {
                     .setIcon('calendar-plus')
                     .onClick(async () => {
                         menu.close();
-                        await this.writeService.duplicateTask(task.id, { dayOffset: 1 });
+                        await this.operations.duplicateTask(task.id, { dayOffset: 1 });
                     });
             });
 
@@ -196,7 +196,7 @@ export class TaskActionsMenuBuilder {
                     .setIcon('calendar-range')
                     .onClick(async () => {
                         menu.close();
-                        await this.writeService.duplicateTask(task.id, { dayOffset: 1, count: 7 });
+                        await this.operations.duplicateTask(task.id, { dayOffset: 1, count: 7 });
                     });
             });
         });
@@ -267,7 +267,7 @@ export class TaskActionsMenuBuilder {
                                 t('menu.switchToUndated'),
                                 t('menu.switchToUndatedMessage'),
                                 async () => {
-                                    await this.writeService.updateTask(task.id, {
+                                    await this.operations.updateTask(task.id, {
                                         startDate: undefined,
                                         startTime: undefined,
                                         endDate: undefined,
@@ -290,7 +290,7 @@ export class TaskActionsMenuBuilder {
                 .setIcon(icon)
                 .onClick(async () => {
                     menu.close();
-                    await this.writeService.updateTask(taskId, updates);
+                    await this.operations.updateTask(taskId, updates);
                 });
         });
     }
@@ -310,13 +310,13 @@ export class TaskActionsMenuBuilder {
                 .setWarning(true)
                 .onClick(async () => {
                     menu.close();
-                    const { outlook, descendantFlows } = this.writeService.assessFlowDelete(task.id);
+                    const { outlook, descendantFlows } = this.operations.assessFlowDelete(task.id);
 
                     // 発火に失敗すると削除も中止される。そのときタスクはまだ
                     // ページ上にあるので、パネルを閉じる・選択を外すといった
                     // 「消えた前提」の後始末は走らせない。
                     const remove = async (fireFlow: boolean) => {
-                        if (await this.writeService.deleteTask(task.id, { fireFlow })) {
+                        if (await this.operations.deleteTask(task.id, { fireFlow })) {
                             onDestructive?.();
                         }
                     };

@@ -14,7 +14,7 @@ import { Destination } from '../services/persistence/Destination';
 import { DateUtils } from '../utils/DateUtils';
 import { type TaskLineFields, formatTaskLine } from '../services/parsing/TaskLineFormat';
 import type { Task } from '../types';
-import type { AnchoredRow } from '../services/core/TaskIndex';
+import type { AnchoredRow } from '../services/operations/Operations';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
@@ -144,13 +144,23 @@ export class TimerRecorder {
      * 呼び出し側は記録待ちのまま残す。
      */
     async recordSessionEnd(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
-        const tail = await this.resolveTailRecord(timer);
-        switch (tail.kind) {
+        if (!timer.tailRecordBlockId) return this.addRecord(timer, record);
+        // self の 1 本目は、尻尾が対象の行そのもの。
+        const direct = timer.tailRecordBlockId === timer.timerTargetId;
+        const closed = await this.plugin.getOperations().updateByAnchor(timer.taskFile, timer.tailRecordBlockId,
+            (tail) => direct ? this.closeTarget(timer, tail, record) : this.closeChild(timer, tail, record));
+        switch (closed.kind) {
             case 'none': return this.addRecord(timer, record);
             case 'unreadable': return this.noticeUnreadable(timer, 'recordSessionEnd (not recorded)');
+            // Not written: the write layer has said why, once.
+            case 'not-written': return false;
         }
-        if (timer.tailRecordBlockId === timer.timerTargetId) return this.updateTaskDirectly(timer, tail.task, record);
-        return this.updateChildAtEnd(timer, tail.task, record);
+        const icon = this.getTimerIcon(timer);
+        const duration = TimeFormatter.formatSeconds(record.seconds);
+        new Notice(direct
+            ? t('notice.taskUpdated', { icon, duration })
+            : t('notice.kindRecorded', { icon, kind: this.getTimerKind(timer), duration }));
+        return true;
     }
 
     /**
@@ -206,7 +216,7 @@ export class TimerRecorder {
      * 1 つしか置けないので付け足すこともできない。タイマーは始めない。
      */
     private startTarget(timer: TimerInstance): StartTarget | null {
-        const task = this.plugin.getTaskIndex().getTask(timer.taskId);
+        const task = this.plugin.getIndex().getTask(timer.taskId);
         if (!task) {
             this.noticeResolveFailure(timer, 'start (not started)');
             return null;
@@ -282,7 +292,7 @@ export class TimerRecorder {
         timer.priorStartMs = this.startMsOf(task);
 
         return this.writeOpening(timer, this.opening(timer, target, { target, puts: rowId ? [rowId] : [] }),
-            () => this.plugin.getTaskIndex().updateTask(task.id, updates));
+            () => this.plugin.getOperations().updateTask(task.id, updates));
     }
 
     /**
@@ -376,7 +386,7 @@ export class TimerRecorder {
         const end = new Date(decision.endMs);
         // 書けたかは問わない。書けなければ行の end は古いままで、次の見直しで
         // それを読んでまた書く。拒否の通知は書き込みの層が出す。
-        await this.plugin.getTaskIndex().updateTask(target.id, {
+        await this.plugin.getOperations().updateTask(target.id, {
             endDate: this.formatDate(end),
             endTime: this.formatTime(end),
         });
@@ -401,27 +411,32 @@ export class TimerRecorder {
      * 理由を1回だけ通知済み。
      */
     async moveRunningStart(timer: TimerInstance, startMs: number): Promise<boolean> {
-        const tail = await this.resolveTailRecord(timer);
-        switch (tail.kind) {
-            case 'unreadable': return this.noticeUnreadable(timer, 'moveRunningStart (not moved)');
-            case 'none':
-                logInfo(`[TimerRecorder] moveRunningStart: no running line, only the timer moves (${describeTimerAnchor(timer)})`);
-                return true;
-        }
-        const row = tail.task;
+        if (!timer.tailRecordBlockId) return this.noRunningLine(timer);
         const start = new Date(startMs);
-        const updates: Partial<Task> = {
-            startDate: this.formatDate(start),
-            startTime: this.formatTime(start),
-        };
-        // 日付の無い end（`@…T10:20>11:20`）は start の日付で読まれる。start を前日へ
-        // ずらしても end が動かないよう、今の日付を書き出しておく。
-        if (row.endTime && !row.endDate && row.startDate) updates.endDate = row.startDate;
-
-        // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
-        if (!(await this.plugin.getTaskIndex().updateTask(row.id, updates))) return false;
+        const moved = await this.plugin.getOperations().updateByAnchor(timer.taskFile, timer.tailRecordBlockId, (row) => {
+            const updates: Partial<Task> = {
+                startDate: this.formatDate(start),
+                startTime: this.formatTime(start),
+            };
+            // 日付の無い end（`@…T10:20>11:20`）は start の日付で読まれる。start を前日へ
+            // ずらしても end が動かないよう、今の日付を書き出しておく。
+            if (row.endTime && !row.endDate && row.startDate) updates.endDate = row.startDate;
+            return updates;
+        });
+        switch (moved.kind) {
+            case 'unreadable': return this.noticeUnreadable(timer, 'moveRunningStart (not moved)');
+            case 'none': return this.noRunningLine(timer);
+            // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
+            case 'not-written': return false;
+        }
         // end の無い行の実効 end は start から決まる。書き足しの門を引き直す。
         timer.lazyEndFloorMs = undefined;
+        return true;
+    }
+
+    /** 開始をずらす走行の行が無い: タイマーだけが動く。 */
+    private noRunningLine(timer: TimerInstance): boolean {
+        logInfo(`[TimerRecorder] moveRunningStart: no running line, only the timer moves (${describeTimerAnchor(timer)})`);
         return true;
     }
 
@@ -474,7 +489,7 @@ export class TimerRecorder {
      */
     private startLine(timer: TimerInstance, start: StartTarget, place: 'firstChild' | 'afterCompletedRun'): Promise<boolean> {
         return this.writeFirstLine(timer, start, line =>
-            this.plugin.getTaskWriteService().insertLine(start.task.id, line, place, start.rowId));
+            this.plugin.getOperations().insertLine(start.task.id, line, place, start.rowId));
     }
 
     /**
@@ -514,25 +529,19 @@ export class TimerRecorder {
             case 'unreadable':
                 return this.noticeUnreadable(timer, 'writeChildLine (not written)');
         }
-        return this.plugin.getTaskWriteService().insertLine(target.task.id, line, 'firstChild');
+        return this.plugin.getOperations().insertLine(target.task.id, line, 'firstChild');
     }
 
     /**
-     * 走行中の行（尻尾、錨で引いた `child`）を、終わりの時刻と完了で閉じる。
+     * 走行中の行（尻尾の `child`）を、終わりの時刻と完了で閉じる書き換え。
      */
-    private async updateChildAtEnd(timer: TimerInstance, child: Task, record: PendingRecord): Promise<boolean> {
-        const taskIndex = this.plugin.getTaskIndex();
-
-        const elapsedSeconds = record.seconds;
+    private closeChild(timer: TimerInstance, child: Task, record: PendingRecord): Partial<Task> {
         const endTime = new Date(record.endMs);
-
-        const icon = this.getTimerIcon(timer);
         // 名前は対象タスクから継ぐので、既にアイコン付きの行（完了済みレコードの
         // 「続き」など）を起点にすると二重に付く。付け直しの規則は
         // {@link withTimerIcon} が持つ。
-        const content = withTimerIcon(icon, child.content.trim());
-
-        const written = await taskIndex.updateTask(child.id, {
+        const content = withTimerIcon(this.getTimerIcon(timer), child.content.trim());
+        return {
             content,
             endDate: this.formatDate(endTime),
             endTime: this.formatTime(endTime),
@@ -541,14 +550,7 @@ export class TimerRecorder {
             // ここを起点に兄弟を挿す。外すのは尻尾でなくなるとき（再開）と
             // widget を閉じるときだけ。
             blockId: child.blockId,
-        });
-
-        // Not written: the write layer has said why, once.
-        if (!written) return false;
-
-        const kind = this.getTimerKind(timer);
-        new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
-        return true;
+        };
     }
 
     /**
@@ -651,12 +653,12 @@ export class TimerRecorder {
 
     /**
      * `taskFile` で錨 `anchor` を持つ行を、ディスクの内容のとおりの読みで引く。
-     * API の `path#^id` と同じ1つの口（`TaskWriteService.freshByAnchor`）を通る。
+     * API の `path#^id` と同じ1つの口（`Operations.freshByAnchor`）を通る。
      * 行が無い（`none`）とノートを読めない（`unreadable`）は分けて答える —
      * 読めないだけで行が無いとみなすと、閉じるはずの行の代わりにレコードを足す。
      */
     private rowByAnchor(timer: TimerInstance, anchor: string): Promise<AnchoredRow> {
-        return this.plugin.getTaskWriteService().freshByAnchor(timer.taskFile, anchor);
+        return this.plugin.getOperations().freshByAnchor(timer.taskFile, anchor);
     }
 
     /**
@@ -665,7 +667,7 @@ export class TimerRecorder {
      */
     tailInIndex(timer: TimerInstance): Task | undefined {
         if (!timer.tailRecordBlockId) return undefined;
-        return this.plugin.getTaskIndex().getTaskByAnchor(timer.taskFile, timer.tailRecordBlockId);
+        return this.plugin.getIndex().getTaskByAnchor(timer.taskFile, timer.tailRecordBlockId);
     }
 
     /**
@@ -694,7 +696,7 @@ export class TimerRecorder {
         const next = this.opening(timer, blockId, { puts: [blockId], takesOff: releases ? timer.tailRecordBlockId : undefined });
         // 書けなければ、理由は書き込みの層が1回だけ通知済みで、尻尾は動かない。
         return this.writeOpening(timer, next, () => tail
-            ? this.plugin.getTaskWriteService().insertLine(tail.id, line, 'afterSubtree', releases ? null : undefined)
+            ? this.plugin.getOperations().insertLine(tail.id, line, 'afterSubtree', releases ? null : undefined)
             : this.writeChildLine(timer, line));
     }
 
@@ -720,12 +722,10 @@ export class TimerRecorder {
 
     /** 錨 `anchor` の行からその `^id` を外す。行を引けなければ何もしない。 */
     private async takeOff(timer: TimerInstance, anchor: string): Promise<void> {
-        const row = await this.rowByAnchor(timer, anchor);
-        if (row.kind !== 'row') {
+        const row = await this.plugin.getOperations().updateByAnchor(timer.taskFile, anchor, { blockId: undefined });
+        if (row.kind === 'none' || row.kind === 'unreadable') {
             logInfo(`[TimerRecorder] takeOff: ${anchor} ${row.kind === 'none' ? 'not found in' : 'not looked up, could not read'} ${timer.taskFile}, nothing taken off (${describeTimerAnchor(timer)})`);
-            return;
         }
-        await this.plugin.getTaskIndex().updateTask(row.task.id, { blockId: undefined });
     }
 
     /**
@@ -769,14 +769,14 @@ export class TimerRecorder {
             return;
         }
 
-        await this.plugin.getTaskIndex().deleteTask(tail.id);
+        await this.plugin.getOperations().deleteTask(tail.id);
     }
 
     /**
-     * self の 1 本目: 尻尾である対象の行（錨で引いた `task`）を、記録の開始と終わりと
-     * 完了に書き換える。This converts the task to SE-Timed type.
+     * self の 1 本目: 尻尾である対象の行（`task`）を、記録の開始と終わりと完了に
+     * 書き換える書き換え。This converts the task to SE-Timed type.
      */
-    private async updateTaskDirectly(timer: TimerInstance, task: Task, record: PendingRecord): Promise<boolean> {
+    private closeTarget(timer: TimerInstance, task: Task, record: PendingRecord): Partial<Task> {
         const elapsedSeconds = record.seconds;
         const endTime = new Date(record.endMs);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
@@ -800,11 +800,7 @@ export class TimerRecorder {
             content: withTimerIcon(icon, task.content.trim()),
         };
 
-        // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
-        if (!(await this.plugin.getTaskIndex().updateTask(task.id, updates))) return false;
-
-        new Notice(t('notice.taskUpdated', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
-        return true;
+        return updates;
     }
 
     /**
@@ -830,7 +826,7 @@ export class TimerRecorder {
             dateStr,
             taskLine,
             Destination.taskSection(this.plugin.settings),
-            this.plugin.getTaskWriteService().writeChannel,
+            this.plugin.getOperations().writeChannel,
         );
     }
 

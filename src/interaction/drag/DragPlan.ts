@@ -12,7 +12,7 @@ import type { DisplayDateEdits } from '../../services/display/DisplayTaskConvert
  * `null` を返す finish は「変更なし、書き戻し不要」を意味する。
  *
  * BaseDragStrategy.commitPlan が `materializeRawDates → diffUpdates →
- * writeService.updateTask + restoreSelection` を 1 箇所で行うため、各 finish
+ * operations.updateTask + restoreSelection` を 1 箇所で行うため、各 finish
  * は raw `Partial<Task>` を組み立てない。これにより `endDate +1day` 系の
  * dual-semantic ミスを構造的に防ぐ。
  */

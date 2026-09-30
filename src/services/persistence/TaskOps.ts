@@ -31,7 +31,7 @@ export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
  *   (`firstChild`), as its next sibling past its subtree (`afterSubtree`),
  *   or past the completed siblings that follow it (`afterCompletedRun`),
  *   spelled as the item next to it. A timer's record, the one insert every
- *   timer line takes (`TaskIndex.insertLine`).
+ *   timer line takes (`Operations.insertLine`).
  * - `copies`: copies of the row go in as its siblings, on `side`: just
  *   above it, or past its subtree, spelled as the row is
  *   (`Placement.copyOf`). `lines` are the copies' own lines, finished
@@ -99,7 +99,7 @@ export type FiringOutcome<F extends CompletionFire = CompletionFire> =
 
 /**
  * A row and its subtree written anew from a draft of their text: the hub's
- * source mode (`TaskIndex.replaceSubtree`). `text` is the row's line, its
+ * source mode (`Operations.replaceSubtree`). `text` is the row's line, its
  * indentation aside (the row keeps the file's). `children` are the lines of
  * its subtree, in order, each as the file is to read it, indentation
  * included, and each with the line of the subtree it was when the draft was

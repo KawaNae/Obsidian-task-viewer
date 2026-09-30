@@ -279,14 +279,14 @@ function settingsWith(overrides: Partial<TaskViewerSettings> = {}): TaskViewerSe
 function setup(settings = settingsWith()) {
     const idx = index();
     const writes: { id: string; updates: Record<string, unknown> }[] = [];
-    const writeService = {
+    const operations = {
         updateTask: vi.fn(async (id: string, updates: Record<string, unknown>) => { writes.push({ id, updates }); return true; }),
         onTaskDeleted: () => () => {},
     };
     let menu: ((m: unknown) => void) | null = null;
     const menuPresenter = { present: (build: (m: unknown) => void) => { menu = build; } };
     const renderer = new TaskCardRenderer(
-        {} as never, idx.readService as never, writeService as never, menuPresenter as never,
+        {} as never, idx.readService as never, operations as never, menuPresenter as never,
         { hoverSource: 'test', getHoverParent: () => ({}) } as never,
         () => settings,
     );

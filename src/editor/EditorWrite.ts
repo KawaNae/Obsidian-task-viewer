@@ -69,7 +69,7 @@ export interface EditorLineHost {
     applyOps: ApplyOps;
     /** Tell the user a write was not made, and why (the index's `reportRefusal`). */
     refused(refusal: Refusal): void;
-    /** The write to the file, for an editor that no longer shows it (`TaskIndex.writeLine`). */
+    /** The write to the file, for an editor that no longer shows it (`Operations.writeLine`). */
     writeLine(path: string, at: RowRef, ops: readonly TaskOp[]): Promise<boolean>;
 }
 

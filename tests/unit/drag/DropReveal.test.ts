@@ -158,7 +158,7 @@ class OrderProbeStrategy extends BaseDragStrategy {
 function makeContext(log: string[], onUpdate?: () => void, written = true): DragContext {
     return {
         plugin: { settings: { startHour: 5 } },
-        writeService: {
+        operations: {
             updateTask: async () => {
                 log.push('commit');
                 onUpdate?.();

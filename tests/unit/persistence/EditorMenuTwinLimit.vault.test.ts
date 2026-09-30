@@ -42,7 +42,7 @@ describe('the editor menu, written to the file, on one of two twin lines', () =>
         const shown = ['メモ', '- [ ] 読書', '- [ ] 読書', ''];
         const at = editorRow(1, '- [ ] 読書', contentKeyOf(shown));
 
-        expect(await session.index.writeLine(FILE, at, [{ kind: 'update', text: '- [x] 読書' }])).toBe(false);
+        expect(await session.ops.writeLine(FILE, at, [{ kind: 'update', text: '- [x] 読書' }])).toBe(false);
         expect(contents.get(FILE)).toBe(['- [ ] 読書', '- [ ] 読書', ''].join('\n'));
         expect(Notice.messages).toEqual([CHANGED]);
     });
@@ -57,7 +57,7 @@ describe('the editor menu, written to the file, on one of two twin lines', () =>
         const at = editorRow(1, '- [ ] 読書', contentKeyOf(shown));
         contents.set(FILE, ['- [ ] 読書', '- [ ] 読書', ''].join('\n'));
 
-        expect(await session.index.writeLine(FILE, at, [{ kind: 'remove' }])).toBe(false);
+        expect(await session.ops.writeLine(FILE, at, [{ kind: 'remove' }])).toBe(false);
         expect(contents.get(FILE)).toBe(['- [ ] 読書', '- [ ] 読書', ''].join('\n'));
         expect(Notice.messages).toEqual([CHANGED]);
     });
@@ -69,19 +69,19 @@ describe('the editor menu, written to the file, on one of two twin lines', () =>
 
         const at = editorRow(1, '- [ ] 読書', contentKeyOf(shown));
 
-        expect(await session.index.writeLine(FILE, at, [{ kind: 'update', text: '- [x] 読書' }])).toBe(true);
+        expect(await session.ops.writeLine(FILE, at, [{ kind: 'update', text: '- [x] 読書' }])).toBe(true);
         expect(contents.get(FILE)).toBe(['- [ ] 読書', '- [x] 読書', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
     });
 });
 
 describe('the editor menu, written in the editor, on one of two twin lines', () => {
-    const host = (session: VaultSession) => session.index.editorLineHost();
+    const host = (session: VaultSession) => session.ops.editorLineHost();
 
     it('writes the twin it was opened on, in the editor holding an unsaved line above it', async () => {
         const { contents, session } = await openVault(['- [ ] 読書', '- [ ] 読書', '']);
         live.push(session);
-        const editor = editorSession(session.index.editorFireHost(), FILE, ['メモ', '- [ ] 読書', '- [ ] 読書', ''].join('\n'));
+        const editor = editorSession(session.ops.editorFireHost(), FILE, ['メモ', '- [ ] 読書', '- [ ] 読書', ''].join('\n'));
         const at = editorRow(1, '- [ ] 読書', keyOf(editor.state.doc));
 
         expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: '- [x] 読書' }], host(session))).toBe(true);
@@ -96,7 +96,7 @@ describe('the editor menu, written in the editor, on one of two twin lines', () 
         const shown = ['- [ ] 読書', '- [ ] 読書', '- [ ] 読書', ''];
         const { session } = await openVault(shown);
         live.push(session);
-        const editor = editorSession(session.index.editorFireHost(), FILE, shown.join('\n'));
+        const editor = editorSession(session.ops.editorFireHost(), FILE, shown.join('\n'));
         const at = editorRow(1, '- [ ] 読書', keyOf(editor.state.doc));
         // The first twin taken away from outside: the third comes onto line 1.
         editor.change({ from: 0, to: editor.at(1) }, 'set');
@@ -111,7 +111,7 @@ describe('the editor menu, written in the editor, on one of two twin lines', () 
         const shown = ['- [ ] 読書', '- [ ] 読書', ''];
         const { contents, session } = await openVault(shown);
         live.push(session);
-        const editor = editorSession(session.index.editorFireHost(), 'another.md', shown.join('\n'));
+        const editor = editorSession(session.ops.editorFireHost(), 'another.md', shown.join('\n'));
         const at = editorRow(1, '- [ ] 読書', keyOf(editor.state.doc));
 
         expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: '- [x] 読書' }], host(session))).toBe(true);
@@ -123,7 +123,7 @@ describe('the editor menu, written in the editor, on one of two twin lines', () 
     it('makes each of its writes a step of its own to undo, apart from the typing just before it', async () => {
         const { session } = await openVault(['- [ ] A', '']);
         live.push(session);
-        const editor = editorSession(session.index.editorFireHost(), FILE, ['- [ ] A', ''].join('\n'));
+        const editor = editorSession(session.ops.editorFireHost(), FILE, ['- [ ] A', ''].join('\n'));
         editor.change({ from: editor.at(0, 7), insert: 'b' }, 'input.type');
 
         // Taking away the line just typed on: a change next to the typing,

@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { editorSession } from '../helpers/editorSession';
 import { freezeDate } from '../helpers/fakeDate';
@@ -49,7 +48,7 @@ type Path = 'card' | 'api' | 'editor';
 async function complete(lines: string[], line: number, content: string, path: Path, side: SectionSide = 'head'): Promise<string[]> {
     const note = await open(lines, side);
     if (path === 'card') {
-        await note.session.index.updateTask(note.idOf(content), { statusChar: 'x' });
+        await note.session.ops.updateTask(note.idOf(content), { statusChar: 'x' });
         await note.session.flowSettled(FILE);
         return note.read();
     }
@@ -58,13 +57,13 @@ async function complete(lines: string[], line: number, content: string, path: Pa
             app: note.session.app,
             settings: { startHour: 0 },
             getTaskReadService: () => new TaskReadService(note.session.index, 0),
-            getTaskWriteService: () => new TaskWriteService(note.session.index),
+            getOperations: () => note.session.ops,
         } as never);
         await api.update({ id: note.idOf(content), status: 'x' });
         await note.session.flowSettled(FILE);
         return note.read();
     }
-    const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+    const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
     editor.check(line);
     await Promise.resolve();
     return editor.lines();
@@ -228,7 +227,7 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
             if (planned.kind !== 'none') fired.push(`${planned.task.content}:${planned.kind}`);
             return planned;
         };
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         const status = (line: number) => editor.at(line, editor.lines()[line].indexOf('[') + 1);
         editor.change([
             { from: status(1), to: status(1) + 1, insert: 'x' },
@@ -267,7 +266,7 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
 
     it('fires the child once when the parent\'s move carries it to another indentation', async () => {
         const note = await open(['# note', '- [ ] Q', '    - [ ] P @2026-09-21 ==> move([[#Done]])', '        - [ ] C @2026-09-21 ==> +1d', '## Done', '']);
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         const status = (line: number) => editor.at(line, editor.lines()[line].indexOf('[') + 1);
         editor.change([
             { from: status(2), to: status(2) + 1, insert: 'x' },
@@ -282,7 +281,7 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
 
     it('fires the child where it stands when the parent\'s fire fails', async () => {
         const note = await open(['# note', '- [ ] P @2026-09-21 ==> move([[#Nope]])', '    - [ ] C @2026-09-21 ==> +1d', '']);
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         const status = (line: number) => editor.at(line, editor.lines()[line].indexOf('[') + 1);
         editor.change([
             { from: status(1), to: status(1) + 1, insert: 'x' },
@@ -344,7 +343,7 @@ describe.each<Path>(['card', 'api', 'editor'])('an ordered row a move carries, f
 describe('a moved row, after a reload', () => {
     it('is found by its ^id where it went', async () => {
         const note = await open(['# note', '- [ ] 移す @2026-09-21 ==> move([[#Done]]) ^keep', '    - [ ] 子 ^kid', '## Done', '']);
-        await note.session.index.updateTask(note.idOf('移す'), { statusChar: 'x' });
+        await note.session.ops.updateTask(note.idOf('移す'), { statusChar: 'x' });
         await note.session.flowSettled(FILE);
         note.session.dispose();
 

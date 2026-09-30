@@ -216,7 +216,7 @@ export class TimerContentBinding {
 
         // 行に付いていたアイコンはそのまま戻す（無ければ付けない）。
         const content = current.icon ? withTimerIcon(current.icon, trimmed) : trimmed;
-        if (!(await this.ctx.plugin.getTaskIndex().updateTask(tail.id, { content }))) {
+        if (!(await this.ctx.plugin.getOperations().updateTask(tail.id, { content }))) {
             // 書けなかった。理由は書き込みの層が1回だけ通知済み。打った名前は
             // 下書きに残し、次の flush で書き直す。往復中にもっと新しい入力が
             // 来ていれば、下書きはもうそれを持っている。

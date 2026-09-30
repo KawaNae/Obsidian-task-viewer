@@ -10,7 +10,7 @@ import { t } from '../../../i18n';
 
 /**
  * The editor's writes to one line. Each answers whether it was written; a
- * write that was not has told the user why (see `TaskIndex.reportRefusal`).
+ * write that was not has told the user why (see `Operations.reportRefusal`).
  */
 export interface CheckboxLineOps {
     updateLine(newContent: string): Promise<boolean>;

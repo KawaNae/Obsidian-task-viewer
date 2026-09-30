@@ -209,7 +209,7 @@ describe('a sweep', () => {
         s.reconciler!.start();
         await swept(1);
         const id = s.index.getTasks()[0].id;
-        expect(await s.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect(await s.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
         disk.moved.set(FILE, { mtime: 7, size: 8 });
         const queueScan = vi.spyOn(s.scanner, 'queueScan');
 
@@ -311,7 +311,7 @@ describe('what asks for a sweep besides the triggers it hears', () => {
 
         const queueScan = vi.spyOn(s.scanner, 'queueScan');
 
-        expect(await s.index.confirmTask(s.index.getTasks().find(t => t.file === FILE)!.id)).toBe(false);
+        expect(await s.ops.confirmTask(s.index.getTasks().find(t => t.file === FILE)!.id)).toBe(false);
         await swept(2);
 
         expect(summaries()[1]).toContain('trigger=stale');

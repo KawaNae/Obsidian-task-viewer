@@ -30,7 +30,7 @@ export interface SubtreeDraft {
 
 /**
  * What a draft comes to (`SubtreeFrame.check`): the replacement to write
- * (`TaskWriteService.replaceSubtree`), the subtree it was opened on unchanged,
+ * (`Operations.replaceSubtree`), the subtree it was opened on unchanged,
  * or why it cannot be written.
  *
  * - `parent-break`: the row's editor holds more than one line

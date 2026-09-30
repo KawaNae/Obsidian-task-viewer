@@ -101,7 +101,7 @@ function startTimer(name: string, mode: 'self' | 'child'): string {
     return evalOrThrow<string>(`(async () => {
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
         const widget = plugin.getTimerWidget();
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(FILE)} && t.content === ${JSON.stringify(name)});
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(FILE)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         const before = new Set(widget.timers.keys());
         widget.startTimer({ taskId: task.id, taskName: task.content, taskFile: task.file, taskOriginalText: task.originalText,

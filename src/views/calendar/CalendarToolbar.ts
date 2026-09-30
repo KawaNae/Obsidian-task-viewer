@@ -84,7 +84,7 @@ export class CalendarToolbar extends ViewToolbarBase {
         const dateLabelDeps = {
             app: deps.app,
             getSettings: () => deps.plugin.settings,
-            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
+            writeChannel: deps.plugin.getOperations().writeChannel,
             linkInteractionManager: deps.linkInteractionManager,
             hoverParent: deps.hoverParent,
         };
@@ -170,7 +170,7 @@ export class CalendarToolbar extends ViewToolbarBase {
             }),
             viewType: VIEW_META_CALENDAR.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
+            writeChannel: deps.plugin.getOperations().writeChannel,
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_CALENDAR.displayText,

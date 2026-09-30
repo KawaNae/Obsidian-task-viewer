@@ -30,8 +30,8 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
     it('delete then update on one row: the update is refused with one notice', async () => {
         const { s, contents, id } = await session();
         const [deleted, updated] = await Promise.all([
-            s.index.deleteTask(id),
-            s.index.updateTask(id, { statusChar: 'x' }),
+            s.ops.deleteTask(id),
+            s.ops.updateTask(id, { statusChar: 'x' }),
         ]);
         expect(deleted).toBe(true);
         expect(updated).toBe(false);
@@ -44,7 +44,7 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
 
     it('delete twice on one row: the second is refused with one notice', async () => {
         const { s, id } = await session();
-        const [first, second] = await Promise.all([s.index.deleteTask(id), s.index.deleteTask(id)]);
+        const [first, second] = await Promise.all([s.ops.deleteTask(id), s.ops.deleteTask(id)]);
         expect(first).toBe(true);
         expect(second).toBe(false);
         expect(Notice.messages).toEqual([gone('対象')]);
@@ -53,7 +53,7 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
 
     it('delete then duplicate on one row: the duplicate is refused with one notice', async () => {
         const { s, contents, id } = await session();
-        const [, duplicated] = await Promise.all([s.index.deleteTask(id), s.index.duplicateTask(id)]);
+        const [, duplicated] = await Promise.all([s.ops.deleteTask(id), s.ops.duplicateTask(id)]);
         expect(duplicated).toBe(false);
         expect(Notice.messages).toEqual([gone('対象')]);
         expect(contents.get(FILE)).not.toContain('対象');
@@ -61,14 +61,14 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
     });
 
     const ops = [
-        { name: 'insertLine (firstChild)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.index.insertLine(id, '- [ ] 子', 'firstChild') },
-        { name: 'insertLine (afterSubtree)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.index.insertLine(id, '- [ ] 子', 'afterSubtree') },
+        { name: 'insertLine (firstChild)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'firstChild') },
+        { name: 'insertLine (afterSubtree)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'afterSubtree') },
     ] as const;
 
     for (const { name, call } of ops) {
         it(`${name} under a row that is gone: refused with one notice, nothing written`, async () => {
             const { s, contents, id } = await session();
-            await s.index.deleteTask(id);
+            await s.ops.deleteTask(id);
             await s.settle(FILE);
             const before = contents.get(FILE);
             Notice.messages.length = 0;
@@ -89,7 +89,7 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
         expect(s.index.getTask(id)).toBeUndefined();
         const before = contents.get(FILE);
         Notice.messages.length = 0;
-        expect(await s.index.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect(await s.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
         expect(Notice.messages).toEqual([gone(FILE)]);
         expect(contents.get(FILE)).toBe(before);
         s.dispose();

@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { DragSession } from '../../../src/interaction/drag/DragSession';
 import { DragHandler } from '../../../src/interaction/drag/DragHandler';
 import type { DragContext, DragStrategy } from '../../../src/interaction/drag/DragStrategy';
-import type { TaskWriteService } from '../../../src/services/data/TaskWriteService';
+import type { Operations } from '../../../src/services/operations/Operations';
+import type { IndexReads } from '../../../src/services/core/TaskIndex';
 import type { TaskReadService } from '../../../src/services/data/TaskReadService';
 import type { PluginContext } from '../../../src/PluginContext';
 import type { SelectionController } from '../../../src/interaction/selection/SelectionController';
@@ -17,12 +18,12 @@ import type { Task } from '../../../src/types';
 describe('a drag that ends', () => {
     it('lets go of its file after the commit, and draws once what it held back is read', async () => {
         const calls: string[] = [];
-        const writeService = {
+        const ports = {
             setDraggingFile: vi.fn((path: string | null) => { calls.push(`drag ${path}`); }),
             notifyImmediate: vi.fn(() => { calls.push('notify'); }),
             // The dragged row is the row on the disk.
             confirmTask: vi.fn(async () => true),
-        } as unknown as TaskWriteService;
+        } as unknown as Operations & IndexReads;
         const strategy = {
             onDown: () => { },
             onMove: () => { },
@@ -32,7 +33,7 @@ describe('a drag that ends', () => {
         // A window whose frames never come: nothing may wait for one.
         const view = { requestAnimationFrame: () => 1 };
         const container = { style: { touchAction: '' }, nodeType: 1, ownerDocument: { defaultView: view } } as unknown as HTMLElement;
-        const session = new DragSession({} as unknown as DragContext, container, writeService);
+        const session = new DragSession({} as unknown as DragContext, container, ports, ports);
         const task = { id: 't', file: 'note.md' } as Task;
 
         session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);
@@ -41,7 +42,7 @@ describe('a drag that ends', () => {
         expect(calls).toEqual(['drag note.md', 'commit', 'drag null', 'notify']);
         // Drawn in full once the note is read again: the rows carry the new
         // reading's names, and the name the drag began with names none.
-        expect(writeService.notifyImmediate).toHaveBeenCalledWith();
+        expect(ports.notifyImmediate).toHaveBeenCalledWith();
         expect(session.isActive()).toBe(false);
     });
 });
@@ -54,12 +55,12 @@ describe('a drag that ends', () => {
 describe('a drag that ends without a commit', () => {
     function rig(onUp: () => Promise<void>) {
         const calls: string[] = [];
-        const writeService = {
+        const ports = {
             setDraggingFile: vi.fn((path: string | null) => { calls.push(`drag ${path}`); }),
             notifyImmediate: vi.fn(() => { calls.push('notify'); }),
             // The dragged row is the row on the disk.
             confirmTask: vi.fn(async () => true),
-        } as unknown as TaskWriteService;
+        } as unknown as Operations & IndexReads;
         const strategy = {
             onDown: () => { },
             onMove: () => { },
@@ -73,13 +74,13 @@ describe('a drag that ends without a commit', () => {
         }) as unknown as HTMLElement;
         const context = {} as unknown as DragContext;
         const task = { id: 't', file: 'note.md' } as Task;
-        return { calls, writeService, strategy, container, context, task };
+        return { calls, ports, strategy, container, context, task };
     }
 
     it('lets go of its file when its view is closed mid-drag', () => {
-        const { calls, writeService, strategy, container, task } = rig(async () => { });
+        const { calls, ports, strategy, container, task } = rig(async () => { });
         const handler = new DragHandler(
-            container, {} as TaskReadService, writeService, {} as PluginContext,
+            container, {} as TaskReadService, ports, { getIndex: () => ports } as unknown as PluginContext,
             {} as SelectionController, () => { }, () => { }, () => '', () => '', () => 1,
         );
         const session = (handler as unknown as { session: DragSession }).session;
@@ -92,9 +93,9 @@ describe('a drag that ends without a commit', () => {
     });
 
     it('lets go of its file when its commit throws', async () => {
-        const { calls, writeService, strategy, container, context, task } =
+        const { calls, ports, strategy, container, context, task } =
             rig(async () => { throw new Error('commit failed'); });
-        const session = new DragSession(context, container, writeService);
+        const session = new DragSession(context, container, ports, ports);
         session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);
 
         await expect(session.handleUp({} as PointerEvent)).rejects.toThrow('commit failed');

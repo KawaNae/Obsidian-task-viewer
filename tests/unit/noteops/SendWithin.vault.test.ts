@@ -43,7 +43,7 @@ async function open(lines: string[]) {
             };
         },
         send: async (rows: SendRow[], heading = 'Tasks', side: 'head' | 'end' = 'head') => {
-            const answer = await session.index.send(rows, { path: FILE, create: false, section: { heading, level: 2, side }, frontmatter: [] });
+            const answer = await session.ops.send(rows, { path: FILE, create: false, section: { heading, level: 2, side }, frontmatter: [] });
             await session.flowSettled(FILE);
             return answer;
         },

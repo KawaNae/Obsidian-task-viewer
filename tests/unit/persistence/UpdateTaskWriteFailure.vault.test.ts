@@ -45,7 +45,7 @@ describe('updateTask when vault.process throws', () => {
         const before = contents.get(FILE);
         vault.process = async () => { throw new Error('disk on fire'); };
 
-        const written = await s.index.updateTask(task.id, { startTime: '11:00', statusChar: 'x' });
+        const written = await s.ops.updateTask(task.id, { startTime: '11:00', statusChar: 'x' });
 
         expect(written).toBe(false);
         const copy = s.index.getTask(task.id)!;
@@ -64,7 +64,7 @@ describe('updateTask when vault.process throws', () => {
             throw new Error('reported late');
         };
 
-        const written = await s.index.updateTask(task.id, { startTime: '11:00', statusChar: 'x' });
+        const written = await s.ops.updateTask(task.id, { startTime: '11:00', statusChar: 'x' });
 
         expect(written).toBe(true);
         const copy = s.index.getTasks().find(t => t.content === '対象')!;

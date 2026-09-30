@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { NoteOps, type SendDestination } from '../../../src/services/data/NoteOps';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { TimerWidget } from '../../../src/timer/TimerWidget';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID } from '../../../src/timer/TimerContext';
@@ -41,8 +40,8 @@ async function open(files: Record<string, string[]>) {
     Object.assign(session.app.vault, { getName: () => 'test-vault' });
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => session.index,
-        getTaskWriteService: () => new TaskWriteService(session.index),
+        getIndex: () => session.index,
+        getOperations: () => session.ops,
         getTaskReadService: () => ({ getTask: (id: string) => session.index.getTask(id) }),
     };
     const ticker = vi.spyOn(TimerLifecycle.prototype, 'startTimerTicker');
@@ -50,7 +49,7 @@ async function open(files: Record<string, string[]>) {
     widget.render = () => { };
     widget.renderTimerItem = () => { };
     widget.persistTimersToStorage = () => { };
-    const ops = new NoteOps(session.app, new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }), {
+    const ops = new NoteOps(session.app, session.ops, () => ({ ...DEFAULT_SETTINGS }), {
         getTask: (id) => session.index.getTask(id),
         timers: () => widget,
     });

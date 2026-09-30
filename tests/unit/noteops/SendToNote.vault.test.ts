@@ -57,7 +57,7 @@ async function open(files: Record<string, string | string[]>) {
             };
         },
         send: async (rows: SendRow[], to: { path: string; create?: boolean; frontmatter?: FrontmatterKey[]; heading?: string; side?: 'head' | 'end' }) => {
-            const answer = await session.index.send(rows, {
+            const answer = await session.ops.send(rows, {
                 path: to.path,
                 create: to.create ?? false,
                 section: { heading: to.heading ?? 'Tasks', level: 2, side: to.side ?? 'head' },

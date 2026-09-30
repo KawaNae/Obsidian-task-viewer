@@ -4,7 +4,7 @@ import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { updateRow, writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
-import { planDuplicate } from '../../../src/services/core/DuplicateShift';
+import { planDuplicate } from '../../../src/services/operations/DuplicateShift';
 
 /**
  * Stage F5: one check for every write that names a row.

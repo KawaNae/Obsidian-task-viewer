@@ -26,7 +26,7 @@ function makeFullTask(overrides: Partial<Task> = {}): Task {
 function createMockApiForCreate(opts: {
     insertedLine: number;
     createdTask: Task | undefined;
-}): { api: TaskApi; readService: any; writeService: any } {
+}): { api: TaskApi; readService: any; operations: any } {
     const mockFile = Object.create(TFile.prototype);
     const readService = {
         getTask: vi.fn().mockReturnValue(undefined),
@@ -39,7 +39,7 @@ function createMockApiForCreate(opts: {
         getFilteredTasks: vi.fn().mockReturnValue([]),
         getTasksForDateRange: vi.fn().mockReturnValue([]),
     };
-    const writeService = {
+    const operations = {
         createTask: vi.fn().mockResolvedValue(opts.insertedLine),
         updateTask: vi.fn(),
         deleteTask: vi.fn(),
@@ -54,9 +54,9 @@ function createMockApiForCreate(opts: {
         },
         settings: { startHour: 0 },
         getTaskReadService: () => readService,
-        getTaskWriteService: () => writeService,
+        getOperations: () => operations,
     };
-    return { api: new TaskApi(mockPlugin as any), readService, writeService };
+    return { api: new TaskApi(mockPlugin as any), readService, operations };
 }
 
 describe('G4: create の行番号ベース再特定', () => {
@@ -73,7 +73,7 @@ describe('G4: create の行番号ベース再特定', () => {
 
     it('heading 指定 + 同一 content 既存タスクありで新タスクが返る（content 検索廃止の証明）', async () => {
         const newTask = makeFullTask({ id: 'new-1', line: 3, content: 'same content' });
-        const { api, readService, writeService } = createMockApiForCreate({
+        const { api, readService, operations } = createMockApiForCreate({
             insertedLine: 3,
             createdTask: newTask,
         });
@@ -82,7 +82,7 @@ describe('G4: create の行番号ベース再特定', () => {
             content: 'same content',
             heading: 'Tasks',
         });
-        expect(writeService.createTask).toHaveBeenCalledWith(
+        expect(operations.createTask).toHaveBeenCalledWith(
             'test.md',
             expect.stringContaining('- [ ] same content'),
             'Tasks',
@@ -140,34 +140,34 @@ describe('the line create and insertChildTask write', () => {
     // Parts join one space apart with their ends trimmed, as format() joins
     // them, so a trailing space in the content leaves nothing behind.
     it('create writes one space between the content and the date block', async () => {
-        const { api, writeService } = createMockApiForCreate({
+        const { api, operations } = createMockApiForCreate({
             insertedLine: 5,
             createdTask: makeFullTask({ line: 5 }),
         });
         await api.create({ file: 'test.md', content: 'task ', start: '2026-07-18' });
-        expect(writeService.createTask).toHaveBeenCalledWith('test.md', '- [ ] task @2026-07-18', undefined);
+        expect(operations.createTask).toHaveBeenCalledWith('test.md', '- [ ] task @2026-07-18', undefined);
     });
 
     it('insertChildTask writes the content with its end trimmed', async () => {
-        const { api, readService, writeService } = createMockApiForCreate({
+        const { api, readService, operations } = createMockApiForCreate({
             insertedLine: 5,
             createdTask: undefined,
         });
         readService.getTask.mockReturnValue(makeFullTask({ id: 'parent-1' }));
-        writeService.insertLine.mockResolvedValue(true);
+        operations.insertLine.mockResolvedValue(true);
         await api.insertChildTask({ parentId: 'parent-1', content: 'child ' });
-        expect(writeService.insertLine).toHaveBeenCalledWith('parent-1', '- [ ] child', 'firstChild');
+        expect(operations.insertLine).toHaveBeenCalledWith('parent-1', '- [ ] child', 'firstChild');
     });
 });
 
 describe('the date block create writes', () => {
     const written = async (params: { start?: string; end?: string; due?: string }): Promise<string> => {
-        const { api, writeService } = createMockApiForCreate({
+        const { api, operations } = createMockApiForCreate({
             insertedLine: 5,
             createdTask: makeFullTask({ line: 5 }),
         });
         await api.create({ file: 'test.md', content: 't', ...params });
-        return writeService.createTask.mock.calls[0][1];
+        return operations.createTask.mock.calls[0][1];
     };
 
     it.each([

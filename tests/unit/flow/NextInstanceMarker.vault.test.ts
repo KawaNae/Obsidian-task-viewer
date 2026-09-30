@@ -31,7 +31,7 @@ async function complete(lines: string[], content = 'T'): Promise<{ lines: string
     const { contents, session } = await openVault({ [FILE]: lines });
     live = session;
     const task = session.index.getTasks().find(each => each.content === content)!;
-    expect(await session.index.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+    expect(await session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
     await session.flowSettled(FILE);
     return { lines: contents.get(FILE)!.split('\n'), session };
 }

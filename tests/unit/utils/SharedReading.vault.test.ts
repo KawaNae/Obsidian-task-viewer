@@ -33,7 +33,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 /** The ops applied to the row on `line`, in one attempt. */
 function together(session: VaultSession, lines: readonly string[], line: number, ops: readonly TaskOp[]): EditedLines {
-    const host = session.index.editorFireHost();
+    const host = session.ops.editorFireHost();
     return editLines(FILE, lines, '\n', (draft, _eol, s) =>
         host.applyOps(draft, s, editorRow(line, lines[line], contentKeyOf(lines)), ops));
 }
@@ -52,7 +52,7 @@ function oneByOne(session: VaultSession, lines: readonly string[], line: number,
 }
 
 function fire(session: VaultSession): TaskOp {
-    return session.index.editorFireHost().fireOp(FILE).op;
+    return session.ops.editorFireHost().fireOp(FILE).op;
 }
 
 async function sameEitherWay(note: string[], line: number, ops: (session: VaultSession) => TaskOp[]): Promise<readonly string[]> {
@@ -148,21 +148,21 @@ describe('a write of one op to a long note', () => {
 
     it('removes a row with its subtree', async () => {
         const readings = await readingsOf(async (session) => {
-            expect(await session.index.deleteTask(idOf(session, 'T'))).toBe(true);
+            expect(await session.ops.deleteTask(idOf(session, 'T'))).toBe(true);
         });
         expect(readings).toEqual({ handed: 1, all: 2 });
     });
 
     it('duplicates a row with its subtree', async () => {
         const readings = await readingsOf(async (session) => {
-            expect(await session.index.duplicateTask(idOf(session, 'T'), { dayOffset: 1 })).toBe(true);
+            expect(await session.ops.duplicateTask(idOf(session, 'T'), { dayOffset: 1 })).toBe(true);
         });
         expect(readings).toEqual({ handed: 1, all: 3 });
     });
 
     it('puts a first child under a row that has none', async () => {
         const readings = await readingsOf(async (session) => {
-            expect(await session.index.insertLine(idOf(session, 'row 1600'), '- [ ] new', 'firstChild')).toBe(true);
+            expect(await session.ops.insertLine(idOf(session, 'row 1600'), '- [ ] new', 'firstChild')).toBe(true);
         });
         expect(readings).toEqual({ handed: 1, all: 3 });
     });
@@ -197,7 +197,7 @@ describe('an update of a long note', () => {
             // has landed: it then reads what the index already holds, and
             // reads no outline.
             const scans = session.holdScans();
-            expect(await session.index.updateTask(row.id, { content: 'row 1500 renamed' })).toBe(true);
+            expect(await session.ops.updateTask(row.id, { content: 'row 1500 renamed' })).toBe(true);
             await scans.release();
             await session.settle(FILE);
             const long = read.mock.calls.filter(([lines]) => lines.length > 3000);

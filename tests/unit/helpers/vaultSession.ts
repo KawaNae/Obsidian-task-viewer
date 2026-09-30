@@ -1,7 +1,7 @@
 import { type App, parseYaml, TFile, TFolder } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
+import { Operations } from '../../../src/services/operations/Operations';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
 import { TimerCreator } from '../../../src/timer/TimerCreator';
 import type { TimerContext } from '../../../src/timer/TimerContext';
@@ -13,6 +13,7 @@ import { splitLines } from '../../../src/services/persistence/FileLines';
 import type { Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
 import type { DiskProbe } from '../../../src/services/core/DiskProbe';
 import type { DiskReconciler } from '../../../src/services/core/DiskReconciler';
+import type { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { linkDouble } from './linkDouble';
 
 export function makeFile(path: string): TFile {
@@ -255,15 +256,19 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
     // above call into. `onLayoutReady` never runs its callback here.
     void index.initialize();
 
+    const ops = new Operations(app as never, index);
     const internals = index as unknown as {
-        commandExecutor: FlowExecutorView;
-        reportRefusal(refusal: Refusal): void;
         reconciler: DiskReconciler | null;
         readVault(): Promise<void>;
     };
-    const executor = internals.commandExecutor;
-    // The channel `TaskIndex` connected, taken before a test connects another.
-    const connected = (index.getRepository() as unknown as { channels: (file: string) => WriteChannel }).channels;
+    const opsInternals = ops as unknown as {
+        commandExecutor: FlowExecutorView;
+        reportRefusal(refusal: Refusal): void;
+        repository: TaskRepository;
+    };
+    const executor = opsInternals.commandExecutor;
+    // The channel the operations connected, taken before a test connects another.
+    const connected = (opsInternals.repository as unknown as { channels: (file: string) => WriteChannel }).channels;
 
     let n = 0;
     // What the recorder calls to save the timers before it writes a line.
@@ -275,25 +280,29 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
     } as unknown as TimerStorageUtils;
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => index,
-        getTaskWriteService: () => new TaskWriteService(index),
+        getIndex: () => index,
+        getOperations: () => ops,
     };
 
     return {
         /** For a test that writes through `processLines` itself. */
         app: app as unknown as App,
         index,
+        /** The operations over `index`: the one way a test writes, as the plugin does. */
+        ops,
+        /** The repository the operations write through, for a test that connects its own channel or writes by hand. */
+        repository: opsInternals.repository,
         scanner,
         /** The flow executor, whose `planFire` plans every completion's fire. */
         executor,
         /** The scanner's private scan entry, which a test wraps to see its answers. */
         scannerPrivates: scanner as unknown as { queueScan: (file: TFile) => Promise<boolean> },
-        /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
+        /** The channel the operations gave a write to `file`, even after a test has connected another. */
         channelOf: (file: string): WriteChannel => connected(file),
         /** The index's reconciler, when the session was given a probe. */
         reconciler: internals.reconciler,
-        /** Tell `TaskIndex` a write was refused, as its own channel does. */
-        reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
+        /** Tell the operations a write was refused, as their own channel does. */
+        reportRefusal: (refusal: Refusal): void => opsInternals.reportRefusal(refusal),
         recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist(), () => openTimers()),
         /** Save the timers as the plugin does when the recorder asks, before it writes a line. */
         onPersist: (fn: () => void): void => { persist = fn; },
@@ -326,7 +335,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         flowSettled: async (...paths: string[]): Promise<void> => {
             for (const path of paths) await scanner!.waitForScan(path);
         },
-        dispose: () => index.dispose(),
+        dispose: () => { ops.dispose(); index.dispose(); },
     };
 }
 

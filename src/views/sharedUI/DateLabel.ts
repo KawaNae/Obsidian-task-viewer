@@ -15,7 +15,7 @@ function firstOf(year: number, month: number): string {
 export interface DateLabelDeps {
     app: App;
     getSettings: () => TaskViewerSettings;
-    /** Where the making of a year's or month's note reports (`TaskWriteService.writeChannel`). */
+    /** Where the making of a year's or month's note reports (`Operations.writeChannel`). */
     writeChannel: WriteChannels;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;

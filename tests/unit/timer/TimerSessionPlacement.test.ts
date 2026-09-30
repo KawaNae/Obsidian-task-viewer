@@ -6,7 +6,7 @@ import type TaskViewerPlugin from '../../../src/main';
 import type { App } from 'obsidian';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
-import { heldByAnchor, rowOf } from '../helpers/anchoredRow';
+import { opsOver, rowOf } from '../helpers/anchoredRow';
 
 /**
  * v2 の記録の置き場。**尻尾（最後に書いたレコード）の兄弟**に並べる、が原則で、
@@ -71,9 +71,9 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
 
     const plugin = {
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
-        getTaskIndex: () => taskIndex,
-        getTaskWriteService: () => ({
-            freshByAnchor: heldByAnchor(taskIndex),
+        getIndex: () => taskIndex,
+        getOperations: () => ({
+            ...opsOver(taskIndex),
             insertLine: async (
                 taskId: string,
                 line: string,
@@ -268,7 +268,7 @@ describe('discardRunningPlaceholder: ✕ leaves no half-open line behind', () =>
         const h = makeHarness();
         await h.recorder.startNextSession(makeTimer());
         // ユーザーが手を入れた（完了にした）ら、それはもう自分の行ではない。
-        const written = h.recorder['plugin'].getTaskIndex().getTasks().find(t => t.id === NEW_SESSION_ID)!;
+        const written = h.recorder['plugin'].getIndex().getTasks().find(t => t.id === NEW_SESSION_ID)!;
         written.statusChar = 'x';
         h.updates.length = 0;
 

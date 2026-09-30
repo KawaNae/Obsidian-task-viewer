@@ -34,7 +34,7 @@ import type { PinnedListDefinition, DisplayTask, Task } from '../../types';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 
@@ -61,7 +61,7 @@ type KanbanViewState = Partial<KanbanConfig> & Partial<KanbanTransient>;
 export class KanbanView extends ItemView {
     private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
-    private readonly writeService: TaskWriteService;
+    private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly menuHandler: MenuHandler;
@@ -102,20 +102,20 @@ export class KanbanView extends ItemView {
         super(leaf);
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
-        this.writeService = this.plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
+        this.operations = this.plugin.getOperations();
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const openTaskHub = createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,
-            writeService: this.writeService,
+            operations: this.operations,
             plugin: this.plugin,
         });
         this.taskRenderer.setDetailCallback((task) => openTaskHub(task));

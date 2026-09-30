@@ -42,7 +42,7 @@ function idOf(session: VaultSession, content: string, file = FILE): string {
 }
 
 async function complete(session: VaultSession, content: string, ...paths: string[]): Promise<void> {
-    expect(await session.index.updateTask(idOf(session, content), { statusChar: 'x' })).toBe(true);
+    expect(await session.ops.updateTask(idOf(session, content), { statusChar: 'x' })).toBe(true);
     await session.flowSettled(FILE, ...paths);
 }
 
@@ -82,7 +82,7 @@ describe('a subtree with a blank line inside it', () => {
             [FILE]: ['# note', '- [ ] 対象 @2026-09-21', '\t- ==> every mon', '\t- [ ] 子1', '', '\t- [ ] 子2', '', '- [ ] 下', ''],
         });
 
-        expect(await session.index.deleteTask(idOf(session, '対象'), { fireFlow: true })).toBe(true);
+        expect(await session.ops.deleteTask(idOf(session, '対象'), { fireFlow: true })).toBe(true);
         await session.flowSettled(FILE);
 
         const lines = contents.get(FILE)!.split('\n');
@@ -112,7 +112,7 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
     it('takes T\'s item with a delete, and leaves the lines after it as they were', async () => {
         const { contents, session } = await open({ [FILE]: NOTE });
 
-        expect(await session.index.deleteTask(idOf(session, 'T'))).toBe(true);
+        expect(await session.ops.deleteTask(idOf(session, 'T'))).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(['# note', '```', '- [ ] U', ''].join('\n'));
@@ -138,7 +138,7 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
         const { contents, session } = await open({ [FILE]: NOTE });
         const t = idOf(session, 'T');
 
-        expect(await session.index.duplicateTask(t, { dayOffset: 1 })).toBe(true);
+        expect(await session.ops.duplicateTask(t, { dayOffset: 1 })).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([

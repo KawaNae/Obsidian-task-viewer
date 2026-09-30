@@ -1,6 +1,6 @@
 import { apiVersion, Notice, Platform, Plugin, TFile } from 'obsidian';
 import './views/registerAllSchemas';
-import { TaskIndex } from './services/core/TaskIndex';
+import { TaskIndex, type IndexReads } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
 import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
 import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/calendar';
@@ -51,7 +51,7 @@ import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
 import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
-import { TaskWriteService } from './services/data/TaskWriteService';
+import { Operations } from './services/operations/Operations';
 import { NoteOps } from './services/data/NoteOps';
 import { initI18n, t } from './i18n';
 import { enabledLineParserIds } from './services/parsing/TaskParser';
@@ -67,7 +67,7 @@ import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private readService: TaskReadService;
-    private writeService: TaskWriteService;
+    private operations: Operations;
     private noteOps: NoteOps;
     private timerWidget: TimerWidget;
     private logStorage: LogStorage;
@@ -155,9 +155,9 @@ export default class TaskViewerPlugin extends Plugin {
         });
         this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
         this.readService.updateWeekStartDay(this.settings.weekStartDay);
-        this.writeService = new TaskWriteService(this.taskIndex);
+        this.operations = new Operations(this.app, this.taskIndex);
         // The timer widget is made below; a send asks for it as it is made.
-        this.noteOps = new NoteOps(this.app, this.writeService, () => this.settings, {
+        this.noteOps = new NoteOps(this.app, this.operations, () => this.settings, {
             getTask: (id) => this.readService.getTask(id),
             timers: () => this.timerWidget ?? null,
         });
@@ -328,11 +328,11 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Menu builders for inline task menu button
         const editorPropertiesBuilder = new PropertiesMenuBuilder(
-            this.app, this.writeService, this,
+            this.app, this.operations, this,
             new PropertyCalculator(), new PropertyFormatter()
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
-        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.writeService, this);
+        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.operations, this);
         const editorValidationBuilder = new ValidationMenuBuilder();
         const editorCheckboxBuilder = new CheckboxMenuBuilder(
             this.app,
@@ -343,7 +343,7 @@ export default class TaskViewerPlugin extends Plugin {
         const taskMenuResult = createTaskMenuExtension(
             this.app,
             this.readService,
-            this.taskIndex.editorLineHost(),
+            this.operations.editorLineHost(),
             editorPropertiesBuilder,
             editorTimerBuilder,
             editorActionsBuilder,
@@ -359,7 +359,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // A completion made in the editor fires its flow in the transaction
         // that made it; nothing else in the editor fires.
-        this.registerEditorExtension(fireFilter(this.taskIndex.editorFireHost()));
+        this.registerEditorExtension(fireFilter(this.operations.editorFireHost()));
 
         // Wavy-underline diagnostics for `==>` flow commands and `@date`
         // blocks. Pure re-parse of visible lines — no TaskIndex.
@@ -439,7 +439,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         if (!this.hubTaskRenderer) {
             this.hubTaskRenderer = new TaskCardRenderer(
-                this.app, this.readService, this.writeService, this.menuPresenter,
+                this.app, this.readService, this.operations, this.menuPresenter,
                 {
                     hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
                     getHoverParent: () => this.hubHoverParent,
@@ -450,7 +450,7 @@ export default class TaskViewerPlugin extends Plugin {
             this.addChild(this.hubTaskRenderer);
         }
         if (!this.hubMenuHandler) {
-            this.hubMenuHandler = new MenuHandler(this.app, this.readService, this.writeService, this);
+            this.hubMenuHandler = new MenuHandler(this.app, this.readService, this.operations, this);
             this.hubMenuHandler.setTaskHubOpener((id, opts) => this.openTaskHub(id, opts));
         }
 
@@ -458,13 +458,13 @@ export default class TaskViewerPlugin extends Plugin {
             taskRenderer: this.hubTaskRenderer,
             menuHandler: this.hubMenuHandler,
             readService: this.readService,
-            writeService: this.writeService,
+            operations: this.operations,
             plugin: this,
         }, options).open();
     }
 
     // Public accessors for services
-    getTaskIndex(): TaskIndex {
+    getIndex(): IndexReads {
         return this.taskIndex;
     }
 
@@ -472,8 +472,8 @@ export default class TaskViewerPlugin extends Plugin {
         return this.readService;
     }
 
-    getTaskWriteService(): TaskWriteService {
-        return this.writeService;
+    getOperations(): Operations {
+        return this.operations;
     }
 
     getNoteOps(): NoteOps {
@@ -546,6 +546,7 @@ export default class TaskViewerPlugin extends Plugin {
         this.logStorage?.close();
         this.taskMenuCleanup?.();
         untrackAllKeyboards();
+        this.operations?.dispose();
         this.taskIndex?.dispose();
         AudioUtils.dispose();
         clearBodyStyles();

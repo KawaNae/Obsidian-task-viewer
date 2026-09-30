@@ -102,7 +102,7 @@ export class DateHeaderRenderer {
             cell.dataset.date = date;
 
             cell.addEventListener('click', () => {
-                void openPeriodicNoteInLeaf(app, dailyNotes(app), date, plugin.getTaskWriteService().writeChannel);
+                void openPeriodicNoteInLeaf(app, dailyNotes(app), date, plugin.getOperations().writeChannel);
             });
 
         });
