@@ -128,7 +128,7 @@ describe('shifting the start of a running timer writes the running line, then mo
         expect(lines(contents)[0]).toContain(`@${DAY}T10:20>11:20`);
 
         vi.setSystemTime(at(10, 25));
-        expect(rememberedStart(timer, Date.now())).toBe(at(10, 0).getTime());
+        expect(rememberedStart(timer, Date.now(), 0)).toBe(at(10, 0).getTime());
         await lifecycle.offsetStart(timer, at(10, 0).getTime());
         await settleAll(s);
         // 走っている間の行も、ずらした start を示す。
@@ -186,7 +186,7 @@ describe('shifting the start of a running timer writes the running line, then mo
         await vi.waitFor(() => expect(busyOf(lifecycle).has(timer.id)).toBe(false));
         await settleAll(s);
         expect(timer.runState).toBe('running');
-        expect(rememberedStart(timer, Date.now())).toBeNull();
+        expect(rememberedStart(timer, Date.now(), 0)).toBeNull();
 
         // ▶ の押し忘れ: 前の区間の end より前へもずらせる（下限を置かない）。
         vi.setSystemTime(at(11, 12));
@@ -350,10 +350,23 @@ describe('where a shift goes (TimerStartOffset)', () => {
 
     it('the remembered start is offered in the first session only, and only when it is past', () => {
         const timer = { sessionCount: 0, priorStartMs: at(10, 0).getTime() } as TimerInstance;
-        expect(rememberedStart(timer, now)).toBe(at(10, 0).getTime());
-        expect(rememberedStart({ ...timer, sessionCount: 1 } as TimerInstance, now)).toBeNull();
-        expect(rememberedStart({ ...timer, priorStartMs: at(10, 30).getTime() } as TimerInstance, now)).toBeNull();
-        expect(rememberedStart({ ...timer, priorStartMs: null } as TimerInstance, now)).toBeNull();
+        expect(rememberedStart(timer, now, 0)).toBe(at(10, 0).getTime());
+        expect(rememberedStart({ ...timer, sessionCount: 1 } as TimerInstance, now, 0)).toBeNull();
+        expect(rememberedStart({ ...timer, priorStartMs: at(10, 30).getTime() } as TimerInstance, now, 0)).toBeNull();
+        expect(rememberedStart({ ...timer, priorStartMs: null } as TimerInstance, now, 0)).toBeNull();
+    });
+
+    it('the remembered start is offered only within today, the day startHour divides', () => {
+        const prior = (ms: number) => ({ sessionCount: 0, priorStartMs: ms }) as TimerInstance;
+        // 何か月も前の予定の start は出さない。
+        expect(rememberedStart(prior(new Date(2026, 5, 1, 9, 0).getTime()), now, 0)).toBeNull();
+        expect(rememberedStart(prior(at(23, 50, 29).getTime()), now, 0)).toBeNull();
+        // 今日の区切りが 5 時なら、02:00 の今日は前日の 05:00 から始まる。
+        const night = at(2, 0).getTime();
+        expect(rememberedStart(prior(at(23, 50, 29).getTime()), night, 5)).toBe(at(23, 50, 29).getTime());
+        expect(rememberedStart(prior(at(4, 59, 29).getTime()), night, 5)).toBeNull();
+        expect(rememberedStart(prior(at(0, 30).getTime()), night, 0)).toBe(at(0, 30).getTime());
+        expect(rememberedStart(prior(at(23, 50, 29).getTime()), night, 0)).toBeNull();
     });
 
     it('only a running countup or countdown can be shifted', () => {
