@@ -51,10 +51,8 @@ export function flowInstanceHead(insert: FlowInstanceInsert): string {
  * depth up. It is written where the row stands, at the row's indentation and
  * spelled with the row's marker and gap (`spelledAsFired`); the put carries
  * it to the spot's indentation (`Block.at`).
- * Both the plain insert and the insert-and-remove of a deletion fire render
- * through here, so the two paths cannot drift into writing different lines for
- * the same effect — which is the whole reason this is not a method on the
- * writer that happens to call it.
+ * Every instance a fire writes — a completion's and a deletion's alike —
+ * comes as an `insert-instance` op and is rendered here.
  *
  * `currentLine` is the original's line in the lines `outline` reads, already
  * resolved by the caller. Nothing here searches for it: a search after a line

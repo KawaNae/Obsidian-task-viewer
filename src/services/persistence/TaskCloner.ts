@@ -7,7 +7,6 @@ import type { PlannedTarget } from './TaskRefs';
 import { Outline } from '../parsing/utils/Outline';
 import { Block, Placement, type Spot } from './utils/Placement';
 
-export type { GeneratedChild } from './FlowInstanceLines';
 
 /**
  * What a duplicate-as-next writes for each copy.
@@ -76,9 +75,7 @@ export class TaskCloner {
      * 時刻を持たないタスクはずらす先が無いので、呼び出し側は `verbatim` を
      * 渡す。その複写はファイルの行をそのまま写し、formatter を通らない。
      *
-     * 複写は元タスクとその子行の**後ろ**に入る。時刻の順に読めるためで、
-     * 同じ本文の 2 行が序数で振り分けられたときに、旧 ID が上の元の行に
-     * 残るためでもある。
+     * 複写は元タスクとその子行の**後ろ**に入る。時刻の順に読めるためである。
      *
      * @returns whether the copies were written.
      */

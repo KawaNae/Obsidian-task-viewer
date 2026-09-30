@@ -7,7 +7,6 @@ import { editorSession } from '../helpers/editorSession';
 import { keyOf } from '../../../src/editor/EditorDoc';
 import { writeEditorLine } from '../../../src/editor/EditorWrite';
 import type { EditorLine } from '../../../src/services/persistence/FileLines';
-import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 
 /**
  * The editor's ⋯ menu, on one of two twin lines, when the editor and the file
@@ -77,10 +76,7 @@ describe('the editor menu, written to the file, on one of two twin lines', () =>
 });
 
 describe('the editor menu, written in the editor, on one of two twin lines', () => {
-    const host = (session: VaultSession) => ({
-        ...session.index.editorFireHost(),
-        writeLine: (path: string, at: EditorLine, ops: readonly TaskOp[]) => session.index.writeLine(path, at, ops),
-    });
+    const host = (session: VaultSession) => session.index.editorLineHost();
 
     it('writes the twin it was opened on, in the editor holding an unsaved line above it', async () => {
         const { contents, session } = await openVault(['- [ ] 読書', '- [ ] 読書', '']);

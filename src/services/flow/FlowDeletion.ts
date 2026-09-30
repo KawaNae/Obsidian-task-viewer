@@ -5,6 +5,13 @@ import type { FlowEffect } from './FlowEffects';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 
 /**
+ * An effect that writes the next instance — the only kind a deletion fire
+ * keeps. Named so the executor can hand them all to one write without a
+ * defensive branch for kinds that {@link planFlowForDeletion} already dropped.
+ */
+export type CreatingEffect = Extract<FlowEffect, { kind: 'create-next' | 'create-generated' }>;
+
+/**
  * What firing would save, for a task that is about to be deleted.
  *
  * - `creates`: firing writes a next instance. `effects` are the ones that
@@ -15,13 +22,6 @@ import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
  * - `failed`: the command is there and could not be planned. The command
  *   would go with the line, and firing cannot save it.
  */
-/**
- * An effect that writes the next instance — the only kind a deletion fire
- * keeps. Named so the executor can hand them all to one write without a
- * defensive branch for kinds that {@link planFlowForDeletion} already dropped.
- */
-export type CreatingEffect = Extract<FlowEffect, { kind: 'create-next' | 'create-generated' }>;
-
 export type FlowDeleteOutlook =
     | { kind: 'creates'; effects: CreatingEffect[]; previewLine: string }
     | { kind: 'nothing' }

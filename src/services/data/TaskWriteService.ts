@@ -1,6 +1,6 @@
 import type { TFile } from 'obsidian';
-import type { EditorLine, WriteChannels } from '../persistence/FileLines';
-import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
+import type { WriteChannels } from '../persistence/FileLines';
+import type { InsertPlace, SubtreeReplacement } from '../persistence/TaskOps';
 import type { IndexRefusal } from '../core/RefusalClause';
 import type { DuplicateOptions, Task } from '../../types';
 import type { AnchoredRow, RowSnapshot, SendRow, SendWrite, TaskIndex } from '../core/TaskIndex';
@@ -158,13 +158,6 @@ export class TaskWriteService {
      */
     async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
         return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to, opts);
-    }
-
-    // ===== A line the editor pointed at =====
-
-    /** @returns whether `ops` were written to the row at `at`, in the file (see TaskIndex.writeLine). */
-    async writeLine(filePath: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean> {
-        return this.taskIndex.writeLine(filePath, at, ops);
     }
 
     // ===== Frontmatter key writes (Task を介さない書き込み) =====

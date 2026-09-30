@@ -7,7 +7,7 @@ import { type FireOp, type NotRun, notRunOf } from '../services/flow/FlowExecuto
 import type { TaskOp } from '../services/persistence/TaskOps';
 import {
     editLines, replayEdits,
-    type EditorLine, type LineEdit, type LineDraft, type NamedRow, type Refusal, type WriteSession,
+    type EditorLine, type LineEdit, type LineDraft, type NamedRow, type WriteSession,
 } from '../services/persistence/FileLines';
 import { lineChanges } from './LineChanges';
 import { linesOf } from './EditorDoc';
@@ -25,8 +25,6 @@ export interface EditorFireHost {
     statusDefinitions(): StatusDefinition[];
     fireOp(path: string): FireOp;
     applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean;
-    /** Tell the user a write was not made, and why (the index's `reportRefusal`): the editor menu's write. */
-    refused(refusal: Refusal): void;
     /** Tell the user a completed row's flow, or its move, was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
     notRun(why: NotRun): void;
 }
@@ -137,11 +135,4 @@ export function fireFilter(host: EditorFireHost): Extension {
         if (changes.length === 0) return [tr, isolated];
         return [tr, { ...isolated, changes, sequential: true }];
     });
-}
-
-export type { EditorHandle } from './EditorWrite';
-
-/** The editor's fire, as one extension (`fireFilter`). */
-export function flowFireExtension(host: EditorFireHost): Extension {
-    return fireFilter(host);
 }

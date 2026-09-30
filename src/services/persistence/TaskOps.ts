@@ -3,6 +3,9 @@ import type { Refusal, WriteMade, WriteRefused } from './FileLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { InSection } from './utils/Placement';
 
+/** Where a new line goes beside the row (see {@link TaskOp} `insert`). */
+export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
+
 /**
  * One thing an operation does to the row it names, in a write that may do
  * several (see `InlineTaskWriter.applyToTask`).
@@ -41,9 +44,6 @@ import type { InSection } from './utils/Placement';
  *   Only a write that completes the row carries it (`completes`): a fire is
  *   what completing a task does, never what a later reading of it finds.
  */
-/** Where a new line goes beside the row (see {@link TaskOp} `insert`). */
-export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
-
 export type TaskOp =
     | { kind: 'insert-instance'; insert: FlowInstanceInsert }
     | { kind: 'strip-flow'; text: string }

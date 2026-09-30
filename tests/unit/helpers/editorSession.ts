@@ -1,11 +1,12 @@
 import { EditorSelection, EditorState, Transaction, type TransactionSpec } from '@codemirror/state';
 import { history, redo, undo } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
-import { flowFireExtension, type EditorHandle, type EditorFireHost } from '../../../src/editor/FlowFireExtension';
+import { fireFilter, type EditorFireHost } from '../../../src/editor/FlowFireExtension';
+import type { EditorHandle } from '../../../src/editor/EditorWrite';
 
 /**
  * A note open in an editor, over the plugin's own editor extension
- * (`flowFireExtension`), without a view: transactions are made on an
+ * (`fireFilter`), without a view: transactions are made on an
  * `EditorState` as the view would make them.
  *
  * `host` is the index's (`TaskIndex.editorFireHost`), so a fire here plans,
@@ -15,7 +16,7 @@ import { flowFireExtension, type EditorHandle, type EditorFireHost } from '../..
 export function editorSession(host: EditorFireHost, path: string, text: string) {
     const stateOf = (note: string, doc: string) => EditorState.create({
         doc,
-        extensions: [editorInfoField.init(() => ({ file: { path: note } })), history(), flowFireExtension(host)],
+        extensions: [editorInfoField.init(() => ({ file: { path: note } })), history(), fireFilter(host)],
     });
     let state = stateOf(path, text);
     let connected = true;
