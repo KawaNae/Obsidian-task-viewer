@@ -21,7 +21,10 @@ afterEach(() => { live?.dispose(); live = undefined; });
 
 async function open(lines: string[], others: Record<string, string[]> = {}) {
     const { contents, session } = await openLiveVault({ [FILE]: lines, ...others }, s => { live = s; });
-    const ops = new NoteOps(session.app, new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }));
+    const ops = new NoteOps(session.app, new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }), {
+        getTask: (id) => session.index.getTask(id),
+        timers: () => null,
+    });
     const idOf = (content: string) => session.index.getTasks().find(one => one.content === content)!.id;
     const row = (content: string) => {
         const task = session.index.getTasks().find(one => one.content === content)!;
@@ -186,6 +189,13 @@ describe('destinationFacts', () => {
 
         expect(await facts(lines, { name: 'Plan' }, { 'Plan.md': ['x ^c', 'y ^z', ''] })).toMatchObject({ shared: ['c'] });
         expect(await facts(lines, { name: 'note' }, {}, ['A', 'B'])).toMatchObject({ shared: [] });
+    });
+
+    it('how many lines of the note carry each ^id; none for a note to make', async () => {
+        const found = await facts(['- [ ] A', ''], { name: 'Plan' }, { 'Plan.md': ['- x ^c', '- [ ] y ^c', 'z ^d', ''] });
+        expect(found.kind !== 'unnamed' && [...found.anchors]).toEqual([['c', 2], ['d', 1]]);
+        const made = await facts(['- [ ] A ^a', ''], { name: 'X' });
+        expect(made.kind !== 'unnamed' && made.anchors.size).toBe(0);
     });
 
     it('the commands of the rows and their descendants the note does not resolve, the heading it makes counted', async () => {

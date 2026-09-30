@@ -30,7 +30,9 @@ import {
     type TimerContext,
     IDLE_TIMER_ID,
 } from './TimerContext';
-import { logInfo } from '../log/log';
+import { logInfo, logWarn } from '../log/log';
+import type { SendingLines, SendTimers } from '../services/data/NoteOps';
+import { anchorsOf, checkTimerSend, timerSendText } from './TimerSendCheck';
 
 /**
  * Hands out the running timer widget. Declared beside the widget for the same
@@ -41,7 +43,7 @@ export interface TimerHost {
     getTimerWidget(): TimerWidget;
 }
 
-export class TimerWidget implements TimerContext {
+export class TimerWidget implements TimerContext, SendTimers {
     readonly app: App;
     readonly plugin: PluginContext & EventRegistrar;
     readonly timers: Map<string, TimerInstance> = new Map();
@@ -283,6 +285,47 @@ export class TimerWidget implements TimerContext {
         if (changed) {
             this.persistTimersToStorage();
         }
+    }
+
+    /**
+     * Why the open timers keep a send of rows from being made, in one
+     * sentence (`checkTimerSend`); null when nothing keeps it. Every open
+     * timer is asked, one waiting to record (`pendingRecord`) as well.
+     */
+    refuse(sending: SendingLines): string | null {
+        const timers = [...this.timers.values()].map(timer => ({ name: timer.taskName, file: timer.taskFile, anchors: anchorsOf(timer) }));
+        const verdict = checkTimerSend(timers, sending);
+        return verdict.kind === 'clear' ? null : timerSendText(verdict);
+    }
+
+    /**
+     * The rows of the note `from` were sent to the note `to` and have left
+     * `from`, the lines carrying `anchors` with them: each timer of `from`
+     * whose `^id`s ({@link anchorsOf}) all went finds its lines in `to` from
+     * now on, as {@link handleFileRename} has it follow a note renamed.
+     *
+     * Asked as the write of `from` lands, so it is asked again here rather
+     * than taken from the check before the send: a timer may have written
+     * since. One whose `^id`s went only in part is left where it is, and
+     * said in the log: the check would have kept the send.
+     */
+    follow(from: string, to: string, anchors: readonly string[]): void {
+        const went = new Set(anchors);
+        let changed = false;
+        for (const timer of this.timers.values()) {
+            if (timer.taskFile !== from) continue;
+            const own = anchorsOf(timer);
+            const going = own.filter(id => went.has(id));
+            if (going.length === 0) continue;
+            if (going.length < own.length) {
+                logWarn(`[Timer:follow] only ${going.join(',')} of ${own.join(',')} went from ${from} to ${to}, the timer is left in ${from}`);
+                continue;
+            }
+            logInfo(`[Timer:follow] ${own.join(',')} ${from} -> ${to}`);
+            timer.taskFile = to;
+            changed = true;
+        }
+        if (changed) this.persistTimersToStorage();
     }
 
     persistTimersToStorage(): void {

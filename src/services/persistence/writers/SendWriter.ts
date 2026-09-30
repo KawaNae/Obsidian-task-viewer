@@ -75,6 +75,17 @@ export type SendOutcome<F extends CompletionFire> =
         writes: readonly FiringOutcome<F>[];
     };
 
+/**
+ * What a caller of a send hears as it is made (`SendWriter.send`): a refusal
+ * before anything is written, when the caller shows it in a place of its own
+ * (`refused`, as `InlineTaskWriter` hears one); and each note the rows came
+ * from whose write landed (`landed`), as it lands, before the send goes on.
+ */
+export interface SendHearing {
+    refused?: (refusal: Refusal) => void;
+    landed?: (path: string) => void;
+}
+
 /** A row as a send puts it in its note: one of the note's own, carried; or the lines another note's write leaves of one, put there new. */
 type Item =
     | { own: RowTarget }
@@ -145,7 +156,10 @@ export class SendWriter {
      *    each row's subtree replaced by the link — only where the subtree
      *    then reads as it did when it was tried, so what went to the note is
      *    what is taken away here (`changed` otherwise). A refusal here is
-     *    told to nobody: it is in the outcome.
+     *    told to nobody: it is in the outcome. A write that lands is handed
+     *    to `opts.landed` there and then, before anything else is awaited:
+     *    what followed the rows by their `^id`s (a timer) follows them to
+     *    the note while nothing else has looked for them.
      * 4. If a note refused, the note sent to is taken back while it reads as
      *    its write left it (`takeBack`): the lines of the notes that refused
      *    taken out of it, or, when no row went, the note taken away, or
@@ -155,7 +169,7 @@ export class SendWriter {
         rows: ReadonlyArray<{ file: string; row: SentRow }>,
         to: SendTo,
         completing: SendCompleting<F>,
-        opts: { refused?: (refusal: Refusal) => void } = {},
+        opts: SendHearing = {},
     ): Promise<SendOutcome<F>> {
         const hearing = (path: string) => hearingChannel(this.channelOf(path), opts.refused);
         const own = rows.filter(one => one.file === to.path).map(one => one.row);
@@ -202,6 +216,7 @@ export class SendWriter {
             const left = await this.leaveLinks(from.path, from.rows, rehearsed.get(from.path)!, note, completing);
             if (left.written) {
                 landed.push(from.path);
+                opts.landed?.(from.path);
                 writes.push(left);
             } else {
                 refused.push(left.refused);
