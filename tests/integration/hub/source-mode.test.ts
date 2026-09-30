@@ -250,6 +250,40 @@ describe('the hub\'s source mode', () => {
         }
     });
 
+    it('shuts the form\'s picker fields as a whole: their clear and picker buttons change nothing', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        openSource('親');
+        const shut = run<Record<string, unknown>>(`
+            const fields = [...document.querySelectorAll('.task-hub .tv-form__input-with-picker')];
+            const controls = fields.flatMap(f => [...f.querySelectorAll('input, button')]);
+            const start = fields[0];
+            const shownBefore = start.querySelector('.tv-ctrl__text-input').value;
+            const showPicker = HTMLInputElement.prototype.showPicker;
+            let opened = 0;
+            HTMLInputElement.prototype.showPicker = function () { opened++; };
+            try {
+                start.querySelector('.tv-form__clear-button').click();
+                for (const f of fields) {
+                    f.querySelector('.tv-form__picker-button').click();
+                    f.querySelector('.tv-form__native-picker-input').click();
+                }
+            } finally {
+                HTMLInputElement.prototype.showPicker = showPicker;
+            }
+            await sleep(200);
+            return JSON.stringify({
+                fields: fields.length,
+                allDisabled: controls.every(c => c.disabled),
+                shownBefore,
+                shownAfter: start.querySelector('.tv-ctrl__text-input').value,
+                opened,
+            });
+        `);
+        // Six date and time fields and the color field.
+        expect(shut).toEqual({ fields: 7, allDisabled: true, shownBefore: '2026-09-29', shownAfter: '2026-09-29', opened: 0 });
+        expect(readTestFile(TEST_FILE)).toBe(NOTE);
+    });
+
     it('breaks the parent\'s line into its first child, goes on with lists on Enter, and moves between the editors by arrow', async () => {
         await writeIndexedTestFile(TEST_FILE, LISTS);
         const opened = openSource('親');
