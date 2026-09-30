@@ -1,6 +1,5 @@
 import type { App, TFile } from 'obsidian';
 import { t } from '../../i18n';
-import { NoteName, type NameCheck, type NoteAt } from '../../services/data/NoteName';
 import { FileSuggest } from '../../suggest/FileSuggest';
 import { FolderSuggest } from '../../suggest/FolderSuggest';
 import type { ShownSuggest } from '../../suggest/ShownSuggest';
@@ -20,22 +19,16 @@ export interface NoteFieldsOptions {
  * The fields that name a note and say where it goes, in the order of its
  * path: its folder (with the vault's folders suggested), and its name (with
  * the vault's notes suggested), each a form row with its icon, as the hub's
- * rows are. Picking a note puts its folder and its name in the two. They
- * answer the note the two point at (`NoteName.at`) — a new note or one of the
- * vault's, which the fields do not keep apart themselves — and whether the
- * name can be one; what the form does with that note is the form's to say.
- *
- * The name follows what the form suggests ({@link suggestName}) until the
- * user types in it or picks a note.
+ * rows are. Picking a note puts its folder and its name in the two. What
+ * the note is, and what the form does with it, is the form's to say.
  */
 export class NoteFields {
     readonly nameInput: HTMLInputElement;
     readonly folderInput: HTMLInputElement;
     private readonly fileSuggest: FileSuggest;
     private readonly folderSuggest: FolderSuggest;
-    private typedName = false;
 
-    constructor(private readonly app: App, container: HTMLElement, opts: NoteFieldsOptions) {
+    constructor(app: App, container: HTMLElement, opts: NoteFieldsOptions) {
         const { row: folderRow } = createFormRow(container, t('modal.noteFields.folder'), { icon: 'folder' });
         this.folderInput = folderRow.createEl('input', {
             type: 'text',
@@ -49,10 +42,7 @@ export class NoteFields {
         const { row: nameRow } = createFormRow(container, t('modal.noteFields.name'), { icon: 'file-text' });
         this.nameInput = nameRow.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         this.nameInput.value = opts.name;
-        this.nameInput.addEventListener('input', () => {
-            this.typedName = true;
-            opts.onChange();
-        });
+        this.nameInput.addEventListener('input', () => opts.onChange());
         this.fileSuggest = new FileSuggest(app, this.nameInput, (file) => {
             this.pick(file);
             opts.onChange();
@@ -80,25 +70,8 @@ export class NoteFields {
         return this.folderInput.value.trim();
     }
 
-    /** Put `name` in the name field, unless the user has typed a name of their own or picked a note. */
-    suggestName(name: string): void {
-        if (this.typedName) return;
-        this.nameInput.value = name;
-    }
-
-    /** Whether the name can be a note's (`NoteName.check`). */
-    check(): NameCheck {
-        return NoteName.check(this.name);
-    }
-
-    /** The note the name and the folder point at (`NoteName.at`); asked only of a name that can be one. */
-    at(): NoteAt {
-        return NoteName.at(this.app.vault, this.folder, this.name);
-    }
-
     /** Name `file` by the two fields: its name, and its folder ('' for the root). */
     private pick(file: TFile): void {
-        this.typedName = true;
         this.nameInput.value = file.basename;
         const folder = file.parent?.path ?? '';
         this.folderInput.value = folder === '/' ? '' : folder;

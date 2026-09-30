@@ -30,7 +30,7 @@ export interface DestinationFieldOptions {
  */
 export class DestinationField {
     private readonly note: NoteFields;
-    readonly headingInput: HTMLInputElement;
+    private readonly headingInput: HTMLInputElement;
     private readonly headingSuggest: HeadingSuggest;
 
     constructor(app: App, container: HTMLElement, opts: DestinationFieldOptions) {

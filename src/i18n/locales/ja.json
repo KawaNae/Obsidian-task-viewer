@@ -386,8 +386,6 @@
     "typePropertyValue": "値を入力...",
     "propertyKeyLabel": "キー：",
     "propertyValueLabel": "値：",
-    "select": "選択...",
-    "nSelected": "{{n}}件選択中",
     "relative": "相対",
     "absolute": "絶対",
     "hours": "時間",

@@ -258,11 +258,6 @@ export class SourceEditor implements DraftEditor {
         return parent || children;
     }
 
-    /** Whether `node` is in either editor, or in a list one of them shows. */
-    contains(node: Node | null): boolean {
-        return node !== null && this.dom.contains(node);
-    }
-
     /** Focus the parent's line, at its end. */
     focus(): void {
         this.parentView.focus();
