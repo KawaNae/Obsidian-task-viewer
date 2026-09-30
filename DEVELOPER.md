@@ -110,7 +110,7 @@ src/
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
 │   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagExtractor, TaskLineClassifier)
-│   ├── persistence/           # Write layer (TaskRepository, InlineTaskWriter)
+│   ├── persistence/           # Write layer (FileLines: one target type `RowRef`, `createFile`; Notes: a block put in a note, a note made; TaskRepository, InlineTaskWriter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
 │   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
@@ -203,8 +203,10 @@ Quick reference for locating the right layer when implementing a feature.
 | **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain); parses only, never writes |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level); cuts the `==>` command off the content without reading it (`readFlow` does) |
-| **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
-| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) and insertion under a heading |
+| **TaskRepository** | `services/persistence/TaskRepository.ts` | Assembles the writers and the index's channel; its ports: `write(file, target, ops, { fire?, refused? })` (the one write of ops to a row, duplicates included as a `copies` op), `applyOps`, `replaceSubtree`, `send`, `putInNote`, `setFrontmatterKeys` |
+| **Notes** | `services/persistence/Notes.ts` | The one way a block is put in a note's section or at its end, the note made when the caller gives its seed (`putInNote`), the one way a note is made of lines (`createNote`, over `createFile`, the only `vault.create`), and daily / periodic notes made from their template (`openPeriodicNote`, `putInPeriodicNote`). Writes to one path run one at a time |
+| **PeriodicNotes** | `utils/PeriodicNotes.ts` | The description of a daily or periodic note (`PeriodicNote`) and the pure answers of which note a date names: `notePath`, `linkTarget`, `label`, `dateOfPath` (formats with `/` included), `findNote` |
+| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
 | **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation |
@@ -652,7 +654,7 @@ The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault pa
 
 ### utils placement rule
 
-`src/utils/` holds only leaves that belong to no layer and are used by two or more layers (e.g. `DateUtils`, `LineBreak`, `HostWindow`). A module that answers one layer's question, or that only one layer uses, lives in that layer, even when it is a small pure helper: `CodeFenceTracker` is a parsing question and lives in `services/parsing/utils/`; `TimerTargetIdUtils` is the timer's and lives in `timer/`. When the last caller outside a layer goes away, move the module into that layer. Existing files that do not meet the rule yet are moved when touched, not kept as precedent.
+`src/utils/` holds only leaves that belong to no layer and are used by two or more layers (e.g. `DateUtils`, `LineBreak`, `HostWindow`). A module that answers one layer's question, or that only one layer uses, lives in that layer, even when it is a small pure helper: `CodeFenceTracker` is a parsing question and lives in `services/parsing/utils/`; `TimerTargetIdUtils` is the timer's and lives in `timer/`. When the last caller outside a layer goes away, move the module into that layer. Existing files that do not meet the rule yet are moved when touched, not kept as precedent. Nothing in `src/utils/` imports a layer's procedures: a write (`processLines`, `createFile`) belongs in `services/persistence`, so a module that answers "which note" purely (`PeriodicNotes`) stays here and the part that makes and writes the note lives in `persistence/Notes`.
 
 ### Tooltip convention
 
