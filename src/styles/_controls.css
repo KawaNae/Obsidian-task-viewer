@@ -242,3 +242,49 @@
     width: 100%;
 }
 
+/* --- Native picker overlay (NativePicker) ---
+ *
+ * ボタンの上に重ねる、見えないネイティブの input（date / time / color）。
+ * フォームの欄が使う。どのボタンにも重ねられるよう、この節の規則は .tv-ctrl
+ * に限らない。置き場所（top / left /
+ * 幅と高さ）は使う側の CSS が決める。
+ * !important は Obsidian が input[type=date] などに与える枠、余白、高さを
+ * 打ち消すため。
+ */
+input.tv-native-picker {
+    position: absolute !important;
+    opacity: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    min-height: 0 !important;
+    cursor: pointer !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    /* desktop では下のボタンが click を受け、showPicker() で開く。
+       input をヒット対象にしないのは、date / time の shadow DOM の内部の
+       欄が cursor の指定を無視し、cursor が default に落ちるため */
+    pointer-events: none !important;
+}
+
+/* Mobile (touch): iOS / iPadOS は showPicker() を拒む（WebKit Bug #261703）
+   ため、input が直接タップを受けて開く */
+.is-mobile input.tv-native-picker {
+    pointer-events: auto !important;
+}
+
+/* date / time の shadow DOM の内部の欄は input の cursor を継承しない
+   （color にはこの内部の構造がない）。input がヒット対象になる is-mobile +
+   ポインタの環境（エミュレーション、iPad + トラックパッド）でも pointer を出す */
+.tv-native-picker::-webkit-datetime-edit,
+.tv-native-picker::-webkit-datetime-edit-fields-wrapper,
+.tv-native-picker::-webkit-datetime-edit-text,
+.tv-native-picker::-webkit-datetime-edit-year-field,
+.tv-native-picker::-webkit-datetime-edit-month-field,
+.tv-native-picker::-webkit-datetime-edit-day-field,
+.tv-native-picker::-webkit-datetime-edit-hour-field,
+.tv-native-picker::-webkit-datetime-edit-minute-field,
+.tv-native-picker::-webkit-datetime-edit-ampm-field,
+.tv-native-picker::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+}
