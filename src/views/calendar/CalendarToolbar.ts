@@ -23,7 +23,6 @@ export interface CalendarToolbarDeps {
     container: HTMLElement;
 
     onNavigateWeek: (days: number) => void;
-    onNavigateMonth: (direction: number) => void;
     onJumpToCurrentMonth: () => void;
     /** Show the month containing `date`, as the Today button shows this month. */
     onJumpToDate: (date: string) => void;
@@ -99,7 +98,6 @@ export class CalendarToolbar extends ViewToolbarBase {
             () => deps.onJumpToCurrentMonth(),
             {
                 vertical: true,
-                onNavigateFast: (direction) => deps.onNavigateMonth(direction),
                 dateJump: {
                     getCurrentDate: () => deps.getCurrentDate(),
                     onJump: (date) => deps.onJumpToDate(date),
