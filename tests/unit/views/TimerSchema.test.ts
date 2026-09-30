@@ -41,7 +41,7 @@ describe('TimerSchema', () => {
     });
 
     it('agrees with the short name the URI builder writes', () => {
-        // 短縮名の表は ViewUriBuilder にも手書きで載っている（統合は C6）。
+        // 書く側（ViewUriBuilder）も読む側も、短縮名を schema の登録簿から引く。
         // 2 つが食い違うと、書いた URI を読み側が解決できなくなる。
         for (const viewType of ALL_VIEW_TYPES) {
             expect(ViewUriBuilder.build(viewType)).toContain(`view=${shortNameFor(viewType)}`);

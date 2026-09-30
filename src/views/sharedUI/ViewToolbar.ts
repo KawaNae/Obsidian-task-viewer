@@ -1,7 +1,8 @@
 import { setIcon, Notice } from 'obsidian';
 import type { App, Menu, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
+import { ViewUriBuilder, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
+import type { LeafPosition } from '../../services/viewConfig/LeafOpener';
 import { shortNameFor } from '../../services/viewConfig';
 import { InputModal } from '../../modals/InputModal';
 import type { Task, ViewTemplate } from '../../types';

@@ -1,7 +1,6 @@
 import type { Workspace, WorkspaceLeaf } from 'obsidian';
 import { shortNameFor } from '../../services/viewConfig';
-
-export type LeafPosition = 'left' | 'right' | 'tab' | 'window' | 'override';
+import type { LeafPosition } from '../../services/viewConfig/LeafOpener';
 
 export interface ViewUriOptions {
     position?: LeafPosition;
