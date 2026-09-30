@@ -3,8 +3,8 @@ import type { Task } from '../../../types';
 /**
  * The rows a send takes of the ones it was asked for, each once: a row in
  * the subtree of another one asked for goes with that one's subtree, and is
- * not taken on its own (`v0.58-features.md`: 親と子を両方選んだら、親の部分木に
- * まとめる). In the order they stand, note by note: the order a send carries
+ * not taken on its own (`archive/2026-09-send.md`, 仕様の決定, 移す操作から
+ * 送る操作へ, `SendRows.outermostRows`). In the order they stand, note by note: the order a send carries
  * them in, and so the order they land in.
  *
  * A row's subtree is the one the copy was read with (`Task.subtreeLines`),
