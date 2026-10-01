@@ -1,16 +1,12 @@
-import type { App } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { logError, logInfo, logWarn } from '../../log/log';
-import type { IndexReads } from '../core/TaskIndex';
+import { logInfo, logWarn } from '../../log/log';
 import { formatRow } from '../parsing/TaskLineFormat';
-import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { TaskOp } from '../persistence/TaskOps';
 import type { CompletionFire } from '../persistence/FiringTrials';
-import { plannedOn, type ReadCopy } from '../persistence/TaskRefs';
 import { type InSection, Placement, type SectionSide } from '../persistence/utils/Placement';
 import { Outline } from '../parsing/utils/Outline';
 import { flowSource } from '../lang/flow/FlowSegments';
@@ -20,7 +16,6 @@ import { createMomentEvalHost } from './MomentEvalHost';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../core/RowNames';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { FlowNotices } from './FlowNotices';
 
 /**
  * Where a move to the heading `name` goes in `lines`, at `side` of the
@@ -59,6 +54,31 @@ export type FirePlan =
     | { kind: 'fires'; task: Task; ops: TaskOp[] };
 
 /**
+ * What the flow reads of the notes besides the lines a write holds: a note's
+ * generation block by its name, and a row by its id. The index answers both
+ * (`IndexReads`); the flow names only what it reads.
+ */
+export interface FlowReads {
+    getGenBlock(file: string, name: string): GenBlock | undefined;
+    getTask(id: string): Task | undefined;
+}
+
+/**
+ * What deleting a row with its fire writes (`FlowExecutor.planDeletion`).
+ *
+ * - `failed`: the fire could not be planned, which stops the delete: the
+ *   command is on the line that was about to go, and removing it would lose
+ *   exactly what the user asked to keep.
+ * - `deletes`: `ops`, the next instance (none when the command has nothing
+ *   left to generate) and then the row's removal, as one write; `blocks`,
+ *   the generation blocks the plan read, for the write to find still reading
+ *   so (`plannedOn`).
+ */
+export type DeletionPlan =
+    | { kind: 'failed'; error: EvalError | GenerationError }
+    | { kind: 'deletes'; ops: TaskOp[]; blocks: ReadonlyArray<{ name: string; body: readonly string[] }> };
+
+/**
  * A `fire` op, and what its plan answered the last time a write ran it: what
  * the user is owed of it once the write landed (`FlowNotices.notRunsOf`).
  */
@@ -68,22 +88,20 @@ export interface FireOp extends CompletionFire {
 }
 
 /**
- * Flow-command runtime: plans what completing a row fires (pure), from the
- * lines the completing write holds, and what deleting a row with a command
- * writes first. A completion fires from the operation that completed the row
- * — an editor's transaction, the plugin's own write — and from nothing else:
- * no reading of a file, a scan's or a sync's, has a way to fire.
+ * Flow-command runtime: plans what completing a row fires, from the lines the
+ * completing write holds, and what deleting a row with a command writes. It
+ * only plans: the operations write the plans (`Operations`) and tell the user
+ * what did not run (`FlowNotices`). A completion fires from the operation
+ * that completed the row — an editor's transaction, the plugin's own write —
+ * and from nothing else: no reading of a file, a scan's or a sync's, has a
+ * way to fire.
  */
 export class FlowExecutor {
     private readonly host = createMomentEvalHost();
-    /** Where a delete that stopped is told (`FlowNotices.deletionStopped`). */
-    private readonly notices = new FlowNotices();
 
     constructor(
-        private repository: TaskRepository,
-        private taskIndex: IndexReads,
-        private app: App,
-        private getSettings: () => TaskViewerSettings
+        private readonly reads: FlowReads,
+        private readonly getSettings: () => TaskViewerSettings,
     ) { }
 
     /**
@@ -183,74 +201,37 @@ export class FlowExecutor {
      * would go on to write. Nothing is queued and nothing is touched.
      */
     assessDeletion(task: Task): FlowDeleteAssessment {
-        return assessFlowDelete(task, this.buildDeps(), id => this.taskIndex.getTask(id));
+        return assessFlowDelete(task, this.buildDeps(), id => this.reads.getTask(id));
     }
 
     /**
-     * Write the next instance, then remove this one, as one write. The
-     * index runs it behind every write already asked of the row
-     * (`Operations.onRow`), so it is planned from the copy the last of them
-     * left. Awaited, so the caller's own rescan runs after the write has
-     * landed.
+     * What deleting `task` with its fire writes: the next instance, then the
+     * row taken away, as one write (`Operations.deleteTask` writes it, behind
+     * every write already asked of the row, so this is planned from the copy
+     * the last of them left). An instance is never left standing beside an
+     * original that did not go.
      *
-     * @returns whether the task is gone. False when the fire could not be
-     * planned, which stops the delete.
+     * A failed plan stops the delete (`DeletionPlan`). Having nothing to
+     * generate is a different answer: an expired command has nothing left to
+     * lose, and the delete goes ahead, the removal alone.
      */
-    async fireAndDelete(task: ReadCopy): Promise<boolean> {
+    planDeletion(task: Task): DeletionPlan {
         logInfo(`[Flow:delete] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
-        try {
-            return await this.executeDeletionFire(task);
-        } catch (err) {
-            // Answered, not thrown: the menu that asked waits on the answer.
-            logError(`[FlowExecutor] Error deleting task ${task.id}: ${(err as Error)?.message ?? err}`);
-            return false;
-        }
-    }
-
-    /**
-     * The delete the user asked for, with the series carried past it.
-     *
-     * A failed plan stops the delete. The command is still on the line and
-     * the line is what was about to go, so removing it now would lose exactly
-     * what the user asked to keep. Having nothing to generate is a different
-     * answer: an expired command has nothing left to lose, and the delete
-     * goes ahead.
-     *
-     * What the fire writes and what the delete takes away are one write (see
-     * {@link TaskRepository.write}): an instance is never left standing
-     * beside an original that did not go.
-     *
-     * @returns whether the task is gone. A fire that could not be planned
-     * answers no and writes nothing. A line that could not be resolved answers
-     * no and writes nothing either — nothing is written that the user would
-     * then have to clear away by hand.
-     */
-    private async executeDeletionFire(task: ReadCopy): Promise<boolean> {
         const read = this.readingBlocks();
         const outlook = planFlowForDeletion(task, read.deps);
-
         if (outlook.kind === 'failed') {
             logWarn(`[FlowExecutor] Delete cancelled, flow did not fire for ${task.id}: ${outlook.error.message}`);
-            this.notices.deletionStopped(task, outlook.error);
-            return false;
+            return { kind: 'failed', error: outlook.error };
         }
-
         const inserts: TaskOp[] = outlook.kind === 'creates'
             ? outlook.effects.flatMap(effect => {
                 logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id} (with the delete)`);
                 return this.opsFor(task, effect);
             })
             : [];
-
         // The instance goes in first, at the head of the sibling group, and
         // the removal follows at the row's line carried across that insert.
-        const { written: removed } = await this.repository.write(
-            task.file, plannedOn(task, { commands: true, subtree: true, blocks: read.blocks }), [...inserts, { kind: 'remove' }]);
-        if (!removed) {
-            // Told to the user by the write layer, which refused it.
-            logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);
-        }
-        return removed;
+        return { kind: 'deletes', ops: [...inserts, { kind: 'remove' }], blocks: read.blocks };
     }
 
     /**
@@ -306,7 +287,7 @@ export class FlowExecutor {
             },
             weekStartDay: this.getSettings().weekStartDay,
             host: this.host,
-            getBlock: (filePath, name) => this.taskIndex.getGenBlock(filePath, name),
+            getBlock: (filePath, name) => this.reads.getGenBlock(filePath, name),
         };
     }
 }
