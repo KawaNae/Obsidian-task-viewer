@@ -12,7 +12,8 @@ import {
 import type { DisplayTask, PinnedListDefinition } from '../../types';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { combineFilterStates, type FilterState } from '../../services/filter/FilterTypes';
+import type { FilterState } from '../../services/filter/FilterTypes';
+import { PinnedListQuery } from '../../services/filter/PinnedListQuery';
 import type { PluginContext } from '../../PluginContext';
 import { TaskStyling } from './TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
@@ -219,10 +220,8 @@ export class PinnedListRenderer {
 
         for (let i = 0; i < lists.length; i++) {
             const listDef = lists[i];
-            const combinedFilter = listDef.applyViewFilter && viewFilterState
-                ? combineFilterStates(listDef.filterState, viewFilterState)
-                : listDef.filterState;
-            const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
+            const query = PinnedListQuery.resolve(listDef, viewFilterState);
+            const tasks = this.readService.getFilteredTasks(query.filter, query.sort);
 
             this.renderList(container, listDef, tasks, collapsedState, callbacks, i, lists.length);
         }

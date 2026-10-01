@@ -36,6 +36,8 @@ export const KanbanSchema: ViewSchema<KanbanConfig, KanbanTransient> = {
         maskMode:    F.boolean('maskMode'),
         grid:        F.grid('grid'),
     },
+    // Row by row, left to right: the order the board is read in.
+    listsOf: (config) => (config.grid ?? []).flat(),
     transient: {
         gridCollapsed: T.collapsedKeys('gridCollapsed'),
     },

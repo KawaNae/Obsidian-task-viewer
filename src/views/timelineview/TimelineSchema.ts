@@ -64,6 +64,7 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         showTimeline:     F.boolean('showTimeline'),
     },
     anchorKey: 'startDate',
+    listsOf: (config) => config.pinnedLists ?? [],
     transient: {
         startDate:               T.dateString('startDate', { legacyKeys: ['date'] }),
         pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),

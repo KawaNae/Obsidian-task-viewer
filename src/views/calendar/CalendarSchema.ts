@@ -39,6 +39,7 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
         pinnedLists:      F.pinnedLists('pinnedLists'),
     },
     anchorKey: 'windowStart',
+    listsOf: (config) => config.pinnedLists ?? [],
     transient: {
         windowStart:         T.dateString('windowStart'),
         pinnedListCollapsed: T.collapsedKeys('pinnedListCollapsed', 'calendar'),
