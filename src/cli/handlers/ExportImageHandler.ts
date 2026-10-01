@@ -4,7 +4,8 @@ import type { ExportHost, ExportOptions } from '../../services/export/ExportServ
 import { cliOk, cliError } from '../CliOutputFormatter';
 import { resolveViewTypeFromShortName, schemaFor } from '../../services/viewConfig';
 import type { ConfigField } from '../../services/viewConfig/ViewConfigSchema';
-import { F } from '../../services/viewConfig/FieldCodecs';
+import { IntInput } from '../../utils/values/NumberValues';
+import { issueText } from '../../utils/values/IssueText';
 import { exportDescriptorFor } from '../../services/export/ExportRegistry';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { buildViewStateFromParams } from '../../services/viewConfig/ViewStateFactory';
@@ -231,8 +232,8 @@ function fromCliName(kebab: string): string {
 }
 
 /**
- * The export's options from its own flags. `width` and `wait` are read as
- * the view's numbers are (`F.int`, a whole decimal number in range): a flag
+ * The export's options from its own flags. `width` and `wait` are whole
+ * decimal numbers in range (`IntInput`, as the view's numbers are): a flag
  * that is given but is not one is a cliError, not NaN passed on and not the
  * default put in its place.
  */
@@ -240,8 +241,8 @@ export function readExportOptions(params: CliData): ExportOptions | string {
     const read = (flag: 'width' | 'wait', min: number): number | string | undefined => {
         const raw = params[flag];
         if (raw === undefined) return undefined;
-        return F.int(flag, { min }).fromUriParam?.(raw)
-            ?? cliError(`Invalid ${flag}: '${raw}'. Must be an integer of at least ${min}`);
+        const n = IntInput.read(raw, { min });
+        return n.ok ? n.value : cliError(issueText(n.issue, flag, raw));
     };
     const width = read('width', 1);
     if (typeof width === 'string') return width;

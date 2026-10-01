@@ -39,7 +39,7 @@ function open(settings: { logRetentionDays: number; logMaxStorageMB: number }) {
 }
 
 describe('the log retention field', () => {
-    it.each(['3', ' 3 '])('saves %j as 3 days', async (typed) => {
+    it.each(['3', ' 3 ', '３'])('saves %j as 3 days', async (typed) => {
         const { plugin, saveSettings, retention } = open({ logRetentionDays: 7, logMaxStorageMB: 50 });
         await retention(typed);
         expect(plugin.settings.logRetentionDays).toBe(3);
