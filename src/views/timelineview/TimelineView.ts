@@ -865,8 +865,6 @@ export class TimelineView extends ItemView {
                     ...listDef,
                     id: 'pl-' + Date.now(),
                     name: listDef.name + ' (copy)',
-                    filterState: structuredClone(listDef.filterState),
-                    sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
                 };
                 lists.splice(idx + 1, 0, dup);
                 this.app.workspace.requestSaveLayout();

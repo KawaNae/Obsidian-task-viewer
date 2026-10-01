@@ -14,12 +14,13 @@ export type SortDirection = 'asc' | 'desc';
  * nothing else tells two rules apart.
  */
 export interface SortRule {
-    property: SortProperty;
-    direction: SortDirection;
+    readonly property: SortProperty;
+    readonly direction: SortDirection;
 }
 
+/** A value, as a FilterState is: the sort menu makes a new one for each edit. */
 export interface SortState {
-    rules: SortRule[];
+    readonly rules: readonly SortRule[];
 }
 
 // ── Factory functions ──

@@ -1,7 +1,7 @@
-import type { FilterState, FilterCondition, FilterGroup, FilterItem, FilterProperty, DateFilterValue } from './FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup, FilterItem, FilterProperty, DateFilterValue, FilterTarget } from './FilterTypes';
 import {
-    createEmptyFilterState, hasConditions, isFilterCondition,
-    PROPERTY_OPERATORS, NO_VALUE_OPERATORS, DATE_PROPERTIES, RELATIVE_DATE_PRESETS,
+    createEmptyFilterState, hasConditions, isFilterCondition, isFilterProperty, isPresenceOperator, takesOperator,
+    PROPERTY_OPERATORS, RELATIVE_DATE_PRESETS,
 } from './FilterTypes';
 import { DateUtils } from '../../utils/DateUtils';
 import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
@@ -82,14 +82,15 @@ function serializeItem(node: FilterItem): Record<string, unknown> {
     return serializeGroup(node);
 }
 
+/** The condition's fields, in the saved order, leaving out what it does not hold. */
 function serializeCondition(c: FilterCondition): Record<string, unknown> {
     const result: Record<string, unknown> = {
         property: c.property,
         operator: c.operator,
     };
-    if (c.value !== undefined) result.value = c.value;
-    if (c.key !== undefined) result.key = c.key;
-    if (c.unit !== undefined) result.unit = c.unit;
+    if ('value' in c && c.value !== undefined) result.value = c.value;
+    if ('key' in c && c.key !== undefined) result.key = c.key;
+    if ('unit' in c && c.unit !== undefined) result.unit = c.unit;
     if (c.target !== undefined) result.target = c.target;
     return result;
 }
@@ -167,67 +168,100 @@ function isRetiredCondition(c: Record<string, unknown>): boolean {
     return c.property === 'kind';
 }
 
-/** The properties whose value is a list of strings. */
-const LIST_PROPERTIES: ReadonlySet<FilterProperty> = new Set(['file', 'tag', 'status', 'color', 'linestyle', 'notation']);
-
-/** A condition, or why it is not one. */
+/**
+ * A condition, or why it is not one: the property is one a condition can be
+ * on, the property takes the operator, and the value has the shape the
+ * property's value has. A value saved with an operator that takes none is
+ * not read.
+ */
 function readCondition(c: Record<string, unknown>): FilterCondition | string {
-    const property = c.property as FilterProperty;
-    const operators = typeof c.property === 'string' && Object.prototype.hasOwnProperty.call(PROPERTY_OPERATORS, c.property)
-        ? PROPERTY_OPERATORS[property]
-        : undefined;
-    if (!operators) {
-        return `Unknown filter property: ${String(c.property)}. Available: ${Object.keys(PROPERTY_OPERATORS).join(', ')}`;
+    const property = c.property;
+    if (!isFilterProperty(property)) {
+        return `Unknown filter property: ${String(property)}. Available: ${Object.keys(PROPERTY_OPERATORS).join(', ')}`;
     }
-    const operator = c.operator as FilterCondition['operator'];
-    if (!operators.includes(operator)) {
-        return `Invalid operator '${String(c.operator)}' for filter property '${property}'. Available: ${operators.join(', ')}`;
-    }
+    const operator: unknown = c.operator;
+    const badOperator = `Invalid operator '${String(operator)}' for filter property '${property}'. Available: ${PROPERTY_OPERATORS[property].join(', ')}`;
+    if (!takesOperator(property, operator)) return badOperator;
     if (c.target !== undefined && c.target !== 'self' && c.target !== 'parent') {
         return `Invalid target '${String(c.target)}'. Use self or parent`;
     }
+    const on: { target?: FilterTarget } = c.target === 'parent' ? { target: 'parent' } : {};
+    const valueFor = (op: FilterCondition['operator']): unknown =>
+        c.value === null || isPresenceOperator(op) ? undefined : c.value;
 
-    const node: FilterCondition = { property, operator };
-    if (c.target === 'parent') node.target = 'parent';
-
-    if (property === 'property') {
-        if (c.key !== undefined && typeof c.key !== 'string') return `'property' takes a key that is text`;
-        if (c.key !== undefined) node.key = c.key;
+    // Each case asks `takesOperator` again only to narrow the operator to its
+    // property's: it was answered above.
+    switch (property) {
+        case 'file':
+        case 'status':
+        case 'color':
+        case 'linestyle':
+        case 'notation': {
+            if (!takesOperator(property, operator)) return badOperator;
+            const value = readStrings(property, valueFor(operator));
+            return typeof value === 'string' ? value : { property, operator, ...on, ...value };
+        }
+        case 'tag': {
+            if (!takesOperator(property, operator)) return badOperator;
+            const value = readStrings(property, valueFor(operator));
+            return typeof value === 'string' ? value : { property, operator, ...on, ...value };
+        }
+        case 'content': {
+            if (!takesOperator(property, operator)) return badOperator;
+            const raw = valueFor(operator);
+            if (raw !== undefined && typeof raw !== 'string') return `'content' takes text`;
+            return { property, operator, ...on, ...(raw !== undefined ? { value: raw } : {}) };
+        }
+        case 'property': {
+            if (!takesOperator(property, operator)) return badOperator;
+            if (c.key !== undefined && typeof c.key !== 'string') return `'property' takes a key that is text`;
+            const raw = valueFor(operator);
+            if (raw !== undefined && typeof raw !== 'string') return `'property' takes text`;
+            return {
+                property, operator, ...on,
+                ...(c.key !== undefined ? { key: c.key } : {}),
+                ...(raw !== undefined ? { value: raw } : {}),
+            };
+        }
+        case 'length': {
+            if (!takesOperator(property, operator)) return badOperator;
+            const unit = c.unit;
+            if (unit !== undefined && unit !== 'hours' && unit !== 'minutes') {
+                return `Invalid unit '${String(unit)}' for 'length'. Use hours or minutes`;
+            }
+            const raw = valueFor(operator);
+            if (raw !== undefined && !(typeof raw === 'number' && Number.isFinite(raw))) return `'length' takes a number`;
+            return {
+                property, operator, ...on,
+                ...(raw !== undefined ? { value: raw } : {}),
+                ...(unit !== undefined ? { unit } : {}),
+            };
+        }
+        case 'startDate':
+        case 'endDate':
+        case 'due': {
+            if (!takesOperator(property, operator)) return badOperator;
+            const raw = valueFor(operator);
+            if (raw === undefined) return { property, operator, ...on };
+            const value = readDateValue(raw);
+            return value !== undefined
+                ? { property, operator, ...on, value }
+                : `'${property}' takes a date that exists (YYYY-MM-DD) or a preset (${RELATIVE_DATE_PRESETS.join(', ')})`;
+        }
+        case 'anyDate':
+        case 'parent':
+        case 'children':
+            if (!takesOperator(property, operator)) return badOperator;
+            return { property, operator, ...on };
     }
-    if (property === 'length' && c.unit !== undefined) {
-        if (c.unit !== 'hours' && c.unit !== 'minutes') return `Invalid unit '${String(c.unit)}' for 'length'. Use hours or minutes`;
-        node.unit = c.unit;
-    }
-
-    if (NO_VALUE_OPERATORS.has(operator) || c.value === undefined || c.value === null) return node;
-    const value = readValue(property, c.value);
-    if ('reason' in value) return value.reason;
-    node.value = value.value;
-    return node;
 }
 
-type ValueRead = { value: NonNullable<FilterCondition['value']> } | { reason: string };
-
-/** The value of a condition on `property`, in the shapes the filter menu writes. */
-function readValue(property: FilterProperty, value: unknown): ValueRead {
-    if (LIST_PROPERTIES.has(property)) {
-        return Array.isArray(value) && value.every(v => typeof v === 'string')
-            ? { value: value as string[] }
-            : { reason: `'${property}' takes a list of strings` };
-    }
-    if (property === 'content' || property === 'property') {
-        return typeof value === 'string' ? { value } : { reason: `'${property}' takes text` };
-    }
-    if (property === 'length') {
-        return typeof value === 'number' && Number.isFinite(value) ? { value } : { reason: `'length' takes a number` };
-    }
-    if (DATE_PROPERTIES.has(property)) {
-        const date = readDateValue(value);
-        return date !== undefined
-            ? { value: date }
-            : { reason: `'${property}' takes a date that exists (YYYY-MM-DD) or a preset (${RELATIVE_DATE_PRESETS.join(', ')})` };
-    }
-    return { reason: `'${property}' takes no value` };
+/** A list property's value: absent, or a list of strings. */
+function readStrings(property: FilterProperty, raw: unknown): { value?: readonly string[] } | string {
+    if (raw === undefined) return {};
+    return Array.isArray(raw) && raw.every(v => typeof v === 'string')
+        ? { value: raw as readonly string[] }
+        : `'${property}' takes a list of strings`;
 }
 
 /** A date filter value: a day that exists, `''` (none chosen yet), or a known preset. */

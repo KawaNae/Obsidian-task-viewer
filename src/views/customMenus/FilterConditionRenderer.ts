@@ -1,52 +1,44 @@
 import { setIcon } from 'obsidian';
 import type {
-    FilterCondition, DateFilterValue, RelativeDatePreset,
+    ContentCondition, DateCondition, LengthCondition, PropertyCondition, TagCondition, TextListCondition,
+    DateFilterValue,
 } from '../../services/filter/FilterTypes';
 import {
     DEFAULT_NEXT_N_DAYS, RELATIVE_DATE_PRESETS, getRelativeDateLabel,
 } from '../../services/filter/FilterTypes';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterDropdownMenus } from './FilterDropdownMenus';
-import { getAvailableValues, getValueDisplay } from './FilterValueHelpers';
+import { getAvailableValues, getValueDisplay, type ConditionEditor } from './FilterValueHelpers';
 import { DateUtils } from '../../utils/DateUtils';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { t } from '../../i18n';
 import type { PopoverStack } from '../sharedUI/PopoverStack';
 import { SuggestController } from './SuggestController';
 
+type ListCondition = TextListCondition | TagCondition;
+
+/**
+ * The value controls of one filter row. Each control reads the condition it
+ * shows and hands its change to the row's editor; it never changes the
+ * condition it was drawn with.
+ */
 export class FilterConditionRenderer {
     constructor(
-        private refreshPopover: () => void,
-        private renderContent: () => void,
         private dropdowns: FilterDropdownMenus,
         private getStatusDefs: () => StatusDefinition[],
         private getLastTasks: () => Task[],
-        private getOnFilterChange: () => (() => void) | undefined,
         private getStack: () => PopoverStack,
     ) {}
 
-    renderValueSelector(row: HTMLElement, condition: FilterCondition): void {
-        if (condition.property === 'content') {
-            this.renderTextInput(row, condition);
-        } else if (condition.property === 'property') {
-            this.renderPropertyValueInput(row, condition);
-        } else {
-            this.renderPillValueSelector(row, condition);
-        }
-    }
-
-    renderTextInput(row: HTMLElement, condition: FilterCondition): void {
+    renderTextInput(row: HTMLElement, edit: ConditionEditor<ContentCondition>): void {
         const input = row.createEl('input', {
             cls: 'tv-ctrl__text-input',
             type: 'text',
             placeholder: t('filter.enterText'),
         });
-        if (typeof condition.value === 'string') {
-            input.value = condition.value;
-        }
+        input.value = edit.current().value ?? '';
         const applyValue = () => {
-            condition.value = input.value;
-            this.getOnFilterChange()?.();
+            edit.update(c => ({ ...c, value: input.value }), 'keep');
         };
         input.addEventListener('change', applyValue);
         input.addEventListener('keydown', (e) => {
@@ -64,54 +56,50 @@ export class FilterConditionRenderer {
      * Labels share a grid column so colons align across rows. Value row is shown
      * even for isSet/isNotSet (engine ignores it) so layout stays stable.
      */
-    renderPropertyRows(row: HTMLElement, condition: FilterCondition): void {
+    renderPropertyRows(row: HTMLElement, edit: ConditionEditor<PropertyCondition>): void {
         const grid = row.createDiv('filter-popover__row-value filter-popover__property-grid');
 
         grid.createEl('span', {
             cls: 'filter-popover__property-label',
             text: t('filter.propertyKeyLabel'),
         });
-        this.renderPropertyKeyInput(grid, condition);
+        this.renderPropertyKeyInput(grid, edit);
 
         grid.createEl('span', {
             cls: 'filter-popover__property-label',
             text: t('filter.propertyValueLabel'),
         });
-        this.renderPropertyValueInput(grid, condition);
+        this.renderPropertyValueInput(grid, edit);
     }
 
-    renderPropertyKeyInput(row: HTMLElement, condition: FilterCondition): void {
+    private renderPropertyKeyInput(row: HTMLElement, edit: ConditionEditor<PropertyCondition>): void {
         const tasks = this.getLastTasks();
         this.renderSuggestInput(row, {
-            initialValue: condition.key ?? '',
+            initialValue: edit.current().key ?? '',
             placeholder: t('filter.typePropertyKey'),
             wrapClass: 'tv-ctrl__input-wrap',
             inputClass: 'tv-ctrl__input',
             suggestClass: 'filter-popover__property-key-suggest',
             getCandidates: () => FilterValueCollector.collectPropertyKeys(tasks),
             onCommit: (val) => {
-                if ((condition.key ?? '') === val) return;
-                condition.key = val;
-                condition.value = '';
-                this.getOnFilterChange()?.();
-                this.renderContent();
+                // Another key's values are not this one's: the value starts over.
+                edit.update(c => ((c.key ?? '') === val ? c : { ...c, key: val, value: '' }), 'redraw');
             },
         });
     }
 
-    renderPropertyValueInput(row: HTMLElement, condition: FilterCondition): void {
+    private renderPropertyValueInput(row: HTMLElement, edit: ConditionEditor<PropertyCondition>): void {
         const tasks = this.getLastTasks();
-        const key = condition.key ?? '';
+        const key = edit.current().key ?? '';
         this.renderSuggestInput(row, {
-            initialValue: typeof condition.value === 'string' ? condition.value : '',
+            initialValue: edit.current().value ?? '',
             placeholder: t('filter.typePropertyValue'),
             wrapClass: 'filter-popover__property-value-wrap',
             inputClass: 'tv-ctrl__text-input',
             suggestClass: 'filter-popover__property-value-suggest',
             getCandidates: () => key ? FilterValueCollector.collectPropertyValuesForKey(tasks, key) : [],
             onCommit: (val) => {
-                condition.value = val;
-                this.getOnFilterChange()?.();
+                edit.update(c => ({ ...c, value: val }), 'keep');
             },
         });
     }
@@ -185,16 +173,17 @@ export class FilterConditionRenderer {
         });
     }
 
-    renderPillValueSelector(row: HTMLElement, condition: FilterCondition): void {
+    renderPillValueSelector(row: HTMLElement, edit: ConditionEditor<ListCondition>): void {
         const container = row.createDiv('filter-popover__tag-value');
-        const currentValues = Array.isArray(condition.value) ? condition.value as string[] : [];
-        const prop = condition.property;
+        const prop = edit.current().property;
+        const valuesOf = (c: ListCondition): readonly string[] => c.value ?? [];
+        const currentValues = valuesOf(edit.current());
 
         // Pill群 (only if there are selected values)
         if (currentValues.length > 0) {
             const pillContainer = container.createDiv('tv-ctrl__pills');
             for (const val of currentValues) {
-                this.renderValuePill(pillContainer, val, condition);
+                this.renderValuePill(pillContainer, val, edit);
             }
         }
 
@@ -215,19 +204,14 @@ export class FilterConditionRenderer {
         const addValue = (val: string) => {
             const normalized = prop === 'tag' ? val.trim().replace(/^#/, '') : prop === 'status' ? val : val.trim();
             if (!normalized) return;
-            const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
-            if (!arr.includes(normalized)) {
-                condition.value = [...arr, normalized];
-                this.getOnFilterChange()?.();
-            }
             input.value = '';
             suggest.close();
-            this.renderContent();
+            edit.update(c => (valuesOf(c).includes(normalized) ? c : { ...c, value: [...valuesOf(c), normalized] }), 'redraw');
         };
 
         const showSuggest = (query: string, showAll: boolean) => {
             const available = getAvailableValues(prop, tasks);
-            const selected = new Set(Array.isArray(condition.value) ? condition.value as string[] : []);
+            const selected = new Set(valuesOf(edit.current()));
             const q = prop === 'tag' ? query.toLowerCase().replace(/^#/, '') : query.toLowerCase();
 
             const filtered = available.filter(v => {
@@ -279,13 +263,9 @@ export class FilterConditionRenderer {
                 }
             } else if (e.key === 'Escape') {
                 suggest.close();
-            } else if (e.key === 'Backspace' && !input.value && currentValues.length > 0) {
+            } else if (e.key === 'Backspace' && !input.value && valuesOf(edit.current()).length > 0) {
                 // Remove last pill on backspace in empty input
-                const last = currentValues[currentValues.length - 1];
-                const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
-                condition.value = arr.filter(v => v !== last);
-                this.getOnFilterChange()?.();
-                this.renderContent();
+                edit.update(c => ({ ...c, value: valuesOf(c).slice(0, -1) }), 'redraw');
             }
         });
 
@@ -294,13 +274,14 @@ export class FilterConditionRenderer {
         });
     }
 
-    renderValuePill(container: HTMLElement, value: string, condition: FilterCondition): void {
+    private renderValuePill(container: HTMLElement, value: string, edit: ConditionEditor<ListCondition>): void {
         const statusDefs = this.getStatusDefs();
+        const property = edit.current().property;
         const pill = container.createDiv('tv-ctrl__pill');
-        if (condition.property === 'color') {
+        if (property === 'color') {
             const swatch = pill.createSpan('tv-ctrl__color-swatch');
             swatch.style.backgroundColor = value;
-        } else if (condition.property === 'status') {
+        } else if (property === 'status') {
             const checkbox = pill.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
             checkbox.type = 'checkbox';
             checkbox.checked = value !== ' ';
@@ -308,46 +289,36 @@ export class FilterConditionRenderer {
             checkbox.tabIndex = -1;
             if (value !== ' ') checkbox.dataset.task = value;
         }
-        pill.createSpan().setText(getValueDisplay(condition.property, value, statusDefs));
+        pill.createSpan().setText(getValueDisplay(property, value, statusDefs));
         const removeBtn = pill.createEl('button', { cls: 'tv-ctrl__pill-remove' });
         setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const arr = Array.isArray(condition.value) ? condition.value as string[] : [];
-            condition.value = arr.filter(v => v !== value);
-            this.getOnFilterChange()?.();
-            this.renderContent();
+            edit.update(c => ({ ...c, value: (c.value ?? []).filter(v => v !== value) }), 'redraw');
         });
     }
 
-    renderDateValueSelector(row: HTMLElement, condition: FilterCondition): void {
+    /**
+     * A date row's value: a preset, or a day. A row with no day chosen yet
+     * (none, or `''`) shows the day input empty: it constrains nothing.
+     */
+    renderDateValueSelector(row: HTMLElement, edit: ConditionEditor<DateCondition>): void {
         const container = row.createDiv('filter-popover__date-value');
-
-        // Initialize value if needed
-        if (condition.value == null || (typeof condition.value !== 'string' && typeof condition.value !== 'object')) {
-            condition.value = { preset: 'today' } as DateFilterValue;
-        }
-
-        const dateVal = condition.value as DateFilterValue;
-        const isRelative = typeof dateVal === 'object' && 'preset' in dateVal;
+        const dateVal = edit.current().value;
+        const relVal = typeof dateVal === 'object' ? dateVal : null;
 
         // Mode toggle button: "Relative" / "Absolute"
         const modeBtn = container.createEl('button', {
             cls: 'filter-popover__dropdown filter-popover__date-mode-btn',
-            text: isRelative ? t('filter.relative') : t('filter.absolute'),
+            text: relVal ? t('filter.relative') : t('filter.absolute'),
         });
         modeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (isRelative) {
-                condition.value = DateUtils.getToday();
-            } else {
-                condition.value = { preset: 'today' } as DateFilterValue;
-            }
-            this.refreshPopover();
+            const value: DateFilterValue = relVal ? DateUtils.getToday() : { preset: 'today' };
+            edit.update(c => ({ ...c, value }), 'redraw');
         });
 
-        if (isRelative) {
-            const relVal = dateVal as { preset: RelativeDatePreset; n?: number };
+        if (relVal) {
             // Relative preset dropdown
             const presetBtn = container.createEl('button', {
                 cls: 'filter-popover__dropdown',
@@ -357,7 +328,7 @@ export class FilterConditionRenderer {
             });
             presetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.showRelativeDateMenu(presetBtn, condition);
+                this.showRelativeDateMenu(presetBtn, edit);
             });
 
             // Number input for nextNDays
@@ -372,10 +343,7 @@ export class FilterConditionRenderer {
                 nInput.placeholder = 'N';
                 nInput.addEventListener('change', () => {
                     const n = parseInt(nInput.value, 10);
-                    if (n > 0) {
-                        condition.value = { preset: 'nextNDays', n } as DateFilterValue;
-                        this.getOnFilterChange()?.();
-                    }
+                    if (n > 0) edit.update(c => ({ ...c, value: { preset: 'nextNDays', n } }), 'keep');
                 });
             }
         } else {
@@ -384,18 +352,16 @@ export class FilterConditionRenderer {
                 cls: 'tv-ctrl__text-input filter-popover__date-input',
                 type: 'date',
             });
-            dateInput.value = (typeof dateVal === 'string' ? dateVal : '') || DateUtils.getToday();
+            dateInput.value = typeof dateVal === 'string' ? dateVal : '';
             dateInput.addEventListener('change', () => {
-                condition.value = dateInput.value;
-                this.getOnFilterChange()?.();
+                edit.update(c => ({ ...c, value: dateInput.value }), 'keep');
             });
         }
     }
 
-    showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
-        const dateVal = condition.value as DateFilterValue;
-        const currentPreset = typeof dateVal === 'object' && 'preset' in dateVal
-            ? dateVal.preset : 'today';
+    private showRelativeDateMenu(anchorEl: HTMLElement, edit: ConditionEditor<DateCondition>): void {
+        const dateVal = edit.current().value;
+        const currentPreset = typeof dateVal === 'object' ? dateVal.preset : 'today';
 
         const items = RELATIVE_DATE_PRESETS.map(p => ({
             label: getRelativeDateLabel(p),
@@ -404,21 +370,17 @@ export class FilterConditionRenderer {
         }));
 
         this.dropdowns.showSelectPopover(anchorEl, items, (val) => {
-            const preset = val as RelativeDatePreset;
-            condition.value = preset === 'nextNDays'
-                ? { preset, n: DEFAULT_NEXT_N_DAYS } as DateFilterValue
-                : { preset } as DateFilterValue;
-            this.refreshPopover();
+            const preset = RELATIVE_DATE_PRESETS.find(p => p === val);
+            if (!preset) return;
+            const value: DateFilterValue = preset === 'nextNDays' ? { preset, n: DEFAULT_NEXT_N_DAYS } : { preset };
+            edit.update(c => ({ ...c, value }), 'redraw');
         });
     }
 
-    renderNumberValueSelector(row: HTMLElement, condition: FilterCondition): void {
+    /** A length row's value and unit. A row with no number chosen yet shows the input empty. */
+    renderNumberValueSelector(row: HTMLElement, edit: ConditionEditor<LengthCondition>): void {
         const container = row.createDiv('filter-popover__number-value');
-
-        if (typeof condition.value !== 'number') {
-            condition.value = 1;
-            condition.unit = 'hours';
-        }
+        const condition = edit.current();
         const unit = condition.unit ?? 'hours';
 
         // Unit toggle button (Hours / Minutes)
@@ -428,8 +390,7 @@ export class FilterConditionRenderer {
         });
         unitBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            condition.unit = unit === 'hours' ? 'minutes' : 'hours';
-            this.refreshPopover();
+            edit.update(c => ({ ...c, unit: (c.unit ?? 'hours') === 'hours' ? 'minutes' : 'hours' }), 'redraw');
         });
 
         // Number input
@@ -438,15 +399,12 @@ export class FilterConditionRenderer {
             type: 'number',
         });
         input.style.width = '52px';
-        input.value = String(condition.value);
+        input.value = condition.value === undefined ? '' : String(condition.value);
         input.min = '0';
         input.step = unit === 'hours' ? '0.5' : '1';
         input.addEventListener('change', () => {
             const n = parseFloat(input.value);
-            if (Number.isFinite(n) && n >= 0) {
-                condition.value = n;
-                this.getOnFilterChange()?.();
-            }
+            if (Number.isFinite(n) && n >= 0) edit.update(c => ({ ...c, value: n }), 'keep');
         });
     }
 }

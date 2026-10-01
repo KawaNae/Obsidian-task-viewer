@@ -1,5 +1,8 @@
-import type { FilterState, FilterItem, FilterCondition, DateFilterValue } from './FilterTypes';
-import { isFilterCondition } from './FilterTypes';
+import type {
+    FilterState, FilterItem, FilterCondition, DateFilterValue,
+    TextListProperty, DateProperty, DateComparison, LengthComparison,
+} from './FilterTypes';
+import { isFilterCondition, isPresenceOperator } from './FilterTypes';
 
 /**
  * The tree the engine evaluates, compiled from a FilterState.
@@ -29,15 +32,10 @@ export type FilterExpr =
     | { readonly kind: 'ancestors'; readonly item: FilterExpr }
     | FilterAtom;
 
-export type TextProperty = 'file' | 'status' | 'color' | 'linestyle' | 'notation';
-export type DateProperty = 'startDate' | 'endDate' | 'due';
-export type DateComparison = 'equals' | 'before' | 'after' | 'onOrBefore' | 'onOrAfter';
-export type LengthComparison = 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual' | 'equals';
-
 /** A positive question about one task. */
 export type FilterAtom =
     /** The property's value is one of `values`. */
-    | { readonly kind: 'textIn'; readonly property: TextProperty; readonly values: readonly string[] }
+    | { readonly kind: 'textIn'; readonly property: TextListProperty; readonly values: readonly string[] }
     /** A tag of the task is one of `tags`, or below one (`a/b` is under `a`). */
     | { readonly kind: 'tagUnder'; readonly tags: readonly string[] }
     /** A tag of the task is exactly one of `tags`. */
@@ -82,63 +80,76 @@ function compileCondition(c: FilterCondition): FilterExpr {
     return negated ? { kind: 'not', item: subject } : subject;
 }
 
-const takesNoValue = (c: FilterCondition) => c.operator === 'isSet' || c.operator === 'isNotSet';
-
 /** A condition whose value is not chosen yet. */
 function isUnfinished(c: FilterCondition): boolean {
-    if (c.property === 'property' && !c.key) return true;
-    if (takesNoValue(c)) return false;
-    // A property condition's text is read as '' when absent; the content's
-    // '' is a value like any other.
-    if (c.property === 'property') return false;
-    if (c.property === 'content') return c.value === undefined;
-    const v = c.value;
-    return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+    switch (c.property) {
+        case 'property':
+            // Its text is read as '' when absent.
+            return !c.key;
+        case 'content':
+            // '' is a text like any other.
+            return c.value === undefined;
+        case 'startDate':
+        case 'endDate':
+        case 'due':
+            return !isPresenceOperator(c.operator) && (c.value === undefined || c.value === '');
+        case 'length':
+            return !isPresenceOperator(c.operator) && c.value === undefined;
+        case 'anyDate':
+        case 'parent':
+        case 'children':
+            return false;
+        default:
+            return c.value === undefined || c.value.length === 0;
+    }
 }
 
-/** The positive atom `c` asks, and whether `c` asks its negation. */
+/**
+ * The positive atom `c` asks, and whether `c` asks its negation. A row with
+ * no value has been turned away by {@link isUnfinished} before this; the
+ * fallbacks for an absent value only satisfy the type.
+ */
 function positiveOf(c: FilterCondition): { atom: FilterAtom; negated: boolean } {
     const negated = c.operator === 'excludes' || c.operator === 'notContains' || c.operator === 'isNotSet';
-    if (takesNoValue(c)) {
-        if (c.property === 'property') return { atom: { kind: 'propertySet', key: c.key! }, negated };
-        return { atom: { kind: 'has', property: c.property as Extract<FilterAtom, { kind: 'has' }>['property'] }, negated };
-    }
-    const list = c.value as readonly string[];
     switch (c.property) {
         case 'file':
         case 'status':
         case 'color':
         case 'linestyle':
         case 'notation':
-            return { atom: { kind: 'textIn', property: c.property, values: list }, negated };
-        case 'tag':
-            if (c.operator === 'equals') return { atom: { kind: 'tagIs', tags: list }, negated };
-            if (c.operator === 'only') return { atom: { kind: 'tagsExactly', tags: list }, negated };
-            return { atom: { kind: 'tagUnder', tags: list }, negated };
-        case 'content':
-            return { atom: { kind: 'contentContains', text: c.value as string }, negated };
-        case 'startDate':
-        case 'endDate':
-        case 'due':
-            return {
-                atom: { kind: 'date', property: c.property, op: c.operator as DateComparison, value: c.value as DateFilterValue },
-                negated,
-            };
-        case 'length':
-            return {
-                atom: { kind: 'length', op: c.operator as LengthComparison, value: c.value as number, unit: c.unit ?? 'hours' },
-                negated,
-            };
-        case 'property': {
-            const value = typeof c.value === 'string' ? c.value : '';
-            return c.operator === 'equals'
-                ? { atom: { kind: 'propertyEquals', key: c.key!, value }, negated }
-                : { atom: { kind: 'propertyContains', key: c.key!, value }, negated };
+            return { atom: { kind: 'textIn', property: c.property, values: c.value ?? [] }, negated };
+        case 'tag': {
+            const tags = c.value ?? [];
+            if (c.operator === 'equals') return { atom: { kind: 'tagIs', tags }, negated };
+            if (c.operator === 'only') return { atom: { kind: 'tagsExactly', tags }, negated };
+            return { atom: { kind: 'tagUnder', tags }, negated };
         }
+        case 'content':
+            return { atom: { kind: 'contentContains', text: c.value ?? '' }, negated };
         case 'anyDate':
         case 'parent':
         case 'children':
-            // These take isSet and isNotSet only, handled above.
-            throw new Error(`filter: '${c.property}' takes no ${c.operator}`);
+            return { atom: { kind: 'has', property: c.property }, negated };
+        case 'startDate':
+        case 'endDate':
+        case 'due': {
+            const { operator } = c;
+            if (isPresenceOperator(operator)) return { atom: { kind: 'has', property: c.property }, negated };
+            return { atom: { kind: 'date', property: c.property, op: operator, value: c.value ?? '' }, negated };
+        }
+        case 'length': {
+            const { operator } = c;
+            if (isPresenceOperator(operator)) return { atom: { kind: 'has', property: 'length' }, negated };
+            return { atom: { kind: 'length', op: operator, value: c.value ?? 0, unit: c.unit ?? 'hours' }, negated };
+        }
+        case 'property': {
+            const key = c.key ?? '';
+            const { operator } = c;
+            if (isPresenceOperator(operator)) return { atom: { kind: 'propertySet', key }, negated };
+            const value = c.value ?? '';
+            return operator === 'equals'
+                ? { atom: { kind: 'propertyEquals', key, value }, negated }
+                : { atom: { kind: 'propertyContains', key, value }, negated };
+        }
     }
 }
