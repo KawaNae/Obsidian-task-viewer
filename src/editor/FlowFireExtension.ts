@@ -25,7 +25,7 @@ export interface EditorFireHost {
     statusDefinitions(): StatusDefinition[];
     fireOp(path: string): FireOp;
     applyOps(draft: LineDraft, session: WriteSession, target: RowRef, ops: readonly TaskOp[]): boolean;
-    /** Tell the user a completed row's flow, or its move, was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
+    /** Tell the user a completed row's flow was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
     notRun(why: NotRun): void;
 }
 

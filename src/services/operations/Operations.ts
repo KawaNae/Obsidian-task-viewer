@@ -258,9 +258,8 @@ export class Operations {
     /**
      * Once a write that completed rows landed, tell the user of each row
      * whose flow was not run, once: its fire was set aside, the write with it
-     * refused, or its plan failed, or it fired without its move
-     * (`FlowExecutor.reportNotRun`). The one word of it for every write of
-     * the index that completes rows.
+     * refused, or its plan failed (`FlowExecutor.reportNotRun`). The one
+     * word of it for every write of the index that completes rows.
      */
     private tellNotRun(outcome: FiringOutcome<FireOp>): void {
         if (!outcome.written) return;

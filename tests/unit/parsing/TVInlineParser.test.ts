@@ -84,9 +84,9 @@ describe('TVInlineParser', () => {
         });
 
         it('parses flow commands into an executable program', () => {
-            const result = readLine('- [ ] task @2026-01-15 ==> move([[target]])');
+            const result = readLine('- [ ] task @2026-01-15 ==> move([[#target]])');
             expect(result).not.toBeNull();
-            expect(result!.flow?.raw).toBe('move([[target]])');
+            expect(result!.flow?.raw).toBe('move([[#target]])');
             expect(result!.flow?.program?.move).toBeDefined();
             expect(result!.validation).toBeUndefined();
         });

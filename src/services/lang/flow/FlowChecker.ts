@@ -32,9 +32,7 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
         }
         if (!program.move && !program.lifetime && !program.until && !program.use && !program.sets && !program.cells) {
             // Empty program (e.g. `==>` followed by prose that failed earlier,
-            // a command that says only `nochildren`, or nothing at all). Only
-            // flag when no diagnostics explain it yet — the retired clause
-            // has already explained itself.
+            // or nothing at all). Only flag when no diagnostics explain it yet.
             if (diagnostics.length === 0) {
                 diagnostics.push(error('flow.empty', 'Flow command is empty', { start: 0, end: 0 }));
             }
@@ -107,7 +105,6 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
         }
     }
 
-    // `move`'s target is not an expression to check: where it goes is read
-    // off how it is written (`MoveTarget`), and anything but a link to a
-    // heading of the note is retired, which the parser has said.
+    // `move`'s target is not an expression to check: the heading it names is
+    // read off how it is written, and the parser refuses any other target.
 }

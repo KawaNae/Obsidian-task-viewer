@@ -24,9 +24,7 @@ export type UnresolvedReference =
  *
  * `rows` are the rows sent, each with its descendants: a command is read
  * off the row that holds it. A name written as anything but a string
- * literal is not judged: what it comes to is known only when it fires. A
- * move that names no heading of any note is not either: it is retired, and
- * the parser says so already.
+ * literal is not judged: what it comes to is known only when it fires.
  */
 export function unresolvedAt(rows: readonly Task[], destination: readonly string[]): UnresolvedReference[] {
     const outline = Outline.read(destination);
@@ -37,10 +35,10 @@ export function unresolvedAt(rows: readonly Task[], destination: readonly string
     for (const task of rows) {
         const program = task.flow?.program;
         if (!program) continue;
-        const to = program.move?.to;
-        if (to?.kind === 'heading') {
-            const found = Placement.heading(outline, to.name);
-            if (found.kind !== 'one') out.push({ kind: 'heading', task, name: to.name, found: found.kind });
+        const heading = program.move?.heading;
+        if (heading !== undefined) {
+            const found = Placement.heading(outline, heading);
+            if (found.kind !== 'one') out.push({ kind: 'heading', task, name: heading, found: found.kind });
         }
         const name = program.use?.name;
         if (name?.kind === 'lit' && name.value.type === 'string' && !hasBlock(name.value.value)) {

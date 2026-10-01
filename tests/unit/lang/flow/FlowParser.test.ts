@@ -67,12 +67,10 @@ describe('FlowParser', () => {
 
     describe('lifetime / options / move', () => {
         it('parses the full clause set order-free', () => {
-            const canonical = parseFlow('every mon x14 until(2026-09-28) nochildren move([[Log/Done]])');
-            const shuffled = parseFlow('nochildren until(2026-09-28) move([[Log/Done]]) x14 every mon');
-            // Errors, not diagnostics: `nochildren` is retired and says so,
-            // and a warning is what order-freedom is being read through here.
-            expect(errorsIn(canonical.diagnostics)).toEqual([]);
-            expect(errorsIn(shuffled.diagnostics)).toEqual([]);
+            const canonical = parseFlow('every mon x14 until(2026-09-28) move([[#Done]])');
+            const shuffled = parseFlow('until(2026-09-28) move([[#Done]]) x14 every mon');
+            expect(canonical.diagnostics).toEqual([]);
+            expect(shuffled.diagnostics).toEqual([]);
             expect(serializeFlow(shuffled.program!)).toBe(serializeFlow(canonical.program!));
         });
 
@@ -102,35 +100,26 @@ describe('FlowParser', () => {
         });
     });
 
-    // F8: a move stays in its note. Where it goes is read off how the clause
-    // is written, before anything is evaluated, once, here.
+    // F8: a move stays in its note. The heading it goes to is read off how
+    // the clause is written, before anything is evaluated, once, here.
     describe('where move goes', () => {
-        const toOf = (raw: string) => {
+        const headingOf = (raw: string) => {
             const { program, diagnostics } = parseFlow(raw);
-            return { to: program?.move?.to, codes: diagnostics.map(d => `${d.severity}:${d.code}`) };
+            return { heading: program?.move?.heading, codes: diagnostics.map(d => `${d.severity}:${d.code}`) };
         };
 
-        // Retired 2026-09-28: `move()` named no heading, and moved the task
-        // to the end of the note, where the one who wrote it never said. It
-        // names no heading of the note, as a move to another note does, and
-        // is read as that: a warning, and the rest of the command stands.
-        it('reads move() as a move that names no heading of the note, retired, and warns', () => {
-            for (const raw of ['move()', 'every mon move( )', 'every mon x2 move()']) {
-                const { program, diagnostics } = parseFlow(raw);
-                expect(program?.move?.to).toEqual({ kind: 'retired' });
-                expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['warning:flow.move-retired']);
-            }
-            const { program, diagnostics: [diagnostic] } = parseFlow('every mon move( )');
-            expect(program?.schedule?.kind).toBe('every');
-            expect(diagnostic.span).toEqual({ start: 10, end: 17 });
+        it('reads a link to a heading of the note as that heading, an alias aside', () => {
+            expect(headingOf('move([[#Done]])')).toEqual({ heading: 'Done', codes: [] });
+            expect(headingOf('move([[#Done later|later]])')).toEqual({ heading: 'Done later', codes: [] });
         });
 
-        it('reads a link to a heading of the note as the end of its section, an alias aside', () => {
-            expect(toOf('move([[#Done]])')).toEqual({ to: { kind: 'heading', name: 'Done' }, codes: [] });
-            expect(toOf('move([[#Done later|later]])')).toEqual({ to: { kind: 'heading', name: 'Done later' }, codes: [] });
-        });
-
+        // Retired 2026-09-28 with a warning, and an error since 2026-10-01:
+        // a move that names no heading of the note cannot move the task, and
+        // the command that holds it does not run at all.
         it.each([
+            'move()',
+            'every mon move( )',
+            'every mon x2 move()',
             'move([[Log]])',
             'move([[Log#Done]])',
             'move([[note#Done]])',
@@ -139,24 +128,21 @@ describe('FlowParser', () => {
             'move([[#Top#Done]])',
             'move([[#]])',
             'move(3)',
-        ])('reads anything else as a move to another note, retired, and warns: %s', (raw) => {
+            'every mon move([[Log]])',
+        ])('refuses anything else, and the whole command with it: %s', (raw) => {
             const { program, diagnostics } = parseFlow(raw);
-            expect(program?.move?.to).toEqual({ kind: 'retired' });
-            expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['warning:flow.move-retired']);
+            expect(program).toBeNull();
+            expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['error:flow.move-not-heading']);
         });
 
-        it('keeps the rest of a command whose move is retired', () => {
-            const { program } = parseFlow('every mon move([[Log]])');
-            expect(program?.schedule?.kind).toBe('every');
+        it('marks what is written between the parentheses, or the clause when nothing is', () => {
+            expect(parseFlow('every mon move( )').diagnostics[0].span).toEqual({ start: 10, end: 17 });
+            expect(parseFlow('every mon move([[Log]])').diagnostics[0].span).toEqual({ start: 15, end: 22 });
         });
 
         it('prints a heading link as written', () => {
             expect(serializeFlow(parseFlow('move([[#Done]])  every mon').program!)).toBe('every mon move([[#Done]])');
             expect(serializeFlow(parseFlow('move([[#Done|d]])').program!)).toBe('move([[#Done|d]])');
-        });
-
-        it('prints move() back as written, so the next instance carries it as it stood', () => {
-            expect(serializeFlow(parseFlow('move( ) every mon').program!)).toBe('every mon move()');
         });
     });
 
@@ -179,28 +165,14 @@ describe('FlowParser', () => {
             expect(errors('use("週報")')).toContain('flow.orphan-modifier');
         });
 
-        it('reads nochildren, warns, and keeps nothing of it', () => {
-            // Refusing the token would take the whole command down with it —
-            // an error nulls the program, so a line that used to run would
-            // stop running on the release that retires one of its clauses.
-            // Keeping it on the AST would put it back on the line every time
-            // a fire regenerates the clause.
-            const { program, diagnostics } = parseFlow('every mon nochildren');
-
-            expect(program).not.toBeNull();
-            expect(diagnostics.map(d => [d.code, d.severity]))
-                .toEqual([['flow.nochildren-retired', 'warning']]);
-            expect(serializeFlow(program!)).toBe('every mon');
-        });
-
-        it('says only that the clause is retired when it is all there is', () => {
-            // Dropping the clause leaves an empty command, but flow.empty
-            // only speaks when nothing else has explained the line — and the
-            // retirement notice has, in a message that names the fix.
-            const { program, diagnostics } = parseFlow('nochildren');
-
-            expect(program).not.toBeNull();
-            expect(diagnostics.map(d => d.code)).toEqual(['flow.nochildren-retired']);
+        // Retired 2026-08-16 with a warning, and an error since 2026-10-01:
+        // `nochildren` is no clause, so the command that holds it does not run.
+        it('reads nochildren as an unknown clause, and the whole command with it', () => {
+            for (const raw of ['every mon nochildren', 'nochildren', 'nochildren every mon x3']) {
+                const { program, diagnostics } = parseFlow(raw);
+                expect(program).toBeNull();
+                expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['error:flow.unknown-head']);
+            }
         });
 
         it('parses use() and keeps the name as an expression', () => {
@@ -248,7 +220,7 @@ describe('FlowParser', () => {
         });
 
         it('program is null iff there are error diagnostics', () => {
-            for (const src of ['every mon', 'garbage', 'every mon x0', 'move([[A]])']) {
+            for (const src of ['every mon', 'garbage', 'every mon x0', 'move([[#A]])', 'move([[A]])']) {
                 const { program, diagnostics } = parseFlow(src);
                 const hasError = diagnostics.some(d => d.severity === 'error');
                 expect(program === null).toBe(hasError);
@@ -271,11 +243,10 @@ describe('FlowParser', () => {
             'at(nextCycle(start, 3d))',
             'every mon x14',
             'every mon until(2026-09-28)',
-            'every mon x14 until(2026-09-28) nochildren',
+            'every mon x14 until(2026-09-28)',
             'every mon use("週報")',
-            'every mon x14 use("週報") move([[Log]])',
-            'move([[Archive/Done]])',
-            'every mon move([[Log]])',
+            'every mon x14 use("週報") move([[#Log]])',
+            'every mon move([[#Log]])',
             'every mon x2 move([[#Done]])',
             'move([[#Done|later]])',
             'at(startOf(month, done + 1mo) + 4d)',
@@ -297,10 +268,7 @@ describe('FlowParser', () => {
             expect(first.program).not.toBeNull();
             const printed = serializeFlow(first.program!);
             const second = parseFlow(printed);
-            // Errors only: a retired clause survives printing in this stage
-            // and warns again on the way back in, which is round-trip
-            // working rather than failing.
-            expect(errorsIn(second.diagnostics)).toEqual([]);
+            expect(second.diagnostics).toEqual([]);
             expect(serializeFlow(second.program!)).toBe(printed);
         });
 
@@ -330,8 +298,8 @@ describe('FlowParser', () => {
         });
 
         it('normalizes clause order canonically', () => {
-            const { program } = parseFlow('move([[A]]) until(2026-09-28) every mon x3');
-            expect(serializeFlow(program!)).toBe('every mon x3 until(2026-09-28) move([[A]])');
+            const { program } = parseFlow('move([[#A]]) until(2026-09-28) every mon x3');
+            expect(serializeFlow(program!)).toBe('every mon x3 until(2026-09-28) move([[#A]])');
         });
     });
 

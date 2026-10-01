@@ -344,17 +344,6 @@ describe('FlowPlanner', () => {
             expect(plan('move([[#Done|d]])').find(e => e.kind === 'move')).toMatchObject({ heading: 'Done' });
         });
 
-        it('drops a retired move, and only the move: the command is consumed and the rest is planned', () => {
-            for (const src of ['move([[Log/]] + file.name)', 'move()', 'move([[Other]])']) {
-                const kinds = plan(src).map(e => e.kind);
-                expect(kinds).toEqual(['strip-flow', 'move-dropped']);
-            }
-            const effects = plan('every mon move()');
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow', 'move-dropped']);
-            const dropped = effects[2];
-            expect(dropped.kind === 'move-dropped' && dropped.error.code).toBe('eval.move-retired');
-        });
-
         it('strips the flow from the moved task and keeps its ^id: the row is carried, not copied', () => {
             const move = plan('move([[#Done]])', { blockId: 'xyz' }).find(e => e.kind === 'move');
             if (move?.kind !== 'move') throw new Error('no move');
@@ -364,17 +353,6 @@ describe('FlowPlanner', () => {
     });
 
     describe('options', () => {
-        it('plans the same effect with or without the retired clause', () => {
-            // Nothing in the effect answers for children any more. What a
-            // task's children hold is what that instance did, and the writer
-            // has no knob left to be asked otherwise.
-            const plain = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' }));
-            const retired = createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' }));
-
-            expect(Object.keys(plain).sort()).toEqual(['kind', 'newTask']);
-            expect(retired.newTask.startDate).toBe(plain.newTask.startDate);
-        });
-
         it('strips timer emoji prefixes from the copied content', () => {
             const { newTask } = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01', content: '⏱️ Test task' }));
             expect(newTask.content).toBe('Test task');

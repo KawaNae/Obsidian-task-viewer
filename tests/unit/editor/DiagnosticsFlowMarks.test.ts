@@ -47,7 +47,11 @@ const SHAPES: Array<[string, string[], Partial<TaskViewerSettings>?]> = [
     ['a nested task with its own flow', [
         `- [ ] A ${D} ==> every mon`, `\t- [ ] B ${D} ==> evry`, '\t\t- ==> x2', '\t- ==> x3',
     ]],
-    ['children that stopped travelling', [`- [ ] A ${D} ==> every mon`, '\t- a child note']],
+    ['children under a command, which nothing marks', [`- [ ] A ${D} ==> every mon`, '\t- a child note']],
+    ['nochildren, an unknown clause', [`- [ ] A ${D} ==> every mon nochildren`]],
+    ['a move to a heading', [`- [ ] A ${D} ==> every mon move([[#Done]])`, '## Done']],
+    ['a move that names no heading, on the task line', [`- [ ] A ${D} ==> every mon move()`, '## Done']],
+    ['a move that names no heading, on a flow line', [`- [ ] A ${D}`, '    - ==> move([[Log]])', '## Done']],
     ['a read-only notation', ['- [ ] A 📅 2026-09-24 ==> every mon', '\t- ==> x3'], { enableTasksPlugin: true }],
     ['an unfinished call, padded', [`- [ ] A ${D} ==>  at(   `]],
     ['an unfinished call on a flow line', [`- [ ] A ${D}`, '\t- ==>   at(  ']],

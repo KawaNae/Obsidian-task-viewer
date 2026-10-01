@@ -48,7 +48,7 @@ describe('unresolvedAt', () => {
         expect(unresolvedAt(rows, [])).toEqual([{ kind: 'heading', task: child, name: '完了', found: 'none' }]);
     });
 
-    it('廃止された move は判定しない（パーサが警告する）', () => {
+    it('見出しを指さない move は判定しない（コマンドが読めず、パーサが誤りを出す）', () => {
         const rows = rowsOf(['- [ ] 片づける @2026-09-28 ==> move()']);
         expect(unresolvedAt(rows, [])).toEqual([]);
     });

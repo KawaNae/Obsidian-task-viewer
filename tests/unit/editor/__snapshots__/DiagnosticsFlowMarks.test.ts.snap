@@ -49,9 +49,22 @@ exports[`the marks the editor puts on a flow program > a modifier before a flow 
 ]
 `;
 
+exports[`the marks the editor puts on a flow program > a move that names no heading, on a flow line 1`] = `
+[
+  "1:15-22 tv-diag tv-diag--error move() takes a link to a heading of this note: move([[#heading]])",
+]
+`;
+
+exports[`the marks the editor puts on a flow program > a move that names no heading, on the task line 1`] = `
+[
+  "0:34-40 tv-diag tv-diag--error move() takes a link to a heading of this note: move([[#heading]])",
+]
+`;
+
+exports[`the marks the editor puts on a flow program > a move to a heading 1`] = `[]`;
+
 exports[`the marks the editor puts on a flow program > a nested task with its own flow 1`] = `
 [
-  "0:20-33 tv-diag tv-diag--warning Child lines no longer travel to the next instance — put what should carry over in a tv-gen block and name it with use("...")",
   "1:25-29 tv-diag tv-diag--error Unknown clause 'evry' — clauses start with every / + / at(...) / xN / until(...) / state(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",
   "2:8-10 tv-diag tv-diag--error 'xN' requires a schedule clause (every / + / at)",
 ]
@@ -118,14 +131,12 @@ exports[`the marks the editor puts on a flow program > an unfinished clause 1`] 
 ]
 `;
 
-exports[`the marks the editor puts on a flow program > children that stopped travelling 1`] = `
-[
-  "0:20-33 tv-diag tv-diag--warning Child lines no longer travel to the next instance — put what should carry over in a tv-gen block and name it with use("...")",
-]
-`;
+exports[`the marks the editor puts on a flow program > children under a command, which nothing marks 1`] = `[]`;
 
-exports[`the marks the editor puts on a flow program > flow lines under a note and in a fence 1`] = `
+exports[`the marks the editor puts on a flow program > flow lines under a note and in a fence 1`] = `[]`;
+
+exports[`the marks the editor puts on a flow program > nochildren, an unknown clause 1`] = `
 [
-  "0:20-33 tv-diag tv-diag--warning Child lines no longer travel to the next instance — put what should carry over in a tv-gen block and name it with use("...")",
+  "0:34-44 tv-diag tv-diag--error Unknown clause 'nochildren' — clauses start with every / + / at(...) / xN / until(...) / state(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",
 ]
 `;
