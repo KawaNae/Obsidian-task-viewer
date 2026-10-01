@@ -18,76 +18,78 @@ const EXPORT_SPECIFIC_KEYS = new Set([
     'anchor-date',
 ]);
 
+/**
+ * The handler checks its own flags: they are the export's and those of the
+ * view it exports, known only once the view is (`validateFlags`). An error
+ * it throws is the registrar's to turn into a cliError.
+ */
 export function createExportImageHandler(plugin: PluginContext & ExportHost) {
     return async (params: CliData): Promise<string> => {
-        try {
-            // 1. Resolve view type
-            const viewType = resolveViewType(params, plugin);
-            if (viewType.startsWith('{')) return viewType; // cliError JSON
+        // 1. Resolve view type
+        const resolution = resolveViewType(params, plugin);
+        if ('error' in resolution) return resolution.error;
+        const { viewType } = resolution;
 
-            if (!exportDescriptorFor(viewType)) {
-                return cliError(`View '${params.view ?? viewType}' does not support image export. Supported: timeline, calendar, schedule, kanban`);
-            }
-
-            // 2. Resolve anchor-date → view-specific transient key
-            const anchorResult = resolveAnchorDate(params, viewType);
-            if (anchorResult.error) return anchorResult.error;
-            const resolvedParams = anchorResult.params;
-
-            // 3. Validate flags: only EXPORT_SPECIFIC_KEYS + valid view-config keys allowed
-            const validationErr = validateFlags(resolvedParams, viewType);
-            if (validationErr) return validationErr;
-
-            // 3b. Validate days-to-show against the same schema field the
-            // actual render reads, so an out-of-range flag fails fast instead
-            // of silently falling back to the default.
-            const daysToShowErr = validateDaysToShow(resolvedParams, viewType);
-            if (daysToShowErr) return daysToShowErr;
-
-            // 4. Validate filename if user-specified
-            const filenameErr = validateFilename(resolvedParams);
-            if (filenameErr) return filenameErr;
-
-            // 4b. Read the export's own flags; a number flag that is not one fails.
-            const opts = readExportOptions(resolvedParams);
-            if (typeof opts === 'string') return opts;
-
-            // 5. Determine mode: open-view vs temp-leaf
-            const hasViewConfig = hasConfigParams(resolvedParams);
-            const hasTemplate = !!resolvedParams.template;
-
-            let result: ExportResult;
-
-            if (!hasViewConfig && !hasTemplate) {
-                result = await plugin.exportService.exportOpenView(viewType, opts);
-            } else {
-                const configParams = extractConfigParams(resolvedParams);
-                const buildResult = await buildViewStateFromParams(
-                    plugin.app,
-                    plugin.settings.viewTemplateFolder,
-                    viewType,
-                    configParams,
-                );
-                if (buildResult.templateNotFound) {
-                    const loader = new ViewTemplateLoader(plugin.app);
-                    const available = loader.loadTemplates(plugin.settings.viewTemplateFolder)
-                        .map(s => s.name);
-                    return cliError(`Template '${buildResult.templateNotFound}' not found. Available: ${available.join(', ') || '(none)'}`);
-                }
-                result = await plugin.exportService.exportTempView(viewType, buildResult.state, opts);
-            }
-
-            const { renderedRange, ...rest } = result;
-            return cliOk({
-                ...rest,
-                ...(renderedRange ? {
-                    resolvedAnchor: renderedRange.anchor,
-                    renderedRange: { from: renderedRange.from, to: renderedRange.to },
-                } : {}),
-            });
-        } catch (e) {
-            return cliError(e instanceof Error ? e.message : String(e));
+        if (!exportDescriptorFor(viewType)) {
+            return cliError(`View '${params.view ?? viewType}' does not support image export. Supported: timeline, calendar, schedule, kanban`);
         }
+
+        // 2. Resolve anchor-date → view-specific transient key
+        const anchorResult = resolveAnchorDate(params, viewType);
+        if (anchorResult.error) return anchorResult.error;
+        const resolvedParams = anchorResult.params;
+
+        // 3. Validate flags: only EXPORT_SPECIFIC_KEYS + valid view-config keys allowed
+        const validationErr = validateFlags(resolvedParams, viewType);
+        if (validationErr) return validationErr;
+
+        // 3b. Validate days-to-show against the same schema field the
+        // actual render reads, so an out-of-range flag fails fast instead
+        // of silently falling back to the default.
+        const daysToShowErr = validateDaysToShow(resolvedParams, viewType);
+        if (daysToShowErr) return daysToShowErr;
+
+        // 4. Validate filename if user-specified
+        const filenameErr = validateFilename(resolvedParams);
+        if (filenameErr) return filenameErr;
+
+        // 4b. Read the export's own flags; a number flag that is not one fails.
+        const opts = readExportOptions(resolvedParams);
+        if (typeof opts === 'string') return opts;
+
+        // 5. Determine mode: open-view vs temp-leaf
+        const hasViewConfig = hasConfigParams(resolvedParams);
+        const hasTemplate = !!resolvedParams.template;
+
+        let result: ExportResult;
+
+        if (!hasViewConfig && !hasTemplate) {
+            result = await plugin.exportService.exportOpenView(viewType, opts);
+        } else {
+            const configParams = extractConfigParams(resolvedParams);
+            const buildResult = await buildViewStateFromParams(
+                plugin.app,
+                plugin.settings.viewTemplateFolder,
+                viewType,
+                configParams,
+            );
+            if (buildResult.templateNotFound) {
+                const loader = new ViewTemplateLoader(plugin.app);
+                const available = loader.loadTemplates(plugin.settings.viewTemplateFolder)
+                    .map(s => s.name);
+                return cliError(`Template '${buildResult.templateNotFound}' not found. Available: ${available.join(', ') || '(none)'}`);
+            }
+            result = await plugin.exportService.exportTempView(viewType, buildResult.state, opts);
+        }
+
+        const { renderedRange, ...rest } = result;
+        return cliOk({
+            ...rest,
+            ...(renderedRange ? {
+                resolvedAnchor: renderedRange.anchor,
+                renderedRange: { from: renderedRange.from, to: renderedRange.to },
+            } : {}),
+        });
     };
 }
 
@@ -126,25 +128,28 @@ function resolveAnchorDate(params: CliData, viewType: string): AnchorResult {
 
 // ── Existing helpers ──
 
-function resolveViewType(params: CliData, plugin: PluginContext & ExportHost): string {
+/** The view an export is of, or the cliError saying why there is none. */
+type ViewTypeResolution = { viewType: string } | { error: string };
+
+function resolveViewType(params: CliData, plugin: PluginContext & ExportHost): ViewTypeResolution {
     if (params.view) {
         const resolved = resolveViewTypeFromShortName(params.view);
-        if (!resolved) return cliError(`Unknown view: '${params.view}'. Use: timeline, calendar, schedule, kanban`);
-        return resolved;
+        if (!resolved) return { error: cliError(`Unknown view: '${params.view}'. Use: timeline, calendar, schedule, kanban`) };
+        return { viewType: resolved };
     }
     if (params.template) {
         const loader = new ViewTemplateLoader(plugin.app);
         const summary = loader.findByBasename(plugin.settings.viewTemplateFolder, params.template);
         if (summary) {
             const resolved = resolveViewTypeFromShortName(summary.viewType);
-            if (resolved) return resolved;
+            if (resolved) return { viewType: resolved };
         }
         const available = listTemplateNames(plugin);
-        return cliError(`Template '${params.template}' not found or has no valid view type. Available: ${available || '(none)'}`);
+        return { error: cliError(`Template '${params.template}' not found or has no valid view type. Available: ${available || '(none)'}`) };
     }
     const available = listTemplateNames(plugin);
     const templateHint = available ? ` Available templates: ${available}` : '';
-    return cliError(`Missing required flag: view= or template=. Specify the view to export (view=timeline|calendar|schedule|kanban) or a saved template name.${templateHint}`);
+    return { error: cliError(`Missing required flag: view= or template=. Specify the view to export (view=timeline|calendar|schedule|kanban) or a saved template name.${templateHint}`) };
 }
 
 function validateFlags(params: CliData, viewType: string): string | null {
