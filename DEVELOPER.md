@@ -351,12 +351,17 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 `@start>end>due` は `readDateBlock(text)`（`parsing/tv-inline/DateBlock.ts`）の1か所で読む。`text` は、内容から末尾の `^id` とコマンド（`==>` から後ろ）を除いたもの（`taskContentText`）である。返すものは次のとおり。
 
 - 最初のブロックの区間と値（開始、終了、期限）
+- 最初のブロックのうち、実在しない日か時刻を指す区画の区間（`unread`）
 - 3つ目以降の `>` の区間
 - 2つ目以降のブロックの区間と原文
 
 `@` だけの一致（`@alice`、`@1on1`）はブロックではない。`TVInlineParser` は値を読む。エディタの診断（`DateBlockDiagnostics`）と日をずらす複製（`shiftLineDates`）は、`readLineDateBlock(line)` で行の桁の区間を読む。
 
-2つ目以降のブロックは日付ではなく、内容にも入らず、parse-error の診断が付く。その原文は `Task.extraDateBlocks` に残り、`formatTaskLine` が最初のブロックの直後にそのまま書き戻す（issue #198）。位置は本文の途中から最初のブロックの直後へ移る。それでも2つ目以降のままなので、読み直しで開始日は入れ替わらない。日付を消したタスクに余分なブロックがあるときは、最初のブロックとして空の `@>`（日付なし）を書く。
+区画の日付と時刻は `parseDateTimeField`（`parsing/utils/DateTimeFieldParser.ts`）で読む。日付の形の断片が実在の日を指さない（`DateUtils.readDate` が null。入力の codec と同じ述語）か、時刻の形の断片が範囲の外なら null を返し、その値は日付も時刻も読まない。片方だけ読むと値を推測することになるからである。
+
+2つ目以降のブロックは日付ではなく、内容にも入らず、parse-error の診断が付く。最初のブロックの区画が1つでも読めなければ、そのブロックも日付を与えず、parse-error の診断が読めない区画に付く。2つ目以降のブロックを日付に繰り上げることはしない。日付を読まなかったブロックの原文は、書かれた順に `Task.unreadDateBlocks` に残り、`formatTaskLine` が日付のブロックの直後にそのまま書き戻す（issue #198、段7の論点 N）。位置は本文の途中から日付のブロックの直後へ移る。それでも読み直しで同じブロックが日付になるので、開始日は入れ替わらない。日付の無いタスクでは、残したブロックの先頭がそれだけで日付として読めるときに限り、先に空の `@>`（日付なし）を書く。先頭が読めないブロックなら書かないので、書き戻しで行に `@>` が増えることはない。`shiftLineDates` は読めないブロックをずらさない。
+
+`@` の外の日付も同じ述語で読む。frontmatter と節のプロパティ行（`BuiltinPropertyExtractor`）は読めない値をその層の値とせず、継承の上の層の値になる。行を書き直す書き手は無いので文字は残るが、エディタの診断の経路は無い。Tasks の絵文字の行（`TasksPluginParser`）は読めない日付を欄に入れず、行の持ち主は形で決めたまま、warning の parse-error を付ける（エディタの診断が無いので、error にしてビューから黙って消さない）。式のリテラル（`Lexer`）は `lex.no-such-day` / `lex.no-such-time` の診断になる。
 
 #### 本文の記法
 
@@ -1307,8 +1312,10 @@ src/api/
   Reference.ts           # api.help() and the CLI's help, made from the tables; OPERATIONS and
                          #   CLI_COMMANDS (the commands the registrar registers)
   TaskNormalizer.ts      # Task → NormalizedTask conversion (ALL_FIELD_NAMES)
-  FilterParamsBuilder.ts # The filter a query's params name (resolveFilterSource: filter file,
-                         #   else filter, else the simple fields and list's window)
+  FilterParamsBuilder.ts # The query a call's params name (resolveQuery: filter file, else filter,
+                         #   else the simple fields and list's window). A filter file is answered
+                         #   as the views answer it: no task with a validation error, the pinned
+                         #   list's order unless sort is given
   FilterFileLoader.ts    # Vault filter file (.json FilterState, .md view template via PinnedListQuery)
 
 src/cli/

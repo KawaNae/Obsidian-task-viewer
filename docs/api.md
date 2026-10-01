@@ -110,13 +110,13 @@ const result = api.today({
 });
 ```
 
-フィルタの元は、`filterFile`、`filter`、単純フィルタと窓（`date`、`from`、`to`）の順に1つだけ使います。上のものがあれば下は読みません（検査もしません）。`list` は `filterFile`（`.md` のテンプレート）と一緒でなければならず、`filterFile` なしで渡すと `'list' requires 'filterFile' (a .md view template)` のエラーです。テンプレートは、そのビューが読むのと同じ形で読みます。リストに保存された並べ替えは使わず、並びは `sort` だけで決まります。
+フィルタの元は、`filterFile`、`filter`、単純フィルタと窓（`date`、`from`、`to`）の順に1つだけ使います。上のものがあれば下は読みません（検査もしません）。`list` は `filterFile`（`.md` のテンプレート）と一緒でなければならず、`filterFile` なしで渡すと `'list' requires 'filterFile' (a .md view template)` のエラーです。テンプレートは、そのビューが読むのと同じ形で読みます。ピン留めリストは、`sort` が無ければリストに保存された並べ替えで並びます（ビューと同じ並び）。
 
 `list` の窓は、タスクの実効の日付（暦日）と重なるかで判定し、締切だけのタスクは含みません。`tasksForDateRange` 系の窓は visual な日付（ビューと同じ基準）で判定し、締切だけのタスクを含みます。
 
 `leaf` は子タスクを持たないタスクです。チェックボックスの無い子の行やリンクは子タスクに数えません。`today` の `leaf` も同じです。
 
-`list` と `tasksForDateRange` 系は、検証エラーのあるタスク（例: 終了が開始より前）も返します。ビューはこれを外して描きます。
+`filterFile` を使う問い合わせは、ビューと同じく検証エラーのあるタスク（例: 終了が開始より前、実在しない日付）を外します。`filterFile` を使わない `list` と `tasksForDateRange` 系は、検証エラーのあるタスクも返します。
 
 **ListParams:**
 
