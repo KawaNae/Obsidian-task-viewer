@@ -19,8 +19,10 @@ export class ScheduleTaskCategorizer {
     }
 
     /**
-     * Convert base CategorizedTasks (from TaskReadService) to Schedule-specific format.
-     * Adds visualStartMinute/visualEndMinute to timed tasks and applies sorting.
+     * Convert base CategorizedTasks (from TaskDateCategorizer) to Schedule's
+     * format: each timed task gets its visualStartMinute/visualEndMinute.
+     * Every section keeps the canonical order it comes in (TaskRenderOrder),
+     * the one Timeline draws in too.
      */
     toScheduleFormat(base: BaseCategorizedTasks): CategorizedTasks {
         const categorized: CategorizedTasks = {
@@ -38,35 +40,6 @@ export class ScheduleTaskCategorizer {
                 categorized.allDay.push(dt);
             }
         }
-
-        categorized.allDay.sort((a, b) => {
-            const fileDiff = a.file.localeCompare(b.file);
-            if (fileDiff !== 0) return fileDiff;
-            return a.line - b.line;
-        });
-
-        categorized.timed.sort((a, b) => {
-            if (a.visualStartMinute !== b.visualStartMinute) {
-                return a.visualStartMinute - b.visualStartMinute;
-            }
-            if (a.visualEndMinute !== b.visualEndMinute) {
-                return a.visualEndMinute - b.visualEndMinute;
-            }
-            const fileDiff = a.file.localeCompare(b.file);
-            if (fileDiff !== 0) return fileDiff;
-            return a.line - b.line;
-        });
-
-        categorized.dueOnly.sort((a, b) => {
-            const aDue = a.due || '';
-            const bDue = b.due || '';
-            if (aDue !== bDue) {
-                return aDue.localeCompare(bDue);
-            }
-            const fileDiff = a.file.localeCompare(b.file);
-            if (fileDiff !== 0) return fileDiff;
-            return a.line - b.line;
-        });
 
         return categorized;
     }
