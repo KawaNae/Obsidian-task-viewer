@@ -5,6 +5,8 @@ describe('issueText', () => {
     it.each([
         [{ code: 'empty' }, 'start must not be empty'],
         [{ code: 'shape', kind: 'int' }, 'start must be a whole number'],
+        [{ code: 'shape', kind: 'dateTime' }, 'start must be a date (YYYY-MM-DD) or a date and a time (YYYY-MM-DD HH:mm)'],
+        [{ code: 'shape', kind: 'dateTimeOrTime' }, 'start must be a date (YYYY-MM-DD), a date and a time (YYYY-MM-DD HH:mm), or a time (HH:mm)'],
         [{ code: 'noSuchDay' }, 'start must be a day that exists'],
         [{ code: 'range', min: 1 }, 'start must be at least 1'],
         [{ code: 'range', max: 9 }, 'start must be at most 9'],

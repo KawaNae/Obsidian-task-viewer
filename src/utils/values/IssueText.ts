@@ -11,7 +11,8 @@ import type { Issue, ShapeKind } from './Read';
 const SHAPE: Record<ShapeKind, string> = {
     date: 'a date (YYYY-MM-DD)',
     time: 'a time (HH:mm)',
-    dateTime: 'a date (YYYY-MM-DD), a date and a time (YYYY-MM-DD HH:mm), or a time (HH:mm)',
+    dateTime: 'a date (YYYY-MM-DD) or a date and a time (YYYY-MM-DD HH:mm)',
+    dateTimeOrTime: 'a date (YYYY-MM-DD), a date and a time (YYYY-MM-DD HH:mm), or a time (HH:mm)',
     int: 'a whole number',
     number: 'a number',
     bool: 'true or false',

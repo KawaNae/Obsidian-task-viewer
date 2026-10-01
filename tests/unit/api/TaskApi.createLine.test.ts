@@ -212,6 +212,13 @@ describe('the date block create writes', () => {
 
     // A due with no date was dropped without a word; it is refused, as
     // update refuses it.
+    it('tells a due of the wrong shape the shapes a due takes, a time alone not among them', async () => {
+        await expect(written({ due: 'tomorrow' }))
+            .rejects.toThrow('due must be a date (YYYY-MM-DD) or a date and a time (YYYY-MM-DD HH:mm), got: "tomorrow"');
+        await expect(written({ start: 'tomorrow' }))
+            .rejects.toThrow('start must be a date (YYYY-MM-DD), a date and a time (YYYY-MM-DD HH:mm), or a time (HH:mm), got: "tomorrow"');
+    });
+
     it('refuses a due that is a time alone', async () => {
         await expect(written({ start: '2026-07-18', due: '17:00' }))
             .rejects.toThrow(/due must include a date, got: "17:00"/);
