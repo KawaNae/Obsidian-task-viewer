@@ -3,6 +3,7 @@ import { FilterSerializer, filterIssueText } from '../services/filter/FilterSeri
 import { DATE_PRESET_SYNTAX, parseDatePreset } from '../services/filter/DatePreset';
 import type { DateFilterValue } from '../services/filter/FilterTypes';
 import type { App } from 'obsidian';
+import type { SortState } from '../services/sort/SortTypes';
 import { TaskApiError } from './TaskApiTypes';
 import type { ListParams, SimpleFilterParams, FilterSourceParams } from './TaskApiTypes';
 import { loadFilterFile } from './FilterFileLoader';
@@ -138,23 +139,45 @@ export function filterOfParams(
 }
 
 /**
- * The filter a query uses, wherever its params say it comes from: the filter
- * file's (`list` picks one pinned list out of a .md template), else `filter`,
- * else the simple fields and `window` ({@link filterOfParams}). `list` and the
- * date-range family both resolve their filter here.
+ * What a query asks for, wherever its params say it comes from: the tasks
+ * `filter` passes (null: every task), in `sort`'s order when the call names
+ * none, and whether the tasks with a validation error are among them.
  */
-export async function resolveFilterSource(
+export interface ApiQuery {
+    filter: FilterState | null;
+    /** The saved query's order (a pinned list's): the caller's `sort` wins over it. */
+    sort?: SortState;
+    /**
+     * A query of the call's own (`filter`, the simple fields) lists every
+     * task the index holds; a saved one (a filter file) the tasks its view
+     * would show, which leaves out the tasks with a validation error.
+     */
+    includeInvalid: boolean;
+}
+
+/**
+ * The query a call names: the filter file's (`list` picks one pinned list out
+ * of a .md template), else `filter`, else the simple fields and `window`
+ * ({@link filterOfParams}). `list` and the date-range family all resolve
+ * their query here.
+ *
+ * A filter file is a saved query, and is answered as the UI answers it
+ * (stage 7, point Q): with the tasks a view shows, so not those with a
+ * validation error, and in the pinned list's own order unless the call
+ * names a `sort`. What the file overrides is not read.
+ */
+export async function resolveQuery(
     app: App,
     params: SimpleFilterParams & FilterSourceParams,
     window?: QueryWindowParams,
-): Promise<FilterState | null> {
+): Promise<ApiQuery> {
     if (params.list && !params.filterFile) {
         throw new TaskApiError(n => `'${n('list')}' requires '${n('filterFile')}' (a .md view template)`, 'list');
     }
-    if (!params.filterFile) return filterOfParams(params, window);
+    if (!params.filterFile) return { filter: filterOfParams(params, window), includeInvalid: true };
     const loaded = await loadFilterFile(app, params.filterFile, params.list);
     if (loaded instanceof TaskApiError) throw loaded;
-    // The list's own sort is not read: the query's order is `sort`'s alone,
-    // until the pinned-list order is decided for the API (point Q).
-    return loaded.filter;
+    return loaded.sort
+        ? { filter: loaded.filter, sort: loaded.sort, includeInvalid: false }
+        : { filter: loaded.filter, includeInvalid: false };
 }

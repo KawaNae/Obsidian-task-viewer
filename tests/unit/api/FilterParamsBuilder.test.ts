@@ -371,12 +371,12 @@ describe('filterOfParams without a window (the date-range family)', () => {
     );
 });
 
-// ── resolveFilterSource (list and the date-range family) ──
+// ── resolveQuery (list and the date-range family) ──
 
-import { resolveFilterSource } from '../../../src/api/FilterParamsBuilder';
+import { resolveQuery } from '../../../src/api/FilterParamsBuilder';
 import type { App } from 'obsidian';
 
-describe('resolveFilterSource', () => {
+describe('resolveQuery', () => {
     function appHolding(files: Record<string, string>): App {
         return {
             vault: {
@@ -389,7 +389,7 @@ describe('resolveFilterSource', () => {
     }
 
     it('refuses list without filterFile, the same for every query', async () => {
-        await expect(resolveFilterSource(appHolding({}), { list: 'a' }))
+        await expect(resolveQuery(appHolding({}), { list: 'a' }))
             .rejects.toThrow("'list' requires 'filterFile'");
     });
 
@@ -397,18 +397,27 @@ describe('resolveFilterSource', () => {
         const file = { filters: [{ property: 'status', operator: 'includes', value: ['x'] }], logic: 'and' };
         const app = appHolding({ 'f.json': JSON.stringify(file), 'bad.json': JSON.stringify({ filters: [{ property: 'nope', operator: 'equals' }], logic: 'and' }) });
 
-        const state = await resolveFilterSource(app, { filterFile: 'f.json', tag: 'work', filter: { filters: [], logic: 'or' } }, { date: 'today' });
-        expect(state?.filters).toHaveLength(1);
-        expect((state!.filters[0] as FilterCondition).property).toBe('status');
+        const query = await resolveQuery(app, { filterFile: 'f.json', tag: 'work', filter: { filters: [], logic: 'or' } }, { date: 'today' });
+        expect(query.filter?.filters).toHaveLength(1);
+        expect((query.filter!.filters[0] as FilterCondition).property).toBe('status');
 
-        await expect(resolveFilterSource(app, { filterFile: 'bad.json' })).rejects.toThrow(/Unknown filter property/);
+        await expect(resolveQuery(app, { filterFile: 'bad.json' })).rejects.toThrow(/Unknown filter property/);
     });
 
     it('builds the simple fields with the window it is given, and no window without one', async () => {
         const app = appHolding({});
-        const withWindow = await resolveFilterSource(app, { status: 'x' }, { date: '2026-03-01' });
-        const without = await resolveFilterSource(app, { status: 'x' });
-        expect(withWindow?.filters).toHaveLength(3);
-        expect(without?.filters).toHaveLength(1);
+        const withWindow = await resolveQuery(app, { status: 'x' }, { date: '2026-03-01' });
+        const without = await resolveQuery(app, { status: 'x' });
+        expect(withWindow.filter?.filters).toHaveLength(3);
+        expect(without.filter?.filters).toHaveLength(1);
+    });
+
+    // Point Q: a filter file is a saved query, answered as a view answers it.
+    it('answers a filter file without the tasks with a validation error, and a query of the call\'s own with them', async () => {
+        const file = { filters: [{ property: 'status', operator: 'includes', value: ['x'] }], logic: 'and' };
+        const app = appHolding({ 'f.json': JSON.stringify(file) });
+        expect((await resolveQuery(app, { filterFile: 'f.json' })).includeInvalid).toBe(false);
+        expect((await resolveQuery(app, { status: 'x' })).includeInvalid).toBe(true);
+        expect(await resolveQuery(app, {})).toEqual({ filter: null, includeInvalid: true });
     });
 });

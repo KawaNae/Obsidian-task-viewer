@@ -67,7 +67,10 @@ tasks whose due falls in the window.`;
 const SOURCE_NOTE = `\
 Where the filter comes from: filterFile, else filter (API only), else the
 simple fields. What is overridden is not read. A pinned list (list) needs
-filterFile, a .md view template; the list's own sort is not read.`;
+filterFile, a .md view template. A filter file is answered as the views
+answer it: without the tasks that have a validation error, and in the
+pinned list's own order unless sort is given. Without a filter file, the
+tasks with a validation error are listed too.`;
 
 const RANGE_NOTE = `\
 from and to are required; a preset takes its whole span (from=thisWeek
@@ -543,9 +546,13 @@ so a part it cannot read is an error.
     ${PREFIX}list filter-file=templates/work.md              (the view's filter)
     ${PREFIX}list filter-file=templates/work.md list=urgent  (a pinned list)
 
-  A pinned list adds the view's filter when its "apply view filter" is on.
-  If the template has pinned lists and list= is omitted, the error names
-  them. list= without filter-file= is an error.
+  A pinned list adds the view's filter when its "apply view filter" is on,
+  and lists the tasks in its own order unless sort= is given. If the
+  template has pinned lists and list= is omitted, the error names them.
+  list= without filter-file= is an error.
+
+  With filter-file=, the tasks that have a validation error are left out,
+  as the views leave them out; without it, they are listed.
 
   Every checkbox is a task, dated or not, so list returns undated ones too.
   To keep only dated tasks, filter on anyDate; to keep only top-level
