@@ -1,6 +1,6 @@
 import { DateUtils } from '../DateUtils';
 import { dashed, typed } from './Normalize';
-import { readFail, readOk, type Read } from './Read';
+import { readFail, readOk, type Issue, type Read } from './Read';
 
 /**
  * Dates and times typed by a person or a script.
@@ -54,13 +54,15 @@ export const DateTimeInput = {
     read(text: string, opts: { timeOnly: 'allow' | 'refuse' }): Read<DateTimeValue> {
         const t = dashed(typed(text));
         if (t === '') return readFail({ code: 'empty' });
+        // The shape told is the one this reading takes: a time alone only where it is taken.
+        const shape: Issue = { code: 'shape', kind: opts.timeOnly === 'allow' ? 'dateTimeOrTime' : 'dateTime' };
 
         const pair = t.match(DATE_TIME_RE);
         if (pair) {
             const date = DateInput.read(pair[1]);
-            if (!date.ok) return readFail(date.issue.code === 'noSuchDay' ? date.issue : { code: 'shape', kind: 'dateTime' });
+            if (!date.ok) return readFail(date.issue.code === 'noSuchDay' ? date.issue : shape);
             const time = TimeInput.read(pair[2]);
-            if (!time.ok) return readFail({ code: 'shape', kind: 'dateTime' });
+            if (!time.ok) return readFail(shape);
             return readOk({ date: date.value, time: time.value });
         }
 
@@ -72,6 +74,6 @@ export const DateTimeInput = {
         if (time.ok) {
             return opts.timeOnly === 'allow' ? readOk({ time: time.value }) : readFail({ code: 'dateRequired' });
         }
-        return readFail({ code: 'shape', kind: 'dateTime' });
+        return readFail(shape);
     },
 };

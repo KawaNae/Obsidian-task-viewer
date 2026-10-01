@@ -76,7 +76,12 @@ describe('DateTimeInput', () => {
     });
 
     it.each(['2026-13-45x', '2026-10-01T99:99', '2026-10-01 10', 'tomorrow', '2026-10-01 10:00 x'])('refuses %j by its shape', (text) => {
-        expect(DateTimeInput.read(text, allow)).toEqual({ ok: false, issue: { code: 'shape', kind: 'dateTime' } });
+        expect(DateTimeInput.read(text, allow)).toEqual({ ok: false, issue: { code: 'shape', kind: 'dateTimeOrTime' } });
+    });
+
+    it('tells the shape it takes: no time alone when it refuses one', () => {
+        expect(DateTimeInput.read('tomorrow', refuse)).toEqual({ ok: false, issue: { code: 'shape', kind: 'dateTime' } });
+        expect(DateTimeInput.read('2026-10-01T99:99', refuse)).toEqual({ ok: false, issue: { code: 'shape', kind: 'dateTime' } });
     });
 
     it('calls space alone empty', () => {

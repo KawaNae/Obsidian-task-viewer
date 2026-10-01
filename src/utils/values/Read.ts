@@ -7,8 +7,11 @@
  * value.
  */
 
-/** The kinds of value whose shape a reading can miss. */
-export type ShapeKind = 'date' | 'time' | 'dateTime' | 'int' | 'number' | 'bool';
+/**
+ * The kinds of value whose shape a reading can miss. `dateTime` is a date
+ * with or without a time; `dateTimeOrTime` also takes a time alone.
+ */
+export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' | 'number' | 'bool';
 
 export type Issue =
     /** Nothing was given (only space, once normalized). */
