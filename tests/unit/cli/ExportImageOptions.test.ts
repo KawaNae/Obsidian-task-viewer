@@ -3,7 +3,7 @@ import { readExportOptions } from '../../../src/cli/handlers/ExportImageHandler'
 
 /**
  * export-image's own number flags, `width` and `wait`, are read as the view's
- * are (`F.int`): a whole decimal number in range, or the command fails. A
+ * are (`IntInput`): a whole decimal number in range, or the command fails. A
  * value that is not one used to reach the export as NaN (the input decision
  * F, 2026-10-01).
  */
@@ -23,12 +23,28 @@ describe('readExportOptions', () => {
         expect(opts).toMatchObject({ width: undefined, waitMs: undefined });
     });
 
-    it.each(['', 'abc', '0', '-5', '1.5', '800px', '0x10', '1e3'])('refuses width=%j', (raw) => {
-        expect(errorOf(readExportOptions({ width: raw }))).toBe(`Invalid width: '${raw}'. Must be an integer of at least 1`);
+    it('reads them as typed: space around them and full-width digits', () => {
+        expect(readExportOptions({ width: ' 800 ', wait: '５００' })).toMatchObject({ width: 800, waitMs: 500 });
     });
 
-    it.each(['', 'abc', '-1', '1.5', '3s'])('refuses wait=%j', (raw) => {
-        expect(errorOf(readExportOptions({ wait: raw }))).toBe(`Invalid wait: '${raw}'. Must be an integer of at least 0`);
+    it.each(['abc', '1.5', '800px', '0x10', '1e3'])('refuses width=%j as not a whole number', (raw) => {
+        expect(errorOf(readExportOptions({ width: raw }))).toBe(`width must be a whole number, got: ${JSON.stringify(raw)}`);
+    });
+
+    it.each(['0', '-5'])('refuses width=%j as out of range', (raw) => {
+        expect(errorOf(readExportOptions({ width: raw }))).toBe(`width must be at least 1, got: ${JSON.stringify(raw)}`);
+    });
+
+    it('refuses an empty width', () => {
+        expect(errorOf(readExportOptions({ width: '' }))).toBe('width must not be empty, got: ""');
+    });
+
+    it.each(['abc', '1.5', '3s'])('refuses wait=%j as not a whole number', (raw) => {
+        expect(errorOf(readExportOptions({ wait: raw }))).toBe(`wait must be a whole number, got: ${JSON.stringify(raw)}`);
+    });
+
+    it('refuses a negative wait', () => {
+        expect(errorOf(readExportOptions({ wait: '-1' }))).toBe('wait must be at least 0, got: "-1"');
     });
 
     it('carries the other flags as they were', () => {

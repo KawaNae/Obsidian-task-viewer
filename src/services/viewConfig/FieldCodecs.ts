@@ -11,9 +11,15 @@
  *
  * Per-field codecs centralize the per-type parse/serialize asymmetries that
  * used to be replicated across 5 boundary call sites in the old codebase.
+ * The scalar fields read their text with the input codecs of
+ * `utils/values` (normalization, shape, validity) and add only where the
+ * value is stored and how it is spelled in a URI.
  */
 
-import { DateUtils } from '../../utils/DateUtils';
+import { valueOf } from '../../utils/values/Read';
+import { DateInput } from '../../utils/values/DateValues';
+import { IntInput, IntValue, FloatInput, FloatValue, type NumberRange } from '../../utils/values/NumberValues';
+import { BoolInput, ChoiceInput } from '../../utils/values/ChoiceValues';
 import type { ConfigField, TransientField } from './ViewConfigSchema';
 import type { FilterState } from '../filter/FilterTypes';
 import { hasConditions } from '../filter/FilterTypes';
@@ -51,8 +57,7 @@ export const F = {
             legacyKeys: opts.legacyKeys,
             parse(raw) {
                 if (typeof raw === 'boolean') return raw;
-                if (raw === 'true') return true;
-                if (raw === 'false') return false;
+                if (typeof raw === 'string') return valueOf(BoolInput.read(raw));
                 return undefined;
             },
             serialize(value) {
@@ -62,9 +67,7 @@ export const F = {
                 return value ? 'true' : 'false';
             },
             fromUriParam(raw) {
-                if (raw === 'true') return true;
-                if (raw === 'false') return false;
-                return undefined;
+                return valueOf(BoolInput.read(raw));
             },
         };
     },
@@ -92,65 +95,27 @@ export const F = {
         };
     },
 
-    intEnum<const N extends number>(
-        key: string,
-        allowed: readonly N[],
-        opts: FieldOptions = {},
-    ): ConfigField<N> {
-        const set = new Set<number>(allowed);
-        const parseValue = (v: number): N | undefined => (set.has(v) ? (v as N) : undefined);
-        return {
-            key,
-            legacyKeys: opts.legacyKeys,
-            parse(raw) {
-                if (typeof raw === 'number') return parseValue(raw);
-                if (typeof raw === 'string') {
-                    const n = parseInt(raw, 10);
-                    return Number.isFinite(n) ? parseValue(n) : undefined;
-                }
-                return undefined;
-            },
-            serialize(value) {
-                return typeof value === 'number' && set.has(value) ? value : undefined;
-            },
-            toUriParam(value) { return String(value); },
-            fromUriParam(raw) {
-                const n = parseInt(raw, 10);
-                return Number.isFinite(n) ? parseValue(n) : undefined;
-            },
-        };
-    },
-
     /**
-     * Bounded integer. Out-of-range and non-integer values are rejected
-     * (return undefined, falling back to the field's default), matching
-     * `float`'s reject-don't-clamp policy rather than silently coercing.
+     * Bounded integer, read by `IntInput` / `IntValue`: a whole decimal
+     * number in range, or undefined (the field's default), never coerced or
+     * moved to the range's end.
      */
     int(
         key: string,
-        opts: FieldOptions & { min?: number; max?: number } = {},
+        opts: FieldOptions & NumberRange = {},
     ): ConfigField<number> {
-        const { min = -Infinity, max = Infinity } = opts;
-        // Plain decimal digits only. Number() alone also accepts "0x10" (16),
-        // "1e1" (10), and whitespace-padded values ("  5  ") as valid
-        // integers — this CLI's fields reject malformed input rather than
-        // coerce it, so a value that isn't visibly a decimal integer doesn't
-        // get a second chance through Number()'s leniency.
-        const DECIMAL_INT = /^-?\d+$/;
-        const check = (n: number): number | undefined =>
-            (Number.isInteger(n) && n >= min && n <= max) ? n : undefined;
-        const parseString = (raw: string): number | undefined =>
-            DECIMAL_INT.test(raw) ? check(Number(raw)) : undefined;
+        const range: NumberRange = { min: opts.min, max: opts.max };
+        const parseString = (raw: string) => valueOf(IntInput.read(raw, range));
         return {
             key,
             legacyKeys: opts.legacyKeys,
             parse(raw) {
-                if (typeof raw === 'number') return check(raw);
+                if (typeof raw === 'number') return valueOf(IntValue.check(raw, range));
                 if (typeof raw === 'string') return parseString(raw);
                 return undefined;
             },
             serialize(value) {
-                return typeof value === 'number' ? check(value) : undefined;
+                return valueOf(IntValue.check(value, range));
             },
             toUriParam(value) { return String(value); },
             fromUriParam(raw) { return parseString(raw); },
@@ -162,48 +127,42 @@ export const F = {
         allowed: readonly S[],
         opts: FieldOptions = {},
     ): ConfigField<S> {
+        const choice = ChoiceInput.of(allowed);
         const set = new Set<string>(allowed);
-        const parseValue = (v: string): S | undefined => (set.has(v) ? (v as S) : undefined);
         return {
             key,
             legacyKeys: opts.legacyKeys,
             parse(raw) {
-                return typeof raw === 'string' ? parseValue(raw) : undefined;
+                return typeof raw === 'string' ? valueOf(choice.read(raw)) : undefined;
             },
             serialize(value) {
                 return typeof value === 'string' && set.has(value) ? value : undefined;
             },
             toUriParam(value) { return String(value); },
-            fromUriParam(raw) { return parseValue(raw); },
+            fromUriParam(raw) { return valueOf(choice.read(raw)); },
         };
     },
 
+    /** Bounded decimal number, read by `FloatInput` / `FloatValue`, as `int` is. */
     float(
         key: string,
-        opts: FieldOptions & { min?: number; max?: number } = {},
+        opts: FieldOptions & NumberRange = {},
     ): ConfigField<number> {
-        const { min = -Infinity, max = Infinity } = opts;
-        const check = (n: number): number | undefined =>
-            (Number.isFinite(n) && n >= min && n <= max) ? n : undefined;
+        const range: NumberRange = { min: opts.min, max: opts.max };
+        const parseString = (raw: string) => valueOf(FloatInput.read(raw, range));
         return {
             key,
             legacyKeys: opts.legacyKeys,
             parse(raw) {
-                if (typeof raw === 'number') return check(raw);
-                if (typeof raw === 'string') {
-                    const n = parseFloat(raw);
-                    return Number.isFinite(n) ? check(n) : undefined;
-                }
+                if (typeof raw === 'number') return valueOf(FloatValue.check(raw, range));
+                if (typeof raw === 'string') return parseString(raw);
                 return undefined;
             },
             serialize(value) {
-                return typeof value === 'number' ? check(value) : undefined;
+                return valueOf(FloatValue.check(value, range));
             },
             toUriParam(value) { return String(value); },
-            fromUriParam(raw) {
-                const n = parseFloat(raw);
-                return Number.isFinite(n) ? check(n) : undefined;
-            },
+            fromUriParam(raw) { return parseString(raw); },
         };
     },
 
@@ -328,23 +287,16 @@ export const F = {
         };
     },
 
-    /** YYYY-MM-DD string. */
+    /** A `YYYY-MM-DD` naming a day that exists, read by `DateInput`. */
     dateString(key: string, opts: FieldOptions = {}): ConfigField<string> {
+        const read = (raw: unknown) => typeof raw === 'string' ? valueOf(DateInput.read(raw)) : undefined;
         return {
             key,
             legacyKeys: opts.legacyKeys,
-            parse(raw) {
-                return typeof raw === 'string' && DateUtils.isDateShape(raw) ? raw : undefined;
-            },
-            serialize(value) {
-                return typeof value === 'string' && DateUtils.isDateShape(value) ? value : undefined;
-            },
-            toUriParam(value) {
-                return DateUtils.isDateShape(value) ? value : undefined;
-            },
-            fromUriParam(raw) {
-                return DateUtils.isDateShape(raw) ? raw : undefined;
-            },
+            parse: read,
+            serialize: read,
+            toUriParam: read,
+            fromUriParam: read,
         };
     },
 };
