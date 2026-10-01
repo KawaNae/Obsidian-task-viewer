@@ -1,7 +1,7 @@
 import type { App } from 'obsidian';
 import type { FilterState } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
-import { FilterSerializer } from '../services/filter/FilterSerializer';
+import { FilterSerializer, filterIssueText } from '../services/filter/FilterSerializer';
 import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
 import type { PinnedListDefinition } from '../types';
 import { F } from '../services/viewConfig/FieldCodecs';
@@ -15,7 +15,9 @@ function mergeFilters(a: FilterState, b: FilterState): FilterState {
 
 /**
  * Load a FilterState from a filter file (.json or .md view template).
- * Returns the resolved FilterState, or an error string.
+ * Returns the resolved FilterState, or an error string. A condition or a
+ * sort rule the file holds that cannot be read is an error, as it is in the
+ * API's `filter`: a query does not run on part of what it was asked.
  */
 export async function loadFilterFile(
     app: App,
@@ -32,7 +34,10 @@ export async function loadFilterFile(
         try { parsed = JSON.parse(raw); } catch {
             return `Invalid JSON in filter file: ${normalizedPath}`;
         }
-        const state = FilterSerializer.fromJSON(parsed);
+        const { state, issues } = FilterSerializer.parse(parsed);
+        if (issues.length > 0) {
+            return `Invalid filter in ${normalizedPath}: ${issues.map(filterIssueText).join('; ')}`;
+        }
         if (!hasConditions(state)) {
             return `Invalid FilterState in ${normalizedPath}: no conditions found`;
         }
@@ -52,11 +57,16 @@ export async function loadFilterFile(
         const pinnedCodec = F.pinnedLists('pinnedLists');
         const gridCodec = F.grid('grid');
 
-        const filterState = filterCodec.parse(cfg.filterState ?? cfg.filter);
+        const issues: string[] = [];
+        const report = (text: string) => issues.push(text);
+        const filterState = filterCodec.parse(cfg.filterState ?? cfg.filter, report);
         const pinnedLists: PinnedListDefinition[] =
-            pinnedCodec.parse(cfg.pinnedLists)
-            ?? gridCodec.parse(cfg.grid)?.flat()
+            pinnedCodec.parse(cfg.pinnedLists, report)
+            ?? gridCodec.parse(cfg.grid, report)?.flat()
             ?? [];
+        if (issues.length > 0) {
+            return `Invalid filter in ${normalizedPath}: ${issues.join('; ')}`;
+        }
 
         // Determine which filter to use
         if (listName) {

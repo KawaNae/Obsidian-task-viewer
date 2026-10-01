@@ -144,6 +144,12 @@ describe('loadFilterFile', () => {
             expect(result).toBe('Invalid JSON in filter file: filters/bad.json');
         });
 
+        it('returns error when a condition cannot be read', async () => {
+            const app = makeApp({ 'filters/bad.json': '{"logic": "and", "filters": [{"property": "due", "operator": "after", "value": "tomorrow"}]}' });
+            const result = await loadFilterFile(app, 'filters/bad.json');
+            expect(result).toMatch(/^Invalid filter in filters\/bad\.json: filters\[0\]: 'due' takes a date that exists/);
+        });
+
         it('returns error when no conditions found', async () => {
             const app = makeApp({ 'filters/empty.json': '{"logic": "and", "conditions": []}' });
             const result = await loadFilterFile(app, 'filters/empty.json');
@@ -170,6 +176,15 @@ describe('loadFilterFile', () => {
 
             const result = await loadFilterFile(app, 'templates/simple.md');
             expect(result).toEqual(filterState);
+        });
+
+        it('returns error when the template holds a condition it cannot read, as the API filter does', async () => {
+            const bad = { filters: [{ property: 'tag', operator: 'includes', value: 'work' }], logic: 'and' } as unknown as FilterState;
+            const app = makeApp({ 'templates/bad-cond.md': '' });
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate({ grid: [[{ ...makePinnedList('A'), filterState: bad }]] }));
+
+            const result = await loadFilterFile(app, 'templates/bad-cond.md', 'A');
+            expect(result).toBe(`Invalid filter in templates/bad-cond.md: list "A" filters[0]: 'tag' takes a list of strings`);
         });
 
         it('returns error when template has no filter and no pinned lists', async () => {

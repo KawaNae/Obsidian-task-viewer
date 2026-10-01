@@ -40,6 +40,7 @@ import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
 
@@ -270,7 +271,7 @@ export class ScheduleView extends ItemView {
 
     async setState(state: ScheduleViewState, result: ViewStateResult): Promise<void> {
         const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = this.codec.parseConfig(stateDict);
+        const config = readViewConfig(this.codec, stateDict);
         const transient = this.codec.parseTransient(stateDict);
 
         this.applyConfig(config);

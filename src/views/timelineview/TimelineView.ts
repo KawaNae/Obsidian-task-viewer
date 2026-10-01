@@ -49,6 +49,7 @@ import { CardReconciler } from '../sharedUI/CardReconciler';
 import { codecFor } from '../../services/viewConfig';
 import type { TimelineConfig, TimelineTransient } from './TimelineSchema';
 import type { ViewConfigCodec } from '../../services/viewConfig';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
@@ -267,7 +268,7 @@ export class TimelineView extends ItemView {
 
     async setState(state: TimelineViewState, result: ViewStateResult): Promise<void> {
         const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = this.codec.parseConfig(stateDict);
+        const config = readViewConfig(this.codec, stateDict);
         const transient = this.codec.parseTransient(stateDict);
 
         // Fields absent from `state` are restored to their declared defaults

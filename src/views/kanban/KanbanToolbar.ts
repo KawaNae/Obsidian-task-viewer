@@ -8,6 +8,7 @@ import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import { exportFolderOf } from '../../services/export/ExportSave';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export interface KanbanToolbarDeps {
     app: App;
@@ -93,7 +94,7 @@ export class KanbanToolbar extends ViewToolbarBase {
             }),
             getExportFolder: () => exportFolderOf(deps.plugin.settings),
             onApplyTemplate: (template) => {
-                const cfg = this.codec.parseConfig(template.config ?? null);
+                const cfg = readViewConfig(this.codec, template.config ?? null);
                 deps.applyConfig(cfg);
                 if (template.name) deps.onRename(template.name);
                 deps.onConfigApplied();

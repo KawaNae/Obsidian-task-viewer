@@ -743,6 +743,7 @@
     "failedToLoadTemplate": "テンプレートの読み込みに失敗しました。",
     "noContentToExport": "エクスポートするコンテンツがありません。",
     "templateNotFound": "ビューテンプレート「{{name}}」が見つかりません。",
+    "unreadableConditions": "読めないフィルタまたは並べ替えの条件を {{count}} 件外しました。内容はログにあります。",
     "timerRecorded": "{{icon}} タイマー記録完了！（{{duration}}）",
     "countdownRecorded": "{{icon}} カウントダウン記録完了！（{{duration}}）",
     "kindRecorded": "{{icon}} {{kind}}記録完了！（{{duration}}）",

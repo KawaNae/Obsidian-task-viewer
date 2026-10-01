@@ -743,6 +743,7 @@
     "failedToLoadTemplate": "Failed to load template.",
     "noContentToExport": "No content to export.",
     "templateNotFound": "View template \"{{name}}\" not found.",
+    "unreadableConditions": "Removed {{count}} filter or sort condition(s) that could not be read. The log lists them.",
     "timerRecorded": "{{icon}} Timer recorded! ({{duration}})",
     "countdownRecorded": "{{icon}} Countdown recorded! ({{duration}})",
     "kindRecorded": "{{icon}} {{kind}} recorded! ({{duration}})",

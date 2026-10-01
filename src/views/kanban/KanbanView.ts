@@ -9,7 +9,6 @@ import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
-import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { combineFilterStates, createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
@@ -38,6 +37,7 @@ import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 
@@ -219,7 +219,7 @@ export class KanbanView extends ItemView {
 
     async setState(state: KanbanViewState, result: ViewStateResult): Promise<void> {
         const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = this.codec.parseConfig(stateDict);
+        const config = readViewConfig(this.codec, stateDict);
         const transient = this.codec.parseTransient(stateDict);
 
         this.applyConfig(config);
@@ -599,7 +599,7 @@ export class KanbanView extends ItemView {
     private persistViewFilterState(): void {
         const state = this.viewFilterMenu.getFilterState();
         this.viewFilterState = hasConditions(state)
-            ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
+            ? structuredClone(state)
             : undefined;
         this.requestSaveLayout();
     }

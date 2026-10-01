@@ -5,6 +5,7 @@ import {
     ViewConfigCodec,
     type ViewSchema,
 } from '../../../../src/services/viewConfig';
+import type { ConfigIssue } from '../../../../src/services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../../../src/services/filter/FilterTypes';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../../../src/types';
 
@@ -71,7 +72,7 @@ const fullFixture: TestConfig = {
     grid: [[{
         id: 'g-1',
         name: 'Col A',
-        filterState: { filters: [{ property: 'status', operator: 'equals', value: ' ' }], logic: 'and' },
+        filterState: { filters: [{ property: 'status', operator: 'includes', value: [' '] }], logic: 'and' },
         applyViewFilter: true,
     }]],
     sky: { sunTimes: true, moonPhase: true },
@@ -84,6 +85,41 @@ describe('ViewConfigCodec', () => {
             const json = codec.serializeConfig(fullFixture);
             const back = codec.parseConfig(json);
             expect(back).toEqual(fullFixture);
+        });
+
+        it('parseConfig drops a filter condition or a sort rule it cannot read, and reports where', () => {
+            const issues: ConfigIssue[] = [];
+            const back = codec.parseConfig({
+                filter: { logic: 'and', filters: [
+                    { property: 'tag', operator: 'includes', value: ['x'] },
+                    { property: 'tagg', operator: 'includes', value: ['x'] },
+                ] },
+                grid: [[{
+                    id: 'g-1', name: 'A', applyViewFilter: false,
+                    filterState: { logic: 'and', filters: [
+                        { property: 'status', operator: 'equals', value: ' ' },
+                        { property: 'due', operator: 'isSet' },
+                    ] },
+                    sortState: { rules: [{ property: 'due', direction: 'up' }, { id: 's-1', property: 'file', direction: 'desc' }] },
+                }]],
+            }, issues);
+            expect(back.filter?.filters).toEqual([{ property: 'tag', operator: 'includes', value: ['x'] }]);
+            expect(back.grid?.[0][0].filterState.filters).toEqual([{ property: 'due', operator: 'isSet' }]);
+            expect(back.grid?.[0][0].sortState).toEqual({ rules: [{ property: 'file', direction: 'desc' }] });
+            expect(issues).toEqual([
+                { field: 'filter', text: expect.stringMatching(/^filters\[1\]: Unknown filter property: tagg/) },
+                { field: 'grid', text: `list "A" filters[0]: Invalid operator 'equals' for filter property 'status'. Available: includes, excludes` },
+                { field: 'grid', text: 'list "A" sort rules[0]: Invalid sort direction: up. Use asc or desc' },
+            ]);
+        });
+
+        it('fromUriParams reports what it dropped too', () => {
+            const issues: ConfigIssue[] = [];
+            const uri = codec.toUriParams({ filter: { logic: 'and', filters: [{ property: 'content', operator: 'contains', value: 'a' }] } });
+            const bad = codec.toUriParams({ filter: { logic: 'and', filters: [{ property: 'content', operator: 'contains', value: 3 as never }] } });
+            expect(codec.fromUriParams(uri, issues).filter?.filters).toHaveLength(1);
+            expect(codec.fromUriParams(bad, issues).filter).toBeUndefined();
+            expect(issues).toEqual([{ field: 'filter', text: "filters[0]: 'content' takes text" }]);
         });
 
         it('serializeConfig omits undefined fields', () => {

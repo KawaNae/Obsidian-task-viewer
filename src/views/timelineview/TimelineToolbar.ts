@@ -14,6 +14,7 @@ import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { TimelineSchema, type TimelineConfig, type TimelineTransient, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from './TimelineSchema';
 import { exportFolderOf } from '../../services/export/ExportSave';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 /**
  * Everything the toolbar needs from TimelineView, as a bundle of narrow
@@ -301,7 +302,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
             onApplyTemplate: (template) => {
-                const cfg = this.codec.parseConfig(template.config ?? null);
+                const cfg = readViewConfig(this.codec, template.config ?? null);
                 deps.applyConfig(cfg);
                 if (template.name) deps.onRename(template.name);
                 deps.onConfigApplied();

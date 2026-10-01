@@ -11,11 +11,12 @@ import { normalizeTask } from './TaskNormalizer';
 import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import { TaskValues } from '../services/filter/TaskValues';
-import type { SortState, SortProperty } from '../services/sort/SortTypes';
+import type { SortState } from '../services/sort/SortTypes';
+import { SortSerializer, sortIssueText } from '../services/sort/SortSerializer';
 import { DateUtils } from '../utils/DateUtils';
 import { NAMED_DATE_PRESETS } from '../services/filter/DatePreset';
 import { DateResolver } from '../services/filter/DateResolver';
-import { resolveFilterSource, assertValidFilterState, readDateParam } from './FilterParamsBuilder';
+import { resolveFilterSource, readDateParam } from './FilterParamsBuilder';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
 import { IntValue } from '../utils/values/NumberValues';
 import type { FilterState } from '../services/filter/FilterTypes';
@@ -297,30 +298,14 @@ Examples
 
 // ── Internal helpers ──
 
-const VALID_SORT_PROPERTIES = {
-    content: true, due: true, startDate: true, endDate: true,
-    file: true, status: true, tag: true,
-} as const satisfies Record<SortProperty, true>;
-
+/** The `sort` param, read by the one reader of sorts. A rule it cannot read is an error. */
 function buildSortState(rules?: ApiSortRule[]): SortState | undefined {
     if (!rules || rules.length === 0) return undefined;
-    for (const r of rules) {
-        if (!(r.property in VALID_SORT_PROPERTIES)) {
-            throw new TaskApiError(
-                `Unknown sort property: ${r.property}. Available: ${Object.keys(VALID_SORT_PROPERTIES).join(', ')}`,
-            );
-        }
-        if (r.direction !== undefined && r.direction !== 'asc' && r.direction !== 'desc') {
-            throw new TaskApiError(`Invalid sort direction: ${r.direction}. Use asc or desc`);
-        }
+    const { state, issues } = SortSerializer.parse({ rules });
+    if (issues.length > 0) {
+        throw new TaskApiError(n => `Invalid ${n('sort')}: ${issues.map(sortIssueText).join('; ')}`, 'sort');
     }
-    return {
-        rules: rules.map((r, i) => ({
-            id: `s-api-${i}`,
-            property: r.property as SortProperty,
-            direction: r.direction ?? 'asc',
-        })),
-    };
+    return state;
 }
 
 interface PaginateResult {

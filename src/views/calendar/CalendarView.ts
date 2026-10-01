@@ -56,6 +56,7 @@ import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
@@ -278,7 +279,7 @@ export class CalendarView extends ItemView {
 
     async setState(state: CalendarViewState, result: ViewStateResult): Promise<void> {
         const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = this.codec.parseConfig(stateDict);
+        const config = readViewConfig(this.codec, stateDict);
         const transient = this.codec.parseTransient(stateDict);
 
         this.applyConfig(config);

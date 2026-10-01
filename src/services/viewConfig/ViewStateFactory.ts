@@ -1,10 +1,13 @@
 import type { App } from 'obsidian';
 import { ViewTemplateLoader } from '../template/ViewTemplateLoader';
 import { codecFor } from './index';
+import type { ConfigIssue } from './ViewConfigSchema';
 
 export interface BuildViewStateResult {
     state: Record<string, unknown>;
     templateNotFound?: string;
+    /** What the template or the params held that could not be read, and was dropped. */
+    issues: ConfigIssue[];
 }
 
 /**
@@ -22,7 +25,7 @@ export async function buildViewStateFromParams(
     params: Record<string, string>,
 ): Promise<BuildViewStateResult> {
     const codec = codecFor(viewType);
-    if (!codec) return { state: {} };
+    if (!codec) return { state: {}, issues: [] };
 
     let baseConfig: Record<string, unknown> = {};
     let baseName: string | undefined;
@@ -42,8 +45,9 @@ export async function buildViewStateFromParams(
         }
     }
 
-    const baseParsed = codec.parseConfig(baseConfig);
-    const uriParsed = codec.fromUriParams(params);
+    const issues: ConfigIssue[] = [];
+    const baseParsed = codec.parseConfig(baseConfig, issues);
+    const uriParsed = codec.fromUriParams(params, issues);
     const mergedConfig = { ...baseParsed, ...uriParsed };
 
     if (params.name) {
@@ -58,5 +62,5 @@ export async function buildViewStateFromParams(
         ...codec.serializeTransient(transientSeed),
     };
 
-    return { state, templateNotFound };
+    return { state, templateNotFound, issues };
 }

@@ -15,17 +15,30 @@
  * collapse maps); they are never written to templates or URIs.
  */
 
+/**
+ * Tells of a part of a value a field read but dropped (a filter condition, a
+ * sort rule), in an English sentence. A field reads what it can and reports
+ * the rest; a value it cannot read at all is undefined, as before.
+ */
+export type ReportIssue = (text: string) => void;
+
+/** A part of a config that was dropped on read: the field and what was dropped. */
+export interface ConfigIssue {
+    readonly field: string;
+    readonly text: string;
+}
+
 export interface ConfigField<T> {
     /** Canonical key. Same string is used in template JSON, workspace state, and URI params. */
     readonly key: string;
     /** Parse an `unknown` dict value (from any source) into the typed value, or undefined to skip. */
-    parse(raw: unknown): T | undefined;
+    parse(raw: unknown, report?: ReportIssue): T | undefined;
     /** Serialize the typed value to a JSON-able value. Returning undefined omits the key from output. */
     serialize(value: T | undefined): unknown;
     /** Encode the typed value to a URI query string value. Default: JSON.stringify ∘ serialize, base64'd if complex. */
     toUriParam?(value: T): string | undefined;
     /** Decode a URI query string value back to the typed value. Pairs with toUriParam. */
-    fromUriParam?(raw: string): T | undefined;
+    fromUriParam?(raw: string, report?: ReportIssue): T | undefined;
     /**
      * Legacy alternate keys (older versions used different names). Read-only:
      * parsing tries `key` first, then each legacyKey in order. Writes always use `key`.

@@ -56,7 +56,7 @@ describe('tasksForDateRange: simple filters never touch the date window', () => 
         await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31', status: 'zzz', filter: explicit });
 
         const [, , filterState] = mockReadService.getTasksForDateRange.mock.calls[0];
-        expect(filterState).toBe(explicit);
+        expect(filterState).toEqual(explicit);
     });
 
     it('list= without filterFile throws, same as list', async () => {
