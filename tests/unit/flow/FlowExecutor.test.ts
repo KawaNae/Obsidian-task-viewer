@@ -6,6 +6,7 @@ import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/fl
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import { DEFAULT_SETTINGS, Task } from '../../../src/types';
@@ -51,11 +52,11 @@ function opsOf(plan: FirePlan): TaskOp[] {
     return plan.ops;
 }
 
-/** The recurrence a plan inserts (fails the test if it inserts none). */
-function recurrenceOf(ops: readonly TaskOp[]): { content: string; flowLines: string[] } {
+/** The next instance a plan inserts (fails the test if it inserts none). */
+function instanceOf(ops: readonly TaskOp[]): FlowInstance {
     const op = ops.find(o => o.kind === 'insert-instance');
-    if (op?.kind !== 'insert-instance' || op.insert.kind !== 'recurrence') throw new Error('no recurrence');
-    return op.insert;
+    if (op?.kind !== 'insert-instance') throw new Error('no next instance');
+    return op.instance;
 }
 
 describe('FlowExecutor.planTask: what a completion fires', () => {
@@ -65,8 +66,8 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
 
         // Order: insert BEFORE strip, as the ops of the one write.
         expect(ops.map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
-        const { content, flowLines } = recurrenceOf(ops);
-        expect(content).toContain('==> every mon');
+        const { head, flowLines } = instanceOf(ops);
+        expect(head).toContain('==> every mon');
         expect(flowLines).toEqual([]);
         // The strip rewrites the fired row to itself without its command.
         expect(ops[1]).toEqual({ kind: 'strip-flow', text: formatRow({ ...task, flow: undefined }).trim() });
@@ -80,7 +81,7 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
         });
         const ops = opsOf(planOf(task));
 
-        const { content: line, flowLines } = recurrenceOf(ops);
+        const { head: line, flowLines } = instanceOf(ops);
         expect(line).toContain('==> every mon');
         expect(line).not.toContain('setDue');
         expect(flowLines).toEqual(['setDue(start + 3d)', 'x2']);
@@ -125,11 +126,11 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
     });
 
     it('decrements the telomere in the generated line', () => {
-        expect(recurrenceOf(opsOf(planOf(flowTask('at(today + 1d) x3')))).content).toContain('==> at(today + 1d) x2');
+        expect(instanceOf(opsOf(planOf(flowTask('at(today + 1d) x3')))).head).toContain('==> at(today + 1d) x2');
     });
 
     it('x1: generated line carries no command', () => {
-        expect(recurrenceOf(opsOf(planOf(flowTask('at(today + 1d) x1')))).content).not.toContain('==>');
+        expect(instanceOf(opsOf(planOf(flowTask('at(today + 1d) x1')))).head).not.toContain('==>');
     });
 });
 
@@ -238,7 +239,7 @@ describe('fireAndDelete', () => {
         // 次回分は元の行と同じ本文になりうるので、その探索は当てにできない。
         expect(repository.write).toHaveBeenCalledTimes(1);
         expect(repository.write).toHaveBeenCalledWith(task.file, plannedOn(task, { commands: true, subtree: true }), [
-            { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
+            { kind: 'insert-instance', instance: expect.objectContaining({ children: [] }) },
             { kind: 'remove' },
         ]);
     });

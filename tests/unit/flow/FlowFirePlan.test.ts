@@ -58,7 +58,7 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(plan.kind).toBe('fires');
         if (plan.kind !== 'fires') return;
         const insert = plan.ops.find(op => op.kind === 'insert-instance');
-        expect(insert?.kind === 'insert-instance' && insert.insert.kind).toBe('generated');
+        expect(insert?.kind === 'insert-instance' && insert.instance.children).toEqual([{ depth: 1, body: '- [ ] 資料' }]);
     });
 
     it('fires nothing for a row that is not complete, or is no task, or has no command', () => {

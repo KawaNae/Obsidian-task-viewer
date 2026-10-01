@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { GeneratedChild } from '../../../src/services/persistence/TaskCloner';
+import type { GeneratedChild } from '../../../src/services/persistence/FlowInstanceLines';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
@@ -23,7 +23,7 @@ function insertGenerated(
     h: WriteBench, task: Task, parentLine: string, flowLines: string[], children: GeneratedChild[],
 ) {
     return h.writer.write(task.file, plannedOn(task), [
-        { kind: 'insert-instance', insert: { kind: 'generated', parentLine, flowLines, children } },
+        { kind: 'insert-instance', instance: { head: parentLine, flowLines, children } },
     ]);
 }
 

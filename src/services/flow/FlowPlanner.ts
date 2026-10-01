@@ -14,7 +14,7 @@ import { parseGenBody } from '../parsing/gen/GenBodyParser';
 import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { formatDateBlock } from '../parsing/tv-inline/DateBlockFormat';
-import type { GeneratedChild } from '../persistence/FlowInstanceLines';
+import type { FlowInstance, GeneratedChild } from '../persistence/FlowInstanceLines';
 import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from '../lang/flow/FlowAst';
 import type { FlowEffect } from './FlowEffects';
 import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
@@ -127,7 +127,7 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
                 // those apart was never possible while one copy rule
                 // covered both.
                 newTask.flow = nextFlow(program, task.flow!);
-                effects.push({ kind: 'create-next', newTask });
+                effects.push({ kind: 'create-instance', instance: instanceOf(newTask), warnings: [] });
             }
         }
     }
@@ -232,12 +232,27 @@ function planGenerated(
 
     const warnings: Diagnostic[] = [];
     return {
-        kind: 'create-generated',
-        parentLine: composeParentLine(rendered.parentText, newTask, warnings),
-        flowLines: (newTask.flow?.childSegments ?? []).map(s => s.raw),
-        children: rendered.children.map(child => checkedChild(child, warnings)),
+        kind: 'create-instance',
+        instance: {
+            head: composeParentLine(rendered.parentText, newTask, warnings),
+            flowLines: flowLinesOf(newTask),
+            children: rendered.children.map(child => checkedChild(child, warnings)),
+        },
         warnings,
     };
+}
+
+/**
+ * The next instance of a recurrence without a block: the task line, spelled
+ * the way every row is (`formatRow`), and its `==>` lines; no children.
+ */
+function instanceOf(newTask: Task): FlowInstance {
+    return { head: formatRow(newTask), flowLines: flowLinesOf(newTask), children: [] };
+}
+
+/** The `==>` lines the next instance carries under its task line. */
+function flowLinesOf(newTask: Task): string[] {
+    return (newTask.flow?.childSegments ?? []).map(s => s.raw);
 }
 
 // ---------------------------------------------------------------------------

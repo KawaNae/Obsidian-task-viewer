@@ -1,4 +1,4 @@
-import type { FlowInstanceInsert } from './FlowInstanceLines';
+import type { FlowInstance } from './FlowInstanceLines';
 import type { Refusal, WriteMade, WriteRefused } from './FileLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { InSection } from './utils/Placement';
@@ -49,7 +49,7 @@ export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
  *   what completing a task does, never what a later reading of it finds.
  */
 export type TaskOp =
-    | { kind: 'insert-instance'; insert: FlowInstanceInsert }
+    | { kind: 'insert-instance'; instance: FlowInstance }
     | { kind: 'strip-flow'; text: string }
     | { kind: 'move'; text: string; to: InSection }
     | { kind: 'remove' }

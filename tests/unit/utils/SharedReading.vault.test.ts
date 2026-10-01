@@ -170,7 +170,7 @@ describe('a write of one op to a long note', () => {
     it('puts a next instance, its command indented as the row\'s', async () => {
         const readings = await readingsOf(async (session) => {
             const edited = together(session, NOTE, T, [{
-                kind: 'insert-instance', insert: { kind: 'recurrence', content: '- [ ] T @2026-09-28', flowLines: ['every mon'] },
+                kind: 'insert-instance', instance: { head: '- [ ] T @2026-09-28', flowLines: ['every mon'], children: [] },
             }]);
             expect(edited.written).toBe(true);
         });

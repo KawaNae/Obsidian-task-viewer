@@ -7,7 +7,7 @@ import { readLine } from '../helpers/readLine';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { completing } from '../helpers/completing';
 
@@ -146,10 +146,10 @@ function makeRepository() {
 }
 
 /** What the fire's one write inserts, if it inserts anything. */
-function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstance | undefined {
     const ops = repository.write.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
-    return op?.kind === 'insert-instance' ? op.insert : undefined;
+    return op?.kind === 'insert-instance' ? op.instance : undefined;
 }
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>) {
@@ -174,9 +174,7 @@ async function fire(line: string): Promise<string | null> {
     const task = readLine(line, DEFAULT_SETTINGS, FILE);
     await makeExecutor(repository).complete({ ...task!, statusChar: 'x' });
     await flush();
-    const insert = insertOf(repository);
-    if (insert !== undefined && insert.kind !== 'recurrence') throw new Error('the fire inserts no recurrence');
-    return insert?.content ?? null;
+    return insertOf(repository)?.head ?? null;
 }
 
 describe('a plain repeating task cannot write a date either', () => {

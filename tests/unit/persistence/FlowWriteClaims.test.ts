@@ -82,7 +82,7 @@ describe('what the next instance reports', () => {
         const b = await writeBench([DONE, FLOW, ''].join('\n'));
         const task = b.taskAt(0);
         await b.writer.write(task.file, plannedOn(task), [
-            { kind: 'insert-instance', insert: { kind: 'recurrence', content: TASK, flowLines: ['every 1d'] } },
+            { kind: 'insert-instance', instance: { head: TASK, flowLines: ['every 1d'], children: [] } },
         ]);
 
         const claim = only(b.filed);
@@ -97,7 +97,7 @@ describe('what the next instance reports', () => {
         const fired = b.taskAt(0);
         b.edit(['- [ ] 別のタスク', ''].join('\n'));
         await b.writer.write(fired.file, plannedOn(fired), [
-            { kind: 'insert-instance', insert: { kind: 'recurrence', content: TASK, flowLines: ['every 1d'] } },
+            { kind: 'insert-instance', instance: { head: TASK, flowLines: ['every 1d'], children: [] } },
         ]);
 
         expect(b.filed).toEqual([]);
@@ -113,9 +113,8 @@ describe('what a generated instance reports', () => {
         await b.writer.write(task.file, plannedOn(task), [
             {
                 kind: 'insert-instance',
-                insert: {
-                    kind: 'generated',
-                    parentLine: TASK,
+                instance: {
+                    head: TASK,
                     flowLines: ['every 1d'],
                     children: [{ depth: 1, body: '- [ ] 子' }],
                 },
@@ -148,7 +147,7 @@ describe('when the flow is written on the task line itself', () => {
         const b = await writeBench([FIRED, ''].join('\n'));
         const task = b.taskAt(0);
         await b.writer.write(task.file, plannedOn(task), [
-            { kind: 'insert-instance', insert: { kind: 'recurrence', content: LIVE, flowLines: [] } },
+            { kind: 'insert-instance', instance: { head: LIVE, flowLines: [], children: [] } },
         ]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'inserted', at: 0, count: 1 }]);

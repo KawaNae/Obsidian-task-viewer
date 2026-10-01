@@ -6,7 +6,7 @@ import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollect
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { completing } from '../helpers/completing';
 import { freezeDate } from '../helpers/fakeDate';
@@ -37,17 +37,17 @@ function makeRepository() {
 }
 
 /** What the fire's one write inserts, if it inserts anything. */
-function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstance | undefined {
     const ops = repository.write.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
-    return op?.kind === 'insert-instance' ? op.insert : undefined;
+    return op?.kind === 'insert-instance' ? op.instance : undefined;
 }
 
-/** The generated instance the fire's one write inserts (fails if there is none). */
-function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<FlowInstanceInsert, { kind: 'generated' }> {
-    const insert = insertOf(repository);
-    if (insert?.kind !== 'generated') throw new Error('the fire inserts no generated instance');
-    return insert;
+/** The instance the fire's one write inserts (fails if there is none). */
+function generatedOf(repository: ReturnType<typeof makeRepository>): FlowInstance {
+    const instance = insertOf(repository);
+    if (!instance) throw new Error('the fire inserts no instance');
+    return instance;
 }
 
 /** How many strip-flow ops the fires wrote. */
@@ -80,7 +80,7 @@ async function flush() {
 }
 
 interface Written {
-    parentLine: string;
+    head: string;
     flowLines: string[];
     children: { depth: number; body: string }[];
     fired: boolean;
@@ -101,11 +101,10 @@ async function fire(line: string, blocks: Record<string, GenBlock>): Promise<Wri
     await makeExecutor(repository, blocks).complete({ ...task!, statusChar: 'x' });
     await flush();
 
-    const insert = insertOf(repository);
-    if (insert !== undefined && insert.kind !== 'generated') throw new Error('the fire inserts no generated instance');
-    return insert
-        ? { parentLine: insert.parentLine, flowLines: insert.flowLines, children: insert.children, fired: true }
-        : { parentLine: '', flowLines: [], children: [], fired: false };
+    const instance = insertOf(repository);
+    return instance
+        ? { head: instance.head, flowLines: instance.flowLines, children: instance.children, fired: true }
+        : { head: '', flowLines: [], children: [], fired: false };
 }
 
 const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${state.n = state.n + 1}回 @${start}']) };
@@ -113,7 +112,7 @@ const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${state.n = state.n 
 describe('a cell travels from one generation to the next', () => {
     it('prints what the block wrote, not what the line started from', async () => {
         const written = await fire('- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', COUNTER);
-        expect(written.parentLine).toBe(
+        expect(written.head).toBe(
             '- [ ] 週報 第4回 @2026-08-24 ==> every mon state(n: 4) use("週報")');
     });
 
@@ -124,7 +123,7 @@ describe('a cell travels from one generation to the next', () => {
         for (let i = 0; i < 3; i++) {
             const written = await fire(lines[i].replace('- [ ] ', '- [x] '), COUNTER);
             expect(written.fired).toBe(true);
-            lines.push(written.parentLine);
+            lines.push(written.head);
         }
         expect(lines.slice(1)).toEqual([
             '- [ ] 週報 第4回 @2026-08-24 ==> every mon state(n: 4) use("週報")',
@@ -148,11 +147,11 @@ describe('a cell travels from one generation to the next', () => {
                 ]),
             });
         expect(written.fired).toBe(true);
-        expect(written.parentLine.split('\n')).toHaveLength(1);
-        expect(written.parentLine).toContain('state(prev: "- [ ] a\\n- [ ] b")');
+        expect(written.head.split('\n')).toHaveLength(1);
+        expect(written.head).toContain('state(prev: "- [ ] a\\n- [ ] b")');
 
         // 書いた行がそのまま読み戻せること。値も往復する。
-        const back = readLine(written.parentLine, DEFAULT_SETTINGS, FILE);
+        const back = readLine(written.head, DEFAULT_SETTINGS, FILE);
         expect(back!.flow!.diagnostics).toEqual([]);
         expect(back!.flow!.program!.cells!.entries[0].value)
             .toEqual({ type: 'string', value: '- [ ] a\n- [ ] b' });
@@ -173,8 +172,8 @@ describe('a cell travels from one generation to the next', () => {
                 ]),
             });
         expect(written.fired).toBe(true);
-        expect(written.parentLine.split('\n')).toHaveLength(1);
-        expect(readLine(written.parentLine, DEFAULT_SETTINGS, FILE)!.flow!.program!.cells!.entries[0].value)
+        expect(written.head.split('\n')).toHaveLength(1);
+        expect(readLine(written.head, DEFAULT_SETTINGS, FILE)!.flow!.program!.cells!.entries[0].value)
             .toEqual({ type: 'string', value: 'one\ntwo' });
     });
 
@@ -187,8 +186,8 @@ describe('a cell travels from one generation to the next', () => {
         await flush();
 
         const insert = insertOf(repository);
-        expect(insert?.kind).toBe('recurrence');
-        expect(insert?.kind === 'recurrence' && insert.content).toMatch(/==> every mon state\(n: 3\)$/);
+        expect(insert?.children).toEqual([]);
+        expect(insert?.head).toMatch(/==> every mon state\(n: 3\)$/);
     });
 
     it('keeps a cell on the line it was written on', async () => {
@@ -211,7 +210,7 @@ describe('a cell travels from one generation to the next', () => {
         });
         await flush();
 
-        const { parentLine, flowLines } = generatedOf(repository);
+        const { head: parentLine, flowLines } = generatedOf(repository);
         expect(parentLine).toContain('==> every mon');
         expect(parentLine).not.toContain('state(');
         expect(flowLines).toEqual(['state(n: 4) use("週報")']);
@@ -224,7 +223,7 @@ describe('the state ends with the command', () => {
         // だけ — コマンドの無い行にセルの置き場所は無い。
         const written = await fire(
             '- [x] 週報 第3回 @2026-08-17 ==> every mon x1 state(n: 3) use("週報")', COUNTER);
-        expect(written.parentLine).toBe('- [ ] 週報 第4回 @2026-08-24');
+        expect(written.head).toBe('- [ ] 週報 第4回 @2026-08-24');
         expect(written.flowLines).toEqual([]);
     });
 });
