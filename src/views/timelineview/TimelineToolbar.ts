@@ -28,7 +28,7 @@ export interface TimelineToolbarDeps {
     plugin: PluginContext;
     readService: TaskReadService;
     /** Owned by the view — the toolbar only opens and closes the popover. */
-    filterMenu: FilterMenuComponent;
+    viewFilterMenu: FilterMenuComponent;
     getLeaf: () => WorkspaceLeaf;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
@@ -242,9 +242,8 @@ export class TimelineToolbar extends ViewToolbarBase {
     private get compactDeps(): CompactMenuDeps {
         const { deps } = this;
         return {
-            filterMenu: deps.filterMenu,
+            viewFilterMenu: deps.viewFilterMenu,
             getTasks: () => deps.plugin.getIndex().getTasks(),
-            getStartHour: () => deps.plugin.settings.startHour,
             onFilterChange: () => deps.onFilterChange(),
             getMaskMode: () => deps.getMaskMode(),
             setMaskMode: (next) => deps.setMaskMode(next),
@@ -261,10 +260,9 @@ export class TimelineToolbar extends ViewToolbarBase {
         filterBtn.onclick = (e) => {
             const allTasks = deps.plugin.getIndex().getTasks();
 
-            deps.filterMenu.showMenu(e, {
+            deps.viewFilterMenu.showMenu(e, {
                 onFilterChange: () => deps.onFilterChange(),
                 getTasks: () => allTasks,
-                getStartHour: () => deps.plugin.settings.startHour,
             });
         };
     }

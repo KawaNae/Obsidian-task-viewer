@@ -438,9 +438,8 @@ export class MaskToggleButton {
  * step now live here.
  */
 export interface CompactMenuDeps {
-    filterMenu: FilterMenuComponent;
+    viewFilterMenu: FilterMenuComponent;
     getTasks: () => Task[];
-    getStartHour: () => number;
     onFilterChange: () => void;
     getMaskMode: () => boolean;
     setMaskMode: (next: boolean) => void;
@@ -458,13 +457,12 @@ export function appendCompactFilterAndMask(
         item.setTitle(t('toolbar.filter'))
             .setIcon('filter')
             .onClick(() => {
-                deps.filterMenu.showMenuAtElement(anchorEl, {
+                deps.viewFilterMenu.showMenuAtElement(anchorEl, {
                     onFilterChange: () => {
                         deps.onFilterChange();
                         deps.onAfter();
                     },
                     getTasks: () => deps.getTasks(),
-                    getStartHour: () => deps.getStartHour(),
                 });
             });
     });

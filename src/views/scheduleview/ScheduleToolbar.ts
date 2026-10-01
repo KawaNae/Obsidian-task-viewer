@@ -20,7 +20,7 @@ export interface ScheduleToolbarDeps {
     leaf: WorkspaceLeaf;
     plugin: PluginContext;
     readService: TaskReadService;
-    filterMenu: FilterMenuComponent;
+    viewFilterMenu: FilterMenuComponent;
     container: HTMLElement;
 
     onNavigate: (days: number) => void;
@@ -107,13 +107,12 @@ export class ScheduleToolbar extends ViewToolbarBase {
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.addEventListener('click', (event: MouseEvent) => {
-            deps.filterMenu.showMenu(event, {
+            deps.viewFilterMenu.showMenu(event, {
                 onFilterChange: () => {
                     deps.onFilterChange();
                     this.update();
                 },
                 getTasks: () => deps.plugin.getIndex().getTasks(),
-                getStartHour: () => deps.plugin.settings.startHour,
             });
         });
 
@@ -185,9 +184,8 @@ export class ScheduleToolbar extends ViewToolbarBase {
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
         const compact: CompactMenuDeps = {
-            filterMenu: deps.filterMenu,
+            viewFilterMenu: deps.viewFilterMenu,
             getTasks: () => deps.plugin.getIndex().getTasks(),
-            getStartHour: () => deps.plugin.settings.startHour,
             onFilterChange: () => deps.onFilterChange(),
             getMaskMode: () => deps.getMaskMode(),
             setMaskMode: (next) => deps.setMaskMode(next),

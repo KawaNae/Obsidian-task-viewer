@@ -10,7 +10,6 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
 import { combineFilterStates, createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
-import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
@@ -68,8 +67,8 @@ export class KanbanView extends ItemView {
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly menuHandler: MenuHandler;
-    private readonly filterMenu = new FilterMenuComponent();
-    private readonly sortMenu = new SortMenuComponent();
+    private readonly listFilterMenu = new FilterMenuComponent();
+    private readonly listSortMenu = new SortMenuComponent();
     private readonly viewFilterMenu = new FilterMenuComponent();
     private readonly toolbar: KanbanToolbar;
 
@@ -86,7 +85,6 @@ export class KanbanView extends ItemView {
         { axis: 'both' },
     );
     private customName: string | undefined;
-    private viewFilterState: FilterState | undefined;
     private grid: PinnedListDefinition[][] = [];
     private gridCollapsed: Record<string, boolean> = {};
     private maskMode: boolean = false;
@@ -130,11 +128,7 @@ export class KanbanView extends ItemView {
             const task = this.index.getTask(taskId);
             if (task) openTaskHub(task, opts);
         });
-        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
-        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
-        this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.viewFilterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
+        this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.paging = new TaskPagingController(
             () => this.plugin.settings.pinnedListPageSize,
@@ -146,10 +140,10 @@ export class KanbanView extends ItemView {
             leaf: this.leaf,
             plugin: this.plugin,
             readService: this.readService,
-            filterMenu: this.viewFilterMenu,
+            viewFilterMenu: this.viewFilterMenu,
             container: this.containerEl,
             onFilterChange: () => {
-                this.persistViewFilterState();
+                this.requestSaveLayout();
                 this.render();
             },
             getCustomName: () => this.customName,
@@ -202,16 +196,14 @@ export class KanbanView extends ItemView {
         }
         this.customName = next.customName;
         this.maskMode = next.maskMode === true;
-        const fs = next.filterState;
-        this.viewFilterState = fs;
-        this.viewFilterMenu.setFilterState(fs ?? createEmptyFilterState());
+        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
     }
 
     getCurrentConfig(): Partial<KanbanConfig> {
+        const filterState = this.viewFilterMenu.getFilterState();
         return {
             customName: this.customName,
-            filterState: this.viewFilterState && hasConditions(this.viewFilterState)
-                ? this.viewFilterState : undefined,
+            filterState: hasConditions(filterState) ? filterState : undefined,
             maskMode: this.maskMode,
             grid: this.grid.length > 0 ? this.grid : undefined,
         };
@@ -270,8 +262,8 @@ export class KanbanView extends ItemView {
     async onClose(): Promise<void> {
         logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
-        this.filterMenu.close();
-        this.sortMenu.close();
+        this.listFilterMenu.close();
+        this.listSortMenu.close();
         this.viewFilterMenu.close();
         this.unsubscribe?.();
         this.unsubscribe = null;
@@ -338,8 +330,9 @@ export class KanbanView extends ItemView {
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
         const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
 
-        const combinedFilter = (this.viewFilterState && hasConditions(this.viewFilterState) && listDef.applyViewFilter)
-            ? combineFilterStates(listDef.filterState, this.viewFilterState)
+        const viewFilter = this.viewFilterMenu.getFilterState();
+        const combinedFilter = listDef.applyViewFilter
+            ? combineFilterStates(listDef.filterState, viewFilter)
             : listDef.filterState;
         const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
@@ -351,25 +344,24 @@ export class KanbanView extends ItemView {
             sortState: listDef.sortState,
             filterState: listDef.filterState,
             onSortClick: (anchorEl) => {
-                this.sortMenu.setSortState(listDef.sortState ?? createEmptySortState());
-                this.sortMenu.showMenuAtElement(anchorEl, {
+                this.listSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
+                this.listSortMenu.showMenuAtElement(anchorEl, {
                     onSortChange: () => {
-                        listDef.sortState = this.sortMenu.getSortState();
+                        listDef.sortState = this.listSortMenu.getSortState();
                         this.requestSaveLayout();
                         this.render();
                     },
                 });
             },
             onFilterClick: (anchorEl) => {
-                this.filterMenu.setFilterState(listDef.filterState);
-                this.filterMenu.showMenuAtElement(anchorEl, {
+                this.listFilterMenu.setFilterState(listDef.filterState);
+                this.listFilterMenu.showMenuAtElement(anchorEl, {
                     onFilterChange: () => {
-                        listDef.filterState = this.filterMenu.getFilterState();
+                        listDef.filterState = this.listFilterMenu.getFilterState();
                         this.requestSaveLayout();
                         this.render();
                     },
                     getTasks: () => this.index.getTasks(),
-                    getStartHour: () => this.plugin.settings.startHour,
                 });
             },
             onMoreClick: (anchorEl, event) => {
@@ -592,13 +584,5 @@ export class KanbanView extends ItemView {
 
     private requestSaveLayout(): void {
         this.app.workspace.requestSaveLayout();
-    }
-
-    private persistViewFilterState(): void {
-        const state = this.viewFilterMenu.getFilterState();
-        this.viewFilterState = hasConditions(state)
-            ? structuredClone(state)
-            : undefined;
-        this.requestSaveLayout();
     }
 }

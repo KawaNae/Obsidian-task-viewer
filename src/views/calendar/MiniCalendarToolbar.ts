@@ -20,7 +20,7 @@ export interface MiniCalendarToolbarDeps {
     leaf: WorkspaceLeaf;
     plugin: PluginContext;
     readService: TaskReadService;
-    filterMenu: FilterMenuComponent;
+    viewFilterMenu: FilterMenuComponent;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
 
@@ -99,13 +99,12 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
             item.setTitle(t('toolbar.filter'))
                 .setIcon('filter')
                 .onClick(() => {
-                    deps.filterMenu.showMenuAtElement(moreBtn, {
+                    deps.viewFilterMenu.showMenuAtElement(moreBtn, {
                         onFilterChange: () => {
                             deps.onFilterChange();
                             this.update();
                         },
                         getTasks: () => deps.plugin.getIndex().getTasks(),
-                        getStartHour: () => deps.plugin.settings.startHour,
                     });
                 });
         });
