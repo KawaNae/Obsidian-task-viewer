@@ -5,7 +5,7 @@ import { nodeFs } from '../../utils/hostEnv';
 
 /**
  * Where an exported image is saved, and saving it. The view menu's export
- * and the API's `exportImage` both come through here, so the folder an
+ * and the CLI's `export-image` both come through here, so the folder an
  * export lands in is answered once: the one asked for, else the setting,
  * else the setting's default.
  */

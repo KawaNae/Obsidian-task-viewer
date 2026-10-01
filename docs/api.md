@@ -15,7 +15,37 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 - `from`/`to` はクエリ窓（inclusive、窓と期間が重なるタスクが対象）、`date` は単日窓の糖衣、`start`/`end`/`due` はタスク自身のフィールドです
 - 未知のパラメータキーはエラーになります（近いキー名の候補を提示します）。サイレントに無視されることはありません
-- `filter` / `filterFile` で渡す FilterState も境界で検証され、未知の property や不正な operator はエラーになります
+- 必須のパラメータが無いか空文字列なら、`Missing required parameter: id` のエラーになります
+- `filter` / `filterFile` で渡す FilterState も境界で検証されます（[FilterState](#filterstate) の「読めない条件」）
+
+### 日付と時刻
+
+`start`、`end`、`due` と、`date`、`from`、`to`、単純フィルタの `due` は、次のように読みます。
+
+| 形 | 例 | 使える所 |
+|----|----|----------|
+| `YYYY-MM-DD` | `2026-03-15` | すべて |
+| `YYYY-MM-DD HH:mm`、`YYYY-MM-DDTHH:mm` | `2026-03-15 14:00` | `start`、`end`、`due` |
+| `HH:mm` | `14:00` | `start`、`end`。`due` は日付が要ります |
+| プリセット | `today`、`thisWeek`、`next7days` | `date`、`from`、`to`、単純フィルタの `due` |
+
+- 日付は実在する日でなければなりません。`2026-02-30` や `2026-13-01` はエラーです（`start must be a day that exists, got: "2026-02-30"`）
+- 時刻は `9:40` を `09:40` と読みます。`25:00` はエラーです
+- 全角の数字と記号は半角として読みます（`２０２６ー０３ー１５` は `2026-03-15`）。日付の中のハイフンに似た字（`ー`、`−`、`‐`、`–`、`—`）は `-` と読みます。値の前後の空白は落とします
+- `create` も `update` も、時刻だけの `due`（`due: '17:00'`）は `due must include a date` で拒みます
+- プリセットは大文字小文字を問いません: `today`、`thisWeek`、`nextWeek`、`pastWeek`、`thisMonth`、`thisYear`、`next<N>days`（例: `next7days`）
+
+### 数
+
+`limit`、`dayOffset`、`count` は整数でなければなりません。`1.5` や `NaN` はエラーです（`limit must be a whole number, got: "1.5"`）。範囲は `limit` が 0 以上、`count` が 1 以上です。`limit: Infinity` は無制限です。
+
+### エラー
+
+メソッドは `TaskApiError` を投げます。
+
+- `message` は理由の文に `— See api.help() for reference` を付けたものです。`rawMessage` はその前の文だけです
+- パラメータについてのエラーは、`param` にそのキーを持ちます（例: `{ param: 'dayOffset' }`）
+- 文は英語で、値を引用します: `dayOffset must be a whole number, got: "1.5"`、`Invalid filter: filters[0]: Unknown filter property: priority. Available: ...`
 
 ## タスク ID
 
@@ -80,13 +110,21 @@ const result = api.today({
 });
 ```
 
+フィルタの元は、`filterFile`、`filter`、単純フィルタと窓（`date`、`from`、`to`）の順に1つだけ使います。上のものがあれば下は読みません（検査もしません）。`list` は `filterFile`（`.md` のテンプレート）と一緒でなければならず、`filterFile` なしで渡すと `'list' requires 'filterFile' (a .md view template)` のエラーです。テンプレートは、そのビューが読むのと同じ形で読みます。リストに保存された並べ替えは使わず、並びは `sort` だけで決まります。
+
+`list` の窓は、タスクの実効の日付（暦日）と重なるかで判定し、締切だけのタスクは含みません。`tasksForDateRange` 系の窓は visual な日付（ビューと同じ基準）で判定し、締切だけのタスクを含みます。
+
+`leaf` は子タスクを持たないタスクです。チェックボックスの無い子の行やリンクは子タスクに数えません。`today` の `leaf` も同じです。
+
+`list` と `tasksForDateRange` 系は、検証エラーのあるタスク（例: 終了が開始より前）も返します。ビューはこれを外して描きます。
+
 **ListParams:**
 
 | パラメータ | 型 | 説明 |
 |-----------|-----|------|
-| `file` | `string` | ファイルパスで絞り込み |
+| `file` | `string` | ファイルパスで絞り込み（`.md` は補われる） |
 | `status` | `string \| string[]` | ステータス文字 |
-| `tag` | `string \| string[]` | タグ名（カンマ区切り文字列も可） |
+| `tag` | `string \| string[]` | タグ名（カンマ区切り文字列も可。下位のタグも含む） |
 | `content` | `string` | コンテンツ部分一致 |
 | `date` | `string` | 単日のクエリ窓（`from=X to=X` と同じ） |
 | `from` | `string` | クエリ窓の開始（この日以降に終わるタスク、inclusive overlap） |
@@ -98,12 +136,32 @@ const result = api.today({
 | `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
 | `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
-| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
+| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート。`filter` より優先） |
 | `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合）。テンプレートのビューのフィルタは、そのリストの「ビューフィルターを適用」がオンのときだけ重ねる（ビューの表示と同じ） |
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
-**TodayParams:** `leaf`, `sort`, `limit` のみ。
+**TodayParams:**
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `leaf` | `boolean` | 子なしタスクのみ |
+| `sort` | `ApiSortRule[]` | ソートルール |
+| `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
+
+`today` の「本日」は、startHour を考慮した今の visual な日付です。実効の開始が本日以前で実効の終了が本日以後のタスク（終了の無いタスクは開始の日だけ）と、開始の無いタスクのうち締切が本日のものを返します。
+
+**ApiSortRule:** `{ property, direction? }`。`property` は次のいずれかで、`direction` は `'asc'`（既定）か `'desc'` です。値の無いタスクは `asc` で先に来ます。`sort` を渡さないときは `due`、`startDate`、`content` の順です。知らない `property` はエラーです（`Invalid sort: rules[0]: Unknown sort property: ...`）。
+
+| property | 比べる値 |
+|----------|----------|
+| `content` | タスクの内容 |
+| `due` | 実効の締切（見出しやノートから受け継いだものを含む）。時刻があれば時刻も |
+| `startDate` | 実効の開始日。時刻は比べない |
+| `endDate` | 実効の終了日。時刻は比べない |
+| `file` | ファイルパス |
+| `status` | ステータス文字 |
+| `tag` | タグ（受け継いだものを含む）の先頭 |
 
 **戻り値: `TaskListResult`**
 
@@ -123,6 +181,12 @@ const result = api.today({
 const task = api.get({ id: 'abc123' });
 // => NormalizedTask
 ```
+
+**GetParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `id` | ○ | `string` | タスクID |
 
 ID が見つからない場合は `TaskApiError` をスローします。
 
@@ -148,7 +212,7 @@ const result = await api.create({
 | `content` | ○ | `string` | タスクの内容 |
 | `start` | | `string` | 開始日時（`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `HH:mm`） |
 | `end` | | `string` | 終了日時 |
-| `due` | | `string` | 締切（`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`）。時刻は日付の後にだけ付けられます |
+| `due` | | `string` | 締切（`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`）。時刻は日付の後にだけ付けられます。時刻だけはエラーです |
 | `status` | | `string` | ステータス文字（デフォルト: ` `） |
 | `heading` | | `string` | 挿入先見出し。レベルを問わず、Obsidian のリンク `[[#見出し]]` と同じ比べ方で探します。節の先頭か末尾かは設定「節に行を足す位置」に従います。見出しが無ければ、ノートの末尾に設定のレベルで作ります。同じ名前の見出しが 2 つ以上あれば書き込みません |
 
@@ -163,7 +227,18 @@ const result = await api.update({
 // => { task: NormalizedTask }
 ```
 
-**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション）。`start`/`end`/`due`/`status` は `'none'` を指定するとフィールドをクリアする。値の形は create と同じで、`due` の時刻も create と同じく書かれる。`content` に `'none'` の特別処理はなく、文字列 `"none"` として設定される
+**UpdateParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `id` | ○ | `string` | タスクID |
+| `content` | | `string` | 新しい内容。`'none'` も文字列としてそのまま書きます |
+| `start` | | `string` | 新しい開始日時。`'none'` で消します |
+| `end` | | `string` | 新しい終了日時。`'none'` で消します |
+| `due` | | `string` | 新しい締切。時刻は日付の後にだけ付けられます。`'none'` で消します |
+| `status` | | `string` | 新しいステータス文字。`'none'` で未完了（` `）に戻します |
+
+値の形は create と同じです。
 
 ## delete
 
@@ -171,6 +246,12 @@ const result = await api.update({
 const result = await api.delete({ id: 'abc123' });
 // => { deleted: 'abc123' }
 ```
+
+**DeleteParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `id` | ○ | `string` | タスクID |
 
 ## duplicate
 
@@ -199,8 +280,8 @@ const result = await api.duplicate({ id: 'abc123', dayOffset: 1, count: 3 });
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
 | `id` | ○ | `string` | タスクID |
-| `dayOffset` | | `number` | 日付シフト日数（デフォルト: 0。0 なら時刻の軸で連ねる） |
-| `count` | | `number` | コピー数（デフォルト: 1） |
+| `dayOffset` | | `number` | 日付シフト日数（整数。デフォルト: 0。0 なら時刻の軸で連ねる） |
+| `count` | | `number` | コピー数（1 以上の整数。デフォルト: 1） |
 
 ## tasksForDateRange
 
@@ -208,10 +289,13 @@ const result = await api.duplicate({ id: 'abc123', dayOffset: 1, count: 3 });
 const result = await api.tasksForDateRange({
   from: '2026-03-01',
   to: '2026-03-31',
+  tag: 'work',
   sort: [{ property: 'startDate', direction: 'asc' }],
 });
-// => { count: number, tasks: NormalizedTask[] }
+// => TaskListResult（list と同じ { total, count, truncated, limit, tasks }）
 ```
+
+visual な期間が窓 [from, to] と重なるタスクを返します。締切だけのタスクは、締切が窓に入れば含みます。プリセットは期間の全体をとります（`from: 'thisWeek', to: 'thisWeek'` はその週）。単純フィルタ、`filter`、`filterFile` と `list` は窓の中のタスクを絞るだけで、窓は動かしません。フィルタの元の選び方は list と同じです。
 
 **TasksForDateRangeParams:**
 
@@ -219,7 +303,19 @@ const result = await api.tasksForDateRange({
 |-----------|------|-----|------|
 | `from` | ○ | `string` | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
 | `to` | ○ | `string` | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
-| `filter` | | `FilterState` | フィルタ定義 |
+| `file` | | `string` | ファイルパス（`.md` は補われる） |
+| `status` | | `string \| string[]` | ステータス文字 |
+| `tag` | | `string \| string[]` | タグ名（下位のタグも含む） |
+| `content` | | `string` | コンテンツ部分一致 |
+| `due` | | `string` | 締切日 = 指定値 |
+| `leaf` | | `boolean` | 子タスクを持たないタスクのみ |
+| `property` | | `string` | カスタムプロパティ（`key:value`） |
+| `color` | | `string \| string[]` | カード色 |
+| `type` | | `string \| string[]` | タスク notation |
+| `root` | | `boolean` | 親タスクを持たないタスクのみ |
+| `filter` | | `FilterState` | フィルタ定義（単純フィルタより優先） |
+| `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。`filter` より優先） |
+| `list` | | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 | `sort` | | `ApiSortRule[]` | ソートルール |
 | `limit` | | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
@@ -235,7 +331,7 @@ const result = await api.categorizedTasksForDateRange({
 
 日付範囲のタスクを日付ごとに allDay（終日）/ timed（時刻あり）/ dueOnly（締切のみ）に分類して返します。
 
-日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインのカード表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。
+日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインのカード表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。絞り込みのパラメータは tasksForDateRange と同じで、窓の中のタスクを絞るだけです。
 
 **CategorizedTasksForDateRangeParams:**
 
@@ -243,7 +339,19 @@ const result = await api.categorizedTasksForDateRange({
 |-----------|------|-----|------|
 | `from` | ○ | `string` | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
 | `to` | ○ | `string` | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
-| `filter` | | `FilterState` | フィルタ定義 |
+| `file` | | `string` | ファイルパス（`.md` は補われる） |
+| `status` | | `string \| string[]` | ステータス文字 |
+| `tag` | | `string \| string[]` | タグ名（下位のタグも含む） |
+| `content` | | `string` | コンテンツ部分一致 |
+| `due` | | `string` | 締切日 = 指定値 |
+| `leaf` | | `boolean` | 子タスクを持たないタスクのみ |
+| `property` | | `string` | カスタムプロパティ（`key:value`） |
+| `color` | | `string \| string[]` | カード色 |
+| `type` | | `string \| string[]` | タスク notation |
+| `root` | | `boolean` | 親タスクを持たないタスクのみ |
+| `filter` | | `FilterState` | フィルタ定義（単純フィルタより優先） |
+| `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。`filter` より優先） |
+| `list` | | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 
 ## insertChildTask
 
@@ -254,6 +362,15 @@ const result = await api.insertChildTask({
 });
 // => { parentId: 'abc123' }
 ```
+
+親の最初の子として `- [ ] サブタスク` を挿入します。
+
+**InsertChildTaskParams:**
+
+| パラメータ | 必須 | 型 | 説明 |
+|-----------|------|-----|------|
+| `parentId` | ○ | `string` | 親タスクID |
+| `content` | ○ | `string` | 子タスクの内容 |
 
 ## getStartHour
 
@@ -276,7 +393,7 @@ unsubscribe();
 
 ## help
 
-API の詳細リファレンスを表示します。
+API の詳細リファレンスを表示します。パラメータ、フィールド、フィルタの演算子、並べ替えの性質の一覧は、プラグインが使う表から作られます。
 
 **エディタ（DataviewJS）で表示:**
 
@@ -290,6 +407,63 @@ dv.paragraph("```\n" + api.help() + "\n```");
 ```javascript
 console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
 ```
+
+## FilterState
+
+`filter` と `.json` のフィルタファイルが受け取る形です。ビューのフィルタメニューが保存する形と同じです。
+
+```json
+{
+  "logic": "and",
+  "filters": [
+    { "property": "tag", "operator": "includes", "value": ["work"] },
+    { "logic": "or", "filters": [
+      { "property": "due", "operator": "onOrBefore", "value": { "preset": "today" } },
+      { "property": "status", "operator": "includes", "value": ["!"] }
+    ] }
+  ]
+}
+```
+
+- 条件は `{ property, operator, value?, target? }` です。`filters` にはグループ（`{ logic, filters }`）も入れられます
+- 条件1つだけをそのまま渡すこともできます（`{ property: 'tag', operator: 'includes', value: ['work'] }`）
+
+| property | 演算子 | 値 |
+|----------|--------|-----|
+| `file` | `includes`, `excludes` | `string[]`。ファイルパス全体 |
+| `tag` | `includes`, `excludes`, `equals`, `only` | `string[]`。`includes` と `excludes` は下位のタグも含む（`work` は `work/x` にも当たる）。`equals` はそのタグちょうど、`only` はタスクのタグがこの集合だけ |
+| `status` | `includes`, `excludes` | `string[]`。ステータス文字 |
+| `content` | `contains`, `notContains` | `string`。大文字小文字を問わない部分一致 |
+| `startDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | `'YYYY-MM-DD'` か `{ preset, n? }`。実効の日付で比べ、時刻は見ない |
+| `endDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ |
+| `due` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ。受け継いだ締切（`effectiveDue`）で比べる |
+| `anyDate` | `isSet`, `isNotSet` | なし。開始、終了、締切のどれかがあれば set |
+| `color` | `includes`, `excludes` | `string[]` |
+| `linestyle` | `includes`, `excludes` | `string[]` |
+| `length` | `lessThan`, `lessThanOrEqual`, `greaterThan`, `greaterThanOrEqual`, `equals`, `isSet`, `isNotSet` | `number` と `unit`（`'hours'` が既定、`'minutes'`）。実効の開始から終了まで |
+| `notation` | `includes`, `excludes` | `string[]`。`taskviewer`、`tasks`、`dayplanner` |
+| `parent` | `isSet`, `isNotSet` | なし |
+| `children` | `isSet`, `isNotSet` | なし。子タスクだけを数える |
+| `property` | `isSet`, `isNotSet`, `equals`, `contains`, `notContains` | `key` と `value`（`string`）。`equals` は完全一致、`contains` は大文字小文字を問わない |
+
+日付のプリセットは `today`、`thisWeek`、`nextWeek`、`pastWeek`、`nextNDays`（`n` で日数）、`thisMonth`、`thisYear` です。
+
+### 否定と `target: parent`
+
+- 否定の演算子（`excludes`、`notContains`、`isNotSet`）は、肯定の演算子（`includes`、`contains`、`isSet`）が当たらないタスクを通します
+- `"target": "parent"` は、条件をタスクの祖先（親、その親、…）に問います。肯定の演算子は、祖先のどれかが当たれば通ります。否定の演算子は、どの祖先も肯定に当たらないときに通ります。したがって、親の無いタスクは否定の条件を通り、肯定の条件を通りません
+- 例: `{ property: 'tag', operator: 'excludes', value: ['archive'], target: 'parent' }` は、親か祖父のどちらかが `#archive` を持つタスクを外します
+
+### 値を選んでいない条件
+
+値を選んでいない条件（空の配列、日付の無い日付の条件、数の無い `length`、`key` の無い `property`）は、すべてのタスクを通します。フィルタメニューで行を足したばかりの状態です。
+
+### 読めない条件
+
+次のような条件は読めません: 知らない `property`、その `property` が取らない演算子、形の合わない値（集合に文字列、実在しない日 `2026-02-30`、知らないプリセット、数でない `length`、`self` と `parent` 以外の `target`）。
+
+- `filter` と `filterFile` では、エラーになります。文は場所を付けて、読めない所をすべて並べます（`Invalid filter: filters[1].filters[0]: ...; filters[2]: ...`）。`filter: {}` も `not a filter group` でエラーです
+- 保存されたビュー、テンプレート、URI では、その条件を外して読み、通知します
 
 ## NormalizedTask フィールド
 
@@ -306,8 +480,8 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `startTime` | `string \| null` | 生の開始時刻（HH:mm） |
 | `endDate` | `string \| null` | 生の終了日 |
 | `endTime` | `string \| null` | 生の終了時刻 |
-| `due` | `string \| null` | 生の締切日 |
-| `tags` | `string[]` | タグ一覧（`#` なし） |
+| `due` | `string \| null` | 生の締切（`YYYY-MM-DD` か `YYYY-MM-DDTHH:mm`） |
+| `tags` | `string[]` | タグ一覧（`#` なし。見出しやノートから受け継いだものを含む） |
 | `parserId` | `string` | パーサー種別（`tv-inline`、`tasks-plugin`、`day-planner` のいずれか） |
 | `parentId` | `string \| null` | 親タスクID |
 | `childIds` | `string[]` | 子タスクID一覧 |
@@ -317,8 +491,10 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `effectiveStartTime` | `string \| null` | 暗黙値解決済み開始時刻 |
 | `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
 | `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
+| `effectiveDue` | `string \| null` | 受け継ぎを含む締切。行に無ければ見出しやノートの締切（フィルタと並べ替えの `due` はこの値） |
 | `durationMinutes` | `number \| null` | 所要時間（分）。暗黙値解決済みの開始から終了まで、日付を含めて数える（フィルタの `length` と同じ）。開始の無いタスクは `null` |
 | `properties` | `Record<string, unknown>` | カスタムプロパティ。値は型に従う: 数は `number`、真偽値（`true` `True` `TRUE` `false` `False` `FALSE`。行でも frontmatter でも同じ）は `boolean`、配列は `string[]`、ほかは `string` |
+| `flow` | `string \| null` | `==>` に続くフローのコマンドを正規の形で1行にしたもの（例: `every tue,fri`、[コマンド](commands.md)）。子の `- ==>` 行も含む。無ければ `null` |
 
 ## DataviewJS 使用例
 

@@ -11,14 +11,30 @@ Obsidian CLI から本プラグインのタスクデータにアクセスでき�
 - `vault` は Obsidian フレームワークが管理するフラグです（本プラグインでは管理しません）
 - ブーリアンフラグ（`leaf`, `root`）: フラグ名のみで有効化（例: `leaf` または `leaf=true`）
 - 未知のフラグはエラーになります（近いフラグ名の候補を提示します）。ブーリアンフラグに値を付けた場合（`leaf=1` 等）もエラーです
+- 値を空にしたフラグ（`limit=`、`due=` など）は、どのコマンドでも `limit must not be empty` のエラーです。既定の値を使うときはフラグごと省きます
 - 語彙の規則: `from`/`to` はクエリ窓（inclusive、窓と重なるタスクが対象）、`date` は単日窓の糖衣（`from=X to=X` と同じ）、`start`/`end`/`due` はタスク自身のフィールドです
+- 値の検査（必須か、整数か、実在する日か）は Public API が1回だけ行います。CLI はフラグを API の型に直して渡すだけなので、文も API と同じです。ただしフラグの名前は CLI の綴りで出ます（`Missing required parameter: parent-id`）
+
+## エラー
+
+エラーは次の JSON で返ります。
+
+```json
+{ "error": "count must be at least 1, got: \"0\"", "help": "obsidian obsidian-task-viewer:help" }
+```
+
+## 値の書き方
+
+- 日付は `YYYY-MM-DD` で、実在する日でなければなりません（`2026-02-30` はエラー）。日時は `YYYY-MM-DD HH:mm` か `YYYY-MM-DDTHH:mm`、時刻は `HH:mm` です。`9:40` は `09:40` と読みます
+- 全角の数字と記号は半角として読みます。日付の中のハイフンに似た字（`ー`、`−` など）は `-` と読みます。値の前後の空白は落とします
+- 整数のフラグ（`limit`、`count`、`day-offset`、export-image の `width`、`wait` など）は数字だけです。`3days` や `1.5` はエラーです（以前は先頭の数字だけを読んでいました）
 
 ## 共通フラグ
 
 | フラグ | 説明 | デフォルト |
 |-------|------|-----------|
 | `format` | 出力形式: `json`, `tsv`, `jsonl` | `json` |
-| `output-fields` | 出力フィールド（カンマ区切り） | `id` |
+| `output-fields` | 出力フィールド（カンマ区切り。[出力フィールド](#出力フィールド)） | `id` |
 
 ## タスク ID
 
@@ -64,7 +80,9 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 >
 > list の窓は effective な日付（カレンダー基準、締切のみのタスクは対象外）で判定します。tasks-for-date-range 系の窓は visual な日付（タイムライン表示と同じ基準、締切のみのタスクを含む）で判定します。
 >
-> `filter-file` や FilterState JSON の詳細は `obsidian obsidian-task-viewer:help` で確認できます。
+> `filter-file` は Public API にそのまま渡し、ファイルは API が読みます（[api.md の list](api.md#list--today)）。`filter-file` があると、単純フィルタフラグと `date`/`from`/`to` は読まれません。`list` は `filter-file`（`.md` テンプレート）と一緒でなければならず、`list` だけを渡すと `'list' requires 'filter-file' (a .md view template)` のエラーです。テンプレートのピン留めリストに保存された並べ替えは使わず、並びは `sort` で決まります。
+>
+> FilterState JSON の形、演算子、否定と `target: parent` の意味、読めない条件の扱いは [api.md の FilterState](api.md#filterstate) を参照してください。読めない条件を含むファイルはエラーです。
 
 **ソート・ページネーション:**
 
@@ -73,7 +91,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | `sort` | ソートルール（`property[:direction]` カンマ区切り） | `sort=startDate:asc,due:desc` |
 | `limit` | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） | `limit=50` / `limit=all` |
 
-**ソート可能プロパティ:** `content`, `due`, `startDate`, `endDate`, `file`, `status`, `tag`
+**ソート可能プロパティ:** `content`, `due`, `startDate`, `endDate`, `file`, `status`, `tag`（比べる値は [api.md の ApiSortRule](api.md#list--today)。`due` は受け継いだ締切で時刻も比べ、`startDate` と `endDate` は日付だけを比べます）
 
 ### today — 本日のタスク
 
@@ -115,7 +133,7 @@ obsidian obsidian-task-viewer:create file=DailyNotes/2026-03-15.md content="Meet
 | `status` | | ステータス文字（デフォルト: ` `） | `status=!` |
 | `heading` | | 挿入先の見出し（探し方と置き場所は [API の create](api.md#create) と同じ） | `heading=Tasks` |
 
-**日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `HH:mm`
+**日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `YYYY-MM-DD HH:mm`, `HH:mm`（[値の書き方](#値の書き方)）。`due=17:00` のような時刻だけの締切は `due must include a date` のエラーです
 
 ### update — タスク更新
 
@@ -124,12 +142,12 @@ obsidian obsidian-task-viewer:update id=abc123 status=x
 obsidian obsidian-task-viewer:update id=abc123 start=none  # フィールドをクリア
 ```
 
-**日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `YYYY-MM-DD HH:mm`, `HH:mm`
+**日時の形式:** create と同じです。
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-| `content` | | 新しい内容 |
+| `content` | | 新しい内容（`none` も文字列として書く） |
 | `start` | | 新しい開始日時（`none` でクリア） |
 | `end` | | 新しい終了日時（`none` でクリア） |
 | `due` | | 新しい締切（時刻は日付の後にだけ付けられる。`none` でクリア） |
@@ -171,8 +189,8 @@ obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-| `day-offset` | | 日付をシフトする日数（デフォルト: 0。0 なら時刻の軸で連ねる） |
-| `count` | | コピー数（デフォルト: 1） |
+| `day-offset` | | 日付をシフトする日数（整数。デフォルト: 0。0 なら時刻の軸で連ねる） |
+| `count` | | コピー数（1 以上の整数。デフォルト: 1） |
 
 **戻り値:** `{ "duplicated": "abc123" }`
 
@@ -255,12 +273,14 @@ obsidian obsidian-task-viewer:export-image template="My Timeline"
 | `name` | | 書き出したビューの表示名 |
 | `anchor-date` | | 日付アンカー（`YYYY-MM-DD`）。「今日」ボタンと同じ役割を任意の日に対して行う。ビューごとのスキーマの日付フィールドに解決される |
 | `width` | | 描画幅（px、1 以上の整数。デフォルト: 1200） |
-| `output-folder` | | 出力先フォルダ（vault相対 or 絶対パス。デフォルト: `task-viewer-export`） |
+| `output-folder` | | 出力先フォルダ（vault 相対か絶対パス。デフォルト: 設定の書き出し先、未設定なら `task-viewer-export`） |
 | `filename` | | 出力ファイル名（デフォルト: `{ビュー種別}_{日付}.png`） |
 | `wait` | | 描画後の待機時間（ms、0 以上の整数。デフォルト: 500） |
 | `keep-open` | | 書き出し後も一時ウィンドウを開いたままにする |
 
 対象ビュー自身の設定フラグもそのまま渡せます（例: timeline の `days-to-show`、1以上30以下の整数）。これを1つでも渡すと一時ビューでの書き出しになります。
+
+vault 相対のフォルダは vault を通して書くので、ファイルシステムでない vault でも書けます。絶対パスのフォルダはデスクトップ版でだけ書けます。テンプレートやフラグのフィルタに読めない条件があると、書き出さずにエラーを返します。
 
 **戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-03-01", "to": "2026-03-05" } }`
 
@@ -295,7 +315,7 @@ obsidian obsidian-task-viewer:get-start-hour
 obsidian obsidian-task-viewer:help
 ```
 
-全コマンドの詳細リファレンス（フラグ一覧・日付形式・ソート・FilterState JSON 構造・使用例）を表示します。
+全コマンドの詳細リファレンス（コマンドごとのフラグ、出力フィールド、日付形式、ソート、FilterState JSON 構造）を表示します。コマンド、フラグ、フィールド、演算子の一覧は、プラグインが使う表から作られます。
 
 ## 日付プリセット
 
@@ -309,8 +329,7 @@ obsidian obsidian-task-viewer:help
 | `nextWeek` | 来週 |
 | `thisMonth` | 今月 |
 | `thisYear` | 今年 |
-| `next7days` | 今後7日間 |
-| `next30days` | 今後30日間 |
+| `next<N>days` | 今後 N 日間（例: `next7days`、`next30days`） |
 | `YYYY-MM-DD` | 絶対日付 |
 
 ## 出力フィールド
@@ -339,15 +358,19 @@ obsidian obsidian-task-viewer:help
 | `effectiveStartTime` | `string \| null` | 暗黙値解決済み開始時刻 |
 | `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
 | `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
+| `effectiveDue` | `string \| null` | 受け継ぎを含む締切 |
 | `durationMinutes` | `number \| null` | 所要時間（分） |
 | `properties` | `Record<string, unknown>` | カスタムプロパティ |
+| `flow` | `string \| null` | `==>` に続くフローのコマンド |
 
 ## 出力形式の例
 
 **json**（デフォルト）:
 ```json
-{ "count": 2, "tasks": [{ "id": "abc", "content": "Meeting", ... }] }
+{ "total": 2, "truncated": false, "limit": 100, "count": 2, "tasks": [{ "id": "abc", "content": "Meeting", ... }] }
 ```
+
+`total` は `limit` を当てる前の件数、`limit` は当てた件数（`limit=all` なら `null`）です。`get`、`create`、`update` は1件のタスクを `{ "id": "abc", ... }` で返します。
 
 **tsv**:
 ```

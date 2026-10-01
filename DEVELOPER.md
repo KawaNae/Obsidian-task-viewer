@@ -106,8 +106,8 @@ src/
 ├── settings/                  # Settings UI (9 tabs: Basic, Behavior, Views, View Details, Notes, Note scope, Parsers, Log, About)
 ├── constants/                 # Constants and view registry
 ├── i18n/                      # Internationalization (locale files)
-├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
-├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliOutputFormatter, handlers/)
+├── api/                       # Public API (TaskApi, TaskApiTypes, TaskIds, TaskNormalizer, OperationSchemas: the parameters; Reference: the help texts; FilterParamsBuilder, FilterFileLoader)
+├── cli/                       # CLI handlers (CliRegistrar: registers Reference's CLI_COMMANDS; CliParamValidator, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
 │   ├── core/                  # The index (TaskIndex, IndexReads, TaskStore, TaskScanner, NotifyCoalescer, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
 │   ├── data/                  # The display side of the read (TaskReadService), children in order, effective properties, NoteOps
@@ -121,8 +121,8 @@ src/
 │   ├── persistence/           # Write layer (FileLines: one target type `RowRef`, `createFile`; Notes: a block put in a note, a note made; FiringTrials: which fires of a completion are written; TaskRepository, InlineTaskWriter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
-│   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
-│   ├── filter/                # Filter engine, serializer, types, value collector, TaskValues (what the filter and the sort compare)
+│   ├── export/                # View image export (ViewExporter; ExportRegistry: what each view expands; ExportSave: where an export is saved; ExportService: the CLI's export-image)
+│   ├── filter/                # Filter types, serializer (the one reader), FilterExpr (the tree evaluated), engine, FilterEdit (edits as new values), PinnedListQuery, value collector, TaskValues (what the filter and the sort compare)
 │   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
 │   ├── template/              # View template load/save (ViewTemplateLoader/Writer; TemplateNote: a template note, saved)
 │   ├── flow/                  # ==> フローの計画と通知 (FlowExecutor: 計画だけで書かない; FlowPlanner/GenBodyRenderer/ScheduleEngine/FlowTrigger; FlowNotices: 発火しなかったことを告げる)
@@ -147,6 +147,7 @@ src/
 ├── modals/                    # Modal UI (CreateTaskModal, ConfirmModal, etc.)
 ├── suggest/                   # Obsidian property panel autocomplete (color/, line/, tags/)
 ├── utils/                     # Layer-less leaves used by two or more layers (DateUtils, LineBreak, HostWindow, etc.; see "utils placement rule")
+│   └── values/                # Input codecs: how typed text is read into a value (Read<T>, Normalize, DateValues, NumberValues, ChoiceValues, IssueText)
 └── styles/                    # CSS (BEM naming, --tv-* tokens)
 ```
 
@@ -219,18 +220,22 @@ Quick reference for locating the right layer when implementing a feature.
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
-| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`) and the text a sort rule compares (`sortKey`). The API's `leaf` (`list` and `today`) is its `children` |
+| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`), the text a sort rule compares (`sortKey`) and each value in words for the references (`words`). The API's `leaf` (`list` and `today`) is its `children`. A flow's expression is not read through it: `start`, `end` and `due` in `at(due+7d)` are the row's own, since the value is written to the next instance's line and an inherited due would be written out onto it (`FlowPlanner`) |
 | **FilterExpr** | `services/filter/FilterExpr.ts` | `compileFilter(state)`: the saved FilterState compiled into the tree the engine evaluates — groups, `not`, `ancestors` (some ancestor) and positive atoms. A negative operator is `not(positive)`; with `target: parent`, `not(ancestors(positive))`. An unfinished condition (no value chosen) is `ALWAYS`. Never saved |
 | **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Evaluates a compiled `FilterExpr` over the values `TaskValues` gives, in a required `FilterContext` (start hour, week start, task lookup, now) |
 | **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). `parse(raw)` is the one reader of every saved or handed-in filter: it returns `{ state, issues }`, dropping a condition of an unknown property, an operator the property does not take, or a value of the wrong shape into `issues` (the API throws them, a view drops them with a notice), and dropping conditions on retired properties (`kind`) silently; a group left empty stays, and evaluates as true. `SortSerializer.parse` does the same for sorts |
-| **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing, over the values `TaskValues` gives |
+| **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing, over the values `TaskValues` gives; without rules, `DEFAULT_SORT_ORDER` (due, startDate, content) |
+| **FilterEdit** | `services/filter/FilterEdit.ts` | The filter menu's edits as functions that return a new tree (`updateConditionAt`, `replaceAt`, `appendTo`, `toggleLogic`, `withOperator`, ...), a node addressed by its path from the root (`NodePath`). `FilterState` and `SortState` are `readonly` values: no holder changes one in place, so none copies one to protect itself |
+| **PinnedListQuery** | `services/filter/PinnedListQuery.ts` | Which tasks a pinned list shows: `resolve(list, viewFilter)` (the list's filter, and the view's when `applyViewFilter`) for the views' lists and Kanban's cells; `fromTemplate(template, listName?)` for a filter file, the template read by its view's schema and its lists by the schema's `listsOf` |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
 | **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order |
 | **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion with effective field resolution |
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
 | **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed / dueOnly kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
 | **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Per-date bucketing: delegates kind to `classifyForSection`, owns date membership (allDay/timed = visual span, dueOnly = calendar due) and sort via TaskRenderOrder |
-| **ViewExporter** | `services/export/ViewExporter.ts` | View data export with per-view ExportStrategy |
+| **TaskRenderOrder** | `services/display/TaskRenderOrder.ts` | The canonical order of each section's bucket, which every view draws in; a tie goes by where the task is written (file, then line as a number, then ID). See "Canonical order within a section" |
+| **ViewExporter** | `services/export/ViewExporter.ts` | Clones a view's container, grows what scrolls (each view's `ExportTargetSpec` in `ExportRegistry`) and captures it as a PNG |
+| **ExportSave** | `services/export/ExportSave.ts` | Where an export is saved and saving it, for the view menu and the CLI alike: `exportFolderOf(settings, override?)` (the folder asked for, else the setting, else `DEFAULT_SETTINGS.exportFolder`), `saveExportImage` (a vault-relative folder through the vault, an absolute one through Node's `fs`, desktop only) |
 | **PropertyValues** | `services/parsing/utils/PropertyValues.ts` | The one reading of a property's value (`PropertyValue`): `fromText` for a line, `fromYaml` / `fromFrontmatter` for the frontmatter; see "プロパティの値" |
 | **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
@@ -239,7 +244,10 @@ Quick reference for locating the right layer when implementing a feature.
 | **FlowLineScanner** | `services/parsing/utils/FlowLineScanner.ts` | `readFlow(outline, taskLine)`: the one place a flow program is read from a note (the task line's tail and its own `- ==>` lines); the extraction and the editor diagnostics both use it |
 | **DayPlannerParser** | `services/parsing/tv-inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
 | **TasksPluginParser** | `services/parsing/tv-inline/TasksPluginParser.ts` | Tasks plugin compatible parser (read-only) |
-| **TaskApi** | `api/TaskApi.ts` | Public API (13 methods) |
+| **TaskApi** | `api/TaskApi.ts` | Public API (13 methods). Checks every parameter once (required, whole numbers, dates); the CLI passes its flags on unchecked |
+| **OperationSchemas** | `api/OperationSchemas.ts` | The parameters of each operation (`ParamSpec`: key, required, a whole number's range, description), bound to the param types by `satisfies`; the shared blocks `SIMPLE_FILTER_SCHEMA`, `FILTER_SOURCE_SCHEMA`, `SORT_PARAM`, `LIMIT_PARAM` |
+| **Reference** | `api/Reference.ts` | `api.help()` and the CLI's `help`, made from the tables: the operations (`OPERATIONS`, whose CLI side `CLI_COMMANDS` the registrar registers), `ALL_FIELD_NAMES`, `PROPERTY_OPERATORS` with `FILTER_VALUE_DOC`, and the sort properties with `TaskValues.words` |
+| **Input codecs** | `utils/values/` | How a value typed by a person or a script is read: `Read<T>` (a value, or an `Issue`), `typed` (NFKC, trimmed) and `dashed` (hyphen-like characters as `-`, dates only), `DateInput` (a day that exists), `TimeInput` (`9:40` as `09:40`), `DateTimeInput`, `IntInput` / `IntValue` (whole numbers, a range), `FloatInput`, `BoolInput`, `ChoiceInput`, and `issueText` (the English sentence of an issue). The API, the CLI, the URI and saved view state (`FieldCodecs`' `F.*`) read through them; the note's notation does not |
 | **TaskNormalizer** | `api/TaskNormalizer.ts` | Task → NormalizedTask conversion for API output |
 | **FilterFileLoader** | `api/FilterFileLoader.ts` | Filter file (.json/.md) loading |
 | **FlowExecutor** | `services/flow/FlowExecutor.ts` | Plans what a `==>` command (every / + / at / x / until / move) writes, and writes nothing: a completion's fire from the lines the completing write holds (`planFire`, as a `fire` op: `fireOp`), a deletion's next instance and removal (`planDeletion`). Reads the notes only through `FlowReads` (a generation block, a row by id). A `move` carries the row to a heading of its own note (`[[#heading]]`) as one `move` op; a heading that is not one place in the note fails the plan |
@@ -422,9 +430,22 @@ Both start and end are specified, at least one has an explicit time.
 
 Only a due is specified, no start or end.
 
-- **Display**: Calendar (all-day) lane on the due date (display only)
+- **Display**: Calendar (all-day) lane on the due date (display only), and Schedule's due section. Timeline does not draw it: `classifyForSection` gives it the `dueOnly` section and Timeline's `GridRenderer` draws only `allDay` and `timed`
 - **Inference**: none — D does not affect display position or duration inference
+- The section is decided by the row's own `due`: a task whose due is only inherited (from a heading or the note) is in no section
 - Example: `@>>2026-03-13`
+
+#### Canonical order within a section
+
+`TaskRenderOrder` orders each section's bucket (`TaskDateCategorizer` sorts with it), and the views draw in that order. Schedule's time grid places its cards by `ScheduleOverlapLayout`, which keeps an order of its own with the same rule (start, the longer first, where written).
+
+| Section | Order |
+|---|---|
+| timed | visual start (minutes from startHour), then the longer first |
+| allDay | effective start date |
+| dueOnly | the row's `due`, with its time |
+
+A tie goes by where the task is written: the file (`localeCompare`), then the line as a number, then the ID (only the segments of one row share a file and a line). The ID does not order tasks by itself: it is a name for one reading of the note, and compared as text it put line 10 before line 9.
 
 ### Implicit value resolution rules (`resolveEffectiveDates()`)
 
@@ -727,20 +748,31 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 
 ### Parameters
 
+`view`, `position`, `name`, `template`, `mode` and `intervalTemplate` are the URI's own. Every other parameter is a field of the view's config schema (`<View>Schema.ts`), under its key or a legacy alias; Copy URI writes the key. A field added to a schema is read from a URI with no change here.
+
 | Parameter | Format | Description | Example |
 |-----------|--------|-------------|---------|
 | `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` / `timer` |
 | `position` | string | Leaf placement | `left` / `right` / `tab` / `window` / `override` |
-| `name` | string | Custom view name (URL-encoded) | `My%20Timeline` |
-| `days` | integer | Display days (validated: 1, 3, 7) | `3` |
-| `zoom` | float | Zoom level (validated: 0.25–10.0) | `1.5` |
-| `date` | YYYY-MM-DD | Start date | `2026-02-28` |
+| `name` | string | Custom view name (URL-encoded); set as the view's `customName` | `My%20Timeline` |
+| `daysToShow` (alias `days`) | integer | Timeline display days, 1–30 | `3` |
+| `zoomLevel` (alias `zoom`) | number | Timeline zoom level, 0.25–10 | `1.5` |
+| `startDate` (alias `date`) | YYYY-MM-DD | Timeline start date | `2026-02-28` |
 | `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
-| `filter` | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
+| `filterState` (alias `filter`) | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
 | `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
-| `template` | string | View template name (URL-encoded). When set, `filter`/`pinnedLists` are omitted | `My%20Template` |
+| `template` | string | View template name (URL-encoded). When set, `filterState`/`pinnedLists` are omitted | `My%20Template` |
 | `mode` | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
 | `intervalTemplate` | string | Interval template name (URL-encoded) | `Deep%20Work` |
+
+### Reading values
+
+A value is read by the schema field's codec (`FieldCodecs`' `F.*` and `T.*`), which reads through the input codecs (`utils/values/`), as the API and the CLI do:
+
+- The text is normalized first: full-width characters as ASCII (NFKC) and spaces around it dropped; in a date, hyphen-like characters (`ー`, `−`, ...) as `-`
+- A date names a day that exists (`2026-02-30` is not one); a whole number is digits only (`3days`, `1.5` are not); a number is a plain decimal; a boolean is `true` or `false`; a choice is one of its values
+- A number outside its range is not moved to the end of it
+- A filter or a pinned list is read by `FilterSerializer.parse`: a condition it cannot read (an unknown property, an operator the property does not take, a value of the wrong shape) is dropped, and the rest is kept
 
 ### Example URIs
 
@@ -779,6 +811,7 @@ obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base6
 | **URI handler** | `src/main.ts` | `registerObsidianProtocolHandler('task-viewer', ...)` — parses params |
 | **View activation** | `src/main.ts` | `activateView()` — creates leaf at specified position and sets view state |
 | **Filter serialization** | `src/services/filter/FilterSerializer.ts` | `parse()` (the one reader: drops what it cannot read into issues) / `toJSON()`, `toURIParam()` / `parseURIParam()` — base64 encode/decode |
+| **URI reading** | `src/services/viewConfig/UriViewOpener.ts`, `ViewStateFactory.ts` | `openViewFromUri` names the view, loads the template, lays the query's fields over it (`codec.fromUriParams`) and tells the issues |
 
 ### View settings menu
 
@@ -795,11 +828,11 @@ Each view's toolbar has a gear icon (settings) button. The menu provides:
 
 ### Copy URI parameters per view
 
-- **TimelineView**: `filterState`, `days`, `zoom`, `pinnedLists`, `showSidebar`, `position`, `name`
+- **TimelineView**: `filterState`, `daysToShow`, `zoomLevel`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
 - **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, `position`, `name`
 - **ScheduleView**: `filterState`, `position`, `name`
 - **TimerView**: `mode`, `intervalTemplate`, `position`, `name`
-- All views support `template` (when set, `filter`/`pinnedLists` are omitted from URI)
+- All views support `template` (when set, `filterState`/`pinnedLists` are omitted from URI)
 
 ### Toolbar icon order
 
@@ -811,10 +844,12 @@ ScheduleView omits view-mode, zoom, and sidebar-toggle.
 
 ### Error handling
 
+- Unknown `view` → nothing opens, silently (a typo in a link should not raise a dialog)
 - Invalid `position` value → ignored, falls back to default behavior
-- Invalid `name` → used as-is (stored as `customName` in view state)
-- Invalid `filter` or `pinnedLists` base64 → silently ignored (empty filter / no pinned lists)
-- Invalid `days`, `zoom`, `date` → ignored (view uses its defaults)
+- `name` → used as-is
+- A value that cannot be read (above) → ignored, the field takes the template's value or the view's default
+- `filterState` or `pinnedLists` that is not base64 JSON, or holds a condition that cannot be read → the view opens without it, and a notice says how many parts were dropped (`UriViewOpener`, `noticeConfigIssues`; each one is logged)
+- `template` not found → a notice, and the view opens on its defaults
 
 ---
 
@@ -1263,26 +1298,34 @@ DataviewJS  →                TaskApi method → typed result (used directly)
 
 ```
 src/api/
-  TaskApi.ts             # Public API class (13 methods)
-  TaskApiTypes.ts        # Param/result interfaces + TaskApiError
+  TaskApi.ts             # Public API class (13 methods); checks every parameter once
+  TaskApiTypes.ts        # Param/result interfaces (SimpleFilterParams, FilterSourceParams) + TaskApiError
+  TaskIds.ts             # The IDs the API hands out and takes (path#^id, or a reading's name)
   OperationSchemas.ts    # Single source of truth for the CLI/API parameter surface
                          #   (per-operation ParamSpec, satisfies-bound to the param types;
-                         #    derives CLI flags, both validators, and help flag tables)
-  TaskNormalizer.ts      # Task → NormalizedTask conversion
-  FilterParamsBuilder.ts # ListParams → FilterState conversion + FilterState boundary validation
-  FilterFileLoader.ts    # Vault filter file (.json/.md) loading
+                         #    derives CLI flags, the API's key check, and the parameter tables)
+  Reference.ts           # api.help() and the CLI's help, made from the tables; OPERATIONS and
+                         #   CLI_COMMANDS (the commands the registrar registers)
+  TaskNormalizer.ts      # Task → NormalizedTask conversion (ALL_FIELD_NAMES)
+  FilterParamsBuilder.ts # The filter a query's params name (resolveFilterSource: filter file,
+                         #   else filter, else the simple fields and list's window)
+  FilterFileLoader.ts    # Vault filter file (.json FilterState, .md view template via PinnedListQuery)
 
 src/cli/
-  CliRegistrar.ts        # Registers 13 CLI handlers, export-image included (flags derived from OperationSchemas)
-  CliParamValidator.ts   # Strict flag validation (unknown flags error with did-you-mean)
-  CliFilterBuilder.ts    # Sort flag parser (date values are parsed by services/filter/DatePreset and DateUtils.parseDateTimeText, which the API uses too)
-  CliOutputFormatter.ts  # Field selection + JSON/TSV/JSONL formatting
+  CliRegistrar.ts        # Registers CLI_COMMANDS (13, export-image included) through one wrapper:
+                         #   flag check, empty flags refused, a thrown error as cliError
+  CliParamValidator.ts   # Strict flag validation (unknown flags error with did-you-mean; x= refused)
+  CliFilterBuilder.ts    # Sort flag parser
+  CliOutputFormatter.ts  # Field selection + JSON/TSV/JSONL formatting, readIntFlag/parseLimit, cliErrorOf
   handlers/
     TaskQueryHandlers.ts   # list / today / get
     TaskCrudHandlers.ts    # create / update / delete
     TaskActionHandlers.ts  # duplicate / tasks-for-date-range / categorized-tasks-for-date-range / insert-child-task / get-start-hour
-    HelpHandler.ts         # help
+    ExportImageHandler.ts  # export-image (checks the exported view's own flags)
+    HelpHandler.ts         # help (Reference's CLI_REFERENCE)
 ```
+
+A handler turns the flags' text into the API's types and calls the API; it checks no parameter itself. Whether one is required, whether a number is whole and in range, whether a date names a day — the API checks, once, for a script and the CLI alike. Dates and numbers are read by the input codecs (`utils/values/`).
 
 ### API entry point
 
@@ -1302,7 +1345,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 | Method | Sync/Async | Returns |
 |--------|-----------|---------|
-| `list(params?)` | async | `TaskListResult { count, tasks: NormalizedTask[] }` |
+| `list(params?)` | async | `TaskListResult { total, count, truncated, limit, tasks: NormalizedTask[] }` |
 | `today(params?)` | sync | `TaskListResult` |
 | `get({ id })` | sync | `NormalizedTask` |
 | `create({ file, content, ... })` | async | `MutationResult { task: NormalizedTask }` |
@@ -1327,14 +1370,19 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `update` | Update task fields | id (req), content, start, end, due, status (use `none` to clear) |
 | `delete` | Delete task | id (required) |
 | `duplicate` | Duplicate task | id (req), day-offset, count |
-| `tasks-for-date-range` | Tasks in date range | from (req), to (req), sort, limit |
-| `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req) |
+| `tasks-for-date-range` | Tasks in date range | from (req), to (req), the simple filter flags (file, status, tag, content, due, leaf, root, property, color, type), filter-file, list, sort, limit |
+| `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req), the simple filter flags, filter-file, list |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
 | `get-start-hour` | Get startHour setting | *(none)* |
-| `export-image` | Export a view as a PNG image | view-config flags (see `help`) |
+| `export-image` | Export a view as a PNG image | view, template, name, anchor-date, width, output-folder, filename, wait, keep-open, and the view's config flags |
 | `help` | Show CLI reference | *(none)* |
 
 ### Error handling
 
-- API methods throw `TaskApiError` on validation or not-found errors.
-- CLI handlers catch `TaskApiError` and return `{ "error": "message" }` JSON.
+- API methods throw `TaskApiError` on validation or not-found errors. Its message ends with `— See api.help() for reference`; `rawMessage` is the text without it. An error about a parameter carries the parameter's key (`param`) and words its text through a namer (`textFor`).
+- The CLI's wrapper turns a thrown error into `{ "error": "<message>", "help": "obsidian obsidian-task-viewer:help" }` (`cliErrorOf`), a `TaskApiError` worded with the flags' names (`textFor(toCliName)`: `parent-id`, not `parentId`).
+- A flag given empty (`x=`) is refused by the wrapper for every command (`x must not be empty`); a flag given alone is `'true'`.
+
+### Help texts
+
+`api/Reference.ts` makes both references from the tables the plugin runs on: the operations (`OPERATIONS`: summary, schema, notes, the API's signature and result, the CLI's command), `ALL_FIELD_NAMES`, `PROPERTY_OPERATORS` with how each property's value is written (`FILTER_VALUE_DOC`, `satisfies Record<FilterProperty, …>`), and the sort properties with what each compares (`TaskValues.words`). A public method of `TaskApi` without its line in `OPERATIONS` is a compile error, and the registrar registers the commands of `CLI_COMMANDS` with a handler for each (`HANDLERS`, keyed by the same names). Only the prose between the tables is written by hand. `tests/unit/api/ReferenceDocs.test.ts` checks that the tables of `docs/api.md` and `docs/cli.md` name the same parameters, flags and fields.
