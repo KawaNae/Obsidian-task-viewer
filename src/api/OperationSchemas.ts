@@ -25,8 +25,12 @@ import type {
 
 export interface ParamSpec {
     required?: true;
-    /** 'hidden' = API-only parameter (not exposed as a CLI flag). */
-    cli?: 'hidden';
+    /**
+     * 'hidden' = API-only parameter (not exposed as a CLI flag). An object
+     * = the flag's placeholder or description where the CLI writes or
+     * defaults it otherwise than the API (`limit`'s `all`).
+     */
+    cli?: 'hidden' | { readonly value?: string; readonly description?: string };
     /** CLI help placeholder, e.g. '<date|preset>'. Omit for boolean/hidden params. */
     value?: string;
     /** Boolean flag: no value on the CLI, boolean in the API. */
@@ -44,11 +48,19 @@ type ParamMap<P> = { [K in keyof Required<P>]: ParamSpec };
 
 // ── Operation schemas ──
 
-/** The page size every listing takes: a whole number of 0 or more (0 counts only); the CLI also takes `all`. */
+/**
+ * The page size every listing takes: a whole number of 0 or more (0 counts
+ * only), or no limit — `Infinity` in the API, `all` on the CLI, whose
+ * default also hangs on the output format.
+ */
 export const LIMIT_PARAM = {
-    value: '<number|all>',
+    value: '<number>',
     int: { min: 0 },
-    description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)',
+    description: 'Max results (default: 100; 0=count only; Infinity=no limit)',
+    cli: {
+        value: '<number|all>',
+        description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only; all=no limit)',
+    },
 } as const satisfies ParamSpec;
 
 /** How a listing is sorted. */
@@ -123,7 +135,7 @@ export const DELETE_SCHEMA = {
 
 export const DUPLICATE_SCHEMA = {
     id:        { value: '<taskId>', description: 'Task ID', required: true },
-    dayOffset: { value: '<number>', int: {}, description: 'Axis the copies run along: 0 (default) chains them on the clock from the task\'s end, above 0 shifts them that many days' },
+    dayOffset: { value: '<number>', int: {}, description: 'Axis the copies run along: 0 (default) chains them on the clock from the task\'s end; any other whole number shifts the first copy that many days (negative: earlier) and each next one a day later' },
     count:     { value: '<number>', int: { min: 1 }, description: 'Number of copies (default: 1)' },
 } as const satisfies ParamMap<DuplicateParams>;
 
@@ -195,8 +207,9 @@ export function toCliFlags(
     const add = (source: Record<string, ParamSpec>) => {
         for (const [key, spec] of Object.entries(source)) {
             if (spec.cli === 'hidden') continue;
-            const decl: CliFlagDecl = { description: spec.description };
-            if (!spec.boolean && spec.value) decl.value = spec.value;
+            const decl: CliFlagDecl = { description: spec.cli?.description ?? spec.description };
+            const value = spec.cli?.value ?? spec.value;
+            if (!spec.boolean && value) decl.value = value;
             if (spec.required) decl.required = true;
             flags[toCliName(key)] = decl;
         }
