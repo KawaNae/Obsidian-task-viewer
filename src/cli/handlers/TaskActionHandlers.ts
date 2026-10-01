@@ -1,7 +1,8 @@
 import type { CliData } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import type { ApiHost } from '../../api/TaskApi';
-import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, parseLimit, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
+import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, parseLimit, readIntFlag, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
+import { DUPLICATE_SCHEMA } from '../../api/OperationSchemas';
 import { parseSortFlag } from '../CliFilterBuilder';
 import { cliDataToSimpleFilterFields } from './TaskQueryHandlers';
 
@@ -10,16 +11,8 @@ export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
         if (!params.id) return cliError('Missing required flag: --id');
 
         return wrapCliResult('duplicate task', async () => {
-            const dayOffset = params['day-offset'] ? parseInt(params['day-offset'], 10) : undefined;
-            const count = params.count ? parseInt(params.count, 10) : undefined;
-
-            if (dayOffset !== undefined && isNaN(dayOffset)) {
-                return cliError('--day-offset must be an integer');
-            }
-            if (count !== undefined && (isNaN(count) || count < 1)) {
-                return cliError('--count must be a positive integer');
-            }
-
+            const dayOffset = readIntFlag(params, 'dayOffset', DUPLICATE_SCHEMA.dayOffset);
+            const count = readIntFlag(params, 'count', DUPLICATE_SCHEMA.count);
             const result = await plugin.api.duplicate({ id: params.id, dayOffset, count });
             return cliOk({ duplicated: result.duplicated });
         });
