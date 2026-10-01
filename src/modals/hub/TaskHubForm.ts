@@ -317,7 +317,7 @@ export class TaskHubForm {
     }
 
     private jumpToFile(): void {
-        openFile(this.deps.app, this.task.file, this.deps.plugin.settings.reuseExistingTab);
+        void openFile(this.deps.app, this.task.file, this.deps.plugin.settings.reuseExistingTab);
         this.deps.onNavigate?.();
     }
 

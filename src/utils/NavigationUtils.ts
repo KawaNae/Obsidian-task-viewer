@@ -1,44 +1,40 @@
-import { type App, MarkdownView } from 'obsidian';
+import { type App, MarkdownView, TFile, type WorkspaceLeaf } from 'obsidian';
 import type { Task } from '../types';
 
-/**
- * 既に開いているタブを検索し、あればフォーカスを移動する。
- * なければ null を返す。全ウィンドウ（ポップアウト含む）を検索対象とする。
- */
-function revealExistingTab(app: App, filePath: string): boolean {
+/** The Markdown tab that already shows the file, in any window (pop-outs included). */
+function findExistingTab(app: App, filePath: string): WorkspaceLeaf | null {
     const leaves = app.workspace.getLeavesOfType('markdown');
-    const existing = leaves.find(leaf => {
+    return leaves.find(leaf => {
         const view = leaf.view;
         return view instanceof MarkdownView && view.file?.path === filePath;
-    });
+    }) ?? null;
+}
 
+/**
+ * Opens a note and answers the leaf that shows it. With `reuseTab`, a tab
+ * already showing the note is focused; otherwise, or when none is, the note
+ * opens in a new tab. `eState` reaches the leaf that shows the note — a new
+ * tab gets it with the open, an existing one through `setEphemeralState` —
+ * so the leaf itself, not whichever view is active later, acts on it.
+ * Every path by which the plugin opens a note comes through here.
+ */
+export async function openFile(
+    app: App,
+    filePath: string,
+    reuseTab: boolean,
+    eState?: Record<string, unknown>,
+): Promise<WorkspaceLeaf | null> {
+    const existing = reuseTab ? findExistingTab(app, filePath) : null;
     if (existing) {
         app.workspace.setActiveLeaf(existing, { focus: true });
-        return true;
+        if (eState) existing.setEphemeralState(eState);
+        return existing;
     }
-    return false;
-}
-
-/**
- * ファイルパスを指定して既存タブに移動、なければ新規タブで開く。
- */
-function openFileInExistingOrNewTab(app: App, filePath: string): void {
-    if (!revealExistingTab(app, filePath)) {
-        void app.workspace.openLinkText(filePath, '', true);
-    }
-}
-
-/**
- * ファイルを開く。設定 `reuseExistingTab` が有効なら既存タブへ移動し
- * （なければ新規タブ）、無効なら常に新規タブで開く。プラグインがノートを
- * 開く経路はここに集める。
- */
-export function openFile(app: App, filePath: string, reuseTab: boolean): void {
-    if (reuseTab) {
-        openFileInExistingOrNewTab(app, filePath);
-    } else {
-        void app.workspace.openLinkText(filePath, '', true);
-    }
+    const file = app.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) return null;
+    const leaf = app.workspace.getLeaf('tab');
+    await leaf.openFile(file, { active: true, eState });
+    return leaf;
 }
 
 /**
@@ -47,32 +43,15 @@ export function openFile(app: App, filePath: string, reuseTab: boolean): void {
 export function openLinkInExistingOrNewTab(app: App, linktext: string, sourcePath: string): void {
     const linkPath = linktext.split('#')[0].split('|')[0];
     const resolved = app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
-    if (resolved && revealExistingTab(app, resolved.path)) {
+    const existing = resolved ? findExistingTab(app, resolved.path) : null;
+    if (existing) {
+        app.workspace.setActiveLeaf(existing, { focus: true });
         return;
     }
     void app.workspace.openLinkText(linktext, sourcePath, true);
 }
 
-/**
- * ファイルを開いて指定行を選択・フォーカスする。
- */
-function openFileAndSelectLine(app: App, filePath: string, lineNumber: number, reuseTab: boolean): void {
-    openFile(app, filePath, reuseTab);
-
-    setTimeout(() => {
-        const view = app.workspace.getActiveViewOfType(MarkdownView);
-        if (view) {
-            const editor = view.editor;
-            const lineText = editor.getLine(lineNumber);
-            editor.setSelection(
-                { line: lineNumber, ch: 0 },
-                { line: lineNumber, ch: lineText.length }
-            );
-            editor.focus();
-        }
-    }, 100);
-}
-
+/** Opens the task's note at the task's line: the leaf that shows the note moves to the line. */
 export function openTaskInEditor(app: App, task: Task, reuseTab: boolean): void {
-    openFileAndSelectLine(app, task.file, task.line, reuseTab);
+    void openFile(app, task.file, reuseTab, { line: task.line });
 }

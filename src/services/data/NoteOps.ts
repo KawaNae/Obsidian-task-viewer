@@ -472,7 +472,7 @@ export class NoteOps {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             notice.hide();
-            openFile(this.app, note.path, this.getSettings().reuseExistingTab);
+            void openFile(this.app, note.path, this.getSettings().reuseExistingTab);
         });
         el.appendText(text.slice(at + note.path.length));
     }

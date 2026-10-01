@@ -111,7 +111,7 @@ export class PropertiesMenuBuilder {
                 .setIcon('file-text')
                 .onClick(() => {
                     (rootMenu ?? menu).close();
-                    openFile(this.app, task.file, this.plugin.settings.reuseExistingTab);
+                    void openFile(this.app, task.file, this.plugin.settings.reuseExistingTab);
                 });
 
             if (sub.dom) {
