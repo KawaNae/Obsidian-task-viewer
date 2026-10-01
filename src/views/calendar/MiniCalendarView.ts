@@ -47,7 +47,7 @@ export class MiniCalendarView extends ItemView {
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly filterMenu = new FilterMenuComponent();
+    private readonly viewFilterMenu = new FilterMenuComponent();
     private readonly toolbar: MiniCalendarToolbar;
 
     private container: HTMLElement;
@@ -67,9 +67,7 @@ export class MiniCalendarView extends ItemView {
         this.index = this.plugin.getIndex();
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
-        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
-        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
 
@@ -78,7 +76,7 @@ export class MiniCalendarView extends ItemView {
             leaf: this.leaf,
             plugin: this.plugin,
             readService: this.readService,
-            filterMenu: this.filterMenu,
+            viewFilterMenu: this.viewFilterMenu,
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
             getReferenceMonth: () => this.getReferenceMonth(),
@@ -152,7 +150,7 @@ export class MiniCalendarView extends ItemView {
 
     applyConfig(cfg: Partial<MiniCalendarConfig>): void {
         const next = this.codec.withDefaults(cfg);
-        this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
         this.customName = next.customName;
         this.astronomyDisplay = next.astronomyDisplay
             ? { ...next.astronomyDisplay }
@@ -160,7 +158,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     getCurrentConfig(): Partial<MiniCalendarConfig> {
-        const filterState = this.filterMenu.getFilterState();
+        const filterState = this.viewFilterMenu.getFilterState();
         return {
             customName: this.customName,
             filterState: hasConditions(filterState) ? filterState : undefined,
@@ -192,7 +190,7 @@ export class MiniCalendarView extends ItemView {
     async onClose(): Promise<void> {
         logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
-        this.filterMenu.close();
+        this.viewFilterMenu.close();
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
             this.navigateWeekDebounceTimer = null;
@@ -356,7 +354,7 @@ export class MiniCalendarView extends ItemView {
 
     private computeIndicators(rangeStart: string, rangeEnd: string): Map<string, IndicatorState> {
         const indicatorMap = new Map<string, IndicatorState>();
-        const filterState = this.filterMenu.getFilterState();
+        const filterState = this.viewFilterMenu.getFilterState();
         const filter = hasConditions(filterState) ? filterState : undefined;
 
         const allTasks = this.readService.getTasksForDateRange(rangeStart, rangeEnd, filter);

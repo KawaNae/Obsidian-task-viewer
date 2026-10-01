@@ -216,14 +216,13 @@ describe('appendCompactFilterAndMask', () => {
         };
         let maskMode = false;
         const deps = {
-            filterMenu: {
+            viewFilterMenu: {
                 showMenuAtElement(anchorEl: unknown, options: { onFilterChange: () => void }) {
                     calls.popoverAnchors.push(anchorEl);
                     options.onFilterChange();
                 },
             },
             getTasks: () => [],
-            getStartHour: () => 4,
             onFilterChange: () => { calls.filterChanges++; },
             getMaskMode: () => maskMode,
             setMaskMode: (next: boolean) => { calls.maskWrites.push(next); maskMode = next; },

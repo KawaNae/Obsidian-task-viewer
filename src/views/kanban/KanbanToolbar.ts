@@ -15,7 +15,7 @@ export interface KanbanToolbarDeps {
     leaf: WorkspaceLeaf;
     plugin: PluginContext;
     readService: TaskReadService;
-    filterMenu: FilterMenuComponent;
+    viewFilterMenu: FilterMenuComponent;
     container: HTMLElement;
 
     onFilterChange: () => void;
@@ -58,13 +58,12 @@ export class KanbanToolbar extends ViewToolbarBase {
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.onclick = (event) => {
-            deps.filterMenu.showMenu(event as MouseEvent, {
+            deps.viewFilterMenu.showMenu(event as MouseEvent, {
                 onFilterChange: () => {
                     deps.onFilterChange();
                     this.update();
                 },
                 getTasks: () => deps.plugin.getIndex().getTasks(),
-                getStartHour: () => deps.plugin.settings.startHour,
             });
         };
         this.filterBtn = filterBtn;
@@ -110,7 +109,7 @@ export class KanbanToolbar extends ViewToolbarBase {
 
     override update(): void {
         if (this.filterBtn) {
-            this.filterBtn.classList.toggle('is-filtered', this.deps.filterMenu.hasActiveFilters());
+            this.filterBtn.classList.toggle('is-filtered', this.deps.viewFilterMenu.hasActiveFilters());
         }
         this.maskHandle?.update();
     }

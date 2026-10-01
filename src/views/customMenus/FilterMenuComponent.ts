@@ -34,7 +34,6 @@ const anyCondition = (_c: FilterCondition): _c is FilterCondition => true;
 export interface FilterMenuCallbacks {
     onFilterChange: () => void;
     getTasks: () => Task[];
-    getStartHour?: () => number;
 }
 
 /**
@@ -53,8 +52,6 @@ export class FilterMenuComponent {
     private rootEl: HTMLElement | null = null;
     private lastTasks: Task[] = [];
     private lastCallbacks: FilterMenuCallbacks | null = null;
-    private startHourProvider: (() => number) | null = null;
-    private taskLookupProvider: ((id: string) => Task | undefined) | null = null;
     private statusDefs: StatusDefinition[] = [];
 
     private dropdowns: FilterDropdownMenus;
@@ -77,14 +74,6 @@ export class FilterMenuComponent {
 
     setFilterState(state: FilterState): void {
         this.state = state;
-    }
-
-    setStartHourProvider(provider: () => number): void {
-        this.startHourProvider = provider;
-    }
-
-    setTaskLookupProvider(provider: (id: string) => Task | undefined): void {
-        this.taskLookupProvider = provider;
     }
 
     setStatusDefinitions(defs: StatusDefinition[]): void {

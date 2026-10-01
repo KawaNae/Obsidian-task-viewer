@@ -87,8 +87,8 @@ export class CalendarView extends ItemView {
     private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly filterMenu = new FilterMenuComponent();
-    private readonly sidebarSortMenu = new SortMenuComponent();
+    private readonly viewFilterMenu = new FilterMenuComponent();
+    private readonly listSortMenu = new SortMenuComponent();
 
     private menuHandler: MenuHandler;
     private dragHandler: DragHandler | null = null;
@@ -104,7 +104,7 @@ export class CalendarView extends ItemView {
      * full view renders.
      */
     private pinnedHost: HTMLElement;
-    private sidebarFilterMenu = new FilterMenuComponent();
+    private listFilterMenu = new FilterMenuComponent();
     private topRightEditor = new TopRightConfigEditor();
     private toolbar: CalendarToolbar;
     private container: HTMLElement;
@@ -148,19 +148,15 @@ export class CalendarView extends ItemView {
             getIsOpen: () => this.showSidebar,
         });
         this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
-        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
-        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
-        this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
-        this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+        this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.toolbar = new CalendarToolbar({
             app: this.app,
             leaf: this.leaf,
             plugin: this.plugin,
             readService: this.readService,
-            filterMenu: this.filterMenu,
+            viewFilterMenu: this.viewFilterMenu,
             container: this.containerEl,
             onNavigateWeek: (days) => this.navigateWeek(days),
             onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
@@ -250,7 +246,7 @@ export class CalendarView extends ItemView {
         const next = this.codec.withDefaults(cfg);
 
         // FilterMenu owns the in-memory FilterState — keep it in sync.
-        this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
 
         const sidebarOpen = next.showSidebar ?? true;
         this.showSidebar = sidebarOpen;
@@ -266,7 +262,7 @@ export class CalendarView extends ItemView {
 
     /** Snapshot for template save / URI build. */
     getCurrentConfig(): Partial<CalendarConfig> {
-        const filterState = this.filterMenu.getFilterState();
+        const filterState = this.viewFilterMenu.getFilterState();
         return {
             customName: this.customName,
             filterState: hasConditions(filterState) ? filterState : undefined,
@@ -345,7 +341,7 @@ export class CalendarView extends ItemView {
             host: this.pinnedHost,
             getLists: () => this.pinnedLists,
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.filterMenu.getFilterState(),
+            getViewFilterState: () => this.viewFilterMenu.getFilterState(),
             callbacks: this.getPinnedListCallbacks(),
             viewId: VIEW_ID,
         });
@@ -392,8 +388,8 @@ export class CalendarView extends ItemView {
     async onClose(): Promise<void> {
         logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
-        this.filterMenu.close();
-        this.sidebarFilterMenu.close();
+        this.viewFilterMenu.close();
+        this.listFilterMenu.close();
         this.sidebarManager.detach();
         this.pinnedListRenderer?.detach();
 
@@ -666,10 +662,10 @@ export class CalendarView extends ItemView {
     }
 
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
-        this.sidebarSortMenu.showMenuAtElement(anchorEl, {
+        this.listSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
+        this.listSortMenu.showMenuAtElement(anchorEl, {
             onSortChange: () => {
-                listDef.sortState = this.sidebarSortMenu.getSortState();
+                listDef.sortState = this.listSortMenu.getSortState();
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
             },
@@ -677,15 +673,14 @@ export class CalendarView extends ItemView {
     }
 
     private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.sidebarFilterMenu.setFilterState(listDef.filterState);
-        this.sidebarFilterMenu.showMenuAtElement(anchorEl, {
+        this.listFilterMenu.setFilterState(listDef.filterState);
+        this.listFilterMenu.showMenuAtElement(anchorEl, {
             onFilterChange: () => {
-                listDef.filterState = this.sidebarFilterMenu.getFilterState();
+                listDef.filterState = this.listFilterMenu.getFilterState();
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
             },
             getTasks: () => this.index.getTasks(),
-            getStartHour: () => this.plugin.settings.startHour,
         });
     }
 
@@ -806,7 +801,7 @@ export class CalendarView extends ItemView {
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
-        const filterState = this.filterMenu.getFilterState();
+        const filterState = this.viewFilterMenu.getFilterState();
         return this.readService.getTasksForDateRange(rangeStart, rangeEnd, filterState);
     }
 

@@ -95,9 +95,9 @@ export class TimelineView extends ItemView {
      * toolbar so that `applyConfig` / `getCurrentConfig` have one authority for
      * "the current filter" — same arrangement as Calendar / Schedule / Kanban.
      */
-    private readonly filterMenu = new FilterMenuComponent();
-    private sidebarFilterMenu = new FilterMenuComponent();
-    private sidebarSortMenu = new SortMenuComponent();
+    private readonly viewFilterMenu = new FilterMenuComponent();
+    private listFilterMenu = new FilterMenuComponent();
+    private listSortMenu = new SortMenuComponent();
     private topRightEditor = new TopRightConfigEditor();
     private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
@@ -196,9 +196,7 @@ export class TimelineView extends ItemView {
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.viewState.maskMode ?? false);
         this.addChild(this.taskRenderer);
-        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
-        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     getViewType() {
@@ -233,7 +231,7 @@ export class TimelineView extends ItemView {
         Object.assign(this.viewState, rest);
 
         // FilterMenu owns the in-memory FilterState; viewState keeps no copy.
-        this.filterMenu.setFilterState(filterState ?? createEmptyFilterState());
+        this.viewFilterMenu.setFilterState(filterState ?? createEmptyFilterState());
 
         const sidebarOpen = rest.showSidebar ?? true;
         this.viewState.showSidebar = sidebarOpen;
@@ -242,7 +240,7 @@ export class TimelineView extends ItemView {
 
     /** Snapshot for template save / URI build / workspace state. */
     getCurrentConfig(): Partial<TimelineConfig> {
-        const filterState = this.filterMenu.getFilterState();
+        const filterState = this.viewFilterMenu.getFilterState();
         return {
             customName: this.viewState.customName,
             filterState: hasConditions(filterState) ? filterState : undefined,
@@ -339,13 +337,13 @@ export class TimelineView extends ItemView {
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
         // after, so the toolbar's DOM survives renders. That, plus the view-owned
-        // filterMenu, is what lets the filter popover stay open across
+        // viewFilterMenu, is what lets the filter popover stay open across
         // data-driven re-renders.
         this.toolbar = new TimelineToolbar({
             app: this.app,
             plugin: this.plugin,
             readService: this.readService,
-            filterMenu: this.filterMenu,
+            viewFilterMenu: this.viewFilterMenu,
             getLeaf: () => this.leaf,
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
@@ -482,14 +480,12 @@ export class TimelineView extends ItemView {
             host: this.pinnedHost,
             getLists: () => this.viewState.pinnedLists ?? [],
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.filterMenu.getFilterState(),
+            getViewFilterState: () => this.viewFilterMenu.getFilterState(),
             callbacks: this.getPinnedListCallbacks(),
             viewId: VIEW_ID,
         });
         this.moonRenderer = new MoonPhaseRenderer();
-        this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
-        this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+        this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
         this.dragHandler = new DragHandler(this.container, this.operations, this.plugin,
@@ -690,9 +686,9 @@ export class TimelineView extends ItemView {
     async onClose() {
         logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
-        this.filterMenu.close();
-        this.sidebarFilterMenu.close();
-        this.sidebarSortMenu.close();
+        this.viewFilterMenu.close();
+        this.listFilterMenu.close();
+        this.listSortMenu.close();
         this.dragHandler.destroy();
         this.pinnedListRenderer?.detach();
         if (this.unsubscribe) {
@@ -1019,7 +1015,7 @@ export class TimelineView extends ItemView {
 
         // Use GridRenderer (render into main column)
         const filteredTasks = this.readService.getTasksForDateRange(
-            dates[0], dates[dates.length - 1], this.filterMenu.getFilterState()
+            dates[0], dates[dates.length - 1], this.viewFilterMenu.getFilterState()
         );
         this.gridRenderer.render(
             main,
@@ -1111,10 +1107,10 @@ export class TimelineView extends ItemView {
     }
 
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
-        this.sidebarSortMenu.showMenuAtElement(anchorEl, {
+        this.listSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
+        this.listSortMenu.showMenuAtElement(anchorEl, {
             onSortChange: () => {
-                listDef.sortState = this.sidebarSortMenu.getSortState();
+                listDef.sortState = this.listSortMenu.getSortState();
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
             },
@@ -1122,15 +1118,14 @@ export class TimelineView extends ItemView {
     }
 
     private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.sidebarFilterMenu.setFilterState(listDef.filterState);
-        this.sidebarFilterMenu.showMenuAtElement(anchorEl, {
+        this.listFilterMenu.setFilterState(listDef.filterState);
+        this.listFilterMenu.showMenuAtElement(anchorEl, {
             onFilterChange: () => {
-                listDef.filterState = this.sidebarFilterMenu.getFilterState();
+                listDef.filterState = this.listFilterMenu.getFilterState();
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
             },
             getTasks: () => this.index.getTasks(),
-            getStartHour: () => this.plugin.settings.startHour,
         });
     }
 
@@ -1177,7 +1172,7 @@ export class TimelineView extends ItemView {
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const displayTasks = this.readService.getFilteredTasks(this.filterMenu.getFilterState());
+        const displayTasks = this.readService.getFilteredTasks(this.viewFilterMenu.getFilterState());
 
         return findOldestOverdueDate(displayTasks, startHour, this.plugin.settings.statusDefinitions, this.readService);
     }

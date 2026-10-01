@@ -62,7 +62,7 @@ export class ScheduleView extends ItemView {
     private readonly moonRenderer: MoonPhaseRenderer;
     private readonly dateHeaderRenderer: DateHeaderRenderer;
     private readonly periodicHeaderRenderer: PeriodicHeaderRenderer;
-    private readonly filterMenu = new FilterMenuComponent();
+    private readonly viewFilterMenu = new FilterMenuComponent();
     private readonly toolbar: ScheduleToolbar;
     private readonly menuHandler: MenuHandler;
     private readonly gridCalculator: ScheduleGridCalculator;
@@ -161,16 +161,14 @@ export class ScheduleView extends ItemView {
             collapsedSections: this.collapsedSections,
             currentVisualDateProvider: () => this.currentVisualDate,
         });
-        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
-        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.toolbar = new ScheduleToolbar({
             app: this.app,
             leaf: this.leaf,
             plugin: this.plugin,
             readService: this.readService,
-            filterMenu: this.filterMenu,
+            viewFilterMenu: this.viewFilterMenu,
             container: this.containerEl,
             onNavigate: (days) => this.navigateDate(days),
             onToday: () => {
@@ -250,7 +248,7 @@ export class ScheduleView extends ItemView {
     /** REPLACE-over-defaults application of a parsed config. */
     applyConfig(cfg: Partial<ScheduleConfig>): void {
         const next = this.codec.withDefaults(cfg);
-        this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
         this.customName = next.customName;
         this.maskMode = next.maskMode === true;
         this.astronomyDisplay = next.astronomyDisplay
@@ -260,7 +258,7 @@ export class ScheduleView extends ItemView {
 
     /** Snapshot for template save / URI build. */
     getCurrentConfig(): Partial<ScheduleConfig> {
-        const filterState = this.filterMenu.getFilterState();
+        const filterState = this.viewFilterMenu.getFilterState();
         return {
             customName: this.customName,
             filterState: hasConditions(filterState) ? filterState : undefined,
@@ -338,7 +336,7 @@ export class ScheduleView extends ItemView {
     async onClose(): Promise<void> {
         logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
-        this.filterMenu.close();
+        this.viewFilterMenu.close();
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
@@ -410,7 +408,7 @@ export class ScheduleView extends ItemView {
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.toolbar.mount(toolbarHost);
 
-        const filterState = this.filterMenu.getFilterState();
+        const filterState = this.viewFilterMenu.getFilterState();
         const startHour = this.plugin.settings.startHour;
         const rangeTasks = this.readService.getTasksForDateRange(
             this.currentVisualDate, this.currentVisualDate, filterState
@@ -531,7 +529,7 @@ export class ScheduleView extends ItemView {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         const isOverdue = (d: string): boolean => {
             if (d >= todayVisualDate) return false;
-            const tasksOnDate = this.readService.getTasksForDateRange(d, d, this.filterMenu.getFilterState());
+            const tasksOnDate = this.readService.getTasksForDateRange(d, d, this.viewFilterMenu.getFilterState());
             return tasksOnDate.some(dt =>
                 getOverdueLevel(dt, this.plugin.settings.startHour, this.plugin.settings.statusDefinitions, this.readService) !== 'none'
             );
