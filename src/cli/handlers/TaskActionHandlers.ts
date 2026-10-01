@@ -1,18 +1,15 @@
 import type { CliData } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import type { ApiHost } from '../../api/TaskApi';
-import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, parseLimit, readIntFlag, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
-import { DUPLICATE_SCHEMA } from '../../api/OperationSchemas';
+import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, readIntFlag, readLimitFlag, type OutputFormat } from '../CliOutputFormatter';
 import { parseSortFlag } from '../CliFilterBuilder';
 import { cliDataToSimpleFilterParams } from './TaskQueryHandlers';
 
 export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params.id) return cliError('Missing required flag: --id');
-
         return wrapCliResult('duplicate task', async () => {
-            const dayOffset = readIntFlag(params, 'dayOffset', DUPLICATE_SCHEMA.dayOffset);
-            const count = readIntFlag(params, 'count', DUPLICATE_SCHEMA.count);
+            const dayOffset = readIntFlag(params, 'dayOffset');
+            const count = readIntFlag(params, 'count');
             const result = await plugin.api.duplicate({ id: params.id, dayOffset, count });
             return cliOk({ duplicated: result.duplicated });
         });
@@ -21,16 +18,13 @@ export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
 
 export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params.from) return cliError('Missing required flag: --from');
-        if (!params.to) return cliError('Missing required flag: --to');
-
         return wrapCliResult('categorize tasks', async () => {
             const result = await plugin.api.categorizedTasksForDateRange({
                 from: params.from,
                 to: params.to,
                 ...cliDataToSimpleFilterParams(params),
-                filterFile: params['filter-file'] || undefined,
-                list: params.list || undefined,
+                filterFile: params['filter-file'],
+                list: params.list,
             });
             return cliOk(result);
         });
@@ -39,9 +33,6 @@ export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext 
 
 export function createInsertChildTaskHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params['parent-id']) return cliError('Missing required flag: --parent-id');
-        if (!params.content) return cliError('Missing required flag: --content');
-
         return wrapCliResult('insert child task', async () => {
             const result = await plugin.api.insertChildTask({
                 parentId: params['parent-id'],
@@ -61,23 +52,20 @@ export function createGetStartHourHandler(plugin: PluginContext & ApiHost) {
 
 export function createTasksForDateRangeHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params.from) return cliError('Missing required flag: --from');
-        if (!params.to) return cliError('Missing required flag: --to');
-
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
         return wrapCliResult('query date range', async () => {
             const format = (params.format as OutputFormat) || 'json';
             const sort = params.sort ? parseSortFlag(params.sort) : undefined;
-            const limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
+            const limit = readLimitFlag(params, format);
 
             const result = await plugin.api.tasksForDateRange({
                 from: params.from,
                 to: params.to,
                 ...cliDataToSimpleFilterParams(params),
-                filterFile: params['filter-file'] || undefined,
-                list: params.list || undefined,
+                filterFile: params['filter-file'],
+                list: params.list,
                 sort,
                 limit,
             });

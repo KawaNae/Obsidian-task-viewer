@@ -17,7 +17,6 @@ import { DateResolver } from '../services/filter/DateResolver';
 import { resolveFilterSource, assertValidFilterState, readDateParam } from './FilterParamsBuilder';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
 import { IntValue } from '../utils/values/NumberValues';
-import { issueText } from '../utils/values/IssueText';
 import type { FilterState } from '../services/filter/FilterTypes';
 import { holdsLineBreak } from '../utils/LineBreak';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
@@ -342,7 +341,7 @@ function paginate(tasks: DisplayTask[], params: PaginationParams): PaginateResul
 function intParam(value: unknown, name: string, spec: ParamSpec): number | undefined {
     if (value === undefined) return undefined;
     const read = IntValue.check(value, spec.int);
-    if (!read.ok) throw new TaskApiError(issueText(read.issue, name, String(value)));
+    if (!read.ok) throw TaskApiError.ofIssue(read.issue, name, String(value));
     return read.value;
 }
 
@@ -353,7 +352,7 @@ function intParam(value: unknown, name: string, spec: ParamSpec): number | undef
  */
 function dateTimeParam(value: string, name: string, timeOnly: 'allow' | 'refuse'): DateTimeValue {
     const read = DateTimeInput.read(value, { timeOnly });
-    if (!read.ok) throw new TaskApiError(issueText(read.issue, name, value));
+    if (!read.ok) throw TaskApiError.ofIssue(read.issue, name, value);
     return read.value;
 }
 
@@ -651,12 +650,11 @@ export class TaskApi {
      */
     async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
+        const dayOffset = intParam(params.dayOffset, 'dayOffset', DUPLICATE_SCHEMA.dayOffset);
+        const count = intParam(params.count, 'count', DUPLICATE_SCHEMA.count);
         const task = await this.rowToWrite(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
-        const written = await this.operations.duplicateTask(task.id, {
-            dayOffset: intParam(params.dayOffset, 'dayOffset', DUPLICATE_SCHEMA.dayOffset),
-            count: intParam(params.count, 'count', DUPLICATE_SCHEMA.count),
-        });
+        const written = await this.operations.duplicateTask(task.id, { dayOffset, count });
         if (!written) throw new TaskApiError(`Task could not be duplicated: ${params.id}`);
         return { duplicated: params.id };
     }

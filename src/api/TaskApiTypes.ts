@@ -1,5 +1,7 @@
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortProperty, SortDirection } from '../services/sort/SortTypes';
+import type { Issue } from '../utils/values/Read';
+import { issueText } from '../utils/values/IssueText';
 
 // ── Normalized task (public API surface) ──
 
@@ -39,12 +41,42 @@ export interface NormalizedTask {
 
 // ── Error ──
 
+/** How an error's text names a parameter: by the API's key, or by the CLI's flag for it (`toCliName`). */
+export type ParamNamer = (key: string) => string;
+
+/**
+ * An error the API answers with. One about a parameter carries the
+ * parameter's key (`param`) and words its text through a namer, so a caller
+ * that spells the parameters otherwise — the CLI's `parent-id` for
+ * `parentId` — tells it in its own spelling (`textFor`).
+ */
 export class TaskApiError extends Error {
+    /** The text in the API's spelling, without the pointer to api.help(). */
     readonly rawMessage: string;
-    constructor(message: string) {
-        super(`${message} — See api.help() for reference`);
+    /** The key of the parameter the error is about, when it is about one. */
+    readonly param?: string;
+    private readonly text: (name: ParamNamer) => string;
+
+    constructor(message: string);
+    constructor(message: (name: ParamNamer) => string, param: string);
+    constructor(message: string | ((name: ParamNamer) => string), param?: string) {
+        const text = typeof message === 'string' ? () => message : message;
+        const raw = text(key => key);
+        super(`${raw} — See api.help() for reference`);
         this.name = 'TaskApiError';
-        this.rawMessage = message;
+        this.rawMessage = raw;
+        this.text = text;
+        if (param !== undefined) this.param = param;
+    }
+
+    /** The text with every parameter named by `name`. */
+    textFor(name: ParamNamer): string {
+        return this.text(name);
+    }
+
+    /** The error a parameter's value gives when read: `issue` told of `param`, `given` quoted. */
+    static ofIssue(issue: Issue, param: string, given?: string): TaskApiError {
+        return new TaskApiError(name => issueText(issue, name(param), given), param);
     }
 }
 
