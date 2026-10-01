@@ -304,7 +304,7 @@ describe('TaskFilterEngine', () => {
 
     // ── Date (startDate, endDate, due) ──
     describe('date filters', () => {
-        const task = makeTask({ startDate: '2026-03-10' });
+        const task = makeDisplayTask({ startDate: '2026-03-10' });
 
         it('isSet — date exists', () => {
             const state = stateFromCondition(cond('startDate', 'isSet'));
@@ -312,13 +312,13 @@ describe('TaskFilterEngine', () => {
         });
 
         it('isSet — date missing', () => {
-            const noDate = makeTask();
+            const noDate = makeDisplayTask();
             const state = stateFromCondition(cond('startDate', 'isSet'));
             expect(TaskFilterEngine.evaluate(noDate, state)).toBe(false);
         });
 
         it('isNotSet — date missing', () => {
-            const noDate = makeTask();
+            const noDate = makeDisplayTask();
             const state = stateFromCondition(cond('startDate', 'isNotSet'));
             expect(TaskFilterEngine.evaluate(noDate, state)).toBe(true);
         });
@@ -364,17 +364,9 @@ describe('TaskFilterEngine', () => {
         });
 
         it('date filter on missing date — returns false', () => {
-            const noDate = makeTask();
+            const noDate = makeDisplayTask();
             const state = stateFromCondition(cond('startDate', 'equals', '2026-03-10'));
             expect(TaskFilterEngine.evaluate(noDate, state)).toBe(false);
-        });
-    });
-
-    describe('endDate filter', () => {
-        it('uses raw endDate for Task', () => {
-            const task = makeTask({ endDate: '2026-04-01' });
-            const state = stateFromCondition(cond('endDate', 'equals', '2026-04-01'));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
     });
 
@@ -603,7 +595,7 @@ describe('TaskFilterEngine', () => {
         });
     });
 
-    // ── DisplayTask vs raw Task ──
+    // ── The effective dates are the ones compared ──
     describe('DisplayTask effective fields', () => {
         it('uses effectiveStartDate from DisplayTask', () => {
             const dt = makeDisplayTask({
@@ -623,12 +615,6 @@ describe('TaskFilterEngine', () => {
             });
             const state = stateFromCondition(cond('endDate', 'equals', '2026-04-01'));
             expect(TaskFilterEngine.evaluate(dt, state)).toBe(true);
-        });
-
-        it('falls back to raw startDate for plain Task', () => {
-            const task = makeTask({ startDate: '2026-03-10' });
-            const state = stateFromCondition(cond('startDate', 'equals', '2026-03-10'));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
     });
 
