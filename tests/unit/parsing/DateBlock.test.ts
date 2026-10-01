@@ -107,6 +107,30 @@ describe('readDateBlock', () => {
         expect(reading.values).toEqual({ startDate: '' });
         expect(reading.extraBlocks.map(e => e.text)).toEqual(['@2026-02-02']);
     });
+
+    // A block naming a day or a time that does not exist is not read: none of
+    // its dates, not the readable part either, and no later block in its place.
+    it('reads no dates of a block naming a day or a time that does not exist', () => {
+        for (const text of ['x @2026-02-30', 'x @2026-13-45', 'x @2026-03-01T25:00', 'x @2026-03-01>2026-02-29', 'x @09:00>24:00', 'x @>>2025-02-29']) {
+            const reading = readDateBlock(text)!;
+            expect(reading.values, text).toEqual({ startDate: '' });
+            expect(reading.unread, text).toHaveLength(1);
+        }
+    });
+
+    it('marks each segment that does not read, and does not take a later block for the dates', () => {
+        const text = 'x @2026-02-30>2026-03-01T99:99>2026-03-02 @2026-03-05';
+        const reading = readDateBlock(text)!;
+        expect(reading.values).toEqual({ startDate: '' });
+        expect(reading.unread!.map(span => cut(text, span))).toEqual(['2026-02-30', '2026-03-01T99:99']);
+        expect(reading.extraBlocks.map(e => e.text)).toEqual(['@2026-03-05']);
+    });
+
+    it('reads a block whose days exist, a leap day included', () => {
+        const reading = readDateBlock('x @2028-02-29')!;
+        expect(reading.values).toEqual({ startDate: '2028-02-29' });
+        expect(reading.unread).toBeUndefined();
+    });
 });
 
 describe('spansForRule', () => {
@@ -142,6 +166,12 @@ describe('spansForRule', () => {
         const messyLoc = readLineDateBlock(messy)!;
         const spans = spansForRule('parse-error', messyLoc);
         expect(spans.map(s => cut(messy, s))).toEqual(['>18:00', '@2026-02-01']);
+    });
+
+    it('maps parse-error to the segments that do not read', () => {
+        const line = '- [ ] foo @2026-01-15>2026-02-30 bar @2026-02-01';
+        const spans = spansForRule('parse-error', readLineDateBlock(line)!);
+        expect(spans.map(s => cut(line, s))).toEqual(['2026-02-30', '@2026-02-01']);
     });
 
     it('falls back to the block for parse-error without structural spans', () => {
@@ -212,6 +242,12 @@ describe('shiftLineDates', () => {
         expect(shiftLineDates('- [ ] Task @2026-03-11 #tag [p:: 1]  ', 1, all)).toBe('- [ ] Task @2026-03-12 #tag [p:: 1]  ');
         expect(shiftLineDates('1. [ ] @2026-03-11 Task  at head', 1, all)).toBe('1. [ ] @2026-03-12 Task  at head');
         expect(shiftLineDates('\t* [x] Task @2026-03-11T9:00', 1, all)).toBe('\t* [x] Task @2026-03-12T9:00');
+    });
+
+    it('leaves a block that does not read unchanged: it has no dates to move', () => {
+        for (const line of ['- [ ] Task @2026-02-30', '- [ ] Task @2026-03-01>2026-13-01', '- [ ] Task @2026-03-01T25:00']) {
+            expect(shiftLineDates(line, 1, all)).toBe(line);
+        }
     });
 
     it('leaves a line without a block unchanged', () => {

@@ -51,6 +51,13 @@ export interface DateBlockReading {
     extraSeparators?: Span;
     /** Each block after the first, with its text as written. */
     extraBlocks: { span: Span; text: string }[];
+    /**
+     * The segments of the first block that name a day or a time that does
+     * not exist (`parseDateTimeField` refuses them). With any, the block is
+     * not read: its `values` are none, and no later block is read in its
+     * place.
+     */
+    unread?: Span[];
     values: DateBlockValues;
 }
 
@@ -95,13 +102,17 @@ export function readDateBlock(text: string): DateBlockReading | null {
         offset += part.length + 1; // step over the `>`
     }
 
+    const fields = parts.map(part => parseDateTimeField(part || null));
+    const unread = spans.filter((_, i) => fields[i] === null);
+
     const reading: DateBlockReading = {
         block,
         start: spans[0],
         separators: parts.length - 1,
         extraBlocks,
-        values: readValues(parts),
+        values: unread.length > 0 ? { startDate: '' } : readValues(fields as { date?: string; time?: string }[]),
     };
+    if (unread.length > 0) reading.unread = unread;
     if (parts.length > 1) reading.end = spans[1];
     if (parts.length > 2) reading.due = spans[2];
     // From the 3rd `>` (the separator before the 4th part).
@@ -109,24 +120,25 @@ export function readDateBlock(text: string): DateBlockReading | null {
     return reading;
 }
 
-function readValues(parts: string[]): DateBlockValues {
+/** The values of a block whose every segment reads, segment by segment (an empty one reads as `{}`). */
+function readValues(fields: { date?: string; time?: string }[]): DateBlockValues {
     const values: DateBlockValues = { startDate: '' };
 
-    const start = parseDateTimeField(parts[0] || null);
+    const start = fields[0];
     if (start.date) values.startDate = start.date;
     if (start.time) values.startTime = start.time;
 
     // An end is a date only when written with one (`>2026-02-16T08:00`); a
     // time-only end (`>08:00`) or an empty one (`>>due`) leaves `endDate`
     // out, and the display resolves the implicit end.
-    if (parts.length > 1 && parts[1]) {
-        const end = parseDateTimeField(parts[1]);
+    const end = fields[1];
+    if (end) {
         if (end.date) values.endDate = end.date;
         if (end.time) values.endTime = end.time;
     }
 
-    if (parts.length > 2 && parts[2]) {
-        const due = parseDateTimeField(parts[2]);
+    const due = fields[2];
+    if (due && (due.date || due.time)) {
         values.due = due.date && due.time ? `${due.date}T${due.time}` : due.date;
     }
     return values;
@@ -153,6 +165,7 @@ export function readLineDateBlock(line: string): DateBlockReading | null {
     if (reading.end) shifted.end = shift(reading.end);
     if (reading.due) shifted.due = shift(reading.due);
     if (reading.extraSeparators) shifted.extraSeparators = shift(reading.extraSeparators);
+    if (reading.unread) shifted.unread = reading.unread.map(shift);
     return shifted;
 }
 
@@ -165,8 +178,9 @@ const DATED_SEGMENT = new RegExp(`^${D}`);
  * line changes but those dates. The block is the one the parser reads
  * ({@link readLineDateBlock}), so a date in the command or past a bare `@`
  * (`@1on1`) is not moved, nor an extra block. A segment that writes a time
- * alone, or nothing, has no date to move. A line with no block is returned
- * as it is.
+ * alone, or nothing, has no date to move, and neither has a block that
+ * does not read (`DateBlockReading.unread`). A line with no block is
+ * returned as it is.
  *
  * The line's side of the one rule for moving a task by days: a copy of a
  * line the user wrote is shifted here, and a line built from a task is
@@ -175,7 +189,8 @@ const DATED_SEGMENT = new RegExp(`^${D}`);
  */
 export function shiftLineDates(line: string, days: number, fields: readonly DateField[]): string {
     const dates = readLineDateBlock(line);
-    if (!dates) return line;
+    // A block that does not read has no dates to move.
+    if (!dates || dates.unread) return line;
     const spans = fields
         .map(field => (field === 'start' ? dates.start : field === 'end' ? dates.end : dates.due))
         .filter((span): span is Span => span !== undefined)
@@ -228,7 +243,7 @@ export function spansForRule(
         case 'due-without-date':
             return usable(loc.due) ? [loc.due] : [loc.block];
         case 'parse-error': {
-            const spans: Span[] = [];
+            const spans: Span[] = [...(loc.unread ?? []).filter(usable)];
             if (usable(loc.extraSeparators)) spans.push(loc.extraSeparators);
             spans.push(...loc.extraBlocks.map(extra => extra.span).filter(usable));
             return spans.length > 0 ? spans : [loc.block];

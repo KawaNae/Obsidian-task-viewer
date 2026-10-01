@@ -10,23 +10,28 @@ describe('DateTimeFieldParser', () => {
             expect(parseDateTimeField(null)).toEqual({});
         });
 
-        it('rejects out-of-range dates on every parse surface (unified with @notation)', () => {
-            expect(parseDateTimeField('2026-13-01').date).toBeUndefined();
-            expect(parseDateTimeField('2026-00-15').date).toBeUndefined();
-            expect(parseDateTimeField('2026-12-32').date).toBeUndefined();
-            expect(parseDateTimeField('2026-12-31').date).toBe('2026-12-31');
+        // A fragment of a date's or a time's shape that names none is not
+        // read, and neither is the rest of the value: the same predicate the
+        // input fields read with (`DateUtils.readDate`).
+        it('reads no value naming a day that does not exist', () => {
+            for (const text of ['2026-13-01', '2026-00-15', '2026-12-32', '2026-02-30', '2025-02-29', '2026-04-31']) {
+                expect(parseDateTimeField(text), text).toBeNull();
+            }
+            expect(parseDateTimeField('2026-12-31')).toEqual({ date: '2026-12-31', time: undefined });
+            expect(parseDateTimeField('2028-02-29')).toEqual({ date: '2028-02-29', time: undefined });
         });
 
-        it('rejects out-of-range times', () => {
-            expect(parseDateTimeField('99:99').time).toBeUndefined();
-            expect(parseDateTimeField('24:00').time).toBeUndefined();
-            expect(parseDateTimeField('23:59').time).toBe('23:59');
-            expect(parseDateTimeField('00:00').time).toBe('00:00');
+        it('reads no value naming a time that does not exist', () => {
+            expect(parseDateTimeField('99:99')).toBeNull();
+            expect(parseDateTimeField('24:00')).toBeNull();
+            expect(parseDateTimeField('23:59')).toEqual({ date: undefined, time: '23:59' });
+            expect(parseDateTimeField('00:00')).toEqual({ date: undefined, time: '00:00' });
         });
 
-        it('keeps the valid component when the other is invalid', () => {
-            expect(parseDateTimeField('2026-13-01T14:30')).toEqual({ date: undefined, time: '14:30' });
-            expect(parseDateTimeField('2026-07-15T99:99')).toEqual({ date: '2026-07-15', time: undefined });
+        it('reads neither part when one of them does not read', () => {
+            expect(parseDateTimeField('2026-13-01T14:30')).toBeNull();
+            expect(parseDateTimeField('2026-02-30T14:30')).toBeNull();
+            expect(parseDateTimeField('2026-07-15T99:99')).toBeNull();
         });
     });
 

@@ -9,6 +9,15 @@ import { validateDateTimeRules, type DateTimeValidationResult } from '../utils/D
 import { readDateBlock, taskContentText, withoutDateBlocks, type DateBlockReading } from './DateBlock';
 
 /**
+ * The blocks of `text` the dates are not read from, verbatim and in order:
+ * the first when it does not read, and every block after it.
+ */
+function unreadBlocks(text: string, dates: DateBlockReading): string[] {
+    const extras = dates.extraBlocks.map(extra => extra.text);
+    return dates.unread ? [text.slice(dates.block.start, dates.block.end), ...extras] : extras;
+}
+
+/**
  * Task Viewer native inline parser.
  *
  * Handles all checkbox lines that this plugin owns:
@@ -37,15 +46,15 @@ export class TVInlineParser implements LeafParserStrategy {
         // program.
         const { text, blockId } = taskContentText(classified.rawContent);
 
-        // 2. The date block (@start>end>due): the first block is the dates;
-        // the others are kept verbatim, so that writing the row back keeps
-        // them (`formatTaskLine`). The content is the text without any.
+        // 2. The date block (@start>end>due): the first block is the dates,
+        // unless it names a day or a time that does not exist. The blocks the
+        // dates are not read from are kept verbatim, so that writing the row
+        // back keeps them (`formatTaskLine`). The content is the text without
+        // any.
         const dates = readDateBlock(text);
         const content = dates ? withoutDateBlocks(text, dates) : text;
         const { startDate: date, startTime, endDate, endTime, due } = dates?.values ?? { startDate: '' };
-        const extraDateBlocks = dates && dates.extraBlocks.length > 0
-            ? dates.extraBlocks.map(extra => extra.text)
-            : undefined;
+        const unreadDateBlocks = dates ? unreadBlocks(text, dates) : [];
 
         // No early return: TVInline accepts any classified checkbox line, with
         // or without a scheduling block. ParserChain order ensures external
@@ -56,7 +65,7 @@ export class TVInlineParser implements LeafParserStrategy {
         // command's is the extraction's to add (`NoteTasks`), after these.
         let validation: Task['validation'];
         const ruleResult = this.validateDateBlock(date, startTime, endDate, endTime, due);
-        const parseWarning = dates ? this.blockWarning(dates) : undefined;
+        const parseWarning = dates ? this.blockWarning(text, dates) : undefined;
         if (ruleResult) {
             validation = ruleResult;
         } else if (parseWarning) {
@@ -81,7 +90,7 @@ export class TVInlineParser implements LeafParserStrategy {
             endDate,
             endTime,
             due,
-            extraDateBlocks,
+            unreadDateBlocks: unreadDateBlocks.length > 0 ? unreadDateBlocks : undefined,
             tags: TagExtractor.fromContent(content.trim()),
             blockId,
             validation,
@@ -89,11 +98,16 @@ export class TVInlineParser implements LeafParserStrategy {
     }
 
     /**
-     * What the notation does not read in a line's blocks: separators past
-     * the second, and blocks past the first.
+     * What the notation does not read in a line's blocks: a first block
+     * naming a day or a time that does not exist, separators past the
+     * second, and blocks past the first.
      */
-    private blockWarning(dates: DateBlockReading): string | undefined {
+    private blockWarning(text: string, dates: DateBlockReading): string | undefined {
         const warnings: string[] = [];
+        if (dates.unread) {
+            const values = dates.unread.map(span => text.slice(span.start, span.end)).join(', ');
+            warnings.push(t('validation.noSuchDate', { values }));
+        }
         if (dates.separators > 2) {
             warnings.push(t('validation.tooManySeparators', { count: dates.separators }));
         }

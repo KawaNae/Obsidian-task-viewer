@@ -102,21 +102,24 @@ export class BuiltinPropertyExtractor {
                 if (tags.length > 0) result.tags = tags;
                 return;
             }
+            // A value naming a day or a time that does not exist is not read
+            // (`parseDateTimeField`): this layer says no date, and the cascade
+            // gives the one above it, as for a task's block that does not read.
             case 'startDate': {
                 const parsed = parseDateTimeField(text);
-                if (parsed.date) result.startDate = parsed.date;
-                if (parsed.time) result.startTime = parsed.time;
+                if (parsed?.date) result.startDate = parsed.date;
+                if (parsed?.time) result.startTime = parsed.time;
                 return;
             }
             case 'endDate': {
                 const parsed = parseDateTimeField(text);
-                if (parsed.date) result.endDate = parsed.date;
-                if (parsed.time) result.endTime = parsed.time;
+                if (parsed?.date) result.endDate = parsed.date;
+                if (parsed?.time) result.endTime = parsed.time;
                 return;
             }
             case 'due': {
                 const parsed = parseDateTimeField(text);
-                if (parsed.date) result.due = DateUtils.joinDateTime(parsed.date, parsed.time);
+                if (parsed?.date) result.due = DateUtils.joinDateTime(parsed.date, parsed.time);
                 return;
             }
         }
