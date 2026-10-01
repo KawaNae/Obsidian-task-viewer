@@ -6,6 +6,7 @@ import type { SortState } from '../sort/SortTypes';
 import type { IndexReads } from '../core/TaskIndex';
 import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
+import { compileFilter, ALWAYS } from '../filter/FilterExpr';
 import { TaskSorter } from '../sort/TaskSorter';
 import { getTaskDateRange } from '../display/VisualDateRange';
 import { DateUtils } from '../../utils/DateUtils';
@@ -106,11 +107,12 @@ export class TaskReadService {
         const raw = this.getAllDisplayTasks();
         const all = options?.includeInvalid ? raw : raw.filter(TaskReadService.isVisible);
         const context = this.createFilterContext();
+        const expr = filter ? compileFilter(filter) : ALWAYS;
         const startHour = this.startHour;
 
         const result: DisplayTask[] = [];
         for (const dt of all) {
-            if (filter && !TaskFilterEngine.evaluate(dt, filter, context)) continue;
+            if (!TaskFilterEngine.evaluate(dt, expr, context)) continue;
             if (!dt.effectiveStartDate) {
                 // D type (due-only): include if due is in range
                 const duePart = DateUtils.dueDatePart(dt.effectiveDue);
@@ -154,7 +156,8 @@ export class TaskReadService {
             return result;
         }
         const context = this.createFilterContext();
-        const result = all.filter(t => TaskFilterEngine.evaluate(t, filter, context));
+        const expr = compileFilter(filter);
+        const result = all.filter(t => TaskFilterEngine.evaluate(t, expr, context));
         TaskSorter.sort(result, sort);
         return result;
     }
