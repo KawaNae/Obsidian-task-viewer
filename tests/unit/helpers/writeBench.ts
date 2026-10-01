@@ -6,7 +6,7 @@ import { TaskRepository } from '../../../src/services/persistence/TaskRepository
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
 import type { LineEdit, Refusal, RowRef, WriteChannel } from '../../../src/services/persistence/FileLines';
-import type { CompletionFire, FiringOutcome } from '../../../src/services/persistence/TaskOps';
+import type { CompletionFire, FiringOutcome } from '../../../src/services/persistence/FiringTrials';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 

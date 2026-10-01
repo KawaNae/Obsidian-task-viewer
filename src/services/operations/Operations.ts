@@ -3,7 +3,8 @@ import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { FlowExecutor, type FireOp, notRunOf } from '../flow/FlowExecutor';
+import { FlowExecutor, type FireOp } from '../flow/FlowExecutor';
+import { FlowNotices } from '../flow/FlowNotices';
 import { completes } from '../flow/FlowTrigger';
 import type { EditorFireHost } from '../../editor/FlowFireExtension';
 import type { EditorLineHost } from '../../editor/EditorWrite';
@@ -16,7 +17,8 @@ import { planDuplicate } from './DuplicateShift';
 import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import { logDebug, logInfo, logWarn } from '../../log/log';
 import { splitLines, type Refusal, type RowRef, type WriteChannels } from '../persistence/FileLines';
-import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
+import type { FiringOutcome } from '../persistence/FiringTrials';
+import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination } from '../persistence/Destination';
 import { Block } from '../persistence/utils/Placement';
 import type { SendTo } from '../persistence/writers/SendWriter';
@@ -108,6 +110,12 @@ export interface RowSnapshot {
 export class Operations {
     private readonly repository: TaskRepository;
     private readonly commandExecutor: FlowExecutor;
+    /**
+     * What the user is told of the flow: a completion whose flow was not
+     * run, for a write here and the editor's transaction alike
+     * (`FlowNotices.firing`).
+     */
+    private readonly notices = new FlowNotices();
 
     /**
      * `dispose` 済みか。閉じたあとの書き込みは行わず、できなかったと答える。
@@ -243,30 +251,15 @@ export class Operations {
      * A write that may complete a row (`completingIn`, its file; null when it
      * does not), made with the row's fire in it: whether it was written. A
      * write refused with the fire in it is made without it in the same
-     * attempt (`InlineTaskWriter.writeFiring`), and the user told
-     * ({@link tellNotRun}).
+     * attempt (`firingTrials`), and the user told (`FlowNotices.firing`).
      */
     private async writeCompleting(
         completingIn: string | null,
         write: (fire?: FireOp) => Promise<FiringOutcome<FireOp>>,
     ): Promise<boolean> {
         const outcome = await write(completingIn === null ? undefined : this.commandExecutor.fireOp(completingIn));
-        this.tellNotRun(outcome);
+        this.notices.firing(outcome);
         return outcome.written;
-    }
-
-    /**
-     * Once a write that completed rows landed, tell the user of each row
-     * whose flow was not run, once: its fire was set aside, the write with it
-     * refused, or its plan failed (`FlowExecutor.reportNotRun`). The one
-     * word of it for every write of the index that completes rows.
-     */
-    private tellNotRun(outcome: FiringOutcome<FireOp>): void {
-        if (!outcome.written) return;
-        for (const { fire, setAside } of outcome.fires) {
-            const notRun = setAside ? { kind: 'refused' as const, refusal: setAside } : notRunOf(fire.planned());
-            if (notRun) this.commandExecutor.reportNotRun(notRun);
-        }
     }
 
     /**
@@ -318,7 +311,7 @@ export class Operations {
                 completes: (was, now) => completes(was, now, defs),
                 fire: () => this.commandExecutor.fireOp(task.file),
             }, { refused: (refusal) => { void hear(refusal); } });
-            this.tellNotRun(outcome);
+            this.notices.firing(outcome);
             return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
         });
     }
@@ -401,7 +394,7 @@ export class Operations {
                 fire: (path) => this.commandExecutor.fireOp(path),
             }, { refused: (refusal) => { void hear(refusal); }, landed: opts.landed });
             if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
-            for (const write of outcome.writes) this.tellNotRun(write);
+            for (const write of outcome.writes) this.notices.firing(write);
             for (const refusal of outcome.refused) await this.index.learnFrom(refusal);
             logInfo(`[send] landed=${outcome.landed.join(',') || '-'} refused=${outcome.refused.map(one => `${one.file}:${one.reason.kind}`).join(',') || '-'} takenBack=${outcome.takenBack}`);
             return {
@@ -768,7 +761,8 @@ export class Operations {
 
     /**
      * What the editor's fire needs of these operations (`fireFilter`): the plan,
-     * the ops, and where its not-run goes. After `dispose`, nothing fires.
+     * the ops, and the notices of what it did not run, told as a write's here
+     * are. After `dispose`, nothing fires.
      */
     editorFireHost(): EditorFireHost {
         return {
@@ -776,7 +770,7 @@ export class Operations {
             statusDefinitions: () => this.settings.statusDefinitions,
             fireOp: (path) => this.commandExecutor.fireOp(path),
             applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
-            notRun: (why) => this.commandExecutor.reportNotRun(why),
+            told: (outcome) => this.notices.firing(outcome),
         };
     }
 

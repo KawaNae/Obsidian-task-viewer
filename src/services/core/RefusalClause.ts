@@ -23,7 +23,7 @@ export type IndexRefusal = Omit<Refusal, 'reason'> & { reason: RefusalReason | C
  * Why a write was refused, as a clause: the one table of the reasons, which
  * every notice of a refusal gives in its own frame — a write not made
  * (`Operations.reportRefusal`), a completion written without its flow
- * (`FlowExecutor.reportNotRun`).
+ * (`FlowNotices.firing`).
  */
 export function refusalClause(reason: RefusalReason): string {
     switch (reason.kind) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { editorSession } from '../helpers/editorSession';
@@ -31,10 +31,8 @@ afterEach(() => {
 async function open(files: Record<string, string[]>) {
     const opened = await openVault(files);
     live = opened.session;
-    const host = opened.session.ops.editorFireHost();
-    const applyOps = vi.fn(host.applyOps);
-    const editor = editorSession({ ...host, applyOps }, FILE, opened.contents.get(FILE)!);
-    return { ...opened, editor, applyOps };
+    const editor = editorSession(opened.session.ops.editorFireHost(), FILE, opened.contents.get(FILE)!);
+    return { ...opened, editor };
 }
 
 describe('a completion made in the editor', () => {
@@ -99,6 +97,9 @@ describe('a completion made in the editor', () => {
 
         expect(editor.lines()[1]).toBe('- [x] 対象 @2026-09-21');
         expect(editor.lines()).toHaveLength(6);
+        // Told once the transaction is through, as a plan that failed is, and once.
+        expect(Notice.messages).toEqual([]);
+        await Promise.resolve();
         expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '- [x] 対象 @2026-09-21' })]);
     });
 });
@@ -121,6 +122,7 @@ describe('a transaction that completes rows, some of whose fires cannot be writt
             '- [x] 対象 @2026-09-21', '\t- ==> every mon', '\t\t- [ ] sub', '- [x] B @2026-09-21', '',
         ]);
         // Told of the row that was refused, not of the last row written.
+        await Promise.resolve();
         expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '- [x] 対象 @2026-09-21' })]);
     });
 
@@ -136,14 +138,35 @@ describe('a transaction that completes rows, some of whose fires cannot be writt
             '# note', '- [ ] A @2026-09-28 ==> every mon', '- [x] A @2026-09-21',
             '- [x] 対象 @2026-09-21', '\t- ==> every mon', '\t\t- [ ] sub', '',
         ]);
+        await Promise.resolve();
         expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '- [x] 対象 @2026-09-21' })]);
+    });
+
+    it('tells each row not fired once, in the order the rows stand, by the rule a card\'s write tells it by', async () => {
+        // A plan that failed above a fire refused: the one rule (`notRunsOf`)
+        // owes each its word, once, the row above first.
+        const { editor } = await open({ [FILE]: ['# note', '- [ ] A @2026-09-21 ==> at(end + 1d)', ...refused, ''] });
+
+        editor.change([
+            { from: editor.at(1, 3), to: editor.at(1, 4), insert: 'x' },
+            { from: editor.at(2, 3), to: editor.at(2, 4), insert: 'x' },
+        ], 'input.type');
+        await Promise.resolve();
+
+        expect(editor.lines()).toEqual([
+            '# note', '- [x] A @2026-09-21 ==> at(end + 1d)',
+            '- [x] 対象 @2026-09-21', '\t- ==> every mon', '\t\t- [ ] sub', '',
+        ]);
+        expect(Notice.messages).toHaveLength(2);
+        expect(Notice.messages[0]).toContain("Property 'end' is not set on this task");
+        expect(Notice.messages[1]).toBe(t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '- [x] 対象 @2026-09-21' }));
     });
 });
 
 describe('a completion with nothing to fire', () => {
     it('is let through as it is, nothing written for it', async () => {
         // A row with no flow, above and below one with a flow.
-        const { editor, applyOps } = await open({ [FILE]: ['- [ ] A', '- [ ] T @2026-09-21 ==> every mon', '- [ ] U', ''] });
+        const { editor } = await open({ [FILE]: ['- [ ] A', '- [ ] T @2026-09-21 ==> every mon', '- [ ] U', ''] });
 
         const tr = editor.check(0);
         editor.check(2);
@@ -151,7 +174,8 @@ describe('a completion with nothing to fire', () => {
         expect(editor.lines()).toEqual(['- [x] A', '- [ ] T @2026-09-21 ==> every mon', '- [x] U', '']);
         expect(editor.transactions[0].changes.toJSON()).toEqual(tr.changes.toJSON());
         expect(editor.transactions[0].changes.toJSON()).toEqual([3, [1, 'x'], editor.state.doc.length - 4]);
-        expect(applyOps).not.toHaveBeenCalled();
+        expect(editor.transactions).toHaveLength(2);
+        expect(Notice.messages).toEqual([]);
     });
 });
 
