@@ -164,17 +164,6 @@ export function hasConditions(state: FilterState): boolean {
     return state.filters.some(child => isFilterCondition(child) || hasConditions(child));
 }
 
-/**
- * Combine multiple FilterStates into a single AND group.
- * Skips states with no conditions.
- */
-export function combineFilterStates(...states: FilterState[]): FilterState {
-    const active = states.filter(s => hasConditions(s));
-    if (active.length === 0) return createEmptyFilterState();
-    if (active.length === 1) return active[0];
-    return { filters: active, logic: 'and' };
-}
-
 // ── Constants ──
 
 /** The operators each property takes, in the order the menu lists them; the first is a new row's. */

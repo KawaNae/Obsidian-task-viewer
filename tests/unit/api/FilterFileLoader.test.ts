@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import '../../../src/views/registerAllSchemas';
 import { loadFilterFile } from '../../../src/api/FilterFileLoader';
 import type { FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
 import type { App } from 'obsidian';
 import type { ViewTemplate, PinnedListDefinition } from '../../../src/types';
+import type { ListQuery } from '../../../src/services/filter/PinnedListQuery';
 
 // ── Mock ViewTemplateLoader ──
 
@@ -56,7 +58,7 @@ function makePinnedList(name: string, applyViewFilter?: boolean): PinnedListDefi
  * `template.config`. This helper packs flat-style overrides into `config`
  * automatically so existing test bodies keep working.
  */
-function makeTemplate(overrides: {
+function makeTemplate(filePath: string, overrides: {
     filterState?: FilterState;
     pinnedLists?: PinnedListDefinition[];
     grid?: PinnedListDefinition[][];
@@ -81,9 +83,10 @@ function makeTemplate(overrides: {
         })));
     }
     return {
-        filePath: 'templates/test.md',
+        filePath,
         name: overrides.name ?? 'Test',
-        viewType: 'timeline',
+        // The template is read by its view's schema: the grid is Kanban's.
+        viewType: overrides.grid ? 'kanban' : 'timeline',
         config,
     };
 }
@@ -132,7 +135,7 @@ describe('loadFilterFile', () => {
             const app = makeApp({ 'filters/test.json': JSON.stringify(v6Json) });
             const result = await loadFilterFile(app, 'filters/test.json');
             expect(typeof result).not.toBe('string');
-            const state = result as FilterState;
+            const state = (result as ListQuery).filter;
             expect(state.filters).toHaveLength(1);
             const c = state.filters[0] as FilterCondition;
             expect(c.value).toEqual(['work']);
@@ -172,16 +175,16 @@ describe('loadFilterFile', () => {
         it('returns viewFilter when template has no pinned lists', async () => {
             const filterState = makeFilterState();
             const app = makeApp({ 'templates/simple.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({ filterState }));
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/simple.md', { filterState }));
 
             const result = await loadFilterFile(app, 'templates/simple.md');
-            expect(result).toEqual(filterState);
+            expect(result).toEqual({ filter: filterState });
         });
 
         it('returns error when the template holds a condition it cannot read, as the API filter does', async () => {
             const bad = { filters: [{ property: 'tag', operator: 'includes', value: 'work' }], logic: 'and' } as unknown as FilterState;
             const app = makeApp({ 'templates/bad-cond.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({ grid: [[{ ...makePinnedList('A'), filterState: bad }]] }));
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/bad-cond.md', { grid: [[{ ...makePinnedList('A'), filterState: bad }]] }));
 
             const result = await loadFilterFile(app, 'templates/bad-cond.md', 'A');
             expect(result).toBe(`Invalid filter in templates/bad-cond.md: list "A" filters[0]: 'tag' takes a list of strings`);
@@ -189,7 +192,7 @@ describe('loadFilterFile', () => {
 
         it('returns error when template has no filter and no pinned lists', async () => {
             const app = makeApp({ 'templates/empty.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate());
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/empty.md'));
 
             const result = await loadFilterFile(app, 'templates/empty.md');
             expect(result).toBe('Template has no filter: templates/empty.md');
@@ -197,7 +200,7 @@ describe('loadFilterFile', () => {
 
         it('returns error when pinned lists exist but list name not specified', async () => {
             const app = makeApp({ 'templates/lists.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
                 pinnedLists: [makePinnedList('urgent'), makePinnedList('backlog')],
             }));
 
@@ -208,17 +211,17 @@ describe('loadFilterFile', () => {
         it('returns pinned list filter when list name matches', async () => {
             const pinnedList = makePinnedList('urgent');
             const app = makeApp({ 'templates/lists.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
                 pinnedLists: [pinnedList, makePinnedList('backlog')],
             }));
 
             const result = await loadFilterFile(app, 'templates/lists.md', 'urgent');
-            expect(result).toEqual(pinnedList.filterState);
+            expect(result).toEqual({ filter: pinnedList.filterState });
         });
 
         it('returns error when list name does not match', async () => {
             const app = makeApp({ 'templates/lists.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
                 pinnedLists: [makePinnedList('urgent')],
             }));
 
@@ -228,7 +231,7 @@ describe('loadFilterFile', () => {
 
         it('returns error when list specified but no pinned lists exist', async () => {
             const app = makeApp({ 'templates/simple.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/simple.md', {
                 filterState: makeFilterState(),
             }));
 
@@ -240,35 +243,33 @@ describe('loadFilterFile', () => {
             const viewFilter = makeFilterState();
             const pinnedList = makePinnedList('urgent', true);
             const app = makeApp({ 'templates/merged.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/merged.md', {
                 filterState: viewFilter,
                 pinnedLists: [pinnedList],
             }));
 
             const result = await loadFilterFile(app, 'templates/merged.md', 'urgent');
-            // Should be a merged AND group. Inner FilterStates are structurally
-            // equal but not necessarily reference-equal: the codec parses fresh
-            // copies via FilterSerializer.fromJSON to keep template.config a
-            // pure JSON dict.
+            // An AND of the list's filter and the view's, as the view's own
+            // pinned list shows it (PinnedListQuery.resolve).
             expect(typeof result).not.toBe('string');
-            const merged = result as FilterState;
+            const merged = (result as ListQuery).filter;
             expect(merged.logic).toBe('and');
             expect(merged.filters).toHaveLength(2);
-            expect(merged.filters[0]).toEqual(viewFilter);
-            expect(merged.filters[1]).toEqual(pinnedList.filterState);
+            expect(merged.filters[0]).toEqual(pinnedList.filterState);
+            expect(merged.filters[1]).toEqual(viewFilter);
         });
 
         it('skips viewFilter merge when applyViewFilter is false', async () => {
             const viewFilter = makeFilterState();
             const pinnedList = makePinnedList('urgent', false);
             const app = makeApp({ 'templates/no-merge.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/no-merge.md', {
                 filterState: viewFilter,
                 pinnedLists: [pinnedList],
             }));
 
             const result = await loadFilterFile(app, 'templates/no-merge.md', 'urgent');
-            expect(result).toEqual(pinnedList.filterState);
+            expect(result).toEqual({ filter: pinnedList.filterState });
         });
 
         // The toggle's default lives in the codec: a list saved before the
@@ -277,24 +278,36 @@ describe('loadFilterFile', () => {
         it('a list saved without the key does not layer the view filter, as the view does', async () => {
             const pinnedList = makePinnedList('urgent');
             const app = makeApp({ 'templates/untouched.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/untouched.md', {
                 filterState: makeFilterState(),
                 pinnedLists: [pinnedList],
             }));
 
             const result = await loadFilterFile(app, 'templates/untouched.md', 'urgent');
-            expect(result).toEqual(pinnedList.filterState);
+            expect(result).toEqual({ filter: pinnedList.filterState });
+        });
+
+        // The template is read by its view's schema, as the view reads it: a
+        // key its view does not keep is not read.
+        it('reads the lists its view keeps, and no other key', async () => {
+            const app = makeApp({ 'templates/timeline.md': '' });
+            const template = makeTemplate('templates/timeline.md', { pinnedLists: [makePinnedList('kept')] });
+            template.config!.grid = [[{ id: 'g', name: 'grid-cell', filterState: makeFilterState() }]];
+            mockLoadFullTemplate.mockResolvedValue(template);
+
+            expect(await loadFilterFile(app, 'templates/timeline.md', 'grid-cell'))
+                .toBe('Pinned list "grid-cell" not found. Available: kept');
         });
 
         it('uses grid flat() when pinnedLists is undefined', async () => {
             const pinnedList = makePinnedList('col1');
             const app = makeApp({ 'templates/grid.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/grid.md', {
                 grid: [[pinnedList]],
             }));
 
             const result = await loadFilterFile(app, 'templates/grid.md', 'col1');
-            expect(result).toEqual(pinnedList.filterState);
+            expect(result).toEqual({ filter: pinnedList.filterState });
         });
     });
 });

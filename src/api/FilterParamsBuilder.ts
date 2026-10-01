@@ -154,5 +154,7 @@ export async function resolveFilterSource(
     if (!params.filterFile) return filterOfParams(params, window);
     const loaded = await loadFilterFile(app, params.filterFile, params.list);
     if (typeof loaded === 'string') throw new TaskApiError(loaded);
-    return loaded;
+    // The list's own sort is not read: the query's order is `sort`'s alone,
+    // until the pinned-list order is decided for the API (point Q).
+    return loaded.filter;
 }

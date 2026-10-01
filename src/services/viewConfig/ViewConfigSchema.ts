@@ -15,6 +15,8 @@
  * collapse maps); they are never written to templates or URIs.
  */
 
+import type { PinnedListDefinition } from '../../types';
+
 /**
  * Tells of a part of a value a field read but dropped (a filter condition, a
  * sort rule), in an English sentence. A field reads what it can and reports
@@ -67,4 +69,11 @@ export interface ViewSchema<
     readonly transient: { readonly [K in keyof TTransient]-?: TransientField<NonNullable<TTransient[K]>> };
     /** Transient field key used as the date anchor (the "Today" button target). */
     readonly anchorKey?: keyof TTransient & string;
+    /**
+     * The pinned lists a config of this view holds, in the order the view
+     * shows them; a view without lists has none. A template's lists are read
+     * through here (`PinnedListQuery.fromTemplate`), so only the schema knows
+     * where they are kept (a flat list, or Kanban's grid).
+     */
+    readonly listsOf?: (config: Partial<TConfig>) => readonly PinnedListDefinition[];
 }

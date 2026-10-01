@@ -1,29 +1,22 @@
 import type { App } from 'obsidian';
-import type { FilterState } from '../services/filter/FilterTypes';
 import { hasConditions } from '../services/filter/FilterTypes';
 import { FilterSerializer, filterIssueText } from '../services/filter/FilterSerializer';
+import { PinnedListQuery, type ListQuery } from '../services/filter/PinnedListQuery';
 import { ViewTemplateLoader } from '../services/template/ViewTemplateLoader';
-import type { PinnedListDefinition } from '../types';
-import { F } from '../services/viewConfig/FieldCodecs';
 
 /**
- * Merge two FilterStates by combining them under a new AND group.
- */
-function mergeFilters(a: FilterState, b: FilterState): FilterState {
-    return { filters: [a, b], logic: 'and' };
-}
-
-/**
- * Load a FilterState from a filter file (.json or .md view template).
- * Returns the resolved FilterState, or an error string. A condition or a
- * sort rule the file holds that cannot be read is an error, as it is in the
- * API's `filter`: a query does not run on part of what it was asked.
+ * Load the query a filter file names: a FilterState (.json), or a view
+ * template (.md) whose filter or pinned list `listName` the query is
+ * (`PinnedListQuery.fromTemplate`). Returns the query, or an error string.
+ * A condition or a sort rule the file holds that cannot be read is an
+ * error, as it is in the API's `filter`: a query does not run on part of
+ * what it was asked.
  */
 export async function loadFilterFile(
     app: App,
     filePath: string,
     listName?: string,
-): Promise<FilterState | string> {
+): Promise<ListQuery | string> {
     const normalizedPath = filePath.replace(/\\/g, '/');
     const exists = await app.vault.adapter.exists(normalizedPath);
     if (!exists) return `Filter file not found: ${normalizedPath}`;
@@ -41,61 +34,14 @@ export async function loadFilterFile(
         if (!hasConditions(state)) {
             return `Invalid FilterState in ${normalizedPath}: no conditions found`;
         }
-        return state;
+        return { filter: state };
     }
 
     if (normalizedPath.endsWith('.md')) {
-        const loader = new ViewTemplateLoader(app);
-        const template = await loader.loadFullTemplate(normalizedPath);
+        const template = await new ViewTemplateLoader(app).loadFullTemplate(normalizedPath);
         if (!template) return `Failed to load view template: ${normalizedPath}`;
-
-        // Parse fields uniformly via the schema's per-type codec — same path
-        // every view uses, so old (flat) and new (config-key) template files
-        // both round-trip through legacyKeys.
-        const cfg = template.config ?? {};
-        const filterCodec = F.filter('filterState', { legacyKeys: ['filter'] });
-        const pinnedCodec = F.pinnedLists('pinnedLists');
-        const gridCodec = F.grid('grid');
-
-        const issues: string[] = [];
-        const report = (text: string) => issues.push(text);
-        const filterState = filterCodec.parse(cfg.filterState ?? cfg.filter, report);
-        const pinnedLists: PinnedListDefinition[] =
-            pinnedCodec.parse(cfg.pinnedLists, report)
-            ?? gridCodec.parse(cfg.grid, report)?.flat()
-            ?? [];
-        if (issues.length > 0) {
-            return `Invalid filter in ${normalizedPath}: ${issues.join('; ')}`;
-        }
-
-        // Determine which filter to use
-        if (listName) {
-            const list = pinnedLists.find(l => l.name === listName);
-            if (!list) {
-                const names = pinnedLists.map(l => l.name);
-                return names.length > 0
-                    ? `Pinned list "${listName}" not found. Available: ${names.join(', ')}`
-                    : `No pinned lists in template. Remove --list flag`;
-            }
-            // Layer the view filter under the list's, as the view does when the
-            // list's toggle is on.
-            if (list.applyViewFilter && filterState && hasConditions(filterState)) {
-                return mergeFilters(filterState, list.filterState);
-            }
-            return list.filterState;
-        }
-
-        // No list specified
-        if (pinnedLists.length > 0) {
-            const names = pinnedLists.map(l => l.name);
-            return `Template has pinned lists. Specify one with list=<name>: ${names.join(', ')}`;
-        }
-
-        if (filterState && hasConditions(filterState)) {
-            return filterState;
-        }
-
-        return `Template has no filter: ${normalizedPath}`;
+        const read = PinnedListQuery.fromTemplate(template, listName);
+        return 'error' in read ? read.error : read.query;
     }
 
     return `Unsupported file type: ${normalizedPath}. Use .json or .md`;

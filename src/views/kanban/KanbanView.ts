@@ -9,7 +9,8 @@ import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
-import { combineFilterStates, createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { PinnedListQuery } from '../../services/filter/PinnedListQuery';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
@@ -330,11 +331,8 @@ export class KanbanView extends ItemView {
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
         const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
 
-        const viewFilter = this.viewFilterMenu.getFilterState();
-        const combinedFilter = listDef.applyViewFilter
-            ? combineFilterStates(listDef.filterState, viewFilter)
-            : listDef.filterState;
-        const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
+        const query = PinnedListQuery.resolve(listDef, this.viewFilterMenu.getFilterState());
+        const tasks = this.readService.getFilteredTasks(query.filter, query.sort);
 
         renderListSection(gridEl, {
             classes: KANBAN_CELL_CLASSES,
