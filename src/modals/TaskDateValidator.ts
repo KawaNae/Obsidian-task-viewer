@@ -42,8 +42,9 @@ export function validateDateTimeFormats(fields: DateTimeFields): DateValidationE
         const valid = c.type === 'date' ? DateUtils.isValidDateString(c.value) : DateUtils.isValidTimeString(c.value);
         if (!valid) {
             const label = t(`modal.${c.label.toLowerCase()}`);
-            const expected = c.type === 'date' ? 'YYYY-MM-DD' : 'HH:mm';
-            return { field: c.field, message: t('validation.invalidFormat', { label, type: c.type, expected }) };
+            // One sentence per kind, so the kind is the locale's word.
+            const key = c.type === 'date' ? 'validation.invalidDateFormat' : 'validation.invalidTimeFormat';
+            return { field: c.field, message: t(key, { label }) };
         }
     }
     return null;
