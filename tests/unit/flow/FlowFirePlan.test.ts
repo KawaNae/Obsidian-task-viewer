@@ -84,10 +84,7 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(plan.kind).toBe('failed');
     });
 
-    it('drops a move that names another note, and fails one to a heading that is not one, from the lines it is handed', () => {
-        const retired = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move("archive")', '    - c'], 0);
-        expect(retired.kind === 'fires' && retired.unmoved?.code).toBe('eval.move-retired');
-        expect(retired.kind === 'fires' && retired.ops.map(o => o.kind)).toEqual(['strip-flow']);
+    it('fails a move to a heading that is not one place, from the lines it is handed', () => {
         const none = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Other'], 0);
         expect(none.kind === 'failed' && none.error.code).toBe('eval.move-no-heading');
         const many = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done', '# done'], 0);
@@ -96,10 +93,11 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { heading: 'Done', side: 'head' } }]);
     });
 
-    it('fires move(), which names no heading of the note, without its move, as it does a move to another note', () => {
-        const plan = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> every 1d move()', '## Done'], 0);
-        expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
-        expect(plan.kind === 'fires' && plan.ops.map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
+    it('fires nothing for a move that names no heading of the note, nor for nochildren: the command does not read', () => {
+        for (const command of ['every 1d move()', 'move("archive")', 'every 1d move([[Done]])', 'every 1d nochildren']) {
+            const plan = executor().planFire(FILE, [`- [x] T @2026-08-17 ==> ${command}`, '## Done'], 0);
+            expect(plan, command).toEqual({ kind: 'none' });
+        }
     });
 });
 

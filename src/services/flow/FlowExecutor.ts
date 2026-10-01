@@ -29,8 +29,7 @@ import { runtimeText } from './runtimeText';
  * Where a move to the heading `name` goes in `lines`, at `side` of the
  * section, or why it cannot be made there: the heading is not there, or is
  * there more than once (`Placement.heading`, as the write will look it up:
- * `Placement.into`). A destination that names no heading of the note never
- * gets here: the planner drops that move (`move-dropped`).
+ * `Placement.into`).
  */
 function destinationIn(name: string, side: SectionSide, lines: readonly string[]): InSection | GenerationError {
     const found = Placement.heading(Outline.read(lines), name);
@@ -63,35 +62,29 @@ function fileName(path: string): string {
  *   the command stays, and the caller says so once the completion has
  *   landed (`reportNotRun`).
  * - `fires`: `ops` are what the fire does to the row in the completing
- *   write. `unmoved` is the move the command asks for and the fire drops,
- *   with why (a retired destination: `move-dropped`), or null; the caller
- *   says so once the completion has landed.
+ *   write.
  */
 export type FirePlan =
     | { kind: 'none' }
     | { kind: 'failed'; task: Task; error: EvalError | GenerationError }
-    | { kind: 'fires'; task: Task; ops: TaskOp[]; unmoved: GenerationError | null };
+    | { kind: 'fires'; task: Task; ops: TaskOp[] };
 
 /**
- * What of a completion's flow was not run (`FlowExecutor.reportNotRun`): the
- * whole of it, because the fire's plan failed or the fire's write was
- * refused, for the reason the write gave; or its move alone, dropped by a
- * plan that otherwise fired (`unmoved`).
+ * Why a completion's flow was not run (`FlowExecutor.reportNotRun`): the
+ * fire's plan failed, or the fire's write was refused, for the reason the
+ * write gave.
  */
 export type NotRun =
     | Extract<FirePlan, { kind: 'failed' }>
-    | { kind: 'refused'; refusal: Refusal }
-    | { kind: 'unmoved'; task: Task; error: GenerationError };
+    | { kind: 'refused'; refusal: Refusal };
 
 /**
  * What the user is owed of a fire's plan once its completion has landed:
- * the plan failed, or it fired without its move; else null. The one reading
- * of it, for a card's write and the editor's alike.
+ * the plan failed; else null. The one reading of it, for a card's write and
+ * the editor's alike.
  */
 export function notRunOf(plan: FirePlan | null): NotRun | null {
-    if (plan?.kind === 'failed') return plan;
-    if (plan?.kind === 'fires' && plan.unmoved) return { kind: 'unmoved', task: plan.task, error: plan.unmoved };
-    return null;
+    return plan?.kind === 'failed' ? plan : null;
 }
 
 /**
@@ -153,10 +146,7 @@ export class FlowExecutor {
      * whole, as an expression that fails does: nothing of the fire is
      * written, the command stays, and the user is told why. Dropping only
      * the move would consume the command, and the user who fixes the heading
-     * and checks the row again would find nothing left to fire. A move whose
-     * destination is retired is another matter, answered by the planner from
-     * how it is written: no fixing of the note makes it one, so the plan
-     * fires without it (`move-dropped`, `unmoved`).
+     * and checks the row again would find nothing left to fire.
      */
     planTask(task: Task, blockNamed: (name: string) => GenBlock | undefined, lines: readonly string[]): FirePlan {
         const program = task.flow?.program;
@@ -177,14 +167,8 @@ export class FlowExecutor {
             throw err;
         }
         const ops: TaskOp[] = [];
-        let unmoved: GenerationError | null = null;
         for (const effect of effects) {
             logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
-            if (effect.kind === 'move-dropped') {
-                logWarn(`[FlowExecutor] Flow fired without its move for ${task.id}: ${effect.error.message}`);
-                unmoved = effect.error;
-                continue;
-            }
             if (effect.kind !== 'move') {
                 ops.push(...this.opsFor(task, effect));
                 continue;
@@ -198,7 +182,7 @@ export class FlowExecutor {
             // fired, and taking it from where it stood is part of the carrying.
             ops.push({ kind: 'move', text: formatRow(effect.movedTask), to });
         }
-        return { kind: 'fires', task, ops, unmoved };
+        return { kind: 'fires', task, ops };
     }
 
     /**
@@ -337,7 +321,7 @@ export class FlowExecutor {
      * What one effect does in the row's own file, as the write applies it. A
      * move's op takes the destination looked up in the lines (`planTask`).
      */
-    private opsFor(task: Task, effect: Exclude<FlowEffect, { kind: 'move' | 'move-dropped' }>): TaskOp[] {
+    private opsFor(task: Task, effect: Exclude<FlowEffect, { kind: 'move' }>): TaskOp[] {
         switch (effect.kind) {
             case 'create-next':
             case 'create-generated':
@@ -353,9 +337,8 @@ export class FlowExecutor {
 
     /**
      * Tell the user a completion was written and its flow was not run, and
-     * why: its plan failed, or the fire's write was refused; or that the flow
-     * ran without its move, and why. The one notice of it, for a card's write
-     * and the editor's alike.
+     * why: its plan failed, or the fire's write was refused. The one notice
+     * of it, for a card's write and the editor's alike.
      *
      * Not firing and not consuming is the design — a command whose expression
      * failed has to stay on the line — but from the outside it is a checkbox
@@ -371,9 +354,8 @@ export class FlowExecutor {
             new Notice(t('notice.flowNotRun', { reason: refusalClause(reason), subject }));
             return;
         }
-        const notice = why.kind === 'unmoved' ? 'notice.flowMoveNotRun' : 'notice.flowNotRun';
-        if (this.shownLately(notice, why.task, why.error)) return;
-        new Notice(t(notice, { reason: runtimeText(why.error), subject: subjectOf(why.task) }));
+        if (this.shownLately('notice.flowNotRun', why.task, why.error)) return;
+        new Notice(t('notice.flowNotRun', { reason: runtimeText(why.error), subject: subjectOf(why.task) }));
     }
 
     /**

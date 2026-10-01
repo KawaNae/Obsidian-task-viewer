@@ -1,15 +1,14 @@
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { RangeSet, type Extension, type Text } from '@codemirror/state';
 import { outlineFor } from './EditorOutline';
-import { flowGroupOf, flowOwnerOf } from './FlowGroup';
+import { flowOwnerOf } from './FlowGroup';
 import { collectGenBlocks, spreadOverLines } from '../services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import { declaredCells } from '../services/parsing/gen/GenCellScan';
 import { type HighlightMark, highlightGenBody } from './GenHighlight';
 import type { Diagnostic, LocatedDiagnostic } from '../services/lang/Diagnostic';
 import { flowRaws, joinSegments, segmentIndexAt } from '../services/lang/flow/FlowSegments';
-import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
-import { FLOW_MARKER, isFlowLine, matchFlowLine, taskLineFlowTail } from '../services/parsing/utils/FlowLineScanner';
+import { FLOW_MARKER, isFlowLine, matchFlowLine, readFlow, taskLineFlowTail } from '../services/parsing/utils/FlowLineScanner';
 import type { OutlineReading } from '../services/parsing/utils/Outline';
 import { diagnosticText } from '../services/lang/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
@@ -298,7 +297,7 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                 if (root === null || seenRoots.has(root)) continue;
                 seenRoots.add(root);
 
-                const { flow, childLines } = flowGroupOf(outline, root);
+                const flow = readFlow(outline, root);
                 if (!flow) continue;
                 const segments = locateSegments(outline, root, flow);
                 const rootNumber = root + 1;
@@ -326,26 +325,6 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                 }
 
                 const { table } = joinSegments(flowRaws(flow));
-
-                // The children stopped travelling with the command. Nothing
-                // in the text says so, which is why it is said here; the mark
-                // covers the command because that is what has to change.
-                const migration = flow.program
-                    && childCopyMigrationWarning(flow.program, childLines, flow.diagnostics);
-                if (migration) {
-                    const anchor = segments.find(s => s.markerCol !== null);
-                    if (anchor) {
-                        const anchorLine = view.state.doc.line(anchor.lineNumber);
-                        marks.push({
-                            from: anchorLine.from + anchor.markerCol!,
-                            to: anchorLine.to,
-                            deco: Decoration.mark({
-                                class: `tv-diag tv-diag--${migration.severity}`,
-                                attributes: { title: diagnosticText(migration) },
-                            }),
-                        });
-                    }
-                }
 
                 for (const d of flow.diagnostics) {
                     const segIdx = Math.min(segmentIndexAt(table, d.span.start), segments.length - 1);

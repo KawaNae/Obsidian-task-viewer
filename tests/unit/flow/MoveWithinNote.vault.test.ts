@@ -13,10 +13,11 @@ import type { SectionSide } from '../../../src/services/persistence/utils/Placem
  * carries the completed row and its subtree to that heading's section, at
  * the side the settings say (`sectionSide`, the head unless set; the
  * decision of 2026-09-28). A heading that is not there, or is there twice,
- * and a move that names another note, fire nothing: the completion is
- * written, the command stays, and the user is told. `move()`, naming no
- * heading at all, is read as that too (2026-09-28). The same on every
- * path that completes a row — a card, the API, the editor.
+ * fires nothing: the completion is written, the command stays, and the user
+ * is told. A move that names no heading of the note — another note, or
+ * nothing at all, `move()` — is a syntax error (2026-10-01): the command does
+ * not read, so nothing fires and nothing is said; the editor marks it. The
+ * same on every path that completes a row — a card, the API, the editor.
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
@@ -128,25 +129,6 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
         expect(Notice.messages).toEqual([]);
     });
 
-    it('fires move(), which names no heading of the note, without the move: the next instance, the command consumed, the row where it was, and says why', async () => {
-        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> every mon move()', '    - [ ] 子', '## Tasks', '- [ ] later', ''];
-        expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', '- [ ] 移す @2026-09-28 ==> every mon move()', '- [x] 移す @2026-09-21', '    - [ ] 子', '## Tasks', '- [ ] later', '',
-        ]);
-        await Promise.resolve();
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('it was not moved');
-        expect(Notice.messages[0]).toContain('names no heading of the note');
-    });
-
-    it.each(['move([[Other]])', 'move()'])('consumes %s alone: the command goes, and the row stays where it was', async (command) => {
-        const lines = ['# note', `- [ ] 移す @2026-09-21 ==> ${command}`, '## Done', ''];
-        expect(await complete(lines, 1, '移す', path)).toEqual(['# note', '- [x] 移す @2026-09-21', '## Done', '']);
-        await Promise.resolve();
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('it was not moved');
-    });
-
     it('writes the next instance where the row was, and carries the row', async () => {
         const lines = ['# note', '- [ ] 移す @2026-09-21 ==> +1d move([[#Done]])', '## Done', ''];
         expect(await complete(lines, 1, '移す', path)).toEqual([
@@ -168,19 +150,19 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
     });
 
     it.each([
-        'move([[Log]])',
+        'move()',
+        'move([[Other]])',
         'move([[note#Done]])',
         'move("Log/Done")',
         'move([[Log/]] + format(done, "YYYY-MM"))',
-    ])('fires without a move that names another note, retired: %s', async (command) => {
-        const lines = ['# note', `- [ ] 移す @2026-09-21 ==> +1d ${command}`, '## Done', ''];
+        'nochildren',
+    ])('fires nothing for a command that does not read: %s', async (clause) => {
+        const lines = ['# note', `- [ ] 移す @2026-09-21 ==> +1d ${clause}`, '    - [ ] 子', '## Done', ''];
         expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', `- [ ] 移す @2026-09-22 ==> +1d ${command}`, '- [x] 移す @2026-09-21', '## Done', '',
+            '# note', `- [x] 移す @2026-09-21 ==> +1d ${clause}`, '    - [ ] 子', '## Done', '',
         ]);
         await Promise.resolve();
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('it was not moved');
-        expect(Notice.messages[0]).toContain('names no heading of the note');
+        expect(Notice.messages).toEqual([]);
     });
 });
 

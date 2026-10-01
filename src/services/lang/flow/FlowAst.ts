@@ -103,25 +103,15 @@ export interface FlowProgram {
     /**
      * `move([[#heading]])` — carry the completed task and its subtree to a
      * heading's section within its note. `target` is what is written between
-     * the parentheses, printed back as it is, null for `move()`; `to` is
-     * where the task goes, read off how it is written (`FlowParser`), never
-     * evaluated.
+     * the parentheses, printed back as it is; `heading` is the name of the
+     * heading it links to, read off how it is written (`FlowParser`), never
+     * evaluated. Anything but a link to a heading of the note is a syntax
+     * error (`flow.move-not-heading`), so a program holds no other move.
+     * Which end of the section is the settings' (`sectionSide`), not the
+     * clause's.
      */
-    move?: { target: Expr | null; to: MoveTarget; span: Span };
+    move?: { target: Expr; heading: string; span: Span };
 }
-
-/**
- * Where a move takes the task, answered from how the clause is written,
- * once, by the parser: the section of a heading of the note
- * (`move([[#name]])`, an alias aside), or nowhere — anything else names no
- * heading of the note, and is retired: another note (F8), or nothing at all,
- * `move()` (2026-09-28). The parser warns
- * on a retired one, and a completion with it fires without the move and
- * says so (`FlowPlanner`, `move-dropped`); the diagnostic and the fire read
- * this one answer. Which end of the section is the settings'
- * (`sectionSide`), not the clause's.
- */
-export type MoveTarget = { kind: 'heading'; name: string } | { kind: 'retired' };
 
 /**
  * Every clause's span, said once.

@@ -1,11 +1,11 @@
-import { type Diagnostic, type Span, error, warning } from '../Diagnostic';
+import { type Diagnostic, type Span, error } from '../Diagnostic';
 import type { Expr } from '../ExprAst';
 import { nestingOverflow, parseExpr } from '../ExprParser';
 import { splitDurationText, tokenize } from '../Lexer';
 import { type Token, TokenCursor, tokenSpan } from '../Token';
 import { type Value, type Weekday, weekdayFromName } from '../Value';
 import { lookupWord } from '../WordTable';
-import { type EveryRule, type FlowCell, type FlowProgram, type MoveTarget, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
+import { type EveryRule, type FlowCell, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 
 export interface ParseFlowResult {
@@ -14,8 +14,6 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-// `nochildren` is missing on purpose: it is still read, but a hint is a
-// list of what to write, and a retired clause does not belong on one.
 const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / state(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
@@ -135,17 +133,6 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             }
             return;
         }
-        case 'nochildren':
-            // Read and dropped. Refusing the token would null the program and
-            // take the rest of the command down with it, so it stays in the
-            // grammar; keeping it on the AST would put it back on the line
-            // every time a fire regenerates the clause. Between those, the
-            // value goes and the notice stays.
-            cursor.next();
-            diagnostics.push(warning('flow.nochildren-retired',
-                "'nochildren' is retired: child lines no longer travel to the next instance, so the clause can be deleted",
-                tokenSpan(head)));
-            return;
         case 'state':
             cursor.next();
             parseCells(cursor, head, program, diagnostics);
@@ -162,30 +149,26 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
         }
         case 'move': {
             cursor.next();
-            // `move()` names nothing: no heading, so no place in the note.
-            // It is one more way of naming no heading of the note, as a move
-            // to another note is, and is read as that (`moveTargetOf`).
-            let target: Expr | null = null;
-            let end: number;
+            // `move()` names nothing, so no heading of the note: the same
+            // error as any other target that is not one.
             if (cursor.at('lparen') && cursor.peek(1).kind === 'rparen') {
                 cursor.next();
-                end = cursor.next().end;
-            } else {
-                target = parseParenExpr(cursor, 'move', diagnostics);
-                if (!target) {
-                    skipToNextNode(cursor);
-                    return;
-                }
-                end = target.span.end + 1;
+                const end = cursor.next().end;
+                diagnostics.push(moveNotHeading({ start: head.start, end }));
+                return;
             }
-            const span = { start: head.start, end };
-            const to = moveTargetOf(target);
-            if (to.kind === 'retired') {
-                diagnostics.push(warning('flow.move-retired',
-                    'move() moves the task to a heading\'s section of its note: move([[#heading]]). This one names no heading of the note, and cannot move the task',
-                    target ? target.span : span));
+            const target = parseParenExpr(cursor, 'move', diagnostics);
+            if (!target) {
+                skipToNextNode(cursor);
+                return;
             }
-            assignNode(program, 'move', { target, to, span }, diagnostics, tokenSpan(head));
+            const heading = headingOf(target);
+            if (heading === null) {
+                diagnostics.push(moveNotHeading(target.span));
+                return;
+            }
+            assignNode(program, 'move', { target, heading, span: { start: head.start, end: target.span.end + 1 } },
+                diagnostics, tokenSpan(head));
             return;
         }
     }
@@ -421,21 +404,24 @@ function parseParenExpr(cursor: TokenCursor, fnName: string, diagnostics: Diagno
 }
 
 /**
- * Where a move written with `target` goes (`MoveTarget`), from how it is
- * written: a link to a heading of the note it stands in, `[[#name]]` or
- * `[[#name|alias]]`, is that heading's section. Anything else names no
- * heading of the note, and is retired: nothing at all (`move()`, null here),
- * another note — a link to one, with or without a heading, the note's own
- * name included, a string, an expression — or no one heading (`[[#A#B]]`,
- * `[[#]]`).
+ * The heading a move's `target` names, from how it is written: a link to a
+ * heading of the note it stands in, `[[#name]]` or `[[#name|alias]]`. Null
+ * for anything else — another note (a link to one, with or without a
+ * heading, the note's own name included), a string, an expression — and for
+ * no one heading (`[[#A#B]]`, `[[#]]`).
  */
-function moveTargetOf(target: Expr | null): MoveTarget {
-    if (!target || target.kind !== 'lit' || target.value.type !== 'link') return { kind: 'retired' };
+function headingOf(target: Expr): string | null {
+    if (target.kind !== 'lit' || target.value.type !== 'link') return null;
     const path = target.value.target.split('|')[0];
-    if (!path.startsWith('#')) return { kind: 'retired' };
+    if (!path.startsWith('#')) return null;
     const name = path.slice(1);
-    if (name.includes('#') || name.trim() === '') return { kind: 'retired' };
-    return { kind: 'heading', name };
+    if (name.includes('#') || name.trim() === '') return null;
+    return name;
+}
+
+function moveNotHeading(span: Span): Diagnostic {
+    return error('flow.move-not-heading',
+        'move() takes a link to a heading of this note: move([[#heading]])', span);
 }
 
 function assignSchedule(program: FlowProgram, node: ScheduleNode, diagnostics: Diagnostic[]): void {
@@ -463,16 +449,12 @@ function assignNode<K extends 'lifetime' | 'until' | 'use' | 'move'>(
 /**
  * Error recovery: skip tokens until something that can start a node, so one
  * mistake yields one diagnostic instead of a cascade.
- *
- * `nochildren` belongs on this list even though it is retired. Recovery has
- * to recognize every head the parser accepts, and it is still accepted; drop
- * it and a command written after one would be skipped along with the mistake.
  */
 function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {
         const t = cursor.peek();
         if (t.kind === 'ident' && (
-            ['every', 'at', 'until', 'nochildren', 'state', 'use', 'move'].includes(t.text)
+            ['every', 'at', 'until', 'state', 'use', 'move'].includes(t.text)
             || lookupWord(SET_HEADS, t.text) !== undefined
             || /^x\d+$/.test(t.text)
         )) return;

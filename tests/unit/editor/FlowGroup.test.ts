@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { flowGroupOf, flowOwnerOf } from '../../../src/editor/FlowGroup';
+import { flowOwnerOf } from '../../../src/editor/FlowGroup';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { isFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
+import { isFlowLine, readFlow } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
@@ -35,7 +35,7 @@ const SHAPES: Array<[string, string[]]> = [
     ]],
 ];
 
-describe('the editor diagnostics read the subtree and the flow lines the parser reads', () => {
+describe('the editor diagnostics read the flow lines the parser reads', () => {
     for (const [name, lines] of SHAPES) {
         it(name, () => {
             const outline = Outline.read(lines);
@@ -44,9 +44,7 @@ describe('the editor diagnostics read the subtree and the flow lines the parser 
             expect(parsed.tasks.length).toBeGreaterThan(0);
 
             for (const task of parsed.tasks) {
-                const group = flowGroupOf(outline, task.line);
-                expect(group.childLines, `children of line ${task.line}`).toEqual(task.subtreeLines!.slice(1));
-                expect(group.flow, `flow of line ${task.line}`).toEqual(task.flow);
+                expect(readFlow(outline, task.line), `flow of line ${task.line}`).toEqual(task.flow);
             }
 
             // Every flow line the editor gives an owner is one that owner's

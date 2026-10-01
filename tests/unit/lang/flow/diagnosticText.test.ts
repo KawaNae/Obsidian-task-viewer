@@ -261,6 +261,7 @@ describe('diagnosticText', () => {
             'every mon setContent(content = "x")', // expr.assign-not-here
             'every mon setContent(state.n)',       // expr.cell-not-here
             'every mon // weekly',                 // flow.comment-not-here
+            'every mon move([[Log]])',             // flow.move-not-heading
         ];
 
         const EXPECTED = [
@@ -276,7 +277,7 @@ describe('diagnosticText', () => {
             'expr.no-new', 'expr.no-date', 'expr.no-console', 'expr.no-function', 'expr.no-await',
             'expr.no-typeof', 'expr.no-delete', 'expr.increment-not-here', 'expr.assign-target',
             'expr.assign-needs-parens', 'expr.fn-body-not-here', 'expr.assign-not-here',
-            'lex.no-block-comment', 'flow.comment-not-here',
+            'lex.no-block-comment', 'flow.comment-not-here', 'flow.move-not-heading',
             'stmt.assign-undeclared', 'stmt.assign-to-const', 'stmt.assign-to-function',
             'stmt.assign-type-change', 'stmt.shadows-reserved', 'stmt.already-declared',
             'stmt.assign-in-condition', 'stmt.break-not-in-loop', 'stmt.continue-not-in-loop',

@@ -103,18 +103,9 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
         expect(opsOf(atEnd.planTask(task, () => undefined, ['## Done']))[1]).toMatchObject({ to: { heading: 'Done', side: 'end' } });
     });
 
-    it('fires without a move that names another note: the move is dropped, the rest runs, the command is consumed', () => {
-        const plan = planOf(flowTask('every mon move([[Archive]])'));
-
-        expect(opsOf(plan).map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
-        expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
-    });
-
-    it('consumes a command that is a retired move alone: nothing moves, the command goes', () => {
-        for (const command of ['move([[Other]])', 'move()']) {
-            const plan = planOf(flowTask(command));
-            expect(opsOf(plan).map(o => o.kind)).toEqual(['strip-flow']);
-            expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
+    it('fires nothing for a command whose move names no heading of the note: the command does not read', () => {
+        for (const command of ['every mon move([[Archive]])', 'move([[Other]])', 'move()', 'every mon nochildren']) {
+            expect(planOf(flowTask(command)).kind, command).toBe('none');
         }
     });
 
@@ -208,14 +199,12 @@ describe('a fire that does not happen says so', () => {
         expect(Notice.messages[0]).toContain("このタスクにプロパティ 'end' は設定されていません");
     });
 
-    it('says the move was dropped when the rest of the fire ran without it', async () => {
-        // move() はノートの見出しを指していない。次回分は生まれ、コマンドは
-        // 消費されるので、「実行しませんでした」ではなく移動だけを落とした旨を出す。
+    it('stays quiet on a command that does not read: nothing fires, and the editor marks the error', async () => {
+        // move() はノートの見出しを指していないので、コマンドは構文の誤り。
+        // 発火そのものが起きず、告げることも無い。
         await complete(makeExecutor(), 'every mon move()');
 
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('its flow was run, but it was not moved');
-        expect(Notice.messages[0]).toContain('names no heading of the note');
+        expect(Notice.messages).toEqual([]);
     });
 
     it('stays quiet when the fire went through', async () => {
@@ -263,7 +252,7 @@ describe('fireAndDelete', () => {
     });
 
     it('does not move, whatever the move names: a delete was not a request to keep a copy', async () => {
-        for (const move of ['move([[#Nope]])', 'move([[Archive]])']) {
+        for (const move of ['move([[#Nope]])', 'move([[#Done]])']) {
             const repository = makeRepository();
 
             expect(await makeExecutor(repository).fireAndDelete(flowTask(`every mon ${move}`, { statusChar: ' ' }))).toBe(true);

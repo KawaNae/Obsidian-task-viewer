@@ -78,7 +78,7 @@ describe('FlowSegments', () => {
             ['use', ['every mon use(', '"gen")']],
             ['cells', ['every mon state(n: 1,', 'm: 2)']],
             ['sets', ['every mon setDue(start +', '3d)']],
-            ['move', ['every mon move([[Log', ']])']],
+            ['move', ['every mon move([[#Log', ']])']],
         ];
 
         it.each(SPLIT_BY_CLAUSE)('rejects a split %s clause', (_clause, raws) => {
@@ -99,7 +99,7 @@ describe('FlowSegments', () => {
             ['use', ['every mon', 'use("gen")']],
             ['cells', ['every mon', 'state(n: 1, m: 2)']],
             ['sets', ['every mon', 'setDue(start + 3d)']],
-            ['move', ['every mon', 'move([[Log]])']],
+            ['move', ['every mon', 'move([[#Log]])']],
         ];
 
         // The mirror of the above: a clause written whole on its own child
@@ -154,17 +154,17 @@ describe('serializeFlowLines (line-level canonical)', () => {
     }
 
     it('degenerates to serializeFlow for a single segment', () => {
-        const { program, table } = parsed(['move([[A]]) until(2026-09-28) every mon x3']);
+        const { program, table } = parsed(['move([[#A]]) until(2026-09-28) every mon x3']);
         const lines = serializeFlowLines(program, table);
         expect(lines.taskLine).toBe(serializeFlow(program));
         expect(lines.childLines).toEqual([]);
     });
 
     it('keeps each node on the line it was written on', () => {
-        const { program, table } = parsed(['every mon', 'setDue(start + 3d)', 'move([[Log]])']);
+        const { program, table } = parsed(['every mon', 'setDue(start + 3d)', 'move([[#Log]])']);
         expect(serializeFlowLines(program, table)).toEqual({
             taskLine: 'every mon',
-            childLines: ['setDue(start + 3d)', 'move([[Log]])'],
+            childLines: ['setDue(start + 3d)', 'move([[#Log]])'],
         });
     });
 

@@ -88,12 +88,12 @@ describe('planFlowForDeletion', () => {
         });
 
         it('move alone: archiving is not what a delete was asked for', () => {
-            const outlook = planFlowForDeletion(flowTask('move([[Archive]])'), DEPS);
+            const outlook = planFlowForDeletion(flowTask('move([[#Archive]])'), DEPS);
             expect(outlook.kind).toBe('nothing');
         });
 
         it('move alongside a schedule: the next instance is kept, the copy is not', () => {
-            const outlook = planFlowForDeletion(flowTask('every mon move([[Archive]])'), DEPS);
+            const outlook = planFlowForDeletion(flowTask('every mon move([[#Archive]])'), DEPS);
 
             expect(outlook.kind).toBe('creates');
             if (outlook.kind !== 'creates') return;

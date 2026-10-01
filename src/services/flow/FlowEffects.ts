@@ -1,14 +1,13 @@
 import type { Task } from '../../types';
 import type { Diagnostic } from '../lang/Diagnostic';
 import type { GeneratedChild } from '../persistence/FlowInstanceLines';
-import type { GenerationError } from './FlowPlanner';
 
 /**
  * Effect descriptors produced by the pure planner and applied by the
  * FlowExecutor's interpreter against TaskRepository.
  *
  * ORDER: the planner emits effects in the order
- *   create-next / create-generated → move / strip-flow → move-dropped
+ *   create-next / create-generated → move / strip-flow
  * and the interpreter keeps it, as the order of the ops of one write (see
  * FlowExecutor.planTask and InlineTaskWriter.applyOps). Everything a fire
  * does is the write that completed the row, in the row's own note: the row
@@ -53,12 +52,4 @@ export type FlowEffect =
      * against the lines the write holds (`FlowExecutor.planTask`,
      * `Placement.heading`); a failure there fails the fire whole.
      */
-    | { kind: 'move'; heading: string; movedTask: Task }
-    /**
-     * The move the command asks for, not made, and why: its destination is
-     * retired (`MoveTarget`), which is known from how the clause is written,
-     * before any note is read. Writes nothing. The rest of the fire goes
-     * ahead, the command is consumed (`strip-flow` before it), and the user
-     * is told the move was dropped (`FlowExecutor.reportNotRun`).
-     */
-    | { kind: 'move-dropped'; error: GenerationError };
+    | { kind: 'move'; heading: string; movedTask: Task };
