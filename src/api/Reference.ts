@@ -154,7 +154,8 @@ an end: that day only), or, without a start, when its due is today.`,
         notes: `\
 Without dayOffset the copies run on the clock: the first starts where the
 task ends and keeps its length. With it they run one per day. A task with
-no time of day is copied as it is. The due never shifts.`,
+no time of day is copied as it is. A copy on another day moves its due by
+the same days as its start and end; a copy on the clock keeps the due.`,
         api: { signature: 'duplicate(params: DuplicateParams): Promise<DuplicateResult>', returns: '{ duplicated: string }' },
         cli: { returns: '{ "duplicated": "<id>" }' },
     },
