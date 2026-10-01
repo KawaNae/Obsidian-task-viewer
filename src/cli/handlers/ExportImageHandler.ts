@@ -1,9 +1,10 @@
 import type { CliData } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
-import type { ExportHost } from '../../services/export/ExportService';
+import type { ExportHost, ExportOptions } from '../../services/export/ExportService';
 import { cliOk, cliError } from '../CliOutputFormatter';
 import { resolveViewTypeFromShortName, schemaFor } from '../../services/viewConfig';
 import type { ConfigField } from '../../services/viewConfig/ViewConfigSchema';
+import { F } from '../../services/viewConfig/FieldCodecs';
 import { exportDescriptorFor } from '../../services/export/ExportRegistry';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { buildViewStateFromParams } from '../../services/viewConfig/ViewStateFactory';
@@ -46,6 +47,10 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
             const filenameErr = validateFilename(resolvedParams);
             if (filenameErr) return filenameErr;
 
+            // 4b. Read the export's own flags; a number flag that is not one fails.
+            const opts = readExportOptions(resolvedParams);
+            if (typeof opts === 'string') return opts;
+
             // 5. Determine mode: open-view vs temp-leaf
             const hasViewConfig = hasConfigParams(resolvedParams);
             const hasTemplate = !!resolvedParams.template;
@@ -53,7 +58,7 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
             let result: ExportResult;
 
             if (!hasViewConfig && !hasTemplate) {
-                result = await plugin.exportService.exportOpenView(viewType, buildOpts(resolvedParams));
+                result = await plugin.exportService.exportOpenView(viewType, opts);
             } else {
                 const configParams = extractConfigParams(resolvedParams);
                 const buildResult = await buildViewStateFromParams(
@@ -68,7 +73,7 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
                         .map(s => s.name);
                     return cliError(`Template '${buildResult.templateNotFound}' not found. Available: ${available.join(', ') || '(none)'}`);
                 }
-                result = await plugin.exportService.exportTempView(viewType, buildResult.state, buildOpts(resolvedParams));
+                result = await plugin.exportService.exportTempView(viewType, buildResult.state, opts);
             }
 
             const { renderedRange, ...rest } = result;
@@ -225,13 +230,29 @@ function fromCliName(kebab: string): string {
     return kebab.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-function buildOpts(params: CliData) {
+/**
+ * The export's options from its own flags. `width` and `wait` are read as
+ * the view's numbers are (`F.int`, a whole decimal number in range): a flag
+ * that is given but is not one is a cliError, not NaN passed on and not the
+ * default put in its place.
+ */
+export function readExportOptions(params: CliData): ExportOptions | string {
+    const read = (flag: 'width' | 'wait', min: number): number | string | undefined => {
+        const raw = params[flag];
+        if (raw === undefined) return undefined;
+        return F.int(flag, { min }).fromUriParam?.(raw)
+            ?? cliError(`Invalid ${flag}: '${raw}'. Must be an integer of at least ${min}`);
+    };
+    const width = read('width', 1);
+    if (typeof width === 'string') return width;
+    const waitMs = read('wait', 0);
+    if (typeof waitMs === 'string') return waitMs;
     return {
         folder: params['output-folder'] || undefined,
         filename: params.filename || undefined,
         name: params.name || params.template || undefined,
-        waitMs: params.wait ? parseInt(params.wait, 10) : undefined,
+        waitMs,
         keepOpen: params['keep-open'] === 'true',
-        width: params.width ? parseInt(params.width, 10) : undefined,
+        width,
     };
 }
