@@ -724,15 +724,67 @@ describe('TaskFilterEngine', () => {
             });
         });
 
-        describe('tag excludes (ancestor traversal)', () => {
-            it('no ancestor has excluded tag — passes', () => {
+        // A negative operator with the parent target asks that no ancestor
+        // answers yes (`not(ancestors(positive))`, decided 2026-09-30). It
+        // used to ask that some ancestor answered no, so a parent holding the
+        // excluded tag passed when the grandparent did not, and a task
+        // without ancestors failed.
+        describe('negation over ancestors: no ancestor answers yes', () => {
+            it('no ancestor has the excluded tag — passes', () => {
                 const state = stateFromCondition(cond('tag', 'excludes', ['blocked'], 'parent'));
                 expect(evaluateFilter(child, state, context)).toBe(true);
             });
 
-            it('direct parent has excluded tag — first ancestor matches excludes (returns true for that ancestor)', () => {
+            it('the direct parent has the excluded tag — fails (it used to pass on the grandparent)', () => {
                 const state = stateFromCondition(cond('tag', 'excludes', ['sub'], 'parent'));
+                expect(evaluateFilter(child, state, context)).toBe(false);
+            });
+
+            it('only the grandparent has the excluded tag — fails for the child and the grandchild', () => {
+                const state = stateFromCondition(cond('tag', 'excludes', ['projectA'], 'parent'));
+                expect(evaluateFilter(child, state, context)).toBe(false);
+                expect(evaluateFilter(grandchild, state, context)).toBe(false);
+            });
+
+            it('a task without ancestors — passes (it used to fail)', () => {
+                const state = stateFromCondition(cond('tag', 'excludes', ['projectA'], 'parent'));
+                expect(evaluateFilter(orphan, state, context)).toBe(true);
+                expect(evaluateFilter(grandparent, state, context)).toBe(true);
+            });
+
+            it('an ancestor the index cannot resolve answers nothing — passes', () => {
+                const task = makeTask({ parentId: 'missing' });
+                const state = stateFromCondition(cond('tag', 'excludes', ['work'], 'parent'));
+                expect(evaluateFilter(task, state, { taskLookup: () => undefined })).toBe(true);
+            });
+
+            it('notContains: an ancestor whose content contains the text — fails', () => {
+                const par = makeTask({ id: 'np', content: 'Important Project', childIds: ['nc'] });
+                const kid = makeTask({ id: 'nc', parentId: 'np', content: 'subtask' });
+                const map = new Map<string, Task>([['np', par], ['nc', kid]]);
+                const state = stateFromCondition(cond('content', 'notContains', 'important', 'parent'));
+                expect(evaluateFilter(kid, state, { taskLookup: id => map.get(id) })).toBe(false);
+            });
+
+            it('isNotSet: no ancestor has a due date — the grandparent having one fails the grandchild', () => {
+                const top = makeTask({ id: 'dt', due: '2026-08-30', childIds: ['dm'] });
+                const mid = makeTask({ id: 'dm', parentId: 'dt', childIds: ['dl'] });
+                const low = makeTask({ id: 'dl', parentId: 'dm' });
+                const map = new Map<string, Task>([['dt', top], ['dm', mid], ['dl', low]]);
+                const state = stateFromCondition(cond('due', 'isNotSet', undefined, 'parent'));
+                expect(evaluateFilter(low, state, { taskLookup: id => map.get(id) })).toBe(false);
+                expect(evaluateFilter(top, state, { taskLookup: id => map.get(id) })).toBe(true);
+            });
+
+            it('an unfinished condition (empty list) still constrains nothing', () => {
+                const state = stateFromCondition(cond('tag', 'excludes', [], 'parent'));
                 expect(evaluateFilter(child, state, context)).toBe(true);
+                expect(evaluateFilter(orphan, state, context)).toBe(true);
+            });
+
+            it('an unfinished date with the parent target constrains nothing, on a task without ancestors too', () => {
+                const state = stateFromCondition(cond('due', 'equals', undefined, 'parent'));
+                expect(evaluateFilter(orphan, state, context)).toBe(true);
             });
         });
 

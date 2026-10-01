@@ -202,8 +202,11 @@ FilterState (JSON format)
     { property: string, operator: string, value?: ..., target?: 'parent' }
 
   Target:
-    Add target: 'parent' to evaluate the condition against the task's
-    parent (and ancestors). Example: tasks whose parent has tag "project":
+    Add target: 'parent' to ask the condition of the task's ancestors (the
+    parent, its parent, ...). A positive operator passes when some ancestor
+    matches; a negative one (excludes, notContains, isNotSet) passes when no
+    ancestor matches the positive form, so a task without a parent passes.
+    Example: tasks with an ancestor tagged "project":
     { property: 'tag', operator: 'includes', value: ['project'], target: 'parent' }
 
   Properties & Operators:
