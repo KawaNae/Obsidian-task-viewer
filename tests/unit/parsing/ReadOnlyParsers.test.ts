@@ -159,6 +159,43 @@ describe('TasksPluginParser', () => {
         expect(task!.due).toBe('2026-03-28');
     });
 
+    // A date naming a day that does not exist is not read. The line stays
+    // the Tasks plugin's (its shape says whose it is), and is never written,
+    // so the text stays; with no diagnostic in the editor for this notation,
+    // the task stays in the views with a warning rather than vanish.
+    it('reads no date naming a day that does not exist, and warns', () => {
+        const task = parser.parse('- [ ] Task 🛫 2026-03-01 📅 2026-02-30', 'test.md', 0)!;
+        expect(task.parserId).toBe('tasks-plugin');
+        expect(task.startDate).toBe('2026-03-01');
+        expect(task.due).toBeUndefined();
+        expect(task.content).toBe('Task');
+        expect(task.validation?.rule).toBe('parse-error');
+        expect(task.validation?.severity).toBe('warning');
+        expect(task.validation?.message).toContain('2026-02-30');
+        expect(formatRow(task)).toBe('- [ ] Task 🛫 2026-03-01 📅 2026-02-30');
+    });
+
+    it('keeps a line whose only date does not exist the Tasks plugin\'s', () => {
+        const task = parser.parse('- [ ] Task 📅 2026-13-45', 'test.md', 0)!;
+        expect(task.parserId).toBe('tasks-plugin');
+        expect(task.due).toBeUndefined();
+        expect(task.startDate).toBeUndefined();
+        expect(task.validation?.severity).toBe('warning');
+    });
+
+    it('does not take a later date for a first one that does not exist', () => {
+        const task = parser.parse('- [ ] Task 🛫 2026-02-30 🛫 2026-03-01', 'test.md', 0)!;
+        expect(task.startDate).toBeUndefined();
+        expect(task.validation?.rule).toBe('parse-error');
+    });
+
+    it('does not warn of a date the mapping ignores', () => {
+        const customParser = new TasksPluginParser({ start: 'startDate', scheduled: 'ignore', due: 'due' });
+        const task = customParser.parse('- [ ] Task ⏳ 2026-02-30 📅 2026-03-28', 'test.md', 0)!;
+        expect(task.due).toBe('2026-03-28');
+        expect(task.validation).toBeUndefined();
+    });
+
     it('formatRow returns originalText', () => {
         const task = parser.parse('- [ ] Task 📅 2026-03-21', 'test.md', 0)!;
         expect(formatRow(task)).toBe('- [ ] Task 📅 2026-03-21');

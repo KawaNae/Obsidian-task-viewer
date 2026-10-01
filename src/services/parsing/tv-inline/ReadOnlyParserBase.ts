@@ -1,4 +1,4 @@
-import type { ParserId } from '../../../types';
+import type { ParserId, Task } from '../../../types';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { createBaseTask, type UnnamedTask } from '../TaskFactory';
 import { TagExtractor } from '../utils/TagExtractor';
@@ -16,6 +16,7 @@ export interface ReadOnlyTaskParams {
     endTime?: string;
     due?: string;
     blockId?: string;
+    validation?: Task['validation'];
 }
 
 /**
@@ -45,6 +46,7 @@ export abstract class ReadOnlyParserBase implements LeafParserStrategy {
             due: params.due,
             tags: TagExtractor.fromContent(params.content),
             blockId: params.blockId,
+            validation: params.validation,
             isReadOnly: true,
         });
     }

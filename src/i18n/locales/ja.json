@@ -580,7 +580,8 @@
     "dueRequiresDate": "期限: 時刻を指定する場合は日付が必要です。",
     "tooManySeparators": "日付ブロックの'>'区切りが多すぎます。最大2個（start>end>due）のところ{{count}}個あります。",
     "multipleDateBlocks": "日付ブロックが複数あります。日付は最初のブロックだけから読み、残りの{{count}}個は読まずに書かれたまま残します。",
-    "noSuchDate": "日付ブロックに実在しない日付か時刻があります: {{values}}。読まずに、書かれたまま残します。"
+    "noSuchDate": "日付ブロックに実在しない日付か時刻があります: {{values}}。読まずに、書かれたまま残します。",
+    "noSuchDateOnLine": "行に実在しない日付があります: {{values}}。読まずに、書かれたまま残します。"
   },
   "validationHint": {
     "crossMidnight": "終了日を明示するか、時刻を修正してください。",
