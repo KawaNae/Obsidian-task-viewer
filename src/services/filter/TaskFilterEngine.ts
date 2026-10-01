@@ -4,17 +4,14 @@ import type { FilterContext } from './FilterContext';
 import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { toDisplayTask, NO_TASK_LOOKUP } from '../display/DisplayTaskConverter';
-import { DateUtils } from '../../utils/DateUtils';
-import { getTaskNotation } from './parserTaxonomy';
-import {
-    getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
-} from '../data/EffectiveProperties';
+import { TaskValues, type NumberValue } from './TaskValues';
 
 /**
  * Evaluates whether a task passes a recursive filter tree.
  * Groups can contain both conditions and sub-groups at any depth.
  *
- * DisplayTask-only: date filters use effective (resolved) fields directly.
+ * DisplayTask-only: the value a condition compares is the effective one, read
+ * from {@link TaskValues} — the table the sort reads too.
  * Raw Task callers must convert via TaskReadService / DisplayTaskConverter
  * first — TaskReadService.getFilteredTasks is the canonical entry point.
  *
@@ -55,52 +52,31 @@ export class TaskFilterEngine {
             return this.evaluateAncestor(task, selfCondition, context);
         }
 
+        const startHour = context?.startHour ?? 0;
         switch (condition.property) {
             case 'file':
-                return this.evalStringSet(task.file, condition);
-            case 'tag':
-                return this.evalTag(task, condition);
             case 'status':
-                return this.evalStringSet(task.statusChar, condition);
-            case 'content':
-                return this.evalContent(task, condition);
-            case 'startDate':
-                return this.evalDate(task.effectiveStartDate || task.startDate, condition, context?.startHour ?? 0, context?.weekStartDay ?? 1);
-            case 'endDate':
-                return this.evalDate(task.effectiveEndDate ?? task.endDate, condition, context?.startHour ?? 0, context?.weekStartDay ?? 1);
-            case 'due':
-                return this.evalDate(DateUtils.dueDatePart(task.effectiveDue), condition, context?.startHour ?? 0, context?.weekStartDay ?? 1);
-            case 'anyDate': {
-                const hasAny = !!task.effectiveStartDate
-                            || !!task.effectiveEndDate
-                            || !!task.effectiveDue;
-                if (condition.operator === 'isSet') return hasAny;
-                if (condition.operator === 'isNotSet') return !hasAny;
-                return true;
-            }
             case 'color':
-                return this.evalStringSet(getEffectiveColor(task) ?? '', condition);
             case 'linestyle':
-                return this.evalStringSet(getEffectiveLinestyle(task) ?? '', condition);
-            case 'length':
-                return this.evalLength(task, condition, context?.startHour ?? 0);
             case 'notation':
-                return this.evalStringSet(getTaskNotation(task.parserId), condition);
+                return this.evalStringSet(TaskValues.of(task, condition.property).text ?? '', condition);
+            case 'tag':
+                return this.evalTag(TaskValues.of(task, 'tag').items, condition);
+            case 'content':
+                return this.evalContent(TaskValues.of(task, 'content').text ?? '', condition);
+            case 'startDate':
+            case 'endDate':
+            case 'due':
+                return this.evalDate(TaskValues.of(task, condition.property).date, condition, startHour, context?.weekStartDay ?? 1);
+            case 'anyDate':
             case 'parent':
-                if (condition.operator === 'isSet') return !!task.parentId;
-                if (condition.operator === 'isNotSet') return !task.parentId;
-                return true;
-            case 'children': {
-                // 'children' = independent child tasks. Plain checkbox lines
-                // and wikilinks aren't tasks of their own, so we filter to
-                // 'task' kind entries.
-                const hasChildTask = task.childEntries.some(e => e.kind === 'task');
-                if (condition.operator === 'isSet') return hasChildTask;
-                if (condition.operator === 'isNotSet') return !hasChildTask;
-                return true;
-            }
+            case 'children':
+                return this.evalFlag(TaskValues.of(task, condition.property).set, condition);
+            case 'length':
+                return this.evalLength(TaskValues.length(task, startHour), condition);
             case 'property':
-                return this.evalProperty(task, condition);
+                if (condition.key == null || condition.key === '') return true;
+                return this.evalProperty(TaskValues.property(task, condition.key).text, condition);
             default:
                 return true;
         }
@@ -145,9 +121,8 @@ export class TaskFilterEngine {
         return false;
     }
 
-    private static evalTag(task: Task, c: FilterCondition): boolean {
+    private static evalTag(tags: readonly string[], c: FilterCondition): boolean {
         if (!Array.isArray(c.value)) return true;
-        const tags = getEffectiveTags(task);
         if (c.operator === 'includes') {
             return c.value.some(v => tags.some(t => this.tagMatches(t, v)));
         }
@@ -165,9 +140,9 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalContent(task: Task, c: FilterCondition): boolean {
+    private static evalContent(content: string, c: FilterCondition): boolean {
         if (typeof c.value !== 'string') return true;
-        const lower = task.content.toLowerCase();
+        const lower = content.toLowerCase();
         const search = c.value.toLowerCase();
         if (c.operator === 'contains') return lower.includes(search);
         if (c.operator === 'notContains') return !lower.includes(search);
@@ -191,9 +166,13 @@ export class TaskFilterEngine {
         }
     }
 
-    private static evalProperty(task: Task, c: FilterCondition): boolean {
-        if (c.key == null || c.key === '') return true;
-        const actual = getEffectiveProperties(task)[c.key]?.value;
+    private static evalFlag(set: boolean, c: FilterCondition): boolean {
+        if (c.operator === 'isSet') return set;
+        if (c.operator === 'isNotSet') return !set;
+        return true;
+    }
+
+    private static evalProperty(actual: string | undefined, c: FilterCondition): boolean {
         const filterValue = typeof c.value === 'string' ? c.value : '';
         switch (c.operator) {
             case 'isSet': return actual !== undefined;
@@ -205,16 +184,13 @@ export class TaskFilterEngine {
         }
     }
 
-    private static evalLength(task: DisplayTask, c: FilterCondition, startHour: number): boolean {
-        const hasDuration = !!task.effectiveStartDate;
-        if (c.operator === 'isSet') return hasDuration;
-        if (c.operator === 'isNotSet') return !hasDuration;
+    private static evalLength(length: NumberValue, c: FilterCondition): boolean {
+        if (c.operator === 'isSet') return length.present;
+        if (c.operator === 'isNotSet') return !length.present;
 
         if (typeof c.value !== 'number') return true;
-        if (!task.effectiveStartDate) return false;
-
-        const durationMs = DateUtils.getDisplayTaskDurationMs(task, startHour);
-        if (durationMs === null) return false;
+        if (length.value === undefined) return false;
+        const durationMs = length.value;
 
         const unit = c.unit ?? 'hours';
         const divisor = unit === 'minutes' ? 60_000 : 3_600_000;

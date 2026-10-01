@@ -550,6 +550,10 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
         // this is the one string that carries all of them.
         dates: { type: 'string', value: formatDateBlock(task) },
     };
+    // The row's own dates, not the effective ones the filter and the sort
+    // compare (`TaskValues`): what the program computes is written on the
+    // next instance's line, and a due inherited from the section put there
+    // by `at(due+7d)` would write the inheritance out onto the line.
     if (task.startDate) props.start = datish(task.startDate, task.startTime);
     if (task.endDate) props.end = datish(task.endDate, task.endTime);
     if (task.due) {

@@ -156,3 +156,75 @@ describe('TaskSorter', () => {
         });
     });
 });
+
+// The values each rule compares, pinned so that reading them from one table
+// (TaskValues) leaves every order as it was.
+describe('the values a rule compares', () => {
+    const ids = (tasks: DisplayTask[]) => tasks.map(t => t.id);
+    const by = (...rules: Array<[SortState['rules'][number]['property'], 'asc' | 'desc']>): SortState =>
+        ({ rules: rules.map(([property, direction], i) => ({ id: `r${i}`, property, direction })) });
+
+    it('due compares the time with the date: a date alone before its times, earlier times first', () => {
+        const tasks = [
+            makeDT({ id: 'nine', due: '2026-03-10T09:00' }),
+            makeDT({ id: 'bare', due: '2026-03-10' }),
+            makeDT({ id: 'eight', due: '2026-03-10T08:00' }),
+        ];
+        TaskSorter.sort(tasks, by(['due', 'asc']));
+        expect(ids(tasks)).toEqual(['bare', 'eight', 'nine']);
+    });
+
+    it('startDate compares the date only: a later time on the same day ties, and the next rule decides', () => {
+        const tasks = [
+            makeDT({ id: 'early-b', content: 'B', effectiveStartDate: '2026-03-10', effectiveStartTime: '08:00' }),
+            makeDT({ id: 'late-a', content: 'A', effectiveStartDate: '2026-03-10', effectiveStartTime: '20:00' }),
+        ];
+        TaskSorter.sort(tasks, by(['startDate', 'asc'], ['content', 'asc']));
+        expect(ids(tasks)).toEqual(['late-a', 'early-b']);
+    });
+
+    it('endDate compares the effective end date only', () => {
+        const tasks = [
+            makeDT({ id: 'early-b', content: 'B', effectiveEndDate: '2026-03-10', effectiveEndTime: '08:00' }),
+            makeDT({ id: 'late-a', content: 'A', effectiveEndDate: '2026-03-10', effectiveEndTime: '20:00' }),
+            makeDT({ id: 'before', content: 'Z', effectiveEndDate: '2026-03-09' }),
+        ];
+        TaskSorter.sort(tasks, by(['endDate', 'asc'], ['content', 'asc']));
+        expect(ids(tasks)).toEqual(['before', 'late-a', 'early-b']);
+    });
+
+    it('tag compares the first of the effective tags, the section\'s merged in', () => {
+        const tasks = [
+            makeDT({ id: 'b-first', tags: ['b', 'a'] }),
+            makeDT({ id: 'a-only', tags: ['a'] }),
+            makeDT({ id: 'inherited', tags: [], cascadeContext: { tags: ['aa'] } }),
+        ];
+        TaskSorter.sort(tasks, by(['tag', 'asc']));
+        expect(ids(tasks)).toEqual(['a-only', 'inherited', 'b-first']);
+    });
+
+    it('a missing value is the smallest: first ascending, last descending', () => {
+        const make = () => [
+            makeDT({ id: 'has', due: '2026-03-10', effectiveStartDate: '2026-03-10', effectiveEndDate: '2026-03-10', tags: ['x'] }),
+            makeDT({ id: 'none' }),
+        ];
+        for (const property of ['due', 'startDate', 'endDate', 'tag'] as const) {
+            const asc = make();
+            TaskSorter.sort(asc, by([property, 'asc']));
+            expect(ids(asc), property).toEqual(['none', 'has']);
+            const desc = make();
+            TaskSorter.sort(desc, by([property, 'desc']));
+            expect(ids(desc), property).toEqual(['has', 'none']);
+        }
+    });
+
+    it('file and status compare the row\'s own text', () => {
+        const tasks = [
+            makeDT({ id: 'b-x', file: 'b.md', statusChar: 'x' }),
+            makeDT({ id: 'a-space', file: 'a.md', statusChar: ' ' }),
+            makeDT({ id: 'a-x', file: 'a.md', statusChar: 'x' }),
+        ];
+        TaskSorter.sort(tasks, by(['file', 'asc'], ['status', 'desc']));
+        expect(ids(tasks)).toEqual(['a-x', 'a-space', 'b-x']);
+    });
+});

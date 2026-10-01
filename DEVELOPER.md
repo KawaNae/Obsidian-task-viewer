@@ -122,7 +122,7 @@ src/
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
 │   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
-│   ├── filter/                # Filter engine, serializer, types, value collector
+│   ├── filter/                # Filter engine, serializer, types, value collector, TaskValues (what the filter and the sort compare)
 │   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
 │   ├── template/              # View template load/save (ViewTemplateLoader/Writer; TemplateNote: a template note, saved)
 │   ├── flow/                  # ==> フローの計画と通知 (FlowExecutor: 計画だけで書かない; FlowPlanner/GenBodyRenderer/ScheduleEngine/FlowTrigger; FlowNotices: 発火しなかったことを告げる)
@@ -219,9 +219,10 @@ Quick reference for locating the right layer when implementing a feature.
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
-| **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation |
+| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`) and the text a sort rule compares (`sortKey`). |
+| **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation, over the values `TaskValues` gives |
 | **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). The one load path for saved views and pinned lists, so it drops conditions on retired properties (`kind`) on read; a group left empty stays, and evaluates as true |
-| **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing |
+| **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing, over the values `TaskValues` gives |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
 | **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order |
 | **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion with effective field resolution |
@@ -331,6 +332,8 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 #### フローと validation
 
 フロープログラムはタスク行の `==>` の後ろと、直下の `- ==>` 行（`collectFlowLineIndices`: `directItems` のうちフロー行の形の行）の全部から1回で決まる。行のパーサ（`TVInlineParser`）は `==>` から後ろを本文から切り落とすだけで、読まない。`readFlow(outline, taskLine)` が行の尾とフロー行を集めて1回パースし、抽出（`tv-inline` の行）とエディタの診断（`DiagnosticsExtension`、`FlowGroup`）がこれを使う。
+
+フローの式が読む `due`（`start`、`end` も）は行に書かれた値で、節やノートから受け継いだ値（`effectiveDue`）ではない。式は次の回の行に書く値を作るもので、受け継いだ締切を入れると `at(due+7d)` が受け継ぎを行へ書き出してしまう。絞り込みと並べ替えが比べる値（`TaskValues`、受け継ぎを含む）とは目的が違う。
 
 `Task.validation` の1枠は抽出で1回だけ埋まる。行のパーサが入れた日付の規則、日付ブロックの parse-error を優先し、どちらも無い行だけがフローの最初の診断を受け取る。
 
