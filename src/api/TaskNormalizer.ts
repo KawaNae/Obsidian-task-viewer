@@ -18,7 +18,10 @@ interface RecordEnv {
 
 // Every ID goes out through `apiIdOf`: the row's own, its parent's and its
 // children's alike, so no ID of one shape reaches a caller in another.
-const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, env: RecordEnv) => unknown> = {
+// Keyed by NormalizedTask's own fields, so a field added to the type without
+// an extractor (or the other way) is a compile error, and ALL_FIELD_NAMES —
+// the CLI's output-fields and the references read it — lists them all.
+const FIELD_EXTRACTORS: { [K in keyof NormalizedTask]: (task: DisplayTask, env: RecordEnv) => unknown } = {
     id:          (t, { lookup }) => apiIdOf(t.id, lookup),
     file:        t => t.file,
     line:        t => t.line,
@@ -51,7 +54,7 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, env: RecordEnv) => un
     flow:               t => extractFlowString(t),
 };
 
-export const ALL_FIELD_NAMES: string[] = Object.keys(FIELD_EXTRACTORS);
+export const ALL_FIELD_NAMES: readonly string[] = Object.keys(FIELD_EXTRACTORS);
 
 // ── Flow extraction ──
 
@@ -82,11 +85,11 @@ function computeDurationMinutes(task: DisplayTask, startHour: number): number | 
 
 // ── Record extraction (for CLI field selection) ──
 
-export function taskToRecord(task: DisplayTask, fields: string[], lookup: TaskLookup, startHour: number): Record<string, unknown> {
+export function taskToRecord(task: DisplayTask, fields: readonly string[], lookup: TaskLookup, startHour: number): Record<string, unknown> {
     const record: Record<string, unknown> = {};
     const env: RecordEnv = { lookup, startHour };
     for (const field of fields) {
-        const extractor = FIELD_EXTRACTORS[field];
+        const extractor = (FIELD_EXTRACTORS as Record<string, ((task: DisplayTask, env: RecordEnv) => unknown) | undefined>)[field];
         record[field] = extractor ? extractor(task, env) : null;
     }
     return record;

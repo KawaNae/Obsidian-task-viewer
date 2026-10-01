@@ -3,7 +3,7 @@ import type { SortState, SortRule, SortProperty } from './SortTypes';
 import { TaskValues } from '../filter/TaskValues';
 
 /** The order used when a list has no sort rules. */
-const DEFAULT_ORDER: readonly SortProperty[] = ['due', 'startDate', 'content'];
+export const DEFAULT_SORT_ORDER: readonly SortProperty[] = ['due', 'startDate', 'content'];
 
 /**
  * Sorts tasks according to a user-defined SortState.
@@ -31,7 +31,7 @@ export class TaskSorter {
 
     static defaultSort(tasks: DisplayTask[]): void {
         tasks.sort((a, b) => {
-            for (const property of DEFAULT_ORDER) {
+            for (const property of DEFAULT_SORT_ORDER) {
                 const cmp = TaskSorter.keyOf(a, property).localeCompare(TaskSorter.keyOf(b, property));
                 if (cmp !== 0) return cmp;
             }
