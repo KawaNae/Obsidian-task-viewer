@@ -11,7 +11,7 @@ import type { CellStore } from '../lang/StmtEvaluator';
 import { type Value, isDatishValue, valueToDisplay } from '../lang/Value';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../parsing/gen/GenBodyParser';
-import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
+import { renderGenBody } from './GenBodyRenderer';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { formatDateBlock } from '../parsing/tv-inline/DateBlockFormat';
 import type { FlowInstance, GeneratedChild } from '../persistence/FlowInstanceLines';

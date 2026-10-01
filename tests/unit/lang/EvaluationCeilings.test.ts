@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer';
+import { renderGenBody } from '../../../src/services/flow/GenBodyRenderer';
 import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { readLine } from '../helpers/readLine';

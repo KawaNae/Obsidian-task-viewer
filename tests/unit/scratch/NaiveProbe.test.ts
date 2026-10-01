@@ -7,7 +7,7 @@ import type { EvalHost, StaticType } from '../../../src/services/lang/functions'
 import type { CellStore } from '../../../src/services/lang/StmtEvaluator';
 import { type Value, valueToLiteral } from '../../../src/services/lang/Value';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer';
+import { renderGenBody } from '../../../src/services/flow/GenBodyRenderer';
 
 /**
  * A runner for probing the expression language from outside.

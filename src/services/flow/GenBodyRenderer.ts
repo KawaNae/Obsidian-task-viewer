@@ -1,12 +1,12 @@
-import type { Span } from '../../lang/Diagnostic';
-import { type EvalContext, EvalError } from '../../lang/ExprEvaluator';
-import { type RenderedPart, renderInterpolation } from '../../lang/Interpolation';
-import { type CellStore, type Scope, SECTION_FUEL, cellScope, execProgram } from '../../lang/StmtEvaluator';
-import type { Value } from '../../lang/Value';
-import { TaskLineClassifier } from '../utils/TaskLineClassifier';
-import { Outline } from '../utils/Outline';
-import { LINE_BREAK, holdsLineBreak } from '../../../utils/LineBreak';
-import { type GenBody, type GenLine, indentDepth, isSpliceLine } from './GenBodyParser';
+import type { Span } from '../lang/Diagnostic';
+import { type EvalContext, EvalError } from '../lang/ExprEvaluator';
+import { type RenderedPart, renderInterpolation } from '../lang/Interpolation';
+import { type CellStore, type Scope, SECTION_FUEL, cellScope, execProgram } from '../lang/StmtEvaluator';
+import type { Value } from '../lang/Value';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
+import { Outline } from '../parsing/utils/Outline';
+import { LINE_BREAK, holdsLineBreak } from '../../utils/LineBreak';
+import { type GenBody, type GenLine, indentDepth, isSpliceLine } from '../parsing/gen/GenBodyParser';
 
 /** One generated child line: its text, and how deep it sits under the parent. */
 export interface RenderedChild {
