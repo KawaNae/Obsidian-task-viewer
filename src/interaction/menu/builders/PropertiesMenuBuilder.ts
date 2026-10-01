@@ -154,7 +154,7 @@ export class PropertiesMenuBuilder {
         this.addEndItem(menu, task, endParts, openModal);
         this.addDueItem(menu, task, dueParts, openModal);
         menu.addSeparator();
-        this.addLengthItem(menu, startParts, endParts, context.startHour);
+        this.addLengthItem(menu, task, context.startHour);
         this.addTagsItem(menu, task, openModal);
         this.addColorItem(menu, task, openModal);
         this.addLinestyleItem(menu, task, openModal);
@@ -274,36 +274,28 @@ export class PropertiesMenuBuilder {
         }
     }
 
-    private addLengthItem(menu: Menu, startParts: CalculatedProperty, endParts: CalculatedProperty, startHour: number): void {
-        let lengthText = '-';
-
-        if (startParts.date) {
-            const durationMs = DateUtils.getTaskDurationMs(
-                startParts.date,
-                startParts.time,
-                endParts.date,
-                endParts.time,
-                startHour
-            );
-            if (!Number.isNaN(durationMs) && durationMs > 0) {
-                const totalMinutes = Math.round(durationMs / 60000);
-                const days = Math.floor(totalMinutes / 1440);
-                const hours = Math.floor((totalMinutes % 1440) / 60);
-                const minutes = totalMinutes % 60;
-
-                const parts: string[] = [];
-                if (days > 0) parts.push(`${days}d`);
-                if (hours > 0) parts.push(`${hours}h`);
-                if (minutes > 0) parts.push(`${minutes}m`);
-
-                lengthText = parts.length > 0 ? parts.join(' ') : '0m';
-            }
-        }
+    /** The span the filter's `length` and the API's `durationMinutes` read. */
+    private addLengthItem(menu: Menu, task: DisplayTask, startHour: number): void {
+        const durationMs = DateUtils.getDisplayTaskDurationMs(task, startHour);
+        const lengthText = durationMs !== null && durationMs > 0 ? PropertiesMenuBuilder.lengthText(durationMs) : '-';
 
         menu.addItem((item) => {
             item.setTitle(t('menu.lengthLabel', { value: lengthText }))
                 .setIcon('clock')
                 .setDisabled(true);
         });
+    }
+
+    private static lengthText(durationMs: number): string {
+        const totalMinutes = Math.round(durationMs / 60000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+
+        const parts: string[] = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        return parts.length > 0 ? parts.join(' ') : '0m';
     }
 }
