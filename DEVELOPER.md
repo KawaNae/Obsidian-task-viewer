@@ -125,7 +125,7 @@ src/
 │   ├── filter/                # Filter engine, serializer, types, value collector
 │   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
 │   ├── template/              # View template load/save (ViewTemplateLoader/Writer; TemplateNote: a template note, saved)
-│   ├── flow/                  # ==> フローの計画と実行 (FlowExecutor/FlowPlanner/ScheduleEngine/FlowTrigger)
+│   ├── flow/                  # ==> フローの計画と実行 (FlowExecutor/FlowPlanner/GenBodyRenderer/ScheduleEngine/FlowTrigger)
 │   └── lang/                  # 式と文の言語 (Lexer/ExprParser/ExprEvaluator/StmtParser, Diagnostic)
 │       └── flow/              # ==> フロー記法の言語 (FlowAst/FlowParser/FlowChecker/FlowSegments/FlowSerializer/diagnosticText)。lang、i18n、types だけに依存する
 ├── editor/                    # Editor extensions (TaskMenuExtension, DiagnosticsExtension, GenHighlight, etc.)

@@ -3,7 +3,7 @@ import { EvalContext, EvalError } from '../../../src/services/lang/ExprEvaluator
 import type { EvalHost, StaticType } from '../../../src/services/lang/functions';
 import type { Value } from '../../../src/services/lang/Value';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer';
+import { renderGenBody } from '../../../src/services/flow/GenBodyRenderer';
 
 const stubHost: EvalHost = {
     formatDate: (value, tokens) => `[${tokens}:${value.type === 'date' ? value.value : '?'}]`,
