@@ -499,7 +499,7 @@ describe('10. duplicate in place (a copy that continues)', () => {
 
 // ─── 11. insertRecurrenceForTask ─────────────────────────────────────
 
-describe('11. insertRecurrenceForTask (create-next)', () => {
+describe('11. the next instance of a recurrence (create-instance)', () => {
     it('A: the next instance goes to the head of the group', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
@@ -538,7 +538,7 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
 
 // ─── 12. insertGeneratedInstance ─────────────────────────────────────
 
-describe('12. insertGeneratedInstance (create-generated)', () => {
+describe('12. the next instance a block writes (create-instance)', () => {
     const GEN = ['```tv-gen 週報', '- [ ] 対象', '\t- [ ] 生成子', '```', ''];
     const SOURCE = () => [...NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon use("週報")', '\t- [ ] 元の子'), ...GEN];
 
@@ -618,7 +618,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
         expect(Notice.messages).toEqual([readAgain('子')]);
     });
 
-    it('a flow fire (create-next, then strip-flow) writes nothing, and says so once', async () => {
+    it('a flow fire (create-instance, then strip-flow) writes nothing, and says so once', async () => {
         // The outside edit, just before the completing write, checks the
         // other twin and writes a line above; the check and its fire are one
         // write, made against two rows that read alike.

@@ -44,7 +44,7 @@ describe('planFlowForDeletion', () => {
             if (outlook.kind !== 'creates') return;
             // strip-flow has no place here: the line it would rewrite is the
             // line about to be deleted.
-            expect(outlook.effects.map(e => e.kind)).toEqual(['create-next']);
+            expect(outlook.effects.map(e => e.kind)).toEqual(['create-instance']);
         });
 
         it('previews the line the writer would put on the page', () => {
@@ -63,7 +63,7 @@ describe('planFlowForDeletion', () => {
 
             expect(outlook.kind).toBe('creates');
             if (outlook.kind !== 'creates') return;
-            expect(outlook.effects.map(e => e.kind)).toEqual(['create-generated']);
+            expect(outlook.effects.map(e => e.kind)).toEqual(['create-instance']);
             expect(outlook.previewLine).toBe('- [ ] 週報 第1回 @2026-07-06 ==> every mon use("週次")');
         });
     });
@@ -97,7 +97,7 @@ describe('planFlowForDeletion', () => {
 
             expect(outlook.kind).toBe('creates');
             if (outlook.kind !== 'creates') return;
-            expect(outlook.effects.map(e => e.kind)).toEqual(['create-next']);
+            expect(outlook.effects.map(e => e.kind)).toEqual(['create-instance']);
         });
     });
 

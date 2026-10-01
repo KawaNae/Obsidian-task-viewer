@@ -27,7 +27,7 @@ const checked = (task: Task): Task => ({ ...task, statusChar: 'x' });
 
 /** A recurrence's fire as the executor writes it: the next instance, then the strip, one write. */
 const fire = (task: Task, next: string): TaskOp[] => [
-    { kind: 'insert-instance', insert: { kind: 'recurrence', content: next, flowLines: ['every 1d'] } },
+    { kind: 'insert-instance', instance: { head: next, flowLines: ['every 1d'], children: [] } },
     { kind: 'strip-flow', text: formatRow({ ...task, flow: undefined }).trim() },
 ];
 
@@ -235,7 +235,7 @@ describe('flow effects', () => {
     const TODO = '- [ ] 🍅 記録';
     const FLOW = '\t- ==> every 1d';
 
-    it('create-next then strip-flow on the second of two identical fired records: the right one', async () => {
+    it('an instance then strip-flow on the second of two identical fired records: the right one', async () => {
         // The next instance goes to the head of the sibling group (line 0).
         // The strip takes its line from the insert's report, in one write.
         const bench = await writeBench([DONE, FLOW, DONE, FLOW, '']);
@@ -282,7 +282,7 @@ describe('flow effects', () => {
         const bench = await writeBench([DONE, FLOW, '']);
         const rec = bench.taskAt(0);
         const outcome = await bench.writer.write(rec.file, plannedOn(rec), [
-            { kind: 'insert-instance', insert: { kind: 'recurrence', content: TODO, flowLines: ['every 1d'] } },
+            { kind: 'insert-instance', instance: { head: TODO, flowLines: ['every 1d'], children: [] } },
             { kind: 'remove' },
             { kind: 'strip-flow', text: DONE },
         ]);

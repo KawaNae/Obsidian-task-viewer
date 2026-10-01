@@ -3,11 +3,11 @@ import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import { collectGenBlocks, type GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import type { GeneratedChild } from '../../../src/services/persistence/TaskCloner';
+import type { GeneratedChild } from '../../../src/services/persistence/FlowInstanceLines';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { completing } from '../helpers/completing';
@@ -50,17 +50,17 @@ function makeRepository() {
 }
 
 /** What the fire's one write inserts, if it inserts anything. */
-function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstance | undefined {
     const ops = repository.write.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
-    return op?.kind === 'insert-instance' ? op.insert : undefined;
+    return op?.kind === 'insert-instance' ? op.instance : undefined;
 }
 
-/** The generated instance the fire's one write inserts (fails if there is none). */
-function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<FlowInstanceInsert, { kind: 'generated' }> {
-    const insert = insertOf(repository);
-    if (insert?.kind !== 'generated') throw new Error('the fire inserts no generated instance');
-    return insert;
+/** The instance the fire's one write inserts (fails if there is none). */
+function generatedOf(repository: ReturnType<typeof makeRepository>): FlowInstance {
+    const instance = insertOf(repository);
+    if (!instance) throw new Error('the fire inserts no instance');
+    return instance;
 }
 
 /** How many strip-flow ops the fires wrote. */
@@ -115,7 +115,7 @@ const WEEKLY = block('週報', [
 ]);
 
 describe('a use() flow writes what its block describes', () => {
-    it('takes the generated path instead of the recurrence one', async () => {
+    it('writes the instance the block describes, in the one write', async () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
@@ -123,7 +123,7 @@ describe('a use() flow writes what its block describes', () => {
         await flush();
 
         expect(repository.write).toHaveBeenCalledTimes(1);
-        expect(insertOf(repository)?.kind).toBe('generated');
+        expect(generatedOf(repository).head).toContain('週報 第4回');
         expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
     });
@@ -154,7 +154,7 @@ describe('a use() flow writes what its block describes', () => {
         await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const { parentLine } = generatedOf(repository);
+        const { head: parentLine } = generatedOf(repository);
         expect(parentLine).toContain('==> every mon use("週報")');
     });
 
@@ -165,7 +165,7 @@ describe('a use() flow writes what its block describes', () => {
         await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const { parentLine } = generatedOf(repository);
+        const { head: parentLine } = generatedOf(repository);
         expect(parentLine).toContain('@2026-08-24');
     });
 
@@ -187,7 +187,7 @@ describe('a use() flow writes what its block describes', () => {
         }));
         await flush();
 
-        const { parentLine, flowLines } = generatedOf(repository);
+        const { head: parentLine, flowLines } = generatedOf(repository);
         expect(parentLine).not.toContain('use(');
         expect(flowLines).toEqual(['use("週報")']);
     });
@@ -203,7 +203,7 @@ describe('a use() flow writes what its block describes', () => {
         await executor.complete(firedTask('every mon use("朝")'));
         await flush();
 
-        const { parentLine, children } = generatedOf(repository);
+        const { head: parentLine, children } = generatedOf(repository);
         expect(parentLine).toBe('- [ ] 週報 第3回 @2026-08-24 ==> every mon use("朝")');
         expect(children).toEqual([{ depth: 1, body: '- [ ] ストレッチ' }]);
     });
@@ -219,7 +219,7 @@ describe('a use() flow writes what its block describes', () => {
         await executor.complete(firedTask('every mon x1 use("週報")'));
         await flush();
 
-        const { parentLine, flowLines, children } = generatedOf(repository);
+        const { head: parentLine, flowLines, children } = generatedOf(repository);
         expect(parentLine).not.toContain('==>');
         expect(flowLines).toEqual([]);
         expect(children).toEqual([
@@ -241,7 +241,7 @@ describe('a use() flow writes what its block describes', () => {
         await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const { parentLine, children } = generatedOf(repository);
+        const { head: parentLine, children } = generatedOf(repository);
         expect(parentLine).toContain('- [ ] 週報 @2026-08-24');
         expect(children).toEqual([{ depth: 1, body: '- [ ] 資料集め' }]);
     });
@@ -257,7 +257,7 @@ describe('a use() flow writes what its block describes', () => {
         await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const { parentLine } = generatedOf(repository);
+        const { head: parentLine } = generatedOf(repository);
         expect(parentLine.startsWith('- [ ] ')).toBe(true);
     });
 });
@@ -382,7 +382,7 @@ describe('a block body reaches the file unchanged', () => {
         await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
             {
                 kind: 'insert-instance',
-                insert: { kind: 'generated', parentLine: parentLine!, flowLines: ['every mon', 'use("週報")'], children },
+                instance: { head: parentLine!, flowLines: ['every mon', 'use("週報")'], children },
             },
         ]);
 
@@ -405,7 +405,7 @@ describe('a block body reaches the file unchanged', () => {
         const { parentLine, children } = shapeOf(document, '週報');
 
         await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
-            { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
+            { kind: 'insert-instance', instance: { head: parentLine!, flowLines: [], children } },
         ]);
 
         const written = h.lines();
@@ -443,7 +443,7 @@ describe('a block body reaches the file unchanged', () => {
         const { parentLine, children } = shapeOf(spaced, '週報');
 
         await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
-            { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
+            { kind: 'insert-instance', instance: { head: parentLine!, flowLines: [], children } },
         ]);
 
         expect(h.lines()[1]).toBe('    - [ ] 資料集め');

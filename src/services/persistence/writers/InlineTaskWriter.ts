@@ -4,7 +4,7 @@ import { carryTo } from '../Carry';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type InSection, type Spot } from '../utils/Placement';
 import { ListNumber } from '../utils/ListNumber';
-import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
+import { renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, fileGone, processLines, withRefused,
     type DraftEdit, type EditTrials, type EditedLines, type LineDraft, type Refusal, type RowRef,
@@ -278,7 +278,7 @@ export class InlineTaskWriter {
             case 'insert-instance': {
                 const outline = draft.reading();
                 const unit = indentUnit(this.app);
-                draft.put(Placement.groupHead(outline, line, flowInstanceHead(op.insert), unit), renderFlowInstance(outline, line, op.insert, unit));
+                draft.put(Placement.groupHead(outline, line, op.instance.head, unit), renderFlowInstance(outline, line, op.instance, unit));
                 return;
             }
             case 'strip-flow': {

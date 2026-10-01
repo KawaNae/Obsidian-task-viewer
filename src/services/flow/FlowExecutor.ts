@@ -8,8 +8,7 @@ import { formatRow } from '../parsing/TaskLineFormat';
 import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
-import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
-import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
+import { type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { CompletionFire, TaskOp } from '../persistence/TaskOps';
 import { plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import type { Refusal } from '../persistence/FileLines';
@@ -269,9 +268,9 @@ export class FlowExecutor {
         }
 
         const inserts: TaskOp[] = outlook.kind === 'creates'
-            ? outlook.effects.map(effect => {
+            ? outlook.effects.flatMap(effect => {
                 logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id} (with the delete)`);
-                return { kind: 'insert-instance', insert: this.instanceInsertFor(task, effect) };
+                return this.opsFor(task, effect);
             })
             : [];
 
@@ -287,45 +286,19 @@ export class FlowExecutor {
     }
 
     /**
-     * The same next instance {@link opsFor} would write, handed over as
-     * lines-to-be rather than written on the spot.
-     *
-     * The two paths read one effect the same way — a recurrence is formatted
-     * here and a generated instance arrives finished — and they render it with
-     * the same function, so a deletion fire and an ordinary one cannot come to
-     * write different lines for the same command.
-     */
-    private instanceInsertFor(task: Task, effect: CreatingEffect): FlowInstanceInsert {
-        if (effect.kind === 'create-next') {
-            return {
-                kind: 'recurrence',
-                content: formatRow(effect.newTask),
-                flowLines: (effect.newTask.flow?.childSegments ?? []).map(s => s.raw),
-            };
-        }
-        // Reported rather than dropped, on this path as on the other: the
-        // written line differs from the one the block describes, and nothing
-        // else will say so.
-        for (const w of effect.warnings) {
-            logWarn(`[Flow:generated] ${task.id}: ${w.message}`);
-        }
-        return {
-            kind: 'generated',
-            parentLine: effect.parentLine,
-            flowLines: effect.flowLines,
-            children: effect.children,
-        };
-    }
-
-    /**
-     * What one effect does in the row's own file, as the write applies it. A
-     * move's op takes the destination looked up in the lines (`planTask`).
+     * What one effect does in the row's own file, as the write applies it,
+     * for a completion's fire and a deletion's alike. A move's op takes the
+     * destination looked up in the lines (`planTask`).
      */
     private opsFor(task: Task, effect: Exclude<FlowEffect, { kind: 'move' }>): TaskOp[] {
         switch (effect.kind) {
-            case 'create-next':
-            case 'create-generated':
-                return [{ kind: 'insert-instance', insert: this.instanceInsertFor(task, effect) }];
+            case 'create-instance':
+                // Reported rather than dropped: the written line differs from
+                // the one the block describes, and nothing else will say so.
+                for (const w of effect.warnings) {
+                    logWarn(`[Flow:generated] ${task.id}: ${w.message}`);
+                }
+                return [{ kind: 'insert-instance', instance: effect.instance }];
             case 'strip-flow':
                 // The row without its command. A completion's fire reads the
                 // row from the lines its write holds, so this is the row as it

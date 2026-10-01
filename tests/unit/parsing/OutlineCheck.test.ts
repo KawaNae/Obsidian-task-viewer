@@ -252,7 +252,7 @@ describe('a next instance put at a sibling spelled apart from the row that fired
     it('is written at the sibling\'s indentation, its `==>` line as far past it as it stands past the row', () => {
         // R is four spaces in, its group's head A a tab: both P's children.
         const lines = ['- [ ] P', '\t- [x] A', '    - [ ] R ==> every mon', '      - ==> every mon', ''];
-        const block = renderFlowInstance(Outline.read(lines), 2, { kind: 'recurrence', content: '- [ ] R', flowLines: ['every mon'] }, '\t');
+        const block = renderFlowInstance(Outline.read(lines), 2, { head: '- [ ] R', flowLines: ['every mon'], children: [] }, '\t');
         const spot = Placement.groupHead(Outline.read(lines), 2, '- [ ] R', '\t');
         expect(spot).toEqual({ at: 1, parent: 0, indent: '\t' });
         const check = checked(lines, (draft) => draft.put(spot, block));

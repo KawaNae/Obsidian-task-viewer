@@ -338,7 +338,7 @@ describe('a recurrence insert leaves the subtree with the instance that fired', 
     /** `write` with the one op a recurrence's next-instance insert makes. */
     const insertRecurrence = (h: WriteBench, task: Task, content: string, flowLines: string[] = []) =>
         h.writer.write(task.file, plannedOn(task), [
-            { kind: 'insert-instance', insert: { kind: 'recurrence', content, flowLines } },
+            { kind: 'insert-instance', instance: { head: content, flowLines, children: [] } },
         ]);
 
     it('writes the new instance and nothing under it', async () => {
