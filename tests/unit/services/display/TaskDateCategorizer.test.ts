@@ -152,7 +152,7 @@ describe('バケツ内ソート（TaskRenderOrder 準拠）', () => {
         expect(idsOf(timed)).toEqual(['z-2300', 'a-0430']);
     });
 
-    it('timed: 同時刻は duration 降順、同一なら id 昇順', () => {
+    it('timed: 同時刻は duration 降順、同一なら書かれた場所の順', () => {
         const short = dt({ id: 'a-short', startDate: '2026-01-15', startTime: '10:00', endTime: '10:30' });
         const long = dt({ id: 'z-long', startDate: '2026-01-15', startTime: '10:00', endTime: '12:00' });
         const k2 = dt({ id: 'k2', startDate: '2026-01-15', startTime: '14:00' });
@@ -161,7 +161,7 @@ describe('バケツ内ソート（TaskRenderOrder 準拠）', () => {
         expect(idsOf(timed)).toEqual(['z-long', 'a-short', 'k1', 'k2']);
     });
 
-    it('allDay: 開始日昇順、同日は id 昇順', () => {
+    it('allDay: 開始日昇順、同日は書かれた場所の順', () => {
         const b = dt({ id: 'b', startDate: '2026-01-15', endDate: '2026-01-16' });
         const a = dt({ id: 'a', startDate: '2026-01-15', endDate: '2026-01-16' });
         const earlier = dt({ id: 'z-earlier', startDate: '2026-01-14', endDate: '2026-01-16' });
@@ -174,6 +174,37 @@ describe('バケツ内ソート（TaskRenderOrder 準拠）', () => {
         const morning = dt({ id: 'z-morning', due: '2026-01-15T09:00' });
         const dueOnly = categorizeTasksForDate([evening, morning], '2026-01-15', startHour).dueOnly;
         expect(idsOf(dueOnly)).toEqual(['z-morning', 'a-evening']);
+    });
+});
+
+// A tie is broken by where the task is written: its file, then its line as
+// a number. The ID is a name for one reading of the note
+// (`parserId:path:n:<reading>:<line>`), so comparing it as text put line 10
+// before line 9 and a file's tasks after another's by their notation.
+describe('同順位は書かれた場所の順（ファイル、行番号）', () => {
+    const name = (parserId: string, file: string, line: number) => `${parserId}:${file}:n:r1:${line}`;
+    const at = (parserId: string, file: string, line: number, fields: Partial<Task>) =>
+        dt({ id: name(parserId, file, line), file, line, parserId: parserId as Task['parserId'], ...fields });
+
+    it('timed: 行 9 が行 10 より先', () => {
+        const ten = at('tv-inline', 'note.md', 10, { startDate: '2026-01-15', startTime: '10:00' });
+        const nine = at('tv-inline', 'note.md', 9, { startDate: '2026-01-15', startTime: '10:00' });
+        const timed = categorizeTasksForDate([ten, nine], '2026-01-15', startHour).timed;
+        expect(timed.map(t => t.line)).toEqual([9, 10]);
+    });
+
+    it('allDay: ファイルの順が記法の順に勝つ', () => {
+        const b = at('day-planner', 'b.md', 1, { startDate: '2026-01-15' });
+        const a = at('tv-inline', 'a.md', 1, { startDate: '2026-01-15' });
+        const allDay = categorizeTasksForDate([b, a], '2026-01-15', startHour).allDay;
+        expect(allDay.map(t => t.file)).toEqual(['a.md', 'b.md']);
+    });
+
+    it('dueOnly: 同じ期限は行番号の数の順', () => {
+        const ten = at('tv-inline', 'note.md', 10, { due: '2026-01-15' });
+        const two = at('tv-inline', 'note.md', 2, { due: '2026-01-15' });
+        const dueOnly = categorizeTasksForDate([ten, two], '2026-01-15', startHour).dueOnly;
+        expect(dueOnly.map(t => t.line)).toEqual([2, 10]);
     });
 });
 
