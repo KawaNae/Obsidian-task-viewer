@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FilterSerializer } from '../../../src/services/filter/FilterSerializer';
 import type { FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
 import { isFilterCondition } from '../../../src/services/filter/FilterTypes';
-import { TaskFilterEngine } from '../../../src/services/filter/TaskFilterEngine';
+import { evaluateFilter } from '../helpers/filterContext';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
 
@@ -224,7 +224,7 @@ describe('FilterSerializer.fromJSON: retired kind conditions', () => {
         expect(state).toEqual({ logic: 'and', filters: [{ logic: 'or', filters: [] }, tag] });
 
         const task = (tags: string[]) => makeTask({ tags }) as unknown as DisplayTask;
-        expect(TaskFilterEngine.evaluate(task(['work']), state)).toBe(true);
-        expect(TaskFilterEngine.evaluate(task(['home']), state)).toBe(false);
+        expect(evaluateFilter(task(['work']), state)).toBe(true);
+        expect(evaluateFilter(task(['home']), state)).toBe(false);
     });
 });

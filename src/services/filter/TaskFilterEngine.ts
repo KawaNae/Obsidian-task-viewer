@@ -3,7 +3,7 @@ import type { FilterState, FilterCondition, FilterGroup, FilterItem, DateFilterV
 import type { FilterContext } from './FilterContext';
 import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
-import { toDisplayTask, NO_TASK_LOOKUP } from '../display/DisplayTaskConverter';
+import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskValues, type NumberValue } from './TaskValues';
 
 /**
@@ -20,11 +20,11 @@ import { TaskValues, type NumberValue } from './TaskValues';
  * exactly the rules a top-level task would be.
  */
 export class TaskFilterEngine {
-    static evaluate(task: DisplayTask, filterState: FilterState, context?: FilterContext): boolean {
+    static evaluate(task: DisplayTask, filterState: FilterState, context: FilterContext): boolean {
         return this.evaluateGroup(task, filterState, context);
     }
 
-    private static evaluateGroup(task: DisplayTask, group: FilterGroup, context?: FilterContext): boolean {
+    private static evaluateGroup(task: DisplayTask, group: FilterGroup, context: FilterContext): boolean {
         if (group.filters.length === 0) return true;
 
         if (group.logic === 'or') {
@@ -33,14 +33,14 @@ export class TaskFilterEngine {
         return group.filters.every(child => this.evaluateItem(task, child, context));
     }
 
-    private static evaluateItem(task: DisplayTask, node: FilterItem, context?: FilterContext): boolean {
+    private static evaluateItem(task: DisplayTask, node: FilterItem, context: FilterContext): boolean {
         if (isFilterCondition(node)) {
             return this.evalCondition(task, node, context);
         }
         return this.evaluateGroup(task, node, context);
     }
 
-    private static evalCondition(task: DisplayTask, condition: FilterCondition, context?: FilterContext): boolean {
+    private static evalCondition(task: DisplayTask, condition: FilterCondition, context: FilterContext): boolean {
         // Skip conditions with empty array values (value not yet selected)
         if (Array.isArray(condition.value) && condition.value.length === 0) return true;
 
@@ -52,7 +52,7 @@ export class TaskFilterEngine {
             return this.evaluateAncestor(task, selfCondition, context);
         }
 
-        const startHour = context?.startHour ?? 0;
+        const startHour = context.startHour;
         switch (condition.property) {
             case 'file':
             case 'status':
@@ -67,7 +67,7 @@ export class TaskFilterEngine {
             case 'startDate':
             case 'endDate':
             case 'due':
-                return this.evalDate(TaskValues.of(task, condition.property).date, condition, startHour, context?.weekStartDay ?? 1);
+                return this.evalDate(TaskValues.of(task, condition.property).date, condition, context);
             case 'anyDate':
             case 'parent':
             case 'children':
@@ -96,13 +96,13 @@ export class TaskFilterEngine {
     private static evaluateAncestor(
         task: DisplayTask,
         selfCondition: FilterCondition,
-        context: FilterContext | undefined,
+        context: FilterContext,
     ): boolean {
         const seen = new Set<string>();
         let currentParentId: string | undefined = task.parentId;
         while (currentParentId && !seen.has(currentParentId)) {
             seen.add(currentParentId);
-            const ancestor: Task | undefined = context?.taskLookup?.(currentParentId);
+            const ancestor: Task | undefined = context.taskLookup(currentParentId);
             if (!ancestor) return false;
             // Through the one conversion entry point, same as any other
             // task the engine sees. The hand-built object this replaces set
@@ -112,8 +112,8 @@ export class TaskFilterEngine {
             // parent, nor that the parent had children.
             const ancestorDt = toDisplayTask(
                 ancestor,
-                context?.startHour ?? 0,
-                context?.taskLookup ?? NO_TASK_LOOKUP,
+                context.startHour,
+                context.taskLookup,
             );
             if (this.evalCondition(ancestorDt, selfCondition, context)) return true;
             currentParentId = ancestor.parentId;
@@ -149,13 +149,13 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number, weekStartDay: 0 | 1): boolean {
+    private static evalDate(taskDate: string | undefined, c: FilterCondition, context: FilterContext): boolean {
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;
 
         if (c.value == null) return true;
         if (!taskDate) return false;
-        const { start, end } = DateResolver.resolve(c.value as DateFilterValue, weekStartDay, startHour, new Date());
+        const { start, end } = DateResolver.resolve(c.value as DateFilterValue, context.weekStartDay, context.startHour, context.now);
         switch (c.operator) {
             case 'equals':     return taskDate >= start && taskDate <= end;
             case 'before':     return taskDate < start;
