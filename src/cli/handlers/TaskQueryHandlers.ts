@@ -1,9 +1,7 @@
 import type { CliData } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import type { ApiHost } from '../../api/TaskApi';
-import type { FilterState } from '../../services/filter/FilterTypes';
 import type { SimpleFilterParams } from '../../api/TaskApiTypes';
-import { loadFilterFile } from '../../api/FilterFileLoader';
 import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
 import {
@@ -36,17 +34,18 @@ export function cliDataToSimpleFilterParams(params: CliData): SimpleFilterParams
     return result;
 }
 
-function cliDataToListParams(params: CliData, format: OutputFormat, preloadedFilter?: FilterState): ListParams {
-    const result: ListParams = {};
-
-    if (preloadedFilter) {
-        result.filter = preloadedFilter;
-    } else {
-        Object.assign(result, cliDataToSimpleFilterParams(params));
-        if (params.date) result.date = params.date;
-        if (params.from) result.from = params.from;
-        if (params.to) result.to = params.to;
-    }
+/**
+ * `list`'s flags as the API's params. A filter file and the list in it go to
+ * the API as they are: the API reads the file, and decides what else it
+ * reads beside one, as it does for any caller.
+ */
+function cliDataToListParams(params: CliData, format: OutputFormat): ListParams {
+    const result: ListParams = cliDataToSimpleFilterParams(params);
+    if (params.date) result.date = params.date;
+    if (params.from) result.from = params.from;
+    if (params.to) result.to = params.to;
+    if (params['filter-file']) result.filterFile = params['filter-file'];
+    if (params.list) result.list = params.list;
 
     if (params.sort) result.sort = parseSortFlag(params.sort);
     result.limit = readLimitFlag(params, format);
@@ -72,17 +71,7 @@ export function createListHandler(plugin: PluginContext & ApiHost) {
 
         return wrapCliResult('list tasks', async () => {
             const format = (params.format as OutputFormat) || 'json';
-
-            let preloadedFilter: FilterState | undefined;
-
-            const filterFilePath = params['filter-file'];
-            if (filterFilePath) {
-                const result = await loadFilterFile(plugin.app, filterFilePath, params.list);
-                if (typeof result === 'string') return cliError(result);
-                preloadedFilter = result;
-            }
-
-            const apiParams = cliDataToListParams(params, format, preloadedFilter);
+            const apiParams = cliDataToListParams(params, format);
             const listResult = await plugin.api.list(apiParams);
             const fields = resolveFields(params['output-fields']);
             const meta = { total: listResult.total, truncated: listResult.truncated, limit: listResult.limit };
