@@ -111,7 +111,7 @@ obsidian obsidian-task-viewer:create file=DailyNotes/2026-03-15.md content="Meet
 | `content` | ○ | タスクの内容 | `content="Weekly review"` |
 | `start` | | 開始日時 | `start=2026-03-15T14:00` |
 | `end` | | 終了日時 | `end=15:00` |
-| `due` | | 締切日 | `due=2026-03-20` |
+| `due` | | 締切（時刻は日付の後にだけ付けられる） | `due=2026-03-20T17:00` |
 | `status` | | ステータス文字（デフォルト: ` `） | `status=!` |
 | `heading` | | 挿入先の見出し（探し方と置き場所は [API の create](api.md#create) と同じ） | `heading=Tasks` |
 
@@ -132,7 +132,7 @@ obsidian obsidian-task-viewer:update id=abc123 start=none  # フィールドを�
 | `content` | | 新しい内容 |
 | `start` | | 新しい開始日時（`none` でクリア） |
 | `end` | | 新しい終了日時（`none` でクリア） |
-| `due` | | 新しい締切日（`none` でクリア） |
+| `due` | | 新しい締切（時刻は日付の後にだけ付けられる。`none` でクリア） |
 | `status` | | 新しいステータス（`none` で未完了に戻す） |
 
 ### delete — タスク削除

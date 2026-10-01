@@ -73,7 +73,7 @@ export const CREATE_SCHEMA = {
     content: { value: '<text>',          description: 'Task content', required: true },
     start:   { value: '<date|datetime>', description: 'Start date (YYYY-MM-DD or YYYY-MM-DD HH:mm)' },
     end:     { value: '<date|datetime>', description: 'End date/datetime' },
-    due:     { value: '<YYYY-MM-DD>',    description: 'Due date' },
+    due:     { value: '<date|datetime>', description: 'Due date, with a time only after it' },
     status:  { value: '<char>',          description: 'Status character (default: space)' },
     heading: { value: '<heading>',       description: 'Insert under heading (default: end of file)' },
 } as const satisfies ParamMap<CreateParams>;
@@ -83,7 +83,7 @@ export const UPDATE_SCHEMA = {
     content: { value: '<text>',               description: 'New content' },
     start:   { value: '<date|datetime|none>', description: 'New start date/datetime ("none" to clear)' },
     end:     { value: '<date|datetime|none>', description: 'New end date/datetime ("none" to clear)' },
-    due:     { value: '<YYYY-MM-DD|none>',    description: 'New due date ("none" to clear)' },
+    due:     { value: '<date|datetime|none>', description: 'New due date, with a time only after it ("none" to clear)' },
     status:  { value: '<char|none>',          description: 'New status character ("none" to uncheck)' },
 } as const satisfies ParamMap<UpdateParams>;
 

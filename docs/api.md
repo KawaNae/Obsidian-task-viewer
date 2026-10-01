@@ -148,7 +148,7 @@ const result = await api.create({
 | `content` | ○ | `string` | タスクの内容 |
 | `start` | | `string` | 開始日時（`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `HH:mm`） |
 | `end` | | `string` | 終了日時 |
-| `due` | | `string` | 締切日（`YYYY-MM-DD`） |
+| `due` | | `string` | 締切（`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`）。時刻は日付の後にだけ付けられます |
 | `status` | | `string` | ステータス文字（デフォルト: ` `） |
 | `heading` | | `string` | 挿入先見出し。レベルを問わず、Obsidian のリンク `[[#見出し]]` と同じ比べ方で探します。節の先頭か末尾かは設定「節に行を足す位置」に従います。見出しが無ければ、ノートの末尾に設定のレベルで作ります。同じ名前の見出しが 2 つ以上あれば書き込みません |
 
@@ -163,7 +163,7 @@ const result = await api.update({
 // => { task: NormalizedTask }
 ```
 
-**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション）。`start`/`end`/`due`/`status` は `'none'` を指定するとフィールドをクリアする。`content` に `'none'` の特別処理はなく、文字列 `"none"` として設定される
+**UpdateParams:** `id`（必須）, `content`, `start`, `end`, `due`, `status`（すべてオプション）。`start`/`end`/`due`/`status` は `'none'` を指定するとフィールドをクリアする。値の形は create と同じで、`due` の時刻も create と同じく書かれる。`content` に `'none'` の特別処理はなく、文字列 `"none"` として設定される
 
 ## delete
 
