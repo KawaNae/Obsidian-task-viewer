@@ -18,23 +18,31 @@ import { createExportImageHandler } from './handlers/ExportImageHandler';
 import { createHelpHandler } from './handlers/HelpHandler';
 
 /**
+ * How the registrar checks a command's flags before its handler runs.
+ * `strict`: only the declared flags, a boolean one without a value.
+ * `handler`: the handler checks its flags itself — `export-image` takes the
+ * flags of the view it exports, which are known only once the view is.
+ */
+type FlagCheck = 'strict' | 'handler';
+
+/**
  * Register all CLI handlers for the Task Viewer plugin.
  * Call once from plugin.onload() after TaskIndex is initialized.
  *
  * Flag declarations are derived from OperationSchemas (the single source of
- * truth for the CLI/API parameter surface), and every handler is wrapped
- * with strict validation: unknown flags error with a did-you-mean
- * suggestion instead of being silently ignored. `export-image` is the one
- * registered without that wrapper (see its registration below).
+ * truth for the CLI/API parameter surface), and every handler is registered
+ * through one wrapper: its flags are checked (`FlagCheck`) — unknown flags
+ * error with a did-you-mean suggestion instead of being silently ignored —
+ * and an error it throws comes back as a cliError.
  *
  * Commands (13): list, today, get, create, update, delete, duplicate, tasks-for-date-range,
  *                 categorized-tasks-for-date-range, insert-child-task, get-start-hour,
  *                 export-image, help
  */
 export function registerCliHandlers(plugin: PluginContext & CliRegistrar & ApiHost & ExportHost): void {
-    function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler): void {
+    function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler, check: FlagCheck = 'strict'): void {
         const wrapped: CliHandler = async (params) => {
-            const err = validateCliParams(params, flags, action);
+            const err = check === 'strict' ? validateCliParams(params, flags, action) : null;
             if (err) return err;
             try {
                 return await handler(params);
@@ -85,15 +93,9 @@ export function registerCliHandlers(plugin: PluginContext & CliRegistrar & ApiHo
         null, createGetStartHourHandler(plugin));
 
     // ── Export ──
-    // export-image accepts dynamic view-config flags (start-date, days-to-show,
-    // etc.) that vary per view type, so strict validation is skipped here.
-    // The handler performs its own context-aware validation.
-    plugin.registerCliHandler(
-        'obsidian-task-viewer:export-image',
-        'Export a view as a PNG image',
-        toCliFlags(EXPORT_IMAGE_SCHEMA),
-        createExportImageHandler(plugin),
-    );
+
+    register('export-image', 'Export a view as a PNG image',
+        toCliFlags(EXPORT_IMAGE_SCHEMA), createExportImageHandler(plugin), 'handler');
 
     // ── Help ──
 
