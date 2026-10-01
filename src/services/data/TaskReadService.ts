@@ -1,4 +1,4 @@
-import type { Task, DisplayTask, ChildEntry } from '../../types';
+import type { Task, DisplayTask, ChildEntry, TaskViewerSettings } from '../../types';
 import type { FilterState } from '../filter/FilterTypes';
 import type { FilterContext } from '../filter/FilterContext';
 import { hasConditions } from '../filter/FilterTypes';
@@ -25,29 +25,20 @@ import { buildChildEntries } from './ChildEntryBuilder';
 export class TaskReadService {
     private cachedDisplayTasks: DisplayTask[] | null = null;
     private cacheRevision: number = -1;
+    /** The startHour the cached copies were drawn with: a change of it redraws them. */
+    private cacheStartHour: number = -1;
 
-    private weekStartDay: 0 | 1 = 1;
-
+    /**
+     * `settings` is read at each question, so what the service answers is
+     * always the current settings; nothing has to push a change in.
+     */
     constructor(
         private taskIndex: IndexReads,
-        private startHour: number
+        private settings: () => Pick<TaskViewerSettings, 'startHour' | 'weekStartDay'>,
     ) {}
 
-    /** Update startHour (call on settings change). Invalidates cache. */
-    updateStartHour(startHour: number): void {
-        if (this.startHour !== startHour) {
-            this.startHour = startHour;
-            this.cachedDisplayTasks = null;
-        }
-    }
-
-    updateWeekStartDay(day: 0 | 1): void {
-        this.weekStartDay = day;
-    }
-
-    /** Current startHour value. */
-    getStartHour(): number {
-        return this.startHour;
+    private get startHour(): number {
+        return this.settings().startHour;
     }
 
     /**
@@ -69,16 +60,18 @@ export class TaskReadService {
 
     /**
      * All DisplayTasks, revision-cached.
-     * Recomputed only when TaskStore revision changes.
+     * Recomputed when the index's revision or the startHour changes.
      */
     getAllDisplayTasks(): DisplayTask[] {
         const currentRevision = this.taskIndex.getRevision();
-        if (this.cachedDisplayTasks && this.cacheRevision === currentRevision) {
+        const startHour = this.startHour;
+        if (this.cachedDisplayTasks && this.cacheRevision === currentRevision && this.cacheStartHour === startHour) {
             return this.cachedDisplayTasks;
         }
         const lookup = this.taskLookup;
-        this.cachedDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), this.startHour, lookup);
+        this.cachedDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour, lookup);
         this.cacheRevision = currentRevision;
+        this.cacheStartHour = startHour;
         return this.cachedDisplayTasks;
     }
 
@@ -172,7 +165,7 @@ export class TaskReadService {
     private createFilterContext(): FilterContext {
         return {
             startHour: this.startHour,
-            weekStartDay: this.weekStartDay,
+            weekStartDay: this.settings().weekStartDay,
             taskLookup: (id: string) => this.taskIndex.getTask(id),
         };
     }

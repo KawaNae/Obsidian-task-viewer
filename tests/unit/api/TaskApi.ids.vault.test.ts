@@ -35,7 +35,7 @@ function apiOver(session: VaultSession): TaskApi {
     const plugin = {
         app: session.app,
         settings: { startHour: 0 },
-        getTaskReadService: () => new TaskReadService(session.index, 0),
+        getTaskReadService: () => new TaskReadService(session.index, () => ({ startHour: 0, weekStartDay: 1 })),
         getIndex: () => session.index,
         getOperations: () => session.ops,
     };

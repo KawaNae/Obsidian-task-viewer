@@ -24,7 +24,7 @@ async function updated(line: string, params: { start?: string; end?: string; due
     const api = new TaskApi({
         app: session.app,
         settings: { startHour: 0 },
-        getTaskReadService: () => new TaskReadService(session.index, 0),
+        getTaskReadService: () => new TaskReadService(session.index, () => ({ startHour: 0, weekStartDay: 1 })),
         getIndex: () => session.index,
         getOperations: () => session.ops,
     } as never);

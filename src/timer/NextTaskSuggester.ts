@@ -54,7 +54,7 @@ export class NextTaskSuggester {
 
     private compute(): NextTaskSuggestion | null {
         const readService = this.plugin.getTaskReadService();
-        const startHour = readService.getStartHour();
+        const startHour = this.plugin.settings.startHour;
         const defs = this.plugin.settings.statusDefinitions;
 
         const now = new Date();
