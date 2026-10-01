@@ -1,6 +1,7 @@
 import { collectFlowLineIndices, formatFlowLine } from '../parsing/utils/FlowLineScanner';
 import { Outline, type OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
+import { ListNumber } from './utils/ListNumber';
 import { Block, Placement, type PlacedLine } from './utils/Placement';
 
 /**
@@ -110,7 +111,8 @@ export function renderFlowInstance(
  * in at the head of the row's group, which can be just past the text of the
  * item above (CommonMark: an ordered item interrupts a paragraph only when it
  * starts at 1). So an ordered row's instance is numbered 1, with the row's
- * delimiter and gap; a bullet is the row's own. A number shorter than the
+ * delimiter and gap (`ListNumber.first`, the number a head takes before it
+ * is placed); a bullet is the row's own. A number shorter than the
  * row's moves the content left of the row's; the `==>` lines and generated
  * children stay at the columns they are resolved to under the row, as a
  * child of an item may stand past its content column.
@@ -119,6 +121,6 @@ function spelledAsFired(fired: string, head: string): string {
     const indent = Outline.indentOf(fired);
     const task = TaskLineClassifier.classify(head);
     if (!task) return indent + Outline.dedent(head);
-    const marker = TaskLineClassifier.extractMarker(fired).replace(/^\d+(?=[.)])/, '1');
+    const marker = ListNumber.first(TaskLineClassifier.extractMarker(fired));
     return indent + marker + '[' + task.statusChar + task.suffix;
 }
