@@ -1,17 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { parseLimit, readIntFlag } from '../../../src/cli/CliOutputFormatter';
 import { createDuplicateHandler, createTasksForDateRangeHandler } from '../../../src/cli/handlers/TaskActionHandlers';
-import { DUPLICATE_SCHEMA, LIMIT_PARAM } from '../../../src/api/OperationSchemas';
+import { toCliName } from '../../../src/api/OperationSchemas';
+import { TaskApiError } from '../../../src/api/TaskApiTypes';
 
 /**
- * The CLI's whole-number flags are read by `IntInput` against the range
- * their API parameter's schema holds, so the CLI takes the numbers the API
- * takes. `parseInt` read `3days` as 3 and `1.5` as 1 (stage 7, input
- * decision F).
+ * The CLI's whole-number flags are read by `IntInput`: `parseInt` read
+ * `3days` as 3 and `1.5` as 1 (stage 7, input decision F). The range is the
+ * API's to check, once (B#13b; `CliApiChecks.test.ts`).
  */
 
 describe('parseLimit', () => {
-    it.each([['0', 0], ['20', 20], [' 20 ', 20], ['２０', 20]])('reads %j as %d', (raw, n) => {
+    it.each([['0', 0], ['20', 20], [' 20 ', 20], ['２０', 20], ['-1', -1]])('reads %j as %d (its range is the API\'s)', (raw, n) => {
         expect(parseLimit(raw)).toBe(n);
     });
 
@@ -22,28 +22,27 @@ describe('parseLimit', () => {
     it.each(['3days', '1.5', 'abc', '0x10'])('refuses %j', (raw) => {
         expect(() => parseLimit(raw)).toThrow(`limit must be a whole number or "all", got: ${JSON.stringify(raw)}`);
     });
-
-    it('refuses a negative limit', () => {
-        expect(() => parseLimit('-1')).toThrow('limit must be at least 0 or "all", got: "-1"');
-    });
-
-    it('takes the range the API checks', () => {
-        expect(LIMIT_PARAM.int).toEqual({ min: 0 });
-    });
 });
 
 describe('readIntFlag', () => {
     it('reads the kebab-case flag of an API key', () => {
-        expect(readIntFlag({ 'day-offset': '-2' }, 'dayOffset', DUPLICATE_SCHEMA.dayOffset)).toBe(-2);
+        expect(readIntFlag({ 'day-offset': '-2' }, 'dayOffset')).toBe(-2);
     });
 
-    it('leaves an absent or empty flag to the API default', () => {
-        expect(readIntFlag({}, 'count', DUPLICATE_SCHEMA.count)).toBeUndefined();
-        expect(readIntFlag({ count: '' }, 'count', DUPLICATE_SCHEMA.count)).toBeUndefined();
+    it('leaves an absent flag to the API default', () => {
+        expect(readIntFlag({}, 'count')).toBeUndefined();
     });
 
-    it('refuses by the schema range', () => {
-        expect(() => readIntFlag({ count: '0' }, 'count', DUPLICATE_SCHEMA.count)).toThrow('count must be at least 1, got: "0"');
+    it('reads the text only: a number out of range is passed on for the API to check', () => {
+        expect(readIntFlag({ count: '0' }, 'count')).toBe(0);
+    });
+
+    it('names the flag in its error', () => {
+        expect(() => readIntFlag({ 'day-offset': 'x' }, 'dayOffset')).toThrow(TaskApiError);
+        try { readIntFlag({ 'day-offset': 'x' }, 'dayOffset'); } catch (e) {
+            expect((e as TaskApiError).param).toBe('dayOffset');
+            expect((e as TaskApiError).textFor(toCliName)).toBe('day-offset must be a whole number, got: "x"');
+        }
     });
 });
 
@@ -64,7 +63,6 @@ describe('duplicate', () => {
         [{ 'day-offset': '3days' }, 'day-offset must be a whole number, got: "3days"'],
         [{ 'day-offset': '1.5' }, 'day-offset must be a whole number, got: "1.5"'],
         [{ count: '2x' }, 'count must be a whole number, got: "2x"'],
-        [{ count: '0' }, 'count must be at least 1, got: "0"'],
     ])('refuses %j without calling the API', async (flags, message) => {
         const p = plugin();
         expect(errorOf(await createDuplicateHandler(p)({ id: 'a.md#^x', ...flags }))).toBe(message);

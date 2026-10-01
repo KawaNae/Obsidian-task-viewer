@@ -308,7 +308,7 @@ export function assertParams(
         if (spec.required) {
             const v = values[key];
             if (v === undefined || v === null || v === '') {
-                throw new TaskApiError(`Missing required parameter: ${key}`);
+                throw new TaskApiError(name => `Missing required parameter: ${name(key)}`, key);
             }
         }
     }

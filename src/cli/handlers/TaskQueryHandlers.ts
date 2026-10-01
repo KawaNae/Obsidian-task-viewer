@@ -8,7 +8,7 @@ import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
 import {
     formatOutput, formatSingleTask, resolveFields, cliError, wrapCliResult,
-    validateFormat, parseLimit, defaultLimitForFormat,
+    validateFormat, readLimitFlag,
     type OutputFormat,
 } from '../CliOutputFormatter';
 
@@ -49,7 +49,7 @@ function cliDataToListParams(params: CliData, format: OutputFormat, preloadedFil
     }
 
     if (params.sort) result.sort = parseSortFlag(params.sort);
-    result.limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
+    result.limit = readLimitFlag(params, format);
 
     return result;
 }
@@ -58,7 +58,7 @@ function cliDataToTodayParams(params: CliData, format: OutputFormat): TodayParam
     const result: TodayParams = {};
     if (params.leaf === 'true') result.leaf = true;
     if (params.sort) result.sort = parseSortFlag(params.sort);
-    result.limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
+    result.limit = readLimitFlag(params, format);
     return result;
 }
 
@@ -109,7 +109,6 @@ export function createTodayHandler(plugin: PluginContext & ApiHost) {
 
 export function createGetHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params.id) return cliError('Missing required flag: --id');
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 

@@ -3,7 +3,6 @@ import { getAllConditions, PROPERTY_OPERATORS } from '../services/filter/FilterT
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { DATE_PRESET_SYNTAX, parseDatePreset } from '../services/filter/DatePreset';
 import type { DateFilterValue } from '../services/filter/FilterTypes';
-import { issueText } from '../utils/values/IssueText';
 import type { App } from 'obsidian';
 import { TaskApiError } from './TaskApiTypes';
 import type { ListParams, SimpleFilterParams, FilterSourceParams } from './TaskApiTypes';
@@ -16,8 +15,8 @@ import { loadFilterFile } from './FilterFileLoader';
 export function readDateParam(value: string, name: string): DateFilterValue {
     const read = parseDatePreset(value);
     if (read.ok) return read.value;
-    if (read.issue.code === 'noSuchDay') throw new TaskApiError(issueText(read.issue, name, value));
-    throw new TaskApiError(`Invalid date value for ${name}: ${value}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`);
+    if (read.issue.code === 'noSuchDay') throw TaskApiError.ofIssue(read.issue, name, value);
+    throw new TaskApiError(n => `Invalid date value for ${n(name)}: ${value}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`, name);
 }
 
 /**
@@ -136,7 +135,7 @@ function windowConditions(params: QueryWindowParams): FilterCondition[] {
     //   from → the task must not end before the window starts
     //   to   → the task must not start after the window ends
     if (params.date && (params.from || params.to)) {
-        throw new TaskApiError("Cannot use 'date' together with 'from'/'to'. Use either 'date' for a single-day window, or 'from'/'to' for a range.");
+        throw new TaskApiError(n => `Cannot use '${n('date')}' together with '${n('from')}'/'${n('to')}'. Use either '${n('date')}' for a single-day window, or '${n('from')}'/'${n('to')}' for a range.`, 'date');
     }
     const conditions: FilterCondition[] = [];
     const windowFrom = params.date ?? params.from;
@@ -181,7 +180,7 @@ export async function resolveFilterSource(
     window?: QueryWindowParams,
 ): Promise<FilterState | null> {
     if (params.list && !params.filterFile) {
-        throw new TaskApiError("'list' requires 'filterFile' (a .md view template)");
+        throw new TaskApiError(n => `'${n('list')}' requires '${n('filterFile')}' (a .md view template)`, 'list');
     }
     if (!params.filterFile) return filterOfParams(params, window);
     const loaded = await loadFilterFile(app, params.filterFile, params.list);

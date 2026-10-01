@@ -1,7 +1,7 @@
 import type { NormalizedTask } from '../api/TaskApiTypes';
 import { TaskApiError } from '../api/TaskApiTypes';
 import { ALL_FIELD_NAMES } from '../api/TaskNormalizer';
-import { LIMIT_PARAM, toCliName, type ParamSpec } from '../api/OperationSchemas';
+import { toCliName } from '../api/OperationSchemas';
 import { IntInput } from '../utils/values/NumberValues';
 import { typed } from '../utils/values/Normalize';
 import { issueText } from '../utils/values/IssueText';
@@ -133,26 +133,32 @@ export function validateFormat(format: string | undefined): string | null {
 }
 
 /**
- * A whole-number flag, read by `IntInput` against the range its API
- * parameter's schema holds, so the CLI takes the numbers the API takes
- * (`3days` and `1.5` are refused, not read as 3 and 1). An absent or empty
- * flag is undefined: the API's default.
+ * The flag of the API key `key`, read as a whole number (`IntInput`):
+ * `3days` and `1.5` are refused, not read as 3 and 1. Only the text is read
+ * here; whether the number is in range is the API's to check, once, as it
+ * checks a number a script hands it. An absent flag is undefined: the API's
+ * default.
  */
-export function readIntFlag(params: Readonly<Record<string, string>>, key: string, spec: ParamSpec): number | undefined {
-    const flag = toCliName(key);
-    const raw = params[flag];
-    if (!raw) return undefined;
-    const read = IntInput.read(raw, spec.int);
-    if (!read.ok) throw new TaskApiError(issueText(read.issue, flag, raw));
+export function readIntFlag(params: Readonly<Record<string, string>>, key: string): number | undefined {
+    const raw = params[toCliName(key)];
+    if (raw === undefined) return undefined;
+    const read = IntInput.read(raw);
+    if (!read.ok) throw TaskApiError.ofIssue(read.issue, key, raw);
     return read.value;
 }
 
-/** `limit=`: a whole number of 0 or more, as the API's, or `all` (no limit). */
+/** `limit=`: a whole number, or `all` (no limit). Its range is the API's to check. */
 export function parseLimit(raw: string): number {
     if (typed(raw) === 'all') return Infinity;
-    const read = IntInput.read(raw, LIMIT_PARAM.int);
-    if (!read.ok) throw new TaskApiError(`${issueText(read.issue, 'limit')} or "all", got: ${JSON.stringify(raw)}`);
-    return read.value;
+    const read = IntInput.read(raw);
+    if (read.ok) return read.value;
+    if (read.issue.code === 'shape') throw new TaskApiError(`${issueText(read.issue, 'limit')} or "all", got: ${JSON.stringify(raw)}`);
+    throw TaskApiError.ofIssue(read.issue, 'limit', raw);
+}
+
+/** A listing's `limit=` flag, or the format's default when it is absent. */
+export function readLimitFlag(params: Readonly<Record<string, string>>, format: OutputFormat): number {
+    return params.limit === undefined ? defaultLimitForFormat(format) : parseLimit(params.limit);
 }
 
 // ── JSON helpers (for CRUD responses) ──
@@ -166,14 +172,22 @@ export function cliError(message: string): string {
 }
 
 /**
- * Runs a handler body and turns a thrown error into `cliError`, unwrapping
- * `TaskApiError.rawMessage` when present. `label` names the operation for
- * the fallback "Failed to X" message (e.g. "create task").
+ * A thrown error as a cliError. A `TaskApiError` is told in its own words
+ * with its parameters named by their flags (`parent-id`, not `parentId`);
+ * any other error, as `Failed to <label>: …` when `label` names the
+ * operation (e.g. "create task").
  */
+export function cliErrorOf(e: unknown, label?: string): string {
+    if (e instanceof TaskApiError) return cliError(e.textFor(toCliName));
+    const message = e instanceof Error ? e.message : String(e);
+    return cliError(label ? `Failed to ${label}: ${message}` : message);
+}
+
+/** Runs a handler body and turns a thrown error into a cliError (`cliErrorOf`). */
 export async function wrapCliResult(label: string, fn: () => Promise<string> | string): Promise<string> {
     try {
         return await fn();
     } catch (e) {
-        return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to ${label}: ${e instanceof Error ? e.message : String(e)}`);
+        return cliErrorOf(e, label);
     }
 }
