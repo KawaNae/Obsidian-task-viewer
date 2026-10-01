@@ -1,6 +1,10 @@
 import type { NormalizedTask } from '../api/TaskApiTypes';
 import { TaskApiError } from '../api/TaskApiTypes';
 import { ALL_FIELD_NAMES } from '../api/TaskNormalizer';
+import { LIMIT_PARAM, toCliName, type ParamSpec } from '../api/OperationSchemas';
+import { IntInput } from '../utils/values/NumberValues';
+import { typed } from '../utils/values/Normalize';
+import { issueText } from '../utils/values/IssueText';
 
 export type OutputFormat = 'json' | 'tsv' | 'jsonl';
 
@@ -128,11 +132,27 @@ export function validateFormat(format: string | undefined): string | null {
     return null;
 }
 
+/**
+ * A whole-number flag, read by `IntInput` against the range its API
+ * parameter's schema holds, so the CLI takes the numbers the API takes
+ * (`3days` and `1.5` are refused, not read as 3 and 1). An absent or empty
+ * flag is undefined: the API's default.
+ */
+export function readIntFlag(params: Readonly<Record<string, string>>, key: string, spec: ParamSpec): number | undefined {
+    const flag = toCliName(key);
+    const raw = params[flag];
+    if (!raw) return undefined;
+    const read = IntInput.read(raw, spec.int);
+    if (!read.ok) throw new TaskApiError(issueText(read.issue, flag, raw));
+    return read.value;
+}
+
+/** `limit=`: a whole number of 0 or more, as the API's, or `all` (no limit). */
 export function parseLimit(raw: string): number {
-    if (raw === 'all') return Infinity;
-    const n = parseInt(raw, 10);
-    if (isNaN(n) || n < 0) throw new TaskApiError('--limit must be a non-negative integer or "all"');
-    return n;
+    if (typed(raw) === 'all') return Infinity;
+    const read = IntInput.read(raw, LIMIT_PARAM.int);
+    if (!read.ok) throw new TaskApiError(`${issueText(read.issue, 'limit')} or "all", got: ${JSON.stringify(raw)}`);
+    return read.value;
 }
 
 // ── JSON helpers (for CRUD responses) ──
