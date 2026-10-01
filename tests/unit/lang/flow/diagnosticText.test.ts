@@ -57,6 +57,8 @@ describe('diagnosticText', () => {
             'every mon setContent(start + due)', // type.cannot-combine
             'at(startOf("day"))',               // type.bad-unit-keyword
             'at(starrt)',                       // expr.unknown-ident
+            'at(2026-02-30)',                   // lex.no-such-day
+            'at(today + 25:00)',                // lex.no-such-time
             'at(Math)',                         // expr.namespace-needs-member
             'at(Math.sqrt(4))',                 // expr.unknown-property
             'at(Math.floor)',                   // expr.expected-call

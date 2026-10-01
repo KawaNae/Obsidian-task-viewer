@@ -833,6 +833,8 @@
       "wikilink-looks-like-list": "これは wikilink として読まれます（配列の配列ではありません）。括弧を離してください: [ [1], [2] ]",
       "unterminated-wikilink": "wikilink が閉じられていません",
       "unterminated-string": "文字列が閉じられていません",
+      "no-such-day": "'{{text}}' は実在しない日です",
+      "no-such-time": "'{{text}}' は実在しない時刻です",
       "unknown-unit": "不明な期間単位 '{{unit}}'（使用可能: {{units}}）",
       "unexpected-char": "予期しない文字 '{{char}}'",
       "decimal-duration": "duration は整数と単位で書きます（'{{text}}'）。小さい単位で書いてください",

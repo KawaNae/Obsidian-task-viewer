@@ -52,6 +52,26 @@ describe('Lexer', () => {
         expect(diagnostics.some(d => d.code === 'lex.unterminated-string')).toBe(true);
     });
 
+    // The notation reads no day or time that does not exist: a literal
+    // naming one is an error, where it is written.
+    it('reports a date or a time literal naming one that does not exist', () => {
+        for (const [src, code, text] of [
+            ['2026-02-30', 'lex.no-such-day', '2026-02-30'],
+            ['at(2026-13-45 + 1d)', 'lex.no-such-day', '2026-13-45'],
+            ['2025-02-29T10:00', 'lex.no-such-day', '2025-02-29T10:00'],
+            ['2026-03-01T25:00', 'lex.no-such-time', '2026-03-01T25:00'],
+            ['24:00', 'lex.no-such-time', '24:00'],
+            ['9:60', 'lex.no-such-time', '9:60'],
+        ]) {
+            const { diagnostics } = tokenize(src);
+            expect(diagnostics.map(d => d.code), src).toEqual([code]);
+            expect(src.slice(diagnostics[0].span.start, diagnostics[0].span.end)).toBe(text);
+        }
+        for (const src of ['2028-02-29', '2026-03-01T23:59', '9:05', '00:00']) {
+            expect(tokenize(src).diagnostics, src).toEqual([]);
+        }
+    });
+
     it('strips wikilink brackets', () => {
         const { tokens } = tokenize('move([[Archive/Done]])');
         expect(tokens.map(t => t.kind)).toEqual(['ident', 'lparen', 'wikilink', 'rparen', 'eof']);
