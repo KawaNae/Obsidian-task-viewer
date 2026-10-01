@@ -1,4 +1,5 @@
 import { TaskApiError } from './TaskApiTypes';
+import type { NumberRange } from '../utils/values/NumberValues';
 import type {
     ListParams, TodayParams, GetParams, CreateParams, UpdateParams, DeleteParams,
     DuplicateParams, TasksForDateRangeParams,
@@ -14,8 +15,8 @@ import type {
  *
  * Deliberately NOT a conversion or help framework: handlers keep their
  * hand-written CliData → params parsing, and the prose parts of help /
- * docs stay hand-written. Only keys, required-ness, and one-line
- * descriptions live here.
+ * docs stay hand-written. Only keys, required-ness, a whole number's
+ * range, and one-line descriptions live here.
  *
  * The `satisfies ParamMap<XxxParams>` bindings tie each schema to its API
  * param type at compile time: a key added to or removed from the type
@@ -30,12 +31,25 @@ export interface ParamSpec {
     value?: string;
     /** Boolean flag: no value on the CLI, boolean in the API. */
     boolean?: true;
+    /**
+     * A whole number, within this range. The API checks its number against
+     * it (`IntValue.check`) and the CLI reads its flag's text against it
+     * (`IntInput.read`), so both take the same numbers.
+     */
+    int?: NumberRange;
     description: string;
 }
 
 type ParamMap<P> = { [K in keyof Required<P>]: ParamSpec };
 
 // ── Operation schemas ──
+
+/** The page size every listing takes: a whole number of 0 or more (0 counts only); the CLI also takes `all`. */
+export const LIMIT_PARAM = {
+    value: '<number|all>',
+    int: { min: 0 },
+    description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)',
+} as const satisfies ParamSpec;
 
 export const LIST_SCHEMA = {
     file:     { value: '<path>',          description: 'Filter by file path' },
@@ -55,13 +69,13 @@ export const LIST_SCHEMA = {
     filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
     list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
     sort:     { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-    limit:    { value: '<number|all>',     description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)' },
+    limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<ListParams>;
 
 export const TODAY_SCHEMA = {
     leaf:   { boolean: true,            description: 'Only leaf tasks (no children)' },
     sort:   { value: '<prop[:dir],..>', description: 'Sort' },
-    limit:  { value: '<number|all>',    description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)' },
+    limit:  LIMIT_PARAM,
 } as const satisfies ParamMap<TodayParams>;
 
 export const GET_SCHEMA = {
@@ -93,8 +107,8 @@ export const DELETE_SCHEMA = {
 
 export const DUPLICATE_SCHEMA = {
     id:        { value: '<taskId>', description: 'Task ID', required: true },
-    dayOffset: { value: '<number>', description: 'Axis the copies run along: 0 (default) chains them on the clock from the task\'s end, above 0 shifts them that many days' },
-    count:     { value: '<number>', description: 'Number of copies (default: 1)' },
+    dayOffset: { value: '<number>', int: {}, description: 'Axis the copies run along: 0 (default) chains them on the clock from the task\'s end, above 0 shifts them that many days' },
+    count:     { value: '<number>', int: { min: 1 }, description: 'Number of copies (default: 1)' },
 } as const satisfies ParamMap<DuplicateParams>;
 
 export const TASKS_FOR_DATE_RANGE_SCHEMA = {
@@ -114,7 +128,7 @@ export const TASKS_FOR_DATE_RANGE_SCHEMA = {
     filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
     list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
     sort:     { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-    limit:    { value: '<number|all>',    description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)' },
+    limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<TasksForDateRangeParams>;
 
 export const CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA = {

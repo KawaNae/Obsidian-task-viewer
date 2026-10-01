@@ -100,7 +100,28 @@ describe('buildFilterFromParams', () => {
 
     it('invalid date throws error', () => {
         expect(() => buildFilterFromParams({ date: 'invalid' }))
-            .toThrow(/Invalid date value/);
+            .toThrow(/Invalid date value for date: invalid\. Use YYYY-MM-DD or a preset \(today, /);
+    });
+
+    // Stage 7, input decision B: a date-shaped value naming no day was read
+    // by shape and handed to the filter; it is refused.
+    it.each([
+        [{ date: '2026-02-30' }, /date must be a day that exists, got: "2026-02-30"/],
+        [{ from: '2026-13-45' }, /from must be a day that exists/],
+        [{ to: '2026-04-31' }, /to must be a day that exists/],
+        [{ due: '2025-02-29' }, /due must be a day that exists/],
+    ])('refuses %j, which names no day', (params, message) => {
+        expect(() => buildFilterFromParams(params)).toThrow(message);
+    });
+
+    it('names the presets when due is neither a date nor a preset', () => {
+        expect(() => buildFilterFromParams({ due: 'soon' }))
+            .toThrow(/Invalid date value for due: soon\. Use YYYY-MM-DD or a preset \(today, /);
+    });
+
+    it('reads a full-width date', () => {
+        const c = findCondition(getConditions({ due: '２０２６－０３－１５' }), 'due');
+        expect(c?.value).toBe('2026-03-15');
     });
 
     // ── from / to（inclusive overlap 窓） ──

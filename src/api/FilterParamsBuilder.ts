@@ -2,8 +2,21 @@ import type { FilterState, FilterCondition, FilterGroup, FilterProperty } from '
 import { getAllConditions, PROPERTY_OPERATORS } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { DATE_PRESET_SYNTAX, parseDatePreset } from '../services/filter/DatePreset';
+import type { DateFilterValue } from '../services/filter/FilterTypes';
+import { issueText } from '../utils/values/IssueText';
 import { TaskApiError } from './TaskApiTypes';
 import type { ListParams } from './TaskApiTypes';
+
+/**
+ * A date parameter that takes a preset (`due`, `date`, `from`, `to`):
+ * a day that exists, or a preset. The one place its error is worded.
+ */
+export function readDateParam(value: string, name: string): DateFilterValue {
+    const read = parseDatePreset(value);
+    if (read.ok) return read.value;
+    if (read.issue.code === 'noSuchDay') throw new TaskApiError(issueText(read.issue, name, value));
+    throw new TaskApiError(`Invalid date value for ${name}: ${value}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`);
+}
 
 /**
  * Boundary validation for externally supplied FilterState (API `filter`
@@ -95,9 +108,7 @@ function buildSimpleFieldConditions(params: SimpleFilterFields): FilterCondition
     }
 
     if (params.due) {
-        const dueValue = parseDatePreset(params.due);
-        if (!dueValue) throw new TaskApiError(`Invalid date value for due: ${params.due}. Use YYYY-MM-DD or a preset`);
-        conditions.push(condition('due', 'equals', dueValue));
+        conditions.push(condition('due', 'equals', readDateParam(params.due, 'due')));
     }
 
     if (params.leaf) {
@@ -163,14 +174,10 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
     const windowFromName = params.date ? 'date' : 'from';
     const windowToName = params.date ? 'date' : 'to';
     if (windowFrom) {
-        const fromValue = parseDatePreset(windowFrom);
-        if (!fromValue) throw new TaskApiError(`Invalid date value for ${windowFromName}: ${windowFrom}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`);
-        conditions.push(condition('endDate', 'onOrAfter', fromValue));
+        conditions.push(condition('endDate', 'onOrAfter', readDateParam(windowFrom, windowFromName)));
     }
     if (windowTo) {
-        const toValue = parseDatePreset(windowTo);
-        if (!toValue) throw new TaskApiError(`Invalid date value for ${windowToName}: ${windowTo}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`);
-        conditions.push(condition('startDate', 'onOrBefore', toValue));
+        conditions.push(condition('startDate', 'onOrBefore', readDateParam(windowTo, windowToName)));
     }
 
     if (conditions.length === 0) return null;

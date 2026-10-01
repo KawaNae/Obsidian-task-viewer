@@ -27,7 +27,6 @@ export class DateUtils {
 
     private static readonly DATE_SHAPE_RE = new RegExp(`^${DateUtils.DATE_PATTERN}$`);
     private static readonly TIME_SHAPE_RE = new RegExp(`^${DateUtils.TIME_PATTERN}$`);
-    private static readonly DATE_TIME_TEXT_RE = new RegExp(`^(${DateUtils.DATE_PATTERN})[T ](${DateUtils.TIME_PATTERN})$`);
 
     /** Whether `value` has the `YYYY-MM-DD` shape. Does not ask whether the day exists. */
     static isDateShape(value: string): boolean {
@@ -116,20 +115,6 @@ export class DateUtils {
     static joinDateTime(date: string | undefined, time: string | undefined): string | undefined {
         if (!date) return undefined;
         return time ? `${date}T${time}` : date;
-    }
-
-    /**
-     * Read a date-time typed by a person or a script: `YYYY-MM-DD`,
-     * `YYYY-MM-DD HH:mm`, `YYYY-MM-DDTHH:mm`, or `HH:mm` alone (date `''`).
-     * Checks the shape only. null when it is none of these.
-     */
-    static parseDateTimeText(value: string): { date: string; time?: string } | null {
-        const trimmed = value.trim();
-        const match = trimmed.match(DateUtils.DATE_TIME_TEXT_RE);
-        if (match) return { date: match[1], time: match[2] };
-        if (DateUtils.isDateShape(trimmed)) return { date: trimmed };
-        if (DateUtils.TIME_SHAPE_RE.test(trimmed)) return { date: '', time: trimmed };
-        return null;
     }
 
     /**
