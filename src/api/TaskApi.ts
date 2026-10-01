@@ -537,7 +537,7 @@ export class TaskApi {
             endDate: end?.date || undefined,
             endTime: end?.time,
             // The notation's due is a date, with a time only after one.
-            due: due?.date ? (due.time ? `${due.date}T${due.time}` : due.date) : undefined,
+            due: DateUtils.joinDateTime(due?.date, due?.time),
         });
 
         const insertedLine = await this.operations.createTask(params.file, line, params.heading);
@@ -598,7 +598,8 @@ export class TaskApi {
             } else {
                 const parsed = parseDateTimeParam(params.due, 'due');
                 if (!parsed.date) throw new TaskApiError(`due must include a date, got: "${params.due}"`);
-                updates.due = parsed.date;
+                // The whole due, its time kept as create keeps it.
+                updates.due = DateUtils.joinDateTime(parsed.date, parsed.time);
             }
         }
 
