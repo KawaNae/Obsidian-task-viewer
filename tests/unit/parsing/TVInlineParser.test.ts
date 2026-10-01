@@ -362,14 +362,14 @@ describe('TVInlineParser', () => {
             const task = parser.parse('- [ ] task @2026-01-01 foo @2026-02-02', 'test.md', 0)!;
             expect(task.startDate).toBe('2026-01-01');
             expect(task.content).toBe('task foo');
-            expect(task.extraDateBlocks).toEqual(['@2026-02-02']);
+            expect(task.unreadDateBlocks).toEqual(['@2026-02-02']);
             expect(task.validation?.rule).toBe('parse-error');
             const formatted = formatRow({ ...task, statusChar: 'x' });
             expect(formatted).toBe('- [x] task foo @2026-01-01 @2026-02-02');
             // Idempotent: re-parsing the formatted line keeps the same start date.
             const again = parser.parse(formatted, 'test.md', 0)!;
             expect(again.startDate).toBe('2026-01-01');
-            expect(again.extraDateBlocks).toEqual(['@2026-02-02']);
+            expect(again.unreadDateBlocks).toEqual(['@2026-02-02']);
             expect(again.validation?.rule).toBe('parse-error');
             expect(formatRow(again)).toBe(formatted);
         });
@@ -391,8 +391,51 @@ describe('TVInlineParser', () => {
             expect(formatted).toBe('- [ ] task foo @> @2026-02-02');
             const again = parser.parse(formatted, 'test.md', 0)!;
             expect(again.startDate).toBe('');
-            expect(again.extraDateBlocks).toEqual(['@2026-02-02']);
+            expect(again.unreadDateBlocks).toEqual(['@2026-02-02']);
             expect(formatRow(again)).toBe(formatted);
+        });
+
+        // A block naming a day or a time that does not exist is not read, and
+        // is kept on the line as written: a write-back (a status toggle) does
+        // not drop it, nor guess a date for it.
+        it('reads no dates of a block naming a day that does not exist, and flags it', () => {
+            for (const line of ['- [ ] task @2026-02-30', '- [ ] task @2026-13-45', '- [ ] task @2026-03-01T25:00>26:00']) {
+                const task = parser.parse(line, 'test.md', 0)!;
+                expect(task.startDate, line).toBe('');
+                expect(task.startTime, line).toBeUndefined();
+                expect(task.endTime, line).toBeUndefined();
+                expect(task.content, line).toBe('task');
+                expect(task.validation?.rule, line).toBe('parse-error');
+                expect(task.validation?.severity, line).toBe('error');
+            }
+        });
+
+        it('keeps a block that does not read as written when the row is written back', () => {
+            for (const [line, written] of [
+                ['- [ ] task @2026-02-30', '- [x] task @2026-02-30'],
+                ['- [ ] task @2026-13-45 ^abc', '- [x] task @2026-13-45 ^abc'],
+                ['- [ ] task @2026-03-01T25:00>2026-03-02>2026-03-05', '- [x] task @2026-03-01T25:00>2026-03-02>2026-03-05'],
+                ['- [ ] @2026-02-30 meeting', '- [x] meeting @2026-02-30'],
+                ['- [ ] task @2026-02-30 and @2026-03-05', '- [x] task and @2026-02-30 @2026-03-05'],
+            ]) {
+                const task = parser.parse(line, 'test.md', 0)!;
+                const formatted = formatRow({ ...task, statusChar: 'x' });
+                expect(formatted).toBe(written);
+                const again = parser.parse(formatted, 'test.md', 0)!;
+                expect(again.startDate, line).toBe('');
+                expect(again.validation?.rule, line).toBe('parse-error');
+                expect(formatRow(again)).toBe(formatted);
+            }
+        });
+
+        it('writes new dates before a block that does not read, which stays as written', () => {
+            const task = parser.parse('- [ ] task @2026-02-30', 'test.md', 0)!;
+            expect(task.unreadDateBlocks).toEqual(['@2026-02-30']);
+            const formatted = formatRow({ ...task, startDate: '2026-03-02' });
+            expect(formatted).toBe('- [ ] task @2026-03-02 @2026-02-30');
+            const again = parser.parse(formatted, 'test.md', 0)!;
+            expect(again.startDate).toBe('2026-03-02');
+            expect(again.unreadDateBlocks).toEqual(['@2026-02-30']);
         });
 
         it('skips a bare @ before the block (as the editor\'s reading does)', () => {

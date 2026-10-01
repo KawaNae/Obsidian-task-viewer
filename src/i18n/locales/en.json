@@ -579,7 +579,8 @@
     "endRequiresDate": "End: date is required when there is no start date.",
     "dueRequiresDate": "Due: date is required when time is specified.",
     "tooManySeparators": "Too many '>' separators in date block. Expected at most 2 (start>end>due), found {{count}}.",
-    "multipleDateBlocks": "Multiple date blocks found; kept the first and discarded {{count}}."
+    "multipleDateBlocks": "Multiple date blocks found; the dates are read from the first only, and the other {{count}} are kept as written but not read.",
+    "noSuchDate": "The date block names a date or time that does not exist: {{values}}. It is not read, and stays as written."
   },
   "validationHint": {
     "crossMidnight": "Specify an explicit end date, or correct the time.",

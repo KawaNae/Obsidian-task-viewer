@@ -151,12 +151,14 @@ export interface Task {
     endTime?: string;
     due?: string;
     /**
-     * The `@` blocks after the first on a `tv-inline` line, verbatim
-     * (`readDateBlock`). The first block is the dates; these are text the
-     * notation does not read, kept so that writing the row back does not
-     * lose them: `formatTaskLine` writes them right after the first block.
+     * The `@` blocks of a `tv-inline` line the dates are not read from,
+     * verbatim and in order (`readDateBlock`): the blocks after the first,
+     * and before them the first itself when it names a day or a time that
+     * does not exist. They are text the notation does not read, kept so that
+     * writing the row back does not lose them: `formatTaskLine` writes them
+     * right after the dates' block.
      */
-    extraDateBlocks?: string[];
+    unreadDateBlocks?: string[];
 
     /**
      * Values inherited from the File → Section cascade rather than from the

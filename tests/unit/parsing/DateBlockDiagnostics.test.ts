@@ -87,4 +87,13 @@ describe('dateBlockDiagnostics', () => {
         expect(diags[0].code).toBe('parse-error');
         expect(cut(line, diags[0].span)).toBe('@2026-02-01');
     });
+
+    it('flags a segment naming a day that does not exist as a parse error', () => {
+        const line = '- [ ] foo @2026-02-30T10:00>11:00';
+        const diags = dateBlockDiagnostics(line, DEFAULTS);
+        expect(diags).toHaveLength(1);
+        expect(diags[0].severity).toBe('error');
+        expect(diags[0].code).toBe('parse-error');
+        expect(cut(line, diags[0].span)).toBe('2026-02-30T10:00');
+    });
 });

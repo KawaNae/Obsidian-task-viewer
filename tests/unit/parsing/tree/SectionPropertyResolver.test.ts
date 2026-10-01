@@ -414,4 +414,33 @@ describe('SectionPropertyResolver の出所', () => {
         expect(section.resolvedProperties.owner.value).toBe('second');
         expect(section.resolvedSources.properties.owner).toEqual(at(2, 'Section'));
     });
+
+    // 実在しない日や時刻を指す値は、日付も時刻も読まない。その層は日付を
+    // 言っていないことになり、上の層の値を受け継ぐ（タスクの読めない @ ブロックと同じ）
+    describe('実在しない日付と時刻', () => {
+        it('frontmatter の実在しない日は読まない', () => {
+            const doc = buildAndResolve(['## S', '- [ ] task'], {
+                'tv-start': '2026-02-30', 'tv-end': '2026-13-45T10:00', 'tv-due': '2025-02-29',
+            });
+            const section = doc.sections[0];
+            expect(section.resolvedStartDate).toBeUndefined();
+            expect(section.resolvedEndDate).toBeUndefined();
+            expect(section.resolvedEndTime).toBeUndefined();
+            expect(section.resolvedDue).toBeUndefined();
+        });
+
+        it('見出しのプロパティ行の読めない値は、日付も時刻も読まず、上の層の値になる', () => {
+            const doc = buildAndResolve([
+                '## Morning',
+                '- tv-start:: 2026-02-30T11:00',
+                '- tv-due:: 2026-10-01T25:00',
+                '- [ ] task',
+            ], { 'tv-start': '2026-09-28', 'tv-due': '2026-10-05' });
+            const section = doc.sections[0];
+            expect(section.resolvedStartDate).toBe('2026-09-28');
+            expect(section.resolvedStartTime).toBeUndefined();
+            expect(section.resolvedSources.fields.startDate).toEqual(fm);
+            expect(section.resolvedDue).toBe('2026-10-05');
+        });
+    });
 });
