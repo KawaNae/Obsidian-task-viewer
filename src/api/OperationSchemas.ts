@@ -4,6 +4,7 @@ import type {
     ListParams, TodayParams, GetParams, CreateParams, UpdateParams, DeleteParams,
     DuplicateParams, TasksForDateRangeParams,
     CategorizedTasksForDateRangeParams, InsertChildTaskParams,
+    SimpleFilterParams, FilterSourceParams,
 } from './TaskApiTypes';
 
 /**
@@ -51,30 +52,46 @@ export const LIMIT_PARAM = {
     description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)',
 } as const satisfies ParamSpec;
 
-export const LIST_SCHEMA = {
+/** How a listing is sorted. */
+export const SORT_PARAM = {
+    value: '<prop[:dir],..>',
+    description: 'Sort (e.g. startDate:asc,due:desc)',
+} as const satisfies ParamSpec;
+
+/** The simple per-field filters `list` and the date-range family share (`SimpleFilterParams`). */
+export const SIMPLE_FILTER_SCHEMA = {
     file:     { value: '<path>',          description: 'Filter by file path' },
     status:   { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
     tag:      { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
     content:  { value: '<text>',          description: 'Filter by content (contains)' },
-    date:     { value: '<date|preset>',   description: 'Single-day query window (= from=X to=X)' },
-    from:     { value: '<date|preset>',   description: 'Query window start: tasks ending on or after (inclusive overlap)' },
-    to:       { value: '<date|preset>',   description: 'Query window end: tasks starting on or before (inclusive overlap)' },
     due:      { value: '<date|preset>',   description: 'Due date equals' },
     leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
     property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
     color:    { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
     type:     { value: '<types>',         description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
     root:     { boolean: true,            description: 'Only root tasks (no parent)' },
-    filter:   { cli: 'hidden',            description: 'FilterState object (API only). Overrides simple filter params' },
-    filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
-    list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
-    sort:     { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
+} as const satisfies ParamMap<SimpleFilterParams>;
+
+/** Where a query's filter comes from instead of the simple fields (`FilterSourceParams`). */
+export const FILTER_SOURCE_SCHEMA = {
+    filter:     { cli: 'hidden',     description: 'FilterState object (API only). Overrides simple filter params' },
+    filterFile: { value: '<path>',   description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
+    list:       { value: '<name>',   description: 'Pinned list name (for .md templates with pinnedLists)' },
+} as const satisfies ParamMap<FilterSourceParams>;
+
+export const LIST_SCHEMA = {
+    ...SIMPLE_FILTER_SCHEMA,
+    date:     { value: '<date|preset>',   description: 'Single-day query window (= from=X to=X)' },
+    from:     { value: '<date|preset>',   description: 'Query window start: tasks ending on or after (inclusive overlap)' },
+    to:       { value: '<date|preset>',   description: 'Query window end: tasks starting on or before (inclusive overlap)' },
+    ...FILTER_SOURCE_SCHEMA,
+    sort:     SORT_PARAM,
     limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<ListParams>;
 
 export const TODAY_SCHEMA = {
-    leaf:   { boolean: true,            description: 'Only leaf tasks (no children)' },
-    sort:   { value: '<prop[:dir],..>', description: 'Sort' },
+    leaf:   SIMPLE_FILTER_SCHEMA.leaf,
+    sort:   SORT_PARAM,
     limit:  LIMIT_PARAM,
 } as const satisfies ParamMap<TodayParams>;
 
@@ -114,39 +131,17 @@ export const DUPLICATE_SCHEMA = {
 export const TASKS_FOR_DATE_RANGE_SCHEMA = {
     from:     { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
     to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
-    file:     { value: '<path>',          description: 'Filter by file path' },
-    status:   { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
-    tag:      { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
-    content:  { value: '<text>',          description: 'Filter by content (contains)' },
-    due:      { value: '<date|preset>',   description: 'Due date equals' },
-    leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
-    property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
-    color:    { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
-    type:     { value: '<types>',         description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
-    root:     { boolean: true,            description: 'Only root tasks (no parent)' },
-    filter:   { cli: 'hidden',            description: 'FilterState object (API only). Overrides simple filter params' },
-    filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
-    list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
-    sort:     { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
+    ...SIMPLE_FILTER_SCHEMA,
+    ...FILTER_SOURCE_SCHEMA,
+    sort:     SORT_PARAM,
     limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<TasksForDateRangeParams>;
 
 export const CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA = {
     from:     { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
     to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
-    file:     { value: '<path>',          description: 'Filter by file path' },
-    status:   { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
-    tag:      { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
-    content:  { value: '<text>',          description: 'Filter by content (contains)' },
-    due:      { value: '<date|preset>',   description: 'Due date equals' },
-    leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
-    property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
-    color:    { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
-    type:     { value: '<types>',         description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
-    root:     { boolean: true,            description: 'Only root tasks (no parent)' },
-    filter:   { cli: 'hidden',            description: 'FilterState object (API only). Overrides simple filter params' },
-    filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
-    list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
+    ...SIMPLE_FILTER_SCHEMA,
+    ...FILTER_SOURCE_SCHEMA,
 } as const satisfies ParamMap<CategorizedTasksForDateRangeParams>;
 
 export const INSERT_CHILD_TASK_SCHEMA = {

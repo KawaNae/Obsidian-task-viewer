@@ -4,7 +4,7 @@ import type { ApiHost } from '../../api/TaskApi';
 import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, parseLimit, readIntFlag, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
 import { DUPLICATE_SCHEMA } from '../../api/OperationSchemas';
 import { parseSortFlag } from '../CliFilterBuilder';
-import { cliDataToSimpleFilterFields } from './TaskQueryHandlers';
+import { cliDataToSimpleFilterParams } from './TaskQueryHandlers';
 
 export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
@@ -28,7 +28,7 @@ export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext 
             const result = await plugin.api.categorizedTasksForDateRange({
                 from: params.from,
                 to: params.to,
-                ...cliDataToSimpleFilterFields(params),
+                ...cliDataToSimpleFilterParams(params),
                 filterFile: params['filter-file'] || undefined,
                 list: params.list || undefined,
             });
@@ -75,7 +75,7 @@ export function createTasksForDateRangeHandler(plugin: PluginContext & ApiHost) 
             const result = await plugin.api.tasksForDateRange({
                 from: params.from,
                 to: params.to,
-                ...cliDataToSimpleFilterFields(params),
+                ...cliDataToSimpleFilterParams(params),
                 filterFile: params['filter-file'] || undefined,
                 list: params.list || undefined,
                 sort,

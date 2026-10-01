@@ -258,7 +258,7 @@ describe('C11: list= を filterFile なしで渡すとエラー', () => {
     it('list に filterFile なしで list= を渡すとエラー', async () => {
         const api = createMockApi(undefined);
         await expect(api.list({ list: 'urgent' }))
-            .rejects.toThrow(/list requires filterFile/);
+            .rejects.toThrow(/'list' requires 'filterFile'/);
     });
 
     it('filterFile ありの list= は通過', async () => {
@@ -267,7 +267,7 @@ describe('C11: list= を filterFile なしで渡すとエラー', () => {
         try {
             await api.list({ filterFile: 'template.md', list: 'urgent' });
         } catch (e) {
-            expect((e as Error).message).not.toMatch(/list requires filterFile/);
+            expect((e as Error).message).not.toMatch(/'list' requires 'filterFile'/);
         }
     });
 });

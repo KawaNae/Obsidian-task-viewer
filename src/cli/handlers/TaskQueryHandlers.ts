@@ -2,7 +2,7 @@ import type { CliData } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import type { ApiHost } from '../../api/TaskApi';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import type { SimpleFilterFields } from '../../api/FilterParamsBuilder';
+import type { SimpleFilterParams } from '../../api/TaskApiTypes';
 import { loadFilterFile } from '../../api/FilterFileLoader';
 import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
@@ -21,8 +21,8 @@ import {
  * window vs. a range command's required window bound, and the filter/
  * filter-file override order), so they're read by each caller directly.
  */
-export function cliDataToSimpleFilterFields(params: CliData): SimpleFilterFields {
-    const result: SimpleFilterFields = {};
+export function cliDataToSimpleFilterParams(params: CliData): SimpleFilterParams {
+    const result: SimpleFilterParams = {};
     if (params.file) result.file = params.file;
     if (params.status) result.status = params.status.split(',').map(s => s.trim()).filter(Boolean);
     if (params.tag) result.tag = params.tag.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean);
@@ -42,7 +42,7 @@ function cliDataToListParams(params: CliData, format: OutputFormat, preloadedFil
     if (preloadedFilter) {
         result.filter = preloadedFilter;
     } else {
-        Object.assign(result, cliDataToSimpleFilterFields(params));
+        Object.assign(result, cliDataToSimpleFilterParams(params));
         if (params.date) result.date = params.date;
         if (params.from) result.from = params.from;
         if (params.to) result.to = params.to;

@@ -3,7 +3,7 @@ import {
     createTasksForDateRangeHandler,
     createCategorizedTasksForDateRangeHandler,
 } from '../../../src/cli/handlers/TaskActionHandlers';
-import { cliDataToSimpleFilterFields } from '../../../src/cli/handlers/TaskQueryHandlers';
+import { cliDataToSimpleFilterParams } from '../../../src/cli/handlers/TaskQueryHandlers';
 
 function createMockPlugin(apiOverride: Record<string, any> = {}) {
     return {
@@ -15,9 +15,9 @@ function createMockPlugin(apiOverride: Record<string, any> = {}) {
     } as any;
 }
 
-describe('cliDataToSimpleFilterFields', () => {
+describe('cliDataToSimpleFilterParams', () => {
     it('maps the simple flags, excluding date/from/to/filter/filter-file/list', () => {
-        const result = cliDataToSimpleFilterFields({
+        const result = cliDataToSimpleFilterParams({
             status: 'x,-',
             tag: '#work,#reading',
             file: 'daily.md',
@@ -53,7 +53,7 @@ describe('cliDataToSimpleFilterFields', () => {
     });
 
     it('returns an empty object when no simple flags are present', () => {
-        expect(cliDataToSimpleFilterFields({ from: '2026-03-01', to: '2026-03-31' })).toEqual({});
+        expect(cliDataToSimpleFilterParams({ from: '2026-03-01', to: '2026-03-31' })).toEqual({});
     });
 });
 
