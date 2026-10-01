@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { buildFilterFromParams } from '../../../src/api/FilterParamsBuilder';
+import { filterOfParams } from '../../../src/api/FilterParamsBuilder';
 import type { FilterCondition } from '../../../src/services/filter/FilterTypes';
 import { isFilterCondition } from '../../../src/services/filter/FilterTypes';
 import type { ListParams } from '../../../src/api/TaskApiTypes';
 
+/** The filter `list` makes of its params: its simple fields and its own query window. */
+function listFilter(params: ListParams) {
+    return filterOfParams(params, params);
+}
+
 /** Extract condition nodes from the built FilterState */
 function getConditions(params: ListParams): FilterCondition[] {
-    const state = buildFilterFromParams(params);
+    const state = listFilter(params);
     if (!state) return [];
     return state.filters.filter(
         (c): c is FilterCondition => isFilterCondition(c),
@@ -17,9 +22,9 @@ function findCondition(conditions: FilterCondition[], property: string): FilterC
     return conditions.find(c => c.property === property);
 }
 
-describe('buildFilterFromParams', () => {
+describe('listFilter', () => {
     it('returns null when no params are provided', () => {
-        expect(buildFilterFromParams({})).toBeNull();
+        expect(listFilter({})).toBeNull();
     });
 
     it('returns filter JSON directly when params.filter is set', () => {
@@ -27,7 +32,7 @@ describe('buildFilterFromParams', () => {
             filters: [],
             logic: 'or' as const,
         };
-        expect(buildFilterFromParams({ filter })).toBe(filter);
+        expect(listFilter({ filter })).toBe(filter);
     });
 
     // ── file ──
@@ -89,17 +94,17 @@ describe('buildFilterFromParams', () => {
     });
 
     it('date + from throws error', () => {
-        expect(() => buildFilterFromParams({ date: '2026-03-15', from: '2026-03-01' }))
+        expect(() => listFilter({ date: '2026-03-15', from: '2026-03-01' }))
             .toThrow(/Cannot use 'date' together with 'from'/);
     });
 
     it('date + to throws error', () => {
-        expect(() => buildFilterFromParams({ date: '2026-03-15', to: '2026-03-31' }))
+        expect(() => listFilter({ date: '2026-03-15', to: '2026-03-31' }))
             .toThrow(/Cannot use 'date' together with 'from'/);
     });
 
     it('invalid date throws error', () => {
-        expect(() => buildFilterFromParams({ date: 'invalid' }))
+        expect(() => listFilter({ date: 'invalid' }))
             .toThrow(/Invalid date value for date: invalid\. Use YYYY-MM-DD or a preset \(today, /);
     });
 
@@ -111,11 +116,11 @@ describe('buildFilterFromParams', () => {
         [{ to: '2026-04-31' }, /to must be a day that exists/],
         [{ due: '2025-02-29' }, /due must be a day that exists/],
     ])('refuses %j, which names no day', (params, message) => {
-        expect(() => buildFilterFromParams(params)).toThrow(message);
+        expect(() => listFilter(params)).toThrow(message);
     });
 
     it('names the presets when due is neither a date nor a preset', () => {
-        expect(() => buildFilterFromParams({ due: 'soon' }))
+        expect(() => listFilter({ due: 'soon' }))
             .toThrow(/Invalid date value for due: soon\. Use YYYY-MM-DD or a preset \(today, /);
     });
 
@@ -170,7 +175,7 @@ describe('buildFilterFromParams', () => {
     });
 
     it('invalid property format throws error', () => {
-        expect(() => buildFilterFromParams({ property: 'noColonHere' }))
+        expect(() => listFilter({ property: 'noColonHere' }))
             .toThrow(/Invalid property filter format/);
     });
 
@@ -214,7 +219,7 @@ describe('buildFilterFromParams', () => {
 
     // ── combined filters ──
     it('multiple flags produce AND group', () => {
-        const state = buildFilterFromParams({ file: 'test.md', tag: 'work', leaf: true });
+        const state = listFilter({ file: 'test.md', tag: 'work', leaf: true });
         expect(state).not.toBeNull();
         expect(state!.logic).toBe('and');
         expect(state!.filters).toHaveLength(3);
@@ -225,7 +230,7 @@ describe('buildFilterFromParams', () => {
             filters: [],
             logic: 'or' as const,
         };
-        const result = buildFilterFromParams({ file: 'test.md', tag: 'work', filter });
+        const result = listFilter({ file: 'test.md', tag: 'work', filter });
         expect(result).toBe(filter);
     });
 });
@@ -250,7 +255,7 @@ function displayTask(id: string, effectiveStartDate: string, effectiveEndDate?: 
 }
 
 function matches(params: ListParams, dt: DisplayTask): boolean {
-    const state = buildFilterFromParams(params);
+    const state = listFilter(params);
     if (!state) return true;
     return TaskFilterEngine.evaluate(dt, state);
 }
@@ -309,36 +314,34 @@ describe('assertValidFilterState（filter/filter-file 境界検証）', () => {
         expect(() => assertValidFilterState(state)).not.toThrow();
     });
 
-    it('buildFilterFromParams は params.filter を境界検証する', () => {
+    it('listFilter は params.filter を境界検証する', () => {
         const bad = { filters: [{ property: 'contentt', operator: 'contains', value: 'x' }], logic: 'and' } as unknown as FilterState;
-        expect(() => buildFilterFromParams({ filter: bad })).toThrow(/Unknown filter property/);
+        expect(() => listFilter({ filter: bad })).toThrow(/Unknown filter property/);
     });
 });
 
-// ── buildRangeFilterFromParams (tasksForDateRange / categorizedTasksForDateRange) ──
+// ── filterOfParams without a window (tasksForDateRange / categorizedTasksForDateRange) ──
 
-import { buildRangeFilterFromParams } from '../../../src/api/FilterParamsBuilder';
-
-describe('buildRangeFilterFromParams', () => {
+describe('filterOfParams without a window (the date-range family)', () => {
     it('returns null when no simple fields are set', () => {
-        expect(buildRangeFilterFromParams({})).toBeNull();
+        expect(filterOfParams({})).toBeNull();
     });
 
-    it('builds the same simple-field conditions as buildFilterFromParams', () => {
-        const rangeState = buildRangeFilterFromParams({ status: 'x,-', tag: 'work' });
-        const listState = buildFilterFromParams({ status: 'x,-', tag: 'work' });
+    it('builds the same simple-field conditions as listFilter', () => {
+        const rangeState = filterOfParams({ status: 'x,-', tag: 'work' });
+        const listState = listFilter({ status: 'x,-', tag: 'work' });
         expect(rangeState).toEqual(listState);
     });
 
     it('params.filter overrides simple fields, same as list', () => {
         const filter = { filters: [], logic: 'or' as const };
-        const result = buildRangeFilterFromParams({ status: 'x', filter });
+        const result = filterOfParams({ status: 'x', filter });
         expect(result).toBe(filter);
     });
 
     it(
         'never produces a startDate/endDate condition, even if a caller passes ' +
-        'from/to on the object (SimpleFilterFields has no such field to read — ' +
+        'from/to on the object (no window is passed to read — ' +
         'pins the property tasksForDateRange/categorizedTasksForDateRange rely on ' +
         'to avoid double-applying a date judgment on top of their own window)',
         () => {
@@ -346,8 +349,8 @@ describe('buildRangeFilterFromParams', () => {
             // required from/to) into this call at runtime; TypeScript allows
             // excess properties on a variable, so this simulates that exact
             // shape rather than the narrower object literal the type allows.
-            const withWindowFields = { status: 'x', from: '2026-03-01', to: '2026-03-31' } as unknown as Parameters<typeof buildRangeFilterFromParams>[0];
-            const state = buildRangeFilterFromParams(withWindowFields);
+            const withWindowFields = { status: 'x', from: '2026-03-01', to: '2026-03-31' } as unknown as Parameters<typeof filterOfParams>[0];
+            const state = filterOfParams(withWindowFields);
             expect(state).not.toBeNull();
             const properties = state!.filters
                 .filter((f): f is FilterCondition => isFilterCondition(f))
@@ -357,4 +360,46 @@ describe('buildRangeFilterFromParams', () => {
             expect(properties).not.toContain('endDate');
         },
     );
+});
+
+// ── resolveFilterSource (list and the date-range family) ──
+
+import { resolveFilterSource } from '../../../src/api/FilterParamsBuilder';
+import type { App } from 'obsidian';
+
+describe('resolveFilterSource', () => {
+    function appHolding(files: Record<string, string>): App {
+        return {
+            vault: {
+                adapter: {
+                    exists: async (p: string) => p in files,
+                    read: async (p: string) => files[p],
+                },
+            },
+        } as unknown as App;
+    }
+
+    it('refuses list without filterFile, the same for every query', async () => {
+        await expect(resolveFilterSource(appHolding({}), { list: 'a' }))
+            .rejects.toThrow("'list' requires 'filterFile'");
+    });
+
+    it('takes the filter file over filter and the simple fields, and checks it as it checks filter', async () => {
+        const file = { filters: [{ property: 'status', operator: 'includes', value: ['x'] }], logic: 'and' };
+        const app = appHolding({ 'f.json': JSON.stringify(file), 'bad.json': JSON.stringify({ filters: [{ property: 'nope', operator: 'equals' }], logic: 'and' }) });
+
+        const state = await resolveFilterSource(app, { filterFile: 'f.json', tag: 'work', filter: { filters: [], logic: 'or' } }, { date: 'today' });
+        expect(state?.filters).toHaveLength(1);
+        expect((state!.filters[0] as FilterCondition).property).toBe('status');
+
+        await expect(resolveFilterSource(app, { filterFile: 'bad.json' })).rejects.toThrow(/Unknown filter property/);
+    });
+
+    it('builds the simple fields with the window it is given, and no window without one', async () => {
+        const app = appHolding({});
+        const withWindow = await resolveFilterSource(app, { status: 'x' }, { date: '2026-03-01' });
+        const without = await resolveFilterSource(app, { status: 'x' });
+        expect(withWindow?.filters).toHaveLength(3);
+        expect(without?.filters).toHaveLength(1);
+    });
 });

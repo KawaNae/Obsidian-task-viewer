@@ -61,25 +61,41 @@ export interface PaginationParams {
     limit?: number;    // default: 100, 0=count-only, Infinity=unlimited
 }
 
-// ── list ──
+// ── Filters ──
 
-export interface ListParams extends PaginationParams {
+/**
+ * The simple per-field filters `list` and the date-range family share. No
+ * `date`/`from`/`to`: those are `list`'s own query window, and the range
+ * operations have their own required window — a range operation never also
+ * applies a `list`-style window condition on top of its own, or a task would
+ * have to satisfy two different date judgments to appear at all.
+ */
+export interface SimpleFilterParams {
     file?: string;
     status?: string | string[];
     tag?: string | string[];
     content?: string;
-    date?: string;            // YYYY-MM-DD or preset
-    from?: string;
-    to?: string;
-    due?: string;
+    due?: string;             // YYYY-MM-DD or preset
     leaf?: boolean;
     property?: string;        // "key:value" — filter by custom property
     color?: string | string[];   // card color filter
     type?: string | string[];    // task notation (taskviewer, tasks, dayplanner)
     root?: boolean;              // root tasks only (no parent)
-    filter?: FilterState;     // overrides simple filter fields above
-    filterFile?: string;      // vault file path (.json FilterState or .md view template)
+}
+
+/** Where a query's filter comes from instead of the simple fields. */
+export interface FilterSourceParams {
+    filter?: FilterState;     // overrides the simple filter fields
+    filterFile?: string;      // vault file path (.json FilterState or .md view template); overrides `filter`
     list?: string;            // pinned list name (when filterFile is a .md template)
+}
+
+// ── list ──
+
+export interface ListParams extends PaginationParams, SimpleFilterParams, FilterSourceParams {
+    date?: string;            // YYYY-MM-DD or preset
+    from?: string;
+    to?: string;
     sort?: ApiSortRule[];
 }
 
@@ -153,49 +169,21 @@ export interface DuplicateResult {
     duplicated: string;
 }
 
-export interface TasksForDateRangeParams extends PaginationParams {
+export interface TasksForDateRangeParams extends PaginationParams, SimpleFilterParams, FilterSourceParams {
     /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
     from: string;
     /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
     to: string;
-    /** Simple filters, same format as `list` (no date/from/to — the window above is the only date judgment). */
-    file?: string;
-    status?: string | string[];
-    tag?: string | string[];
-    content?: string;
-    due?: string;
-    leaf?: boolean;
-    property?: string;        // "key:value" — filter by custom property
-    color?: string | string[];   // card color filter
-    type?: string | string[];    // task notation (taskviewer, tasks, dayplanner)
-    root?: boolean;              // root tasks only (no parent)
-    filter?: FilterState;     // overrides simple filter fields above
-    filterFile?: string;      // vault file path (.json FilterState or .md view template)
-    list?: string;            // pinned list name (when filterFile is a .md template)
     sort?: ApiSortRule[];
 }
 
 // ── categorizedTasksForDateRange ──
 
-export interface CategorizedTasksForDateRangeParams {
+export interface CategorizedTasksForDateRangeParams extends SimpleFilterParams, FilterSourceParams {
     /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
     from: string;
     /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
     to: string;
-    /** Simple filters, same format as `list` (no date/from/to — the window above is the only date judgment). */
-    file?: string;
-    status?: string | string[];
-    tag?: string | string[];
-    content?: string;
-    due?: string;
-    leaf?: boolean;
-    property?: string;
-    color?: string | string[];
-    type?: string | string[];
-    root?: boolean;
-    filter?: FilterState;
-    filterFile?: string;
-    list?: string;
 }
 
 export interface CategorizedTasksResult {

@@ -14,12 +14,11 @@ import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
 import { NAMED_DATE_PRESETS } from '../services/filter/DatePreset';
 import { DateResolver } from '../services/filter/DateResolver';
-import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterState, readDateParam } from './FilterParamsBuilder';
+import { resolveFilterSource, assertValidFilterState, readDateParam } from './FilterParamsBuilder';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
 import { IntValue } from '../utils/values/NumberValues';
 import { issueText } from '../utils/values/IssueText';
 import type { FilterState } from '../services/filter/FilterTypes';
-import { loadFilterFile } from './FilterFileLoader';
 import { holdsLineBreak } from '../utils/LineBreak';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { formatTaskLine } from '../services/parsing/TaskLineFormat';
@@ -435,22 +434,10 @@ export class TaskApi {
      */
     async list(params?: ListParams): Promise<TaskListResult> {
         assertParams(params ?? {}, LIST_SCHEMA, 'list');
-        const p = { ...(params ?? {}) };
-
-        if (p.list && !p.filterFile) {
-            throw new TaskApiError('list requires filterFile (a .md view template)');
-        }
-
-        // Resolve filterFile → filter (async file read)
-        if (p.filterFile) {
-            const result = await loadFilterFile(this.plugin.app, p.filterFile, p.list);
-            if (typeof result === 'string') throw new TaskApiError(result);
-            p.filter = result;
-        }
-
+        const p = params ?? {};
         const readService = this.readService;
 
-        const filterState = buildFilterFromParams(p);
+        const filterState = await resolveFilterSource(this.plugin.app, p, p);
         const sortState = buildSortState(p.sort);
 
         let filtered: DisplayTask[];
@@ -679,7 +666,7 @@ export class TaskApi {
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
-        const filterState = await this.resolveRangeFilter(params);
+        const filterState = await resolveFilterSource(this.plugin.app, params);
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
         let tasks = this.readService.getTasksForDateRange(from, to, filterState ?? undefined, { includeInvalid: true });
@@ -701,7 +688,7 @@ export class TaskApi {
      */
     async categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult> {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
-        const filterState = await this.resolveRangeFilter(params);
+        const filterState = await resolveFilterSource(this.plugin.app, params);
         const startHour = this.plugin.settings.startHour;
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
@@ -743,30 +730,6 @@ export class TaskApi {
         const { weekStartDay, startHour } = this.plugin.settings;
         const window = DateResolver.resolve(parsed, weekStartDay, startHour, new Date());
         return side === 'from' ? window.start : window.end;
-    }
-
-    /**
-     * Resolve filterFile/list → filter, then build a FilterState from the
-     * simple fields. Same override order as `list` (params.filter wins,
-     * then filterFile — `list` picks one pinned list out of a .md template —
-     * then the simple per-field flags), but never a date-window condition:
-     * from/to on these params is the range's own window bound, already
-     * applied separately via getTasksForDateRange, so buildRangeFilterFromParams
-     * has no date/from/to field to read in the first place.
-     */
-    private async resolveRangeFilter(
-        params: TasksForDateRangeParams | CategorizedTasksForDateRangeParams,
-    ): Promise<FilterState | null> {
-        const p = { ...params };
-        if (p.list && !p.filterFile) {
-            throw new TaskApiError("'list' requires 'filterFile' (a .md view template)");
-        }
-        if (p.filterFile) {
-            const result = await loadFilterFile(this.plugin.app, p.filterFile, p.list);
-            if (typeof result === 'string') throw new TaskApiError(result);
-            p.filter = result;
-        }
-        return buildRangeFilterFromParams(p);
     }
 
     /**

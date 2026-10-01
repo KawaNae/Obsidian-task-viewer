@@ -4,8 +4,10 @@ import { FilterSerializer } from '../services/filter/FilterSerializer';
 import { DATE_PRESET_SYNTAX, parseDatePreset } from '../services/filter/DatePreset';
 import type { DateFilterValue } from '../services/filter/FilterTypes';
 import { issueText } from '../utils/values/IssueText';
+import type { App } from 'obsidian';
 import { TaskApiError } from './TaskApiTypes';
-import type { ListParams } from './TaskApiTypes';
+import type { ListParams, SimpleFilterParams, FilterSourceParams } from './TaskApiTypes';
+import { loadFilterFile } from './FilterFileLoader';
 
 /**
  * A date parameter that takes a preset (`due`, `date`, `from`, `to`):
@@ -62,30 +64,7 @@ function normalizeStringArray(value: string | string[] | undefined, stripHash = 
     return arr.map(s => { let v = s.trim(); if (stripHash) v = v.replace(/^#/, ''); return v; }).filter(Boolean);
 }
 
-/**
- * The simple per-field filter params shared by `list` and the date-range
- * family (tasksForDateRange / categorizedTasksForDateRange). Deliberately
- * excludes `date`/`from`/`to`: those are list's own query-window fields, and
- * the range operations have their own from/to (a required window bound, not
- * a filter condition) — a range operation must never also apply a `list`-style
- * date-window condition on top of its own window, or a task could need to
- * satisfy two different date judgments (visual-date window match, then
- * effective-date filter match) to appear at all.
- */
-export interface SimpleFilterFields {
-    file?: string;
-    status?: string | string[];
-    tag?: string | string[];
-    content?: string;
-    due?: string;
-    leaf?: boolean;
-    property?: string;
-    color?: string | string[];
-    type?: string | string[];
-    root?: boolean;
-}
-
-function buildSimpleFieldConditions(params: SimpleFilterFields): FilterCondition[] {
+function buildSimpleFieldConditions(params: SimpleFilterParams): FilterCondition[] {
     const conditions: FilterCondition[] = [];
 
     if (params.file) {
@@ -140,27 +119,17 @@ function buildSimpleFieldConditions(params: SimpleFilterFields): FilterCondition
     return conditions;
 }
 
-/** `params.filter`, parsed and validated, when present — the override every
- *  simple-field builder shares (an explicit FilterState always wins). */
-function resolveExplicitFilter(filter: FilterState | Record<string, unknown> | undefined): FilterState | undefined {
-    if (!filter) return undefined;
+/** A FilterState handed in from outside (`filter`, or a filter file's), parsed and validated. */
+function readExplicitFilter(filter: FilterState | Record<string, unknown>): FilterState {
     const state = 'filters' in filter ? filter as FilterState : FilterSerializer.fromJSON(filter);
     assertValidFilterState(state);
     return state;
 }
 
-/**
- * Build a FilterState from simple ListParams fields, `list`'s own query
- * window (`date`/`from`/`to`) included. Returns null if no filter conditions
- * are needed. If params.filter is provided, it overrides all simple fields
- * (including the window).
- */
-export function buildFilterFromParams(params: ListParams): FilterState | null {
-    const explicit = resolveExplicitFilter(params.filter);
-    if (explicit) return explicit;
+/** `list`'s own query window: the conditions `date`, or `from` and `to`, make. */
+export type QueryWindowParams = Pick<ListParams, 'date' | 'from' | 'to'>;
 
-    const conditions = buildSimpleFieldConditions(params);
-
+function windowConditions(params: QueryWindowParams): FilterCondition[] {
     // Query window (inclusive overlap): a task matches when its effective
     // span intersects [from, to]. `date` is sugar for a single-day window
     // (from=X to=X), presets included, so the whole family shares one rule:
@@ -169,6 +138,7 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
     if (params.date && (params.from || params.to)) {
         throw new TaskApiError("Cannot use 'date' together with 'from'/'to'. Use either 'date' for a single-day window, or 'from'/'to' for a range.");
     }
+    const conditions: FilterCondition[] = [];
     const windowFrom = params.date ?? params.from;
     const windowTo = params.date ?? params.to;
     const windowFromName = params.date ? 'date' : 'from';
@@ -179,26 +149,42 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
     if (windowTo) {
         conditions.push(condition('startDate', 'onOrBefore', readDateParam(windowTo, windowToName)));
     }
-
-    if (conditions.length === 0) return null;
-
-    return { filters: conditions, logic: 'and' };
+    return conditions;
 }
 
 /**
- * Build a FilterState from simple filter fields for the date-range family —
- * same simple fields and the same params.filter override as `list`, but
- * never a date-window condition: tasksForDateRange/categorizedTasksForDateRange
- * already have their own required from/to (a window bound passed straight to
- * getTasksForDateRange), and SimpleFilterFields has no date/from/to field to
- * read in the first place, so the two window judgments structurally can't mix.
+ * The FilterState the params name, or null when they name no condition. An
+ * explicit `filter` wins over everything else; otherwise the simple fields
+ * make it, together with `window`'s conditions when given (`list`'s own
+ * query window — the range operations pass none: their window is applied
+ * apart, and two date judgments must never stack). What is overridden is
+ * not read, so it is not checked either.
  */
-export function buildRangeFilterFromParams(params: SimpleFilterFields & { filter?: FilterState | Record<string, unknown> }): FilterState | null {
-    const explicit = resolveExplicitFilter(params.filter);
-    if (explicit) return explicit;
+export function filterOfParams(
+    params: SimpleFilterParams & { filter?: FilterState | Record<string, unknown> },
+    window?: QueryWindowParams,
+): FilterState | null {
+    if (params.filter) return readExplicitFilter(params.filter);
+    const conditions = [...buildSimpleFieldConditions(params), ...(window ? windowConditions(window) : [])];
+    return conditions.length === 0 ? null : { filters: conditions, logic: 'and' };
+}
 
-    const conditions = buildSimpleFieldConditions(params);
-    if (conditions.length === 0) return null;
-
-    return { filters: conditions, logic: 'and' };
+/**
+ * The filter a query uses, wherever its params say it comes from: the filter
+ * file's (`list` picks one pinned list out of a .md template), else `filter`,
+ * else the simple fields and `window` ({@link filterOfParams}). `list` and the
+ * date-range family both resolve their filter here.
+ */
+export async function resolveFilterSource(
+    app: App,
+    params: SimpleFilterParams & FilterSourceParams,
+    window?: QueryWindowParams,
+): Promise<FilterState | null> {
+    if (params.list && !params.filterFile) {
+        throw new TaskApiError("'list' requires 'filterFile' (a .md view template)");
+    }
+    if (!params.filterFile) return filterOfParams(params, window);
+    const loaded = await loadFilterFile(app, params.filterFile, params.list);
+    if (typeof loaded === 'string') throw new TaskApiError(loaded);
+    return readExplicitFilter(loaded);
 }
