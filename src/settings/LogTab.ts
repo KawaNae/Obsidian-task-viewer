@@ -1,6 +1,16 @@
 import { Notice, Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
+import { F } from '../services/viewConfig/FieldCodecs';
+
+// The number fields read a whole decimal number in range, as the CLI's do
+// (`F.int`). What is not one (empty, `3days`, out of range) is not saved:
+// the setting keeps its value rather than taking a default or the range's
+// end, so an emptied storage limit no longer saves 0, which is no limit.
+/** Days the log is kept: one or more. */
+const RETENTION_DAYS = F.int('logRetentionDays', { min: 1 });
+/** Megabytes the log may take: 0 is no limit. */
+const MAX_STORAGE_MB = F.int('logMaxStorageMB', { min: 0 });
 
 export function render(el: HTMLElement, plugin: PluginContext): void {
     new Setting(el)
@@ -20,8 +30,8 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             .setPlaceholder('7')
             .setValue(plugin.settings.logRetentionDays.toString())
             .onChange(async (value) => {
-                let days = parseInt(value);
-                if (isNaN(days) || days < 1) days = 1;
+                const days = RETENTION_DAYS.parse(value.trim());
+                if (days === undefined) return;
                 plugin.settings.logRetentionDays = days;
                 await plugin.saveSettings();
             }));
@@ -33,8 +43,8 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             .setPlaceholder('50')
             .setValue(plugin.settings.logMaxStorageMB.toString())
             .onChange(async (value) => {
-                let mb = parseInt(value);
-                if (isNaN(mb) || mb < 0) mb = 0;
+                const mb = MAX_STORAGE_MB.parse(value.trim());
+                if (mb === undefined) return;
                 plugin.settings.logMaxStorageMB = mb;
                 await plugin.saveSettings();
             }));
