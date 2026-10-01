@@ -200,6 +200,11 @@ describe('FlowParser', () => {
             expect(errors('next(monday).as(text)')).toContain('flow.unknown-head');
         });
 
+        it('rejects a date that does not exist', () => {
+            expect(errors('every mon until(2026-02-30)')).toContain('lex.no-such-day');
+            expect(errors('at(2026-03-01T25:00)')).toContain('lex.no-such-time');
+        });
+
         it('rejects bare until without parentheses', () => {
             expect(errors('every mon until 2026-02-30')).toContain('flow.expected-lparen');
         });
