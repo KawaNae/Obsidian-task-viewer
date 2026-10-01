@@ -45,7 +45,6 @@ function makeSuggester(tasks: DisplayTask[]): NextTaskSuggester {
         settings: { statusDefinitions: [], startHour: 0 },
         getIndex: () => ({ getRevision: () => ++revision }),
         getTaskReadService: () => ({
-            getStartHour: () => 0,
             getVisibleDisplayTasks: () => tasks,
             getDisplayTask: (id: string) => tasks.find(t => t.id === id),
         }),

@@ -16,7 +16,6 @@ function createMockApi() {
         getAllDisplayTasks: vi.fn().mockReturnValue([]),
         getFilteredTasks: vi.fn().mockReturnValue([]),
         getTasksForDateRange: vi.fn().mockReturnValue([]),
-        getStartHour: vi.fn().mockReturnValue(5),
     };
     const mockPlugin = {
         app: { vault: { getAbstractFileByPath: vi.fn() } },

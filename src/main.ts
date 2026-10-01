@@ -152,8 +152,7 @@ export default class TaskViewerPlugin extends Plugin {
             doc: typeof document !== 'undefined' ? document : undefined,
             win: typeof window !== 'undefined' ? window : undefined,
         });
-        this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
-        this.readService.updateWeekStartDay(this.settings.weekStartDay);
+        this.readService = new TaskReadService(this.taskIndex, () => this.settings);
         this.operations = new Operations(this.app, this.taskIndex);
         // The timer widget is made below; a send asks for it as it is made.
         this.noteOps = new NoteOps(this.app, this.operations, () => this.settings, {
@@ -414,8 +413,6 @@ export default class TaskViewerPlugin extends Plugin {
         // Reconfigure editor extensions so diagnostics pick up the rebuilt
         // parser chain immediately (dp/tp toggles change line ownership).
         this.app.workspace.updateOptions();
-        this.readService.updateStartHour(this.settings.startHour);
-        this.readService.updateWeekStartDay(this.settings.weekStartDay);
         applyBodyStyles(this.settings);
 
         this.viewEvents.settingsChanged();

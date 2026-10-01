@@ -773,7 +773,7 @@ export class TaskApi {
      * Get the current startHour setting (visual day boundary).
      */
     getStartHour(): StartHourResult {
-        return { startHour: this.readService.getStartHour() };
+        return { startHour: this.plugin.settings.startHour };
     }
 
     /**
