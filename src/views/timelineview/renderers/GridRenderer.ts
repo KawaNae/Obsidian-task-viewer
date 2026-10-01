@@ -98,7 +98,10 @@ export class GridRenderer {
 
         // 5. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
-        const buckets = bucketBySection(filteredTasks, startHour);
+        // Timeline draws two of the three sections: the all-day lane and the
+        // time grid. A task with only a due is in neither (`dueOnly`): it has
+        // no span to draw, and Timeline does not draw it (Schedule does).
+        const { allDay, timed } = bucketBySection(filteredTasks, startHour);
 
         // 5.1. All-Day Row
         if (showAllDay) {
@@ -123,7 +126,7 @@ export class GridRenderer {
                 dateCells.push(cell);
             });
 
-            const laneCount = allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
+            const laneCount = allDayRenderer.render(allDayRow, dates, allDay, reconciler);
             const rowSpan = Math.max(laneCount + 2, 2);
             axisCell.style.gridRow = `1 / span ${rowSpan}`;
             for (const cell of dateCells) {
@@ -144,8 +147,7 @@ export class GridRenderer {
                 attachSunAxisArrows(timeCol, dates[0], { startHour, latitude, longitude });
             }
 
-            const timelineInput = [...buckets.timed, ...buckets.dueOnly];
-            const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
+            const splitResult = splitTasks(timed, { type: 'visual-date', startHour });
             const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
             dates.forEach(date => {
                 const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
