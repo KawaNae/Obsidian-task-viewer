@@ -13,6 +13,7 @@ import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
 import type { MiniCalendarConfig, MiniCalendarTransient } from './MiniCalendarSchema';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export interface MiniCalendarToolbarDeps {
     app: App;
@@ -131,7 +132,7 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
             onApplyTemplate: (template) => {
-                const cfg = this.codec.parseConfig(template.config ?? null);
+                const cfg = readViewConfig(this.codec, template.config ?? null);
                 deps.applyConfig(cfg);
                 if (template.name) deps.onRename(template.name);
                 deps.onConfigApplied();

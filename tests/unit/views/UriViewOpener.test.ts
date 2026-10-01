@@ -12,7 +12,7 @@ import type { App } from 'obsidian';
  */
 
 const openLeafFromState = vi.fn(async () => { });
-const buildViewStateFromParams = vi.fn(async () => ({ state: {} as Record<string, unknown>, templateNotFound: undefined as string | undefined }));
+const buildViewStateFromParams = vi.fn(async () => ({ state: {} as Record<string, unknown>, templateNotFound: undefined as string | undefined, issues: [] as { field: string; text: string }[] }));
 const resolveViewTypeFromShortName = vi.fn((_: string) => undefined as string | undefined);
 const notices: string[] = [];
 
@@ -42,7 +42,7 @@ const settings = { viewTemplateFolder: 'Templates' } as never;
 beforeEach(() => {
     openLeafFromState.mockClear();
     buildViewStateFromParams.mockClear();
-    buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: undefined });
+    buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: undefined, issues: [] });
     resolveViewTypeFromShortName.mockReturnValue(undefined);
     notices.length = 0;
 });
@@ -59,7 +59,7 @@ describe('openViewFromUri', () => {
 
     it('opens a registered view with the state its template produced', async () => {
         resolveViewTypeFromShortName.mockReturnValue('kanban-view');
-        buildViewStateFromParams.mockResolvedValue({ state: { startDate: '2026-08-22' }, templateNotFound: undefined });
+        buildViewStateFromParams.mockResolvedValue({ state: { startDate: '2026-08-22' }, templateNotFound: undefined, issues: [] });
 
         await openViewFromUri(app, settings, { view: 'kanban', template: 'Sprint', position: 'tab' });
 
@@ -70,7 +70,7 @@ describe('openViewFromUri', () => {
 
     it('still opens the view when the named template is missing, and says so', async () => {
         resolveViewTypeFromShortName.mockReturnValue('kanban-view');
-        buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: 'Sprint' });
+        buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: 'Sprint', issues: [] });
 
         await openViewFromUri(app, settings, { view: 'kanban', template: 'Sprint' });
 
@@ -78,6 +78,20 @@ describe('openViewFromUri', () => {
         // default view with nothing to say it was not the one asked for.
         expect(notices).toHaveLength(1);
         expect(notices[0]).toContain('Sprint');
+        expect(openLeafFromState).toHaveBeenCalledOnce();
+    });
+
+    it('opens the view without the conditions it could not read, and says how many', async () => {
+        resolveViewTypeFromShortName.mockReturnValue('kanban-view');
+        buildViewStateFromParams.mockResolvedValue({
+            state: {}, templateNotFound: undefined,
+            issues: [{ field: 'filterState', text: 'filters[0]: Unknown filter property: tagg' }, { field: 'grid', text: 'list "A" sort rules[0]: x' }],
+        });
+
+        await openViewFromUri(app, settings, { view: 'kanban', template: 'Sprint' });
+
+        expect(notices).toHaveLength(1);
+        expect(notices[0]).toContain('2');
         expect(openLeafFromState).toHaveBeenCalledOnce();
     });
 

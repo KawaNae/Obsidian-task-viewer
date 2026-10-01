@@ -4,6 +4,7 @@ import type {
 } from '../../services/sort/SortTypes';
 import {
     createDefaultSortRule,
+    SORT_PROPERTIES,
     createEmptySortState,
     getSortPropertyLabel,
     SORT_PROPERTY_ICONS,
@@ -186,10 +187,7 @@ export class SortMenuComponent {
     // ── Property / Direction Menus ──
 
     private showPropertyMenu(anchorEl: HTMLElement, rule: SortRule): void {
-        const properties: SortProperty[] = [
-            'content', 'due', 'startDate', 'endDate', 'file', 'status', 'tag',
-        ];
-        const items: SelectItem[] = properties.map(p => ({
+        const items: SelectItem[] = SORT_PROPERTIES.map(p => ({
             label: getSortPropertyLabel(p),
             value: p,
             checked: rule.property === p,

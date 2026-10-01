@@ -14,6 +14,7 @@ import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
 import { exportFolderOf } from '../../services/export/ExportSave';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export interface CalendarToolbarDeps {
     app: App;
@@ -180,7 +181,7 @@ export class CalendarToolbar extends ViewToolbarBase {
             }),
             getExportFolder: () => exportFolderOf(deps.plugin.settings),
             onApplyTemplate: (template) => {
-                const cfg = this.codec.parseConfig(template.config ?? null);
+                const cfg = readViewConfig(this.codec, template.config ?? null);
                 deps.applyConfig(cfg);
                 if (template.name) deps.onRename(template.name);
                 deps.onConfigApplied();

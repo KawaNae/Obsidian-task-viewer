@@ -32,7 +32,7 @@ describe('listFilter', () => {
             filters: [],
             logic: 'or' as const,
         };
-        expect(listFilter({ filter })).toBe(filter);
+        expect(listFilter({ filter })).toEqual(filter);
     });
 
     // ── file ──
@@ -231,14 +231,13 @@ describe('listFilter', () => {
             logic: 'or' as const,
         };
         const result = listFilter({ file: 'test.md', tag: 'work', filter });
-        expect(result).toBe(filter);
+        expect(result).toEqual(filter);
     });
 });
 
 // ── overlap 窓の実挙動（TaskFilterEngine を通した検証） ──
 
 import { evaluateFilter } from '../helpers/filterContext';
-import { assertValidFilterState } from '../../../src/api/FilterParamsBuilder';
 import type { DisplayTask } from '../../../src/types';
 import type { FilterState } from '../../../src/services/filter/FilterTypes';
 
@@ -298,20 +297,30 @@ describe('from/to overlap 窓の実挙動', () => {
     });
 });
 
-describe('assertValidFilterState（filter/filter-file 境界検証）', () => {
+describe('params.filter の境界（FilterSerializer.parse の issues を例外にする）', () => {
     it('未知 property を拒否する', () => {
         const state = { filters: [{ property: 'statuss', operator: 'includes' }], logic: 'and' } as unknown as FilterState;
-        expect(() => assertValidFilterState(state)).toThrow(/Unknown filter property: statuss/);
+        expect(() => listFilter({ filter: state })).toThrow(/filters\[0\]: Unknown filter property: statuss/);
     });
 
     it('property に対して不正な operator を拒否する', () => {
         const state = { filters: [{ property: 'status', operator: 'onOrAfter' }], logic: 'and' } as unknown as FilterState;
-        expect(() => assertValidFilterState(state)).toThrow(/Invalid operator 'onOrAfter' for filter property 'status'/);
+        expect(() => listFilter({ filter: state })).toThrow(/Invalid operator 'onOrAfter' for filter property 'status'/);
+    });
+
+    it('値の形の誤りを拒否する（集合に文字列、日付に実在しない日）', () => {
+        const state = { filters: [
+            { property: 'tag', operator: 'includes', value: 'work' },
+            { logic: 'or', filters: [{ property: 'due', operator: 'equals', value: '2026-02-30' }] },
+        ], logic: 'and' } as unknown as FilterState;
+        expect(() => listFilter({ filter: state })).toThrow(
+            /Invalid filter: filters\[0\]: 'tag' takes a list of strings; filters\[1\]\.filters\[0\]: 'due' takes a date that exists/,
+        );
     });
 
     it('正しい FilterState は通過する', () => {
         const state: FilterState = { filters: [{ property: 'status', operator: 'includes', value: ['x'] }], logic: 'and' };
-        expect(() => assertValidFilterState(state)).not.toThrow();
+        expect(listFilter({ filter: state })).toEqual(state);
     });
 
     it('listFilter は params.filter を境界検証する', () => {
@@ -336,7 +345,7 @@ describe('filterOfParams without a window (the date-range family)', () => {
     it('params.filter overrides simple fields, same as list', () => {
         const filter = { filters: [], logic: 'or' as const };
         const result = filterOfParams({ status: 'x', filter });
-        expect(result).toBe(filter);
+        expect(result).toEqual(filter);
     });
 
     it(

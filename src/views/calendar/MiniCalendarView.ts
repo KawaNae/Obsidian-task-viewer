@@ -30,6 +30,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 import { hostWindow } from '../../utils/HostWindow';
+import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 
@@ -128,7 +129,7 @@ export class MiniCalendarView extends ItemView {
 
     async setState(state: MiniCalendarViewState, result: ViewStateResult): Promise<void> {
         const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = this.codec.parseConfig(stateDict);
+        const config = readViewConfig(this.codec, stateDict);
         const transient = this.codec.parseTransient(stateDict);
 
         this.applyConfig(config);

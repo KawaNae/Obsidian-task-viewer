@@ -20,13 +20,13 @@ import { valueOf } from '../../utils/values/Read';
 import { DateInput } from '../../utils/values/DateValues';
 import { IntInput, IntValue, FloatInput, FloatValue, type NumberRange } from '../../utils/values/NumberValues';
 import { BoolInput, ChoiceInput } from '../../utils/values/ChoiceValues';
-import type { ConfigField, TransientField } from './ViewConfigSchema';
+import type { ConfigField, TransientField, ReportIssue } from './ViewConfigSchema';
 import type { FilterState } from '../filter/FilterTypes';
 import { hasConditions } from '../filter/FilterTypes';
-import { FilterSerializer } from '../filter/FilterSerializer';
+import { FilterSerializer, filterIssueText, type FilterRead } from '../filter/FilterSerializer';
+import { SortSerializer, sortIssueText } from '../sort/SortSerializer';
 import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
-import type { SortRule } from '../sort/SortTypes';
 
 interface FieldOptions {
     readonly legacyKeys?: readonly string[];
@@ -169,15 +169,16 @@ export const F = {
     /**
      * FilterState. Workspace state and template JSON store the serialized JSON
      * form (FilterSerializer.toJSON). URI form is base64-encoded JSON.
-     * Empty filter states (no conditions) are omitted entirely.
+     * Empty filter states (no conditions) are omitted entirely. A condition
+     * FilterSerializer cannot read is dropped and reported.
      */
     filter(key: string, opts: FieldOptions = {}): ConfigField<FilterState> {
         return {
             key,
             legacyKeys: opts.legacyKeys,
-            parse(raw) {
+            parse(raw, report) {
                 if (!raw || typeof raw !== 'object') return undefined;
-                const state = FilterSerializer.fromJSON(raw);
+                const state = reportedFilter(FilterSerializer.parse(raw), report);
                 return hasConditions(state) ? state : undefined;
             },
             serialize(value) {
@@ -187,8 +188,8 @@ export const F = {
             toUriParam(value) {
                 return hasConditions(value) ? FilterSerializer.toURIParam(value) : undefined;
             },
-            fromUriParam(raw) {
-                const state = FilterSerializer.fromURIParam(raw);
+            fromUriParam(raw, report) {
+                const state = reportedFilter(FilterSerializer.parseURIParam(raw), report);
                 return hasConditions(state) ? state : undefined;
             },
         };
@@ -203,9 +204,9 @@ export const F = {
         return {
             key,
             legacyKeys: opts.legacyKeys,
-            parse(raw) {
+            parse(raw, report) {
                 if (!Array.isArray(raw)) return undefined;
-                const result = parsePinnedLists(raw);
+                const result = parsePinnedLists(raw, report);
                 return result.length > 0 ? result : undefined;
             },
             serialize(value) {
@@ -216,10 +217,10 @@ export const F = {
                 if (!Array.isArray(value) || value.length === 0) return undefined;
                 return encodeBase64Json(value.map(serializePinnedList));
             },
-            fromUriParam(raw) {
+            fromUriParam(raw, report) {
                 const decoded = tryDecodeBase64Json(raw);
                 if (!Array.isArray(decoded)) return undefined;
-                const result = parsePinnedLists(decoded);
+                const result = parsePinnedLists(decoded, report);
                 return result.length > 0 ? result : undefined;
             },
         };
@@ -229,9 +230,9 @@ export const F = {
         return {
             key,
             legacyKeys: opts.legacyKeys,
-            parse(raw) {
+            parse(raw, report) {
                 if (!Array.isArray(raw)) return undefined;
-                const grid = parseGrid(raw);
+                const grid = parseGrid(raw, report);
                 return grid.length > 0 ? grid : undefined;
             },
             serialize(value) {
@@ -242,10 +243,10 @@ export const F = {
                 if (!Array.isArray(value) || value.length === 0) return undefined;
                 return encodeBase64Json(value.map(row => row.map(serializePinnedList)));
             },
-            fromUriParam(raw) {
+            fromUriParam(raw, report) {
                 const decoded = tryDecodeBase64Json(raw);
                 if (!Array.isArray(decoded)) return undefined;
-                const grid = parseGrid(decoded);
+                const grid = parseGrid(decoded, report);
                 return grid.length > 0 ? grid : undefined;
             },
         };
@@ -378,15 +379,7 @@ function serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> 
         filterState: FilterSerializer.toJSON(pl.filterState),
         applyViewFilter: pl.applyViewFilter,
     };
-    if (pl.sortState) {
-        result.sortState = {
-            rules: pl.sortState.rules.map(r => ({
-                id: r.id,
-                property: r.property,
-                direction: r.direction,
-            })),
-        };
-    }
+    if (pl.sortState) result.sortState = SortSerializer.toJSON(pl.sortState);
     if (pl.topRight && pl.topRight.fields.length > 0) {
         const tr: Record<string, unknown> = { fields: pl.topRight.fields, separator: pl.topRight.separator };
         if (pl.topRight.prefix) tr.prefix = pl.topRight.prefix;
@@ -396,7 +389,13 @@ function serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> 
     return result;
 }
 
-function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
+/** The filter `read` holds, with what it dropped told to `report`. */
+function reportedFilter(read: FilterRead, report: ReportIssue | undefined, where = ''): FilterState {
+    for (const issue of read.issues) report?.(`${where}${filterIssueText(issue)}`);
+    return read.state;
+}
+
+function parsePinnedLists(raw: unknown[], report?: ReportIssue): PinnedListDefinition[] {
     const result: PinnedListDefinition[] = [];
     for (const entry of raw) {
         if (!entry || typeof entry !== 'object') continue;
@@ -408,7 +407,8 @@ function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
             : 'pl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5);
 
         if (!obj.filterState || typeof obj.filterState !== 'object') continue;
-        const filterState = FilterSerializer.fromJSON(obj.filterState);
+        const where = `list "${name}" `;
+        const filterState = reportedFilter(FilterSerializer.parse(obj.filterState), report, where);
 
         // A list saved before the toggle was touched has no key: it reads as
         // false (the view filter is not applied). This is the one place the
@@ -417,18 +417,9 @@ function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
         const def: PinnedListDefinition = { id, name, filterState, applyViewFilter };
 
         if (obj.sortState && typeof obj.sortState === 'object') {
-            const rawSort = obj.sortState as Record<string, unknown>;
-            if (Array.isArray(rawSort.rules)) {
-                def.sortState = {
-                    rules: (rawSort.rules as Record<string, unknown>[]).map(r => ({
-                        id: (typeof r.id === 'string' && r.id)
-                            ? r.id
-                            : `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                        property: r.property as SortRule['property'],
-                        direction: r.direction as SortRule['direction'],
-                    })),
-                };
-            }
+            const sort = SortSerializer.parse(obj.sortState);
+            for (const issue of sort.issues) report?.(`${where}sort ${sortIssueText(issue)}`);
+            def.sortState = sort.state;
         }
         if (obj.topRight && typeof obj.topRight === 'object') {
             const tr = obj.topRight as Record<string, unknown>;
@@ -449,11 +440,11 @@ function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
     return result;
 }
 
-function parseGrid(raw: unknown[]): PinnedListDefinition[][] {
+function parseGrid(raw: unknown[], report?: ReportIssue): PinnedListDefinition[][] {
     const grid: PinnedListDefinition[][] = [];
     for (const row of raw) {
         if (!Array.isArray(row)) continue;
-        const parsedRow = parsePinnedLists(row);
+        const parsedRow = parsePinnedLists(row, report);
         if (parsedRow.length > 0) grid.push(parsedRow);
     }
     return grid;

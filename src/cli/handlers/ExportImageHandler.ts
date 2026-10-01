@@ -79,6 +79,11 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
                     .map(s => s.name);
                 return cliError(`Template '${buildResult.templateNotFound}' not found. Available: ${available.join(', ') || '(none)'}`);
             }
+            // As the API refuses a filter it cannot read whole, the export
+            // refuses to draw a view on less than its template and flags say.
+            if (buildResult.issues.length > 0) {
+                return cliError(`Cannot read the view's config: ${buildResult.issues.map(i => `${i.field} ${i.text}`).join('; ')}`);
+            }
             result = await plugin.exportService.exportTempView(viewType, buildResult.state, opts);
         }
 

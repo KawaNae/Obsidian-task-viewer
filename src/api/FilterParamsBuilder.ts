@@ -1,6 +1,5 @@
-import type { FilterState, FilterCondition, FilterGroup, FilterProperty } from '../services/filter/FilterTypes';
-import { getAllConditions, PROPERTY_OPERATORS } from '../services/filter/FilterTypes';
-import { FilterSerializer } from '../services/filter/FilterSerializer';
+import type { FilterState, FilterCondition } from '../services/filter/FilterTypes';
+import { FilterSerializer, filterIssueText } from '../services/filter/FilterSerializer';
 import { DATE_PRESET_SYNTAX, parseDatePreset } from '../services/filter/DatePreset';
 import type { DateFilterValue } from '../services/filter/FilterTypes';
 import type { App } from 'obsidian';
@@ -17,29 +16,6 @@ export function readDateParam(value: string, name: string): DateFilterValue {
     if (read.ok) return read.value;
     if (read.issue.code === 'noSuchDay') throw TaskApiError.ofIssue(read.issue, name, value);
     throw new TaskApiError(n => `Invalid date value for ${n(name)}: ${value}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`, name);
-}
-
-/**
- * Boundary validation for externally supplied FilterState (API `filter`
- * param, CLI `filter-file`). The filter engine silently passes unknown
- * properties/operators through as all-match, so typos in a filter JSON
- * would otherwise go undetected. Internal (UI-built) filters don't pass
- * through here.
- */
-export function assertValidFilterState(state: FilterState): void {
-    for (const cond of getAllConditions(state)) {
-        const ops = PROPERTY_OPERATORS[cond.property as FilterProperty];
-        if (!ops) {
-            throw new TaskApiError(
-                `Unknown filter property: ${String(cond.property)}. Available: ${Object.keys(PROPERTY_OPERATORS).join(', ')}`,
-            );
-        }
-        if (!ops.includes(cond.operator)) {
-            throw new TaskApiError(
-                `Invalid operator '${String(cond.operator)}' for filter property '${String(cond.property)}'. Available: ${ops.join(', ')}`,
-            );
-        }
-    }
 }
 
 // ── Internal helpers ──
@@ -118,10 +94,16 @@ function buildSimpleFieldConditions(params: SimpleFilterParams): FilterCondition
     return conditions;
 }
 
-/** A FilterState handed in from outside (`filter`, or a filter file's), parsed and validated. */
+/**
+ * The `filter` param, read by the one reader of saved filters. A part it
+ * cannot read is an error: the API does not run a query on less than it was
+ * asked.
+ */
 function readExplicitFilter(filter: FilterState | Record<string, unknown>): FilterState {
-    const state = 'filters' in filter ? filter as FilterState : FilterSerializer.fromJSON(filter);
-    assertValidFilterState(state);
+    const { state, issues } = FilterSerializer.parse(filter);
+    if (issues.length > 0) {
+        throw new TaskApiError(`Invalid filter: ${issues.map(filterIssueText).join('; ')}`);
+    }
     return state;
 }
 
@@ -185,5 +167,5 @@ export async function resolveFilterSource(
     if (!params.filterFile) return filterOfParams(params, window);
     const loaded = await loadFilterFile(app, params.filterFile, params.list);
     if (typeof loaded === 'string') throw new TaskApiError(loaded);
-    return readExplicitFilter(loaded);
+    return loaded;
 }

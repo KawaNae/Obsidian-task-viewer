@@ -5,6 +5,7 @@ import { t } from '../../i18n';
 import { resolveViewTypeFromShortName } from './SchemaRegistry';
 import { buildViewStateFromParams } from './ViewStateFactory';
 import { openLeafFromState, parseLeafPosition } from './LeafOpener';
+import { noticeConfigIssues } from './ConfigIssueNotice';
 
 const TIMER_VIEW: ViewType = 'timer-view';
 
@@ -52,7 +53,8 @@ function timerState(params: Record<string, string>): Record<string, unknown> {
  *
  * A template that cannot be found is worth saying out loud — unlike a bad
  * view name, the user named a file they expected to exist — and the view
- * still opens, on its defaults.
+ * still opens, on its defaults. So is a condition the template or the query
+ * holds that cannot be read: the view opens without it.
  */
 async function templatedState(
     app: App,
@@ -66,5 +68,6 @@ async function templatedState(
     if (result.templateNotFound) {
         new Notice(t('notice.templateNotFound', { name: result.templateNotFound }));
     }
+    noticeConfigIssues(result.issues);
     return result.state;
 }
