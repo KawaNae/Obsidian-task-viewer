@@ -1270,7 +1270,7 @@ export async function createFile(
  * throws is taken as made when the vault holds it then (another write made
  * it meanwhile), and fails the write otherwise — a note in the way included.
  */
-async function ensureFolderOf(app: App, path: string): Promise<void> {
+export async function ensureFolderOf(app: App, path: string): Promise<void> {
     const folders = path.split('/').slice(0, -1).filter(part => part !== '');
     let at = '';
     for (const folder of folders) {

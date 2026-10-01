@@ -13,6 +13,7 @@ import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteraction
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
+import { exportFolderOf } from '../../services/export/ExportSave';
 
 export interface CalendarToolbarDeps {
     app: App;
@@ -177,7 +178,7 @@ export class CalendarToolbar extends ViewToolbarBase {
                 viewType: CalendarSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
-            getExportFolder: () => deps.plugin.settings.exportFolder,
+            getExportFolder: () => exportFolderOf(deps.plugin.settings),
             onApplyTemplate: (template) => {
                 const cfg = this.codec.parseConfig(template.config ?? null);
                 deps.applyConfig(cfg);

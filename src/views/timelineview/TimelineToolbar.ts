@@ -13,6 +13,7 @@ import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteraction
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { TimelineSchema, type TimelineConfig, type TimelineTransient, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from './TimelineSchema';
+import { exportFolderOf } from '../../services/export/ExportSave';
 
 /**
  * Everything the toolbar needs from TimelineView, as a bundle of narrow
@@ -305,7 +306,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 if (template.name) deps.onRename(template.name);
                 deps.onConfigApplied();
             },
-            getExportFolder: () => deps.plugin.settings.exportFolder,
+            getExportFolder: () => exportFolderOf(deps.plugin.settings),
             onReset: () => {
                 deps.onReset();
                 deps.onRename(undefined);

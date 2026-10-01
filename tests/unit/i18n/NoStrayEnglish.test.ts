@@ -92,11 +92,6 @@ const EXEMPTIONS: Exemption[] = [
     },
     {
         file: 'settings/BasicTab.ts',
-        text: 'task-viewer-export',
-        why: 'The default folder name, shown as the value it would take.',
-    },
-    {
-        file: 'settings/BasicTab.ts',
         text: 'Templates/Timers',
         why: 'Example path showing the expected shape of the setting.',
     },

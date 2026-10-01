@@ -54,10 +54,16 @@ export function nodeOs(): NodeOs | undefined {
     return electronRequire(window)?.('os') as NodeOs | undefined;
 }
 
-/** The slice of Node's `fs` the disk probe reads (`NodeDiskProbe`). */
+/**
+ * The slice of Node's `fs` the plugin uses: the disk probe reads with `stat`
+ * (`NodeDiskProbe`), and an image exported to a folder outside the vault is
+ * written with `mkdir` and `writeFile` (`saveExportImage`).
+ */
 export interface NodeFs {
     promises: {
         stat(path: string): Promise<{ mtimeMs: number; size: number }>;
+        mkdir(path: string, options: { recursive: true }): Promise<unknown>;
+        writeFile(path: string, data: Uint8Array): Promise<void>;
     };
 }
 

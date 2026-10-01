@@ -510,6 +510,7 @@ export interface ViewSettingsOptions {
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
     menuPresenter: MenuPresenter;
+    /** The folder an export from the menu is saved in (`exportFolderOf`); a view without it has no export item. */
     getExportFolder?: () => string;
     /** View-specific menu items appended above the Save/Load/Reset block.
      *  Used by views to surface their own overlay/display toggles
@@ -660,7 +661,8 @@ export class ViewSettingsMenu {
         });
 
         const descriptor = exportDescriptorFor(viewType);
-        if (descriptor) {
+        const getExportFolder = options.getExportFolder;
+        if (descriptor && getExportFolder) {
             menu.addSeparator();
 
             menu.addItem((item) => {
@@ -679,7 +681,7 @@ export class ViewSettingsMenu {
                         }
                         const label = getCustomName() || ViewSettingsMenu.toShortViewType(viewType);
                         const filename = buildExportFilename(label);
-                        const folder = options.getExportFolder?.()?.trim() || 'task-viewer-export';
+                        const folder = getExportFolder();
                         await ViewExporter.exportAsPng({
                             app: options.app,
                             container,
