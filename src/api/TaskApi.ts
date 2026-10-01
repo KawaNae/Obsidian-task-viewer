@@ -603,9 +603,11 @@ export class TaskApi {
             }
         }
 
-        // A write that could not be placed leaves the index reverted to the
-        // former values, so reading the task back would describe a change that
-        // never reached the file and report it as a success.
+        // The write does not touch the index's copy: a write that was not
+        // made leaves the copy saying what the file says, and reading it back
+        // would report as done a change the file never took. A write that was
+        // made is the index's next reading of the file (`landed`) by the time
+        // it returns, so the read below sees the new values.
         const written = await this.operations.updateTask(task.id, updates);
         if (!written) throw new TaskApiError(`Task could not be written: ${params.id}`);
 
