@@ -48,9 +48,9 @@ export function classifyForSection(dt: DisplayTask, startHour: number): SectionK
  * filteredTasks をセクション別に振り分ける。同一 task が 'allDay' と 'timed' の両方に
  * 入ることは起こり得ない（render burst 修正の主目的）。
  *
- * 注意: timeline view において dueOnly バケツは GridRenderer で timed と一緒に
- * timeline 側へ流すが、TimelineSectionRenderer が `effectiveStartTime` 不在を skip するため
- * **現状 timeline view では描画されない**（既知の既存挙動）。schedule view 側は別経路で描画。
+ * どのセクションを描くかは消費者が決める。Timeline（GridRenderer）は allDay と
+ * timed だけを描き、dueOnly は描かない。Schedule は TaskDateCategorizer 経由で
+ * 3 つとも描く。
  */
 export function bucketBySection(
     tasks: DisplayTask[],
