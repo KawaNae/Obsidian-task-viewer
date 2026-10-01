@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeTask } from '../../../src/api/TaskNormalizer';
 import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
-import { TaskFilterEngine } from '../../../src/services/filter/TaskFilterEngine';
+import { evaluateFilter } from '../helpers/filterContext';
 import type { FilterState } from '../../../src/services/filter/FilterTypes';
 import { makeTask } from '../helpers/makeTask';
 
@@ -45,7 +45,7 @@ describe('durationMinutes counts the days between start and end', () => {
             filters: [{ id: 'c', property: 'length', operator: 'greaterThan', value: 24, unit: 'hours' }],
             logic: 'and',
         } as FilterState;
-        expect(TaskFilterEngine.evaluate(dt, state, { startHour: START_HOUR } as never)).toBe(true);
+        expect(evaluateFilter(dt, state, { startHour: START_HOUR })).toBe(true);
         expect(minutes).toBeGreaterThan(24 * 60);
     });
 });

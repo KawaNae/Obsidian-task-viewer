@@ -237,7 +237,7 @@ describe('listFilter', () => {
 
 // ── overlap 窓の実挙動（TaskFilterEngine を通した検証） ──
 
-import { TaskFilterEngine } from '../../../src/services/filter/TaskFilterEngine';
+import { evaluateFilter } from '../helpers/filterContext';
 import { assertValidFilterState } from '../../../src/api/FilterParamsBuilder';
 import type { DisplayTask } from '../../../src/types';
 import type { FilterState } from '../../../src/services/filter/FilterTypes';
@@ -257,7 +257,7 @@ function displayTask(id: string, effectiveStartDate: string, effectiveEndDate?: 
 function matches(params: ListParams, dt: DisplayTask): boolean {
     const state = listFilter(params);
     if (!state) return true;
-    return TaskFilterEngine.evaluate(dt, state);
+    return evaluateFilter(dt, state);
 }
 
 describe('from/to overlap 窓の実挙動', () => {

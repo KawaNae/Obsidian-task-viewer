@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { DateUtils } from '../../../src/utils/DateUtils';
-import { TaskFilterEngine } from '../../../src/services/filter/TaskFilterEngine';
+import { evaluateFilter } from '../helpers/filterContext';
 import type { Task, DisplayTask } from '../../../src/types';
 import type { FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
 
@@ -80,19 +80,19 @@ describe('effectiveDue: due フィルタが cascade due を含む', () => {
     it('cascade due を持つタスクが due isSet にかかる', () => {
         const task = makeTask({ cascadeContext: { due: '2026-07-20' } });
         const dt = toDisplayTask(task, 0, noLookup);
-        expect(TaskFilterEngine.evaluate(dt, dueCond('isSet'))).toBe(true);
+        expect(evaluateFilter(dt, dueCond('isSet'))).toBe(true);
     });
 
     it('cascade due なし + raw due なし → due isNotSet', () => {
         const task = makeTask();
         const dt = toDisplayTask(task, 0, noLookup);
-        expect(TaskFilterEngine.evaluate(dt, dueCond('isNotSet'))).toBe(true);
+        expect(evaluateFilter(dt, dueCond('isNotSet'))).toBe(true);
     });
 
     it('datetime due が日付部分で equals にマッチ', () => {
         const task = makeTask({ due: '2026-07-18T14:00' });
         const dt = toDisplayTask(task, 0, noLookup);
-        expect(TaskFilterEngine.evaluate(dt, dueCond('equals', '2026-07-18'))).toBe(true);
+        expect(evaluateFilter(dt, dueCond('equals', '2026-07-18'))).toBe(true);
     });
 });
 
@@ -111,8 +111,8 @@ describe('weekStartDay: フィルタの週窓が設定に従う', () => {
         const dt = toDisplayTask(task, 0, noLookup);
         const filter = thisWeekCond();
 
-        const resultSunday = TaskFilterEngine.evaluate(dt, filter, { weekStartDay: 0 });
-        const resultMonday = TaskFilterEngine.evaluate(dt, filter, { weekStartDay: 1 });
+        const resultSunday = evaluateFilter(dt, filter, { weekStartDay: 0 });
+        const resultMonday = evaluateFilter(dt, filter, { weekStartDay: 1 });
         // 2026-07-20 is Monday. With weekStartDay=0 (Sun) the week is Sun 7/19 - Sat 7/25,
         // so Mon 7/20 is inside. With weekStartDay=1 (Mon) the week is Mon 7/20 - Sun 7/26,
         // so Mon 7/20 is also inside. Both should be true in this case.

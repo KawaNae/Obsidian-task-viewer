@@ -105,7 +105,7 @@ export class TaskReadService {
     ): DisplayTask[] {
         const raw = this.getAllDisplayTasks();
         const all = options?.includeInvalid ? raw : raw.filter(TaskReadService.isVisible);
-        const context = filter ? this.createFilterContext() : undefined;
+        const context = this.createFilterContext();
         const startHour = this.startHour;
 
         const result: DisplayTask[] = [];
@@ -159,14 +159,13 @@ export class TaskReadService {
         return result;
     }
 
-    /**
-     * Create a FilterContext with startHour and taskLookup.
-     */
+    /** The context the plugin evaluates filters in: its settings, its index, and now. */
     private createFilterContext(): FilterContext {
         return {
             startHour: this.startHour,
             weekStartDay: this.settings().weekStartDay,
             taskLookup: (id: string) => this.taskIndex.getTask(id),
+            now: new Date(),
         };
     }
 
