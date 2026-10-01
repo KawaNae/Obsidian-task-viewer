@@ -280,7 +280,7 @@ const result = await api.duplicate({ id: 'abc123', dayOffset: 1, count: 3 });
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
 | `id` | ○ | `string` | タスクID |
-| `dayOffset` | | `number` | 日付シフト日数（整数。デフォルト: 0。0 なら時刻の軸で連ねる） |
+| `dayOffset` | | `number` | 日付シフト日数（整数。デフォルト: 0。0 なら時刻の軸で連ねる。それ以外は最初の複写をその日数ずらし、次からは1日ずつ後へ。負なら前の日へ） |
 | `count` | | `number` | コピー数（1 以上の整数。デフォルト: 1） |
 
 ## tasksForDateRange

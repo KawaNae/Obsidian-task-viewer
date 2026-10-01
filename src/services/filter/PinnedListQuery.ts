@@ -11,8 +11,15 @@ export interface ListQuery {
     readonly sort?: SortState;
 }
 
-/** A template's query, or why it names none. */
-export type TemplateQuery = { readonly query: ListQuery } | { readonly error: string };
+/**
+ * A template's query, or why it names none. A `listError` is about the list
+ * asked for (or not asked for): its text names the parameter that names
+ * the list by `listParam`, so the API and the CLI each spell it their way.
+ */
+export type TemplateQuery =
+    | { readonly query: ListQuery }
+    | { readonly error: string }
+    | { readonly listError: (listParam: string) => string };
 
 /**
  * The one answer to "which tasks does this pinned list show": the lists of
@@ -59,14 +66,15 @@ export class PinnedListQuery {
             if (list) return { query: PinnedListQuery.resolve(list, viewFilter) };
             const names = lists.map(l => l.name);
             return {
-                error: names.length > 0
-                    ? `Pinned list "${listName}" not found. Available: ${names.join(', ')}`
-                    : `No pinned lists in template. Remove --list flag`,
+                listError: names.length > 0
+                    ? () => `Pinned list "${listName}" not found. Available: ${names.join(', ')}`
+                    : param => `No pinned lists in template: ${path}. Leave out '${param}'`,
             };
         }
 
         if (lists.length > 0) {
-            return { error: `Template has pinned lists. Specify one with list=<name>: ${lists.map(l => l.name).join(', ')}` };
+            const names = lists.map(l => l.name).join(', ');
+            return { listError: param => `Template has pinned lists. Name one with '${param}': ${names}` };
         }
         if (viewFilter && hasConditions(viewFilter)) return { query: { filter: viewFilter } };
         return { error: `Template has no filter: ${path}` };

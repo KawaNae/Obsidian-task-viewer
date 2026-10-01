@@ -89,7 +89,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | フラグ | 説明 | 例 |
 |-------|------|-----|
 | `sort` | ソートルール（`property[:direction]` カンマ区切り） | `sort=startDate:asc,due:desc` |
-| `limit` | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） | `limit=50` / `limit=all` |
+| `limit` | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） | `limit=50` / `limit=all` |
 
 **ソート可能プロパティ:** `content`, `due`, `startDate`, `endDate`, `file`, `status`, `tag`（比べる値は [api.md の ApiSortRule](api.md#list--today)。`due` は受け継いだ締切で時刻も比べ、`startDate` と `endDate` は日付だけを比べます）
 
@@ -105,7 +105,7 @@ obsidian obsidian-task-viewer:today output-fields=content,effectiveStartTime,eff
 |-------|------|
 | `leaf` | 子タスクを持たないタスクのみ |
 | `sort` | ソートルール |
-| `limit` | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
+| `limit` | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） |
 
 ### get — 単一タスク取得
 
@@ -189,7 +189,7 @@ obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-| `day-offset` | | 日付をシフトする日数（整数。デフォルト: 0。0 なら時刻の軸で連ねる） |
+| `day-offset` | | 日付をシフトする日数（整数。デフォルト: 0。0 なら時刻の軸で連ねる。それ以外は最初の複写をその日数ずらし、次からは1日ずつ後へ。負なら前の日へ） |
 | `count` | | コピー数（1 以上の整数。デフォルト: 1） |
 
 **戻り値:** `{ "duplicated": "abc123" }`
@@ -222,7 +222,7 @@ obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31
 | `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
 | `list` | | ピン留めリスト名（`.md` テンプレート用） |
 | `sort` | | ソートルール |
-| `limit` | | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
+| `limit` | | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） |
 
 ### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 
