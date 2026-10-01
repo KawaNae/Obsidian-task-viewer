@@ -11,9 +11,10 @@ import {
 /**
  * 日付ごとのタスクバケツ。キー集合は SectionKind（null 除く）と型で一致する。
  * 各バケツ (allDay / timed / dueOnly) は canonical render order でソート済みで返る:
- *   - allDay:  effectiveStartDate ASC, id ASC
- *   - timed:   effectiveStartTime ASC, id ASC
- *   - dueOnly: due ASC, id ASC
+ *   - allDay:  effectiveStartDate ASC
+ *   - timed:   visual start ASC, duration DESC
+ *   - dueOnly: due ASC
+ * 同順位はファイル、行番号の順（TaskRenderOrder）。
  * 消費者はこの順序を前提にしてよく、再ソートは不要。
  * この不変条件により、同一列内の `.task-card` DOM 兄弟順が決定論となり、
  * `position: absolute` 下の paint 順（document 順）も安定する。
