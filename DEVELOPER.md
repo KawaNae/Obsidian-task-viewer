@@ -85,7 +85,7 @@ graph TB
 | **Consumers** | UI rendering and user interaction, the API, the CLI, timers, the editor's extensions |
 | **TaskReadService** | The display side of the read: cached DisplayTask conversion, date ranges, filters and sorts, a row's children in order. It passes no copy through |
 | **TaskIndex** (`services/core`) | The copies of the last reading of each note, looked up by name, anchor and line; whether a copy is what the disk holds; the telling of a change. Its read port is the type `IndexReads` (`PluginContext.getIndex`), which has no method that writes a note. The copies are written by the scan and by what a write of ours left (`landed`), nothing else. It knows nothing of the operations |
-| **Operations** (`services/operations`) | The one way a consumer writes (`PluginContext.getOperations`): checks the copy it plans from against the disk (`planCopy`, the read-only check included), orders the writes asked of one row (`onRow`), writes through the repository with the row's fire, tells the user a refusal once. Daily and periodic notes (`putInDailyNote`, `openPeriodicNote`) and template notes (`saveTemplateNote`) are written here too; the write channel does not leave it |
+| **Operations** (`services/operations`) | The one way a consumer writes (`PluginContext.getOperations`): checks the copy it plans from against the disk (`planCopy`, the read-only check included), orders the writes asked of one row (`onRow`), writes through the repository with the row's fire (a completion's planned inside the write, a deletion's planned before it, both by `FlowExecutor`), tells the user a refusal once and a flow that was not run (`FlowNotices`). Daily and periodic notes (`putInDailyNote`, `openPeriodicNote`) and template notes (`saveTemplateNote`) are written here too; the write channel does not leave it |
 | **Parsers** | Convert markdown to Task objects |
 | **Persistence** | Write rows back to files: each write checks the lines it planned from and writes them in one `vault.process` (`TaskRepository`, `writers/`, `FileLines`, `Notes`) |
 
@@ -118,14 +118,14 @@ src/
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
 │   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagExtractor, TaskLineClassifier)
-│   ├── persistence/           # Write layer (FileLines: one target type `RowRef`, `createFile`; Notes: a block put in a note, a note made; TaskRepository, InlineTaskWriter)
+│   ├── persistence/           # Write layer (FileLines: one target type `RowRef`, `createFile`; Notes: a block put in a note, a note made; FiringTrials: which fires of a completion are written; TaskRepository, InlineTaskWriter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
 │   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
 │   ├── filter/                # Filter engine, serializer, types, value collector
 │   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
 │   ├── template/              # View template load/save (ViewTemplateLoader/Writer; TemplateNote: a template note, saved)
-│   ├── flow/                  # ==> フローの計画と実行 (FlowExecutor/FlowPlanner/GenBodyRenderer/ScheduleEngine/FlowTrigger)
+│   ├── flow/                  # ==> フローの計画と通知 (FlowExecutor: 計画だけで書かない; FlowPlanner/GenBodyRenderer/ScheduleEngine/FlowTrigger; FlowNotices: 発火しなかったことを告げる)
 │   └── lang/                  # 式と文の言語 (Lexer/ExprParser/ExprEvaluator/StmtParser, Diagnostic)
 │       └── flow/              # ==> フロー記法の言語 (FlowAst/FlowParser/FlowChecker/FlowSegments/FlowSerializer/diagnosticText)。lang、i18n、types だけに依存する
 ├── editor/                    # Editor extensions (TaskMenuExtension, DiagnosticsExtension, GenHighlight, etc.)
@@ -240,7 +240,9 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskApi** | `api/TaskApi.ts` | Public API (13 methods) |
 | **TaskNormalizer** | `api/TaskNormalizer.ts` | Task → NormalizedTask conversion for API output |
 | **FilterFileLoader** | `api/FilterFileLoader.ts` | Filter file (.json/.md) loading |
-| **FlowExecutor** | `services/flow/FlowExecutor.ts` | Executes `==>` flow commands (every / + / at / x / until / move) |
+| **FlowExecutor** | `services/flow/FlowExecutor.ts` | Plans what a `==>` command (every / + / at / x / until / move) writes, and writes nothing: a completion's fire from the lines the completing write holds (`planFire`, as a `fire` op: `fireOp`), a deletion's next instance and removal (`planDeletion`). Reads the notes only through `FlowReads` (a generation block, a row by id). A `move` carries the row to a heading of its own note (`[[#heading]]`) as one `move` op; a heading that is not one place in the note fails the plan |
+| **FlowNotices** | `services/flow/FlowNotices.ts` | What the user is told of the flow: for each completed row whose flow was not run, why (`notRunsOf(outcome)`, the one rule for a card's write, a send and the editor), and a delete its fire stopped (`deletionStopped`); the same failure once per window |
+| **FiringTrials** | `services/persistence/FiringTrials.ts` | `firingTrials`: the one rule of which fires of a completion are written — every fire, else none, else each put back from the top and kept or set aside with its refusal — for `InlineTaskWriter`, `SendWriter` and the editor's fire alike (`FiringOutcome`) |
 | **DragHandler** | `interaction/drag/DragHandler.ts` | Delegates pointer events to `DragRouter` (Strategy selection) / `DragSession` (gesture lifecycle) |
 | **MenuHandler** | `interaction/menu/MenuHandler.ts` | Context menu facade coordinating multiple Builder classes |
 | **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
@@ -825,10 +827,12 @@ A scan, a `modify`, a sync, or another plugin's write to the vault is no operati
 
 ### Implementation
 
-- [`FlowFireExtension.ts`](./src/editor/FlowFireExtension.ts): the editor's fire (`fireFilter`)
 - [`FlowTrigger.ts`](./src/services/flow/FlowTrigger.ts): `completes` and `isOperation`
-- [`Operations.ts`](./src/services/operations/Operations.ts): a completing write and its fire as one write (`writeCompleting`)
-- [`FlowExecutor.ts`](./src/services/flow/FlowExecutor.ts): the fire's plan (`planFire`)
+- [`FlowExecutor.ts`](./src/services/flow/FlowExecutor.ts): the plans, and nothing written: a completion's fire (`planFire`, carried into the write as a `fire` op by `fireOp`) and a deletion's (`planDeletion`: the next instance and the row's removal, or why the delete stops)
+- [`FiringTrials.ts`](./src/services/persistence/FiringTrials.ts): `firingTrials`, the one rule of which fires of a write are written. The write is tried with every fire, then with none, then with each fire put back from the top; a fire whose write is refused is set aside with its refusal, and its row stays completed with its command. All of it is tried on the lines of one run of the write (`EditTrials`)
+- [`Operations.ts`](./src/services/operations/Operations.ts): writes both kinds of fire. A completing write carries the row's fire (`writeCompleting`); a delete with its fire writes the plan's ops in one write, checked against the row, its subtree, its command lines and the blocks the plan read (`writeFiringDelete`)
+- [`FlowFireExtension.ts`](./src/editor/FlowFireExtension.ts): the editor's fire (`fireFilter`). The rows a transaction completed are one write over the document it leaves, tried by the same `firingTrials` with the same ops (`editLines`), and turned into changes of the transaction (`lineChanges`)
+- [`FlowNotices.ts`](./src/services/flow/FlowNotices.ts): what the user is told, derived from the write's `FiringOutcome` by one function (`notRunsOf`): for each completed row, the refusal its fire was set aside with, else its plan's failure, else nothing. A card's write, a send and the editor (`EditorFireHost.told`, after the transaction) all tell through it
 
 ---
 
