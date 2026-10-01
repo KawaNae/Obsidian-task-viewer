@@ -80,7 +80,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 >
 > list の窓は effective な日付（カレンダー基準、締切のみのタスクは対象外）で判定します。tasks-for-date-range 系の窓は visual な日付（タイムライン表示と同じ基準、締切のみのタスクを含む）で判定します。
 >
-> `filter-file` は Public API にそのまま渡し、ファイルは API が読みます（[api.md の list](api.md#list--today)）。`filter-file` があると、単純フィルタフラグと `date`/`from`/`to` は読まれません。`list` は `filter-file`（`.md` テンプレート）と一緒でなければならず、`list` だけを渡すと `'list' requires 'filter-file' (a .md view template)` のエラーです。テンプレートのピン留めリストに保存された並べ替えは使わず、並びは `sort` で決まります。
+> `filter-file` は Public API にそのまま渡し、ファイルは API が読みます（[api.md の list](api.md#list--today)）。`filter-file` があると、単純フィルタフラグと `date`/`from`/`to` は読まれません。`list` は `filter-file`（`.md` テンプレート）と一緒でなければならず、`list` だけを渡すと `'list' requires 'filter-file' (a .md view template)` のエラーです。ピン留めリストは、`sort` が無ければリストに保存された並べ替えで並びます（ビューと同じ並び）。`filter-file` を使うと、ビューと同じく検証エラーのあるタスクを外します。`filter-file` を使わなければ、検証エラーのあるタスクも返します。
 >
 > FilterState JSON の形、演算子、否定と `target: parent` の意味、読めない条件の扱いは [api.md の FilterState](api.md#filterstate) を参照してください。読めない条件を含むファイルはエラーです。
 
