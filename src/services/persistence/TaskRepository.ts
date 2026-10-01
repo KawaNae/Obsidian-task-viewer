@@ -3,7 +3,8 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import type { LineDraft, Refusal, RowRef, RowTarget, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
-import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from './TaskOps';
+import type { CompletionFire, FiringOutcome } from './FiringTrials';
+import type { SubtreeReplacement, TaskOp } from './TaskOps';
 import { putInNote, type NotePut, type NoteSpot } from './Notes';
 import type { PlacedLine } from './utils/Placement';
 

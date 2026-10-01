@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Notice, setMockLocale } from 'obsidian';
-import { initI18n } from '../../../src/i18n';
-import { FlowExecutor, type FirePlan, notRunOf } from '../../../src/services/flow/FlowExecutor';
+import { Notice } from 'obsidian';
+import { FlowExecutor, type FirePlan } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
@@ -131,87 +130,6 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
 
     it('x1: generated line carries no command', () => {
         expect(instanceOf(opsOf(planOf(flowTask('at(today + 1d) x1')))).head).not.toContain('==>');
-    });
-});
-
-describe('a fire that does not happen says so', () => {
-    // 非発火・非消費は設計どおりだが、外から見えるのは「チェックしても何も
-    // 起きないチェックボックス」。ログしか残らないと、タスクを触っている人
-    // には何も届かない。
-    beforeEach(() => {
-        Notice.messages.length = 0;
-    });
-
-    /**
-     * Complete a row whose command fails, as a write does: the fire planned
-     * inside the write, and what it owes once the write landed.
-     */
-    async function complete(executor: FlowExecutor, command: string, file = 'notes/週報.md'): Promise<void> {
-        const fire = executor.fireOp(file);
-        fire.op.plan([`- [x] Test task @2026-06-29 ==> ${command}`], 0);
-        const notRun = notRunOf(fire.planned());
-        if (notRun) executor.reportNotRun(notRun);
-    }
-
-    it('shows what stopped it, and which task it was', async () => {
-        await complete(makeExecutor(), 'at(end + 1d)');
-
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain("Property 'end' is not set on this task");
-        expect(Notice.messages[0]).toContain('(Test task)');
-    });
-
-    it('says it once while the same task keeps failing the same way', async () => {
-        // 直すために付けたり外したりする間、同じ文言が積み上がるとファイル
-        // 自体が見えなくなる。
-        const executor = makeExecutor();
-
-        await complete(executor, 'at(end + 1d)');
-        await complete(executor, 'at(end + 1d)');
-
-        expect(Notice.messages).toHaveLength(1);
-    });
-
-    it('says the next failure, since it is a different thing to fix', async () => {
-        const executor = makeExecutor();
-
-        await complete(executor, 'at(end + 1d)');
-        // 同じタスクの別の失敗。窓は「同じ失敗」に効くのであって、
-        // 「そのタスクを黙らせる」ためのものではない。
-        await complete(executor, 'at(due + 1d)');
-
-        expect(Notice.messages).toHaveLength(2);
-        expect(Notice.messages[1]).toContain("Property 'due' is not set on this task");
-    });
-
-    it('says it in the reader language', async () => {
-        // 理由の英文はエンジンが投げた場所で書かれている。通知はそれをそのまま
-        // 出すのではなく code で引き直すので、日本語の vault では日本語になる。
-        setMockLocale('ja');
-        initI18n();
-        try {
-            await complete(makeExecutor(), 'at(end + 1d)');
-        } finally {
-            setMockLocale('en');
-            initI18n();
-        }
-
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain("このタスクにプロパティ 'end' は設定されていません");
-    });
-
-    it('stays quiet on a command that does not read: nothing fires, and the editor marks the error', async () => {
-        // move() はノートの見出しを指していないので、コマンドは構文の誤り。
-        // 発火そのものが起きず、告げることも無い。
-        await complete(makeExecutor(), 'every mon move()');
-
-        expect(Notice.messages).toEqual([]);
-    });
-
-    it('stays quiet when the fire went through', async () => {
-        await complete(makeExecutor(), 'at(today + 1d)');
-
-        expect(Notice.messages).toEqual([]);
     });
 });
 

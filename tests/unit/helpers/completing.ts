@@ -1,5 +1,6 @@
 import type { Mock } from 'vitest';
 import type { FirePlan, FlowExecutor } from '../../../src/services/flow/FlowExecutor';
+import { FlowNotices } from '../../../src/services/flow/FlowNotices';
 import { canTriggerFlow } from '../../../src/services/flow/FlowTrigger';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
@@ -11,7 +12,8 @@ import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
  * can (`canTriggerFlow`, as `planFire` asks), its fire planned with the blocks
  * its note holds (`FlowExecutor.planTask`), the ops it plans handed to
  * `repository.write` as the one write that applies them, and a plan
- * that failed told as the write tells it once it landed.
+ * that failed told as the write tells it once it landed (`FlowNotices.firing`,
+ * one for the executor, so its window holds across completions).
  *
  * For a test of what a fire plans. What the write makes of the ops is the
  * write layer's, pinned where the write is.
@@ -21,10 +23,12 @@ export function completing<E extends FlowExecutor>(
     repository: { write: Mock },
     blocks: Record<string, GenBlock> = {},
 ): E & { complete(task: Task): Promise<FirePlan> } {
+    const notices = new FlowNotices();
     const complete = async (task: Task): Promise<FirePlan> => {
         if (!canTriggerFlow(task, DEFAULT_SETTINGS.statusDefinitions)) return { kind: 'none' };
         const plan = executor.planTask(task, name => blocks[name], []);
-        if (plan.kind === 'failed') executor.reportNotRun(plan);
+        const fire = { op: { kind: 'fire' as const, plan: () => [] }, planned: () => plan };
+        notices.firing({ written: true, refused: null, fires: [{ fire, setAside: null }] });
         if (plan.kind === 'fires') {
             const ops = plan.ops;
             if (ops.length > 0) await repository.write(task.file, plannedOn(task), ops);

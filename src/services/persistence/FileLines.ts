@@ -629,9 +629,8 @@ export type DraftEdit = (draft: LineDraft, eol: Eol, session: WriteSession) => b
  * comes between the tries. `settle` is run again on every run of the
  * callback, and only the last run's answer counts.
  *
- * A completion's fires are tried so (`InlineTaskWriter.writeFiring`): a fire
- * the write is refused with is set aside, and the completion written without
- * it.
+ * A completion's fires are tried so (`firingTrials`): a fire the write is
+ * refused with is set aside, and the completion written without it.
  */
 export interface EditTrials {
     settle(tryEdit: (edit: DraftEdit) => EditedLines): EditedLines;

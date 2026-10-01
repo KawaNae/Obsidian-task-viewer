@@ -67,7 +67,7 @@ describe('a completion whose fire would disturb the note', () => {
 /**
  * A completion whose fire could not be planned is written, and told in the
  * same words as one whose fire's write was refused: the task was completed,
- * the flow was not run, and why (`FlowExecutor.reportNotRun`).
+ * the flow was not run, and why (`FlowNotices.firing`).
  */
 describe('a completion whose fire could not be planned', () => {
     const FAILS = ['# note', '- [ ] A @2026-09-21 ==> at(end + 1d)', ''];
@@ -134,6 +134,7 @@ describe('a completion whose fire is refused for a reason not of where its lines
         const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         editor.check(1);
         expect(editor.lines()).toEqual(CHECKED);
+        await Promise.resolve();
         expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedGone'), subject: '- [x] A @2026-09-21' })]);
     });
 });

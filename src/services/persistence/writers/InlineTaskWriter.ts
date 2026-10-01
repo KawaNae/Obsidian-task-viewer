@@ -7,10 +7,10 @@ import { ListNumber } from '../utils/ListNumber';
 import { renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, fileGone, processLines, withRefused,
-    type DraftEdit, type EditTrials, type EditedLines, type LineDraft, type Refusal, type RowRef,
-    type RowTarget, type WriteChannel, type WriteChannels, type WriteSession,
+    type LineDraft, type Refusal, type RowRef, type RowTarget, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
-import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
+import { firingTrials, type CompletionFire, type FiringOutcome } from '../FiringTrials';
+import type { SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
@@ -106,9 +106,10 @@ export class InlineTaskWriter {
 
     /**
      * One write of `base`, and of the fire of each row it completed, each
-     * fire kept or set aside on its own: as the editor fires the rows one
-     * transaction completed (`FlowFireExtension`), but in one write
-     * ({@link firingTrials}).
+     * fire kept or set aside on its own, by the one rule of it
+     * (`firingTrials`, over this writer's {@link applyOps}): the rule the
+     * editor writes the rows one transaction completed by
+     * (`FlowFireExtension`).
      *
      * A refusal says what the write was about by the row it asked for last,
      * else `about` (`processLines`): a write that may ask for no row of its
@@ -125,113 +126,11 @@ export class InlineTaskWriter {
         after?: (draft: LineDraft, session: WriteSession) => A | false,
         about?: string,
     ): Promise<FiringOutcome<F> & { after?: A }> {
-        const firing = this.firingTrials(base, fire, after);
+        const firing = firingTrials((draft, session, target, ops) => this.applyOps(draft, session, target, ops), base, fire, after);
         const outcome = await processLines(this.app, file, channel, firing.trials, about);
         if (!outcome.written) return outcome;
         const { fires, after: answered } = firing.settled();
         return { ...outcome, fires, ...(answered !== undefined ? { after: answered } : {}) };
-    }
-
-    /**
-     * The edits one write of `base` and its fires tries, to settle on the one
-     * it writes (`EditTrials`): what {@link writeFiring} writes to its note,
-     * and what a send tries first on the lines of a note to learn what the
-     * write will leave of its rows (`SendWriter`). `settled` answers what the
-     * last settle chose: each fire and the refusal it was set aside with, and
-     * what `after` answered in the edit chosen.
-     *
-     * `base` does the write's own edit and answers the rows it completed,
-     * where its session finds them (the row the write names, a line it
-     * marked), in the order they stand; false when it gave the write up.
-     * Each row's fire is `fire()`, asked once per row in each run of the
-     * write, and applied after `base`, row by row, the ones above first, each
-     * planned from the lines the fires before it left. A fire that carries a
-     * row below it (a parent's move) carries it through the write's own
-     * report, and the row fires where it went, once.
-     *
-     * `after`, when given, is the rest of the write, done once the fires
-     * are: an edit of rows the fires may have changed or moved, which it
-     * finds through the session where they left them — a send carries the
-     * rows its draft completed once they fired where they stood
-     * (`SendWriter`). It is part of every try, the one without fires too;
-     * false gives the write up, as from `base`, and anything else is what it
-     * answers of the edit.
-     *
-     * The write is tried with every fire first, which is the one try when
-     * nothing is refused. Refused with a fire in it, it is tried with none:
-     * refused so too, the refusal is the write's own, and nothing is
-     * written. Otherwise the fires are put back one at a time, from the
-     * top, each kept if the write with it and the ones kept before it is
-     * made, and set aside, with the refusal it met, if not: the completion
-     * stands without it, its command stays on the row, and the user is owed a
-     * word of it (`FiringOutcome`). All of it is tried on the lines of one
-     * run of the write's callback (`EditTrials`).
-     */
-    firingTrials<F extends CompletionFire, A = true>(
-        base: (draft: LineDraft, session: WriteSession) => readonly RowTarget[] | false,
-        fire: () => F,
-        after?: (draft: LineDraft, session: WriteSession) => A | false,
-    ): { trials: EditTrials; settled(): { fires: ReadonlyArray<{ fire: F; setAside: Refusal | null }>; after: A | undefined } } {
-        // The last settle's fires, what came of them, and what `after`
-        // answered in the edit it chose.
-        let fires: F[] = [];
-        let setAside = new Map<number, Refusal>();
-        let chosen: A | undefined;
-        const settle = (tryEdit: (edit: DraftEdit) => EditedLines): EditedLines => {
-            fires = [];
-            setAside = new Map();
-            chosen = undefined;
-            const fireAt = (k: number): F => fires[k] ??= fire();
-            // How many rows `base` completed, as its last try answered.
-            let rows = 0;
-            // What `after` answered in each edit made.
-            const answers = new Map<EditedLines, A | undefined>();
-            // The write with the fires of the rows `kept` names (all of them
-            // for null), each after the ones above it.
-            const tryWith = (kept: readonly number[] | null): EditedLines => {
-                let answered: A | undefined;
-                const edited = tryEdit((draft, _eol, session) => {
-                    answered = undefined;
-                    const completed = base(draft, session);
-                    if (completed === false) return false;
-                    rows = completed.length;
-                    for (const k of kept ?? completed.keys()) {
-                        if (!this.applyOps(draft, session, completed[k], [fireAt(k).op])) return false;
-                    }
-                    if (!after) return true;
-                    const answer = after(draft, session);
-                    if (answer === false) return false;
-                    answered = answer;
-                    return true;
-                });
-                if (edited.written) answers.set(edited, answered);
-                return edited;
-            };
-            const choose = (edited: EditedLines): EditedLines => {
-                chosen = answers.get(edited);
-                return edited;
-            };
-            const all = tryWith(null);
-            if (all.written || rows === 0) return choose(all);
-            let made = tryWith([]);
-            if (!made.written) return made;
-            const kept: number[] = [];
-            for (let k = 0; k < rows; k++) {
-                // With every fire above it kept, the last is the first try again.
-                const withIt = kept.length === k && k === rows - 1 ? all : tryWith([...kept, k]);
-                if (withIt.written) {
-                    kept.push(k);
-                    made = withIt;
-                } else {
-                    setAside.set(k, withIt.refused);
-                }
-            }
-            return choose(made);
-        };
-        return {
-            trials: { settle },
-            settled: () => ({ fires: fires.map((one, k) => ({ fire: one, setAside: setAside.get(k) ?? null })), after: chosen }),
-        };
     }
 
     /**

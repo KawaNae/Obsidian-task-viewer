@@ -9,7 +9,8 @@ import {
 } from '../FileLines';
 import { createNote, sectionSpot } from '../Notes';
 import { replaceSubtree } from '../ReplaceSubtree';
-import type { CompletionFire, FiringOutcome, SubtreeReplacement } from '../TaskOps';
+import { firingTrials, type CompletionFire, type FiringOutcome } from '../FiringTrials';
+import type { SubtreeReplacement } from '../TaskOps';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { ListNumber } from '../utils/ListNumber';
 import { noteLink } from '../utils/NoteLink';
@@ -233,7 +234,7 @@ export class SendWriter {
     /**
      * Try the write of the note at `path` that sends `rows` on its lines as
      * the disk holds them, writing nothing ({@link leaveLinks}'s drafts and
-     * fires, `InlineTaskWriter.firingTrials`), and answer what it leaves of
+     * fires, `firingTrials`), and answer what it leaves of
      * each row, in their order; or why it is refused, the refusal told
      * through `channel`.
      */
@@ -247,7 +248,8 @@ export class SendWriter {
         if (!(file instanceof TFile)) return fileGone(channel, path, rows[0]?.target.subject ?? path);
         const { lines, eol } = splitLines(await readInLine(this.app, file));
         let sent: RowTarget[] = [];
-        const firing = this.inline.firingTrials(
+        const firing = firingTrials(
+            (draft, session, target, ops) => this.inline.applyOps(draft, session, target, ops),
             (draft, session) => {
                 const drafted = writeDrafts(draft, session, rows, completing);
                 if (drafted === false) return false;

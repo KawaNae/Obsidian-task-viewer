@@ -1,6 +1,5 @@
-import { type App, Notice } from 'obsidian';
+import type { App } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
-import { t } from '../../i18n';
 import { DateUtils } from '../../utils/DateUtils';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { IndexReads } from '../core/TaskIndex';
@@ -9,10 +8,9 @@ import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
-import type { CompletionFire, TaskOp } from '../persistence/TaskOps';
-import { plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
-import type { Refusal } from '../persistence/FileLines';
-import { refusalClause } from '../core/RefusalClause';
+import type { TaskOp } from '../persistence/TaskOps';
+import type { CompletionFire } from '../persistence/FiringTrials';
+import { plannedOn, type ReadCopy } from '../persistence/TaskRefs';
 import { type InSection, Placement, type SectionSide } from '../persistence/utils/Placement';
 import { Outline } from '../parsing/utils/Outline';
 import { flowSource } from '../lang/flow/FlowSegments';
@@ -22,7 +20,7 @@ import { createMomentEvalHost } from './MomentEvalHost';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../core/RowNames';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { runtimeText } from './runtimeText';
+import { FlowNotices } from './FlowNotices';
 
 /**
  * Where a move to the heading `name` goes in `lines`, at `side` of the
@@ -42,14 +40,6 @@ function destinationIn(name: string, side: SectionSide, lines: readonly string[]
     return { heading: name, side };
 }
 
-/** How long one failure stays quiet after it has been shown. */
-const FAILURE_NOTICE_WINDOW_MS = 5000;
-
-/** The file as it is named in the vault, which is how a user knows it. */
-function fileName(path: string): string {
-    return (path.split('/').pop() ?? path).replace(/\.md$/i, '');
-}
-
 /**
  * What completing one row fires, planned from the lines the completing write
  * holds (`FlowExecutor.planFire`).
@@ -59,7 +49,7 @@ function fileName(path: string): string {
  * - `failed`: the plan failed (an expression, a block, a move to a heading
  *   that is not one place in the note). Nothing is written for the fire,
  *   the command stays, and the caller says so once the completion has
- *   landed (`reportNotRun`).
+ *   landed (`FlowNotices`).
  * - `fires`: `ops` are what the fire does to the row in the completing
  *   write.
  */
@@ -69,26 +59,8 @@ export type FirePlan =
     | { kind: 'fires'; task: Task; ops: TaskOp[] };
 
 /**
- * Why a completion's flow was not run (`FlowExecutor.reportNotRun`): the
- * fire's plan failed, or the fire's write was refused, for the reason the
- * write gave.
- */
-export type NotRun =
-    | Extract<FirePlan, { kind: 'failed' }>
-    | { kind: 'refused'; refusal: Refusal };
-
-/**
- * What the user is owed of a fire's plan once its completion has landed:
- * the plan failed; else null. The one reading of it, for a card's write and
- * the editor's alike.
- */
-export function notRunOf(plan: FirePlan | null): NotRun | null {
-    return plan?.kind === 'failed' ? plan : null;
-}
-
-/**
- * A `fire` op, what its plan answered the last time a write ran it, and
- * whether that plan writes lines (`CompletionFire.writes`).
+ * A `fire` op, and what its plan answered the last time a write ran it: what
+ * the user is owed of it once the write landed (`FlowNotices.notRunsOf`).
  */
 export interface FireOp extends CompletionFire {
     /** The plan of the write's last run, or null while no write has run it. */
@@ -104,8 +76,8 @@ export interface FireOp extends CompletionFire {
  */
 export class FlowExecutor {
     private readonly host = createMomentEvalHost();
-    /** Failures already shown, by task and message, with when they were shown. */
-    private readonly recentFailures = new Map<string, number>();
+    /** Where a delete that stopped is told (`FlowNotices.deletionStopped`). */
+    private readonly notices = new FlowNotices();
 
     constructor(
         private repository: TaskRepository,
@@ -201,10 +173,6 @@ export class FlowExecutor {
                 },
             },
             planned: () => last,
-            writes: () => {
-                const planned = last as FirePlan | null;
-                return planned?.kind === 'fires' && planned.ops.length > 0;
-            },
         };
     }
 
@@ -263,7 +231,7 @@ export class FlowExecutor {
 
         if (outlook.kind === 'failed') {
             logWarn(`[FlowExecutor] Delete cancelled, flow did not fire for ${task.id}: ${outlook.error.message}`);
-            this.reportDeleteDidNotFire(task, outlook.error);
+            this.notices.deletionStopped(task, outlook.error);
             return false;
         }
 
@@ -306,65 +274,6 @@ export class FlowExecutor {
                 // planned from (`plannedOn`).
                 return [{ kind: 'strip-flow', text: formatRow({ ...task, flow: undefined }) }];
         }
-    }
-
-    /**
-     * Tell the user a completion was written and its flow was not run, and
-     * why: its plan failed, or the fire's write was refused. The one notice
-     * of it, for a card's write and the editor's alike.
-     *
-     * Not firing and not consuming is the design — a command whose expression
-     * failed has to stay on the line — but from the outside it is a checkbox
-     * that answers with nothing at all. The log line was the only trace, and
-     * nobody has the console open while ticking a task.
-     *
-     * The same failure of a plan is shown once per window (`shownLately`).
-     */
-    reportNotRun(why: NotRun): void {
-        if (why.kind === 'refused') {
-            const { reason, subject, file } = why.refusal;
-            logWarn(`[FlowExecutor] fire refused, completion written: file=${file} reason=${reason.kind} subject=${subject}`);
-            new Notice(t('notice.flowNotRun', { reason: refusalClause(reason), subject }));
-            return;
-        }
-        if (this.shownLately('notice.flowNotRun', why.task, why.error)) return;
-        new Notice(t('notice.flowNotRun', { reason: runtimeText(why.error), subject: subjectOf(why.task) }));
-    }
-
-    /**
-     * Tell the user a delete stopped because its fire could not be planned,
-     * in a sentence of its own: the task is still on the page and the user is
-     * watching for it to go, so "the flow was not run" would leave them to
-     * work out that the delete did not happen either. Once per window, as
-     * {@link reportNotRun}.
-     */
-    private reportDeleteDidNotFire(task: Task, err: EvalError | GenerationError): void {
-        if (this.shownLately('notice.flowDeleteDidNotFire', task, err)) return;
-        new Notice(t('notice.flowDeleteDidNotFire', { reason: runtimeText(err), file: fileName(task.file) }));
-    }
-
-    /**
-     * Whether the notice `notice` of this failure of the task's plan was shown
-     * within the window; if not, it counts as shown now. A task is toggled on
-     * and off while its author works out what is wrong, and a notice per
-     * toggle would bury the file behind its own complaint. A different
-     * failure is a different message, so fixing one and hitting the next is
-     * still visible.
-     */
-    private shownLately(notice: string, task: Task, err: EvalError | GenerationError): boolean {
-        const now = Date.now();
-        // Drop what has aged out on the way past, so a long session does not
-        // keep a key for every failure it has ever seen.
-        for (const [key, at] of this.recentFailures) {
-            if (now - at >= FAILURE_NOTICE_WINDOW_MS) this.recentFailures.delete(key);
-        }
-        // Which failure this is, said in neither language: the code and the
-        // values it was given. Keying on the sentence would make the same
-        // failure a different one as soon as the vault changes language.
-        const key = `${notice}::${task.id}::${err.code}::${JSON.stringify(err.params ?? {})}`;
-        if (this.recentFailures.has(key)) return true;
-        this.recentFailures.set(key, now);
-        return false;
     }
 
     /**
