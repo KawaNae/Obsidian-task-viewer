@@ -3,24 +3,38 @@ import { DATE_PRESET_SYNTAX, NAMED_DATE_PRESETS, parseDatePreset } from '../../.
 import { RELATIVE_DATE_PRESETS } from '../../../src/services/filter/FilterTypes';
 
 describe('parseDatePreset', () => {
-    it('reads an absolute date by shape', () => {
-        expect(parseDatePreset(' 2026-03-14 ')).toBe('2026-03-14');
+    const ok = (value: unknown) => ({ ok: true, value });
+
+    it('reads an absolute date', () => {
+        expect(parseDatePreset(' 2026-03-14 ')).toEqual(ok('2026-03-14'));
+    });
+
+    it('reads an absolute date as typed text: full-width and hyphen-like characters', () => {
+        expect(parseDatePreset('２０２６－０３－１４')).toEqual(ok('2026-03-14'));
+        expect(parseDatePreset('2026ー03ー14')).toEqual(ok('2026-03-14'));
+    });
+
+    it('refuses a date-shaped value that names no day', () => {
+        expect(parseDatePreset('2026-02-30')).toEqual({ ok: false, issue: { code: 'noSuchDay' } });
+        expect(parseDatePreset('2026-13-45')).toEqual({ ok: false, issue: { code: 'noSuchDay' } });
     });
 
     it('reads every named preset in any case', () => {
         for (const p of NAMED_DATE_PRESETS) {
-            expect(parseDatePreset(p.toUpperCase())).toEqual({ preset: p });
+            expect(parseDatePreset(p.toUpperCase())).toEqual(ok({ preset: p }));
         }
+        expect(parseDatePreset(' ｔｏｄａｙ ')).toEqual(ok({ preset: 'today' }));
     });
 
     it('reads next<N>days', () => {
-        expect(parseDatePreset('next30days')).toEqual({ preset: 'nextNDays', n: 30 });
+        expect(parseDatePreset('next30days')).toEqual(ok({ preset: 'nextNDays', n: 30 }));
     });
 
-    it('rejects anything else', () => {
-        expect(parseDatePreset('nextndays')).toBeNull();
-        expect(parseDatePreset('2026/03/14')).toBeNull();
-        expect(parseDatePreset('yesterday')).toBeNull();
+    it('rejects anything else as not a date', () => {
+        const notADate = { ok: false, issue: { code: 'shape', kind: 'date' } };
+        expect(parseDatePreset('nextndays')).toEqual(notADate);
+        expect(parseDatePreset('2026/03/14')).toEqual(notADate);
+        expect(parseDatePreset('yesterday')).toEqual(notADate);
     });
 
     it('names every preset in the syntax the errors show', () => {

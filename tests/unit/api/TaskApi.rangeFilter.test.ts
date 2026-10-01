@@ -87,3 +87,25 @@ describe('categorizedTasksForDateRange: simple filters never touch the date wind
         expect(filterState).toBeUndefined();
     });
 });
+
+/**
+ * The range's own bounds are read as the filter's dates are (stage 7,
+ * input decision B): a day that exists, typed text normalized.
+ */
+describe('the range bounds', () => {
+    it('refuses a bound that names no day', async () => {
+        const { api, mockReadService } = createMockApi();
+        await expect(api.tasksForDateRange({ from: '2026-02-30', to: '2026-03-31' }))
+            .rejects.toThrow(/from must be a day that exists, got: "2026-02-30"/);
+        await expect(api.categorizedTasksForDateRange({ from: '2026-03-01', to: '2026-04-31' }))
+            .rejects.toThrow(/to must be a day that exists/);
+        expect(mockReadService.getTasksForDateRange).not.toHaveBeenCalled();
+    });
+
+    it('reads a full-width bound', async () => {
+        const { api, mockReadService } = createMockApi();
+        await api.tasksForDateRange({ from: '２０２６－０３－０１', to: '2026ー03ー31' });
+        const [from, to] = mockReadService.getTasksForDateRange.mock.calls[0];
+        expect([from, to]).toEqual(['2026-03-01', '2026-03-31']);
+    });
+});

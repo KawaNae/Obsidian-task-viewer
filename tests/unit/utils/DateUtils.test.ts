@@ -267,35 +267,6 @@ describe('DateUtils', () => {
             expect(DateUtils.isAllDayTask('2026-01-15', '05:00', '2026-01-16', undefined, startHour)).toBe(true);
         });
     });
-    describe('parseDateTimeText', () => {
-        it('parses date only', () => {
-            expect(DateUtils.parseDateTimeText('2026-03-14')).toEqual({ date: '2026-03-14' });
-        });
-
-        it('parses date with time (space separator)', () => {
-            expect(DateUtils.parseDateTimeText('2026-03-14 10:00')).toEqual({ date: '2026-03-14', time: '10:00' });
-        });
-
-        it('parses date with time (T separator)', () => {
-            expect(DateUtils.parseDateTimeText('2026-03-14T10:00')).toEqual({ date: '2026-03-14', time: '10:00' });
-        });
-
-        it('parses time only', () => {
-            expect(DateUtils.parseDateTimeText('10:00')).toEqual({ date: '', time: '10:00' });
-        });
-
-        it('trims whitespace', () => {
-            expect(DateUtils.parseDateTimeText('  2026-03-14  ')).toEqual({ date: '2026-03-14' });
-        });
-
-        it('returns null for invalid format', () => {
-            expect(DateUtils.parseDateTimeText('invalid-date')).toBeNull();
-            expect(DateUtils.parseDateTimeText('2026/03/14')).toBeNull();
-            expect(DateUtils.parseDateTimeText('March 14')).toBeNull();
-            expect(DateUtils.parseDateTimeText('')).toBeNull();
-        });
-    });
-
     describe('dateAt / parseDate / readDate', () => {
         it('keeps a two-digit year as written', () => {
             expect(DateUtils.dateAt(26, 0, 1).getFullYear()).toBe(26);

@@ -1,4 +1,6 @@
-import { DateUtils } from '../../utils/DateUtils';
+import { DateInput } from '../../utils/values/DateValues';
+import { typed } from '../../utils/values/Normalize';
+import { readOk, type Read } from '../../utils/values/Read';
 import { RELATIVE_DATE_PRESETS, type DateFilterValue, type RelativeDatePreset } from './FilterTypes';
 
 /**
@@ -20,21 +22,21 @@ const BY_LOWER_NAME: ReadonlyMap<string, RelativeDatePreset> =
     new Map(NAMED_DATE_PRESETS.map(p => [p.toLowerCase(), p]));
 
 /**
- * Parse a date value into a DateFilterValue. Absolute dates are checked for
- * shape only. Returns null if the input matches neither a date nor a preset.
+ * Read a date value into a DateFilterValue: an absolute date read by
+ * `DateInput` (a day that exists, full-width and hyphen-like characters
+ * read), or a preset. A date-shaped value naming no day is `noSuchDay`;
+ * anything that is neither a date nor a preset is a date's `shape` issue.
  */
-export function parseDatePreset(input: string): DateFilterValue | null {
-    const normalized = input.trim().toLowerCase();
+export function parseDatePreset(input: string): Read<DateFilterValue> {
+    const date = DateInput.read(input);
+    if (date.ok || date.issue.code !== 'shape') return date;
 
-    if (DateUtils.isDateShape(normalized)) {
-        return normalized;
-    }
-
+    const normalized = typed(input).toLowerCase();
     const nextNMatch = normalized.match(/^next(\d+)days$/);
     if (nextNMatch) {
-        return { preset: 'nextNDays', n: parseInt(nextNMatch[1], 10) };
+        return readOk({ preset: 'nextNDays', n: parseInt(nextNMatch[1], 10) });
     }
 
     const preset = BY_LOWER_NAME.get(normalized);
-    return preset ? { preset } : null;
+    return preset ? readOk({ preset }) : date;
 }

@@ -188,14 +188,42 @@ describe('the date block create writes', () => {
 
     // The block is formatTaskLine's, as every other line the plugin writes.
     // A due keeps its time (the hand-built block dropped it), an end on the
-    // start's own day is written the notation's way, and a due with no date
-    // leaves no empty `>>` behind.
+    // start's own day is written the notation's way.
     it.each([
         [{ start: '2026-07-18', due: '2026-07-25 17:00' }, '- [ ] t @2026-07-18>>2026-07-25T17:00'],
         [{ start: '2026-07-18 09:00', end: '2026-07-18 10:00' }, '- [ ] t @2026-07-18T09:00>10:00'],
         [{ start: '2026-07-18', end: '2026-07-18' }, '- [ ] t @2026-07-18'],
-        [{ start: '2026-07-18', due: '17:00' }, '- [ ] t @2026-07-18'],
     ])('%j -> %j', async (params, line) => {
         expect(await written(params)).toBe(line);
+    });
+
+    // The values are read as typed text (stage 7, input decisions B, C, D):
+    // an hour of one digit is written with two, full-width and hyphen-like
+    // characters are read as ASCII.
+    it.each([
+        [{ start: '2026-07-18 9:40' }, '- [ ] t @2026-07-18T09:40'],
+        [{ start: '9:40', end: '10:05' }, '- [ ] t @09:40>10:05'],
+        [{ start: '２０２６－０７－１８　９：４０' }, '- [ ] t @2026-07-18T09:40'],
+        [{ start: '2026ー07ー18' }, '- [ ] t @2026-07-18'],
+        [{ due: '2026-07-25T9:00' }, '- [ ] t @>>2026-07-25T09:00'],
+    ])('%j -> %j', async (params, line) => {
+        expect(await written(params)).toBe(line);
+    });
+
+    // A due with no date was dropped without a word; it is refused, as
+    // update refuses it.
+    it('refuses a due that is a time alone', async () => {
+        await expect(written({ start: '2026-07-18', due: '17:00' }))
+            .rejects.toThrow(/due must include a date, got: "17:00"/);
+    });
+
+    it.each([
+        [{ start: '2026-02-30' }, /start must be a day that exists, got: "2026-02-30"/],
+        [{ start: '2026-13-45' }, /start must be a day that exists/],
+        [{ end: '2026-07-18T99:99' }, /end must be a date \(YYYY-MM-DD\), a date and a time/],
+        [{ due: '2026-02-29' }, /due must be a day that exists/],
+        [{ start: '2026/07/18' }, /start must be a date/],
+    ])('refuses %j', async (params, message) => {
+        await expect(written(params)).rejects.toThrow(message);
     });
 });

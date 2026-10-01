@@ -12,16 +12,19 @@ import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
-import { DATE_PRESET_SYNTAX, NAMED_DATE_PRESETS, parseDatePreset } from '../services/filter/DatePreset';
+import { NAMED_DATE_PRESETS } from '../services/filter/DatePreset';
 import { DateResolver } from '../services/filter/DateResolver';
-import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
+import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterState, readDateParam } from './FilterParamsBuilder';
+import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
+import { IntValue } from '../utils/values/NumberValues';
+import { issueText } from '../utils/values/IssueText';
 import type { FilterState } from '../services/filter/FilterTypes';
 import { loadFilterFile } from './FilterFileLoader';
 import { holdsLineBreak } from '../utils/LineBreak';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { formatTaskLine } from '../services/parsing/TaskLineFormat';
 import {
-    assertParams, renderParamTable,
+    assertParams, renderParamTable, LIMIT_PARAM, type ParamSpec,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
     DELETE_SCHEMA, DUPLICATE_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
@@ -184,9 +187,10 @@ Sort
 
 Date Formats
 ------------
-  Absolute:  YYYY-MM-DD (e.g. 2026-03-15)
-  Datetime:  YYYY-MM-DD HH:mm (e.g. 2026-03-15 14:00)
-  Time only: HH:mm (e.g. 14:00)
+  Absolute:  YYYY-MM-DD (e.g. 2026-03-15), naming a day that exists
+  Datetime:  YYYY-MM-DD HH:mm (e.g. 2026-03-15 14:00); 9:40 is read as 09:40
+  Time only: HH:mm (e.g. 14:00), for start and end; a due needs a date
+  Full-width digits and hyphen-like characters (ー, −) are read as ASCII.
   Presets:   ${NAMED_DATE_PRESETS.join(', ')},
              next7days, next30days
 
@@ -329,21 +333,29 @@ interface PaginateResult {
 function paginate(tasks: DisplayTask[], params: PaginationParams): PaginateResult {
     const total = tasks.length;
     const rawLimit = params.limit ?? 100;
-    if (typeof rawLimit !== 'number' || isNaN(rawLimit)) throw new TaskApiError('limit must be a number');
-    if (rawLimit < 0) throw new TaskApiError('limit must be non-negative');
-    if (rawLimit === 0) return { paged: [], total, resolvedLimit: 0 };
-    if (!isFinite(rawLimit)) return { paged: tasks, total, resolvedLimit: null };
-    return { paged: tasks.slice(0, rawLimit), total, resolvedLimit: rawLimit };
+    // Infinity is the CLI's `all`: no limit.
+    if (rawLimit === Infinity) return { paged: tasks, total, resolvedLimit: null };
+    const limit = intParam(rawLimit, 'limit', LIMIT_PARAM)!;
+    return { paged: limit === 0 ? [] : tasks.slice(0, limit), total, resolvedLimit: limit };
 }
 
-function parseDateTimeParam(value: string, fieldName: string): { date: string; time?: string } {
-    const result = DateUtils.parseDateTimeText(value);
-    if (!result) {
-        throw new TaskApiError(
-            `Invalid date format for ${fieldName}: ${value}. Use YYYY-MM-DD, YYYY-MM-DD HH:mm, or HH:mm`,
-        );
-    }
-    return result;
+/** A whole-number parameter, checked against its schema's range. */
+function intParam(value: unknown, name: string, spec: ParamSpec): number | undefined {
+    if (value === undefined) return undefined;
+    const read = IntValue.check(value, spec.int);
+    if (!read.ok) throw new TaskApiError(issueText(read.issue, name, String(value)));
+    return read.value;
+}
+
+/**
+ * A date-time parameter (`start`, `end`, `due`): a day that exists, an
+ * optional `H:mm` time written back as `HH:mm`, typed text normalized. A
+ * due takes its time only after a date (`timeOnly: 'refuse'`).
+ */
+function dateTimeParam(value: string, name: string, timeOnly: 'allow' | 'refuse'): DateTimeValue {
+    const read = DateTimeInput.read(value, { timeOnly });
+    if (!read.ok) throw new TaskApiError(issueText(read.issue, name, value));
+    return read.value;
 }
 
 // ── Public API ──
@@ -526,17 +538,17 @@ export class TaskApi {
 
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
-        const start = params.start ? parseDateTimeParam(params.start, 'start') : undefined;
-        const end = params.end ? parseDateTimeParam(params.end, 'end') : undefined;
-        const due = params.due ? parseDateTimeParam(params.due, 'due') : undefined;
+        const start = params.start ? dateTimeParam(params.start, 'start', 'allow') : undefined;
+        const end = params.end ? dateTimeParam(params.end, 'end', 'allow') : undefined;
+        // The notation's due is a date, with a time only after one.
+        const due = params.due ? dateTimeParam(params.due, 'due', 'refuse') : undefined;
         const line = formatTaskLine({
             statusChar,
             content: params.content,
-            startDate: start?.date || undefined,
+            startDate: start?.date,
             startTime: start?.time,
-            endDate: end?.date || undefined,
+            endDate: end?.date,
             endTime: end?.time,
-            // The notation's due is a date, with a time only after one.
             due: DateUtils.joinDateTime(due?.date, due?.time),
         });
 
@@ -575,7 +587,7 @@ export class TaskApi {
                 updates.startDate = undefined;
                 updates.startTime = undefined;
             } else {
-                const parsed = parseDateTimeParam(params.start, 'start');
+                const parsed = dateTimeParam(params.start, 'start', 'allow');
                 if (parsed.date) updates.startDate = parsed.date;
                 if (parsed.time) updates.startTime = parsed.time;
             }
@@ -586,7 +598,7 @@ export class TaskApi {
                 updates.endDate = undefined;
                 updates.endTime = undefined;
             } else {
-                const parsed = parseDateTimeParam(params.end, 'end');
+                const parsed = dateTimeParam(params.end, 'end', 'allow');
                 if (parsed.date) updates.endDate = parsed.date;
                 if (parsed.time) updates.endTime = parsed.time;
             }
@@ -596,8 +608,7 @@ export class TaskApi {
             if (params.due === 'none') {
                 updates.due = undefined;
             } else {
-                const parsed = parseDateTimeParam(params.due, 'due');
-                if (!parsed.date) throw new TaskApiError(`due must include a date, got: "${params.due}"`);
+                const parsed = dateTimeParam(params.due, 'due', 'refuse');
                 // The whole due, its time kept as create keeps it.
                 updates.due = DateUtils.joinDateTime(parsed.date, parsed.time);
             }
@@ -655,17 +666,9 @@ export class TaskApi {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
         const task = await this.rowToWrite(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
-        if (params.dayOffset !== undefined) {
-            if (typeof params.dayOffset !== 'number' || isNaN(params.dayOffset)) throw new TaskApiError('dayOffset must be a number');
-        }
-        if (params.count !== undefined) {
-            if (typeof params.count !== 'number' || isNaN(params.count)) throw new TaskApiError('count must be a number');
-            if (!Number.isInteger(params.count)) throw new TaskApiError('count must be a whole number');
-            if (params.count < 1) throw new TaskApiError('count must be at least 1');
-        }
         const written = await this.operations.duplicateTask(task.id, {
-            dayOffset: params.dayOffset,
-            count: params.count,
+            dayOffset: intParam(params.dayOffset, 'dayOffset', DUPLICATE_SCHEMA.dayOffset),
+            count: intParam(params.count, 'count', DUPLICATE_SCHEMA.count),
         });
         if (!written) throw new TaskApiError(`Task could not be duplicated: ${params.id}`);
         return { duplicated: params.id };
@@ -736,12 +739,7 @@ export class TaskApi {
      * `from=thisweek to=thisweek` covers the whole week.
      */
     private resolveWindowBound(value: string, side: 'from' | 'to'): string {
-        const parsed = parseDatePreset(value);
-        if (!parsed) {
-            throw new TaskApiError(
-                `Invalid date value for ${side}: ${value}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`,
-            );
-        }
+        const parsed = readDateParam(value, side);
         const { weekStartDay, startHour } = this.plugin.settings;
         const window = DateResolver.resolve(parsed, weekStartDay, startHour, new Date());
         return side === 'from' ? window.start : window.end;
