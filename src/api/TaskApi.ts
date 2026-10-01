@@ -19,7 +19,6 @@ import { DateResolver } from '../services/filter/DateResolver';
 import { resolveFilterSource, readDateParam } from './FilterParamsBuilder';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
 import { IntValue } from '../utils/values/NumberValues';
-import type { FilterState } from '../services/filter/FilterTypes';
 import { holdsLineBreak } from '../utils/LineBreak';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { formatTaskLine } from '../services/parsing/TaskLineFormat';
