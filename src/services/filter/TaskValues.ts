@@ -85,6 +85,7 @@ const TABLE: { [P in ValueProperty]: (task: DisplayTask) => ValueOf[P] } = {
     parent: t => flag(!!t.parentId),
     // Child tasks only: plain checkbox lines and wikilinks are not tasks of
     // their own, and a child ID the index cannot resolve is no child here.
+    // The API's `leaf` reads this too.
     children: t => flag(t.childEntries.some(e => e.kind === 'task')),
 };
 

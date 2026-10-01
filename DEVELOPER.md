@@ -219,7 +219,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
-| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`) and the text a sort rule compares (`sortKey`). |
+| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`) and the text a sort rule compares (`sortKey`). The API's `leaf` (`list` and `today`) is its `children` |
 | **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation, over the values `TaskValues` gives |
 | **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). The one load path for saved views and pinned lists, so it drops conditions on retired properties (`kind`) on read; a group left empty stays, and evaluates as true |
 | **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing, over the values `TaskValues` gives |

@@ -10,6 +10,7 @@ import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
 import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
 import { TaskSorter } from '../services/sort/TaskSorter';
+import { TaskValues } from '../services/filter/TaskValues';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
 import { NAMED_DATE_PRESETS } from '../services/filter/DatePreset';
@@ -482,7 +483,8 @@ export class TaskApi {
         });
 
         if (p.leaf) {
-            filtered = filtered.filter(t => t.childIds.length === 0);
+            // What `list`'s leaf (`children isNotSet`) means.
+            filtered = filtered.filter(t => !TaskValues.of(t, 'children').set);
         }
 
         const sortState = buildSortState(p.sort);
