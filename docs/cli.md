@@ -254,10 +254,10 @@ obsidian obsidian-task-viewer:export-image template="My Timeline"
 | `template` | ※ | 保存済みビューテンプレート名（ビュー種別を推論。`view=` 未指定なら必須） |
 | `name` | | 書き出したビューの表示名 |
 | `anchor-date` | | 日付アンカー（`YYYY-MM-DD`）。「今日」ボタンと同じ役割を任意の日に対して行う。ビューごとのスキーマの日付フィールドに解決される |
-| `width` | | 描画幅（px、デフォルト: 1200） |
+| `width` | | 描画幅（px、1 以上の整数。デフォルト: 1200） |
 | `output-folder` | | 出力先フォルダ（vault相対 or 絶対パス。デフォルト: `task-viewer-export`） |
 | `filename` | | 出力ファイル名（デフォルト: `{ビュー種別}_{日付}.png`） |
-| `wait` | | 描画後の待機時間（ms、デフォルト: 500） |
+| `wait` | | 描画後の待機時間（ms、0 以上の整数。デフォルト: 500） |
 | `keep-open` | | 書き出し後も一時ウィンドウを開いたままにする |
 
 対象ビュー自身の設定フラグもそのまま渡せます（例: timeline の `days-to-show`、1以上30以下の整数）。これを1つでも渡すと一時ビューでの書き出しになります。
