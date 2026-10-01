@@ -8,13 +8,13 @@ import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { splitTasks } from '../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
+import { API_REFERENCE } from './Reference';
 import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import { TaskValues } from '../services/filter/TaskValues';
 import type { SortState } from '../services/sort/SortTypes';
 import { SortSerializer, sortIssueText } from '../services/sort/SortSerializer';
 import { DateUtils } from '../utils/DateUtils';
-import { NAMED_DATE_PRESETS } from '../services/filter/DatePreset';
 import { DateResolver } from '../services/filter/DateResolver';
 import { resolveFilterSource, readDateParam } from './FilterParamsBuilder';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
@@ -24,7 +24,7 @@ import { holdsLineBreak } from '../utils/LineBreak';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { formatTaskLine } from '../services/parsing/TaskLineFormat';
 import {
-    assertParams, renderParamTable, LIMIT_PARAM, type ParamSpec,
+    assertParams, LIMIT_PARAM, type ParamSpec,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
     DELETE_SCHEMA, DUPLICATE_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
@@ -71,233 +71,6 @@ function anchorNotFound(id: string, file: string, anchor: string): string {
     return `Task not found: ${id} (no line of ${file} carries ^${anchor} alone)`;
 }
 
-export const API_HELP_TEXT = `
-Task Viewer API Reference
-=========================
-
-Access: app.plugins.plugins['obsidian-task-viewer'].api
-
-Vocabulary
-----------
-  from / to        = query window (inclusive overlap). A task matches when
-                     its span intersects [from, to].
-  date             = single-day window, sugar for from=X to=X (list only)
-  start / end / due = the task's own fields (create / update)
-
-  Unknown parameter keys are errors (with a did-you-mean suggestion) —
-  they are never silently ignored. Params documented as comma-separated
-  strings (status, tag, color, type) also accept string arrays.
-
-Task IDs
---------
-  id, parentId and childIds take one of two shapes:
-    path#^id  for a line whose ^id no other line of the file carries.
-              It lasts across edits from outside and reloads.
-    a name    for any other line: a receipt for one reading of the file.
-              It lasts until the file changes outside the plugin or the
-              plugin reloads, even when the file comes back to what it
-              was. Do not store it; list the tasks again. Give a task a
-              ^id to keep its ID.
-  update returns the task as written: a name comes back as its new ID.
-
-Methods
--------
-
-  list(params?: ListParams): Promise<TaskListResult>
-    List tasks with optional filters, sort, and pagination.
-
-    ListParams:
-${renderParamTable(LIST_SCHEMA).replace(/^/gm, '    ')}
-
-    Returns: { total: number, count: number, truncated: boolean, limit: number | null, tasks: NormalizedTask[] }
-
-  today(params?: TodayParams): TaskListResult
-    List tasks active today (visual-date aware).
-
-    TodayParams:
-${renderParamTable(TODAY_SCHEMA).replace(/^/gm, '    ')}
-
-  get(params: GetParams): NormalizedTask
-    Get a single task by ID.
-
-    GetParams:
-${renderParamTable(GET_SCHEMA).replace(/^/gm, '    ')}
-
-  create(params: CreateParams): Promise<MutationResult>
-    Create a new inline task.
-
-    CreateParams:
-${renderParamTable(CREATE_SCHEMA).replace(/^/gm, '    ')}
-
-  update(params: UpdateParams): Promise<MutationResult>
-    Update an existing task.
-
-    UpdateParams:
-${renderParamTable(UPDATE_SCHEMA).replace(/^/gm, '    ')}
-
-  delete(params: DeleteParams): Promise<DeleteResult>
-    Delete a task.
-
-    DeleteParams:
-${renderParamTable(DELETE_SCHEMA).replace(/^/gm, '    ')}
-
-  help(): string
-    Show this reference.
-
-  duplicate(params: DuplicateParams): Promise<DuplicateResult>
-    Duplicate a task with optional date shifting.
-
-    DuplicateParams:
-${renderParamTable(DUPLICATE_SCHEMA).replace(/^/gm, '    ')}
-
-  tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>
-    List tasks whose visual span overlaps the window [from, to].
-    Due-only tasks are included when due falls in the window.
-
-    TasksForDateRangeParams:
-${renderParamTable(TASKS_FOR_DATE_RANGE_SCHEMA).replace(/^/gm, '    ')}
-
-  categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult>
-    Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
-    allDay/timed membership follows the visual span; dueOnly the calendar due.
-
-    CategorizedTasksForDateRangeParams:
-${renderParamTable(CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA).replace(/^/gm, '    ')}
-
-    Returns: Record<date, { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }>
-
-  insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult>
-    Insert a child task under a parent task.
-
-    InsertChildTaskParams:
-${renderParamTable(INSERT_CHILD_TASK_SCHEMA).replace(/^/gm, '    ')}
-
-  getStartHour(): StartHourResult
-    Get the current startHour setting (visual day boundary).
-
-    Returns: { startHour: number }
-
-  onChange(callback): () => void
-    Subscribe to task changes. Returns unsubscribe function.
-
-Sort
-----
-  ApiSortRule: { property: string, direction?: 'asc' | 'desc' }
-  Properties: content, due, startDate, endDate, file, status, tag
-
-Date Formats
-------------
-  Absolute:  YYYY-MM-DD (e.g. 2026-03-15), naming a day that exists
-  Datetime:  YYYY-MM-DD HH:mm (e.g. 2026-03-15 14:00); 9:40 is read as 09:40
-  Time only: HH:mm (e.g. 14:00), for start and end; a due needs a date
-  Full-width digits and hyphen-like characters (ー, −) are read as ASCII.
-  Presets:   ${NAMED_DATE_PRESETS.join(', ')},
-             next7days, next30days
-
-FilterState (JSON format)
--------------------------
-  { logic: 'and', filters: [...] }
-
-  Condition:
-    { property: string, operator: string, value?: ..., target?: 'parent' }
-
-  Target:
-    Add target: 'parent' to ask the condition of the task's ancestors (the
-    parent, its parent, ...). A positive operator passes when some ancestor
-    matches; a negative one (excludes, notContains, isNotSet) passes when no
-    ancestor matches the positive form, so a task without a parent passes.
-    Example: tasks with an ancestor tagged "project":
-    { property: 'tag', operator: 'includes', value: ['project'], target: 'parent' }
-
-  Properties & Operators:
-    file       : includes, excludes          (value: string[])
-    tag        : includes, excludes, equals, only  (value: string[])
-                                             (only = tags are exactly this set, nothing more)
-    status     : includes, excludes          (value: string[])
-    content    : contains, notContains       (value: string)
-    startDate  : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
-                                             (value: 'YYYY-MM-DD' or { preset: '...' })
-    endDate    : (same as startDate)
-    due        : (same as startDate)
-    color      : includes, excludes          (value: string[])
-    linestyle  : includes, excludes          (value: string[])
-    length     : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
-                                             (value: number, unit?: 'hours'|'minutes')
-    anyDate    : isSet, isNotSet             (no value needed; isSet = any of start/end/due set)
-    notation   : includes, excludes          (value: string[] of 'taskviewer' | 'tasks' | 'dayplanner')
-    parent     : isSet, isNotSet             (no value needed)
-    children   : isSet, isNotSet             (no value needed)
-    property   : isSet, isNotSet, equals, contains, notContains
-                                             (value: string, key: string)
-
-NormalizedTask Fields
----------------------
-  id, file, line, content, status, startDate, startTime, endDate, endTime,
-  due, tags, parserId, parentId, childIds, color, linestyle,
-  effectiveStartDate, effectiveStartTime, effectiveEndDate, effectiveEndTime,
-  durationMinutes, properties
-
-Examples
---------
-  const api = app.plugins.plugins['obsidian-task-viewer'].api;
-
-  // List all tasks in a file
-  await api.list({ file: 'daily/2026-03-15' });
-
-  // Filter by tag (exact match) using FilterState
-  await api.list({
-    filter: {
-      logic: 'and',
-      filters: [
-        { property: 'tag', operator: 'equals', value: ['work'] }
-      ]
-    }
-  });
-
-  // Use a filter file
-  await api.list({ filterFile: 'filters/exact-tag.json' });
-
-  // Use a view template with pinned list
-  await api.list({ filterFile: 'templates/work.md', list: 'urgent' });
-
-  // Today's tasks, sorted by start date
-  api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
-
-  // Get a specific task
-  api.get({ id: 'daily/2026-03-15.md#^review' });
-
-  // Duplicate a task, shifting dates by 1 day
-  await api.duplicate({ id: 'daily/2026-03-15.md#^review', dayOffset: 1 });
-
-  // Duplicate a task 3 times (no date shift)
-  await api.duplicate({ id: 'daily/2026-03-15.md#^review', count: 3 });
-
-  // List tasks in a date range (window bounds accept presets too)
-  await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31' });
-  await api.tasksForDateRange({ from: 'today', to: 'today' });
-
-  // List tasks in a date range with sort
-  await api.tasksForDateRange({
-    from: '2026-03-01',
-    to: '2026-03-31',
-    sort: [{ property: 'startDate', direction: 'asc' }],
-  });
-
-  // Get categorized tasks for a date range (or single date)
-  await api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
-
-  // Insert a child task
-  await api.insertChildTask({ parentId: 'daily/2026-03-15.md#^review', content: 'Sub-task' });
-
-  // Get visual day boundary setting
-  api.getStartHour();
-
-  // Subscribe to task changes
-  const unsubscribe = api.onChange((taskId) => {
-    console.log('Task changed:', taskId);
-  });
-  // Later: unsubscribe();
-`.trim();
 
 // ── Internal helpers ──
 
@@ -739,6 +512,6 @@ export class TaskApi {
      * Return API reference text.
      */
     help(): string {
-        return API_HELP_TEXT;
+        return API_REFERENCE;
     }
 }

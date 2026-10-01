@@ -89,7 +89,34 @@ const TABLE: { [P in ValueProperty]: (task: DisplayTask) => ValueOf[P] } = {
     children: t => flag(t.childEntries.some(e => e.kind === 'task')),
 };
 
+/**
+ * What each value is, in words, beside the table that reads it: the
+ * references (`api/Reference`) tell a caller what a sort rule compares from
+ * here, so a change to a row of the table is made with its words.
+ */
+const WORDS: { [P in ValueProperty]: string } = {
+    file: 'the file path',
+    status: 'the status character',
+    content: 'the text of the task',
+    color: 'the card color, inherited ones included',
+    linestyle: 'the line style, inherited ones included',
+    notation: 'the notation (taskviewer, tasks, dayplanner)',
+    tag: 'the tags, inherited ones included; a sort compares the first',
+    startDate: 'the effective start date; the time is not compared',
+    endDate: 'the effective end date; the time is not compared',
+    due: 'the effective due (inherited ones included), with its time when written with one',
+    anyDate: 'whether any of start, end and due is set',
+    parent: 'whether the task has a parent',
+    children: 'whether the task has child tasks (plain checkbox lines and links are not)',
+};
+
 export const TaskValues = {
+    /** What {@link of} reads for `property`, in words. */
+    words(property: ValueProperty): string {
+        return WORDS[property];
+    },
+
+
     of<P extends ValueProperty>(task: DisplayTask, property: P): ValueOf[P] {
         return TABLE[property](task);
     },

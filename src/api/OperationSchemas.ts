@@ -12,11 +12,10 @@ import type {
  * flags, CLI exposure). Consumed by:
  *   - assertParams() — strict unknown-key / required validation on the API
  *   - the CLI registrar — flag declarations and unknown-flag validation
- *   - help output — generated flag tables
+ *   - the references (`api/Reference`) — generated parameter and flag tables
  *
- * Deliberately NOT a conversion or help framework: handlers keep their
- * hand-written CliData → params parsing, and the prose parts of help /
- * docs stay hand-written. Only keys, required-ness, a whole number's
+ * Deliberately NOT a conversion framework: handlers keep their hand-written
+ * CliData → params parsing. Only keys, required-ness, a whole number's
  * range, and one-line descriptions live here.
  *
  * The `satisfies ParamMap<XxxParams>` bindings tie each schema to its API
