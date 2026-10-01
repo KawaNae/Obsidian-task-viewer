@@ -1,6 +1,6 @@
 import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
-import { FIXED_STATUS_CHARS } from '../types';
+import { DEFAULT_SETTINGS, FIXED_STATUS_CHARS } from '../types';
 import { t } from '../i18n';
 import { FolderSuggest } from '../suggest/FolderSuggest';
 
@@ -127,9 +127,9 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
 
     new Setting(el)
         .setName(t('settings.views.exportFolder'))
-        .setDesc(t('settings.views.exportFolderDesc'))
+        .setDesc(t('settings.views.exportFolderDesc', { folder: DEFAULT_SETTINGS.exportFolder }))
         .addText(text => {
-            text.setPlaceholder('task-viewer-export')
+            text.setPlaceholder(DEFAULT_SETTINGS.exportFolder)
                 .setValue(plugin.settings.exportFolder)
                 .onChange(async (value) => {
                     plugin.settings.exportFolder = value.trim();

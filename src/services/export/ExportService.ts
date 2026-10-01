@@ -1,11 +1,9 @@
-import { FileSystemAdapter } from 'obsidian';
 import type { View } from 'obsidian';
-import * as fsNode from 'fs';
-import * as pathNode from 'path';
 import type { PluginContext } from '../../PluginContext';
 import { ViewExporter } from './ViewExporter';
 import { exportDescriptorFor, resolveExportContainer } from './ExportRegistry';
 import { buildExportFilename } from './ExportFilename';
+import { exportFolderOf, saveExportImage } from './ExportSave';
 import { viewContentEl } from '../../utils/ObsidianView';
 import { currentBrowserWindow, type BrowserWindowLike } from '../../utils/hostEnv';
 import type { RenderedDateRange, ExportableDateRangeView } from './ExportTypes';
@@ -66,11 +64,6 @@ function resizePopout(win: Window, bw: BrowserWindowLike | null, width: number, 
     } else {
         win.resizeTo(width, height);
     }
-}
-
-function resolveFolder(opts: ExportOptions | undefined, plugin: PluginContext): string {
-    const folder = opts?.folder?.trim() || plugin.settings.exportFolder?.trim() || 'task-viewer-export';
-    return folder;
 }
 
 function resolveFilename(opts: ExportOptions | undefined, viewType: string): string {
@@ -165,9 +158,9 @@ export class ExportService {
 
         const result = await ViewExporter.captureExpanded(container, spec);
 
-        const folder = resolveFolder(opts, this.plugin);
+        const folder = exportFolderOf(this.plugin.settings, opts?.folder);
         const filename = resolveFilename(opts, viewType);
-        const savedPath = await this.saveToFs(result.blob, filename, folder);
+        const savedPath = await saveExportImage(this.plugin.app, result.blob, folder, filename);
 
         const out: ExportResult = {
             path: savedPath,
@@ -184,31 +177,5 @@ export class ExportService {
         const renderedRange = getExportedDateRange(view);
         if (renderedRange) out.renderedRange = renderedRange;
         return out;
-    }
-
-    private async saveToFs(blob: Blob, filename: string, folder: string): Promise<string> {
-        const isAbsolute = pathNode.isAbsolute(folder);
-        let dir: string;
-        if (isAbsolute) {
-            dir = folder;
-        } else {
-            // A relative folder is resolved against the vault's own path, which
-            // only a filesystem-backed vault has.
-            const adapter = this.plugin.app.vault.adapter;
-            if (!(adapter instanceof FileSystemAdapter)) {
-                throw new Error('Image export needs a filesystem vault');
-            }
-            dir = pathNode.join(adapter.getBasePath(), folder);
-        }
-
-        if (!fsNode.existsSync(dir)) {
-            fsNode.mkdirSync(dir, { recursive: true });
-        }
-
-        const filePath = pathNode.join(dir, filename);
-        const buffer = Buffer.from(await blob.arrayBuffer());
-        fsNode.writeFileSync(filePath, buffer);
-
-        return isAbsolute ? filePath.replace(/\\/g, '/') : `${folder}/${filename}`;
     }
 }

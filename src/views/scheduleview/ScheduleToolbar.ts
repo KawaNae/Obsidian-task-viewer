@@ -12,6 +12,7 @@ import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteraction
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
+import { exportFolderOf } from '../../services/export/ExportSave';
 
 export interface ScheduleToolbarDeps {
     app: App;
@@ -156,7 +157,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 viewType: ScheduleSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),
-            getExportFolder: () => deps.plugin.settings.exportFolder,
+            getExportFolder: () => exportFolderOf(deps.plugin.settings),
             onApplyTemplate: (template) => {
                 const cfg = this.codec.parseConfig(template.config ?? null);
                 deps.applyConfig(cfg);
