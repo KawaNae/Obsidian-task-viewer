@@ -1,4 +1,4 @@
-import type { DisplayTask } from '../types';
+import type { DisplayTask, TimeOfDay } from '../types';
 
 /**
  * The date module: every conversion between a `YYYY-MM-DD` string and a
@@ -93,8 +93,18 @@ export class DateUtils {
     }
 
     /** Format hours/minutes as `HH:mm`, zero-padded. */
-    static formatHHMM(hours: number, minutes: number): string {
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    static formatHHMM(hours: number, minutes: number): TimeOfDay {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` as TimeOfDay;
+    }
+
+    /**
+     * A time a row holds (`Task.startTime`, `endTime`, or the section's), taken
+     * for the `HH:mm` it is: the parsers read only that shape (`TIME_PATTERN`),
+     * and every writer checks or builds it. The form's preview reads a time
+     * still being typed through here too, as it always has.
+     */
+    static timeOfDay(time: string | undefined): TimeOfDay | undefined {
+        return time as TimeOfDay | undefined;
     }
 
     /**
@@ -240,31 +250,31 @@ export class DateUtils {
         return h * 60 + m;
     }
 
-    static minutesToTime(minutes: number): string {
+    static minutesToTime(minutes: number): TimeOfDay {
         let m = Math.round(minutes);
         if (m < 0) m = 0;
         while (m >= 24 * 60) m -= 24 * 60;
         const h = Math.floor(m / 60);
         const min = m % 60;
-        return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        return DateUtils.formatHHMM(h, min);
     }
 
     /**
      * Calculate task duration in milliseconds based on README spec.
      * Returns the duration considering start/end dates and times.
-     * 
+     *
      * @param startDate YYYY-MM-DD
      * @param startTime HH:mm or undefined
      * @param endDate YYYY-MM-DD or undefined
-     * @param endTime HH:mm or full ISO string or undefined
+     * @param endTime HH:mm or undefined
      * @param startHour The configured start hour for visual day
      * @returns Duration in milliseconds
      */
     static getTaskDurationMs(
         startDate: string,
-        startTime: string | undefined,
+        startTime: TimeOfDay | undefined,
         endDate: string | undefined,
-        endTime: string | undefined,
+        endTime: TimeOfDay | undefined,
         startHour: number
     ): number {
         const startHourStr = startHour.toString().padStart(2, '0') + ':00';
@@ -277,18 +287,12 @@ export class DateUtils {
         let endDateTime: Date;
 
         if (endTime) {
-            if (endTime.includes('T')) {
-                // Full ISO format
-                endDateTime = new Date(endTime);
-            } else {
-                // HH:mm format
-                const effectiveEndDate = endDate || startDate;
-                endDateTime = new Date(`${effectiveEndDate}T${endTime}`);
-                // If end is strictly before start, assume next day
-                // Note: end == start means 0 duration, not 24 hours
-                if (endDateTime < startDateTime) {
-                    endDateTime.setDate(endDateTime.getDate() + 1);
-                }
+            const effectiveEndDate = endDate || startDate;
+            endDateTime = new Date(`${effectiveEndDate}T${endTime}`);
+            // If end is strictly before start, assume next day
+            // Note: end == start means 0 duration, not 24 hours
+            if (endDateTime < startDateTime) {
+                endDateTime.setDate(endDateTime.getDate() + 1);
             }
         } else if (endDate && endDate !== startDate) {
             // Different end date, no end time: end at startHour-1:59 of end date
@@ -364,9 +368,9 @@ export class DateUtils {
      */
     static isAllDayTask(
         startDate: string,
-        startTime: string | undefined,
+        startTime: TimeOfDay | undefined,
         endDate: string | undefined,
-        endTime: string | undefined,
+        endTime: TimeOfDay | undefined,
         startHour: number
     ): boolean {
         // Tasks without start time are always considered All Day

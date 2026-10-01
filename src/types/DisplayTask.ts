@@ -1,6 +1,13 @@
 import type { ChildEntry, Task } from './TaskModel';
 
 /**
+ * A time of day, `HH:mm`: what the effective times hold. A date-time does
+ * not fit the type. `DateUtils.formatHHMM` and `minutesToTime` make one, and
+ * `DateUtils.timeOfDay` takes a time a row holds for one (`resolveEffectiveDates`).
+ */
+export type TimeOfDay = `${number}:${number}`;
+
+/**
  * The dates a task covers once its implicit values are resolved
  * (`resolveEffectiveDates`).
  */
@@ -15,9 +22,9 @@ export interface EffectiveDates {
      * 読み書きできる。
      */
     effectiveStartDate: string;
-    effectiveStartTime?: string;
+    effectiveStartTime?: TimeOfDay;
     effectiveEndDate?: string;
-    effectiveEndTime?: string;
+    effectiveEndTime?: TimeOfDay;
     effectiveDue?: string;
     /** 各フィールドが暗黙値かどうか */
     startDateImplicit: boolean;

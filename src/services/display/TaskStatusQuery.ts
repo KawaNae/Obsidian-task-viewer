@@ -49,9 +49,7 @@ export function getOverdueLevel(
     }
 
     if (task.effectiveEndDate) {
-        const endTime = task.effectiveEndTime;
-        const cleanEndTime = endTime?.includes('T') ? endTime.split('T')[1] : endTime;
-        if (DateUtils.isPastDate(task.effectiveEndDate, cleanEndTime, startHour)) {
+        if (DateUtils.isPastDate(task.effectiveEndDate, task.effectiveEndTime, startHour)) {
             return 'past-end';
         }
     }

@@ -1,3 +1,4 @@
+import type { TimeOfDay } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 
 /**
@@ -20,10 +21,10 @@ import { DateUtils } from '../../utils/DateUtils';
 export interface DayBoundary {
     /** The boundary itself: `startHour:00` on the boundary date. */
     date: string;
-    time: string;
+    time: TimeOfDay;
     /** The last minute before the boundary. */
     beforeDate: string;
-    beforeTime: string;
+    beforeTime: TimeOfDay;
 }
 
 const MINUTES_PER_DAY = 24 * 60;

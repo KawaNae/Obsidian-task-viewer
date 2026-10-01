@@ -11,9 +11,9 @@ import { DateUtils } from './DateUtils';
  */
 export function resolveEffectiveDates(task: Task, startHour: number): EffectiveDates {
     let effectiveStartDate = task.startDate || task.cascadeContext?.startDate || '';
-    let effectiveStartTime = task.startTime || task.cascadeContext?.startTime;
+    let effectiveStartTime = DateUtils.timeOfDay(task.startTime || task.cascadeContext?.startTime);
     let effectiveEndDate = task.endDate || task.cascadeContext?.endDate;
-    let effectiveEndTime = task.endTime || task.cascadeContext?.endTime;
+    let effectiveEndTime = DateUtils.timeOfDay(task.endTime || task.cascadeContext?.endTime);
     const effectiveDue = task.due || task.cascadeContext?.due;
 
     // Which fields the 3 layers actually produced. Every implicit-resolution
