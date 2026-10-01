@@ -4,8 +4,6 @@ import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer
 import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { readLine } from '../helpers/readLine';
-import { TaskIndex } from '../../../src/services/core/TaskIndex';
-import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
@@ -157,15 +155,9 @@ function makeExecutor(repository: ReturnType<typeof makeRepository>) {
         getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn(() => undefined),
     };
-    return completing(new FlowExecutor(
-        repository as unknown as TaskRepository,
-        taskIndex as unknown as TaskIndex,
-        app as never,
-        () => DEFAULT_SETTINGS
-    ), repository);
+    return completing(new FlowExecutor(taskIndex, () => DEFAULT_SETTINGS), repository);
 }
 
-const app = { vault: { getAbstractFileByPath: () => null } };
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
 /** Complete a task and hand back the line written for the next one. */

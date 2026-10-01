@@ -4,8 +4,6 @@ import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/fl
 import { collectGenBlocks, type GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 import type { GeneratedChild } from '../../../src/services/persistence/FlowInstanceLines';
-import { TaskIndex } from '../../../src/services/core/TaskIndex';
-import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
@@ -69,7 +67,6 @@ function stripsOf(repository: ReturnType<typeof makeRepository>): number {
         .flatMap(c => c[2] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
 }
 
-const app = { vault: { getAbstractFileByPath: () => null } };
 
 /** A block as the scan would have collected it, from its body lines. */
 function block(name: string, body: string[]): GenBlock {
@@ -84,12 +81,7 @@ function makeExecutor(
         getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
-    const executor = completing(new FlowExecutor(
-        repository as unknown as TaskRepository,
-        taskIndex as unknown as TaskIndex,
-        app as never,
-        () => DEFAULT_SETTINGS
-    ), repository, blocks);
+    const executor = completing(new FlowExecutor(taskIndex, () => DEFAULT_SETTINGS), repository, blocks);
     return { executor, taskIndex };
 }
 

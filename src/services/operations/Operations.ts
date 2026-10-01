@@ -15,7 +15,7 @@ import { readName } from '../core/RowNames';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { planDuplicate } from './DuplicateShift';
 import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
-import { logDebug, logInfo, logWarn } from '../../log/log';
+import { logDebug, logError, logInfo, logWarn } from '../../log/log';
 import { splitLines, type Refusal, type RowRef, type WriteChannels } from '../persistence/FileLines';
 import type { FiringOutcome } from '../persistence/FiringTrials';
 import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
@@ -113,7 +113,8 @@ export class Operations {
     /**
      * What the user is told of the flow: a completion whose flow was not
      * run, for a write here and the editor's transaction alike
-     * (`FlowNotices.firing`).
+     * (`FlowNotices.firing`), and a delete its fire stopped
+     * (`FlowNotices.deletionStopped`).
      */
     private readonly notices = new FlowNotices();
 
@@ -134,7 +135,7 @@ export class Operations {
         // Settings asked of the index each time (not a snapshot): a change of
         // them replaces the object, and a completion is judged by the latest
         // status definitions.
-        this.commandExecutor = new FlowExecutor(this.repository, index, app, () => index.getSettings());
+        this.commandExecutor = new FlowExecutor(index, () => index.getSettings());
         // Cut on dispose, so a write that outlives these operations lands
         // nothing in the index (see WriteChannels).
         this.repository.connect((path) => ({
@@ -617,9 +618,9 @@ export class Operations {
 
     /**
      * @param options.fireFlow write the command's next instance before
-     * removing this one. A fire that cannot be planned stops the delete —
-     * see {@link FlowExecutor.fireAndDelete} — so the task can survive this
-     * call, with a notice saying why.
+     * removing this one, in the same write. A fire that cannot be planned
+     * stops the delete (`FlowExecutor.planDeletion`), so the task can survive
+     * this call, with a notice saying why.
      * @returns whether the task is gone. A stopped fire, a read-only task and
      * a delete whose lines could not be resolved in the file all answer no.
      */
@@ -637,22 +638,45 @@ export class Operations {
         if (!task) return false;
         logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
 
-        let removed: boolean;
-        if (options.fireFlow && isTvInline(task)) {
-            removed = await this.commandExecutor.fireAndDelete(task);
-        } else {
+        const removed = options.fireFlow && isTvInline(task)
+            ? await this.writeFiringDelete(task)
             // The row and the subtree the index read (`plannedOn`): a line
             // written into the subtree since is not taken with it.
-            removed = (await this.repository.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
-            if (!removed) {
-                // Nothing was written, so no rescan follows and the store
-                // still holds a task the file also still holds. They agree,
-                // and the caller must not report the task gone.
-                logWarn(`[Operations] delete was not written: id=${taskId}`);
-            }
+            : (await this.repository.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
+        if (!removed) {
+            // Nothing was written, so no rescan follows and the store still
+            // holds a task the file also still holds. They agree, and the
+            // caller must not report the task gone. A refusal was told by the
+            // write, a stopped fire by its notice.
+            logWarn(`[Operations] delete was not written: id=${taskId}`);
         }
-
         return removed;
+    }
+
+    /**
+     * The delete of `task` with its fire: what the plan writes, the next
+     * instance and the row's removal, as one write, checked against the row,
+     * its command lines, its subtree and the blocks the plan read
+     * (`plannedOn`), as a completion's fire is one write with the completion.
+     * A plan that failed stops the delete, and the user is told why
+     * (`FlowNotices.deletionStopped`).
+     *
+     * @returns whether the task is gone. Answered, not thrown, whatever the
+     * plan or the write threw: the menu that asked waits on the answer.
+     */
+    private async writeFiringDelete(task: ReadCopy): Promise<boolean> {
+        try {
+            const plan = this.commandExecutor.planDeletion(task);
+            if (plan.kind === 'failed') {
+                this.notices.deletionStopped(task, plan.error);
+                return false;
+            }
+            return (await this.repository.write(
+                task.file, plannedOn(task, { commands: true, subtree: true, blocks: plan.blocks }), plan.ops)).written;
+        } catch (err) {
+            logError(`[Operations] Error deleting task ${task.id} with its fire: ${(err as Error)?.message ?? err}`);
+            return false;
+        }
     }
 
     /** @returns whether the copy was written. */

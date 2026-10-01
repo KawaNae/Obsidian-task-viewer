@@ -18,7 +18,7 @@ const FILE = 'note.md';
 const app = { vault: { getAbstractFileByPath: () => null } };
 
 function executor(): FlowExecutor {
-    return new FlowExecutor({} as never, {} as never, app as never, () => DEFAULT_SETTINGS);
+    return new FlowExecutor({} as never, () => DEFAULT_SETTINGS);
 }
 
 const writer = new InlineTaskWriter(app as never, () => undefined);

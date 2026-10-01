@@ -16,7 +16,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 
 function makeExecutor() {
     const taskIndex = { getTask: vi.fn(() => undefined), getGenBlock: vi.fn(() => undefined) };
-    return new FlowExecutor({} as never, taskIndex as never, {} as never, () => DEFAULT_SETTINGS);
+    return new FlowExecutor(taskIndex, () => DEFAULT_SETTINGS);
 }
 
 /** A fire whose write's last run planned `plan`. */
