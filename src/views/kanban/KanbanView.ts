@@ -576,8 +576,6 @@ export class KanbanView extends ItemView {
             ...listDef,
             id: this.generateId(),
             name: listDef.name + ' (copy)',
-            filterState: structuredClone(listDef.filterState),
-            sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
         };
 
         // Insert the duplicate to the right in its row; keep the grid

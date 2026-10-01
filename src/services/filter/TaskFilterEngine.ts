@@ -1,7 +1,7 @@
 import type { DisplayTask, Task } from '../../types';
 import type { FilterContext } from './FilterContext';
-import type { FilterExpr, DateComparison, LengthComparison } from './FilterExpr';
-import type { DateFilterValue } from './FilterTypes';
+import type { FilterExpr } from './FilterExpr';
+import type { DateFilterValue, DateComparison, LengthComparison } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskValues } from './TaskValues';

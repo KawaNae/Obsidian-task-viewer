@@ -20,19 +20,6 @@ export function readDateParam(value: string, name: string): DateFilterValue {
 
 // ── Internal helpers ──
 
-function condition(
-    property: FilterCondition['property'],
-    operator: FilterCondition['operator'],
-    value?: FilterCondition['value'],
-    extra?: { key?: string; unit?: 'hours' | 'minutes' },
-): FilterCondition {
-    const node: FilterCondition = { property, operator };
-    if (value !== undefined) node.value = value;
-    if (extra?.key) node.key = extra.key;
-    if (extra?.unit) node.unit = extra.unit;
-    return node;
-}
-
 function normalizeStringArray(value: string | string[] | undefined, stripHash = false): string[] {
     if (!value) return [];
     const arr = typeof value === 'string' ? value.split(',') : value;
@@ -44,29 +31,29 @@ function buildSimpleFieldConditions(params: SimpleFilterParams): FilterCondition
 
     if (params.file) {
         const file = params.file.endsWith('.md') ? params.file : params.file + '.md';
-        conditions.push(condition('file', 'includes', [file]));
+        conditions.push({ property: 'file', operator: 'includes', value: [file] });
     }
 
     const statusArr = normalizeStringArray(params.status);
     if (statusArr.length > 0) {
-        conditions.push(condition('status', 'includes', statusArr));
+        conditions.push({ property: 'status', operator: 'includes', value: statusArr });
     }
 
     const tagArr = normalizeStringArray(params.tag, true);
     if (tagArr.length > 0) {
-        conditions.push(condition('tag', 'includes', tagArr));
+        conditions.push({ property: 'tag', operator: 'includes', value: tagArr });
     }
 
     if (params.content) {
-        conditions.push(condition('content', 'contains', params.content));
+        conditions.push({ property: 'content', operator: 'contains', value: params.content });
     }
 
     if (params.due) {
-        conditions.push(condition('due', 'equals', readDateParam(params.due, 'due')));
+        conditions.push({ property: 'due', operator: 'equals', value: readDateParam(params.due, 'due') });
     }
 
     if (params.leaf) {
-        conditions.push(condition('children', 'isNotSet'));
+        conditions.push({ property: 'children', operator: 'isNotSet' });
     }
 
     if (params.property) {
@@ -74,21 +61,21 @@ function buildSimpleFieldConditions(params: SimpleFilterParams): FilterCondition
         if (colonIdx < 1) throw new TaskApiError('Invalid property filter format. Use "key:value"');
         const key = params.property.substring(0, colonIdx).trim();
         const value = params.property.substring(colonIdx + 1).trim();
-        conditions.push(condition('property', 'contains', value, { key }));
+        conditions.push({ property: 'property', operator: 'contains', key, value });
     }
 
     const colorArr = normalizeStringArray(params.color);
     if (colorArr.length > 0) {
-        conditions.push(condition('color', 'includes', colorArr));
+        conditions.push({ property: 'color', operator: 'includes', value: colorArr });
     }
 
     const typeArr = normalizeStringArray(params.type);
     if (typeArr.length > 0) {
-        conditions.push(condition('notation', 'includes', typeArr));
+        conditions.push({ property: 'notation', operator: 'includes', value: typeArr });
     }
 
     if (params.root) {
-        conditions.push(condition('parent', 'isNotSet'));
+        conditions.push({ property: 'parent', operator: 'isNotSet' });
     }
 
     return conditions;
@@ -125,10 +112,10 @@ function windowConditions(params: QueryWindowParams): FilterCondition[] {
     const windowFromName = params.date ? 'date' : 'from';
     const windowToName = params.date ? 'date' : 'to';
     if (windowFrom) {
-        conditions.push(condition('endDate', 'onOrAfter', readDateParam(windowFrom, windowFromName)));
+        conditions.push({ property: 'endDate', operator: 'onOrAfter', value: readDateParam(windowFrom, windowFromName) });
     }
     if (windowTo) {
-        conditions.push(condition('startDate', 'onOrBefore', readDateParam(windowTo, windowToName)));
+        conditions.push({ property: 'startDate', operator: 'onOrBefore', value: readDateParam(windowTo, windowToName) });
     }
     return conditions;
 }

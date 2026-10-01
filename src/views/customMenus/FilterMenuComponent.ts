@@ -1,31 +1,35 @@
 import { setIcon } from 'obsidian';
 import type { StatusDefinition, Task } from '../../types';
-import type {
-    FilterState, FilterCondition, FilterGroup,
-    FilterProperty, FilterOperator,
-} from '../../services/filter/FilterTypes';
+import type { FilterState, FilterCondition, FilterGroup, FilterItem } from '../../services/filter/FilterTypes';
 import {
     MAX_FILTER_DEPTH,
     PROPERTY_ICONS,
     getOperatorLabel,
     getPropertyLabel,
-    NO_VALUE_OPERATORS,
-    DATE_PROPERTIES,
-    NUMBER_PROPERTIES,
     createDefaultCondition,
     createEmptyFilterState,
     createFilterGroup,
-    deepCloneNode,
     hasConditions,
     isFilterCondition,
+    isPresenceOperator,
+    isListCondition,
+    isDateCondition,
+    isLengthCondition,
+    isContentCondition,
+    isPropertyCondition,
 } from '../../services/filter/FilterTypes';
+import {
+    type NodePath, nodeAt, updateGroupAt, updateConditionAt, replaceAt, appendTo, toggleLogic,
+} from '../../services/filter/FilterEdit';
 import { t } from '../../i18n';
-import { resolveGlue } from './FilterValueHelpers';
+import { resolveGlue, type ConditionEditor } from './FilterValueHelpers';
 import { FilterDropdownMenus } from './FilterDropdownMenus';
 import type { SelectItem } from './FilterDropdownMenus';
 import { FilterConditionRenderer } from './FilterConditionRenderer';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import { OverlayShell } from '../sharedUI/OverlayShell';
+
+const anyCondition = (_c: FilterCondition): _c is FilterCondition => true;
 
 export interface FilterMenuCallbacks {
     onFilterChange: () => void;
@@ -36,6 +40,11 @@ export interface FilterMenuCallbacks {
 /**
  * Notion-style filter popover with recursive group nesting.
  * Groups can contain both conditions and sub-groups up to MAX_FILTER_DEPTH levels.
+ *
+ * The menu holds the filter it edits, a value (`FilterState`): each edit
+ * makes a new one from the one held (`FilterEdit`) and tells the owner,
+ * which reads it with `getFilterState`. What the owner read before stays as
+ * it was, so neither side copies.
  */
 export class FilterMenuComponent {
     private state: FilterState = createEmptyFilterState();
@@ -52,28 +61,12 @@ export class FilterMenuComponent {
     private conditionRenderer: FilterConditionRenderer;
 
     constructor() {
-        const refreshPopover = () => this.refreshPopover();
-        const renderContent = () => this.renderContent();
-        const getStatusDefs = () => this.statusDefs;
-        const getLastTasks = () => this.lastTasks;
-        const getOnFilterChange = () => this.lastCallbacks?.onFilterChange;
         const getStack = () => this.stack;
-
-        this.dropdowns = new FilterDropdownMenus(
-            refreshPopover,
-            renderContent,
-            getStatusDefs,
-            getLastTasks,
-            getOnFilterChange,
-            getStack,
-        );
+        this.dropdowns = new FilterDropdownMenus(getStack);
         this.conditionRenderer = new FilterConditionRenderer(
-            refreshPopover,
-            renderContent,
             this.dropdowns,
-            getStatusDefs,
-            getLastTasks,
-            getOnFilterChange,
+            () => this.statusDefs,
+            () => this.lastTasks,
             getStack,
         );
     }
@@ -83,7 +76,7 @@ export class FilterMenuComponent {
     }
 
     setFilterState(state: FilterState): void {
-        this.state = structuredClone(state);
+        this.state = state;
     }
 
     setStartHourProvider(provider: () => number): void {
@@ -150,40 +143,74 @@ export class FilterMenuComponent {
         if (this.state.filters.length === 0) {
             this.rootEl.createDiv('filter-popover__empty').setText(t('filter.noFilters'));
         } else {
-            this.renderChildren(this.rootEl, this.state, 0);
+            this.renderChildren(this.rootEl, this.state, [], 0);
         }
 
-        this.renderFooterButtons(this.rootEl, this.state, 0);
+        this.renderFooterButtons(this.rootEl);
     }
 
-    private refreshPopover(): void {
-        if (!this.rootEl) return;
-        this.renderContent();
+    /**
+     * Hold `next` and tell the owner. `redraw` draws the menu from it; `keep`
+     * leaves the controls, which already show it. An edit that changed
+     * nothing tells no one.
+     */
+    private commit(next: FilterState, after: 'redraw' | 'keep'): void {
+        if (next === this.state) return;
+        this.state = next;
+        if (after === 'redraw') this.renderContent();
         this.lastCallbacks?.onFilterChange();
+    }
+
+    private editGroup(path: NodePath, edit: (group: FilterGroup) => FilterGroup): void {
+        this.commit(updateGroupAt(this.state, path, edit), 'redraw');
+    }
+
+    /** Replace the node at `path` by what `edit` makes of it (none, itself twice, its children). */
+    private replaceNode(path: NodePath, edit: (node: FilterItem) => readonly FilterItem[]): void {
+        this.commit(replaceAt(this.state, path, edit), 'redraw');
+    }
+
+    /**
+     * The editor of the row at `path`, for a control that edits a condition
+     * of the kind `isKind` tells. A row changes kind only by its property
+     * menu, which redraws it, so the row's controls always find their kind.
+     */
+    private editorAt<C extends FilterCondition>(path: NodePath, isKind: (c: FilterCondition) => c is C): ConditionEditor<C> {
+        const current = (): C => {
+            const node = nodeAt(this.state, path);
+            if (!isFilterCondition(node) || !isKind(node)) throw new Error(`filter menu: the row at [${path.join(', ')}] changed kind under its controls`);
+            return node;
+        };
+        return {
+            current,
+            update: (edit, after) => {
+                this.commit(updateConditionAt(this.state, path, () => edit(current())), after);
+            },
+        };
     }
 
     // ── Recursive Children Rendering ──
 
-    private renderChildren(parent: HTMLElement, group: FilterGroup, depth: number): void {
+    private renderChildren(parent: HTMLElement, group: FilterGroup, path: NodePath, depth: number): void {
         for (let i = 0; i < group.filters.length; i++) {
             const child = group.filters[i];
 
             // Inter-sibling logic separator (between nodes, not before the first)
             if (i > 0) {
-                this.renderLogicSeparator(parent, group, depth);
+                this.renderLogicSeparator(parent, group, path);
             }
 
             if (isFilterCondition(child)) {
-                this.renderConditionRow(parent, group, child, i);
+                this.renderConditionRow(parent, child, [...path, i]);
             } else {
-                this.renderGroup(parent, child, depth + 1, group, i);
+                this.renderGroup(parent, child, [...path, i], depth + 1, group.filters.length);
             }
         }
     }
 
     // ── Logic Separator ──
 
-    private renderLogicSeparator(parent: HTMLElement, group: FilterGroup, _depth: number): void {
+    private renderLogicSeparator(parent: HTMLElement, group: FilterGroup, path: NodePath): void {
         const logicRow = parent.createDiv('filter-popover__logic-separator');
         const logicBtn = logicRow.createEl('button', {
             cls: 'filter-popover__logic-btn',
@@ -191,8 +218,7 @@ export class FilterMenuComponent {
         });
         logicBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            group.logic = group.logic === 'and' ? 'or' : 'and';
-            this.refreshPopover();
+            this.editGroup(path, toggleLogic);
         });
     }
 
@@ -201,9 +227,9 @@ export class FilterMenuComponent {
     private renderGroup(
         parent: HTMLElement,
         group: FilterGroup,
+        path: NodePath,
         depth: number,
-        parentGroup: FilterGroup,
-        indexInParent: number,
+        siblingCount: number,
     ): void {
         const groupEl = parent.createDiv('filter-popover__group');
 
@@ -213,7 +239,7 @@ export class FilterMenuComponent {
         groupBody.dataset.depth = String(depth); // 背景シェーディングのセレクタ用
 
         // Render children recursively
-        this.renderChildren(groupBody, group, depth);
+        this.renderChildren(groupBody, group, path, depth);
 
         // Group footer: [+ Add filter] [+ Add group] [...]
         const groupFooter = groupBody.createDiv('filter-popover__group-footer');
@@ -224,8 +250,7 @@ export class FilterMenuComponent {
         addBtn.createSpan().setText(t('filter.addFilter'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            group.filters.push(createDefaultCondition());
-            this.refreshPopover();
+            this.editGroup(path, g => appendTo(g, createDefaultCondition()));
         });
 
         // Add sub-group button (only if depth allows)
@@ -235,15 +260,12 @@ export class FilterMenuComponent {
             addGroupBtn.createSpan().setText(t('filter.addGroup'));
             addGroupBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const newGroup = createFilterGroup();
-                newGroup.filters.push(createDefaultCondition());
-                group.filters.push(newGroup);
-                this.refreshPopover();
+                this.editGroup(path, g => appendTo(g, createFilterGroup()));
             });
         }
 
         // Group more menu (...) — only when parent has multiple children
-        if (parentGroup.filters.length > 1) {
+        if (siblingCount > 1) {
             const groupMoreBtn = groupFooter.createEl('button', { cls: 'filter-popover__more-btn' });
             setIcon(groupMoreBtn.createSpan(), 'more-horizontal');
             groupMoreBtn.addEventListener('click', (e) => {
@@ -255,16 +277,13 @@ export class FilterMenuComponent {
                 ];
                 this.dropdowns.showSelectPopover(groupMoreBtn, items, (val) => {
                     if (val === 'remove-group') {
-                        parentGroup.filters.splice(indexInParent, 1);
-                        this.refreshPopover();
+                        this.replaceNode(path, () => []);
                     } else if (val === 'duplicate-group') {
-                        const dup = deepCloneNode(group) as FilterGroup;
-                        parentGroup.filters.splice(indexInParent + 1, 0, dup);
-                        this.refreshPopover();
+                        // A value: the copy and the original can be the same object.
+                        this.replaceNode(path, node => [node, node]);
                     } else if (val === 'ungroup') {
                         // Move all filters of this group into the parent
-                        parentGroup.filters.splice(indexInParent, 1, ...group.filters);
-                        this.refreshPopover();
+                        this.replaceNode(path, node => (isFilterCondition(node) ? [node] : node.filters));
                     }
                 });
             });
@@ -275,11 +294,11 @@ export class FilterMenuComponent {
 
     private renderConditionRow(
         parent: HTMLElement,
-        ownerGroup: FilterGroup,
         condition: FilterCondition,
-        indexInGroup: number,
+        path: NodePath,
     ): void {
         const row = parent.createDiv('filter-popover__row');
+        const edit = this.editorAt(path, anyCondition);
 
         // ── Upper row: [Target?] [Property] [Operator] [...] ──
         const headerLine = row.createDiv('filter-popover__row-header');
@@ -294,7 +313,7 @@ export class FilterMenuComponent {
             targetBtn.createSpan().setText(t('filter.parent'));
             targetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.dropdowns.showTargetMenu(targetBtn, condition);
+                this.dropdowns.showTargetMenu(targetBtn, edit);
             });
         } else {
             // Subtle "self" indicator that can be clicked to switch
@@ -305,7 +324,7 @@ export class FilterMenuComponent {
             setIcon(targetIcon, 'user');
             targetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.dropdowns.showTargetMenu(targetBtn, condition);
+                this.dropdowns.showTargetMenu(targetBtn, edit);
             });
         }
 
@@ -328,7 +347,7 @@ export class FilterMenuComponent {
         propBtn.createSpan().setText(getPropertyLabel(condition.property));
         propBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.dropdowns.showPropertyMenu(propBtn, condition);
+            this.dropdowns.showPropertyMenu(propBtn, edit);
         });
 
         // Glue: after property (before operator)
@@ -344,7 +363,7 @@ export class FilterMenuComponent {
         });
         opBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.dropdowns.showOperatorMenu(opBtn, condition);
+            this.dropdowns.showOperatorMenu(opBtn, edit);
         });
 
         // More menu button (...) — condition-level actions
@@ -358,35 +377,34 @@ export class FilterMenuComponent {
             ];
             this.dropdowns.showSelectPopover(moreBtn, items, (val) => {
                 if (val === 'remove') {
-                    ownerGroup.filters.splice(indexInGroup, 1);
-                    this.refreshPopover();
+                    this.replaceNode(path, () => []);
                 } else if (val === 'duplicate') {
-                    const dup = deepCloneNode(condition) as FilterCondition;
-                    ownerGroup.filters.splice(indexInGroup + 1, 0, dup);
-                    this.refreshPopover();
+                    this.replaceNode(path, node => [node, node]);
                 }
             });
         });
 
         // ── Lower row(s): Value selector ──
         // Property filter: 2 sub-rows ([key:pill] / [value-input]). Other types: single row.
-        if (condition.property === 'property') {
-            this.conditionRenderer.renderPropertyRows(row, condition);
-        } else if (!NO_VALUE_OPERATORS.has(condition.operator)) {
+        if (isPropertyCondition(condition)) {
+            this.conditionRenderer.renderPropertyRows(row, this.editorAt(path, isPropertyCondition));
+        } else if (!isPresenceOperator(condition.operator)) {
             const valueLine = row.createDiv('filter-popover__row-value');
-            if (DATE_PROPERTIES.has(condition.property)) {
-                this.conditionRenderer.renderDateValueSelector(valueLine, condition);
-            } else if (NUMBER_PROPERTIES.has(condition.property)) {
-                this.conditionRenderer.renderNumberValueSelector(valueLine, condition);
-            } else {
-                this.conditionRenderer.renderValueSelector(valueLine, condition);
+            if (isDateCondition(condition)) {
+                this.conditionRenderer.renderDateValueSelector(valueLine, this.editorAt(path, isDateCondition));
+            } else if (isLengthCondition(condition)) {
+                this.conditionRenderer.renderNumberValueSelector(valueLine, this.editorAt(path, isLengthCondition));
+            } else if (isContentCondition(condition)) {
+                this.conditionRenderer.renderTextInput(valueLine, this.editorAt(path, isContentCondition));
+            } else if (isListCondition(condition)) {
+                this.conditionRenderer.renderPillValueSelector(valueLine, this.editorAt(path, isListCondition));
             }
         }
     }
 
     // ── Footer Buttons ──
 
-    private renderFooterButtons(parent: HTMLElement, group: FilterGroup, depth: number): void {
+    private renderFooterButtons(parent: HTMLElement): void {
         const footer = parent.createDiv('filter-popover__footer');
 
         // Add filter
@@ -395,21 +413,17 @@ export class FilterMenuComponent {
         addBtn.createSpan().setText(t('filter.addFilter'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            group.filters.push(createDefaultCondition());
-            this.refreshPopover();
+            this.editGroup([], g => appendTo(g, createDefaultCondition()));
         });
 
-        // Add filter group (only if depth allows)
-        if (depth < MAX_FILTER_DEPTH - 1) {
+        // Add filter group (the root is depth 0, below the limit)
+        if (MAX_FILTER_DEPTH > 1) {
             const addGroupBtn = footer.createEl('button', { cls: 'filter-popover__add-btn' });
             setIcon(addGroupBtn.createSpan(), 'plus-square');
             addGroupBtn.createSpan().setText(t('filter.addFilterGroup'));
             addGroupBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const newGroup = createFilterGroup();
-                newGroup.filters.push(createDefaultCondition());
-                group.filters.push(newGroup);
-                this.refreshPopover();
+                this.editGroup([], g => appendTo(g, createFilterGroup()));
             });
         }
     }

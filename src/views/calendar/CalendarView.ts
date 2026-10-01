@@ -599,8 +599,6 @@ export class CalendarView extends ItemView {
                     ...listDef,
                     id: 'pl-' + Date.now(),
                     name: listDef.name + ' (copy)',
-                    filterState: structuredClone(listDef.filterState),
-                    sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
                 });
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
