@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { getTimerElapsedSeconds, type TimerInstance } from '../../../src/timer/TimerInstance';
+import { targetOf, type TimerState } from '../../../src/timer/TimerState';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { rowOf } from '../helpers/anchoredRow';
+import { timerOn as startCommand } from '../helpers/timerRig';
 
 /**
  * A timer finds the rows it follows across readings by their anchor alone
@@ -21,25 +22,18 @@ function lines(contents: Map<string, string>): string[] {
     return contents.get(FILE)!.split('\n').filter(line => line.trim() !== '');
 }
 
-/** A child-mode timer on the row reading `対象`, as the first session knew it. */
-async function timerOn(contents: Map<string, string>, over: Partial<TimerInstance> = {}): Promise<TimerInstance> {
+/**
+ * A child-mode timer on the row reading `対象`, as the first session's start
+ * command made it: on the row's anchor, or on the one it took for a row
+ * without one (the start write, which would put it on, is not made here).
+ */
+async function timerOn(contents: Map<string, string>, over: Partial<TimerState> = {}): Promise<TimerState> {
     const first = vaultSession(contents);
     await first.scanAll();
     const target = first.index.getTasks().find(task => task.content === '対象')!;
-    const timer = first.creator.createTimer({
-        taskId: target.id,
-        taskName: target.content,
-        taskFile: target.file,
-        taskOriginalText: target.originalText,
-        timerTargetId: target.anchor,
-        timerType: 'countup',
-        recordMode: 'child',
-        autoStart: true,
-    });
-    // 開始の書き込みが書けたあと: 対象の錨はタイマーに移っている。
-    Object.assign(timer, { timerTargetId: target.anchor, ...over });
+    const timer = { ...startCommand(target, 'child', 'countup', first.recorder.startAnchor(target) ?? undefined), ...over };
     first.dispose();
-    return JSON.parse(JSON.stringify(timer)) as TimerInstance;
+    return JSON.parse(JSON.stringify(timer)) as TimerState;
 }
 
 /** The next session over `contents`, scanned: a reload after the edits. */
@@ -51,12 +45,8 @@ async function reload(contents: Map<string, string>): Promise<VaultSession> {
     return s;
 }
 
-async function record(s: VaultSession, timer: TimerInstance): Promise<boolean> {
-    const written = await s.recorder.recordSessionEnd(timer, {
-        endMs: Date.now(),
-        seconds: getTimerElapsedSeconds(timer),
-        then: 'close',
-    });
+async function record(s: VaultSession, timer: TimerState): Promise<boolean> {
+    const written = await s.recorder.recordSessionEnd(timer, { endMs: Date.now(), seconds: 60, then: 'close' });
     await s.settle(FILE);
     return written;
 }
@@ -72,7 +62,7 @@ describe('a timer finds its target by the anchor, across an edit and a reload', 
     ])('%s: the record goes under the anchored row', async (_name, edit) => {
         const contents = new Map([[FILE, start]]);
         const timer = await timerOn(contents);
-        expect(timer.timerTargetId).toBe(ANCHOR);
+        expect(targetOf(timer)).toBe(ANCHOR);
         contents.set(FILE, edit(contents.get(FILE)!));
 
         const s = await reload(contents);
@@ -100,10 +90,10 @@ describe('a timer does not write where it cannot name the row by its anchor', ()
         expect(contents.get(FILE)).toBe(before);
     });
 
-    it('a target without an anchor, after a reload: its text does not find it, so a twin above takes nothing', async () => {
+    it('a target whose anchor the start write never put on, after a reload: its text does not find it, so a twin above takes nothing', async () => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', ''].join('\n')]]);
         const timer = await timerOn(contents);
-        expect(timer.timerTargetId).toBeUndefined();
+        expect(contents.get(FILE)).not.toContain(`^${targetOf(timer)}`);
         contents.set(FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 対象 @2026-09-21', ''].join('\n'));
         const before = contents.get(FILE);
 
@@ -112,15 +102,13 @@ describe('a timer does not write where it cannot name the row by its anchor', ()
         expect(contents.get(FILE)).toBe(before);
     });
 
-    it('a timer without a target anchor finds no target, not even by the name it was started with', async () => {
+    it('a timer whose target anchor no row carries finds no target, not even by the name it was started with', async () => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', ''].join('\n')]]);
         const s = vaultSession(contents);
         await s.scanAll();
         const target = s.index.getTasks().find(task => task.content === '対象')!;
-        const timer = s.creator.createTimer({
-            taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-            timerType: 'countup', recordMode: 'child', autoStart: true,
-        });
+        const timer = startCommand(target, 'child', 'countup', s.recorder.startAnchor(target) ?? undefined);
+        expect(timer.name).toBe('対象');
         const before = contents.get(FILE);
 
         expect(rowOf(await s.recorder.resolveTarget(timer))).toBeUndefined();
@@ -135,7 +123,7 @@ describe('a timer does not write where it cannot name the row by its anchor', ()
             '    - [ ] 対象 @2026-09-21T09:00 ^tv-t-tail',
             '',
         ].join('\n')]]);
-        const timer = await timerOn(contents, { tailRecordBlockId: 'tv-t-tail' });
+        const timer = await timerOn(contents, { tail: 'tv-t-tail', owned: ['tv-t-tail'] });
 
         const s = await reload(contents);
         await record(s, timer);

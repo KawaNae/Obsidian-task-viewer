@@ -1,16 +1,15 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { TimerContentBinding, CONTENT_WRITE_DEBOUNCE_MS } from '../../../src/timer/TimerContentBinding';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import { TimerBoard } from '../../../src/timer/TimerBoard';
+import type { TimerRecorder } from '../../../src/timer/TimerRecorder';
+import type { TimerState } from '../../../src/timer/TimerState';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 
 /**
  * content の正は**尻尾の行**ひとつだけで、widget の入力欄はその行の編集器である。
- *
- * v0.51.0 は widget 側にも値を持ち（`customLabel`）、md へ渡るのは行を書く一度きり
- * だったので、入力が常に 1 セッション遅れて記録された。ここで pin するのは「入力は
- * その場で尻尾の行へ届く」ことと、その周りの取りこぼし防止。
+ * 入力はその場で尻尾の行へ届き、行が無い間と書けなかった間だけ下書き
+ * （`TimerState.draft`、`drafted` で当てる）に溜める。
  *
  * DOM は使わない（unit の environment は node）。入力欄は value と activeElement
  * だけを持つ最小の代役で、打鍵は `oninput` を直接呼んで起こす。
@@ -24,9 +23,12 @@ interface FakeInput {
 
 interface Harness {
     binding: TimerContentBinding;
-    timer: TimerInstance;
+    board: TimerBoard;
+    timer: TimerState;
     input: FakeInput;
     updates: { id: string; updates: Record<string, unknown> }[];
+    /** 保存のたびの下書き。 */
+    savedDrafts: (string | null)[];
     /** 尻尾として返す行。undefined なら「書く相手がまだ無い」状態。 */
     setTail(task: Task | undefined): void;
     /** 入力欄にフォーカスがある状態にする。 */
@@ -39,37 +41,53 @@ function tailLine(content: string): Task {
     return makeTask({ id: TAIL_ID, file: 'notes/a.md', line: 3, content, blockId: 'tv-t-1' });
 }
 
+/** 1 本目の行を書き終えて走っている child のタイマー。 */
+function runningTimer(): TimerState {
+    return {
+        id: 'timer-1',
+        subject: { kind: 'task', anchor: 'box' },
+        file: 'notes/a.md',
+        name: '器タスク',
+        color: '',
+        mode: 'child',
+        measure: { type: 'countup' },
+        clock: { kind: 'running', startMs: 0 },
+        session: { kind: 'running', from: 0 },
+        tail: 'tv-t-1',
+        owned: ['tv-t-1'],
+        opening: null,
+        recorded: { seconds: 0, count: 0 },
+        priorStartMs: null,
+        draft: null,
+        expanded: true,
+    };
+}
+
 function makeHarness(options: { tail?: Task | undefined } = {}): Harness {
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
     let tail: Task | undefined = 'tail' in options ? options.tail : tailLine('器タスク');
 
-    const timer = {
-        id: 'timer-1',
-        taskId: 'tv-inline:notes/a.md:ln:3',
-        taskName: '器タスク',
-        taskFile: 'notes/a.md',
-        recordMode: 'child',
-        timerType: 'countup',
-        runState: 'running',
-    } as unknown as TimerInstance;
+    const timer = runningTimer();
+    const savedDrafts: (string | null)[] = [];
+    const board = new TimerBoard({ persist: () => { savedDrafts.push(timer.draft); }, render: () => { } });
+    board.add(timer);
+    const recorder = {
+        tailInIndex: () => tail,
+        resolveTailRecord: async () => (tail ? { kind: 'row' as const, task: tail } : { kind: 'none' as const }),
+        noticeUnreadable: () => false,
+    } as unknown as TimerRecorder;
+    const plugin = {
+        getOperations: () => ({
+            updateTask: async (id: string, u: Record<string, unknown>) => {
+                updates.push({ id, updates: u });
+                // 書いた値は行に載る（次の比較の対象になる）。
+                if (tail && tail.id === id) tail = { ...tail, content: u.content as string };
+                return true;
+            },
+        }),
+    };
 
-    const ctx = {
-        timers: new Map([[timer.id, timer]]),
-        recorder: { tailInIndex: () => tail, resolveTailRecord: async () => (tail ? { kind: 'row' as const, task: tail } : { kind: 'none' as const }) },
-        plugin: {
-            getOperations: () => ({
-                updateTask: async (id: string, u: Record<string, unknown>) => {
-                    updates.push({ id, updates: u });
-                    // 書いた値は行に載る（次の比較の対象になる）。
-                    if (tail && tail.id === id) tail = { ...tail, content: u.content as string };
-                    return true;
-                },
-            }),
-        },
-        persistTimersToStorage: () => { /* localStorage は測らない */ },
-    } as unknown as TimerContext;
-
-    const binding = new TimerContentBinding(ctx);
+    const binding = new TimerContentBinding(plugin as never, board, recorder);
     const input: FakeInput = {
         value: binding.displayValue(timer),
         oninput: null,
@@ -78,7 +96,7 @@ function makeHarness(options: { tail?: Task | undefined } = {}): Harness {
     binding.bind(timer, input as unknown as HTMLInputElement);
 
     return {
-        binding, timer, input, updates,
+        binding, board, timer, input, updates, savedDrafts,
         setTail: (t) => { tail = t; },
         focus: () => { input.ownerDocument.activeElement = input; },
     };
@@ -101,7 +119,19 @@ describe('TimerContentBinding: the running line owns the content', () => {
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(TAIL_ID);
         expect(h.updates[0].updates.content).toBe('資料集め');
-        expect(h.timer.pendingContent).toBeUndefined();
+        expect(h.timer.draft).toBeNull();
+    });
+
+    it('a typed name is the draft until it is written, and the board saves it', async () => {
+        // 入力欄の組み直しや再読み込みをまたいでも打った字が消えない。
+        type(h, '資料集め');
+        expect(h.timer.draft).toBe('資料集め');
+        h.board.flush();
+        expect(h.savedDrafts.at(-1)).toBe('資料集め');
+
+        await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS);
+        h.board.flush();
+        expect(h.savedDrafts.at(-1)).toBeNull();
     });
 
     it('folds embedded newlines into spaces before writing (paste, IME)', async () => {
@@ -115,10 +145,10 @@ describe('TimerContentBinding: the running line owns the content', () => {
         expect(h.updates[0].updates.content).toBe('資料集め メモ書き');
     });
 
-    it('folds newlines in a pendingContent draft that bypassed bind (defense in depth)', async () => {
-        // pendingContent は localStorage 経由でも復元されうる — bind の oninput を
-        // 一度も通らない値でも、書き込みの単一関門である writeOnce 側で必ず畳む。
-        h.timer.pendingContent = '資料集め\nメモ書き';
+    it('folds newlines in a draft that did not come through the input', async () => {
+        // 下書きは保存からも戻る — oninput を一度も通らない値でも、書き込みの
+        // 単一関門である writeOnce 側で必ず畳む。
+        h.board.dispatch(h.timer, { type: 'drafted', draft: '資料集め\nメモ書き' });
         await h.binding.flush(h.timer);
 
         expect(h.updates).toHaveLength(1);
@@ -142,10 +172,11 @@ describe('TimerContentBinding: the running line owns the content', () => {
         await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS);
 
         expect(h.updates).toHaveLength(0);
+        expect(h.timer.draft).toBeNull();
     });
 
     it('keeps the icon that the line already carries', async () => {
-        // 中断後のレコードは `⏱️` 付き。名前だけ差し替えて、アイコンは残す。
+        // 記録を書き終えた行は `⏱️` 付き。名前だけ差し替えて、アイコンは残す。
         h.setTail(tailLine('⏱️ 器タスク'));
         type(h, '資料集め');
         await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS);
@@ -154,7 +185,7 @@ describe('TimerContentBinding: the running line owns the content', () => {
     });
 
     it('does not grow an icon on a line that has none', async () => {
-        // 走行中の行はアイコンを持たない（付くのは停止時）。
+        // 走行中の行はアイコンを持たない（付くのは記録のとき）。
         type(h, '資料集め');
         await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS);
 
@@ -162,13 +193,13 @@ describe('TimerContentBinding: the running line owns the content', () => {
     });
 
     it('holds the input as a draft while there is no line to write to', async () => {
-        // デイリーノート起点は停止時に 1 行足す形で、走行中の行を持たない。
+        // 開始の書き込みの往復中は、尻尾の行がまだ無い。
         h.setTail(undefined);
         type(h, '資料集め');
         await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS);
 
         expect(h.updates).toHaveLength(0);
-        expect(h.timer.pendingContent).toBe('資料集め');
+        expect(h.timer.draft).toBe('資料集め');
     });
 
     it('writes the draft out once a line appears', async () => {
@@ -181,12 +212,12 @@ describe('TimerContentBinding: the running line owns the content', () => {
 
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].updates.content).toBe('資料集め');
-        expect(h.timer.pendingContent).toBeUndefined();
+        expect(h.timer.draft).toBeNull();
     });
 
     it('flush writes before the debounce elapses', async () => {
-        // 中断・完了は記録の前に flush する。待たずに記録すると、停止時の書き込みが
-        // 古い content を読んで入力が 1 セッション繰り越される（v0.51.0 のバグ）。
+        // ⏸ と ■ は記録の前に flush する。待たずに記録すると、記録の書き込みが
+        // 古い content を読み、入力が 1 セッション繰り越される。
         type(h, '資料集め');
         await h.binding.flush(h.timer);
 
@@ -195,13 +226,13 @@ describe('TimerContentBinding: the running line owns the content', () => {
     });
 
     it('discard drops the pending input without writing', async () => {
-        // ✕ 破棄は走行中の行ごと消すので、書いてから消すのは無駄でしかない。
+        // ✕ の破棄は走行中の行ごと消すので、書いてから消すのは無駄でしかない。
         type(h, '資料集め');
         h.binding.discard(h.timer);
         await h.binding.flush(h.timer);
 
         expect(h.updates).toHaveLength(0);
-        expect(h.timer.pendingContent).toBeUndefined();
+        expect(h.timer.draft).toBeNull();
     });
 });
 
@@ -209,8 +240,13 @@ describe('TimerContentBinding: reading the line back into the input', () => {
     let h: Harness;
     beforeEach(() => { vi.useFakeTimers(); h = makeHarness(); });
 
-    it('shows the tail line name when there is no pending input', () => {
+    it('shows the tail line name when there is no draft', () => {
         expect(h.binding.displayValue(h.timer)).toBe('器タスク');
+    });
+
+    it('shows nothing while there is no tail line', () => {
+        h.setTail(undefined);
+        expect(h.binding.displayValue(h.timer)).toBe('');
     });
 
     it('strips the icon from what the input shows', () => {
@@ -219,7 +255,7 @@ describe('TimerContentBinding: reading the line back into the input', () => {
     });
 
     it('prefers the unwritten draft over the line', () => {
-        h.timer.pendingContent = '打ちかけ';
+        h.board.dispatch(h.timer, { type: 'drafted', draft: '打ちかけ' });
         expect(h.binding.displayValue(h.timer)).toBe('打ちかけ');
     });
 

@@ -2,11 +2,9 @@ import type { Menu } from 'obsidian';
 import type { Task } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import { getTaskDisplayName } from '../../../services/display/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
-import { canTriggerFlow } from '../../../services/flow/FlowTrigger';
+import { allowsSelf } from '../../../timer/TimerStartRules';
 import { t } from '../../../i18n';
-import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 
 /**
  * Builder for timer-related menu items.
@@ -19,23 +17,10 @@ export class TimerMenuBuilder {
      * Countdown is shown only when both startTime and endTime are set.
      */
     addTrackSelfItems(menu: Menu, task: Task): void {
-        // 非オープンかつコマンド付きタスクではselfモードを提供しない（startDate変更でコマンド再発火するため）
-        if (canTriggerFlow(task, this.plugin.settings.statusDefinitions)) {
+        // self を使えないタスク（読み取り専用、完了でフローを起こしうる）には項目を出さない。
+        if (!allowsSelf(task, this.plugin.settings.statusDefinitions)) {
             return;
         }
-
-        const displayName = getTaskDisplayName(task);
-        const baseParams = {
-            taskId: task.id,
-            taskName: displayName,
-            taskOriginalText: task.originalText,
-            taskFile: task.file,
-            taskColor: getEffectiveColor(task) ?? '',
-            recordMode: 'self' as const,
-            parserId: task.parserId,
-            timerTargetId: task.anchor,
-            autoStart: true,
-        };
 
         // Countup
         menu.addItem((item) => {
@@ -44,7 +29,7 @@ export class TimerMenuBuilder {
                 .onClick(() => {
                     menu.close();
                     const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({ ...baseParams, timerType: 'countup' });
+                    widget.startTimer(task, 'self', { kind: 'countup' });
                 });
         });
 
@@ -55,7 +40,7 @@ export class TimerMenuBuilder {
                 .onClick(() => {
                     menu.close();
                     const widget = this.plugin.getTimerWidget();
-                    widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
+                    widget.startTimer(task, 'self', { kind: 'pomodoro' });
                 });
         });
 
@@ -68,7 +53,7 @@ export class TimerMenuBuilder {
                     .onClick(() => {
                         menu.close();
                         const widget = this.plugin.getTimerWidget();
-                        widget.startTimer({ ...baseParams, timerType: 'countdown', countdownSeconds });
+                        widget.startTimer(task, 'self', { kind: 'countdown', seconds: countdownSeconds });
                     });
             });
         }

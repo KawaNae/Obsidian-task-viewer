@@ -10,11 +10,9 @@ import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
 import { SendModal } from '../../../modals/noteops/SendModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
-import { getTaskDisplayName } from '../../../services/display/TaskContent';
 import { openTaskInEditor } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
-import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 
 /**
  * Task操作メニューの構築
@@ -65,45 +63,29 @@ export class TaskActionsMenuBuilder {
      * "Record as Child" サブメニュー（タイマー系のみ）
      */
     private addRecordAsChildSubmenu(menu: Menu, task: Task): void {
-        const displayName = getTaskDisplayName(task);
-
         menu.addItem((item) => {
             const subMenu = item
                 .setTitle(t('menu.trackAsChild'))
                 .setIcon('clock')
                 .setSubmenu();
 
-            const baseParams = {
-                taskId: task.id,
-                taskName: displayName,
-                taskOriginalText: task.originalText,
-                taskFile: task.file,
-                taskColor: getEffectiveColor(task) ?? '',
-                recordMode: 'child' as const,
-                parserId: task.parserId,
-                timerTargetId: task.anchor,
-                autoStart: false,
-            };
-
             // Countup
             subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.openCountup'))
+                sub.setTitle(t('menu.startChildCountup'))
                     .setIcon('play')
                     .onClick(() => {
                         menu.close();
-                        const widget = this.plugin.getTimerWidget();
-                        widget.startTimer({ ...baseParams, timerType: 'countup' });
+                        this.plugin.getTimerWidget().startTimer(task, 'child', { kind: 'countup' });
                     });
             });
 
             // Pomodoro
             subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.openPomodoro'))
+                sub.setTitle(t('menu.startChildPomodoro'))
                     .setIcon('timer')
                     .onClick(() => {
                         menu.close();
-                        const widget = this.plugin.getTimerWidget();
-                        widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
+                        this.plugin.getTimerWidget().startTimer(task, 'child', { kind: 'pomodoro' });
                     });
             });
         });

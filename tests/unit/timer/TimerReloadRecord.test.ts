@@ -1,132 +1,104 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance, type TimerRecordMode } from '../../../src/timer/TimerInstance';
+import type { PendingRecord, RecordMode, TimerState } from '../../../src/timer/TimerState';
 import { makeFile, vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { timerOn } from '../helpers/timerRig';
 
-/** 止めた時点で固定する記録: 旧コードの `stoppedAtMs ?? Date.now()` 相当。 */
-function recordFor(timer: TimerInstance): PendingRecord {
-    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then: 'close' };
+/** 止めた時点で固定する記録: 1 分。 */
+function recordFor(): PendingRecord {
+    return { endMs: Date.now(), seconds: 60, then: 'close' };
 }
 
 /**
- * Stopping a timer after a reload writes into the session line it started.
+ * Stopping a timer after a reload writes into the running line it started.
  *
- * Runtime task IDs live for one session, so after a reload a persisted one
- * names nothing — and the stop path used to look one up directly, miss,
- * announce "child task not found" and write a second record, leaving the
- * placeholder `[ ]` behind. Worse, with a counter restarting at 1 a stale ID
- * could name a *different* task in the new session, and the stop overwrote
- * that task's line. Two fixes are pinned: runtime IDs are seeded from the
- * clock so a previous session's ID names nothing, and the stop resolves its
- * line by the session line's own `^id` (`tailRecordBlockId`), which survives
- * the reload because it is in the file.
+ * A timer keeps no task id: a runtime id lives for one reading, and after a
+ * reload it names nothing, or a different row. The stop finds its line by
+ * the line's own `^id` (`tail`), which survives the reload because it is in
+ * the file, and closes it: no second record, no placeholder left `[ ]`.
  *
- * Each "session" here is a fresh TaskIndex over the same file contents, so the
- * reload gets a new ledger and new `seq:` numbers, exactly like the plugin.
+ * Each "session" here is a fresh TaskIndex over the same file contents, so
+ * the reload gets a new ledger and new `seq:` numbers, exactly like the plugin.
  */
 
 const FILE = 'notes/a.md';
-
-function session(contents: Map<string, string>): VaultSession {
-    return vaultSession(contents);
-}
 
 function lines(contents: Map<string, string>): string[] {
     return contents.get(FILE)!.split('\n').filter(line => line.trim() !== '');
 }
 
-async function startTimer(
-    first: VaultSession,
-    recordMode: TimerRecordMode
-): Promise<TimerInstance> {
+async function startTimer(first: VaultSession, mode: RecordMode): Promise<TimerState> {
     await first.scanAll();
     const target = first.index.getTasks().find(task => task.content === '対象')!;
-
-    const timer = first.creator.createTimer({
-        taskId: target.id,
-        taskName: target.content,
-        taskFile: target.file,
-        taskOriginalText: target.originalText,
-        timerType: 'countup',
-        recordMode,
-        autoStart: true,
-    });
-    expect(await first.recorder.writeStart(timer)).toBe(true);
+    const timer = timerOn(target, mode, 'countup', first.recorder.startAnchor(target) ?? undefined);
+    expect(await first.recorder.writeStart(timer, target)).toBe(true);
     await first.settle(FILE);
-    expect(timer.tailRecordBlockId).toBeDefined();
+    expect(timer.tail).not.toBeNull();
     return timer;
 }
 
-async function startInFirstSession(contents: Map<string, string>, recordMode: TimerRecordMode): Promise<TimerInstance> {
-    return startTimer(session(contents), recordMode);
-}
-
-/** What survives the reload: the persisted fields, nothing live. */
-function persisted(timer: TimerInstance): TimerInstance {
-    return JSON.parse(JSON.stringify(timer)) as TimerInstance;
+/** What survives the reload: the saved fields. */
+function persisted(timer: TimerState): TimerState {
+    return JSON.parse(JSON.stringify(timer)) as TimerState;
 }
 
 afterEach(() => {
     vi.useRealTimers();
 });
 
-/** A reload happens later on the clock; runtime IDs are seeded from it. */
+/** A reload happens later on the clock. */
 function laterSession(contents: Map<string, string>) {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.now() + 5_000);
-    return session(contents);
+    return vaultSession(contents);
 }
 
 describe('stopping a timer after a reload', () => {
-    it.each<[TimerRecordMode, RegExp]>([
+    it.each<[RecordMode, RegExp]>([
         ['child', /^\s+- \[ \] /],
         ['sibling', /^- \[ \] /],
-    ])('%s mode: completes the placeholder instead of adding a second record', async (mode, placeholderShape) => {
+    ])('%s: closes the running line instead of adding a second record', async (mode, runningShape) => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 下のタスク @2026-09-21', ''].join('\n')]]);
-        const timer = await startInFirstSession(contents, mode);
+        const timer = await startTimer(vaultSession(contents), mode);
 
         const before = lines(contents);
-        const placeholder = before.find(line => line.includes(`^${timer.tailRecordBlockId}`))!;
-        expect(placeholder).toMatch(placeholderShape);
+        const running = before.find(line => line.includes(`^${timer.tail}`))!;
+        expect(running).toMatch(runningShape);
 
-        // Reload: a new index, a new session of readings (N1: a name is one
-        // reading's, and the session keeps the next index's numbers apart).
+        // Reload: a new index, a new session of readings.
         const second = laterSession(contents);
         await second.scanAll();
         const restored = persisted(timer);
-        // A previous session's ID names nothing — never a different task.
-        expect(second.index.getTask(restored.taskId)).toBeUndefined();
 
-        restored.startTimeMs = Date.now() - 60_000;
-        await second.recorder.recordSessionEnd(restored, recordFor(restored));
+        expect(await second.recorder.recordSessionEnd(restored, recordFor())).toBe(true);
         await second.settle(FILE);
 
         const after = lines(contents);
         expect(after).toHaveLength(before.length);
-        const record = after.find(line => line.includes(`^${timer.tailRecordBlockId}`))!;
+        const record = after.find(line => line.includes(`^${timer.tail}`))!;
         expect(record).toMatch(/- \[x\] /);
+        second.dispose();
     });
 
-    // The tail anchor (`tailRecordBlockId`) is looked up within `timer.taskFile`,
-    // which the widget's rename handler rewrites. That alone finds the record
-    // after a rename.
+    // The tail anchor is looked up within `timer.file`, which the widget's
+    // rename handler rewrites (`followed`). That alone finds the record after
+    // a rename.
     it('finds the record after a rename', async () => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 下のタスク @2026-09-21', ''].join('\n')]]);
-        const live = session(contents);
-        await live.scanAll();
+        const live = vaultSession(contents);
         const timer = await startTimer(live, 'child');
 
         const renamed = 'notes/renamed.md';
         contents.set(renamed, contents.get(FILE)!);
         contents.delete(FILE);
         await live.fireVault('rename', makeFile(renamed), FILE);
-        timer.taskFile = renamed;          // what TimerWidget.handleFileRename does
-        timer.taskId = timer.taskId.replace(FILE, renamed);
+        live.board.dispatch(timer, { type: 'followed', file: renamed });   // what TimerWidget.handleFileRename does
 
-        await live.recorder.recordSessionEnd(timer, recordFor(timer));
+        expect(await live.recorder.recordSessionEnd(timer, recordFor())).toBe(true);
         await live.scanner.waitForScan(renamed);
 
         const after = contents.get(renamed)!.split('\n').filter(line => line.trim() !== '');
         expect(after).toHaveLength(3);
-        expect(after.find(line => line.includes(`^${timer.tailRecordBlockId}`))).toMatch(/- \[x\] /);
+        expect(after.find(line => line.includes(`^${timer.tail}`))).toMatch(/- \[x\] /);
+        live.dispose();
     });
 });

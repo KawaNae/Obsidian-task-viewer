@@ -11,8 +11,10 @@
  * が既に持っているのでここでは呼ぶだけでよい。
  */
 
-import type { TimerInstance } from './TimerInstance';
-import type { TimerContext } from './TimerContext';
+import type { PluginContext } from '../PluginContext';
+import type { TimerBoard } from './TimerBoard';
+import type { TimerRecorder } from './TimerRecorder';
+import type { TimerState } from './TimerState';
 import { splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 
 /** 入力が静まってから書き込むまでの待ち。1 打鍵ごとの書き込みは重すぎる。 */
@@ -38,7 +40,9 @@ export class TimerContentBinding {
     private states = new Map<string, BindingState>();
 
     constructor(
-        private ctx: TimerContext,
+        private plugin: PluginContext,
+        private board: TimerBoard,
+        private recorder: TimerRecorder,
         /** 値を書き換えた直後に呼ぶ（textarea のオートグロー用）。省略可。 */
         private onValueChanged?: (el: HTMLInputElement | HTMLTextAreaElement) => void,
     ) {}
@@ -51,26 +55,25 @@ export class TimerContentBinding {
      * 下書きを先に見るのは、書き込みが返る前に widget が組み直されても打った字が
      * 消えないようにするため。
      */
-    displayValue(timer: TimerInstance): string {
-        if (timer.pendingContent !== undefined) return timer.pendingContent;
+    displayValue(timer: TimerState): string {
+        if (timer.draft !== null) return timer.draft;
         return this.tailName(timer);
     }
 
     /**
      * 入力欄をタイマーに結ぶ。renderer が入力欄を作るたびに呼ぶ。
      */
-    bind(timer: TimerInstance, inputEl: HTMLInputElement | HTMLTextAreaElement): void {
+    bind(timer: TimerState, inputEl: HTMLInputElement | HTMLTextAreaElement): void {
         inputEl.oninput = () => {
             const state = this.stateFor(timer.id);
             // 見た目の改行（貼り付け由来）はそのまま textarea に残してよいが、
-            // 下書き・localStorage には残さない — 書く相手は常に 1 行の記法。
+            // 下書きには残さない — 書く相手は常に 1 行の記法。
             const value = foldNewlines(inputEl.value);
 
             state.pending = value;
             // 未書き込みの入力は下書きにも置く。widget の組み直しやリロードを
-            // またいでも打った字が消えない。
-            timer.pendingContent = value;
-            this.ctx.persistTimersToStorage();
+            // またいでも打った字が消えない（dispatch が保存を予約する）。
+            this.setDraft(timer, value);
             this.onValueChanged?.(inputEl);
 
             if (state.timeoutId !== undefined) clearTimeout(state.timeoutId);
@@ -87,8 +90,8 @@ export class TimerContentBinding {
      * 打鍵中（フォーカス中）と未書き込みの入力があるときは見送る — どちらも
      * ユーザーが今書いている値を、古い md の値で上書きすることになる。
      */
-    syncFromFile(timer: TimerInstance, inputEl: HTMLInputElement | HTMLTextAreaElement): void {
-        if (timer.pendingContent !== undefined) return;
+    syncFromFile(timer: TimerState, inputEl: HTMLInputElement | HTMLTextAreaElement): void {
+        if (timer.draft !== null) return;
         if (inputEl.ownerDocument.activeElement === inputEl) return;
 
         const name = this.tailName(timer);
@@ -106,9 +109,9 @@ export class TimerContentBinding {
      */
     /**
      * @returns whether what was typed was written. A write that was not keeps
-     * the name as the draft (`pendingContent`), to be written by the next flush.
+     * the name as the draft (`draft`), to be written by the next flush.
      */
-    async flush(timer: TimerInstance): Promise<boolean> {
+    async flush(timer: TimerState): Promise<boolean> {
         const state = this.stateFor(timer.id);
         if (state.timeoutId !== undefined) {
             clearTimeout(state.timeoutId);
@@ -117,8 +120,8 @@ export class TimerContentBinding {
         // 下書きが残っているなら、書き先の行がその後に生えた可能性がある。flush が
         // 呼ばれるのは行が動いた直後（1 本目を書いた / 再開で兄弟を挿した / 停止する）
         // なので、ここでもう一度当たる。
-        if (state.pending === undefined && timer.pendingContent !== undefined) {
-            state.pending = timer.pendingContent;
+        if (state.pending === undefined && timer.draft !== null) {
+            state.pending = timer.draft;
         }
         return this.drain(timer);
     }
@@ -127,8 +130,8 @@ export class TimerContentBinding {
      * 未書き込みの入力を捨てる。✕ 破棄の経路で使う — 走行中の行ごと消えるので、
      * 書いてから消すのは無駄な書き込みにしかならない。
      */
-    discard(timer: TimerInstance): void {
-        timer.pendingContent = undefined;
+    discard(timer: TimerState): void {
+        this.setDraft(timer, null);
         this.release(timer.id);
     }
 
@@ -141,6 +144,12 @@ export class TimerContentBinding {
 
     // ─── Private ─────────────────────────────────────────────
 
+    /** 名前の下書きを置き換える。同じなら当てない（保存の予約を増やさない）。 */
+    private setDraft(timer: TimerState, draft: string | null): void {
+        if (timer.draft === draft) return;
+        this.board.dispatch(timer, { type: 'drafted', draft });
+    }
+
     private stateFor(timerId: string): BindingState {
         let state = this.states.get(timerId);
         if (!state) {
@@ -151,8 +160,8 @@ export class TimerContentBinding {
     }
 
     /** 尻尾の行の素の名前（アイコンを剥がしたもの）。 */
-    private tailName(timer: TimerInstance): string {
-        const tail = this.ctx.recorder.tailInIndex(timer);
+    private tailName(timer: TimerState): string {
+        const tail = this.recorder.tailInIndex(timer);
         if (!tail) return '';
         return splitTimerIcon(tail.content).name;
     }
@@ -163,7 +172,7 @@ export class TimerContentBinding {
      * 書き込み中に来た入力は `pending` に上書きされ、1 本目が返ってから続けて
      * 走る。並べて投げると、行を引き直す前のスナップショットで書くことになる。
      */
-    private drain(timer: TimerInstance): Promise<boolean> {
+    private drain(timer: TimerState): Promise<boolean> {
         const state = this.stateFor(timer.id);
         // 書き込み中の drain が、いま積まれた分まで書く。その成否を待って答える。
         // 待たずに書けたと答えると、停止は名前の書き込みの結果を知らずに記録へ
@@ -191,17 +200,17 @@ export class TimerContentBinding {
     }
 
     /** @returns whether the name was written, or had nothing to be written to yet. */
-    private async writeOnce(timer: TimerInstance, name: string): Promise<boolean> {
+    private async writeOnce(timer: TimerState, name: string): Promise<boolean> {
         // 単一の畳み関門。上流（bind の oninput）で既に畳んでいても、ここで
         // 独立に保証する — 記法は 1 行のみで、改行が行を割ってタスクを壊す。
         const trimmed = foldNewlines(name).trim();
-        const found = await this.ctx.recorder.resolveTailRecord(timer);
+        const found = await this.recorder.resolveTailRecord(timer);
         if (found.kind !== 'row') {
             // 書く相手がまだ居ない。下書きのまま置いて、行が生えたときに書き出す。
             // ノートを読めないだけなら相手は居るかもしれない。書けなかったと答え、
             // 次の flush で書き直す。
-            timer.pendingContent = foldNewlines(name);
-            return found.kind === 'none' || this.ctx.recorder.noticeUnreadable(timer, 'writeContent (not written)');
+            this.setDraft(timer, foldNewlines(name));
+            return found.kind === 'none' || this.recorder.noticeUnreadable(timer, 'writeContent (not written)');
         }
         const tail = found.task;
 
@@ -209,24 +218,21 @@ export class TimerContentBinding {
         if (current.name === trimmed) {
             // 値が同じなら書かない。no-op な vault.process は modify を発火せず、
             // 自己修復も効かないまま無駄な往復だけが残る。
-            timer.pendingContent = undefined;
-            this.ctx.persistTimersToStorage();
+            this.setDraft(timer, null);
             return true;
         }
 
         // 行に付いていたアイコンはそのまま戻す（無ければ付けない）。
         const content = current.icon ? withTimerIcon(current.icon, trimmed) : trimmed;
-        if (!(await this.ctx.plugin.getOperations().updateTask(tail.id, { content }))) {
+        if (!(await this.plugin.getOperations().updateTask(tail.id, { content }))) {
             // 書けなかった。理由は書き込みの層が1回だけ通知済み。打った名前は
             // 下書きに残し、次の flush で書き直す。往復中にもっと新しい入力が
             // 来ていれば、下書きはもうそれを持っている。
-            if (this.stateFor(timer.id).pending === undefined) timer.pendingContent = foldNewlines(name);
-            this.ctx.persistTimersToStorage();
+            if (this.stateFor(timer.id).pending === undefined) this.setDraft(timer, foldNewlines(name));
             return false;
         }
 
-        timer.pendingContent = undefined;
-        this.ctx.persistTimersToStorage();
+        this.setDraft(timer, null);
         return true;
     }
 }

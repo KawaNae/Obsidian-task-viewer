@@ -8,7 +8,7 @@
  * 時刻を決めて言い表すだけの純粋な関数で、どれも「今」を引数で受ける。
  */
 
-import type { CountdownTimer, CountupTimer, TimerInstance } from './TimerInstance';
+import type { TimerState } from './TimerState';
 import { DateUtils } from '../utils/DateUtils';
 import { t } from '../i18n';
 
@@ -19,23 +19,22 @@ const MINUTE_MS = 60_000;
 
 /**
  * 開始をずらせるか。countup と countdown の、走っている区間だけ。中断中と記録待ちは
- * 区間が止まっており、interval は区間の位置と遷移が経過で決まるので対象外。
+ * 時計が止まっており、ポモドーロは区間の位置が時計の読みで決まるので対象外。
  */
-export function canOffsetStart(timer: TimerInstance): timer is CountupTimer | CountdownTimer {
-    if (timer.timerType !== 'countup' && timer.timerType !== 'countdown') return false;
-    return timer.runState === 'running' && timer.isRunning && !timer.pendingRecord;
+export function canOffsetStart(timer: Pick<TimerState, 'measure' | 'session'>): boolean {
+    return timer.measure.type !== 'interval' && timer.session.kind === 'running';
 }
 
 /**
- * メニューに出す覚えた時刻（{@link TimerInstance.priorStartMs}）。出すのは 1 本目の
+ * メニューに出す覚えた時刻（{@link TimerState.priorStartMs}）。出すのは 1 本目の
  * 区間の間だけで、⏸→▶ のあとの区間には出さない。覚えた時刻が今より後なら出さない
  * （未来へはずらせない）。
  *
  * 出すのは、覚えた時刻が今日（`startHour` で区切った表示上の日）の中にあるときだけ。
  * 何か月も前の予定の行で始めたとき、その start は作業を始めた時刻ではない。
  */
-export function rememberedStart(timer: TimerInstance, nowMs: number, startHour: number): number | null {
-    if (timer.sessionCount !== 0) return null;
+export function rememberedStart(timer: Pick<TimerState, 'recorded' | 'priorStartMs'>, nowMs: number, startHour: number): number | null {
+    if (timer.recorded.count !== 0) return null;
     const prior = timer.priorStartMs;
     if (typeof prior !== 'number' || prior >= nowMs) return null;
     if (visualDateOf(prior, startHour) !== visualDateOf(nowMs, startHour)) return null;

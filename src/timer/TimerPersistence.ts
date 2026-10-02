@@ -1,510 +1,254 @@
 /**
- * Timer persistence: serialize, deserialize, migrate, reconcile.
+ * タイマーの保存（版 9）。保存するのは表（`TimerState`）と提案の時刻だけで、
+ * 復元で作り直すものは無い。経過は時計から求まり、区間は最初の tick で送られる。
+ *
+ * 読みは形を厳密に確かめる。崩れたタイマーは捨てる（この版が保存した形ではない）。
  */
 
-import type { ParserId } from '../types';
-import type {
-    IntervalGroup,
-    IntervalTimer,
-    Opening,
-    PendingRecord,
-    TimerInstance,
-    TimerPhase,
-    TimerRecordMode,
-    TimerRunState,
-    TimerType,
-} from './TimerInstance';
-import { isDailyTimer } from './TimerInstance';
-import type { TimerContext } from './TimerContext';
-import { OBSOLETE_STORAGE_VERSIONS, STORAGE_VERSION } from './TimerStorageUtils';
-import type { TimerCreator } from './TimerCreator';
-import {
-    clampToTotalDuration,
-    computeCompletedDuration,
-    totalDuration,
-    getCurrentSegment,
-    normalizeGroups,
-    type IntervalDefaults,
-} from './IntervalMath';
-import type { TimerLifecycle } from './TimerLifecycle';
-import type { TimerStorageUtils } from './TimerStorageUtils';
-import { readName } from '../services/core/RowNames';
+import type { App } from 'obsidian';
+import { FileSystemAdapter } from 'obsidian';
+import type { Clock } from './TimerClock';
+import type { IntervalCursor, IntervalGroup, IntervalSegment } from './IntervalMath';
+import type { Measure } from './TimerProgress';
+import type { IdleBoard } from './TimerBoard';
+import type { Opening, PendingRecord, RecordMode, Session, Subject, TimerState } from './TimerState';
 import { logError, logInfo } from '../log/log';
 
-/** Parsers a saved timer may name. Anything else is not a timer this version saved. */
-const CURRENT_PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tasks-plugin', 'day-planner']);
-
-function isParserId(value: unknown): value is ParserId {
-    return CURRENT_PARSER_IDS.has(value as ParserId);
-}
-
-function isStringArray(value: unknown): value is string[] {
-    return Array.isArray(value) && value.every(item => typeof item === 'string');
-}
-
-/** 保存に在る書き込みの途中の姿。無いか形の崩れたものは、この版が保存したタイマーではない。 */
-function isOpeningOrNull(value: unknown): value is Opening | null {
-    if (value === null) return true;
-    if (!value || typeof value !== 'object') return false;
-    const opening = value as Partial<Opening>;
-    return typeof opening.tail === 'string'
-        && (opening.target === null || typeof opening.target === 'string')
-        && isStringArray(opening.owned);
-}
-
-/** 保存に在る記録待ち。無いか形の崩れたものは、この版が保存したタイマーではない。 */
-function isPendingRecordOrNull(value: unknown): value is PendingRecord | null {
-    if (value === null) return true;
-    if (!value || typeof value !== 'object') return false;
-    const record = value as Partial<PendingRecord>;
-    return typeof record.endMs === 'number'
-        && typeof record.seconds === 'number'
-        && (record.then === 'suspend' || record.then === 'close');
-}
-
-/** 保存に在る覚えた時刻。無いか数でないものは、この版が保存したタイマーではない。 */
-function isNumberOrNull(value: unknown): value is number | null {
-    return value === null || (typeof value === 'number' && Number.isFinite(value));
-}
-
-export interface PersistedTimer {
-    id: string;
-    taskId: string;
-    taskName: string;
-    taskOriginalText: string;
-    taskFile: string;
-    timerTargetId?: string;
-    ownedAnchors: string[];
-    tailRecordBlockId?: string;
-    startTimeMs: number;
-    pausedElapsedTime: number;
-    phase?: TimerPhase;
-    isRunning: boolean;
-    runState?: TimerRunState;
-    sessionCount?: number;
-    recordedElapsedTime?: number;
-    isExpanded: boolean;
-    pendingContent?: string;
-    pendingRecord: PendingRecord | null;
-    opening: Opening | null;
-    priorStartMs: number | null;
-    /**
-     * 保存するのは実行時の種別だけ。`TimerStartConfig` の `'pomodoro'` は
-     * 開始時の便宜値で、`TimerInstance` になった時点で `interval` に化けている。
-     */
-    timerType: TimerType;
-    recordMode: TimerRecordMode;
-    parserId: string;
-    taskColor?: string;
-
-    timeRemaining?: number;
-    totalTime?: number;
-    elapsedTime?: number;
-
-    groups?: IntervalGroup[];
-    currentGroupIndex?: number;
-    currentSegmentIndex?: number;
-    currentRepeatIndex?: number;
-    segmentTimeRemaining?: number;
-    totalElapsedTime?: number;
-    totalDuration?: number;
-    intervalSource?: 'pomodoro';
-}
+/**
+ * v9: タイマーを状態（主題、測り方、時計、記録の区切り）で保存し、提案（idle）を
+ * 表の外に置いた。ストレージキーに版が入るので、旧い版の状態は読まずに捨てる
+ * （移し替えはしない）。復元のときに旧いキーを掃除する。
+ */
+export const STORAGE_VERSION = 9;
+/** 掃除する旧い版。 */
+export const OBSOLETE_STORAGE_VERSIONS = [5, 6, 7, 8];
+export const STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
+/** 旧い版が使っていた端末 ID のキー。掃除だけする。 */
+const OBSOLETE_KEYS = ['task-viewer.device-id.v1'];
 
 export interface PersistedTimerState {
     version: number;
-    ownerDeviceId: string;
     vaultFingerprint: string;
-    updatedAtMs: number;
-    timers: PersistedTimer[];
+    idleSinceMs: number | null;
+    timers: TimerState[];
 }
 
+// ─── 形の検査 ─────────────────────────────────────────────────
+
+type Shape = Record<string, unknown>;
+
+function isObject(value: unknown): value is Shape {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isString(value: unknown): value is string {
+    return typeof value === 'string';
+}
+
+function isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every(isString);
+}
+
+function isSubject(value: unknown): value is Subject {
+    if (!isObject(value)) return false;
+    if (value.kind === 'task') return isString(value.anchor) && value.anchor !== '';
+    if (value.kind === 'daily') return isString(value.date) && /^\d{4}-\d{2}-\d{2}$/.test(value.date);
+    return false;
+}
+
+function isMode(value: unknown): value is RecordMode {
+    return value === 'self' || value === 'child' || value === 'sibling';
+}
+
+function isSegment(value: unknown): value is IntervalSegment {
+    return isObject(value) && isString(value.label) && isNumber(value.durationSeconds)
+        && (value.type === 'work' || value.type === 'break' || value.type === 'prepare');
+}
+
+function isGroup(value: unknown): value is IntervalGroup {
+    return isObject(value) && isNumber(value.repeatCount)
+        && Array.isArray(value.segments) && value.segments.length > 0 && value.segments.every(isSegment);
+}
+
+function isCursor(value: unknown): value is IntervalCursor {
+    return isObject(value) && isNumber(value.group) && isNumber(value.repeat)
+        && isNumber(value.segment) && isNumber(value.from);
+}
+
+/** ウィジェットの測り方: countup、countdown、ポモドーロ。 */
+function isMeasure(value: unknown): value is Measure {
+    if (!isObject(value)) return false;
+    switch (value.type) {
+        case 'countup': return true;
+        case 'countdown': return isNumber(value.totalSeconds) && value.totalSeconds > 0;
+        case 'interval':
+            return value.source === 'pomodoro' && Array.isArray(value.groups) && value.groups.length > 0
+                && value.groups.every(isGroup) && isCursor(value.at);
+        default: return false;
+    }
+}
+
+function isClock(value: unknown): value is Clock {
+    if (!isObject(value)) return false;
+    if (value.kind === 'running') return isNumber(value.startMs);
+    if (value.kind === 'frozen') return isNumber(value.seconds);
+    return false;
+}
+
+function isPendingRecord(value: unknown): value is PendingRecord {
+    return isObject(value) && isNumber(value.endMs) && isNumber(value.seconds)
+        && (value.then === 'suspend' || value.then === 'close');
+}
+
+function isSession(value: unknown): value is Session {
+    if (!isObject(value)) return false;
+    switch (value.kind) {
+        case 'running': return isNumber(value.from);
+        case 'pending': return isPendingRecord(value.record);
+        case 'suspended': return true;
+        default: return false;
+    }
+}
+
+function isOpening(value: unknown): value is Opening {
+    return isObject(value) && isString(value.tail) && isStringArray(value.owned);
+}
+
+/** 保存のタイマーが、この版が保存した形か。走る時計を持てるのは running だけ。 */
+function isTimerState(value: unknown): value is TimerState {
+    if (!isObject(value)) return false;
+    const recorded = value.recorded;
+    return isString(value.id) && value.id !== ''
+        && isSubject(value.subject)
+        && isString(value.file)
+        && isString(value.name)
+        && isString(value.color)
+        && isMode(value.mode)
+        && isMeasure(value.measure)
+        && isClock(value.clock)
+        && isSession(value.session)
+        && ((value.session as Session).kind === 'running') === ((value.clock as Clock).kind === 'running')
+        && (value.tail === null || isString(value.tail))
+        && isStringArray(value.owned)
+        && (value.opening === null || isOpening(value.opening))
+        && isObject(recorded) && isNumber(recorded.seconds) && isNumber(recorded.count)
+        && (value.priorStartMs === null || isNumber(value.priorStartMs))
+        && (value.draft === null || isString(value.draft))
+        && typeof value.expanded === 'boolean';
+}
+
+/** 保存の欄だけを写す（実行時に足されたものを持ち込まない）。 */
+function toPersisted(timer: TimerState): TimerState {
+    return {
+        id: timer.id,
+        subject: timer.subject,
+        file: timer.file,
+        name: timer.name,
+        color: timer.color,
+        mode: timer.mode,
+        measure: timer.measure,
+        clock: timer.clock,
+        session: timer.session,
+        tail: timer.tail,
+        owned: timer.owned,
+        opening: timer.opening,
+        recorded: timer.recorded,
+        priorStartMs: timer.priorStartMs,
+        draft: timer.draft,
+        expanded: timer.expanded,
+    };
+}
+
+// ─── 保存の口 ─────────────────────────────────────────────────
+
 export class TimerPersistence {
-    constructor(
-        private ctx: TimerContext,
-        private creator: TimerCreator,
-        private lifecycle: TimerLifecycle,
-        private storageUtils: TimerStorageUtils,
-    ) {}
+    readonly vaultFingerprint: string;
 
-    // ─── Persist ─────────────────────────────────────────────
+    constructor(app: App) {
+        this.vaultFingerprint = vaultFingerprintOf(app);
+    }
 
-    persistTimersToStorage(): void {
-        logInfo(`[Timer:persist] count=${this.ctx.timers.size}`);
-        const storageKey = this.storageUtils.getStorageKey();
+    storageKey(version = STORAGE_VERSION): string {
+        return `${STORAGE_KEY_PREFIX}.v${version}:${this.vaultFingerprint}`;
+    }
+
+    /** 表と提案を保存する。どちらも無ければキーを消す。呼ぶのは `TimerBoard` の予約だけ。 */
+    persist(timers: readonly TimerState[], idle: IdleBoard | null): void {
+        logInfo(`[Timer:persist] count=${timers.length}`);
+        const key = this.storageKey();
         try {
-            if (this.ctx.timers.size === 0) {
-                window.localStorage.removeItem(storageKey);
+            if (timers.length === 0 && idle === null) {
+                window.localStorage.removeItem(key);
                 return;
             }
-
             const payload: PersistedTimerState = {
                 version: STORAGE_VERSION,
-                ownerDeviceId: this.storageUtils.deviceId,
-                vaultFingerprint: this.storageUtils.vaultFingerprint,
-                updatedAtMs: Date.now(),
-                timers: Array.from(this.ctx.timers.values()).map((timer) => this.toPersistedTimer(timer))
+                vaultFingerprint: this.vaultFingerprint,
+                idleSinceMs: idle?.sinceMs ?? null,
+                timers: timers.map(toPersisted),
             };
-
-            window.localStorage.setItem(storageKey, JSON.stringify(payload));
+            window.localStorage.setItem(key, JSON.stringify(payload));
         } catch (error) {
             logError(`[TimerWidget] Failed to persist timers: ${(error as Error)?.message ?? error}`);
         }
     }
 
-    // ─── Restore ─────────────────────────────────────────────
-
-    restoreTimersFromStorage(onTimerRestored?: (timerId: string) => void): void {
-        const storageKey = this.storageUtils.getStorageKey();
-        this.dropObsoleteStorage();
+    /**
+     * 保存した表と提案を読む。旧い版のキーは掃除する。形の崩れた中身は捨て、
+     * 崩れたタイマーだけを落とす。
+     */
+    restore(): { timers: TimerState[]; idle: IdleBoard | null } {
+        const empty = { timers: [], idle: null };
+        this.dropObsolete();
+        const key = this.storageKey();
         try {
-            const raw = window.localStorage.getItem(storageKey);
-            if (!raw) return;
-
-            const parsed = JSON.parse(raw) as PersistedTimerState;
-
-            if (
-                !parsed
-                || parsed.version !== STORAGE_VERSION
-                || parsed.vaultFingerprint !== this.storageUtils.vaultFingerprint
+            const raw = window.localStorage.getItem(key);
+            if (!raw) return empty;
+            const parsed: unknown = JSON.parse(raw);
+            if (!isObject(parsed) || parsed.version !== STORAGE_VERSION
+                || parsed.vaultFingerprint !== this.vaultFingerprint
                 || !Array.isArray(parsed.timers)
-            ) {
-                window.localStorage.removeItem(storageKey);
-                return;
+                || !(parsed.idleSinceMs === null || isNumber(parsed.idleSinceMs))) {
+                window.localStorage.removeItem(key);
+                return empty;
             }
-            if (parsed.ownerDeviceId !== this.storageUtils.deviceId) {
-                return;
-            }
-
-            for (const persisted of parsed.timers) {
-                const timer = this.fromPersistedTimer(persisted);
-                if (!timer) continue;
-
-                this.reconcileRestoredTimer(timer);
-                this.ctx.timers.set(timer.id, timer);
-            }
-
-            if (this.ctx.timers.size === 0) {
-                this.persistTimersToStorage();
-                return;
-            }
-
-            for (const [timerId, timer] of this.ctx.timers) {
-                if (timer.isRunning) {
-                    if (timer.timerType === 'interval' && timer.segmentTimeRemaining <= 0) {
-                        void this.lifecycle.handleIntervalSegmentComplete(timerId, timer);
-                    } else {
-                        this.lifecycle.startTimerTicker(timerId);
-                    }
-                }
-
-                if (onTimerRestored) {
-                    onTimerRestored(timerId);
-                }
-            }
-
-            logInfo(`[Timer:restored] count=${this.ctx.timers.size}`);
-            this.ctx.render();
-            this.scheduleRestoredCheck();
+            const timers = parsed.timers.filter(isTimerState).map(toPersisted);
+            const idle = isNumber(parsed.idleSinceMs) ? { sinceMs: parsed.idleSinceMs } : null;
+            logInfo(`[Timer:restored] count=${timers.length}`);
+            return { timers, idle };
         } catch (error) {
-            window.localStorage.removeItem(storageKey);
+            window.localStorage.removeItem(key);
             logError(`[TimerWidget] Failed to restore timers: ${(error as Error)?.message ?? error}`);
+            return empty;
         }
     }
 
-    /**
-     * 書く途中で落ちたタイマーの `opening` に、**最初の onChange を待ってから**
-     * ファイルで答える（錨で引いて尻尾にするか消すか）。
-     *
-     * 復元は layout-ready 直後に走るので、その時点では初回スキャンが終わって
-     * おらず index は空でありうる。`waitForScan` はキュー済みのスキャンしか待た
-     * ないので当てにならず、「最初の変更通知が来た ＝ スキャンがタスクを流し
-     * 始めた」を合図にする。
-     *
-     * 対象を引けないだけでは閉じない。計測は widget に残り、記録しようとして
-     * 引けなければ記録待ちになって通知が1回出る。閉じるのは利用者だけ。
-     */
-    private scheduleRestoredCheck(): void {
-        let done = false;
-        const unsubscribe = this.ctx.plugin.getIndex().onChange(() => {
-            if (done) return;
-            done = true;
-            unsubscribe();
-            void this.adoptOpenings();
-        });
-    }
-
-    /** 書く途中で落ちたタイマーの `opening` に答える（{@link TimerRecorder.adoptOpening}）。 */
-    private async adoptOpenings(): Promise<void> {
-        let changed = false;
-        for (const timer of [...this.ctx.timers.values()]) {
-            if (await this.ctx.recorder.adoptOpening(timer)) changed = true;
-        }
-        if (changed) this.ctx.persistTimersToStorage();
-    }
-
-    /**
-     * 旧バージョンのキーを掃除する。ストレージキーはバージョン込みなので古い
-     * 状態が読まれることはないが、消さないと localStorage に残り続ける。
-     */
-    private dropObsoleteStorage(): void {
-        for (const version of OBSOLETE_STORAGE_VERSIONS) {
+    /** 旧い版のキーを消す。キーに版が入るので読まれはしないが、消さないと残り続ける。 */
+    private dropObsolete(): void {
+        const keys = [...OBSOLETE_STORAGE_VERSIONS.map(version => this.storageKey(version)), ...OBSOLETE_KEYS];
+        for (const key of keys) {
             try {
-                window.localStorage.removeItem(this.storageUtils.getStorageKeyForVersion(version));
+                window.localStorage.removeItem(key);
             } catch {
                 // localStorage が使えない環境では黙って諦める（復元も同様に失敗する）
             }
         }
     }
+}
 
-    // ─── Serialization ───────────────────────────────────────
-
-    private toPersistedTimer(timer: TimerInstance): PersistedTimer {
-        const common: PersistedTimer = {
-            id: timer.id,
-            taskId: timer.taskId,
-            taskName: timer.taskName,
-            taskOriginalText: timer.taskOriginalText,
-            taskFile: timer.taskFile,
-            timerTargetId: timer.timerTargetId,
-            ownedAnchors: timer.ownedAnchors,
-            tailRecordBlockId: timer.tailRecordBlockId,
-            startTimeMs: timer.startTimeMs,
-            pausedElapsedTime: timer.pausedElapsedTime,
-            phase: timer.phase,
-            isRunning: timer.isRunning,
-            runState: timer.runState,
-            sessionCount: timer.sessionCount,
-            recordedElapsedTime: timer.recordedElapsedTime,
-            isExpanded: timer.isExpanded,
-            pendingContent: timer.pendingContent,
-            pendingRecord: timer.pendingRecord,
-            opening: timer.opening,
-            priorStartMs: timer.priorStartMs,
-            timerType: timer.timerType,
-            recordMode: timer.recordMode,
-            parserId: timer.parserId,
-            taskColor: timer.taskColor
-        };
-
-        switch (timer.timerType) {
-            case 'countup':
-                return {
-                    ...common,
-                    elapsedTime: timer.elapsedTime
-                };
-            case 'countdown':
-                return {
-                    ...common,
-                    timeRemaining: timer.timeRemaining,
-                    totalTime: timer.totalTime,
-                    elapsedTime: timer.elapsedTime
-                };
-            case 'interval':
-                return {
-                    ...common,
-                    groups: timer.groups,
-                    currentGroupIndex: timer.currentGroupIndex,
-                    currentSegmentIndex: timer.currentSegmentIndex,
-                    currentRepeatIndex: timer.currentRepeatIndex,
-                    segmentTimeRemaining: timer.segmentTimeRemaining,
-                    totalElapsedTime: timer.totalElapsedTime,
-                    totalDuration: timer.totalDuration,
-                    intervalSource: timer.intervalSource
-                };
-            case 'idle':
-            default:
-                return {
-                    ...common,
-                    elapsedTime: timer.elapsedTime
-                };
-        }
+/** vault の指紋。保存のキーに入れ、別の vault の保存を読まない。 */
+function vaultFingerprintOf(app: App): string {
+    const adapter = app.vault.adapter;
+    const basePath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
+    const rawIdentity = basePath && basePath.trim() ? basePath : app.vault.getName();
+    const identity = (rawIdentity || 'unknown-vault').trim().toLowerCase();
+    let hash = 5381;
+    for (let i = 0; i < identity.length; i++) {
+        hash = ((hash << 5) + hash) + identity.charCodeAt(i);
     }
-
-    private fromPersistedTimer(persisted: PersistedTimer): TimerInstance | null {
-        if (!persisted || !persisted.id || !persisted.taskId) {
-            return null;
-        }
-
-        const taskId = persisted.taskId;
-        if (!this.lifecycle.isIdleTimer(taskId) && !isDailyTimer({ taskId }) && !readName(taskId)) {
-            return null;
-        }
-        if (!isPendingRecordOrNull(persisted.pendingRecord) || !isOpeningOrNull(persisted.opening)
-            || !isStringArray(persisted.ownedAnchors) || !isParserId(persisted.parserId)
-            || !isNumberOrNull(persisted.priorStartMs)) {
-            return null;
-        }
-
-        const phase = (persisted.phase ?? 'idle') as TimerPhase;
-        const common = {
-            id: persisted.id,
-            taskId,
-            taskName: persisted.taskName || 'Untitled',
-            taskOriginalText: persisted.taskOriginalText || '',
-            taskFile: persisted.taskFile || '',
-            timerTargetId: persisted.timerTargetId,
-            ownedAnchors: persisted.ownedAnchors,
-            tailRecordBlockId: persisted.tailRecordBlockId,
-            startTimeMs: persisted.startTimeMs || 0,
-            pausedElapsedTime: persisted.pausedElapsedTime || 0,
-            phase,
-            isRunning: !!persisted.isRunning,
-            // 不変条件: suspended なら ticker は止まっている。
-            runState: (persisted.runState === 'suspended' ? 'suspended' : 'running') as TimerRunState,
-            sessionCount: persisted.sessionCount ?? 0,
-            recordedElapsedTime: persisted.recordedElapsedTime ?? 0,
-            isExpanded: persisted.isExpanded !== false,
-            intervalId: null,
-            pendingContent: persisted.pendingContent,
-            pendingRecord: persisted.pendingRecord,
-            opening: persisted.opening,
-            priorStartMs: persisted.priorStartMs,
-            recordMode: persisted.recordMode || 'child',
-            parserId: persisted.parserId,
-            taskColor: persisted.taskColor || ''
-        };
-
-        switch (persisted.timerType) {
-            case 'countdown': {
-                const totalTime = Math.max(1, persisted.totalTime ?? this.ctx.plugin.settings.pomodoroWorkMinutes * 60);
-                const elapsedTime = Math.max(0, persisted.elapsedTime ?? persisted.pausedElapsedTime ?? 0);
-                const timeRemaining = persisted.timeRemaining ?? (totalTime - elapsedTime);
-                return {
-                    ...common,
-                    timerType: 'countdown',
-                    timeRemaining,
-                    totalTime,
-                    elapsedTime
-                };
-            }
-            case 'interval': {
-                const groups = normalizeGroups(persisted.groups, this.intervalDefaults());
-                const intervalTimer: IntervalTimer = {
-                    ...common,
-                    timerType: 'interval',
-                    intervalSource: persisted.intervalSource,
-                    groups,
-                    currentGroupIndex: Math.max(0, persisted.currentGroupIndex ?? 0),
-                    currentSegmentIndex: Math.max(0, persisted.currentSegmentIndex ?? 0),
-                    currentRepeatIndex: Math.max(0, persisted.currentRepeatIndex ?? 0),
-                    segmentTimeRemaining: Math.max(0, persisted.segmentTimeRemaining ?? groups[0].segments[0].durationSeconds),
-                    totalElapsedTime: Math.max(0, persisted.totalElapsedTime ?? 0),
-                    totalDuration: Math.max(0, persisted.totalDuration ?? totalDuration(groups))
-                };
-                const segment = getCurrentSegment(intervalTimer);
-                if (!segment) {
-                    return null;
-                }
-                // 満了の記録待ちは残り 0 のまま（固定した時間で見せる）。
-                if (intervalTimer.segmentTimeRemaining <= 0 && !intervalTimer.pendingRecord) {
-                    intervalTimer.segmentTimeRemaining = segment.durationSeconds;
-                }
-                return intervalTimer;
-            }
-            case 'idle': {
-                return {
-                    ...common,
-                    timerType: 'idle',
-                    elapsedTime: Math.max(0, persisted.elapsedTime ?? persisted.pausedElapsedTime ?? 0),
-                    phase: 'idle'
-                };
-            }
-            case 'countup':
-            default: {
-                return {
-                    ...common,
-                    timerType: 'countup',
-                    elapsedTime: Math.max(0, persisted.elapsedTime ?? persisted.pausedElapsedTime ?? 0)
-                };
-            }
-        }
-    }
-
-    // ─── Reconciliation ──────────────────────────────────────
-
-    private reconcileRestoredTimer(timer: TimerInstance): void {
-        // 記録待ちは止めたときに固定した姿のまま。閉じていた間の時間は積まない。
-        if (timer.pendingRecord) return;
-        if (timer.runState === 'suspended') {
-            // 中断中 = 記録済み・再開待ち。閉じていた間の時間は次のセッションに
-            // 属さないので経過を積まない。表示は recordedElapsedTime の静的値。
-            timer.isRunning = false;
-            timer.startTimeMs = 0;
-            timer.pausedElapsedTime = 0;
-            if (timer.timerType === 'countup' || timer.timerType === 'idle') {
-                timer.elapsedTime = 0;
-            } else if (timer.timerType === 'countdown') {
-                timer.elapsedTime = 0;
-                timer.timeRemaining = timer.totalTime;
-                timer.phase = 'work';
-            }
-            return;
-        }
-
-        if (!timer.isRunning) {
-            if (timer.timerType === 'countup' || timer.timerType === 'idle') {
-                timer.elapsedTime = Math.max(timer.elapsedTime, timer.pausedElapsedTime);
-            } else if (timer.timerType === 'countdown') {
-                timer.elapsedTime = Math.max(timer.elapsedTime, timer.pausedElapsedTime);
-                timer.timeRemaining = timer.totalTime - timer.elapsedTime;
-                timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
-            } else if (timer.timerType === 'interval') {
-                const segment = getCurrentSegment(timer);
-                if (segment) {
-                    timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
-                    timer.totalElapsedTime = clampToTotalDuration(
-                        timer.totalDuration,
-                        computeCompletedDuration(timer) + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
-                    );
-                }
-            }
-            return;
-        }
-
-        if (timer.startTimeMs <= 0) {
-            timer.startTimeMs = Date.now();
-        }
-
-        const now = Date.now();
-        const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
-        const totalElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
-
-        switch (timer.timerType) {
-            case 'countup':
-            case 'idle':
-                timer.elapsedTime = totalElapsed;
-                break;
-            case 'countdown':
-                timer.elapsedTime = totalElapsed;
-                timer.timeRemaining = timer.totalTime - totalElapsed;
-                timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
-                break;
-            case 'interval': {
-                const segment = getCurrentSegment(timer);
-                if (!segment) {
-                    timer.segmentTimeRemaining = 0;
-                    timer.totalElapsedTime = timer.totalDuration;
-                    break;
-                }
-                timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - totalElapsed);
-                timer.totalElapsedTime = clampToTotalDuration(
-                    timer.totalDuration,
-                    computeCompletedDuration(timer) + Math.min(segment.durationSeconds, totalElapsed)
-                );
-                break;
-            }
-            default:
-                break;
-        }
-    }
-
-    /** 空の永続グループに当てる既定。{@link TimerCreator} と同じ設定を読む。 */
-    private intervalDefaults(): IntervalDefaults {
-        return {
-            prepareSeconds: 10,
-            workSeconds: this.ctx.plugin.settings.pomodoroWorkMinutes * 60,
-            breakSeconds: this.ctx.plugin.settings.pomodoroBreakMinutes * 60,
-        };
-    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
 }

@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TaskCardRenderer } from '../../../src/views/taskcard/TaskCardRenderer';
 import { HandleManager } from '../../../src/views/sharedUI/handles/HandleManager';
-import { refreshTimerTask } from '../../../src/timer/TimerTaskSync';
 import { makeSegmentId } from '../../../src/services/display/SegmentIds';
 import { makeTask } from '../helpers/makeTask';
 import type { Task } from '../../../src/types';
 
 /**
  * What holds a task's name across a render: the selection, an expanded
- * card, a timer. A card holds none (`CardHold.test.ts`).
+ * card. A card holds none (`CardHold.test.ts`), and neither does a timer: it
+ * finds its row by the row's anchor (`TimerIdentity.test.ts`).
  *
  * A name lasts one reading of its file. After a write of ours, `getTask`
  * follows a name from before it to the row's name now, and the copy it
@@ -79,15 +79,5 @@ describe('an expanded card', () => {
 
         expect(state.isExpanded(`kanban::cell-2::${NOW}`, NOW)).toBe(false);
         expect([...state.expandedTaskIds]).toEqual([`kanban::cell-1::${OLD}`]);
-    });
-});
-
-describe('a timer', () => {
-    it('takes the name the index answers for the one it holds, and says it was rewritten', () => {
-        const task = makeTask({ id: NOW, file: 'a.md' });
-        const timer = { taskId: OLD, taskFile: 'a.md', timerTargetId: undefined };
-
-        expect(refreshTimerTask(timer as never, following(task) as never)).toEqual({ task, rewritten: true });
-        expect(timer.taskId).toBe(NOW);
     });
 });

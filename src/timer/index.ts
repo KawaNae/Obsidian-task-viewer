@@ -4,14 +4,5 @@
 
 export { TimerWidget } from './TimerWidget';
 export { TimerProgressUI } from './TimerProgressUI';
-export type {
-    TimerInstance,
-    TimerStartConfig,
-    CountupTimer,
-    CountdownTimer,
-    IntervalTimer,
-    IdleTimer,
-    IntervalGroup,
-    IntervalSegment,
-    TimerPhase,
-} from './TimerInstance';
+export type { TimerState, Subject, RecordMode, Session } from './TimerState';
+export type { IntervalGroup, IntervalSegment } from './IntervalMath';

@@ -1,91 +1,105 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
+import { TimerBoard } from '../../../src/timer/TimerBoard';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { CountdownTimer, CountupTimer, IdleTimer, TimerInstance } from '../../../src/timer/TimerInstance';
+import { TimerRuntime } from '../../../src/timer/TimerRuntime';
+import type { TimerRecorder } from '../../../src/timer/TimerRecorder';
+import { freeze, restart } from '../../../src/timer/TimerClock';
+import { holdsRun, newTimerId, type Session, type TimerState } from '../../../src/timer/TimerState';
+import type { Measure } from '../../../src/timer/TimerProgress';
 
 /**
- * ✕ の分かれ目（`TimerLifecycle.holdsRunningLine`）。
+ * ✕ の分かれ目は記録の区切り（`session.kind`）だけで決まる
+ * （`TimerLifecycle.close(timer, confirmed)`）。
  *
- * 以前は描画の側が `phase` と `isRunning` で判定していた。countdown は超過で
- * `phase = 'idle'` になり、未開始のタイマーは `isRunning === false` なので、どちらも
- * 確認なしの `closeTimer` に落ち、開いたときに書いた走行中の行がノートに残った。
+ * - 走っているか記録待ち … ノートに走行中の行を持つ。確認の2打目で、自分で書いた
+ *   走行中の行ごと捨てて閉じる。countdown が 0 を割っていても同じ
+ * - 中断中             … 記録を書き終えている。確認なしで閉じ、何も消さない
  */
 (globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => 1, clearInterval: () => { },
+    setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
     addEventListener: () => { }, removeEventListener: () => { },
 };
 
 function build() {
-    const discardRunningPlaceholder = vi.fn(async (_timer: TimerInstance) => { });
-    const onTimerClosed = vi.fn();
-    const ctx = {
-        timers: new Map<string, TimerInstance>(), recorder: { discardRunningPlaceholder },
-        plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } }, app: {},
-        startTimer: () => { }, render: () => { }, renderTimerItem: () => { }, persistTimersToStorage: () => { },
-        onTimerClosed, flushTimerContent: async () => true, discardTimerContent: () => { },
-    } as unknown as TimerContext;
-    const lifecycle = new TimerLifecycle(ctx, new TimerCreator(ctx));
-    return { ctx, lifecycle, discardRunningPlaceholder, onTimerClosed };
+    const board = new TimerBoard({ persist: () => { }, render: () => { } });
+    const discardRunningPlaceholder = vi.fn(async (_timer: TimerState) => { });
+    const releaseAnchors = vi.fn(async (_timer: TimerState) => { });
+    const recorder = { discardRunningPlaceholder, releaseAnchors } as unknown as TimerRecorder;
+    const content = { flush: vi.fn(async () => true), discard: vi.fn(), release: vi.fn() };
+    const lifecycle = new TimerLifecycle({ board, runtime: new TimerRuntime(), recorder, content, renderTimes: () => { } });
+    return { board, lifecycle, discardRunningPlaceholder, releaseAnchors, content };
 }
 
-const base = {
-    taskId: 'tv-inline:notes/a.md:seq:1', taskName: 'A', taskOriginalText: '- [ ] A', taskFile: 'notes/a.md',
-    startTimeMs: Date.now(), pausedElapsedTime: 0, runState: 'running' as const,
-    sessionCount: 0, recordedElapsedTime: 0, isExpanded: true, intervalId: null, recordMode: 'child' as const,
-    parserId: 'tv-inline' as const, taskColor: '', pendingRecord: null, ownedAnchors: [], opening: null,
-    priorStartMs: null, tailRecordBlockId: 'tv-tail',
-};
-
-function countdown(overrides: Partial<CountdownTimer> = {}): CountdownTimer {
-    return {
-        ...base, id: 'd1', timerType: 'countdown', phase: 'work', isRunning: true,
-        totalTime: 60, timeRemaining: 60, elapsedTime: 0, ...overrides,
-    } as CountdownTimer;
+function timerIn(board: TimerBoard, session: Session, measure: Measure = { type: 'countup' }, startedSecondsAgo = 90): TimerState {
+    const now = Date.now();
+    const clock = restart(now - startedSecondsAgo * 1000);
+    const timer: TimerState = {
+        id: newTimerId(),
+        subject: { kind: 'task', anchor: 'box' },
+        file: 'notes/a.md', name: 'A', color: '', mode: 'child',
+        measure,
+        clock: session.kind === 'running' ? clock : freeze(clock, now),
+        session,
+        tail: 'tv-tail', owned: ['tv-tail'], opening: null,
+        recorded: { seconds: 0, count: 0 }, priorStartMs: null, draft: null, expanded: true,
+    };
+    board.add(timer);
+    return timer;
 }
 
-function countup(overrides: Partial<CountupTimer> = {}): CountupTimer {
-    return { ...base, id: 'c1', timerType: 'countup', phase: 'work', isRunning: true, elapsedTime: 0, ...overrides } as CountupTimer;
-}
+const PENDING: Session = { kind: 'pending', record: { endMs: 0, seconds: 5, then: 'close' } };
 
 describe('✕ asks first whenever the timer holds a running line', () => {
-    it('a countdown past zero (phase idle, still running) holds its line', () => {
+    it('a running timer holds its line, and so does a countdown past zero', () => {
         const h = build();
-        expect(h.lifecycle.holdsRunningLine(countdown({ phase: 'idle', timeRemaining: -30, elapsedTime: 90 }))).toBe(true);
-    });
-
-    it('a timer opened but not started (isRunning false) holds the line it wrote on open', () => {
-        const h = build();
-        expect(h.lifecycle.holdsRunningLine(countup({ isRunning: false, phase: 'idle' }))).toBe(true);
+        const countup = timerIn(h.board, { kind: 'running', from: 0 });
+        const overrun = timerIn(h.board, { kind: 'running', from: 0 }, { type: 'countdown', totalSeconds: 60 }, 90);
+        expect(holdsRun(countup)).toBe(true);
+        expect(holdsRun(overrun)).toBe(true);
+        expect(h.lifecycle.close(countup, false)).toBe('confirm');
+        expect(h.lifecycle.close(overrun, false)).toBe('confirm');
+        expect(h.board.size).toBe(2);
     });
 
     it('a stopped run waiting for its record holds its line', () => {
         const h = build();
-        expect(h.lifecycle.holdsRunningLine(countup({
-            isRunning: false, pendingRecord: { endMs: Date.now(), seconds: 5, then: 'close' },
-        }))).toBe(true);
+        const timer = timerIn(h.board, PENDING);
+        expect(holdsRun(timer)).toBe(true);
+        expect(h.lifecycle.close(timer, false)).toBe('confirm');
+        expect(h.board.has(timer)).toBe(true);
     });
 
-    it('a suspended timer has recorded everything and closes without asking', () => {
+    it('a suspended timer has recorded everything and closes without asking, removing nothing', async () => {
         const h = build();
-        expect(h.lifecycle.holdsRunningLine(countup({ isRunning: false, runState: 'suspended' }))).toBe(false);
+        const timer = timerIn(h.board, { kind: 'suspended' });
+        expect(holdsRun(timer)).toBe(false);
+
+        expect(h.lifecycle.close(timer, false)).toBe('closing');
+
+        expect(h.board.has(timer)).toBe(false);
+        expect(h.discardRunningPlaceholder).not.toHaveBeenCalled();
+        // 付けた錨は後始末で外す。
+        await vi.waitFor(() => expect(h.releaseAnchors).toHaveBeenCalledWith(timer));
     });
 
-    it('the idle timer has no line and closes without asking', () => {
+    it('confirmed, an overrunning countdown has its running line removed, then closes', async () => {
         const h = build();
-        const idle = { ...base, id: '__idle__', timerType: 'idle', phase: 'idle', isRunning: true, elapsedTime: 0 } as IdleTimer;
-        expect(h.lifecycle.holdsRunningLine(idle)).toBe(false);
-    });
+        const timer = timerIn(h.board, { kind: 'running', from: 0 }, { type: 'countdown', totalSeconds: 60 }, 90);
 
-    it('discarding an overrunning countdown removes its running line, then closes', async () => {
-        const h = build();
-        const timer = countdown({ phase: 'idle', timeRemaining: -30, elapsedTime: 90 });
-        h.ctx.timers.set(timer.id, timer);
+        expect(h.lifecycle.close(timer, true)).toBe('closing');
 
-        await h.lifecycle.discardTimer(timer);
-
+        await vi.waitFor(() => expect(h.board.has(timer)).toBe(false));
+        expect(h.content.discard).toHaveBeenCalledWith(timer);
         expect(h.discardRunningPlaceholder).toHaveBeenCalledWith(timer);
-        expect(h.ctx.timers.has(timer.id)).toBe(false);
-        expect(h.onTimerClosed).toHaveBeenCalledWith(timer);
+    });
+
+    it('confirmed, a run waiting for its record is thrown away with its line', async () => {
+        const h = build();
+        const timer = timerIn(h.board, PENDING);
+
+        expect(h.lifecycle.close(timer, true)).toBe('closing');
+
+        await vi.waitFor(() => expect(h.board.has(timer)).toBe(false));
+        expect(h.discardRunningPlaceholder).toHaveBeenCalledWith(timer);
     });
 });

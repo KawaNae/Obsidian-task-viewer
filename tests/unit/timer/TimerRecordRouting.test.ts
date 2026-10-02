@@ -1,48 +1,52 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
+import type { PendingRecord, RecordMode, TimerState } from '../../../src/timer/TimerState';
+import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
 import type TaskViewerPlugin from '../../../src/main';
-import type { App } from 'obsidian';
 import { makeTask } from '../helpers/makeTask';
 import { opsOver } from '../helpers/anchoredRow';
+import { timerOn, type MeasureKind } from '../helpers/timerRig';
 
 /**
- * child モードでは開始時に placeholder の子タスクが 1 行書かれる
- * (`writeStart`)。停止時はその行を更新するだけで、新しい行を足しては
- * ならない — **1 セッション = 1 行**。
- *
- * countdown / interval の停止は `addCountdownRecord` / `addIntervalRecord` を
- * 直接呼んでおり、placeholder を無視して 2 行目を書いていた。停止経路を
- * `recordSessionEnd` に集約したことをここで pin する。
+ * 記録の書き先は尻尾（最後に書いた行）で選ぶ（`TimerRecorder.recordSessionEnd`）。
+ * child は開始の書き込みで走行中の行を 1 行書き、止めたらその行を閉じる —
+ * **1 つの走行は 1 行**。測り方（countup、countdown、ポモドーロ）で経路は分かれない。
+ * 尻尾を引けなければ記録を 1 行足す（予備の記録）。self の 1 本目は尻尾が対象の錨
+ * そのもので、対象の行を記録に書き換える。
  */
 
 interface Harness {
     recorder: TimerRecorder;
     inserted: string[];
     updates: { id: string; updates: Record<string, unknown> }[];
+    parent: ReturnType<typeof makeTask>;
 }
 
+const FILE = 'notes/a.md';
 const CHILD_ID = 'tv-inline:notes/a.md:ln:5';
 const PARENT_ID = 'tv-inline:notes/a.md:ln:3';
+const TARGET = 'tv-timer-anchor';
+const RUNNING = 'tv-timer-1';
+
+/** 出来事を step で当てる。開いているタイマーはこのタイマーだけ。 */
+const outlet = {
+    dispatch: (timer: TimerState, event: TimerEvent) => { Object.assign(timer, step(timer, event, Date.now())); },
+    timers: () => [],
+};
 
 function makeHarness(options: { childExists?: boolean; childContent?: string } = {}): Harness {
     const inserted: string[] = [];
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
     const childExists = options.childExists !== false;
 
-    const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', line: 2, content: 'parent', blockId: 'tv-timer-anchor', anchor: 'tv-timer-anchor' });
-    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', line: 3, content: options.childContent ?? '', blockId: 'tv-timer-1', anchor: 'tv-timer-1' });
+    const parent = makeTask({ id: PARENT_ID, file: FILE, line: 2, content: 'parent', blockId: TARGET, anchor: TARGET });
+    const child = makeTask({ id: CHILD_ID, file: FILE, line: 3, content: options.childContent ?? '', blockId: RUNNING, anchor: RUNNING });
     const visible = childExists ? [parent, child] : [parent];
 
     const taskIndex = {
-        getTask: (id: string) => {
-            if (id === CHILD_ID) return childExists ? child : undefined;
-            return id === PARENT_ID ? parent : undefined;
-        },
+        getTask: (id: string) => visible.find(t => t.id === id),
         getTaskByAnchor: (file: string, anchor: string) => visible.find(t => t.file === file && t.anchor === anchor),
         getTasks: () => visible,
-        getTaskByFileLine: () => parent,
         updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); return true; },
     };
 
@@ -55,231 +59,160 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         }),
     } as unknown as TaskViewerPlugin;
 
-    const storageUtils = { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils;
-    const recorder = new TimerRecorder(plugin, storageUtils, () => { /* unused */ }, () => []);
-
-    return { recorder, inserted, updates };
+    const recorder = new TimerRecorder(plugin, outlet, () => 'tv-timer-2');
+    return { recorder, inserted, updates, parent };
 }
 
-function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
-    return {
-        id: 'timer-1',
-        taskId: PARENT_ID,
-        taskName: 'parent',
-        taskOriginalText: '- [ ] parent',
-        taskFile: 'notes/a.md',
-        timerTargetId: 'tv-timer-anchor',
-        startTimeMs: 0,
-        pausedElapsedTime: 600,
-        phase: 'work',
-        isRunning: false,
-        runState: 'running',
-        // 1 本目の走行中。self が対象タスク行に書き戻してよいのはこの間だけ。
-        sessionCount: 0,
-        recordedElapsedTime: 0,
-        isExpanded: true,
-        intervalId: null,
-        recordMode: 'child',
-        parserId: 'tv-inline',
-        taskColor: '',
-        timerType: 'countup',
-        elapsedTime: 600,
-        tailRecordBlockId: 'tv-timer-1',
-        pendingRecord: null,
-        opening: null,
-        priorStartMs: null,
-        ownedAnchors: [],
-        ...overrides,
-    } as TimerInstance;
+/** `parent` に始めたタイマー。既定は child の 1 本目で、尻尾は開始の書き込みが書いた走行中の行。 */
+function makeTimer(h: Harness, over: Partial<TimerState> & { kind?: MeasureKind; mode?: RecordMode } = {}): TimerState {
+    const { kind = 'countup', mode = 'child', ...rest } = over;
+    return { ...timerOn(h.parent, mode, kind), tail: RUNNING, owned: [RUNNING], ...rest };
 }
 
-/** 止めた時点で固定する記録: 経過は timer の値をそのまま使う。 */
-function recordFor(timer: TimerInstance, then: PendingRecord['then'] = 'close'): PendingRecord {
-    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then };
+/** 止めた時点で固定する記録: 10 分。 */
+function recordFor(then: PendingRecord['then'] = 'close'): PendingRecord {
+    return { endMs: Date.now(), seconds: 600, then };
 }
 
-describe('recordSessionEnd: one session writes one line', () => {
+describe('recordSessionEnd: one run writes one line', () => {
     let h: Harness;
     beforeEach(() => { h = makeHarness(); });
 
-    it('countup updates the placeholder instead of inserting a second line', async () => {
-        const timer = makeTimer();
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
+    it.each<[string, MeasureKind]>([
+        ['countup', 'countup'],
+        ['countdown', { countdown: 600 }],
+        ['pomodoro', 'pomodoro'],
+    ])('%s closes the running line instead of inserting a second line', async (_name, kind) => {
+        await h.recorder.recordSessionEnd(makeTimer(h, { kind }), recordFor());
         expect(h.inserted).toHaveLength(0);
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(CHILD_ID);
         expect(h.updates[0].updates.statusChar).toBe('x');
     });
 
-    it('countdown updates the placeholder instead of inserting a second line', async () => {
-        const timer = makeTimer({ timerType: 'countdown', timeRemaining: 0, totalTime: 600 } as Partial<TimerInstance>);
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
-        expect(h.inserted).toHaveLength(0);
-        expect(h.updates).toHaveLength(1);
-    });
-
-    it('interval updates the placeholder instead of inserting a second line', async () => {
-        const timer = makeTimer({
-            timerType: 'interval',
-            intervalSource: 'pomodoro',
-            groups: [],
-            currentGroupIndex: 0,
-            currentSegmentIndex: 0,
-            currentRepeatIndex: 0,
-            segmentTimeRemaining: 0,
-            totalElapsedTime: 600,
-            totalDuration: 600,
-        } as Partial<TimerInstance>);
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
-        expect(h.inserted).toHaveLength(0);
-        expect(h.updates).toHaveLength(1);
-    });
-
-    it('falls back to inserting a record when the placeholder was deleted', async () => {
+    it('adds a record when the running line was deleted', async () => {
         const gone = makeHarness({ childExists: false });
-        const timer = makeTimer();
-        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
+        await gone.recorder.recordSessionEnd(makeTimer(gone), recordFor());
         expect(gone.inserted).toHaveLength(1);
         expect(gone.updates).toHaveLength(0);
     });
 
-    it('the fallback record still carries the task name', async () => {
-        // 走行中の行を書く経路は下書きが無ければ対象名を継ぐのに、フォールバック
-        // だけが下書きしか見ておらず、名前を失った「⏱️」だけのレコードを書いて
-        // いた（move 発火中の停止で実機観測）。
+    it('the added record carries the task name', async () => {
         const gone = makeHarness({ childExists: false });
-        const timer = makeTimer();
-        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
+        await gone.recorder.recordSessionEnd(makeTimer(gone), recordFor());
         expect(gone.inserted[0]).toContain('⏱️ parent');
     });
 
-    it('the fallback record prefers an explicit label over the task name', async () => {
+    it('the added record takes the draft over the task name', async () => {
         const gone = makeHarness({ childExists: false });
-        const timer = makeTimer({ pendingContent: '資料集め' });
-        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
+        await gone.recorder.recordSessionEnd(makeTimer(gone, { draft: '資料集め' }), recordFor());
         expect(gone.inserted[0]).toContain('⏱️ 資料集め');
         expect(gone.inserted[0]).not.toContain('parent');
     });
 
-    it('the placeholder and the fallback agree on the name', async () => {
+    it('the running line and the added record go by the same name', async () => {
         const gone = makeHarness({ childExists: false });
-        const timer = makeTimer();
-        const placeholder = gone.recorder.buildSessionPlaceholder(timer).line;
-        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
+        const timer = makeTimer(gone, { tail: null, owned: [] });
+        // 開始の書き込みが書く走行中の行。
+        expect(await gone.recorder.writeStart(timer, gone.parent)).toBe(true);
+        const running = gone.inserted[0];
+        // その行を見失ってからの記録。
+        await gone.recorder.recordSessionEnd(timer, recordFor());
 
-        // 走行中の行とフォールバックのレコードは同じ名前を名乗る。
-        expect(placeholder).toContain('parent');
-        expect(gone.inserted[0]).toContain('parent');
+        expect(running).toContain('parent');
+        expect(gone.inserted[1]).toContain('parent');
     });
 
-    it('inserts a single record when no placeholder was created', async () => {
-        const timer = makeTimer({ tailRecordBlockId: undefined });
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
+    it('adds one record when no running line was written', async () => {
+        await h.recorder.recordSessionEnd(makeTimer(h, { tail: null, owned: [] }), recordFor());
         expect(h.inserted).toHaveLength(1);
         expect(h.updates).toHaveLength(0);
     });
 
-    it('self mode updates the task itself and writes no child line', async () => {
-        // 1 本目の self は、開始の書き込みで尻尾を対象の錨に置いている。
-        const timer = makeTimer({ recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' });
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
+    it('the added record becomes the tail', async () => {
+        const timer = makeTimer(h, { tail: null, owned: [] });
+        await h.recorder.recordSessionEnd(timer, recordFor());
+        expect(h.inserted[0]).toMatch(/ \^tv-timer-2$/);
+        expect(timer.tail).toBe('tv-timer-2');
+        expect(timer.owned).toEqual(['tv-timer-2']);
+    });
+
+    it('self, first run: the tail is the target, and the target row is the record', async () => {
+        const timer = makeTimer(h, { mode: 'self', tail: TARGET, owned: [] });
+        await h.recorder.recordSessionEnd(timer, recordFor());
         expect(h.inserted).toHaveLength(0);
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(PARENT_ID);
         expect(h.updates[0].updates.statusChar).toBe('x');
     });
 
-    it('does not stack a second icon on a record that already carries one', async () => {
-        // レコードの名前は対象タスクから継ぐので、完了済みレコードの「続き」を
-        // 始めると起点の名前が「⏱️ …」で始まる。そこへもう一度付けない。
+    it('does not stack a second icon on a line that already carries one', async () => {
+        // 名前は対象から継ぐので、完了済みの記録から続きを始めると行の名前は「⏱️ …」で始まる。
         const iconed = makeHarness({ childContent: '⏱️ 完了済み記録' });
-        const timer = makeTimer();
-        await iconed.recorder.recordSessionEnd(timer, recordFor(timer));
+        await iconed.recorder.recordSessionEnd(makeTimer(iconed), recordFor());
 
         expect(iconed.updates[0].updates.content).toBe('⏱️ 完了済み記録');
     });
 
-    it('self mode closes the line it is running on, not the task row it started from', async () => {
-        // 2 本目以降の self は自分で書いた兄弟レコードに走っている。recordMode を
-        // 先に見て対象タスク行へ書き戻すと、1 本目のレコードが上書きされて消える
-        // （実機で「再開して終了すると最初のセッションが消える」として現れた）。
-        const timer = makeTimer({ recordMode: 'self', sessionCount: 1 });
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
+    it('self, a later run: closes the line it runs on, not the target row', async () => {
+        // 2 本目からの self は自分で書いた兄弟に走っている。対象の行は 1 本目の記録で、
+        // そこへ書き戻すと 1 本目が上書きされて消える。
+        const timer = makeTimer(h, { mode: 'self' });
+        await h.recorder.recordSessionEnd(timer, recordFor());
 
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(CHILD_ID);
         expect(h.inserted).toHaveLength(0);
     });
 
-    it('self mode adds a record line when a later session lost its own line', async () => {
-        const timer = makeTimer({
-            recordMode: 'self', sessionCount: 1, tailRecordBlockId: undefined,
-        });
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
+    it('self, a later run whose line was lost: adds a record, not back onto the target row', async () => {
+        const gone = makeHarness({ childExists: false });
+        await gone.recorder.recordSessionEnd(makeTimer(gone, { mode: 'self' }), recordFor());
 
-        // 走行中の行を見失ってもタスク行には戻らない。記録を 1 行足して救う。
-        expect(h.inserted).toHaveLength(1);
-        expect(h.updates).toHaveLength(0);
+        expect(gone.inserted).toHaveLength(1);
+        expect(gone.updates).toHaveLength(0);
     });
 
-    it('self mode keeps the anchor on the record line after ⏸, so the next session can find it', async () => {
-        // 記録で content も日時も書き換わるため、id を落とすと再開後のセッションが
-        // 対象を引き直せない（実機で「再開しても記録されない」として現れた）。
-        const timer = makeTimer({
-            recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor', ownedAnchors: ['tv-timer-anchor'],
-        });
-        await h.recorder.recordSessionEnd(timer, recordFor(timer, 'suspend'));
-        expect(h.updates[0].updates.blockId).toBe('tv-timer-anchor');
+    it('self, ⏸: the record keeps the target\'s anchor, so the next ▶ finds its place', async () => {
+        const timer = makeTimer(h, { mode: 'self', tail: TARGET, owned: [TARGET] });
+        await h.recorder.recordSessionEnd(timer, recordFor('suspend'));
+        expect(h.updates[0].updates.blockId).toBe(TARGET);
     });
 
-    it('self mode takes its own anchor off in the record\'s write when ■ closes it (F8)', async () => {
-        // 同じ書き込みで発火する move は行を ^id ごと運ぶので、閉じたあとに外すと
-        // 運ばれた先に錨が残る。
-        const timer = makeTimer({
-            recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor', ownedAnchors: ['tv-timer-anchor'],
-        });
-        await h.recorder.recordSessionEnd(timer, recordFor(timer, 'close'));
+    it('self, ■: the record takes its own anchor off in the same write', async () => {
+        // 同じ書き込みで発火する move は行を ^id ごと運ぶので、あとから外すと運ばれた先に錨が残る。
+        const timer = makeTimer(h, { mode: 'self', tail: TARGET, owned: [TARGET] });
+        await h.recorder.recordSessionEnd(timer, recordFor('close'));
         expect(h.updates[0].updates.blockId).toBeUndefined();
+    });
+
+    it('self, ■ on a target the user anchored: its anchor stays', async () => {
+        const timer = makeTimer(h, { mode: 'self', tail: TARGET, owned: [] });
+        await h.recorder.recordSessionEnd(timer, recordFor('close'));
+        expect(h.updates[0].updates.blockId).toBe(TARGET);
     });
 });
 
 /**
- * 上のテストは recordSessionEnd 自体の振る舞いしか見ない。「停止ボタンが
- * そこを通る」という結びつきは DOM を組まないと動かせないので、代わりに
- * 呼び出し側に直呼びが残っていないことをソースレベルで固定する。
+ * 上は recordSessionEnd そのものしか見ない。⏸ と ■ がそこを通ることは、呼び口が
+ * 1 つであることをソースで固定する: 描画は lifecycle の stop を呼ぶだけで、記録は
+ * lifecycle の 1 か所から、名前の書き出しの直後に書く。
  */
-describe('stop paths do not bypass recordSessionEnd', () => {
-    const files = ['src/timer/TimerRenderer.ts', 'src/timer/TimerLifecycle.ts'];
-
-    it.each(files)('%s calls no per-type record API directly', async (file) => {
-        const { readFileSync } = await import('node:fs');
-        const source = readFileSync(file, 'utf8');
-        expect(source).not.toMatch(/recorder\.addCountupRecord\(/);
-        expect(source).not.toMatch(/recorder\.addCountdownRecord\(/);
-        expect(source).not.toMatch(/recorder\.addIntervalRecord\(/);
-        expect(source).not.toMatch(/recorder\.updateTaskDirectly\(/);
-    });
-
-    /**
-     * 記録の前に content を流し込む規則は、書き方を守らせるのでは守れない。
-     * 2 箇所に同じ列を書けた結果、2026-08-17 に flush を足したとき interval の
-     * 停止ハンドラは片方だけが直った。呼び出し口を 1 つに閉じて、2 本目を書く
-     * 余地そのものを消す。
-     */
-    it('TimerRenderer leaves the whole stop sequence to TimerLifecycle', async () => {
+describe('the stops record through one place', () => {
+    it('TimerRenderer leaves the stop to TimerLifecycle', async () => {
         const { readFileSync } = await import('node:fs');
         const source = readFileSync('src/timer/TimerRenderer.ts', 'utf8');
         expect(source).not.toMatch(/recorder\.recordSessionEnd\(/);
-        expect(source).not.toMatch(/flushTimerContent\(/);
+        expect(source).not.toMatch(/content\.flush\(/);
     });
 
-    it('TimerLifecycle records from exactly one place, right after the flush', async () => {
+    it('TimerLifecycle records from exactly one place, right after the name is written', async () => {
         const { readFileSync } = await import('node:fs');
         const source = readFileSync('src/timer/TimerLifecycle.ts', 'utf8');
         expect(source.match(/recorder\.recordSessionEnd\(/g)).toHaveLength(1);
         // 名前を書けなければ記録に進まず、書けたら直後に記録する。
         expect(source).toMatch(
-            /if \(!\(await this\.ctx\.flushTimerContent\(timer\.id\)\)\) return;\s*\n\s*if \(!\(await this\.ctx\.recorder\.recordSessionEnd\(timer, record\)\)\) return;/
+            /if \(!\(await this\.content\.flush\(timer\)\)\) return;\s*\n\s*if \(!\(await this\.recorder\.recordSessionEnd\(timer, record\)\)\) return;/
         );
     });
 });
