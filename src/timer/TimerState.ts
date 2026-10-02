@@ -94,7 +94,7 @@ export interface TimerState {
     owned: string[];
     /** 書いている途中の行と、書けたあとの錨の姿。無ければ null。 */
     opening: Opening | null;
-    /** 書き終えた記録の長さの合計と本数。中断中の表示と、開始をずらすメニューが読む。 */
+    /** 書き終えた記録の長さの合計と本数。中断中の countup の表示と、開始をずらすメニューが読む。 */
     recorded: { seconds: number; count: number };
     /**
      * self の開始が対象の行の start を上書きする前の、その行の start（ミリ秒）。

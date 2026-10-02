@@ -117,9 +117,9 @@ export class TimerLifecycle {
     }
 
     /**
-     * ▶: 新しい走行中の行を尻尾の兄弟に書き、書けたら走る。時計は countup と
-     * countdown は押した時刻から 0、ポモドーロは止めた所から続ける
-     * （`TimerTransitions` の `resumed`）。書けなければ中断のまま残る。
+     * ▶: 新しい走行中の行を尻尾の兄弟に書き、書けたら走る。時計は countup は押した
+     * 時刻から 0、countdown とポモドーロは止めた所から続ける（`TimerTransitions` の
+     * `resumed`）。書けなければ中断のまま残る。
      */
     resume(timer: TimerState): Promise<void> {
         if (timer.session.kind !== 'suspended') return Promise.resolve();
@@ -141,6 +141,8 @@ export class TimerLifecycle {
     /**
      * 走っている区間の開始を `startMs` へずらす（`TimerStartOffset`）。先に走行の行の
      * start を書き直し（`TimerRecorder.moveRunningStart`）、書けてから時計を動かす。
+     * 止めた所から続く countdown の時計は、区間の開始より区間の始めの読みだけ前から
+     * 数える（`TimerTransitions` の `shifted`）。
      * ずらせるのは countup と countdown の走っている区間だけで、未来へはずらせない。
      */
     offsetStart(timer: TimerState, startMs: number): Promise<void> {

@@ -200,6 +200,30 @@ describe('shifting the start of a running timer writes the running line, then mo
         s.dispose();
     });
 
+    it('countdown after ⏸ and ▶: the running session starts where it is moved to, and the time left goes on from the stop', async () => {
+        const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child', 'countdown');
+
+        vi.setSystemTime(at(10, 30));
+        await widget.lifecycle.stop(timer, 'suspend');
+        await settleAll(s);
+        vi.setSystemTime(at(10, 40));
+        await widget.lifecycle.resume(timer);
+        await settleAll(s);
+        expect(progressOf(timer.measure, elapsed(timer))).toMatchObject({ displaySeconds: 15 * 60 });
+
+        // 区間を 7 分前へ: 残りは止めた所の 15 分から、区間の 7 分を引いた 8 分。
+        vi.setSystemTime(at(10, 42));
+        await widget.lifecycle.offsetStart(timer, at(10, 35).getTime());
+        await settleAll(s);
+        expect(progressOf(timer.measure, elapsed(timer))).toMatchObject({ displaySeconds: 8 * 60 });
+
+        vi.setSystemTime(at(10, 45));
+        await widget.lifecycle.stop(timer, 'close');
+        await settleAll(s);
+        expect(records(contents)).toEqual([`${DAY}T10:20>10:30`, `${DAY}T10:35>10:45`]);
+        s.dispose();
+    });
+
     it('a shift whose line cannot be written moves nothing', async () => {
         const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
         const before = contents.get(FILE);

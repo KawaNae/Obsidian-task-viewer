@@ -932,11 +932,13 @@ There is no "not started" state: a timer runs from the moment it is started. `na
 | running | ⏸ | the record | suspended | pending |
 | running | ■, or the last Pomodoro segment ends (no auto repeat) | the record | closed, anchors taken off | pending |
 | running | a segment ends with more to come | nothing | next segment (sound) | — |
-| running | shift the start (countup, countdown) | the running line's start | the clock's start moves | nothing moves |
+| running | shift the start (countup, countdown) | the running line's start | the clock starts `from` seconds before the new start | nothing moves |
 | running, pending | ✕ twice (confirm) | deletes the running line, if it wrote that line | closed | closed |
 | pending | ⏸ or ■ | the fixed record again | as pressed | stays pending |
-| suspended | ▶ | a new running line (the tail's sibling) | running: countup and countdown from 0, Pomodoro where it stopped | stays suspended |
+| suspended | ▶ | a new running line (the tail's sibling) | running: countup from 0, countdown and Pomodoro where they stopped | stays suspended |
 | suspended | ■ or ✕ | nothing | closed, anchors taken off | — |
+
+Every run is one record, whichever the measure; only the clock differs on ▶. A countup counts again from 0, while a countdown's time left and a Pomodoro's segments go on from where they stopped, and the new record counts from the reading at the press (`session.from`). While suspended, the widget shows the frozen clock by its measure (a countdown's time left, below zero past it; a Pomodoro segment's time left), and a countup shows the records so far, since its clock starts again (`TimerRenderer.timerRing`).
 
 `TimerLifecycle.close(timer, confirmed)` answers the ✕ from `session.kind` alone; the renderer only draws the confirmation. The next-task suggestion (`TimerBoard.idle`, `NextTaskSuggester`) is not a timer: it appears when no timer holds a run and disappears when one starts.
 

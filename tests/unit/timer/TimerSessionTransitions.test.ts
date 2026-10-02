@@ -153,14 +153,14 @@ describe('the exits', () => {
             expect(timer.expanded).toBe(true);
         });
 
-        it('restarts a countdown from a full clock', async () => {
+        it('a countdown goes on from where it stopped', async () => {
             const timer = running(h.board, { type: 'countdown', totalSeconds: 1500 });
             await h.lifecycle.stop(timer, 'suspend');
             vi.setSystemTime(T0 + 60_000);
             await h.lifecycle.resume(timer);
 
-            expect(readSeconds(timer.clock, Date.now())).toBe(0);
-            expect(timer.session).toEqual({ kind: 'running', from: 0 });
+            expect(timer.session).toEqual({ kind: 'running', from: 600 });
+            expect(readSeconds(timer.clock, Date.now())).toBe(600);
         });
 
         it('a pomodoro goes on from where it stopped', async () => {
