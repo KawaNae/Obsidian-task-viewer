@@ -3,7 +3,6 @@ import type { TimerHost } from '../../timer/TimerWidget';
 import { t } from '../../i18n';
 import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import type { HandleManager } from './handles/HandleManager';
 import { markHandleSurface } from './handles/HandleSurface';
 import type { DisplayTask } from '../../types';
 import {
@@ -15,7 +14,6 @@ import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLa
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
-import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import type { CardReconciler } from './CardReconciler';
 
 const ALLDAY_VARIANT_CLASSES = [
@@ -27,7 +25,6 @@ const ALLDAY_VARIANT_CLASSES = [
 export class AllDaySectionRenderer {
     constructor(
         private plugin: PluginContext & TimerHost,
-        private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
     ) { }
 
@@ -136,12 +133,6 @@ export class AllDaySectionRenderer {
         if (entry.useBarVariant) el.addClass('task-card--multi-day');
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
-
-        // A split segment's id is not its task's: the selection holds the
-        // task's (`originalTaskId`), which the handles find on the card's
-        // hold (`CardHold.name`).
-        const originalTaskId = getOriginalTaskId(task);
-        el.toggleClass('is-selected', originalTaskId === this.handleManager.getSelectedTaskId());
 
         // Grid 座標を dataset で公開し、drag move/resize が style.gridColumn の
         // regex parse を経ずに済むようにする。calendar card と命名対称。

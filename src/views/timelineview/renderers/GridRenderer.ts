@@ -3,7 +3,6 @@ import type { ViewState } from '../TimelineViewState';
 import type { PluginContext } from '../../../PluginContext';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import type { HandleManager } from '../../sharedUI/handles/HandleManager';
 import { t } from '../../../i18n';
 
 import type { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
@@ -37,7 +36,6 @@ export class GridRenderer {
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
         moonRenderer: MoonPhaseRenderer,
-        handleManager: HandleManager,
         dates: string[],
         filteredTasks: DisplayTask[],
         reconciler: CardReconciler,
