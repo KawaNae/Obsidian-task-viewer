@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { progressOf, tickOf, type Measure } from '../../../src/timer/TimerProgress';
 import { pomodoroGroups, START_CURSOR, type IntervalCursor } from '../../../src/timer/IntervalMath';
 import { restart, type Clock } from '../../../src/timer/TimerClock';
-import type { IntervalGroup } from '../../../src/timer/TimerInstance';
+import type { IntervalGroup } from '../../../src/timer/IntervalMath';
 
 /**
  * 測り方と時計の読みから表示と出来事を導く。ウィジェットと独立ビューが同じ
