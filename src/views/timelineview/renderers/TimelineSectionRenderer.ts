@@ -7,7 +7,6 @@ import { DateUtils } from '../../../utils/DateUtils';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import type { HandleManager } from '../../sharedUI/handles/HandleManager';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import {
@@ -27,7 +26,6 @@ const Z_MAX = 190;
 export class TimelineSectionRenderer {
     constructor(
         private plugin: PluginContext & TimerHost,
-        private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
         private getZoomLevel: () => number,
     ) { }
@@ -89,9 +87,6 @@ export class TimelineSectionRenderer {
         layout: ReturnType<typeof TaskLayout.calculateTaskLayout>,
         startHour: number,
     ): void {
-        // Selection class is owned by HandleManager; sync it from authoritative state.
-        el.toggleClass('is-selected', task.id === this.handleManager.getSelectedTaskId());
-
         // Reset + apply split-segment variant classes (idempotent).
         TaskStyling.applySplitClasses(el, task);
 

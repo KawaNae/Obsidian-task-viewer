@@ -520,12 +520,11 @@ export class CalendarView extends ItemView {
             toolbarRootEl.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
         }
 
-        // Attach handles to the selected card. Section renderers already
-        // tagged cards with `.is-selected` during render; reapplySelectionClass is
-        // idempotent and ensures handles are attached on the fresh DOM.
-        if (this.handleManager?.getSelectedTaskId()) {
-            this.handleManager.reapplySelectionClass();
-        }
+        // The selection is shown by HandleManager alone: `.is-selected` and the
+        // handles on the selected task's cards, taken off every other card. It
+        // runs on every draw, a selection or none, since a kept card may carry
+        // the class from the draw before.
+        this.handleManager?.reapplySelectionClass();
 
         this.scrollRestorer.restore();
     }

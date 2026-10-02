@@ -449,8 +449,8 @@ export class TimelineView extends ItemView {
         });
 
         // Initialize Renderers
-        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.handleManager, this.taskRenderer);
-        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
+        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.taskRenderer);
+        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.taskRenderer, () => this.getEffectiveZoomLevel());
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,
@@ -998,7 +998,6 @@ export class TimelineView extends ItemView {
             this.allDayRenderer,
             this.timelineRenderer,
             this.moonRenderer,
-            this.handleManager,
             dates,
             filteredTasks,
             reconciler,
@@ -1037,16 +1036,12 @@ export class TimelineView extends ItemView {
             }
         }
 
-        // Attach handles to the selected card after scroll restoration.
-        // Section renderers already tagged cards with `.is-selected` during render;
-        // reapplySelectionClass is idempotent and ensures handles are attached
-        // and z-index is raised on the fresh DOM.
-        // 同期実行することで、最初の paint からハンドル + SELECTED_Z_INDEX が
-        // 揃った状態で表示され、cascade z-index に一瞬戻る/ハンドルが 1 frame 消える
-        // ちらつきを防ぐ。
-        if (this.handleManager.getSelectedTaskId()) {
-            this.handleManager.reapplySelectionClass();
-        }
+        // The selection is shown by HandleManager alone: `.is-selected` and the
+        // handles on the selected task's cards, taken off every other card. It
+        // runs on every draw, a selection or none, since a kept card may carry
+        // the class from the draw before. Run in the same task as the draw, the
+        // first paint already has the class and the handles.
+        this.handleManager.reapplySelectionClass();
     }
 
     /**
