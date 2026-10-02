@@ -13,7 +13,11 @@ export type ControlButtonVariant = 'primary' | 'secondary' | 'danger';
 export interface ControlButtonOptions {
     /** BEM のブロック名。`timer-widget` / `timer-view`。 */
     block: string;
-    variant: ControlButtonVariant;
+    /**
+     * 見た目の変種。独立ビューは開始、一時停止、リセットを色で分ける。
+     * ウィジェットのボタンは1つの見た目なので渡さない（修飾のクラスが付かない）。
+     */
+    variant?: ControlButtonVariant;
     icon: string;
     label: string;
     onClick: () => void;
@@ -28,7 +32,7 @@ export function createControlButton(
     const { block, variant, icon, label, onClick, extraClass } = options;
 
     const btn = container.createEl('button', {
-        cls: `${block}__btn ${block}__btn--${variant}${extraClass ? ` ${extraClass}` : ''}`,
+        cls: [`${block}__btn`, variant && `${block}__btn--${variant}`, extraClass].filter(Boolean).join(' '),
     });
     setIcon(btn.createSpan({ cls: `${block}__btn-icon` }), icon);
     btn.createSpan({ text: label });

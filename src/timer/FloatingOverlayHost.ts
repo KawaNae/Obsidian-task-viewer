@@ -17,7 +17,6 @@
 
 import { trackKeyboard, keyboardTop } from '../utils/KeyboardState';
 
-const DEFAULT_OFFSET = 24;
 /**
  * How far a press must move before it becomes a drag of the widget
  * (`BaseDragStrategy.checkMoveThreshold` uses the same distance).
@@ -49,7 +48,7 @@ export class FloatingOverlayHost {
     private dragOffset = { x: 0, y: 0 };
     private onDragEndCb: (() => void) | null = null;
     /**
-     * null = use CSS-default position (bottom-right corner). Once the user
+     * null = the CSS default position (`.timer-widget`, bottom-right). Once the user
      * drags the widget, an explicit {left, top} is recorded and re-applied
      * on every attach so the widget tracks the user's choice across windows.
      */
@@ -57,12 +56,8 @@ export class FloatingOverlayHost {
 
     constructor(private opts: FloatingOverlayHostOptions) {}
 
+    /** Creates the container in `doc`. The caller detaches the previous one first (`TimerWidgetWindowObserver`). */
     attach(win: Window, doc: Document, className: string): HTMLElement {
-        if (this.container) {
-            // Defensive: previous attach was not balanced. Detach to keep
-            // listeners and DOM consistent.
-            this.detach();
-        }
         this.win = win;
         this.doc = doc;
         this.container = doc.body.createDiv(className);
@@ -179,12 +174,11 @@ export class FloatingOverlayHost {
             this.container.style.right = 'auto';
             this.container.style.bottom = 'auto';
         } else {
-            // Default corner-anchored position: keep the badge inside the
-            // viewport since it sticks out beyond the widget's border.
-            this.container.style.right = `${DEFAULT_OFFSET}px`;
-            this.container.style.bottom = `${DEFAULT_OFFSET}px`;
+            // Not dragged: the stylesheet places it (`.timer-widget`).
             this.container.style.left = '';
             this.container.style.top = '';
+            this.container.style.right = '';
+            this.container.style.bottom = '';
         }
     }
 

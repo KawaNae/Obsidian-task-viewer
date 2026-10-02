@@ -17,7 +17,7 @@ import { type App, setIcon } from 'obsidian';
 import type { DisplayTask } from '../types';
 import type { PluginContext } from '../PluginContext';
 import type { IntervalGroup } from './IntervalMath';
-import { createControlButton, type ControlButtonVariant } from './TimerControlButton';
+import { createControlButton } from './TimerControlButton';
 import type { TimerLifecycle } from './TimerLifecycle';
 import type { TimerBoard, IdleBoard } from './TimerBoard';
 import type { TimerRuntime } from './TimerRuntime';
@@ -285,22 +285,21 @@ export class TimerRenderer {
     private renderControls(container: HTMLElement, timer: TimerState): void {
         const { lifecycle } = this.deps;
         if (timer.session.kind === 'suspended') {
-            this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => void lifecycle.resume(timer));
+            this.addWidgetButton(container, 'play', t('timer.resume'), () => void lifecycle.resume(timer));
         } else if (!finished(timer, Date.now())) {
-            this.addWidgetButton(container, 'secondary', 'pause', t('timer.suspend'), () => void lifecycle.stop(timer, 'suspend'));
+            this.addWidgetButton(container, 'pause', t('timer.suspend'), () => void lifecycle.stop(timer, 'suspend'));
         }
-        this.addWidgetButton(container, 'primary', 'square', t('timer.finish'), () => void lifecycle.stop(timer, 'close'));
+        this.addWidgetButton(container, 'square', t('timer.finish'), () => void lifecycle.stop(timer, 'close'));
     }
 
     /** ウィジェットの操作ボタン。ブロック名を固定しただけの薄い包み。 */
     private addWidgetButton(
         container: HTMLElement,
-        variant: ControlButtonVariant,
         icon: string,
         label: string,
         onClick: () => void,
     ): HTMLButtonElement {
-        return createControlButton(container, { block: 'timer-widget', variant, icon, label, onClick });
+        return createControlButton(container, { block: 'timer-widget', icon, label, onClick });
     }
 
     /** tick の描き直し: 時間の表示と輪を進める。 */
@@ -445,7 +444,6 @@ export class TimerRenderer {
 
         createControlButton(next, {
             block: 'timer-widget',
-            variant: 'primary',
             icon: 'play',
             label: t('timer.start'),
             extraClass: 'timer-widget__next-start',

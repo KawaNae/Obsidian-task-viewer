@@ -460,26 +460,6 @@
     outline-offset: 1px;
 }
 
-.timer-widget .timer-widget__btn--primary {
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text);
-}
-
-.timer-widget .timer-widget__btn--secondary {
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text);
-}
-
-.timer-widget .timer-widget__btn--danger {
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text-danger);
-}
-
-.timer-widget .timer-widget__btn--danger:hover {
-    background: var(--tv-bg-hover);
-    border-color: var(--tv-border);
-}
-
 /* Next-task suggestion (idle item) */
 .timer-widget__next {
     width: 100%;
