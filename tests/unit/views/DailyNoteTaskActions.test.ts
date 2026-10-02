@@ -1,49 +1,36 @@
 import { describe, it, expect } from 'vitest';
 import {
     appendEmptySpaceMenuItems,
-    openDailyNoteTimer,
+    startDailyNoteTimer,
     type DailyNoteTimerType,
 } from '../../../src/views/sharedLogic/DailyNoteTaskActions';
+import { t } from '../../../src/i18n';
 import type TaskViewerPlugin from '../../../src/main';
 import type { Menu } from 'obsidian';
 
 function makePlugin() {
-    const started: Record<string, unknown>[] = [];
+    const started: unknown[][] = [];
     const plugin = {
         getTimerWidget: () => ({
-            startTimer: (opts: Record<string, unknown>) => { started.push(opts); },
+            startTimer: (...args: unknown[]) => { started.push(args); },
         }),
     } as unknown as TaskViewerPlugin;
     return { plugin, started };
 }
 
-describe('openDailyNoteTimer', () => {
-    it('targets the day itself with the synthetic daily id', () => {
-        // `daily-<date>` is what routes the recorded segments into that day's
-        // note instead of a task's own line.
+describe('startDailyNoteTimer', () => {
+    it('starts a timer on the day itself, recorded as children under that day\'s heading', () => {
+        // The subject is the day, not a task: its records go under the heading
+        // of that day's daily note. The start command runs it from the press.
         const { plugin, started } = makePlugin();
-        openDailyNoteTimer(plugin, '2026-08-22', 'countup');
-        expect(started).toEqual([{
-            taskId: 'daily-2026-08-22',
-            taskName: '2026-08-22',
-            recordMode: 'child',
-            timerType: 'countup',
-            autoStart: false,
-        }]);
+        startDailyNoteTimer(plugin, '2026-08-22', 'countup');
+        expect(started).toEqual([[{ daily: '2026-08-22' }, 'child', { kind: 'countup' }]]);
     });
 
-    it('passes the requested timer type through', () => {
+    it('passes the requested kind through', () => {
         const { plugin, started } = makePlugin();
-        openDailyNoteTimer(plugin, '2026-08-22', 'pomodoro');
-        expect(started[0].timerType).toBe('pomodoro');
-    });
-
-    it('never starts the timer running', () => {
-        // The menu opens the widget so the user can start it; starting on its
-        // own would begin recording behind their back.
-        const { plugin, started } = makePlugin();
-        openDailyNoteTimer(plugin, '2026-08-22', 'countup');
-        expect(started[0].autoStart).toBe(false);
+        startDailyNoteTimer(plugin, '2026-08-22', 'pomodoro');
+        expect(started[0][2]).toEqual({ kind: 'pomodoro' });
     });
 });
 
@@ -96,6 +83,15 @@ describe('appendEmptySpaceMenuItems', () => {
     it('separates the create entry from the timer entries', () => {
         const { menu } = build();
         expect(menu.separatorAfter).toEqual([1]);
+    });
+
+    it('says the timers start, not open', () => {
+        const { menu } = build();
+        expect(menu.items.map(i => i.title)).toEqual([
+            t('menu.createTaskForDailyNote'),
+            t('menu.startCountupForDailyNote'),
+            t('menu.startPomodoroForDailyNote'),
+        ]);
     });
 
     it('routes each entry to its handler', () => {

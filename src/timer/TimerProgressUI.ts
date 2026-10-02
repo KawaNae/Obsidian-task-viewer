@@ -8,8 +8,6 @@
  */
 
 import type { Progress, Tone } from './TimerProgress';
-import type { TimerInstance } from './TimerInstance';
-import { repeatText } from './IntervalMath';
 
 /** The ring's colour: a tone of the measure, or `suspended` while the widget's timer waits to resume. */
 export type RingTone = Tone | 'suspended';
@@ -100,69 +98,4 @@ export class TimerProgressUI {
 
 function progressClass(block: string, tone: RingTone): string {
     return `${block}__progress-ring-progress ${block}__progress-ring-progress--${tone}`;
-}
-
-/**
- * The widget's timer read as a ring state. removed in stage 8 step 3, when the
- * widget's timers carry a measure and a clock and call `progressOf`.
- */
-export function legacyProgress(timer: TimerInstance): RingState {
-    const fullRotation = 30 * 60;
-    if (timer.runState === 'suspended') {
-        return {
-            ring: Math.max(0, Math.min(1, (timer.recordedElapsedTime % fullRotation) / fullRotation)),
-            displaySeconds: timer.recordedElapsedTime,
-            tone: 'suspended',
-            countupLike: true,
-            repeatText: null,
-        };
-    }
-
-    const tone: RingTone = timer.phase !== 'idle'
-        ? timer.phase
-        : timer.timerType === 'countdown' && timer.timeRemaining < 0 ? 'overtime' : 'plain';
-
-    switch (timer.timerType) {
-        case 'countup':
-        case 'idle':
-            return {
-                ring: Math.max(0, Math.min(1, (timer.elapsedTime % fullRotation) / fullRotation)),
-                displaySeconds: timer.elapsedTime,
-                tone,
-                countupLike: true,
-                repeatText: null,
-            };
-        case 'countdown':
-            if (timer.timeRemaining >= 0) {
-                return {
-                    ring: Math.min(1, timer.totalTime > 0 ? timer.timeRemaining / timer.totalTime : 0),
-                    displaySeconds: timer.timeRemaining,
-                    tone,
-                    countupLike: false,
-                    repeatText: null,
-                };
-            }
-            return {
-                ring: Math.max(0, Math.min(1, (-timer.timeRemaining % fullRotation) / fullRotation)),
-                displaySeconds: timer.timeRemaining,
-                tone,
-                countupLike: true,
-                repeatText: null,
-            };
-        case 'interval': {
-            const segment = timer.groups[timer.currentGroupIndex]?.segments[timer.currentSegmentIndex];
-            const segmentDuration = segment?.durationSeconds ?? timer.segmentTimeRemaining;
-            return {
-                ring: Math.max(0, Math.min(1, segmentDuration > 0 ? timer.segmentTimeRemaining / segmentDuration : 0)),
-                displaySeconds: timer.segmentTimeRemaining,
-                tone,
-                countupLike: false,
-                repeatText: repeatText(timer.groups, {
-                    group: timer.currentGroupIndex,
-                    repeat: timer.currentRepeatIndex,
-                    segment: timer.currentSegmentIndex,
-                }),
-            };
-        }
-    }
 }

@@ -3,7 +3,7 @@
  *
  * The timer puts one on in a write of its own and takes it off when the widget
  * closes. Which ids a timer put on is recorded by the write that put them on
- * (`TimerBase.ownedAnchors`), never read off the id's shape. It is still visible
+ * (`TimerState.owned`), never read off the id's shape. It is still visible
  * in the note while it is there, which is why the form is deliberately short —
  * the long UUID form it replaced read as noise in the middle of a task line.
  */

@@ -1,7 +1,8 @@
 /**
- * Next-task suggestion for the idle timer item.
+ * Next-task suggestion (idle) for the widget.
  *
- * When all timers are closed the widget shows an idle timer; this module
+ * When no timer is running the widget shows the suggestion after its timers
+ * (`TimerBoard.idle`, not a timer of its own); this module
  * picks the single task the user most likely wants to start next:
  *   1. 'current'  — an incomplete timed task whose window contains now
  *                   (latest start wins; ties broken by earliest end)
@@ -13,7 +14,7 @@
  * one hands the user a session that will be lost.
  *
  * Results are cached per (index revision, wall-clock minute) so the
- * 1-second idle tick never rescans the index.
+ * widget's 1-second tick never rescans the index.
  */
 
 import type { PluginContext } from '../PluginContext';

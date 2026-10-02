@@ -1,10 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance, type TimerRecordMode } from '../../../src/timer/TimerInstance';
+import { targetOf, type PendingRecord, type RecordMode, type TimerState } from '../../../src/timer/TimerState';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { rowOf } from '../helpers/anchoredRow';
+import { timerOn } from '../helpers/timerRig';
 
 /**
- * A timer whose target moves within its note (F8). A timer that closes with
+ * A timer whose target moves within its note. A timer that closes with
  * ■ takes its own anchor off in the write that records it, so the move in
  * that write carries a row without it. A timer that stays open while its
  * target moves — self's ⏸ completes the target, and a child's or sibling's
@@ -20,20 +21,17 @@ function lines(contents: Map<string, string>): string[] {
     return contents.get(FILE)!.split('\n');
 }
 
-function recordFor(timer: TimerInstance, then: PendingRecord['then']): PendingRecord {
-    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then };
+function recordFor(then: PendingRecord['then']): PendingRecord {
+    return { endMs: Date.now(), seconds: 60, then };
 }
 
-async function started(contents: Map<string, string>, mode: TimerRecordMode): Promise<{ s: VaultSession; timer: TimerInstance }> {
+async function started(contents: Map<string, string>, mode: RecordMode): Promise<{ s: VaultSession; timer: TimerState }> {
     const s = vaultSession(contents);
     await s.scanAll();
     const target = s.index.getTasks().find(task => task.content === '対象')!;
-    const timer = s.creator.createTimer({
-        taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-        timerTargetId: target.anchor, timerType: 'countup', recordMode: mode, autoStart: true,
-    });
-    s.onOpenTimers(() => [timer]);
-    expect(await s.recorder.writeStart(timer)).toBe(true);
+    const timer = timerOn(target, mode, 'countup', s.recorder.startAnchor(target) ?? undefined);
+    s.board.add(timer);
+    expect(await s.recorder.writeStart(timer, target)).toBe(true);
     await s.settle(FILE);
     return { s, timer };
 }
@@ -44,11 +42,11 @@ describe('self, closed with ■, on a target that moves', () => {
     it('takes its anchor off in the record\'s write, before the move carries the row', async () => {
         const contents = new Map([[FILE, NOTE.join('\n')]]);
         const { s, timer } = await started(contents, 'self');
-        const anchor = timer.timerTargetId!;
+        const anchor = targetOf(timer)!;
         expect(lines(contents)[1]).toContain(`^${anchor}`);
 
         const process = vi.spyOn(s.app.vault, 'process');
-        expect(await s.recorder.recordSessionEnd(timer, recordFor(timer, 'close'))).toBe(true);
+        expect(await s.recorder.recordSessionEnd(timer, recordFor('close'))).toBe(true);
         await s.settle(FILE);
 
         expect(process).toHaveBeenCalledTimes(1);
@@ -63,9 +61,9 @@ describe('self, closed with ■, on a target that moves', () => {
     it('keeps the anchor of a row the user anchored', async () => {
         const contents = new Map([[FILE, NOTE.map(line => line.replace('move([[#Done]])', 'move([[#Done]]) ^mine')).join('\n')]]);
         const { s, timer } = await started(contents, 'self');
-        expect(timer.timerTargetId).toBe('mine');
+        expect(targetOf(timer)).toBe('mine');
 
-        expect(await s.recorder.recordSessionEnd(timer, recordFor(timer, 'close'))).toBe(true);
+        expect(await s.recorder.recordSessionEnd(timer, recordFor('close'))).toBe(true);
         await s.settle(FILE);
 
         expect(lines(contents)[2]).toMatch(/ \^mine$/);
@@ -77,9 +75,9 @@ describe('a timer that stays open while its target moves', () => {
     it('self, after ⏸: the completed target moved with its anchor, and the timer still finds it, across a reload', async () => {
         const contents = new Map([[FILE, NOTE.join('\n')]]);
         const { s, timer } = await started(contents, 'self');
-        const anchor = timer.timerTargetId!;
+        const anchor = targetOf(timer)!;
 
-        expect(await s.recorder.recordSessionEnd(timer, recordFor(timer, 'suspend'))).toBe(true);
+        expect(await s.recorder.recordSessionEnd(timer, recordFor('suspend'))).toBe(true);
         await s.settle(FILE);
 
         const after = lines(contents);
@@ -95,7 +93,7 @@ describe('a timer that stays open while its target moves', () => {
         reloaded.dispose();
     });
 
-    it.each<TimerRecordMode>(['child', 'sibling'])('%s: its target completed by hand moves with its anchor, and the timer finds target and tail', async (mode) => {
+    it.each<RecordMode>(['child', 'sibling'])('%s: its target completed by hand moves with its anchor, and the timer finds target and tail', async (mode) => {
         const start = mode === 'sibling'
             ? ['# note', '- [ ] 親 @2026-09-21 ==> move([[#Done]])', '    - [x] 対象 @2026-09-21', '## Done', '']
             : NOTE;

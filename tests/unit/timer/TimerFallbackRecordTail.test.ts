@@ -1,40 +1,20 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { CountupTimer, TimerInstance } from '../../../src/timer/TimerInstance';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { begin, timerOn, timerRig } from '../helpers/timerRig';
 
 /**
  * タイマーが書く行はどれも錨を付けて書き、書けたらそれが尻尾になる。尻尾を
  * 見失ったときの予備の記録も同じで、置き場所（対象の先頭の子）は変えない。
- *
- * 形 B（実機の B）: 走行中の行を外で消してから ⏸ を押すと、予備の記録が先頭の子に
- * 書かれる。その行は錨を持たず、尻尾は消えた行を指したままだったので、次の ▶ の
- * 行も先頭の子に入り、前の記録より上に並んだ。
+ * 走行中の行を外で消してから ⏸ を押すと、予備の記録が先頭の子に書かれて尻尾に
+ * なり、次の ▶ の行はその隣（記録より下）に並ぶ。
  */
 (globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => 1, clearInterval: () => { },
+    setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
     addEventListener: () => { }, removeEventListener: () => { },
 };
 
 const FILE = 'notes/a.md';
 const at = (h: number, m: number) => new Date(2026, 8, 21, h, m, 0);
-
-function lifecycleOver(s: VaultSession) {
-    const ctx = {
-        timers: new Map<string, TimerInstance>(), recorder: s.recorder,
-        plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } },
-        app: s.app,
-        startTimer: () => { }, render: () => { }, renderTimerItem: () => { }, persistTimersToStorage: () => { },
-        onTimerClosed: () => { }, discardTimerContent: () => { },
-        flushTimerContent: async () => true,
-        ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
-        getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
-    } as unknown as TimerContext;
-    s.onOpenTimers(() => ctx.timers.values());
-    return { ctx, lifecycle: new TimerLifecycle(ctx, new TimerCreator(ctx)) };
-}
 
 async function settleAll(s: VaultSession) {
     for (let i = 0; i < 3; i++) {
@@ -43,7 +23,6 @@ async function settleAll(s: VaultSession) {
     }
 }
 
-const busyOf = (lifecycle: TimerLifecycle) => (lifecycle as unknown as { busy: Set<string> }).busy;
 const lines = (contents: Map<string, string>) => contents.get(FILE)!.split('\n').filter(l => l.trim() !== '');
 
 describe('a record written after the running line was lost becomes the tail', () => {
@@ -57,40 +36,36 @@ describe('a record written after the running line was lost becomes the tail', ()
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 下のタスク @2026-09-21', ''].join('\n')]]);
         const s = vaultSession(contents);
         await s.scanAll();
-        const { ctx, lifecycle } = lifecycleOver(s);
+        const rig = timerRig(s);
         const target = s.index.getTasks().find(t => t.content === '対象')!;
-        const timer = s.creator.createTimer({
-            taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-            timerType: 'countup', recordMode: 'child', autoStart: true,
-        }) as CountupTimer;
-        ctx.timers.set(timer.id, timer);
-        expect(await s.recorder.writeStart(timer)).toBe(true);
+        const timer = await begin(rig, timerOn(target, 'child', 'countup', s.recorder.startAnchor(target) ?? undefined), target);
         await settleAll(s);
+        expect(timer.tail).not.toBeNull();
 
         // 外で走行中の行を消す。
-        const running = timer.tailRecordBlockId!;
+        const running = timer.tail!;
         contents.set(FILE, contents.get(FILE)!.split('\n').filter(l => !l.includes(`^${running}`)).join('\n'));
         await s.scanAll();
 
         vi.setSystemTime(at(9, 10));
-        await lifecycle.suspendTimer(timer);
+        await rig.lifecycle.stop(timer, 'suspend');
         await settleAll(s);
-        expect(timer.runState).toBe('suspended');
+        expect(timer.session).toEqual({ kind: 'suspended' });
         const record = lines(contents).findIndex(l => l.includes('@2026-09-21T09:00>09:10'));
         expect(record).toBe(1);
         // 予備の記録も錨を持ち、尻尾になる。
-        expect(lines(contents)[record]).toMatch(new RegExp(`\\^${timer.tailRecordBlockId}$`));
+        expect(timer.tail).not.toBe(running);
+        expect(lines(contents)[record]).toMatch(new RegExp(`\\^${timer.tail}$`));
 
         vi.setSystemTime(at(9, 20));
-        lifecycle.resumeSession(timer);
-        await vi.waitFor(() => expect(busyOf(lifecycle).has(timer.id)).toBe(false));
+        await rig.lifecycle.resume(timer);
         await settleAll(s);
-        expect(timer.runState).toBe('running');
+        expect(timer.session.kind).toBe('running');
         const next = lines(contents).findIndex(l => /@2026-09-21T09:20(?!>)/.test(l));
         expect(next).toBeGreaterThan(record);
 
         vi.setSystemTime(at(9, 30));
-        await lifecycle.finishTimer(timer);
+        await rig.lifecycle.stop(timer, 'close');
         await settleAll(s);
         const after = lines(contents);
         expect(after.filter(l => /@2026-09-21T\d\d:\d\d(?!>)/.test(l))).toEqual([]);

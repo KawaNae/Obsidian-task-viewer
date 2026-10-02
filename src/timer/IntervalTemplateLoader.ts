@@ -27,7 +27,7 @@
  */
 
 import { type App, TFile, TFolder } from 'obsidian';
-import type { IntervalGroup, IntervalSegment } from './TimerInstance';
+import type { IntervalGroup, IntervalSegment } from './IntervalMath';
 import { formatTotalDuration } from './IntervalMath';
 
 export interface IntervalTemplate {

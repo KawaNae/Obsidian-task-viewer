@@ -15,7 +15,7 @@ import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import {
     appendEmptySpaceMenuItems,
     openCreateTaskForDailyNote,
-    openDailyNoteTimer,
+    startDailyNoteTimer,
 } from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
@@ -205,7 +205,7 @@ export class TimelineSectionRenderer {
         this.plugin.menuPresenter.present((menu) => {
             appendEmptySpaceMenuItems(menu, {
                 onCreate: () => this.handleCreateTaskTrigger(offsetY, date),
-                onTimer: (timerType) => openDailyNoteTimer(this.plugin, date, timerType),
+                onTimer: (kind) => startDailyNoteTimer(this.plugin, date, kind),
             });
         }, { kind: 'position', x, y });
     }

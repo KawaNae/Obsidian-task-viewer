@@ -19,7 +19,6 @@
 import type { App, WorkspaceLeaf, WorkspaceWindow } from 'obsidian';
 import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { FloatingOverlayHost } from './FloatingOverlayHost';
-import type { TimerContext } from './TimerContext';
 
 const NON_DRAGGABLE_SELECTORS = [
     '.timer-widget__item input',
@@ -37,7 +36,7 @@ export class TimerWidgetWindowObserver {
     constructor(
         private app: App,
         private plugin: PluginContext & EventRegistrar,
-        private widget: TimerContext,
+        private widget: { render(): void },
     ) {
         this.host = new FloatingOverlayHost({
             nonDraggableSelectors: NON_DRAGGABLE_SELECTORS,

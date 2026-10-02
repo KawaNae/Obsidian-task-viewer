@@ -12,7 +12,7 @@ import type { DisplayTask } from '../../types';
 import {
     appendEmptySpaceMenuItems,
     openCreateTaskForDailyNote,
-    openDailyNoteTimer,
+    startDailyNoteTimer,
 } from '../sharedLogic/DailyNoteTaskActions';
 import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
@@ -180,7 +180,7 @@ export class AllDaySectionRenderer {
         this.plugin.menuPresenter.present((menu) => {
             appendEmptySpaceMenuItems(menu, {
                 onCreate: () => openCreateTaskForDailyNote(this.plugin, date, { startDate: date }),
-                onTimer: (timerType) => openDailyNoteTimer(this.plugin, date, timerType),
+                onTimer: (kind) => startDailyNoteTimer(this.plugin, date, kind),
             });
         }, { kind: 'position', x, y });
     }

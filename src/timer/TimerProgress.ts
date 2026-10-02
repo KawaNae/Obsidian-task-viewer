@@ -7,7 +7,7 @@
  * （{@link tickOf}）だけ。
  */
 
-import type { IntervalGroup } from './TimerInstance';
+import type { IntervalGroup } from './IntervalMath';
 import { msAt, readSeconds, type Clock } from './TimerClock';
 import { advance, repeatText, segmentAt, type IntervalCursor } from './IntervalMath';
 

@@ -1,54 +1,32 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { CountupTimer, TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
+import type { RecordMode } from '../../../src/timer/TimerState';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { begin, timerOn, timerRig } from '../helpers/timerRig';
 
 /**
- * 停止は尻尾（tailRecordBlockId）が指すセッションの行を閉じる
- * （TimerRecorder.recordSessionEnd）。
- *
- * 尻尾は書き込みが書けたときに移り、停止はその錨で行を引いて閉じる。以前は書いた
- * あとにスキャンで行の id を引き直し、引けなかったときの停止は開いた行の横に記録を
- * 1行足した。開いた行は残り、
- * 1 セッションが 2 行になった（並びも逆）。
+ * 止めると、尻尾（`tail`）が指す走行中の行を閉じる（TimerRecorder.recordSessionEnd）。
+ * 尻尾は書き込みが書けたときに移り（`landed`）、止めるときはその錨で行を引いて
+ * 閉じる。1 つの走行は 1 行で、開いた行も、横に足した記録も残らない。
  */
 (globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => 1, clearInterval: () => { },
+    setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
     addEventListener: () => { }, removeEventListener: () => { },
 };
 const FILE = 'notes/a.md';
 const at = (h: number, m: number) => new Date(2026, 8, 21, h, m, 0);
 
-function lifecycleOver(s: VaultSession) {
-    const ctx = {
-        timers: new Map<string, TimerInstance>(), recorder: s.recorder,
-        plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } }, app: s.app,
-        startTimer: () => { }, render: () => { }, renderTimerItem: () => { }, persistTimersToStorage: () => { },
-        onTimerClosed: () => { }, flushTimerContent: async () => true, discardTimerContent: () => { },
-        ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
-        getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
-    } as unknown as TimerContext;
-    const lifecycle = new TimerLifecycle(ctx, new TimerCreator(ctx));
-    return { ctx, lifecycle };
-}
-
-async function sessionAt9(mode: TimerRecordMode) {
+/** 09:00 に始めて、1 本目の行を書いたタイマー。 */
+async function startedAt9(mode: RecordMode) {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(at(9, 0));
     const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 下のタスク @2026-09-21', ''].join('\n')]]);
     const s = vaultSession(contents);
     await s.scanAll();
+    const rig = timerRig(s);
     const target = s.index.getTasks().find(t => t.content === '対象')!;
-    const timer = s.creator.createTimer({
-        taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-        timerType: 'countup', recordMode: mode, autoStart: true,
-    }) as CountupTimer;
-    const h = lifecycleOver(s);
-    h.ctx.timers.set(timer.id, timer);
-    return { s, contents, timer, ...h };
+    const timer = await begin(rig, timerOn(target, mode, 'countup', s.recorder.startAnchor(target) ?? undefined), target);
+    return { s, contents, timer, rig };
 }
 
 async function settleAll(s: VaultSession) {
@@ -65,20 +43,18 @@ describe('a stop closes the session line the tail names', () => {
     afterEach(() => vi.useRealTimers());
 
     it('child, session 1: ■ closes the line written at start, and there is one line', async () => {
-        const { s, contents, timer, lifecycle, ctx } = await sessionAt9('child');
+        const { s, contents, timer, rig } = await startedAt9('child');
         // 書けた時点で尻尾はその行の錨。
-        expect(await s.recorder.writeStart(timer)).toBe(true);
-        expect(openLines(contents.get(FILE)!)).toEqual([expect.stringContaining(`^${timer.tailRecordBlockId}`)]);
+        expect(openLines(contents.get(FILE)!)).toEqual([expect.stringContaining(`^${timer.tail}`)]);
         await s.settle(FILE);
 
-        timer.startTimeMs = Date.now();
         vi.setSystemTime(at(9, 10));
         Notice.messages.length = 0;
-        await lifecycle.finishTimer(timer);
+        await rig.lifecycle.stop(timer, 'close');
         await settleAll(s);
 
         expect(Notice.messages).toHaveLength(1);
-        expect(ctx.timers.has(timer.id)).toBe(false);
+        expect(rig.board.has(timer)).toBe(false);
         const text = contents.get(FILE)!;
         expect(records(text)).toEqual(['09:00>09:10']);
         expect(openLines(text)).toEqual([]);
@@ -88,32 +64,30 @@ describe('a stop closes the session line the tail names', () => {
 
     for (const mode of ['child', 'self'] as const) {
         it(`${mode}, session 2: ⏸ closes the resumed line, and the records are 09:00>09:10 then 09:20>09:30`, async () => {
-            const { s, contents, timer, lifecycle } = await sessionAt9(mode);
-            await s.recorder.writeStart(timer);
+            const { s, contents, timer, rig } = await startedAt9(mode);
             await s.settle(FILE);
-            timer.startTimeMs = Date.now();
             vi.setSystemTime(at(9, 10));
-            await lifecycle.suspendTimer(timer);
+            await rig.lifecycle.stop(timer, 'suspend');
             await settleAll(s);
             expect(records(contents.get(FILE)!)).toEqual(['09:00>09:10']);
 
             vi.setSystemTime(at(9, 20));
-            const firstTail = timer.tailRecordBlockId;
+            const firstTail = timer.tail;
             // 再開の行が書けた時点で、尻尾は新しい行。
-            lifecycle.resumeSession(timer);
-            await vi.waitFor(() => expect(timer.runState).toBe('running'));
-            expect(timer.tailRecordBlockId).not.toBe(firstTail);
+            await rig.lifecycle.resume(timer);
+            expect(timer.session.kind).toBe('running');
+            expect(timer.tail).not.toBe(firstTail);
             await settleAll(s);
             expect(openLines(contents.get(FILE)!)).toHaveLength(1);
 
             vi.setSystemTime(at(9, 30));
             Notice.messages.length = 0;
-            await lifecycle.suspendTimer(timer);
+            await rig.lifecycle.stop(timer, 'suspend');
             await settleAll(s);
 
             expect(Notice.messages).toHaveLength(1);
-            expect(timer.runState).toBe('suspended');
-            expect(timer.sessionCount).toBe(2);
+            expect(timer.session).toEqual({ kind: 'suspended' });
+            expect(timer.recorded).toEqual({ seconds: 1200, count: 2 });
             const text = contents.get(FILE)!;
             expect(records(text)).toEqual(['09:00>09:10', '09:20>09:30']);
             expect(openLines(text)).toEqual([]);

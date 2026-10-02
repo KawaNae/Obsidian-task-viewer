@@ -10,8 +10,8 @@ import ja from '../../../src/i18n/locales/ja.json';
 const BUTTON_LABEL_KEYS = ['start', 'stop', 'resume', 'pause', 'suspend', 'finish', 'suspended'] as const;
 
 const locales: Record<string, Record<string, string>> = {
-    en: (en as { timer: Record<string, string> }).timer,
-    ja: (ja as { timer: Record<string, string> }).timer,
+    en: (en as unknown as { timer: Record<string, string> }).timer,
+    ja: (ja as unknown as { timer: Record<string, string> }).timer,
 };
 
 describe('timer widget button labels', () => {
@@ -32,4 +32,39 @@ describe('timer widget button labels', () => {
         // 別キーを起こすこと（流用するとボタンに文が出る）。
         expect(locales.en.complete).toMatch(/!$/);
     });
+});
+
+/**
+ * 記録の通知は1つの文言で、種類の名前（Timer、Countdown、Pomodoro）を `{{kind}}` で
+ * 受ける。メニューの文言は押した瞬間に始まることを「開始」と言う。
+ */
+const NOTICE_KEYS = ['timerRecorded'] as const;
+const MENU_KEYS = ['startChildCountup', 'startChildPomodoro', 'startCountupForDailyNote', 'startPomodoroForDailyNote'] as const;
+
+const tables = (namespace: string): Record<string, Record<string, string>> => ({
+    en: (en as unknown as Record<string, Record<string, string>>)[namespace],
+    ja: (ja as unknown as Record<string, Record<string, string>>)[namespace],
+});
+
+describe('timer notice and menu labels', () => {
+    for (const [name, table] of Object.entries(tables('notice'))) {
+        it(`${name}: one recorded notice names the kind, the icon and the duration`, () => {
+            for (const key of NOTICE_KEYS) {
+                expect(table[key], `notice.${key} missing in ${name}`).toBeTruthy();
+            }
+            for (const slot of ['{{icon}}', '{{kind}}', '{{duration}}']) expect(table.timerRecorded).toContain(slot);
+            for (const gone of ['countdownRecorded', 'kindRecorded', 'taskUpdated']) expect(table[gone]).toBeUndefined();
+        });
+    }
+
+    for (const [name, table] of Object.entries(tables('menu'))) {
+        it(`${name}: the menu starts a child or daily note timer, and does not open one`, () => {
+            for (const key of MENU_KEYS) {
+                expect(table[key], `menu.${key} missing in ${name}`).toBeTruthy();
+            }
+            for (const gone of ['openCountup', 'openPomodoro', 'openCountupForDailyNote', 'openPomodoroForDailyNote']) {
+                expect(table[gone]).toBeUndefined();
+            }
+        });
+    }
 });

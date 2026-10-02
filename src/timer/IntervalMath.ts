@@ -10,7 +10,20 @@
  * ここだけが答える。ウィジェットと独立ビュー（`TimerView`）が同じ関数を使う。
  */
 
-import type { IntervalGroup, IntervalSegment } from './TimerInstance';
+export interface IntervalSegment {
+    label: string;
+    durationSeconds: number;
+    type: 'work' | 'break' | 'prepare';
+}
+
+/**
+ * 区間の並びと、その繰り返し回数（0 は無限）。work、break、prepare の巡回を表し、
+ * 記録の書き方とは関係しない。
+ */
+export interface IntervalGroup {
+    segments: IntervalSegment[];
+    repeatCount: number;
+}
 
 /** 区間の位置。`from` は今の区間が始まったときの時計の読み（秒）。 */
 export interface IntervalCursor {
@@ -135,115 +148,4 @@ export function defaultSegmentLabel(type: IntervalSegment['type']): string {
     if (type === 'prepare') return 'Prepare';
     if (type === 'break') return 'Break';
     return 'Work';
-}
-
-// ─── ウィジェットの口 ───────────────────────────────────────────
-// ウィジェット（TimerLifecycle / TimerPersistence / TimerRenderer / TimerCreator）
-// のタイマーが持つカーソルの形で答える。used by the widget until stage 8 step 3.
-
-/** ウィジェットのタイマーが持つ区間の位置。`IntervalTimer` はこれを満たす。 */
-export interface LegacyIntervalCursor {
-    groups: IntervalGroup[];
-    currentGroupIndex: number;
-    currentSegmentIndex: number;
-    currentRepeatIndex: number;
-}
-
-/** `normalizeGroups` が空の入力に当てる既定値。設定を読むのは呼び出し側の責任。 */
-export interface IntervalDefaults {
-    prepareSeconds: number;
-    workSeconds: number;
-    breakSeconds: number;
-}
-
-export function getCurrentSegment(cursor: LegacyIntervalCursor): IntervalSegment | null {
-    const group = cursor.groups[cursor.currentGroupIndex];
-    if (!group) return null;
-    return group.segments[cursor.currentSegmentIndex] ?? null;
-}
-
-/** カーソルを次の区間へ進める。進めたら true、全部終わっていたら false。送りの規則は {@link advance} と同じ。 */
-export function advanceSegment(cursor: LegacyIntervalCursor): boolean {
-    const next = nextPosition(cursor.groups, {
-        group: cursor.currentGroupIndex,
-        repeat: cursor.currentRepeatIndex,
-        segment: cursor.currentSegmentIndex,
-        from: 0,
-    });
-    if (!next) return false;
-    cursor.currentGroupIndex = next.group;
-    cursor.currentRepeatIndex = next.repeat;
-    cursor.currentSegmentIndex = next.segment;
-    return true;
-}
-
-/** 現在位置より前に完了している区間の合計秒。今いる区間の経過は含まない。 */
-export function computeCompletedDuration(cursor: LegacyIntervalCursor): number {
-    let total = 0;
-    for (let g = 0; g < cursor.groups.length; g++) {
-        const group = cursor.groups[g];
-        const repeats = group.repeatCount === 0
-            ? (g === cursor.currentGroupIndex ? cursor.currentRepeatIndex : 0)
-            : Math.max(1, group.repeatCount || 1);
-        const groupDuration = group.segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
-
-        if (g < cursor.currentGroupIndex) {
-            total += groupDuration * repeats;
-            continue;
-        }
-
-        if (g > cursor.currentGroupIndex) {
-            break;
-        }
-
-        total += groupDuration * cursor.currentRepeatIndex;
-        for (let s = 0; s < cursor.currentSegmentIndex; s++) {
-            total += group.segments[s].durationSeconds;
-        }
-    }
-    return total;
-}
-
-/** 上限のあるインターバルで経過が総量を超えないようにする。0 は上限なし。 */
-export function clampToTotalDuration(total: number, value: number): number {
-    return total > 0 ? Math.min(total, value) : value;
-}
-
-/**
- * 外から来たグループ定義を整える。長さは 1 秒以上の整数、ラベルは空なら種別から
- * 補う。区間の無いグループは落とし、全部落ちたら既定の 1 グループを返す。
- */
-export function normalizeGroups(
-    input: IntervalGroup[] | undefined,
-    defaults: IntervalDefaults,
-): IntervalGroup[] {
-    const normalized = (input ?? [])
-        .map((group) => ({
-            repeatCount: group.repeatCount === 0 ? 0 : Math.max(1, Math.floor(group.repeatCount || 1)),
-            segments: (group.segments || [])
-                .map((segment) => ({
-                    label: (segment.label || '').trim() || defaultSegmentLabel(segment.type),
-                    durationSeconds: Math.max(1, Math.floor(segment.durationSeconds || 0)),
-                    type: segment.type,
-                }))
-                // 長さは上で 1 秒以上に持ち上がるので、この filter は何も落とさない。
-                // 消えるのは segments が空のグループだけ（下段の filter）。
-                .filter((segment) => segment.durationSeconds > 0),
-        }))
-        .filter((group) => group.segments.length > 0);
-
-    if (normalized.length > 0) {
-        return normalized;
-    }
-
-    return [
-        {
-            repeatCount: 1,
-            segments: [
-                { label: 'Prepare', durationSeconds: defaults.prepareSeconds, type: 'prepare' },
-                { label: 'Work', durationSeconds: defaults.workSeconds, type: 'work' },
-                { label: 'Break', durationSeconds: defaults.breakSeconds, type: 'break' },
-            ],
-        },
-    ];
 }

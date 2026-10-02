@@ -3,10 +3,8 @@ import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { Operations } from '../../../src/services/operations/Operations';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
+import { TimerBoard } from '../../../src/timer/TimerBoard';
+import type { TimerState } from '../../../src/timer/TimerState';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { splitLines } from '../../../src/services/persistence/FileLines';
@@ -173,6 +171,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             ...(config ? { getConfig: (key: string) => config[key] } : {}),
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
             offref: () => { },
+            getName: () => 'test-vault',
             read: async (file: TFile) => contents.get(file.path) ?? '',
             process: async (file: TFile, fn: (data: string) => string) => {
                 const before = contents.get(file.path) ?? '';
@@ -271,18 +270,23 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
     const connected = (opsInternals.repository as unknown as { channels: (file: string) => WriteChannel }).channels;
 
     let n = 0;
-    // What the recorder calls to save the timers before it writes a line.
-    let persist = (): void => { };
-    // The timers the recorder sees open, when it decides whether it may take an anchor off.
-    let openTimers = (): Iterable<TimerInstance> => [];
-    const storageUtils = {
-        generateTimerTargetId: () => `tv-t-test${++n}`,
-    } as unknown as TimerStorageUtils;
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
         getIndex: () => index,
         getOperations: () => ops,
+        /** Reads no display task: a test of the end extension gives its own. */
+        getTaskReadService: () => ({ getDisplayTask: (_id: string): unknown => undefined }),
     };
+    // The timers' board, as the widget's: what it saves is kept in `saved`, it draws nothing.
+    const saved: TimerState[][] = [];
+    const board: TimerBoard = new TimerBoard({
+        persist: () => { saved.push(board.values().map(timer => structuredClone(timer))); },
+        render: () => { },
+    });
+    const recorder = new TimerRecorder(plugin as never, {
+        dispatch: (timer, event) => board.dispatch(timer, event),
+        timers: () => board.values(),
+    }, () => `tv-t-test${++n}`);
 
     return {
         /** For a test that writes through `processLines` itself. */
@@ -303,12 +307,14 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         reconciler: internals.reconciler,
         /** Tell the operations a write was refused, as their own channel does. */
         reportRefusal: (refusal: Refusal): void => opsInternals.reportRefusal(refusal),
-        recorder: new TimerRecorder(plugin as never, storageUtils, () => persist(), () => openTimers()),
-        /** Save the timers as the plugin does when the recorder asks, before it writes a line. */
-        onPersist: (fn: () => void): void => { persist = fn; },
-        /** The open timers the recorder sees, as the widget's own map. */
-        onOpenTimers: (fn: () => Iterable<TimerInstance>): void => { openTimers = fn; },
-        creator: new TimerCreator({} as TimerContext),
+        /** The plugin the timer's parts are given: its settings, the index and the operations. */
+        plugin,
+        /** The open timers, as the widget's board: the recorder writes through it and asks it which timers are open. */
+        board,
+        /** What the board saved, oldest first: a copy of its timers each time. */
+        saved,
+        /** The recorder over `board`; the anchors it puts are `tv-t-test1`, `tv-t-test2`, … */
+        recorder,
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
         /** Read the whole vault, and tell the listeners, as the index does once the layout is ready. */
         scanAll: () => internals.readVault(),

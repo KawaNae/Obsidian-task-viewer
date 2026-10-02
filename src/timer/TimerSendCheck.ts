@@ -1,12 +1,12 @@
 import { t } from '../i18n';
 import type { SendingLines } from '../services/data/NoteOps';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
-import type { TimerBase } from './TimerInstance';
+import { targetOf, type TimerState } from './TimerState';
 
 /**
  * Whether the open timers let rows go to a note (the send operation,
  * `NoteOps.send`; `archive/2026-09-send.md`, 開いているタイマー). A timer finds its lines by their
- * `^id`s in its note (`taskFile`), so a send that carries them away must
+ * `^id`s in its note (`file`), so a send that carries them away must
  * take the timer along, and one that would leave it without its lines is
  * not made.
  */
@@ -19,14 +19,14 @@ export interface AnchoredTimer {
 }
 
 /**
- * The `^id`s a timer finds its lines by: its target's and its tail's, and
- * those of the write it is making (`opening`), which are its target and tail
- * once the write lands. Not `ownedAnchors`: those are the ones it is to take
- * off, not the ones it looks up. A timer with none (idle, or one whose first
- * write has not been asked) has nothing a send could take away.
+ * The `^id`s a timer finds its lines by: its target's (`targetOf`) and its
+ * tail's, and the tail of the write it is making (`opening`), which is its
+ * tail once the write lands. Not `owned`: those are the ones it is to take
+ * off, not the ones it looks up. A timer with none (one on a daily note
+ * whose first write has not been asked) has nothing a send could take away.
  */
-export function anchorsOf(timer: Pick<TimerBase, 'timerTargetId' | 'tailRecordBlockId' | 'opening'>): string[] {
-    const ids = [timer.timerTargetId, timer.tailRecordBlockId, timer.opening?.target, timer.opening?.tail];
+export function anchorsOf(timer: Pick<TimerState, 'subject' | 'tail' | 'opening'>): string[] {
+    const ids = [targetOf(timer), timer.tail, timer.opening?.tail];
     return [...new Set(ids.filter((id): id is string => !!id))];
 }
 

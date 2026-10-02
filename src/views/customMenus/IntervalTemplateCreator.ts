@@ -9,7 +9,7 @@
 import { type App, Notice, setIcon, getIconIds } from 'obsidian';
 import { t } from '../../i18n';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
-import type { IntervalGroup, IntervalSegment } from '../../timer/TimerInstance';
+import type { IntervalGroup, IntervalSegment } from '../../timer/IntervalMath';
 import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
 import { defaultSegmentLabel } from '../../timer/IntervalMath';
 import { PopoverStack } from '../sharedUI/PopoverStack';

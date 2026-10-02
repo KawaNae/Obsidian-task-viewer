@@ -1,128 +1,136 @@
-import { describe, expect, it, beforeEach } from 'vitest';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
-import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Notice } from 'obsidian';
+import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { widgetOver } from '../helpers/timerRig';
+import { TimerWidget } from '../../../src/timer/TimerWidget';
+import { t } from '../../../src/i18n';
 
 /**
- * タイマーの同一性は **タスクから独立**していなければならない。
- * `handleFileRename` は `timer.taskId` をその場で書き換えるので、タスク id を
- * キーにしていると Map / DOM / ticker が取り残される（rename 後に同じタスクで
- * 二重起動できてしまうのが実害）。
+ * タイマーの同一性はタスクから独立している。タイマーの id は対象から作らず、
+ * 一生のあいだ変わらない。対象は行の錨（`subject.anchor`）で追い、行の名前
+ * （`task.id`）は持たない。二重起動の判定は `(file, anchor)` とデイリーノートの日で
+ * 行うので、ノートの改名や行の移動のあとも同じ行への二重起動を断る。表示の写し
+ * （名前と色）は索引が変わるたびに錨で引き直す。
  */
+const FILE = 'notes/a.md';
+const at = (h: number, m: number) => new Date(2026, 8, 21, h, m, 0);
 
-// TimerLifecycle は ticker に window タイマーを使う。node environment なので最小スタブ。
-const timerHandles: number[] = [];
-(globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => {
-        const id = timerHandles.length + 1;
-        timerHandles.push(id);
-        return id;
-    },
-    clearInterval: (id: number) => {
-        const idx = timerHandles.indexOf(id);
-        if (idx >= 0) timerHandles.splice(idx, 1);
-    },
-};
-
-function makeCtx(): TimerContext & { renders: number } {
-    const ctx = {
-        timers: new Map<string, TimerInstance>(),
-        recorder: {} as TimerContext['recorder'],
-        plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],
-        app: {} as TimerContext['app'],
-        renders: 0,
-        startTimer: () => { /* unused */ },
-        render() { ctx.renders++; },
-        renderTimerItem: () => { /* unused */ },
-        persistTimersToStorage: () => { /* unused */ },
-        onTimerClosed: () => { /* unused */ },
-        flushTimerContent: async () => { /* unused */ },
-        discardTimerContent: () => { /* unused */ },
-        ensureContainer: () => ({}) as HTMLElement,
-        destroyContainer: () => { /* unused */ },
-        getPinState: () => 'pinned' as const,
-        togglePin: () => { /* unused */ },
-        shouldShowPinBadge: () => false,
+function stubWindow(): void {
+    const store = new Map<string, string>();
+    (globalThis as unknown as { window: unknown }).window = {
+        setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
+        addEventListener: () => { }, removeEventListener: () => { },
+        localStorage: {
+            getItem: (k: string) => store.get(k) ?? null,
+            setItem: (k: string, v: string) => { store.set(k, v); },
+            removeItem: (k: string) => { store.delete(k); },
+        },
     };
-    return ctx;
 }
 
-const TASK_ID = 'tv-inline:notes/a.md:ln:3';
-const RENAMED_TASK_ID = 'tv-inline:notes/renamed.md:ln:3';
-
 describe('timer identity', () => {
-    let ctx: ReturnType<typeof makeCtx>;
-    let creator: TimerCreator;
-    let lifecycle: TimerLifecycle;
+    let s: VaultSession;
+    let contents: Map<string, string>;
 
-    beforeEach(() => {
-        ctx = makeCtx();
-        creator = new TimerCreator(ctx);
-        lifecycle = new TimerLifecycle(ctx, creator);
+    beforeEach(async () => {
+        stubWindow();
+        Notice.messages = [];
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(at(9, 0));
+        contents = new Map([[FILE, ['- [ ] 器 @2026-09-21 ^box', '- [ ] 別 @2026-09-21 ^other', ''].join('\n')]]);
+        s = vaultSession(contents);
+        await s.scanAll();
+    });
+    afterEach(() => {
+        s.dispose();
+        vi.useRealTimers();
     });
 
-    function start(taskId: string): TimerInstance {
-        const timer = creator.createTimer({ taskId, taskName: 'A', timerType: 'countup', autoStart: true });
-        ctx.timers.set(timer.id, timer);
-        return timer;
-    }
+    const task = (content: string) => s.index.getTasks().find(one => one.content === content)!;
+    const settle = async () => {
+        for (let i = 0; i < 3; i++) {
+            await new Promise(r => setTimeout(r, 0));
+            for (const path of contents.keys()) await s.settle(path);
+        }
+    };
 
-    it('gives every timer an id that is not the task id', () => {
-        const timer = start(TASK_ID);
-        expect(timer.id).not.toBe(TASK_ID);
-        expect(timer.id.startsWith('timer-')).toBe(true);
-    });
+    it('gives each timer its own id, made from nothing of its task', () => {
+        const widget = widgetOver(s);
+        widget.startTimer(task('器'), 'child', { kind: 'countup' });
+        widget.startTimer(task('別'), 'child', { kind: 'countup' });
 
-    it('gives two timers on the same task distinct ids', () => {
-        const a = creator.createTimer({ taskId: TASK_ID, taskName: 'A', timerType: 'countup' });
-        const b = creator.createTimer({ taskId: TASK_ID, taskName: 'A', timerType: 'countup' });
+        const [a, b] = widget.board.values();
+        expect(a.id).toMatch(/^timer-/);
         expect(a.id).not.toBe(b.id);
+        expect(a.id).not.toContain(task('器').id);
+        expect(a.subject).toEqual({ kind: 'task', anchor: 'box' });
+        expect(b.subject).toEqual({ kind: 'task', anchor: 'other' });
     });
 
-    it('keeps the idle sentinel id (single-instance guard depends on it)', () => {
-        const idle = creator.createTimer({ taskId: 'ignored', taskName: '', timerType: 'idle' });
-        expect(idle.id).toBe(IDLE_TIMER_ID);
-        expect(lifecycle.isIdleTimer(idle.id)).toBe(true);
+    it('refuses a second timer on the same row, found by its anchor', async () => {
+        const widget = widgetOver(s);
+        widget.startTimer(task('器'), 'child', { kind: 'countup' });
+        await vi.waitFor(() => expect(widget.board.values()[0].tail).not.toBeNull());
+        await settle();
+
+        // 子の行が書かれて行の名前は替わっているが、錨は同じ。
+        widget.startTimer(task('器'), 'self', { kind: 'pomodoro' });
+
+        expect(widget.board.size).toBe(1);
+        expect(Notice.messages).toContain(t('timer.alreadyActive'));
     });
 
-    it('still finds the active timer after a file rename rewrites taskId', () => {
-        const timer = start(TASK_ID);
-        expect(lifecycle.hasActiveTimerForTask(TASK_ID)).toBe(true);
+    it('still refuses the same row after its note is renamed', async () => {
+        const widget = widgetOver(s);
+        widget.startTimer(task('器'), 'child', { kind: 'countup' });
+        const [timer] = widget.board.values();
+        await vi.waitFor(() => expect(timer.tail).not.toBeNull());
+        await settle();
 
-        // handleFileRename の挙動: taskId だけをその場で書き換える
-        timer.taskId = RENAMED_TASK_ID;
+        contents.set('notes/b.md', contents.get(FILE)!);
+        contents.delete(FILE);
+        await s.fireVault('rename', s.app.vault.getAbstractFileByPath('notes/b.md'), FILE);
+        widget.handleFileRename(FILE, 'notes/b.md');
+        await settle();
 
-        expect(lifecycle.hasActiveTimerForTask(RENAMED_TASK_ID)).toBe(true);
-        expect(lifecycle.hasActiveTimerForTask(TASK_ID)).toBe(false);
+        expect(timer.file).toBe('notes/b.md');
+        expect(task('器').file).toBe('notes/b.md');
+        widget.startTimer(task('器'), 'child', { kind: 'countup' });
+        expect(widget.board.values()).toEqual([timer]);
     });
 
-    it('closes the timer by its own id after a rename', () => {
-        const timer = start(TASK_ID);
-        timer.taskId = RENAMED_TASK_ID;
+    it('refuses a second timer on the same day, and takes one on another day', () => {
+        const widget = widgetOver(s);
+        s.ops.putInDailyNote = async () => null;
 
-        lifecycle.closeTimer(timer.id);
+        widget.startTimer({ daily: '2026-09-21' }, 'child', { kind: 'countup' });
+        widget.startTimer({ daily: '2026-09-21' }, 'child', { kind: 'pomodoro' });
+        expect(widget.board.size).toBe(1);
+        expect(Notice.messages).toContain(t('timer.alreadyActive'));
 
-        expect(ctx.timers.has(timer.id)).toBe(false);
-        // 非 idle が居なくなったので idle が起きる
-        expect(ctx.timers.has(IDLE_TIMER_ID)).toBe(true);
+        widget.startTimer({ daily: '2026-09-22' }, 'child', { kind: 'countup' });
+        expect(widget.board.size).toBe(2);
     });
 
-    it('matches by timerTargetId as before', () => {
-        const timer = creator.createTimer({
-            taskId: TASK_ID, taskName: 'A', timerType: 'countup', timerTargetId: 'tv-timer-1',
-        });
-        // 対象の錨は開始の書き込みが書けてから決まる。
-        timer.timerTargetId = 'tv-timer-1';
-        ctx.timers.set(timer.id, timer);
+    it('takes its name from the row its anchor finds, after the row is rewritten', async () => {
+        const widget = new TimerWidget(s.app, { ...s.plugin, registerEvent: () => { } } as never);
+        widget.render = () => { };
+        // 項目は見つかるが、名前欄と見出しは無い器。
+        widget.ensureContainer = () => ({ querySelector: () => ({ querySelector: () => null }) }) as unknown as HTMLElement;
+        widget.activate();
 
-        expect(lifecycle.hasActiveTimerForTask('tv-inline:other.md:ln:9', 'tv-timer-1')).toBe(true);
-        expect(lifecycle.hasActiveTimerForTask('tv-inline:other.md:ln:9', 'tv-timer-2')).toBe(false);
-    });
+        widget.startTimer(task('器'), 'child', { kind: 'countup' });
+        const [timer] = widget.board.values();
+        await vi.waitFor(() => expect(timer.tail).not.toBeNull());
+        await settle();
+        expect(timer.name).toBe('器');
 
-    it('reports the idle timer only through the sentinel', () => {
-        expect(lifecycle.hasActiveTimerForTask(IDLE_TIMER_ID)).toBe(false);
-        lifecycle.startIdleTimer();
-        expect(lifecycle.hasActiveTimerForTask(IDLE_TIMER_ID)).toBe(true);
+        // 行を書き換える（行の名前は読み直しで替わる）。
+        await s.ops.updateByAnchor(timer.file, 'box', { content: '新しい器' });
+        await settle();
+
+        // 索引の変化の知らせはまとめて遅れて届く。
+        await vi.waitFor(() => expect(timer.name).toBe('新しい器'));
+        widget.destroy();
     });
 });

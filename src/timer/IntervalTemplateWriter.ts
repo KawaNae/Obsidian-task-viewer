@@ -6,7 +6,7 @@
  */
 
 import { type App, TFile } from 'obsidian';
-import type { IntervalGroup } from './TimerInstance';
+import type { IntervalGroup } from './IntervalMath';
 import { templateNoteContent, templateNotePath, yamlQuoted, type TemplateNoteSaver } from '../services/template/TemplateNote';
 
 export interface TemplateCreateData {
