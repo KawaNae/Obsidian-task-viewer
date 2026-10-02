@@ -151,14 +151,14 @@ function startTimer(name: string, mode: 'child' | 'sibling'): { id: string; targ
         const widget = plugin.getTimerWidget();
         const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
-        const before = new Set(widget.timers.keys());
-        widget.startTimer({ taskId: task.id, taskName: task.content, taskFile: task.file, taskOriginalText: task.originalText,
-            timerTargetId: task.anchor, timerType: 'countup', recordMode: ${JSON.stringify(mode)}, autoStart: true });
-        const timer = [...widget.timers.values()].find(t => t.timerType === 'countup' && !before.has(t.id));
+        const before = new Set(widget.board.values().map(t => t.id));
+        widget.startTimer(task, ${JSON.stringify(mode)}, { kind: 'countup' });
+        const timer = widget.board.values().find(t => t.measure.type === 'countup' && !before.has(t.id));
+        if (!timer) throw new Error('no timer started on ' + ${JSON.stringify(name)});
         const end = Date.now() + 5000;
-        while (Date.now() < end && !(timer.tailRecordBlockId && !timer.opening)) await new Promise(r => setTimeout(r, 50));
+        while (Date.now() < end && !(timer.tail && !timer.opening)) await new Promise(r => setTimeout(r, 50));
         await new Promise(r => setTimeout(r, 300));
-        return JSON.stringify({ id: timer.id, target: timer.timerTargetId, tail: timer.tailRecordBlockId });
+        return JSON.stringify({ id: timer.id, target: timer.subject.anchor, tail: timer.tail });
     })()`);
     if (result && typeof result === 'object' && 'error' in (result as object)) {
         throw new Error(`eval failed: ${(result as { error: string }).error}`);
@@ -168,7 +168,7 @@ function startTimer(name: string, mode: 'child' | 'sibling'): { id: string; targ
 
 /** The note the timer `id` finds its lines in, or null when it is closed. */
 function timerFile(id: string): string | null {
-    return obsidianEval(`JSON.stringify(app.plugins.plugins['obsidian-task-viewer'].getTimerWidget().timers.get(${JSON.stringify(id)})?.taskFile ?? null)`) as string | null;
+    return obsidianEval(`JSON.stringify(app.plugins.plugins['obsidian-task-viewer'].getTimerWidget().board.get(${JSON.stringify(id)})?.file ?? null)`) as string | null;
 }
 
 /**
@@ -186,11 +186,11 @@ function timerFileShown(id: string, expected: string | null): string | null {
 }
 
 /** Press ⏸ (record and suspend) on the timer `id`, or ■ (record and close), and wait for it. */
-function stopTimer(id: string, how: 'suspendTimer' | 'finishTimer'): void {
+function stopTimer(id: string, how: 'suspend' | 'close'): void {
     obsidianEval(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.timers.get(${JSON.stringify(id)});
-        if (timer) await widget.lifecycle.${how}(timer);
+        const timer = widget.board.get(${JSON.stringify(id)});
+        if (timer) await widget.lifecycle.stop(timer, ${JSON.stringify(how)});
         await new Promise(r => setTimeout(r, 500));
         return JSON.stringify(true);
     })()`);
@@ -200,7 +200,8 @@ function stopTimer(id: string, how: 'suspendTimer' | 'finishTimer'): void {
 function closeTimer(id: string): void {
     obsidianEval(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        if (widget.timers.has(${JSON.stringify(id)})) widget.lifecycle.closeTimer(${JSON.stringify(id)});
+        const timer = widget.board.get(${JSON.stringify(id)});
+        if (timer) widget.lifecycle.close(timer, true);
         await new Promise(r => setTimeout(r, 500));
         return JSON.stringify(true);
     })()`);
@@ -227,7 +228,7 @@ describe('sending a row a timer runs on (段 B4)', () => {
         expect(timerFileShown(timer.id, NEW)).toBe(NEW);
         expect(readTestFile(SRC)).toBe([`- [[${NEW}]]`, '- [ ] 残る', ''].join('\n'));
 
-        stopTimer(timer.id, 'suspendTimer');
+        stopTimer(timer.id, 'suspend');
         const made = readTestFile(`${NEW}.md`)!.split('\n');
         const record = made.find(line => line.includes(`^${timer.tail}`));
         expect(record).toMatch(/@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}>\d{2}:\d{2}/);
