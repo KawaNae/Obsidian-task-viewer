@@ -16,7 +16,12 @@
  * What the tests look at does not hang on the hour they run at: the remembered
  * start is offered only within today, so `startHour` is set, for the test and
  * in memory only, half a day away from now; the time field is read against a
- * now the dialog is given, at noon.
+ * now the dialog is given, at noon. Nor on the minute: a shift by minutes back
+ * reads the clock when it is chosen, so the menu and the dialog are given a
+ * now on the minute (the start of the current one) and the start it lands on
+ * is known exactly. A start a second before a minute would otherwise be
+ * written in one minute and recorded in the next, the record's length being
+ * whole seconds.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
@@ -103,12 +108,12 @@ function startTimer(name: string, mode: 'self' | 'child'): string {
         const widget = plugin.getTimerWidget();
         const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(FILE)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
-        const before = new Set(widget.timers.keys());
-        widget.startTimer({ taskId: task.id, taskName: task.content, taskFile: task.file, taskOriginalText: task.originalText,
-            timerTargetId: task.anchor, timerType: 'countup', recordMode: ${JSON.stringify(mode)}, autoStart: true });
-        const timer = [...widget.timers.values()].find(t => t.timerType === 'countup' && !before.has(t.id));
+        const before = new Set(widget.board.values().map(t => t.id));
+        widget.startTimer(task, ${JSON.stringify(mode)}, { kind: 'countup' });
+        const timer = widget.board.values().find(t => t.measure.type === 'countup' && !before.has(t.id));
+        if (!timer) throw new Error('no timer started on ' + ${JSON.stringify(name)});
         const end = Date.now() + 5000;
-        while (Date.now() < end && !(timer.tailRecordBlockId && !timer.opening)) await new Promise(r => setTimeout(r, 50));
+        while (Date.now() < end && !(timer.tail && !timer.opening)) await new Promise(r => setTimeout(r, 50));
         await new Promise(r => setTimeout(r, 300));
         return JSON.stringify(timer.id);
     })()`);
@@ -118,8 +123,12 @@ function startTimer(name: string, mode: 'self' | 'child'): string {
  * Press the elapsed time of the timer `id` and answer the titles of the menu
  * it opens, drawn in the page. With `choose`, the item whose title includes
  * it is then clicked, and the shift waited for.
+ *
+ * With `now`, the item is clicked while `Date.now` answers it: an item of
+ * minutes back reads the clock when it is clicked, so the start it shifts to
+ * is known to the test.
  */
-function pressElapsed(id: string, choose?: string): string[] {
+function pressElapsed(id: string, choose?: string, now?: number): string[] {
     return evalOrThrow<string[]>(`(async () => {
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
         const presenter = plugin.menuPresenter;
@@ -141,7 +150,14 @@ function pressElapsed(id: string, choose?: string): string[] {
         } else {
             const item = items[titles.findIndex(title => title.includes(choose))];
             if (!item) throw new Error('no item ' + choose + ' in ' + JSON.stringify(titles));
-            item.click();
+            const now = ${JSON.stringify(now ?? null)};
+            const realNow = Date.now;
+            if (now !== null) Date.now = () => now;
+            try {
+                item.click();
+            } finally {
+                Date.now = realNow;
+            }
             await new Promise(r => setTimeout(r, 800));
         }
         return JSON.stringify(titles);
@@ -149,11 +165,12 @@ function pressElapsed(id: string, choose?: string): string[] {
 }
 
 /** Press ⏸ (record and suspend), ▶ (a new session) or ■ (record and close) on the timer `id`, and wait for it. */
-function press(id: string, how: 'suspendTimer' | 'resumeSession' | 'finishTimer'): void {
+function press(id: string, how: 'suspend' | 'resume' | 'close'): void {
+    const call = how === 'resume' ? 'resume(timer)' : `stop(timer, '${how}')`;
     evalOrThrow(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.timers.get(${JSON.stringify(id)});
-        if (timer) await widget.lifecycle.${how}(timer);
+        const timer = widget.board.get(${JSON.stringify(id)});
+        if (timer) await widget.lifecycle.${call};
         await new Promise(r => setTimeout(r, 800));
         return JSON.stringify(true);
     })()`);
@@ -163,7 +180,8 @@ function press(id: string, how: 'suspendTimer' | 'resumeSession' | 'finishTimer'
 function closeTimer(id: string): void {
     obsidianEval(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        if (widget.timers.has(${JSON.stringify(id)})) widget.lifecycle.closeTimer(${JSON.stringify(id)});
+        const timer = widget.board.get(${JSON.stringify(id)});
+        if (timer) widget.lifecycle.close(timer, true);
         await new Promise(r => setTimeout(r, 500));
         return JSON.stringify(true);
     })()`);
@@ -210,7 +228,7 @@ describe('shifting the start of a running count-up', () => {
         expect(line('自分')).toMatch(new RegExp(`@${dateOf(prior)}T${timeOf(prior)}(\\s|$)`));
 
         const before = Date.now();
-        press(open, 'finishTimer');
+        press(open, 'close');
         const after = Date.now();
         open = null;
         const record = line('自分');
@@ -226,21 +244,19 @@ describe('shifting the start of a running count-up', () => {
         const running = readTestFile(FILE).split('\n')[1];
         expect(running).toMatch(/^\s+- \[ \] .*@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
 
-        const before = Date.now();
-        const titles = pressElapsed(open, '30');
-        const after = Date.now();
+        const now = minuteFloor(Date.now());
+        const titles = pressElapsed(open, '30', now);
 
         // A child's running line has no start of its own to remember.
         expect(titles.filter(title => /\d{2}:\d{2}/.test(title))).toEqual([]);
-        const shifted = readTestFile(FILE).split('\n')[1];
-        const expected = [before, after].map(ms => `@${dateOf(ms - 30 * 60_000)}T${timeOf(ms - 30 * 60_000)}`);
-        expect(expected.some(start => shifted.includes(start)), shifted).toBe(true);
+        const expected = `@${dateOf(now - 30 * 60_000)}T${timeOf(now - 30 * 60_000)}`;
+        expect(readTestFile(FILE).split('\n')[1]).toContain(expected);
 
-        press(open, 'suspendTimer');
+        press(open, 'suspend');
         const record = readTestFile(FILE).split('\n')[1];
         const m = /@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})>(?:\d{4}-\d{2}-\d{2}T)?\d{2}:\d{2}/.exec(record);
         expect(m, record).not.toBeNull();
-        expect(expected).toContain(`@${m![1]}`);
+        expect(`@${m![1]}`).toBe(expected);
     });
 
     it('self, after ⏸ and ▶: the remembered start is no longer offered, the minutes back still are', async () => {
@@ -250,8 +266,8 @@ describe('shifting the start of a running count-up', () => {
         open = startTimer('続ける', 'self');
         expect(pressElapsed(open).some(title => title.includes(timeOf(prior)))).toBe(true);
 
-        press(open, 'suspendTimer');
-        press(open, 'resumeSession');
+        press(open, 'suspend');
+        press(open, 'resume');
 
         const titles = pressElapsed(open);
         expect(titles.some(title => title.includes(timeOf(prior)))).toBe(false);
@@ -278,15 +294,14 @@ describe('shifting the start of a running count-up', () => {
         const unreadable = offsetDialog({ type: '1.5' });
         expect(unreadable).toMatchObject({ kind: 'minutes', says: 'warning', invalid: true, applicable: false });
 
-        const before = Date.now();
-        const readable = offsetDialog({ type: '25' });
-        const expected = [before, Date.now()].map(ms => timeOf(ms - 25 * 60_000));
+        const now = minuteFloor(Date.now());
+        const readable = offsetDialog({ type: '25', now });
+        const expected = timeOf(now - 25 * 60_000);
         expect(readable).toMatchObject({ kind: 'minutes', says: 'info', invalid: false, applicable: true });
-        expect(expected.some(time => readable.text.includes(time)), readable.text).toBe(true);
+        expect(readable.text).toContain(expected);
 
-        offsetDialog({ apply: true });
-        const shifted = readTestFile(FILE).split('\n')[1];
-        expect(expected.some(time => shifted.includes(`T${time}`)), shifted).toBe(true);
+        offsetDialog({ apply: true, now });
+        expect(readTestFile(FILE).split('\n')[1]).toContain(`T${expected}`);
     });
 
     it('"Set the shift...": a time later than now is foreseen as the day before, and shifts to it', async () => {
