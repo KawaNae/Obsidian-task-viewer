@@ -23,7 +23,7 @@ import type { TimerBoard, IdleBoard } from './TimerBoard';
 import type { TimerRuntime } from './TimerRuntime';
 import { finished, type TimerState } from './TimerState';
 import { readSeconds } from './TimerClock';
-import { progressOf } from './TimerProgress';
+import { progressOf, type Measure } from './TimerProgress';
 import { getDisplayFileName, getTaskDisplayName } from '../services/display/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI, type RingOptions, type RingState } from './TimerProgressUI';
@@ -160,7 +160,7 @@ export class TimerRenderer {
         if (timer.color) TaskStyling.applyTaskColor(itemEl, timer.color);
         itemEl.toggleClass('timer-widget__item--suspended', timer.session.kind === 'suspended');
 
-        const ring = this.ringOf(timer, now);
+        const ring = timerRing(timer, now);
 
         // Header
         const header = itemEl.createDiv('timer-widget__header');
@@ -195,7 +195,7 @@ export class TimerRenderer {
         if (!timer.expanded) {
             const timeSpan = header.createSpan('timer-widget__header-time');
             timeSpan.dataset.timeDisplay = 'header';
-            timeSpan.setText(this.headerTimeText(timer, ring));
+            timeSpan.setText(headerTimeText(timer.measure, ring));
             timeSpan.toggleClass('timer-widget__header-time--break', ring.tone === 'break');
 
             if (ring.repeatText) {
@@ -304,34 +304,16 @@ export class TimerRenderer {
 
     /** tick の描き直し: 時間の表示と輪を進める。 */
     private updateTimes(itemEl: HTMLElement, timer: TimerState, now: number): void {
-        const ring = this.ringOf(timer, now);
+        const ring = timerRing(timer, now);
         const headerTime = itemEl.querySelector('[data-time-display="header"]') as HTMLElement | null;
         if (headerTime) {
-            headerTime.setText(this.headerTimeText(timer, ring));
+            headerTime.setText(headerTimeText(timer.measure, ring));
             headerTime.toggleClass('timer-widget__header-time--break', ring.tone === 'break');
         }
         const headerRepeat = itemEl.querySelector('[data-repeat-display="header"]') as HTMLElement | null;
         headerRepeat?.setText(ring.repeatText ?? '');
         TimerProgressUI.update(itemEl, ring, this.ringOptions());
         this.syncStartOffset(itemEl, timer);
-    }
-
-    /**
-     * 輪と時間の表示。中断中はこれまでの記録の合計を数え上げの見た目で見せる
-     * （時計は次の ▶ まで意味を持たない）。ほかは時計の読みで測り方が見せるもの。
-     */
-    private ringOf(timer: TimerState, now: number): RingState {
-        if (timer.session.kind === 'suspended') {
-            return { ...progressOf({ type: 'countup' }, timer.recorded.seconds), tone: 'suspended' };
-        }
-        return progressOf(timer.measure, readSeconds(timer.clock, now));
-    }
-
-    /** 畳んだ見出しの時間。countdown の残りは超過で負になるので符号を付ける。 */
-    private headerTimeText(timer: TimerState, ring: RingState): string {
-        return timer.measure.type === 'countdown' && timer.session.kind !== 'suspended'
-            ? TimeFormatter.formatSignedSeconds(ring.displaySeconds)
-            : TimeFormatter.formatSeconds(ring.displaySeconds);
     }
 
     private ringOptions(): RingOptions {
@@ -640,6 +622,27 @@ export class TimerRenderer {
         });
         this.titleGrowFrame = { win, id };
     }
+}
+
+/**
+ * タイマーの輪と時間の表示: 時計の読みで測り方が見せるもの。中断中の時計は止めた
+ * 時点の読みで、countdown とポモドーロは ▶ でそこから続くので、そのまま見せる。
+ * countup は ▶ で 0 から数え直すので、中断中はこれまでの記録の合計を見せる。
+ * 中断中の色は `suspended`。
+ */
+export function timerRing(timer: TimerState, now: number): RingState {
+    const suspended = timer.session.kind === 'suspended';
+    const progress = suspended && timer.measure.type === 'countup'
+        ? progressOf(timer.measure, timer.recorded.seconds)
+        : progressOf(timer.measure, readSeconds(timer.clock, now));
+    return suspended ? { ...progress, tone: 'suspended' } : progress;
+}
+
+/** 畳んだ見出しの時間。countdown の残りは超過で負になるので符号を付ける。 */
+export function headerTimeText(measure: Measure, ring: RingState): string {
+    return measure.type === 'countdown'
+        ? TimeFormatter.formatSignedSeconds(ring.displaySeconds)
+        : TimeFormatter.formatSeconds(ring.displaySeconds);
 }
 
 /** 提案の輪: 提案が出てからの経過を数え上げの見た目で、色を付けずに見せる。 */

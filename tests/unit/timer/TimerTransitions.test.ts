@@ -12,8 +12,8 @@ import type { Session, TimerState } from '../../../src/timer/TimerState';
  * |-----------|-----------|
  * | stopped   | running → pending。時計を止め、記録を固定する。pending なら行き先だけ替える |
  * | recorded  | pending → suspended。recorded を足す |
- * | resumed   | suspended → running。時計を 0 からか（countup、countdown）続きから（ポモドーロ） |
- * | shifted   | 走っている時計の開始 |
+ * | resumed   | suspended → running。時計を 0 からか（countup）続きから（countdown、ポモドーロ） |
+ * | shifted   | 走っている区間の開始。時計はそれより区間の始めの読みだけ前から |
  * | ticked    | 区間を送った測り方 |
  * | retimed   | ポモドーロの区間の長さと繰り返し |
  * | opening、landed | 書いている途中の錨と、書けたあとの尻尾、自分の錨、ノート |
@@ -103,10 +103,10 @@ describe('resumed', () => {
         expect(next.expanded).toBe(true);
     });
 
-    it('a countdown runs from a full clock', () => {
+    it('a countdown goes on from where it stopped, and the next record starts there', () => {
         const next = step(state({ ...SUSPENDED, measure: { type: 'countdown', totalSeconds: 300 } }), { type: 'resumed', pressedAt: T0 }, T0);
-        expect(next.clock).toEqual({ kind: 'running', startMs: T0 });
-        expect(next.session).toEqual({ kind: 'running', from: 0 });
+        expect(next.clock).toEqual({ kind: 'running', startMs: T0 - 600_000 });
+        expect(next.session).toEqual({ kind: 'running', from: 600 });
     });
 
     it('a pomodoro goes on from where it stopped, and the next record starts there', () => {
@@ -128,6 +128,17 @@ describe('shifted', () => {
         const next = step(state(), { type: 'shifted', startMs: T0 - 900_000 }, T0);
         expect(next.clock).toEqual({ kind: 'running', startMs: T0 - 900_000 });
         expect(next.session).toEqual({ kind: 'running', from: 0 });
+    });
+
+    it('a run that went on from where it stopped: the run starts where it is moved to, and the clock that much before', () => {
+        const countdown = state({
+            measure: { type: 'countdown', totalSeconds: 1500 },
+            clock: { kind: 'running', startMs: T0 - 660_000 },
+            session: { kind: 'running', from: 600 },
+        });
+        const next = step(countdown, { type: 'shifted', startMs: T0 - 300_000 }, T0);
+        expect(next.clock).toEqual({ kind: 'running', startMs: T0 - 900_000 });
+        expect(next.session).toEqual({ kind: 'running', from: 600 });
     });
 
     it('pending and suspended: the same state', () => {

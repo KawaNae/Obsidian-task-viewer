@@ -3,9 +3,9 @@
  * 書き込み、音、描画は持たない。当てるのは `TimerBoard.dispatch` で、書き込みを
  * 待つのは `TimerLifecycle`（書けてから状態を進める）。
  *
- * countup、countdown、ポモドーロは同じ状態機械に乗る。違いは測り方と、▶ で
- * 時計を 0 から数え直すか（countup と countdown。1つの走行が1つの記録）、
- * 続きから数えるか（ポモドーロ。区間の周は止めた所から）だけ。
+ * countup、countdown、ポモドーロは同じ状態機械に乗り、どれも1つの走行が1つの
+ * 記録である。違いは測り方と、▶ で時計を 0 から数え直すか（countup）、止めた
+ * 所から続けるか（countdown の残りとポモドーロの区間の周）だけ。
  */
 
 import { freeze, readSeconds, restart, resume, shift } from './TimerClock';
@@ -21,9 +21,12 @@ export type TimerEvent =
     | { type: 'stopped'; then: PendingRecord['then'] }
     /** pending → suspended: 記録を書けた。閉じる行き先は呼び手が閉じる。 */
     | { type: 'recorded' }
-    /** suspended → running: 新しい走行中の行を書けた。時計は ▶ を押した時刻から。 */
+    /** suspended → running: 新しい走行中の行を書けた。走行は ▶ を押した時刻から。 */
     | { type: 'resumed'; pressedAt: number }
-    /** 走っている時計の開始を動かす（開始をずらす）。 */
+    /**
+     * 走っている区間の開始を動かす（開始をずらす）。`startMs` は区間（走行の行と記録）の
+     * 開始で、時計の開始はそれより区間の始めの読み（`session.from`）だけ前になる。
+     */
     | { type: 'shifted'; startMs: number }
     /** 区間を送った測り方。 */
     | { type: 'ticked'; measure: Measure }
@@ -67,14 +70,16 @@ export function step(state: TimerState, event: TimerEvent, nowMs: number): Timer
         }
         case 'resumed': {
             if (state.session.kind !== 'suspended') return state;
-            // ポモドーロは区間の周を止めた所から続ける。countup と countdown は 1 つの走行が 1 つの記録。
+            // countup は 0 から数え直す。countdown とポモドーロは止めた所から続け、記録は押した時刻から。
             const at = event.pressedAt;
-            const clock = state.measure.type === 'interval' ? resume(state.clock, at) : restart(at);
+            const clock = state.measure.type === 'countup' ? restart(at) : resume(state.clock, at);
             return { ...state, clock, session: { kind: 'running', from: readSeconds(clock, at) }, expanded: true };
         }
-        case 'shifted':
-            if (state.session.kind !== 'running') return state;
-            return { ...state, clock: shift(state.clock, event.startMs) };
+        case 'shifted': {
+            const { session } = state;
+            if (session.kind !== 'running') return state;
+            return { ...state, clock: shift(state.clock, event.startMs - session.from * 1000) };
+        }
         case 'ticked':
             return { ...state, measure: event.measure };
         case 'retimed':

@@ -20,6 +20,8 @@ const MINUTE_MS = 60_000;
 /**
  * 開始をずらせるか。countup と countdown の、走っている区間だけ。中断中と記録待ちは
  * 時計が止まっており、ポモドーロは区間の位置が時計の読みで決まるので対象外。
+ * ⏸→▶ のあとの countdown の区間もずらせて、残りはずらした分だけ減る（時計は
+ * 止めた所から続く）。
  */
 export function canOffsetStart(timer: Pick<TimerState, 'measure' | 'session'>): boolean {
     return timer.measure.type !== 'interval' && timer.session.kind === 'running';
