@@ -255,7 +255,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **FiringTrials** | `services/persistence/FiringTrials.ts` | `firingTrials`: the one rule of which fires of a completion are written — every fire, else none, else each put back from the top and kept or set aside with its refusal — for `InlineTaskWriter`, `SendWriter` and the editor's fire alike (`FiringOutcome`) |
 | **DragHandler** | `interaction/drag/DragHandler.ts` | Delegates pointer events to `DragRouter` (Strategy selection) / `DragSession` (gesture lifecycle) |
 | **MenuHandler** | `interaction/menu/MenuHandler.ts` | Context menu facade coordinating multiple Builder classes |
-| **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
+| **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; starts timers and owns their board, lifecycle and recorder |
 | **IntervalTemplateLoader/Writer** | `timer/IntervalTemplateLoader.ts` et al. | Interval template read/write |
 | **AudioUtils** | `timer/AudioUtils.ts` | Web Audio API notifications with serialized context management |
 | **KanbanView** | `views/kanban/KanbanView.ts` | Kanban board view |
@@ -900,59 +900,102 @@ MIT License
 
 ## Timer Widget
 
-`src/timer/` — A fully independent floating UI. Operates separately from the Timeline and Schedule views.
+`src/timer/` — the floating timer widget, and the parts it shares with the standalone Timer view (`views/TimerView.ts`). The widget records what it measures into notes; the view only measures.
 
-### Timer types (defined in `timer/TimerInstance.ts`)
+### State (`timer/TimerState.ts`)
 
-| Type | Description |
-|------|-------------|
-| `CountupTimer` | Elapsed time measurement; supports both task-linked and standalone modes |
-| `CountdownTimer` | Countdown; tracks `timeRemaining` |
-| `IntervalTimer` | Multi-segment (work/break) loop; Pomodoro is implemented as this type |
-| `IdleTimer` | Passive idle tracking; no task association |
+A widget timer is one `TimerState`. It holds only what cannot be derived; elapsed time, time remaining and the position in the intervals are read from the clock and the measure each time.
 
-Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
+| Field | Type | Meaning |
+|-------|------|---------|
+| `subject` | `Subject` | What it measures: `{ kind: 'task', anchor }` (the target row's `^id`) or `{ kind: 'daily', date }` (a daily note, no target row) |
+| `measure` | `Measure` (`TimerProgress.ts`) | `countup`, `countdown` (`totalSeconds`), or `interval` (`groups` and a cursor `at`). The widget starts only the Pomodoro interval; templates are the view's |
+| `clock` | `Clock` (`TimerClock.ts`) | `running` (`startMs`) or `frozen` (`seconds`). It runs only while the session runs |
+| `session` | `Session` | `running` (the record counts from clock reading `from`), `pending` (stopped, the record fixed but not yet written), or `suspended` (recorded, waiting for ▶) |
+| `file`, `tail`, `owned`, `opening` | | The note its lines are in, the `^id` of the line it records into, the `^id`s it put on itself, and the write in flight |
+| `mode` | `'self' \| 'child' \| 'sibling'` | Where the first record goes. From the second on, a record is always the tail's sibling |
 
-### Persistence
+There is no "not started" state: a timer runs from the moment it is started. `name` and `color` are display copies, refreshed from the target row whenever the index changes. The runtime schedule (the one tick, operations in flight, the lazy-end gate, the ✕ confirmation) lives in `TimerRuntime` and is never saved.
 
-- Storage key: `task-viewer.active-timers.v8:{vaultFingerprint}` (`STORAGE_VERSION` in `TimerStorageUtils.ts`)
-- An older version is not migrated: its state is dropped, and its key is removed on restore (`OBSOLETE_STORAGE_VERSIONS`).
+### Transitions
+
+`TimerTransitions.step(state, event, nowMs)` is the only function that answers the next state; it is pure. `TimerBoard.dispatch(timer, event)` applies it to the same object (render closures keep their reference) and schedules one save and one render on a microtask. `TimerLifecycle` writes first and dispatches only once the write has landed ("write, then move the state").
+
+| From | On | Writes | Then | If the write fails |
+|------|----|--------|------|--------------------|
+| — | start (`TimerWidget.startTimer`) | the first line (self: the target's start; child; sibling; daily: under the heading) | running | closed |
+| running | ⏸ | the record | suspended | pending |
+| running | ■, or the last Pomodoro segment ends (no auto repeat) | the record | closed, anchors taken off | pending |
+| running | a segment ends with more to come | nothing | next segment (sound) | — |
+| running | shift the start (countup, countdown) | the running line's start | the clock's start moves | nothing moves |
+| running, pending | ✕ twice (confirm) | deletes the running line, if it wrote that line | closed | closed |
+| pending | ⏸ or ■ | the fixed record again | as pressed | stays pending |
+| suspended | ▶ | a new running line (the tail's sibling) | running: countup and countdown from 0, Pomodoro where it stopped | stays suspended |
+| suspended | ■ or ✕ | nothing | closed, anchors taken off | — |
+
+`TimerLifecycle.close(timer, confirmed)` answers the ✕ from `session.kind` alone; the renderer only draws the confirmation. The next-task suggestion (`TimerBoard.idle`, `NextTaskSuggester`) is not a timer: it appears when no timer holds a run and disappears when one starts.
+
+### Starting
+
+```ts
+startTimer(subject: Task | { daily: string }, mode: RecordMode, start: { kind: 'countup' } | { kind: 'countdown'; seconds } | { kind: 'pomodoro' })
+```
+
+`TimerStartRules` answers both the command and the menus: a read-only notation is refused, a task that can trigger a flow does not take `self` (it falls back to `child`, and `TimerMenuBuilder` does not offer the self items), and `self` on a `[x]` row asks (`TimerStartChoiceModal`). The display copies are taken from the Task once, here.
+
+### Anchors
+
+A timer follows its rows across readings only by their `^id`s: the target by `subject.anchor`, the record line by `tail`, both looked up with `getTaskByAnchor(file, anchor)` and written through `Operations` (`updateByAnchor`, `insertLine`, `putInDailyNote`). There is no lookup by task ID or by text. A duplicate start is detected by `(file, anchor)` and by the daily date; a row without an anchor is no timer's target yet. The anchors a timer relies on are answered in one place, `TimerSendCheck.anchorsOf` (used by the send operation and by whether an anchor may be taken off). `TimerTargetIdUtils` makes the short `tv-t-` ids. Frontmatter holds no timer target: a leftover `tv-timer-target-id` key is only reserved so it never becomes a custom property.
+
+### Persistence (`timer/TimerPersistence.ts`)
+
+- Storage key: `task-viewer.active-timers.v9:{vaultFingerprint}`; the content is `{ version, vaultFingerprint, idleSinceMs, timers: TimerState[] }`.
+- Only `TimerBoard`'s scheduled save calls `persist`. The rule "save `opening` before writing the line" holds because the microtask runs before the write's round trip returns.
+- The read checks the shape strictly and drops a timer that does not match. Nothing is rebuilt on restore: elapsed time comes from the clock, and the first tick moves the intervals.
+- An older version is not migrated: its state is dropped, and its key (and the old device-id key) is removed on restore (`OBSOLETE_STORAGE_VERSIONS`).
 - **When the persisted shape changes, bump `STORAGE_VERSION` and add the old version to `OBSOLETE_STORAGE_VERSIONS`.**
-
-### Task integration
-
-- `refreshTimerTask` (`TimerTaskSync.ts`) — finds the timer's task by its task ID while that name is current, and otherwise by its anchor (`timerTargetId`), re-pointing the task ID at the row found. A row is followed across readings only by its anchor; there is no fallback by text
-- `TimerRecorder` — records a session to the target line itself (self), as a child of the target line (child), as a sibling after the last record (sibling), or under the daily note's heading when the timer started from the daily note
-- `timerTargetId` — the inline block ID (`^id`) the timer anchors to; it survives edits and file renames. Frontmatter holds no timer target: a leftover `tv-timer-target-id` key is only reserved so it never becomes a custom property
 
 ### Components (all in `src/timer/`)
 
-- `TimerProgressUI` — circular progress ring + time display
-- `TimerSettingsMenu` — Pomodoro settings context menu
-- `TimerRenderer` — timer UI rendering
-- `TimerContext` — timer context management
-- `TimerCreator` — timer instance creation
-- `TimerLifecycle` — timer lifecycle management
-- `TimerStorageUtils` — storage key, device and vault identification
-- `TimerTargetIdUtils` — the block IDs the timer writes onto the line it records into
-- `TimerPersistence` — save and restore of the open timers
-- `TimerRecorder` — the record writes (self, child, sibling, daily note)
-- `TimerContentBinding` — keeps the widget's content field and the running row in step
-- `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval template read/write (markdown files with `_tv-*` frontmatter keys)
+Shared with the standalone view:
+
+- `TimerClock` — the running or frozen clock (`readSeconds`, `freeze`, `resume`, `restart`, `shift`)
+- `IntervalMath` — moves the interval cursor, the round text, total duration, the Pomodoro segments
+- `TimerProgress` — what a measure shows (`progressOf`) and what a tick brings (`tickOf`)
+- `TimerProgressUI` — draws the ring and the time from `progressOf`, under the block it is given (`timer-widget__` or `timer-view__`)
+- `TimerControlButton` — one control button; the view passes a variant (primary, secondary, danger), the widget's buttons have one look
+- `TimerSettingsMenu` — the duration menu (Pomodoro and countdown lengths)
+- `AudioUtils` — sounds (below)
+- `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval templates (markdown files with `_tv-*` frontmatter keys); segments are `work`, `break` or `prepare`
+
+The widget's own:
+
+- `TimerWidget` — owns the board, runtime, lifecycle and recorder; `startTimer`, restore, file renames, following a send
+- `TimerState`, `TimerTransitions`, `TimerBoard`, `TimerRuntime` — the state, its transitions, the table that applies them, the unsaved schedule
+- `TimerLifecycle` — the operations: `begin`, `stop`, `resume`, `offsetStart`, `close`, `tick`
+- `TimerRecorder` — the line writes: the first line, running lines, records, putting anchors on and off. The record notice is one sentence (`notice.timerRecorded`)
+- `TimerStartRules`, `TimerStartMode` — whether and how a start may use `self`
+- `TimerStartOffset` — where "shift the start" lands (the menu and `TimerStartOffsetModal`)
+- `TimerContentBinding` — keeps the widget's name field and the running line in step
+- `TimerLazyEnd` — when to write a later end onto a running line that has outlived its implied end
+- `TimerSendCheck` — whether a send may carry a timer's lines (`anchorsOf`)
+- `TimerPersistence`, `TimerTargetIdUtils`
+- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion
+- `FloatingOverlayHost`, `TimerWidgetWindowObserver` — the container, dragging, and moving between windows. The default corner is in the stylesheet (`.timer-widget`); the host keeps only a dragged position
 
 ### Audio notifications (`timer/AudioUtils.ts`)
 
-State-transition-based sound mapping. All sounds use Web Audio API scheduling (no `setTimeout`).
+State-transition-based sound mapping. All sounds use Web Audio API scheduling (no `setTimeout`). The widget plays them from `TimerLifecycle` (and `TimerWidget` on start), only when the operation goes ahead; the view plays them itself.
 
 | Action | Sound | Method | Notes |
 |--------|-------|--------|-------|
-| Start (initial) | Long × 2 (660 Hz, 0.35 s each) | `playStartSound()` | — |
-| Resume | Long × 2 | `playStartSound()` | Same as Start |
-| Pause | G5→E5→C5 descending 3-note | `playPauseSound()` | Mirrors finish sound in reverse |
-| Stop (manual) | C5→E5→G5 ascending 3-note | `playFinishSound()` | Same as auto-complete |
-| Auto-complete | C5→E5→G5 ascending 3-note | `playFinishSound()` | Interval finish / countdown expire |
-| Segment transition | Long × 2 | `playTransitionConfirm()` | Same pattern as Start |
-| Warning (3, 2, 1 s) | Short × 1 per tick (660 Hz, 0.25 s) | `playWarningBeep()` | Called each tick when remaining ≤ 3 s |
+| Start | Long × 2 (660 Hz, 0.35 s each) | `playStartSound()` | Widget: every start, any mode |
+| Resume (▶) | Long × 2 | `playStartSound()` | Same as Start |
+| Suspend (⏸) / Pause | G5→E5→C5 descending 3-note | `playPauseSound()` | Mirrors finish sound in reverse |
+| End (■) / Stop | C5→E5→G5 ascending 3-note | `playFinishSound()` | Same as auto-complete |
+| Auto-complete | C5→E5→G5 ascending 3-note | `playFinishSound()` | The last interval segment; in the view also a countdown reaching 0 (the widget keeps recording past 0, silently) |
+| Segment transition | Long × 2 | `playTransitionConfirm()` | Once per tick, however many segments it moved |
+| Warning (3, 2, 1 s) | Short × 1 per tick (660 Hz, 0.25 s) | `playWarningBeep()` | Remaining ≤ 3 s: interval segments in both; countdown in the view only |
 
 **Design notes**:
 - Multi-note patterns prevent wireless earphone auto-sleep from swallowing notifications.
