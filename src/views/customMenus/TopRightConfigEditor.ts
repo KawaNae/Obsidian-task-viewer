@@ -103,7 +103,7 @@ export class TopRightConfigEditor {
         for (const field of this.fields) {
             const pill = pillsEl.createDiv('tv-ctrl__pill');
             pill.createSpan().setText(field);
-            const removeBtn = pill.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+            const removeBtn = pill.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
             setIcon(removeBtn.createSpan(), 'x');
             removeBtn.addEventListener('click', () => {
                 this.fields = this.fields.filter(f => f !== field);

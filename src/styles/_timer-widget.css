@@ -195,20 +195,8 @@
 .timer-widget .timer-widget__settings-btn {
     width: 24px;
     height: 24px;
-    appearance: none;
-    -webkit-appearance: none;
     background: var(--tv-bg-widget-header);
-    border: 1px solid transparent;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    /* remove padding for ipad */
-    padding: 0 !important;
-    border-radius: var(--tv-radius-s);
-    box-shadow: none;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
@@ -220,7 +208,6 @@
 .timer-widget .timer-widget__settings-btn:hover {
     background: var(--tv-bg-hover);
     border-color: var(--tv-border);
-    color: var(--tv-text);
 }
 
 .timer-widget .timer-widget__close-btn:hover {

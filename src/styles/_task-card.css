@@ -340,30 +340,16 @@
 
 /* Child task menu button */
 .task-card .task-card__child-menu-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     width: 18px;
     height: 18px;
     margin-left: 0.3em;
-    padding: 0;
-    appearance: none;
-    -webkit-appearance: none;
-    background: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
-    cursor: pointer;
-    border-radius: var(--tv-radius-s);
     vertical-align: middle;
-    color: var(--tv-text-muted);
     opacity: 0.6;
     transition: color 120ms ease, opacity 120ms ease;
 }
 
 .task-card .task-card__child-menu-btn:hover {
     opacity: 1;
-    color: var(--tv-text);
-    background-color: var(--tv-bg-hover);
 }
 
 .task-card .task-card__child-menu-btn .svg-icon {

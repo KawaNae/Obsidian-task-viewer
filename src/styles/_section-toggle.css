@@ -7,19 +7,7 @@
 button.tv-section-toggle {
     width: 22px;
     height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     margin: 2px;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 1px solid transparent !important;
-    border-radius: var(--tv-radius-s);
-    background: transparent !important;
-    color: var(--tv-text-muted);
-    box-shadow: none;
-    cursor: pointer;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
@@ -32,9 +20,7 @@ button.tv-section-toggle svg {
 }
 
 button.tv-section-toggle:hover {
-    background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
-    color: var(--tv-text);
 }
 
 button.tv-section-toggle:focus-visible {

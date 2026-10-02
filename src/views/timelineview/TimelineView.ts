@@ -958,7 +958,7 @@ export class TimelineView extends ItemView {
         // Sidebar header content
         sidebarHeader.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
 
-        const addListBtn = sidebarHeader.createEl('button', { cls: 'tv-sidebar__panel-add-btn' });
+        const addListBtn = sidebarHeader.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
         setIcon(addListBtn, 'plus');
         addListBtn.appendText(t('pinnedList.addList'));
         addListBtn.addEventListener('click', () => {

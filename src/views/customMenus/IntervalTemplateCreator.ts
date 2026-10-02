@@ -130,7 +130,7 @@ export class IntervalTemplateCreator {
             text: this.editingFilePath ? t('timer.editTemplate') : t('timer.newTemplate'),
         });
 
-        const closeBtn = header.createEl('button', { cls: 'template-creator__close-btn' });
+        const closeBtn = header.createEl('button', { cls: 'tv-icon-btn template-creator__close-btn' });
         setIcon(closeBtn, 'x');
         closeBtn.addEventListener('click', () => this.close());
     }
@@ -211,7 +211,7 @@ export class IntervalTemplateCreator {
                     const limited = filtered.slice(0, 200); // limit for performance
 
                     for (const name of limited) {
-                        const btn = grid.createEl('button', { cls: 'template-creator__icon-option' });
+                        const btn = grid.createEl('button', { cls: 'tv-icon-btn template-creator__icon-option' });
                         btn.setAttribute('aria-label', name);
                         setIcon(btn.createSpan(), name);
                         btn.addEventListener('click', () => {
@@ -266,7 +266,7 @@ export class IntervalTemplateCreator {
         });
 
         if (this.state.groups.length > 1) {
-            const removeBtn = header.createEl('button', { cls: 'template-creator__remove-btn' });
+            const removeBtn = header.createEl('button', { cls: 'tv-icon-btn template-creator__remove-btn' });
             setIcon(removeBtn, 'trash-2');
             removeBtn.addEventListener('click', () => {
                 this.state.groups.splice(groupIndex, 1);
@@ -340,7 +340,7 @@ export class IntervalTemplateCreator {
 
         // Remove segment
         if (group.segments.length > 1) {
-            const removeBtn = row.createEl('button', { cls: 'template-creator__remove-btn' });
+            const removeBtn = row.createEl('button', { cls: 'tv-icon-btn template-creator__remove-btn' });
             setIcon(removeBtn, 'x');
             removeBtn.addEventListener('click', () => {
                 group.segments.splice(segIndex, 1);

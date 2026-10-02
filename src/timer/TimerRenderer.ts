@@ -207,7 +207,7 @@ export class TimerRenderer {
 
         // ウィジェットの interval はポモドーロだけ。
         if (timer.measure.type === 'interval') {
-            const settingsBtn = header.createEl('button', { cls: 'timer-widget__settings-btn' });
+            const settingsBtn = header.createEl('button', { cls: 'tv-icon-btn timer-widget__settings-btn' });
             setIcon(settingsBtn, 'settings');
             settingsBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -215,11 +215,11 @@ export class TimerRenderer {
             };
         }
 
-        const toggleBtn = header.createEl('button', { cls: 'timer-widget__toggle-btn' });
+        const toggleBtn = header.createEl('button', { cls: 'tv-icon-btn timer-widget__toggle-btn' });
         setIcon(toggleBtn, timer.expanded ? 'chevron-down' : 'chevron-right');
         toggleBtn.onclick = () => this.deps.board.dispatch(timer, { type: 'toggled' });
 
-        const closeBtn = header.createEl('button', { cls: 'timer-widget__close-btn' });
+        const closeBtn = header.createEl('button', { cls: 'tv-icon-btn timer-widget__close-btn' });
         setIcon(closeBtn, 'x');
         closeBtn.toggleClass('timer-widget__close-btn--confirming', this.deps.runtime.closeConfirm.has(timer.id));
         closeBtn.onclick = () => this.onClose(timer);
@@ -390,7 +390,7 @@ export class TimerRenderer {
         const header = itemEl.createDiv('timer-widget__header');
         const titleContainer = header.createDiv('timer-widget__title');
         titleContainer.createSpan({ cls: 'timer-widget__title-name', text: t('timer.idle') });
-        const closeBtn = header.createEl('button', { cls: 'timer-widget__close-btn' });
+        const closeBtn = header.createEl('button', { cls: 'tv-icon-btn timer-widget__close-btn' });
         setIcon(closeBtn, 'x');
         closeBtn.onclick = () => {
             if (justShown(idle)) return;

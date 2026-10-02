@@ -153,7 +153,7 @@ export class OverlayShell {
         const handle = panel.createDiv({ cls: 'tv-overlay__handle' });
         this.handleEl = handle;
 
-        const closeBtn = panel.createEl('button', { cls: 'tv-overlay__close' });
+        const closeBtn = panel.createEl('button', { cls: 'tv-icon-btn tv-overlay__close' });
         setIcon(closeBtn.createSpan(), 'x');
         closeBtn.setAttribute('aria-label', t('modal.cancel'));
         closeBtn.addEventListener('click', () => this.requestClose());

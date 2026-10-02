@@ -88,23 +88,13 @@
     flex: 1;
 }
 
-.tv-sidebar__panel .tv-sidebar__panel-add-btn {
+/* button を付けて (0,2,1) にし、tv-icon-btn のタブレットの余白の規則
+   （_controls.css）に後の順で勝つ */
+.tv-sidebar__panel button.tv-sidebar__panel-add-btn {
     height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     gap: 4px;
-    padding: 0 6px !important;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 1px solid transparent !important;
-    border-radius: var(--tv-radius-s);
-    background: transparent !important;
-    color: var(--tv-text-muted);
+    padding: 0 6px;
     font-size: 0.8em;
-    box-shadow: none;
-    cursor: pointer;
-    flex-shrink: 0;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
@@ -112,9 +102,7 @@
 }
 
 .tv-sidebar__panel .tv-sidebar__panel-add-btn:hover {
-    background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
-    color: var(--tv-text);
 }
 
 .tv-sidebar__panel-body {

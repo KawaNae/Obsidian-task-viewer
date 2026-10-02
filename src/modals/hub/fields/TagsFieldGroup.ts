@@ -45,7 +45,7 @@ export class TagsFieldGroup {
                     chip.addClass('task-hub__tag-chip--locked');
                     chip.setAttribute('aria-label', t('modal.hub.contentTagLocked'));
                 } else if (ownTags.has(tag)) {
-                    const removeBtn = chip.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+                    const removeBtn = chip.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
                     setIcon(removeBtn.createSpan(), 'x');
                     removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
                     removeBtn.disabled = shut;

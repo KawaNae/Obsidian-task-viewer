@@ -192,7 +192,7 @@ export class ChildSectionRenderer {
 
     private createChildMenuButton(nameOf: () => string | undefined): HTMLButtonElement {
         const btn = document.createElement('button');
-        btn.className = 'task-card__child-menu-btn';
+        btn.className = 'tv-icon-btn task-card__child-menu-btn';
         btn.setAttribute('aria-label', t('aria.taskMenu'));
         btn.setAttribute('tabindex', '-1');
 
