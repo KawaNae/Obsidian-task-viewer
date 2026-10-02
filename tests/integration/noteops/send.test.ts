@@ -356,13 +356,13 @@ function openDialog(name: string): DialogState {
         const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         // The card menu the hub's cards open, made as a hub first opens.
-        if (!plugin.hubMenuHandler) {
+        if (!plugin.hubCards) {
             plugin.openTaskHub(task.id);
             await until(() => document.querySelector('.task-hub'));
             document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
             await until(() => !document.querySelector('.task-hub'));
         }
-        await plugin.hubMenuHandler.showContextMenu(0, 0, task);
+        await plugin.hubCards.menuHandler.showContextMenu(0, 0, task);
         const menu = plugin.menuPresenter.currentMenu;
         const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
         if (!item) throw new Error('no send in the menu');
