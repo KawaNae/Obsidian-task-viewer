@@ -308,12 +308,31 @@ describe('computeContentSignature', () => {
             .not.toBe(computeContentSignature(b, settings, options, '', 'none', true, false, shown(b, rs)));
     });
 
-    it('ハブの preview かどうかで sig が変わる', () => {
+    it.each([
+        ['expandChildren', true],
+        ['alwaysLinks', true],
+        ['doubleTap', false],
+        ['mask', false],
+    ])('描画の方針 %s で sig が変わる', (policy, value) => {
         const settings = makeSettings();
         const task = makeDisplayTask();
         const rs = makeReadService();
 
         expect(computeContentSignature(task, settings, makeOptions(), '', 'none', false, false, shown(task, rs)))
-            .not.toBe(computeContentSignature(task, settings, makeOptions({ context: 'hub-preview' }), '', 'none', false, false, shown(task, rs)));
+            .not.toBe(computeContentSignature(task, settings, makeOptions({ [policy]: value }), '', 'none', false, false, shown(task, rs)));
+    });
+
+    it.each([
+        ['expandChildren', false],
+        ['alwaysLinks', false],
+        ['doubleTap', true],
+        ['mask', true],
+    ])('描画の方針 %s は既定の値を書いても書かなくても同じ sig になる', (policy, value) => {
+        const settings = makeSettings();
+        const task = makeDisplayTask();
+        const rs = makeReadService();
+
+        expect(computeContentSignature(task, settings, makeOptions(), '', 'none', false, false, shown(task, rs)))
+            .toBe(computeContentSignature(task, settings, makeOptions({ [policy]: value }), '', 'none', false, false, shown(task, rs)));
     });
 });

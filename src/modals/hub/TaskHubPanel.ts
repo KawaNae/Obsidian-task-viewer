@@ -165,7 +165,7 @@ export class TaskHubPanel {
         this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl.empty();
 
-        const card = this.previewEl.createDiv('task-card');
+        const card = this.previewEl.createDiv('task-card task-card--in-hub-preview');
         TaskStyling.applyTaskColor(card, getEffectiveColor(this.task) ?? null);
         TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(this.task) ?? null);
         TaskStyling.applyReadOnly(card, this.task);
@@ -179,7 +179,12 @@ export class TaskHubPanel {
         const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.index.getTask(id));
         this.deps.taskRenderer.render(card, dt, settings, {
             cardInstanceId: `hub::${dt.id}`,
-            context: 'hub-preview',
+            // The user asked to look at this task: all of it, its links
+            // live, unmasked. A double tap would open the hub it is in.
+            expandChildren: true,
+            alwaysLinks: true,
+            doubleTap: false,
+            mask: false,
             hooks: { onNavigate: closePanel },
         });
     }

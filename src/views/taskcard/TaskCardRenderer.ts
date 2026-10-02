@@ -8,12 +8,34 @@ export type TopRightSpec =
     | { mode: 'template'; config: TopRightConfig }
     | { mode: 'none' };
 
-interface RenderOptions {
+/**
+ * How one card is drawn. Every policy is its own field, so a caller that
+ * draws cards apart from the views (the hub's preview) says what it wants
+ * of each, and the renderer has no branch for that caller.
+ */
+export interface RenderOptions {
     cardInstanceId: string;
-    context?: 'inline' | 'hub-preview';
     topRight?: TopRightSpec;
     compact?: boolean;
+    /** Show every child, however many: no collapsed section. Default false. */
+    expandChildren?: boolean;
+    /** Links in the card can be clicked whatever `enableCardFileLink` says. Default false. */
+    alwaysLinks?: boolean;
+    /** A double tap on the card does the setting's action. Default true. */
+    doubleTap?: boolean;
+    /** The view's mask mode applies to the card. Default true. */
+    mask?: boolean;
     hooks?: { onNavigate?: () => void };
+}
+
+/** The policies of `options`, with their defaults filled in. */
+function policiesOf(options: RenderOptions) {
+    return {
+        expandChildren: options.expandChildren ?? false,
+        alwaysLinks: options.alwaysLinks ?? false,
+        doubleTap: options.doubleTap ?? true,
+        mask: options.mask ?? true,
+    };
 }
 
 /**
@@ -71,6 +93,7 @@ export function computeContentSignature(
     isExpanded: boolean,
     children: readonly ChildRenderItem[],
 ): string {
+    const policies = policiesOf(options);
     const childSig = children.map(item => [
         item.isCheckbox ? 1 : 0,
         item.markdown,
@@ -105,7 +128,10 @@ export function computeContentSignature(
         // for as long as the task is not edited.
         overdueLevel,
         options.compact ? '1' : '0',
-        options.context ?? '',
+        policies.expandChildren ? '1' : '0',
+        policies.alwaysLinks ? '1' : '0',
+        policies.doubleTap ? '1' : '0',
+        policies.mask ? '1' : '0',
         maskMode ? '1' : '0',
         maskMode ? (getEffectiveMask(task) ?? '') : '',
         isExpanded ? '1' : '0',
@@ -235,9 +261,9 @@ export class TaskCardRenderer extends Component {
         const cardInstanceId = options.cardInstanceId;
         const topRight: TopRightSpec = options.topRight ?? { mode: 'time' };
         const compact = options.compact ?? false;
-        const isHubPreview = options.context === 'hub-preview';
-        const forceExpand = isHubPreview;
-        const enableLinks = isHubPreview || settings.enableCardFileLink;
+        const policies = policiesOf(options);
+        const enableLinks = policies.alwaysLinks || settings.enableCardFileLink;
+        const masked = policies.mask && this.getMaskMode();
         const onNavigate = options.hooks?.onNavigate;
 
         // What the card shows of its children, and the names behind them. A
@@ -250,10 +276,6 @@ export class TaskCardRenderer extends Component {
         const hold = holdCard(container, task, cardInstanceId, children.map(item => item.handler?.taskId ?? null));
         container.dataset.cardInstanceId = cardInstanceId;
 
-        if (isHubPreview) {
-            container.addClass('task-card--in-hub-preview');
-        }
-
         // Compute content signature for render skip
         const topRightResolved = this.resolveTopRightString(task, settings, topRight);
         const isExpanded = this.isExpanded(cardInstanceId, task.id);
@@ -263,7 +285,7 @@ export class TaskCardRenderer extends Component {
         );
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
-            this.getMaskMode(), isExpanded, children,
+            masked, isExpanded, children,
         );
 
         if (container.dataset.contentSig === sig) {
@@ -291,7 +313,7 @@ export class TaskCardRenderer extends Component {
         this.cardComponents.set(container, cardComp);
 
         this.renderTopRightMeta(container, task, settings, topRight);
-        if (!isHubPreview) {
+        if (policies.doubleTap) {
             bindTapIntents(container, {
                 onDoubleTap: (x, y) => {
                     const action = this.getDoubleTapAction();
@@ -331,7 +353,7 @@ export class TaskCardRenderer extends Component {
                 countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
         } else if (task.childEntries.length > 0) {
-            late = this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, forceExpand);
+            late = this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, policies.expandChildren);
         } else {
             late = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
@@ -340,9 +362,8 @@ export class TaskCardRenderer extends Component {
         this.bindParentCheckbox(contentContainer, hold, settings, task.isReadOnly);
 
         // Apply mask last so it overlays whatever child/inline renderer produced.
-        // Detail modal opts out — the user explicitly asked to inspect this task.
         const mask = getEffectiveMask(task);
-        if (!isHubPreview && this.getMaskMode() && mask) {
+        if (masked && mask) {
             TaskCardRenderer.applyMaskToContent(contentContainer, mask);
             // Text a post-processor puts in later would show unmasked: lay the
             // mask again once it is in, while the card still shows this draw.
@@ -513,10 +534,10 @@ export class TaskCardRenderer extends Component {
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
-        forceExpand = false
+        expandChildren = false
     ): LateContent {
         const nameAt = (index: number) => hold.childAt(index);
-        if (!forceExpand && items.length >= settings.childCollapseThreshold) {
+        if (!expandChildren && items.length >= settings.childCollapseThreshold) {
             const parentLate = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, component);
             const childrenLate = this.childSectionRenderer.renderCollapsed(
                 contentContainer,
