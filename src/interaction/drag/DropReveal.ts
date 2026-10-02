@@ -75,10 +75,4 @@ export class DropReveal {
             el.classList.add('is-drag-hidden');
         }
     }
-
-    /** その要素は可視化される状態か（inline z の据え置き判定などに使う）。 */
-    isRevealable(el: HTMLElement): boolean {
-        if (!this.gated || this.applied.has(el)) return true;
-        return !CONCEALING_CLASSES.some(cls => el.classList.contains(cls));
-    }
 }

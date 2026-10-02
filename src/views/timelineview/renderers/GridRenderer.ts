@@ -119,7 +119,6 @@ export class GridRenderer {
                 if (i === dates.length - 1) cell.addClass('is-last-cell');
                 cell.dataset.date = date;
                 cell.style.gridColumn = `${i + 2}`;
-                cell.style.zIndex = '0';
                 allDayRenderer.addEmptySpaceContextMenu(cell, date);
                 dateCells.push(cell);
             });

@@ -904,6 +904,7 @@ MIT License
 4. Component/style files must use only `--tv-*` tokens.
 5. Keep token design effectively single-layer; only keep `theme-light`/`theme-dark` overrides for app/card background and shadow strength.
 6. Drag-and-drop visuals must separate drop-zone tokens (`--tv-drop-*`) from drag-ghost tokens (`--tv-ghost-*`).
+7. A z-index is a token of ladder [A] or [B] (`src/styles/_variables.css`), never a bare number or an inline `z-index`. A lane card's script writes only its rank, `--lane-z`; `.task-card` turns it into the z-index, capped by `--z-task-card-max`, and `.task-card.is-selected` outranks it by specificity. `.is-selected` itself is written only by `HandleManager`.
 
 ---
 

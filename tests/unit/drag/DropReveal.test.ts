@@ -91,21 +91,6 @@ describe('DropReveal', () => {
         expect(applied.classes.has('is-drag-hidden')).toBe(false);
         expect(unapplied.classes.has('is-drag-hidden')).toBe(true);
     });
-
-    it('isRevealable mirrors what finish will do', () => {
-        const reveal = new DropReveal();
-        const applied = makeEl('is-drag-hidden');
-        const hidden = makeEl('is-drag-hidden');
-        const plain = makeEl('is-dragging');
-
-        expect(reveal.isRevealable(hidden)).toBe(true); // まだ gate されていない
-        reveal.gate();
-        reveal.markApplied(applied);
-
-        expect(reveal.isRevealable(applied)).toBe(true);
-        expect(reveal.isRevealable(hidden)).toBe(false);
-        expect(reveal.isRevealable(plain)).toBe(true);
-    });
 });
 
 // ---------------------------------------------------------------------------

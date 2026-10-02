@@ -83,13 +83,31 @@
            --layer-*: a var() resolves where the property is declared, and
            on :root --layer-* does not exist.
        [B] leaf-level (inside .workspace-leaf, which is isolation:isolate):
-           normal cards <= 190 (Z_MAX, TimelineSectionRenderer)
+           normal cards <= 190 (--z-task-card-max)
            < selected card / current-time-indicator 200 < drag ghost 210
            < sticky band 245 (moon) / 250 (date) / 255 (periodic)
-           < view drawer 260 (sidebar panel) */
+           < view drawer 260 (sidebar panel)
+           Lane cards: a card's z-index is its rank in its lane, `--lane-z`,
+           capped at --z-task-card-max (`.task-card` in _task-card.css). The
+           script writes only the rank (Timeline's time lanes: overlap
+           stacking); a lane of one rank sets it here (--z-allday-card). A
+           card without a rank stands at the floor, --z-task-card.
+           Grid band (Calendar's week rows, Timeline's all-day row): cells
+           (0) < cards (1, all-day 10) / due arrow (5) < grid ghost (10).
+           Schedule has no selection and no lane rank: its cards stand at
+           the floor (1) with the time labels, the now-line and its label
+           above them (10), and the fixed all-day row (30, PC sticky) above
+           the scrolling timeline. All of it stays under the sticky band. */
     --z-negative: -1;
     --z-base: 0;
     --z-task-card: 1;
+    --z-task-card-max: 190;
+    --z-allday-card: 10;
+    --z-due-arrow: 5;
+    --z-task-card-ghost-grid: 10;
+    --z-schedule-marker: 1;
+    --z-schedule-now-line: 10;
+    --z-schedule-allday: 30;
     /* Sunrise/sunset lines. Default 0 = below the task-card floor (1) so the
        lines sit behind every card (ambient context). The `.is-sun-front`
        modifier on the grid root raises this to 195 (above normal cards ≤190,

@@ -142,7 +142,6 @@ export class AllDaySectionRenderer {
 
         el.style.gridColumn = `${entry.colStart + gridColOffset} / span ${entry.span}`;
         el.style.gridRow = `${entry.trackIndex + gridRowOffset}`;
-        el.style.zIndex = '10';
     }
 
     /** Add context menu listeners to AllDay section cell */
