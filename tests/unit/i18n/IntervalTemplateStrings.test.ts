@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import en from '../../../src/i18n/locales/en.json';
+import { defaultSegmentLabel } from '../../../src/timer/IntervalMath';
 
 const SOURCE = resolve(__dirname, '../../../src/views/customMenus/IntervalTemplateCreator.ts');
 const source = readFileSync(SOURCE, 'utf-8');
@@ -35,8 +36,8 @@ describe('timer.template', () => {
         const seeds = [...source.matchAll(/label: (.+?), hours:/g)].map(m => m[1]);
         expect(seeds).toEqual(["'Work'", "'Work'", "'Work'", "'Break'"]);
 
-        const fallback = [...source.matchAll(/s\.label\.trim\(\) \|\| \(s\.type === 'work' \? (.+?) : (.+?)\)/g)];
-        expect(fallback).toHaveLength(1);
-        expect([fallback[0][1], fallback[0][2]]).toEqual(["'Work'", "'Break'"]);
+        expect(source).toContain('s.label.trim() || defaultSegmentLabel(s.type)');
+        expect(['prepare', 'work', 'break'].map((type) => defaultSegmentLabel(type as 'prepare' | 'work' | 'break')))
+            .toEqual(['Prepare', 'Work', 'Break']);
     });
 });

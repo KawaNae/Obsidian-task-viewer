@@ -28,6 +28,7 @@
 
 import { type App, TFile, TFolder } from 'obsidian';
 import type { IntervalGroup, IntervalSegment } from './TimerInstance';
+import { formatTotalDuration } from './IntervalMath';
 
 export interface IntervalTemplate {
     filePath: string;
@@ -84,7 +85,7 @@ export class IntervalTemplateLoader {
         const jsonData = this.extractJsonBlock(content);
         if (!jsonData) return null;
 
-        const groups = this.parseGroups(jsonData.groups);
+        const groups = parseTemplateGroups(jsonData.groups);
         if (groups.length === 0) return null;
 
         const icon = typeof jsonData.icon === 'string' && jsonData.icon
@@ -96,7 +97,7 @@ export class IntervalTemplateLoader {
             name,
             icon,
             groups,
-            totalDurationLabel: this.formatTotalDuration(groups),
+            totalDurationLabel: formatTotalDuration(groups),
         };
     }
 
@@ -110,60 +111,47 @@ export class IntervalTemplateLoader {
             return null;
         }
     }
+}
 
-    private parseGroups(raw: unknown): IntervalGroup[] {
-        if (!Array.isArray(raw)) return [];
-        const groups: IntervalGroup[] = [];
+/**
+ * Reads the template's groups. A segment needs a label and a positive length;
+ * its type is work, break or prepare, and anything else is work. A group with
+ * no segment left is dropped.
+ */
+export function parseTemplateGroups(raw: unknown): IntervalGroup[] {
+    if (!Array.isArray(raw)) return [];
+    const groups: IntervalGroup[] = [];
 
-        for (const entry of raw) {
-            if (!entry || typeof entry !== 'object') continue;
-            const obj = entry as Record<string, unknown>;
+    for (const entry of raw) {
+        if (!entry || typeof entry !== 'object') continue;
+        const obj = entry as Record<string, unknown>;
 
-            const repeatCount = typeof obj.repeatCount === 'number' ? obj.repeatCount : 1;
-            if (!Array.isArray(obj.segments)) continue;
+        const repeatCount = typeof obj.repeatCount === 'number' ? obj.repeatCount : 1;
+        if (!Array.isArray(obj.segments)) continue;
 
-            const segments: IntervalSegment[] = [];
-            for (const seg of obj.segments) {
-                if (!seg || typeof seg !== 'object') continue;
-                const s = seg as Record<string, unknown>;
+        const segments: IntervalSegment[] = [];
+        for (const seg of obj.segments) {
+            if (!seg || typeof seg !== 'object') continue;
+            const s = seg as Record<string, unknown>;
 
-                const label = typeof s.label === 'string' ? s.label : '';
-                const durationSeconds = typeof s.durationSeconds === 'number' ? s.durationSeconds : 0;
-                if (!label || durationSeconds <= 0) continue;
+            const label = typeof s.label === 'string' ? s.label : '';
+            const durationSeconds = typeof s.durationSeconds === 'number' ? s.durationSeconds : 0;
+            if (!label || durationSeconds <= 0) continue;
 
-                const rawType = typeof s.type === 'string' ? s.type.toLowerCase() : 'work';
-                const type: 'work' | 'break' = rawType === 'break' ? 'break' : 'work';
+            const type = segmentType(s.type);
 
-                segments.push({ label, durationSeconds, type });
-            }
-
-            if (segments.length > 0) {
-                groups.push({ segments, repeatCount });
-            }
+            segments.push({ label, durationSeconds, type });
         }
 
-        return groups;
-    }
-
-    private formatTotalDuration(groups: IntervalGroup[]): string {
-        let totalSeconds = 0;
-        let hasInfinite = false;
-
-        for (const group of groups) {
-            if (group.repeatCount === 0) {
-                hasInfinite = true;
-                continue;
-            }
-            const groupSeconds = group.segments.reduce((sum, s) => sum + s.durationSeconds, 0);
-            totalSeconds += groupSeconds * Math.max(1, group.repeatCount);
+        if (segments.length > 0) {
+            groups.push({ segments, repeatCount });
         }
-
-        if (hasInfinite) return '∞';
-
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-        if (hours > 0) return `${hours}h`;
-        return `${minutes}m`;
     }
+
+    return groups;
+}
+
+function segmentType(raw: unknown): IntervalSegment['type'] {
+    const type = typeof raw === 'string' ? raw.toLowerCase() : 'work';
+    return type === 'break' || type === 'prepare' ? type : 'work';
 }

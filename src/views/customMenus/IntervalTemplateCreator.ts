@@ -9,8 +9,9 @@
 import { type App, Notice, setIcon, getIconIds } from 'obsidian';
 import { t } from '../../i18n';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
-import type { IntervalGroup } from '../../timer/TimerInstance';
+import type { IntervalGroup, IntervalSegment } from '../../timer/TimerInstance';
 import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
+import { defaultSegmentLabel } from '../../timer/IntervalMath';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 import { OverlayShell } from '../sharedUI/OverlayShell';
@@ -25,8 +26,15 @@ interface FormSegment {
     hours: number;
     minutes: number;
     seconds: number;
-    type: 'work' | 'break' | 'prepare';
+    type: IntervalSegment['type'];
 }
+
+/** The type a segment's type button turns to. */
+const NEXT_SEGMENT_TYPE: Record<IntervalSegment['type'], IntervalSegment['type']> = {
+    work: 'break',
+    break: 'prepare',
+    prepare: 'work',
+};
 
 interface FormGroup {
     repeatCount: number;
@@ -317,7 +325,7 @@ export class IntervalTemplateCreator {
             onChange: (v) => { seg.seconds = v; },
         });
 
-        // Type toggle button (cycles work → break → work)
+        // Type button: cycles work → break → prepare → work
         const typeLabel = seg.type === 'work' ? t('timer.template.typeWork')
             : seg.type === 'break' ? t('timer.template.typeBreak')
             : t('timer.template.typePrepare');
@@ -326,7 +334,7 @@ export class IntervalTemplateCreator {
             text: typeLabel,
         });
         typeBtn.addEventListener('click', () => {
-            seg.type = seg.type === 'work' ? 'break' : 'work';
+            seg.type = NEXT_SEGMENT_TYPE[seg.type];
             this.refreshContent();
         });
 
@@ -448,7 +456,7 @@ export class IntervalTemplateCreator {
         return this.state.groups.map(g => ({
             repeatCount: g.repeatCount,
             segments: g.segments.map(s => ({
-                label: s.label.trim() || (s.type === 'work' ? 'Work' : 'Break'),
+                label: s.label.trim() || defaultSegmentLabel(s.type),
                 durationSeconds: s.hours * 3600 + s.minutes * 60 + s.seconds,
                 type: s.type,
             })),
