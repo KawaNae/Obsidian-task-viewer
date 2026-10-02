@@ -26,7 +26,7 @@ import { createControlButton, type ControlButtonVariant } from './TimerControlBu
 import type { TimerLifecycle } from './TimerLifecycle';
 import { getDisplayFileName, getTaskDisplayName } from '../services/display/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
-import { TimerProgressUI } from './TimerProgressUI';
+import { legacyProgress, TimerProgressUI, type RingOptions } from './TimerProgressUI';
 import { TimerSettingsMenu } from './TimerSettingsMenu';
 import { OFFSET_PRESET_MINUTES, canOffsetStart, rememberedStart, startLabel } from './TimerStartOffset';
 import { TimerStartOffsetModal } from '../modals/TimerStartOffsetModal';
@@ -358,7 +358,7 @@ export class TimerRenderer {
             headerTime.setText(this.getTimerDisplayText(timer));
             headerTime.toggleClass('timer-widget__header-time--break', timer.phase === 'break');
         }
-        TimerProgressUI.updateDisplay(itemEl, timer, this.formatSignedTime.bind(this));
+        TimerProgressUI.update(itemEl, legacyProgress(timer), this.ringOptions());
         this.syncStartOffset(itemEl, timer);
     }
 
@@ -439,7 +439,11 @@ export class TimerRenderer {
     }
 
     private renderCircularProgress(container: HTMLElement, timer: TimerInstance): void {
-        TimerProgressUI.render(container, timer, this.formatSignedTime.bind(this));
+        TimerProgressUI.render(container, legacyProgress(timer), this.ringOptions());
+    }
+
+    private ringOptions(): RingOptions {
+        return { block: 'timer-widget', size: 120, format: this.formatSignedTime.bind(this) };
     }
 
     private renderControls(container: HTMLElement, timer: TimerInstance): void {

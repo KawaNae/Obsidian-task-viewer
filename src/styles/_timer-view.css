@@ -83,7 +83,9 @@
     overflow: hidden;
 }
 
-/* ─── Progress Ring (TimerProgressUI overrides) ────────────── */
+/* ─── Progress Ring ──────────────────────────────────────────
+ * 輪と時刻と周の共有の宣言は _timer-widget.css。ここはビューの大きさだけ。
+ * 時刻は countup でも薄くしない。 */
 
 .timer-view__progress-container {
     position: relative;
@@ -98,37 +100,19 @@
     container-type: inline-size;
 }
 
-.timer-view .timer-widget__progress-ring {
+.timer-view__progress-ring {
     display: block;
     width: 100%;
     height: 100%;
 }
 
-.timer-view .timer-widget__time-display {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+.timer-view__time-display {
     font-size: min(2.5rem, 25cqw);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    color: var(--tv-text);
 }
 
-.timer-view .timer-widget__repeat-info {
-    position: absolute;
-    bottom: 12%;
-    left: 50%;
-    transform: translateX(-50%);
+.timer-view__repeat-info {
     font-size: min(0.9rem, 14cqw);
-    color: var(--tv-text-muted);
-    text-align: center;
-    white-space: normal;
     max-width: 70cqw;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
 }
 
 /* ─── Controls ─────────────────────────────────────────────── */

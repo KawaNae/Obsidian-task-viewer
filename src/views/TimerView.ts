@@ -1,39 +1,22 @@
 /**
  * Timer View (formerly Pomodoro View)
  *
- * タスク非紐付けの独立タイマービュー。
- * 4モード対応: countup / countdown / pomodoro / interval
- * TimerInstance 型と TimerProgressUI を再利用。
+ * タスク非紐付けの独立タイマービュー。4モード: countup / countdown / pomodoro / interval。
+ * 走行は測り方と時計の組で、表示と出来事はウィジェットと同じ `TimerProgress` が
+ * 導く。ウィジェットとの違いは、記録を書かないことと、出来事への応じ方（countdown
+ * が 0 をまたぐと鳴らして告げ、区間の終わりを告げる）。
  */
 
 import { ItemView, type WorkspaceLeaf, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../log/log';
 import type { PluginContext } from '../PluginContext';
 import { VIEW_META_TIMER } from '../constants/viewRegistry';
-import type {
-    CountupTimer,
-    CountdownTimer,
-    IntervalGroup,
-    IntervalTimer,
-    TimerInstance,
-    TimerPhase,
-} from '../timer/TimerInstance';
-import { TimerProgressUI } from '../timer/TimerProgressUI';
+import { TimerProgressUI, type RingOptions, type RingState } from '../timer/TimerProgressUI';
 import { IntervalTemplateLoader, type IntervalTemplate } from '../timer/IntervalTemplateLoader';
 import { AudioUtils } from '../timer/AudioUtils';
-import {
-    advanceSegment,
-    computeCompletedDuration,
-    totalDuration,
-    getCurrentSegment,
-} from '../timer/IntervalMath';
-import {
-    accumulatePausedElapsed,
-    applyCountdownTick,
-    applyCountupTick,
-    applyIntervalPauseSnapshot,
-    applyIntervalTick,
-} from '../timer/TimerTickMath';
+import { pomodoroGroups, segmentAt, START_CURSOR } from '../timer/IntervalMath';
+import { freeze, readSeconds, restart, resume, type Clock } from '../timer/TimerClock';
+import { progressOf, tickOf, type Measure } from '../timer/TimerProgress';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
 import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
@@ -47,14 +30,20 @@ import { t } from '../i18n';
 
 export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 
-const TIMER_VIEW_ID = '__timer-view__';
+/** 走行。時計が止まっていれば一時停止。 */
+interface Run {
+    measure: Measure;
+    clock: Clock;
+}
 
 export class TimerView extends ItemView {
     private plugin: PluginContext;
     private container: HTMLElement;
     private timerViewMode: TimerViewMode = 'pomodoro';
     private customName?: string;
-    private timer: TimerInstance | null = null;
+    private run: Run | null = null;
+    /** 前の tick の時刻。tick はここから今までに起きたことに応じる。 */
+    private lastTickMs = 0;
     private tickIntervalId: number | null = null;
 
     private templateLoader: IntervalTemplateLoader;
@@ -70,7 +59,7 @@ export class TimerView extends ItemView {
 
         this.toolbar = new TimerToolbar({
             getMode: () => this.timerViewMode,
-            isIdle: () => !this.timer,
+            isIdle: () => !this.run,
             onSelectMode: (event) => this.showModeMenu(event),
             onReloadTemplates: () => {
                 void (async () => {
@@ -83,7 +72,7 @@ export class TimerView extends ItemView {
     }
 
     private showModeMenu(event: MouseEvent): void {
-        if (this.timer) return;
+        if (this.run) return;
         const labels: Record<TimerViewMode, string> = {
             countup: t('timer.countup'),
             countdown: t('timer.countdown'),
@@ -97,7 +86,7 @@ export class TimerView extends ItemView {
                         .setChecked(this.timerViewMode === mode)
                         .onClick(async () => {
                             this.timerViewMode = mode;
-                            this.timer = null;
+                            this.run = null;
                             this.selectedTemplate = null;
                             if (mode === 'interval') {
                                 await this.loadTemplates();
@@ -176,99 +165,37 @@ export class TimerView extends ItemView {
         this.stopTicker();
     }
 
-    // ─── Timer Instance Creation ────────────────────────────────
+    // ─── Measure ────────────────────────────────────────────────
 
-    private createTimerInstance(): TimerInstance {
-        const now = Date.now();
-        const base = {
-            id: TIMER_VIEW_ID,
-            taskId: TIMER_VIEW_ID,
-            taskName: '',
-            taskOriginalText: '',
-            taskFile: '',
-            startTimeMs: 0,
-            pausedElapsedTime: 0,
-            phase: 'idle' as TimerPhase,
-            isRunning: false,
-            isExpanded: true,
-            intervalId: null,
-            recordMode: 'self' as const,
-            parserId: 'tv-inline',
-            taskColor: '',
-        };
-
+    /** 今のモードの測り方。interval でテンプレートを選んでいなければ null。 */
+    private measureOf(): Measure | null {
+        const settings = this.plugin.settings;
         switch (this.timerViewMode) {
             case 'countup':
-                return { ...base, timerType: 'countup', elapsedTime: 0 } as CountupTimer;
-            case 'countdown': {
-                const total = this.plugin.settings.countdownMinutes * 60;
+                return { type: 'countup' };
+            case 'countdown':
+                return { type: 'countdown', totalSeconds: settings.countdownMinutes * 60 };
+            case 'pomodoro':
                 return {
-                    ...base,
-                    timerType: 'countdown',
-                    timeRemaining: total,
-                    totalTime: total,
-                    elapsedTime: 0,
-                } as CountdownTimer;
-            }
-            case 'pomodoro': {
-                const workSec = this.plugin.settings.pomodoroWorkMinutes * 60;
-                const breakSec = this.plugin.settings.pomodoroBreakMinutes * 60;
-                const groups: IntervalGroup[] = [{
-                    segments: [
-                        { label: 'Work', durationSeconds: workSec, type: 'work' },
-                        { label: 'Break', durationSeconds: breakSec, type: 'break' },
-                    ],
-                    repeatCount: 0,
-                }];
-                return {
-                    ...base,
-                    timerType: 'interval',
-                    intervalSource: 'pomodoro',
-                    groups,
-                    currentGroupIndex: 0,
-                    currentSegmentIndex: 0,
-                    currentRepeatIndex: 0,
-                    segmentTimeRemaining: workSec,
-                    totalElapsedTime: 0,
-                    totalDuration: 0,
-                } as IntervalTimer;
-            }
-            case 'interval': {
-                if (!this.selectedTemplate) {
-                    return { ...base, timerType: 'countup', elapsedTime: 0 } as CountupTimer;
-                }
-                const groups = this.selectedTemplate.groups;
-                const firstSeg = groups[0]?.segments[0];
-                return {
-                    ...base,
-                    timerType: 'interval',
-                    groups,
-                    currentGroupIndex: 0,
-                    currentSegmentIndex: 0,
-                    currentRepeatIndex: 0,
-                    segmentTimeRemaining: firstSeg?.durationSeconds ?? 0,
-                    totalElapsedTime: 0,
-                    totalDuration: totalDuration(groups),
-                } as IntervalTimer;
-            }
+                    type: 'interval',
+                    source: 'pomodoro',
+                    groups: pomodoroGroups(settings.pomodoroWorkMinutes, settings.pomodoroBreakMinutes),
+                    at: START_CURSOR,
+                };
+            case 'interval':
+                if (!this.selectedTemplate) return null;
+                return { type: 'interval', source: 'template', groups: this.selectedTemplate.groups, at: START_CURSOR };
         }
     }
-
 
     // ─── Timer Actions ──────────────────────────────────────────
 
     private startTimer(): void {
-        this.timer = this.createTimerInstance();
+        const measure = this.measureOf();
+        if (!measure) return;
         const now = Date.now();
-        this.timer.startTimeMs = now;
-        this.timer.isRunning = true;
-
-        if (this.timer.timerType === 'interval') {
-            const segment = getCurrentSegment(this.timer);
-            this.timer.phase = segment ? segment.type : 'work';
-        } else {
-            this.timer.phase = 'work';
-        }
+        this.run = { measure, clock: restart(now) };
+        this.lastTickMs = now;
 
         AudioUtils.playStartSound();
         this.startTicker();
@@ -276,40 +203,17 @@ export class TimerView extends ItemView {
     }
 
     private pauseTimer(): void {
-        if (!this.timer || !this.timer.isRunning) return;
-
-        accumulatePausedElapsed(this.timer, Date.now());
-        this.timer.isRunning = false;
+        if (!this.run || this.run.clock.kind !== 'running') return;
+        this.run.clock = freeze(this.run.clock, Date.now());
         this.stopTicker();
-
-        switch (this.timer.timerType) {
-            case 'countup':
-                this.timer.elapsedTime = this.timer.pausedElapsedTime;
-                break;
-            case 'countdown':
-                this.timer.elapsedTime = this.timer.pausedElapsedTime;
-                this.timer.timeRemaining = this.timer.totalTime - this.timer.elapsedTime;
-                break;
-            case 'interval':
-                applyIntervalPauseSnapshot(this.timer);
-                break;
-        }
-
         this.render();
     }
 
     private resumeTimer(): void {
-        if (!this.timer || this.timer.isRunning) return;
-
-        if (this.timer.timerType === 'interval') {
-            const segment = getCurrentSegment(this.timer);
-            if (segment) {
-                this.timer.phase = segment.type;
-            }
-        }
-
-        this.timer.startTimeMs = Date.now();
-        this.timer.isRunning = true;
+        if (!this.run || this.run.clock.kind === 'running') return;
+        const now = Date.now();
+        this.run.clock = resume(this.run.clock, now);
+        this.lastTickMs = now;
         AudioUtils.playStartSound();
         this.startTicker();
         this.render();
@@ -317,7 +221,7 @@ export class TimerView extends ItemView {
 
     private resetTimer(): void {
         this.stopTicker();
-        this.timer = null;
+        this.run = null;
         this.render();
     }
 
@@ -336,99 +240,50 @@ export class TimerView extends ItemView {
     }
 
     private tick(): void {
-        if (!this.timer || !this.timer.isRunning) return;
+        const run = this.run;
+        if (!run || run.clock.kind !== 'running') return;
 
         const now = Date.now();
+        const tick = tickOf(run, now, this.lastTickMs);
+        this.lastTickMs = now;
 
-        switch (this.timer.timerType) {
-            case 'countup':
-                applyCountupTick(this.timer, now);
-                this.updateDisplay();
-                return;
-            case 'countdown': {
-                const tick = applyCountdownTick(this.timer, now);
-                // phase は進捗リングの色の元。セッションが在るかどうかは
-                // `this.timer` が持つので、ここを「未開始」の判定に使わない。
-                this.timer.phase = tick.remaining < 0 ? 'idle' : 'work';
-                if (tick.warn) {
-                    AudioUtils.playWarningBeep();
-                }
-                if (tick.crossedZero) {
-                    AudioUtils.playFinishSound();
-                    new Notice(t('timer.complete'));
-                }
-                this.updateDisplay();
-                return;
+        if (tick.finishedAtMs !== null) {
+            this.finish();
+            return;
+        }
+
+        const ended = run.measure.type === 'interval' ? segmentAt(run.measure.groups, run.measure.at) : null;
+        run.measure = tick.measure;
+
+        if (tick.crossedZero) {
+            AudioUtils.playFinishSound();
+            new Notice(t('timer.complete'));
+        }
+        if (tick.segmentsMoved > 0) {
+            AudioUtils.playTransitionConfirm();
+            if (ended?.type === 'work') {
+                new Notice(t('timer.workComplete'));
+            } else if (ended?.type === 'break') {
+                new Notice(t('timer.breakComplete'));
             }
-            case 'interval': {
-                const tick = applyIntervalTick(this.timer, now);
-                if (tick.outcome === 'no-segment') {
-                    this.handleIntervalFinish();
-                    return;
-                }
-                if (tick.outcome === 'segment-complete') {
-                    this.handleSegmentComplete();
-                    return;
-                }
-                if (tick.warn) {
-                    AudioUtils.playWarningBeep();
-                }
-                this.updateDisplay();
-                return;
-            }
+        }
+        if (tick.warn) {
+            AudioUtils.playWarningBeep();
+        }
+
+        if (tick.segmentsMoved > 0) {
+            this.render();
+        } else {
+            this.updateDisplay();
         }
     }
 
-    // ─── Completion Handlers ────────────────────────────────────
-
-    private handleSegmentComplete(): void {
-        if (!this.timer || this.timer.timerType !== 'interval') return;
-
-        this.stopTicker();
-        const currentSegment = getCurrentSegment(this.timer);
-        if (!currentSegment) {
-            this.handleIntervalFinish();
-            return;
-        }
-
-        // Update totalElapsedTime
-        this.timer.totalElapsedTime = computeCompletedDuration(this.timer) + currentSegment.durationSeconds;
-
-        // Advance to next segment first to decide which sound to play
-        const moved = advanceSegment(this.timer);
-        if (!moved) {
-            this.handleIntervalFinish();
-            return;
-        }
-
-        // Play transition confirm chime (only when continuing to next segment)
-        AudioUtils.playTransitionConfirm();
-        if (currentSegment.type === 'work') {
-            new Notice(t('timer.workComplete'));
-        } else if (currentSegment.type === 'break') {
-            new Notice(t('timer.breakComplete'));
-        }
-
-        const nextSegment = getCurrentSegment(this.timer);
-        if (!nextSegment) {
-            this.handleIntervalFinish();
-            return;
-        }
-
-        this.timer.segmentTimeRemaining = nextSegment.durationSeconds;
-        this.timer.phase = nextSegment.type;
-        this.timer.startTimeMs = Date.now();
-        this.timer.pausedElapsedTime = 0;
-        this.timer.isRunning = true;
-        this.startTicker();
-        this.render();
-    }
-
-    private handleIntervalFinish(): void {
+    /** interval の最後の区間が終わった。 */
+    private finish(): void {
         this.stopTicker();
         AudioUtils.playFinishSound();
         new Notice(t('timer.allIntervalsComplete'));
-        this.timer = null;
+        this.run = null;
         this.render();
     }
 
@@ -444,33 +299,46 @@ export class TimerView extends ItemView {
         const mainContainer = this.container.createDiv('timer-view__main');
 
         // Interval mode: show template selector when idle
-        if (this.timerViewMode === 'interval' && !this.timer) {
+        if (this.timerViewMode === 'interval' && !this.run) {
             this.renderTemplateSelector(mainContainer);
             return;
         }
 
-        // Progress ring
-        const progressContainer = mainContainer.createDiv('timer-view__progress-container');
-        const displayTimer = this.timer ?? this.createTimerInstance();
-        TimerProgressUI.render(progressContainer, displayTimer, this.formatTime.bind(this), 200);
+        const ring = this.ringState();
+        if (ring) {
+            const progressContainer = mainContainer.createDiv('timer-view__progress-container');
+            TimerProgressUI.render(progressContainer, ring, this.ringOptions());
+        }
 
-        // Controls
         const controls = mainContainer.createDiv('timer-view__controls');
         this.renderControls(controls);
     }
 
     private updateDisplay(): void {
-        if (!this.timer) return;
-        TimerProgressUI.updateDisplay(this.container, this.timer, this.formatTime.bind(this), 200);
+        const ring = this.ringState();
+        if (ring) TimerProgressUI.update(this.container, ring, this.ringOptions());
+    }
+
+    /** 走行の今の表示。開始前は測り方の 0 秒を色無しで見せる。 */
+    private ringState(): RingState | null {
+        if (this.run) {
+            return progressOf(this.run.measure, readSeconds(this.run.clock, Date.now()));
+        }
+        const measure = this.measureOf();
+        return measure ? { ...progressOf(measure, 0), tone: 'plain' } : null;
+    }
+
+    private ringOptions(): RingOptions {
+        return { block: 'timer-view', size: 200, format: (seconds) => TimeFormatter.formatSignedSeconds(seconds) };
     }
 
     private renderControls(container: HTMLElement): void {
-        if (!this.timer) {
+        if (!this.run) {
             this.addViewButton(container, 'primary', 'play', t('timer.start'), () => this.startTimer());
             return;
         }
 
-        if (this.timer.isRunning) {
+        if (this.run.clock.kind === 'running') {
             this.addViewButton(container, 'secondary', 'pause', t('timer.pause'), () => {
                 this.pauseTimer();
                 AudioUtils.playPauseSound();
@@ -675,13 +543,7 @@ export class TimerView extends ItemView {
      * 計っている最中のセッションを設定変更で捨てるわけにはいかない。
      */
     private applyDurationSettingsToTimer(): void {
-        if (this.timer) return;
+        if (this.run) return;
         this.render();
-    }
-
-    // ─── Utilities ──────────────────────────────────────────────
-
-    private formatTime(seconds: number): string {
-        return TimeFormatter.formatSignedSeconds(seconds);
     }
 }
