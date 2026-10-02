@@ -95,16 +95,15 @@ export class ScheduleTaskRenderer {
     renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean, reconciler: CardReconciler): void {
         const wrapper = container.createDiv(flowCard ? 'schedule-tasks__card-wrap' : 'schedule-section__task-wrap');
 
-        const scope = flowCard ? 'flow' : 'section';
-        const cardInstanceId = `schedule::${scope}::${task.id}`;
-        const reused = reconciler.acquire(cardInstanceId, task);
+        const key = { scope: flowCard ? 'flow' : 'section', name: task.id };
+        const reused = reconciler.acquire(key, task);
         const card = reused ?? wrapper.createDiv('task-card');
         if (reused) wrapper.appendChild(reused);
 
         TaskStyling.applySplitClasses(card, task);
         const options = flowCard
-            ? { cardInstanceId, topRight: { mode: 'time' as const } }
-            : { cardInstanceId, topRight: { mode: 'time' as const }, compact: true };
+            ? { key, topRight: { mode: 'time' as const } }
+            : { key, topRight: { mode: 'time' as const }, compact: true };
         this.taskRenderer.render(card, task, this.getSettings(), options);
     }
 }

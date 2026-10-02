@@ -5,6 +5,7 @@ import type { ChildRenderItem } from './types';
 import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 import { touchCard } from './CardHold';
+import type { CardKey, ExpandedCards } from './CardKey';
 import { renderCardMarkdown, type LateContent } from './CardMarkdown';
 import { t } from '../../i18n';
 
@@ -52,8 +53,8 @@ export class ChildSectionRenderer {
         contentContainer: HTMLElement,
         items: ChildRenderItem[],
         nameAt: (index: number) => string | undefined,
-        expandedTaskIds: Set<string>,
-        expandKey: () => string,
+        expanded: ExpandedCards,
+        keyOf: () => CardKey,
         filePath: string,
         component: Component,
         settings: TaskViewerSettings,
@@ -62,7 +63,7 @@ export class ChildSectionRenderer {
     ): LateContent {
         const { completed, total } = countChildCompletion(items, this.index, settings);
         const label = `${warnIcon}${completed}/${total}`;
-        const wasExpanded = expandedTaskIds.has(expandKey());
+        const wasExpanded = expanded.has(keyOf());
 
         const toggle = contentContainer.createDiv('task-card__children-toggle');
         const childrenContainer = contentContainer.createDiv('task-card__children');
@@ -89,13 +90,13 @@ export class ChildSectionRenderer {
                 toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${label}`;
                 childrenContainer.removeClass('task-card__children--collapsed');
                 childrenContainer.addClass('task-card__children--expanded');
-                expandedTaskIds.add(expandKey());
+                expanded.set(keyOf(), true);
             } else {
                 toggle.dataset.collapsed = 'true';
                 toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${label}`;
                 childrenContainer.removeClass('task-card__children--expanded');
                 childrenContainer.addClass('task-card__children--collapsed');
-                expandedTaskIds.delete(expandKey());
+                expanded.set(keyOf(), false);
             }
         });
         return late;

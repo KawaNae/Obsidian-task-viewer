@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TaskCardRenderer } from '../../../src/views/taskcard/TaskCardRenderer';
 import { HandleManager } from '../../../src/views/sharedUI/handles/HandleManager';
 import { makeSegmentId } from '../../../src/services/display/SegmentIds';
+import { ExpandedCards, type CardKey } from '../../../src/views/taskcard/CardKey';
 import { makeTask } from '../helpers/makeTask';
 import type { Task } from '../../../src/types';
 
@@ -45,39 +46,65 @@ describe('the selection', () => {
 });
 
 describe('an expanded card', () => {
-    /** The renderer's expansion, over an index that follows OLD to NOW. */
-    function expansion(keys: string[]) {
-        const renderer = Object.create(TaskCardRenderer.prototype) as TaskCardRenderer;
+    /** The opened cards `keys`, followed through an index that follows OLD to NOW. */
+    function expansion(keys: CardKey[]) {
+        const expanded = new ExpandedCards();
+        for (const key of keys) expanded.set(key, true);
         const index = following(makeTask({ id: NOW, file: 'a.md' }));
-        const state = renderer as unknown as {
-            expandedTaskIds: Set<string>;
-            index: unknown;
-            isExpanded(cardInstanceId: string, taskId: string): boolean;
-        };
-        state.expandedTaskIds = new Set(keys);
-        state.index = index;
-        return state;
+        const isOpen = (key: CardKey) => expanded.isOpen(key, row => index.getTask(row)?.id);
+        return { expanded, isOpen };
     }
 
     it('stays expanded under the name the index answers, and the key is taken over', () => {
-        const state = expansion([`kanban::cell-1::${OLD}`]);
+        const { expanded, isOpen } = expansion([{ scope: 'cell-1', name: OLD }]);
 
-        expect(state.isExpanded(`kanban::cell-1::${NOW}`, NOW)).toBe(true);
-        expect([...state.expandedTaskIds]).toEqual([`kanban::cell-1::${NOW}`]);
+        expect(isOpen({ scope: 'cell-1', name: NOW })).toBe(true);
+        expect(expanded.keys()).toEqual([{ scope: 'cell-1', name: NOW }]);
     });
 
     it('follows a segment of a split task by its base', () => {
         const old = makeSegmentId(OLD, '2026-09-25');
         const now = makeSegmentId(NOW, '2026-09-25');
-        const state = expansion([`timeline::allday::${old}`]);
+        const { isOpen } = expansion([{ scope: 'allday', name: old }]);
 
-        expect(state.isExpanded(`timeline::allday::${now}`, now)).toBe(true);
+        expect(isOpen({ scope: 'allday', name: now })).toBe(true);
+    });
+
+    it('is not taken over by another segment of the same task', () => {
+        const { isOpen } = expansion([{ scope: 'allday', name: makeSegmentId(OLD, '2026-09-25') }]);
+
+        expect(isOpen({ scope: 'allday', name: makeSegmentId(NOW, '2026-09-26') })).toBe(false);
     });
 
     it('is not taken over by the same task in another scope', () => {
-        const state = expansion([`kanban::cell-1::${OLD}`]);
+        const { expanded, isOpen } = expansion([{ scope: 'cell-1', name: OLD }]);
 
-        expect(state.isExpanded(`kanban::cell-2::${NOW}`, NOW)).toBe(false);
-        expect([...state.expandedTaskIds]).toEqual([`kanban::cell-1::${OLD}`]);
+        expect(isOpen({ scope: 'cell-2', name: NOW })).toBe(false);
+        expect(expanded.keys()).toEqual([{ scope: 'cell-1', name: OLD }]);
+    });
+
+    it('is forgotten when its row\'s name ends, its segments too, in every place', () => {
+        let deleted: ((taskId: string) => void) | null = null;
+        const renderer = new TaskCardRenderer({
+            app: {} as never,
+            readService: {} as never,
+            index: { getTask: () => undefined, onTaskDeleted: (fn: (taskId: string) => void) => { deleted = fn; return () => {}; } } as never,
+            operations: {} as never,
+            menuPresenter: {} as never,
+            linkRuntime: { hoverSource: 'test', getHoverParent: () => ({}) } as never,
+            getSettings: () => ({}) as never,
+            getMaskMode: () => false,
+            actions: {} as never,
+        });
+        const expanded = (renderer as unknown as { expanded: ExpandedCards }).expanded;
+        const other = { scope: 'lane', name: NOW };
+        expanded.set({ scope: 'allday', name: makeSegmentId(OLD, '2026-09-25') }, true);
+        expanded.set({ scope: 'lane-multi', name: makeSegmentId(OLD, '2026-09-26') }, true);
+        expanded.set({ scope: 'cell-1', name: OLD }, true);
+        expanded.set(other, true);
+
+        deleted!(OLD);
+
+        expect(expanded.keys()).toEqual([other]);
     });
 });

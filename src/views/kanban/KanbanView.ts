@@ -263,7 +263,7 @@ export class KanbanView extends ItemView {
 
         // Keyed reconciliation: lift surviving cards before tearing down the
         // grid. They will be re-parented + re-decorated as their
-        // cardInstanceId turns up in the new render; unmatched ones (filter
+        // key turns up in the new render; unmatched ones (filter
         // dropped, deleted, etc.) are disposed at the end.
         const reconciler = new CardReconciler();
         reconciler.detach(this.container);
@@ -361,13 +361,13 @@ export class KanbanView extends ItemView {
             ? { mode: 'template' as const, config: listDef.topRight }
             : { mode: 'none' as const };
         for (const task of tasks) {
-            const cardInstanceId = `kanban::cell-${listId}::${task.id}`;
-            const reused = reconciler?.acquire(cardInstanceId, task);
+            const key = { scope: `cell-${listId}`, name: task.id };
+            const reused = reconciler?.acquire(key, task);
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
             this.taskRenderer.render(card, task, settings, {
-                cardInstanceId,
+                key,
                 topRight,
             });
         }

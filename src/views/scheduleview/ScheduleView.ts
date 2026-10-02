@@ -372,7 +372,7 @@ export class ScheduleView extends ItemView {
 
         // Keyed reconciliation: lift surviving cards before tearing down the
         // day-timeline scaffolding. They will be re-parented + re-decorated as
-        // their cardInstanceId turns up in the new render; unmatched ones are
+        // their key turns up in the new render; unmatched ones are
         // disposed at the end.
         const reconciler = new CardReconciler();
         reconciler.detach(this.container);

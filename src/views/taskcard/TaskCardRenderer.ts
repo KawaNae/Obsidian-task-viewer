@@ -14,7 +14,8 @@ export type TopRightSpec =
  * of each, and the renderer has no branch for that caller.
  */
 export interface RenderOptions {
-    cardInstanceId: string;
+    /** Which card this is in its view; an opened card is kept by it. */
+    key: CardKey;
     topRight?: TopRightSpec;
     compact?: boolean;
     /** Show every child, however many: no collapsed section. Default false. */
@@ -112,7 +113,7 @@ import type { ChildRenderItem, TaskCardLinkRuntime } from './types';
 import { getEffectiveColor, getEffectiveLinestyle, getEffectiveMask } from '../../services/data/EffectiveProperties';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import type { TaskMenuHooks } from '../../interaction/menu/MenuHandler';
-import { mapRow } from '../../services/display/SegmentIds';
+import { ExpandedCards, stampCardKey, type CardKey } from './CardKey';
 import { holdCard, type CardHold } from './CardHold';
 import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
 import { renderCardMarkdown, type LateContent } from './CardMarkdown';
@@ -189,7 +190,7 @@ export function computeContentSignature(
 }
 
 export class TaskCardRenderer extends Component {
-    private expandedTaskIds: Set<string> = new Set();
+    private expanded = new ExpandedCards();
     private childItemBuilder: ChildItemBuilder;
     private childSectionRenderer: ChildSectionRenderer;
     private checkboxWiring: CheckboxWiring;
@@ -216,19 +217,11 @@ export class TaskCardRenderer extends Component {
         this.childItemBuilder = new ChildItemBuilder(readService, index);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, index, deps.actions.showChildMenu);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, deps.getSettings);
-        // Clean up expandedTaskIds entries for rows whose names ended (the
-        // index's delete notification) so the set does not grow unbounded
-        // over the renderer's lifetime. Keys are
-        // `${viewId}::${scope}::${task.id}` (cardInstanceId). Match by suffix so
-        // all card instances of the deleted task are dropped regardless of view /
-        // scope (main grid, pinned list, etc.).
+        // Forget the opened cards of rows whose names ended (the index's
+        // delete notification), segments included, in every place, so the
+        // set does not grow over the renderer's lifetime.
         this.unsubscribeTaskDeleted = index.onTaskDeleted((taskId) => {
-            const suffix = `::${taskId}`;
-            for (const key of [...this.expandedTaskIds]) {
-                if (key.endsWith(suffix)) {
-                    this.expandedTaskIds.delete(key);
-                }
-            }
+            this.expanded.forgetRow(taskId);
         });
     }
 
@@ -238,30 +231,6 @@ export class TaskCardRenderer extends Component {
             this.unsubscribeTaskDeleted = null;
         }
         super.onunload();
-    }
-
-    /**
-     * Whether the card `cardInstanceId`, drawing the task `taskId`, was left
-     * expanded. A key ends in the name the task had when it was expanded, and
-     * a name lasts one reading of its file: one given before a write of ours
-     * is followed to the row's name now (`getTask`), and the key is taken
-     * over by this card. One from before a change that was not ours names
-     * nothing, and the card is drawn collapsed.
-     */
-    private isExpanded(cardInstanceId: string, taskId: string): boolean {
-        if (this.expandedTaskIds.has(cardInstanceId)) return true;
-        if (!cardInstanceId.endsWith(taskId)) return false;
-        const scope = cardInstanceId.slice(0, cardInstanceId.length - taskId.length);
-        for (const key of this.expandedTaskIds) {
-            if (!key.startsWith(scope)) continue;
-            const held = key.slice(scope.length);
-            const now = mapRow(held, row => this.index.getTask(row)?.id);
-            if (now !== taskId) continue;
-            this.expandedTaskIds.delete(key);
-            this.expandedTaskIds.add(cardInstanceId);
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -276,7 +245,7 @@ export class TaskCardRenderer extends Component {
         settings: TaskViewerSettings,
         options: RenderOptions
     ): void {
-        const cardInstanceId = options.cardInstanceId;
+        const key = options.key;
         const topRight: TopRightSpec = options.topRight ?? { mode: 'time' };
         const compact = options.compact ?? false;
         const policies = policiesOf(options);
@@ -291,8 +260,8 @@ export class TaskCardRenderer extends Component {
             : [];
         // Every draw puts the task it draws in the hold, whether or not the
         // card is drawn anew: a kept card acts on the task it shows.
-        const hold = holdCard(container, task, cardInstanceId, children.map(item => item.handler?.taskId ?? null));
-        container.dataset.cardInstanceId = cardInstanceId;
+        const hold = holdCard(container, task, key, children.map(item => item.handler?.taskId ?? null));
+        stampCardKey(container, key);
 
         // The card's look outside its content, and its menu, on every draw:
         // a kept card is drawn for a task whose color may have gone.
@@ -303,7 +272,7 @@ export class TaskCardRenderer extends Component {
 
         // Compute content signature for render skip
         const topRightResolved = this.resolveTopRightString(task, settings, topRight);
-        const isExpanded = this.isExpanded(cardInstanceId, task.id);
+        const isExpanded = this.expanded.isOpen(key, row => this.index.getTask(row)?.id);
         const overdueLevel = getOverdueLevel(
             task, settings.startHour, settings.statusDefinitions,
             this.readService,
@@ -568,8 +537,8 @@ export class TaskCardRenderer extends Component {
                 contentContainer,
                 items,
                 nameAt,
-                this.expandedTaskIds,
-                () => hold.cardInstanceId,
+                this.expanded,
+                () => hold.key,
                 task.file,
                 component,
                 settings,

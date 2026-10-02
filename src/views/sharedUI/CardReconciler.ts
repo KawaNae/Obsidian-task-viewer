@@ -1,16 +1,17 @@
 import { TRANSIENT_DRAG_CLASSES } from '../../interaction/drag/constants';
 import type { Task } from '../../types';
-import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import { heldBy } from '../taskcard/CardHold';
+import { cardKeyString, segmentPartOf, type CardKey } from '../taskcard/CardKey';
 
 /**
  * Keyed reconciler for `.task-card` elements across a render pass.
  *
  * Pattern (1 instance per render call):
- *   1. `detach(scope)` — index every existing card in `scope` by its
- *      `data-card-instance-id` and remove it from the DOM tree. The element
- *      itself stays alive (with its TaskCardRenderer cardComponents WeakMap
- *      entry, bound listeners, and inner markdown DOM intact).
+ *   1. `detach(container)` — index every existing card in `container` by its
+ *      key (`CardKey`, which its hold carries) and remove it from the DOM
+ *      tree. The element itself stays alive (with its TaskCardRenderer
+ *      cardComponents WeakMap entry, bound listeners, and inner markdown DOM
+ *      intact).
  *   2. The view rebuilds its scaffolding (week rows / day columns / sections)
  *      and, for each intended card, calls `acquire(key)` to get back the
  *      existing element if one survived. Otherwise the view creates a fresh
@@ -20,58 +21,54 @@ import { heldBy } from '../taskcard/CardHold';
  *      `taskRenderer.dispose(card)` any element that no longer corresponds to
  *      an intended card (filter dropped, segment vanished, etc.).
  *
- * Keys come from `dataset.cardInstanceId` which `TaskCardRenderer.render()`
- * stamps. Each view already builds these with enough scope (`viewId :: scope
- * :: id-or-segmentId`) to be unique within its container, which is exactly the
- * granularity reconciliation needs.
+ * Keys are those `TaskCardRenderer.render()` was given. Each view gives a
+ * card a place (`CardKey.scope`) that, with the task's name, is unique within
+ * its container, which is exactly the granularity reconciliation needs.
  *
  * A key holds the task's name, and a name lasts one reading of its file: once
  * the file is read again, no key of its cards turns up. A card is then found
- * by what it shows instead (`shownKey`): the key with the name taken out, and
- * the task's file, status and text put in. Twins take the survivors in the
+ * by what it shows instead (`shownKey`): its place, the segment part of its
+ * name, and the task's file, status and text. Twins take the survivors in the
  * order they were drawn. A card found this way may have shown another row
  * with the same text; the draw that follows puts the task in its hold
  * (`CardHold`) and draws it anew if it shows anything else.
  */
 export class CardReconciler {
+    /** Survivors by their key (`cardKeyString`). */
     private survivors = new Map<string, HTMLElement>();
     /** Survivors by what they showed (`shownKey`), in the order they were drawn. */
     private byShown = new Map<string, HTMLElement[]>();
 
     /**
-     * Index existing cards in `scope` by their cardInstanceId and detach them
-     * from the DOM. Cards without a `data-card-instance-id` (i.e. not yet
-     * passed through `TaskCardRenderer.render`) are left alone — they belong
-     * to scaffolding paths the reconciler does not own.
+     * Index existing cards in `container` by their key and detach them from
+     * the DOM. Cards no draw has passed (without a hold) are left alone — they
+     * belong to scaffolding paths the reconciler does not own.
      */
-    detach(scope: HTMLElement): void {
-        scope.querySelectorAll<HTMLElement>('.task-card[data-card-instance-id]').forEach(card => {
-            const key = card.dataset.cardInstanceId;
-            if (!key) return;
-            this.survivors.set(key, card);
+    detach(container: HTMLElement): void {
+        container.querySelectorAll<HTMLElement>('.task-card[data-card-scope]').forEach(card => {
             const held = heldBy(card);
-            const shown = held ? shownKey(key, held.task) : null;
-            if (shown !== null) {
-                const same = this.byShown.get(shown);
-                if (same) same.push(card); else this.byShown.set(shown, [card]);
-            }
+            if (!held) return;
+            this.survivors.set(cardKeyString(held.key), card);
+            const shown = shownKey(held.key, held.task);
+            const same = this.byShown.get(shown);
+            if (same) same.push(card); else this.byShown.set(shown, [card]);
             card.remove();
         });
     }
 
     /**
      * Return (and consume) the surviving card for `key`, or, when none has
-     * it, one that showed what `task` shows under the same key otherwise
+     * it, one that showed what `task` shows in the same place
      * (`shownKey`); undefined if the caller has to build a new one. Consuming
      * guarantees the same card cannot be acquired twice in a single reconcile
      * pass.
      *
      * @param task the task the card is for, whose name `key` holds
      */
-    acquire(key: string, task: Task): HTMLElement | undefined {
-        const el = this.survivors.get(key) ?? this.takeShown(key, task);
+    acquire(key: CardKey, task: Task): HTMLElement | undefined {
+        const el = this.survivors.get(cardKeyString(key)) ?? this.takeShown(key, task);
         if (el) {
-            this.survivors.delete(el.dataset.cardInstanceId!);
+            this.survivors.delete(cardKeyString(heldBy(el)!.key));
             // Render never owns transient drag state — the active gesture
             // re-applies it on the next onDown/onMove. Stripping it from reused
             // cards means a missed gesture-end (e.g. pointercancel) cannot leave
@@ -92,13 +89,12 @@ export class CardReconciler {
         this.byShown.clear();
     }
 
-    /** The first survivor not yet taken that showed what `task` shows under `key`. */
-    private takeShown(key: string, task: Task): HTMLElement | undefined {
-        const shown = shownKey(key, task);
-        const same = shown !== null ? this.byShown.get(shown) : undefined;
+    /** The first survivor not yet taken that showed what `task` shows in the place of `key`. */
+    private takeShown(key: CardKey, task: Task): HTMLElement | undefined {
+        const same = this.byShown.get(shownKey(key, task));
         while (same && same.length > 0) {
             const card = same.shift()!;
-            if (this.survivors.get(card.dataset.cardInstanceId!) === card) return card;
+            if (this.survivors.get(cardKeyString(heldBy(card)!.key)) === card) return card;
         }
         return undefined;
     }
@@ -110,14 +106,11 @@ export class CardReconciler {
 }
 
 /**
- * `key` with the task's name taken out and what the card shows of the task
- * put in: its file, status and text. The same for a card and for the card
- * the next reading of its file would give, as long as the row shows the same.
- * Null when `key` does not hold the name.
+ * What a card in the place of `key` shows of `task`, without the task's name:
+ * the place, the segment part of the name, and the task's file, status and
+ * text. The same for a card and for the card the next reading of its file
+ * would give, as long as the row shows the same.
  */
-function shownKey(key: string, task: Task): string | null {
-    const name = getOriginalTaskId(task);
-    const at = key.indexOf(name);
-    if (at < 0) return null;
-    return JSON.stringify([key.slice(0, at), key.slice(at + name.length), task.file, task.statusChar, task.content]);
+function shownKey(key: CardKey, task: Task): string {
+    return JSON.stringify([key.scope, segmentPartOf(key.name), task.file, task.statusChar, task.content]);
 }
