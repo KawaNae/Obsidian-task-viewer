@@ -532,7 +532,7 @@ export class CalendarView extends ItemView {
     private renderSidebarContent(header: HTMLElement, body: HTMLElement): void {
         header.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
 
-        const addBtn = header.createEl('button', { cls: 'tv-sidebar__panel-add-btn' });
+        const addBtn = header.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
         setIcon(addBtn, 'plus');
         addBtn.appendText(t('pinnedList.addList'));
         addBtn.addEventListener('click', () => {

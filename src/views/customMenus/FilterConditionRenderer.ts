@@ -290,7 +290,7 @@ export class FilterConditionRenderer {
             if (value !== ' ') checkbox.dataset.task = value;
         }
         pill.createSpan().setText(getValueDisplay(property, value, statusDefs));
-        const removeBtn = pill.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+        const removeBtn = pill.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
         setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();

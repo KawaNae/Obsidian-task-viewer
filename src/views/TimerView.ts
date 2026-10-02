@@ -411,7 +411,7 @@ export class TimerView extends ItemView {
                 item.createSpan({ cls: 'timer-view__template-duration', text: template.totalDurationLabel });
 
                 // Edit gear button
-                const editBtn = item.createEl('button', { cls: 'timer-view__template-edit-btn' });
+                const editBtn = item.createEl('button', { cls: 'tv-icon-btn timer-view__template-edit-btn' });
                 setIcon(editBtn.createSpan(), 'settings');
                 editBtn.addEventListener('click', (e) => {
                     e.stopPropagation();

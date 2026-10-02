@@ -31,7 +31,7 @@ export class ScheduleSectionRenderer {
         axisCell.setAttribute('tabindex', '0');
         axisCell.setAttribute('aria-label', t('allDaySection.toggleAllDay'));
 
-        const toggleBtn = axisCell.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--axis' });
+        const toggleBtn = axisCell.createEl('button', { cls: 'tv-icon-btn tv-section-toggle tv-section-toggle--axis' });
         toggleBtn.tabIndex = -1;
         toggleBtn.setAttribute('aria-hidden', 'true');
 
@@ -86,7 +86,7 @@ export class ScheduleSectionRenderer {
         header.setAttribute('tabindex', '0');
         header.setAttribute('aria-label', t('aria.toggleSection', { title }));
 
-        const icon = header.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--header' });
+        const icon = header.createEl('button', { cls: 'tv-icon-btn tv-section-toggle tv-section-toggle--header' });
         icon.tabIndex = -1;
         icon.setAttribute('aria-hidden', 'true');
         header.createSpan({ text: title });

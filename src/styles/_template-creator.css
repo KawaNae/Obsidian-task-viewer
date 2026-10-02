@@ -27,25 +27,6 @@
 .template-creator .template-creator__close-btn {
     width: 24px;
     height: 24px;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent !important;
-    border: 1px solid transparent !important;
-    box-shadow: none;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    border-radius: var(--tv-radius-s);
-    flex-shrink: 0;
-}
-
-.template-creator .template-creator__close-btn:hover {
-    color: var(--tv-text);
-    background-color: var(--tv-bg-hover);
-    box-shadow: none;
 }
 
 .template-creator__close-btn .svg-icon {
@@ -228,25 +209,10 @@
 .template-creator .template-creator__remove-btn {
     width: 24px;
     height: 24px;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent !important;
-    border: 1px solid transparent !important;
-    box-shadow: none;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    border-radius: var(--tv-radius-s);
-    flex-shrink: 0;
 }
 
 .template-creator .template-creator__remove-btn:hover {
     color: var(--tv-text-danger);
-    background-color: var(--tv-bg-hover);
-    box-shadow: none;
 }
 
 .template-creator__remove-btn .svg-icon {
@@ -381,25 +347,11 @@
 .template-creator .template-creator__icon-option {
     width: 32px;
     height: 32px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent !important;
-    border: 1px solid transparent !important;
-    border-radius: var(--tv-radius-s);
-    cursor: pointer;
     color: var(--tv-text);
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    box-shadow: none;
-    flex-shrink: 0;
 }
 
 .template-creator .template-creator__icon-option:hover {
-    background: var(--tv-bg-hover);
     border-color: var(--tv-border);
-    box-shadow: none;
 }
 
 .template-creator .template-creator__icon-option .svg-icon {

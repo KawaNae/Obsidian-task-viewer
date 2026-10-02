@@ -158,7 +158,7 @@ export class SortMenuComponent {
         });
 
         // Remove button (×)
-        const removeBtn = row.createEl('button', { cls: 'sort-popover__remove-btn' });
+        const removeBtn = row.createEl('button', { cls: 'tv-icon-btn sort-popover__remove-btn' });
         setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();

@@ -97,23 +97,7 @@ body:not(.theme-dark) .tv-overlay {
     right: 10px;
     width: 28px;
     height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    appearance: none;
-    -webkit-appearance: none;
-    padding: 0 !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: var(--tv-radius-s);
-    color: var(--tv-text-muted);
-    cursor: pointer;
-}
-
-.tv-overlay .tv-overlay__close:hover {
-    color: var(--tv-text);
-    background: var(--tv-bg-hover) !important;
+    border: none;
 }
 
 .tv-overlay__close .svg-icon {

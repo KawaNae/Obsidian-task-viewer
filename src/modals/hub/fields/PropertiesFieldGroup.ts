@@ -72,7 +72,7 @@ export class PropertiesFieldGroup {
             });
 
             if (isOwn) {
-                const removeBtn = row.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+                const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
                 removeBtn.disabled = shut;

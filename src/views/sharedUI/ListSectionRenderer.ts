@@ -178,7 +178,7 @@ export function startListSectionRename(
  * inline-flex button, which is what these are.
  */
 function makeHeaderButton(header: HTMLElement, cls: string, icon: string): HTMLElement {
-    const btn = header.createEl('button', { cls });
+    const btn = header.createEl('button', { cls: `tv-icon-btn ${cls}` });
     setIcon(btn.createSpan(), icon);
     return btn;
 }

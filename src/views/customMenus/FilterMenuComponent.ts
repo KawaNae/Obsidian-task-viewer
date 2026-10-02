@@ -255,7 +255,7 @@ export class FilterMenuComponent {
 
         // Group more menu (...) — only when parent has multiple children
         if (siblingCount > 1) {
-            const groupMoreBtn = groupFooter.createEl('button', { cls: 'filter-popover__more-btn' });
+            const groupMoreBtn = groupFooter.createEl('button', { cls: 'tv-icon-btn filter-popover__more-btn' });
             setIcon(groupMoreBtn.createSpan(), 'more-horizontal');
             groupMoreBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -356,7 +356,7 @@ export class FilterMenuComponent {
         });
 
         // More menu button (...) — condition-level actions
-        const moreBtn = headerLine.createEl('button', { cls: 'filter-popover__more-btn' });
+        const moreBtn = headerLine.createEl('button', { cls: 'tv-icon-btn filter-popover__more-btn' });
         setIcon(moreBtn.createSpan(), 'more-horizontal');
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
