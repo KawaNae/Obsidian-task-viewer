@@ -45,7 +45,6 @@ import { parseSegmentId } from '../../services/display/SegmentIds';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
-import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
@@ -294,7 +293,7 @@ export class CalendarView extends ItemView {
         }
 
         await super.setState(state, result);
-        await this.renderSerializer.request();
+        this.performRender();
         // setState may have changed filterState / pinnedLists / collapse — none
         // of these go through index.onChange, so PinnedList wouldn't
         // otherwise refresh. (Safe to call even before attach: refresh() no-ops
@@ -368,7 +367,7 @@ export class CalendarView extends ItemView {
 
         this.selectionController.attachBackgroundClick(this.container);
 
-        await this.renderSerializer.request();
+        this.performRender();
 
         // Clear selection when the selected task is deleted via the UI.
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
@@ -423,19 +422,12 @@ export class CalendarView extends ItemView {
         }, () => setTimeout(() => this.handleManager?.selectTask(null), 0))(task, options);
     }
 
-    /**
-     * Single serialization gate for every async render entry point
-     * (render / setState / onOpen), keeping the reconciler's
-     * detach→build→dispose cycle atomic against interleaving.
-     */
-    private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
-
     private render(): void {
         this.scrollRestorer.save();
-        void this.renderSerializer.request();
+        this.performRender();
     }
 
-    private async performRender(): Promise<void> {
+    private performRender(): void {
         if (!this.container) {
             return;
         }
@@ -533,7 +525,7 @@ export class CalendarView extends ItemView {
                 }
             }
 
-            await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks, reconciler);
+            this.renderWeekTasks(weekRow, weekDates, allVisibleTasks, reconciler);
         }
 
         // Dispose any cards that did not turn up in the new render (filter
@@ -759,7 +751,7 @@ export class CalendarView extends ItemView {
         }, { bindClick: false });
     }
 
-    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[], reconciler: CardReconciler): Promise<void> {
+    private renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[], reconciler: CardReconciler): void {
         const startHour = this.plugin.settings.startHour;
         // Calendar 月セルは calendar day ベースで 1 セル = 1 日。startHour 境界
         // (visual-date split) を視覚化する意味はなく、入れると view 内部に
@@ -788,8 +780,8 @@ export class CalendarView extends ItemView {
 
         const colOffset = getColumnOffset(this.shouldShowWeekNumbers());
 
-        await Promise.all(entries.map(async (entry) => {
-            await this.renderGridTask(weekRow, entry, colOffset, reconciler);
+        for (const entry of entries) {
+            this.renderGridTask(weekRow, entry, colOffset, reconciler);
 
             if (entry.dueArrow) {
                 renderDueArrow(weekRow, entry, {
@@ -797,7 +789,7 @@ export class CalendarView extends ItemView {
                     gridColOffset: colOffset,
                 });
             }
-        }));
+        }
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
@@ -805,12 +797,12 @@ export class CalendarView extends ItemView {
         return this.readService.getTasksForDateRange(rangeStart, rangeEnd, filterState);
     }
 
-    private async renderGridTask(
+    private renderGridTask(
         weekRow: HTMLElement,
         entry: GridTaskEntry,
         colOffset: number,
         reconciler: CardReconciler,
-    ): Promise<void> {
+    ): void {
         if (entry.useBarVariant) {
             const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
             const reused = reconciler.acquire(cardInstanceId, entry.task);
@@ -819,7 +811,7 @@ export class CalendarView extends ItemView {
             if (reused) weekRow.appendChild(reused);
 
             this.decorateCalendarBar(barEl, entry, colOffset);
-            await this.taskRenderer.render(barEl, entry.task as DisplayTask, this.plugin.settings, {
+            this.taskRenderer.render(barEl, entry.task as DisplayTask, this.plugin.settings, {
                 cardInstanceId,
                 topRight: { mode: 'none' },
                 compact: true,
@@ -835,7 +827,7 @@ export class CalendarView extends ItemView {
         if (reused) weekRow.appendChild(reused);
 
         this.decorateCalendarCell(card, entry, colOffset);
-        await this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
+        this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
             cardInstanceId,
             topRight: { mode: 'time' },
             compact: true,

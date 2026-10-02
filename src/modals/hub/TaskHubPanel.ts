@@ -105,7 +105,7 @@ export class TaskHubPanel {
         const sourceHost = bodyEl.createDiv();
         const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
 
-        void this.renderPreview();
+        this.renderPreview();
 
         if (this.task.isReadOnly) {
             formHost.createDiv({
@@ -149,7 +149,7 @@ export class TaskHubPanel {
             const fresh = this.deps.index.getTask(this.task.id);
             if (fresh) {
                 this.task = fresh;
-                void this.renderPreview();
+                this.renderPreview();
                 this.form?.refresh(fresh);
             } else {
                 this.form?.setMissing();
@@ -158,7 +158,7 @@ export class TaskHubPanel {
         });
     }
 
-    private async renderPreview(): Promise<void> {
+    private renderPreview(): void {
         if (!this.previewEl) return;
         const settings = this.deps.plugin.settings;
 
@@ -177,7 +177,7 @@ export class TaskHubPanel {
         });
 
         const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.index.getTask(id));
-        await this.deps.taskRenderer.render(card, dt, settings, {
+        this.deps.taskRenderer.render(card, dt, settings, {
             cardInstanceId: `hub::${dt.id}`,
             context: 'hub-preview',
             hooks: { onNavigate: closePanel },

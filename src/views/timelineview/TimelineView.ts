@@ -1039,12 +1039,14 @@ export class TimelineView extends ItemView {
         this.rebindStickyAnchorObserver();
 
         // Restore scroll position with a sync write (avoids 1-frame flicker
-        // on first paint) followed by two rAF re-applies (absorbs any
-        // residual async layout settle, e.g. data-driven layout flux that
-        // may slip past the TaskCardRenderer expand-bar fix). Mirrors the
-        // scrollToCurrentTime three-pass pattern from 4029ac9 / 7c44468.
-        // The re-applies run on the container's own window so a popout view
-        // is not waiting on the main window's frame clock.
+        // on first paint) followed by two rAF re-applies. The cards are drawn
+        // whole by now (TaskCardRenderer.render is synchronous); the
+        // re-applies wait for the heights of the leaves and the all-day row
+        // to settle, and for content that is truly asynchronous (an image, an
+        // embed) to come in. Whether the second is needed was not measured.
+        // Mirrors the scrollToCurrentTime three-pass pattern from 4029ac9 /
+        // 7c44468. The re-applies run on the container's own window so a
+        // popout view is not waiting on the main window's frame clock.
         const newGrid = this.container.querySelector('.timeline-grid') as HTMLElement | null;
         if (newGrid) {
             if (this.scrollToNowOnNextRender) {

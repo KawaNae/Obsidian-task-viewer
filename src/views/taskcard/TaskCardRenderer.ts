@@ -1,4 +1,4 @@
-import { type App, MarkdownRenderer, Component } from 'obsidian';
+import { type App, Component } from 'obsidian';
 import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type TopRightConfig } from '../../types';
 import { getOverdueLevel, type OverdueLevel } from '../../services/display/TaskStatusQuery';
 import { resolveTopRightField } from './TopRightFieldResolver';
@@ -48,6 +48,7 @@ import { getEffectiveMask } from '../../services/data/EffectiveProperties';
 import { mapRow } from '../../services/display/SegmentIds';
 import { holdCard, type CardHold } from './CardHold';
 import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
+import { renderCardMarkdown, type LateContent } from './CardMarkdown';
 
 /**
  * What a card shows, to tell whether a kept card can stay as it is drawn.
@@ -219,12 +220,18 @@ export class TaskCardRenderer extends Component {
         this.getDoubleTapAction = getter;
     }
 
-    async render(
+    /**
+     * Draw `task` into `container`. The card is drawn whole when this
+     * returns: its body, its children, their notation, its links and the
+     * mask. Only content that is truly asynchronous (`LateContent`) comes in
+     * later, and the mask is laid again once it has.
+     */
+    render(
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
         options: RenderOptions
-    ): Promise<void> {
+    ): void {
         const cardInstanceId = options.cardInstanceId;
         const topRight: TopRightSpec = options.topRight ?? { mode: 'time' };
         const compact = options.compact ?? false;
@@ -313,28 +320,20 @@ export class TaskCardRenderer extends Component {
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
+        let late: LateContent;
         if (compact) {
-            // Reserve the child-count bar synchronously, BEFORE the markdown await.
-            // Without this, the bar appears in a microtask after MarkdownRenderer
-            // resolves, briefly shrinking compact cards by ~21px. For allday
-            // cards stacked on a CSS grid, that transient propagates to the
-            // allday-section height, which combined with the sync scroll-restore
-            // in TimelineView.performRender produces a 1-frame flicker of timed
-            // cards shifting up then settling back.
-            const childCountBar = container.createDiv('task-card__child-count');
-            const countLabelSpan = childCountBar.createSpan();
-
-            const strippedMarkdown = withoutEmbeds(parentMarkdown);
-            await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, cardComp);
-
+            late = renderCardMarkdown(this.app, withoutEmbeds(parentMarkdown), contentContainer, task.file, cardComp);
+            // The bar is there with or without children, so compact cards
+            // of one lane keep one height.
+            const countLabelSpan = container.createDiv('task-card__child-count').createSpan();
             const { completed, total } = this.getChildCompletion(task, settings);
             if (total > 0) {
                 countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
         } else if (task.childEntries.length > 0) {
-            await this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, forceExpand);
+            late = this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, forceExpand);
         } else {
-            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
+            late = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
         this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
@@ -345,6 +344,13 @@ export class TaskCardRenderer extends Component {
         const mask = getEffectiveMask(task);
         if (!isHubPreview && this.getMaskMode() && mask) {
             TaskCardRenderer.applyMaskToContent(contentContainer, mask);
+            // Text a post-processor puts in later would show unmasked: lay the
+            // mask again once it is in, while the card still shows this draw.
+            void late.then(() => {
+                if (container.dataset.contentSig !== sig) return;
+                if (this.cardComponents.get(container) !== cardComp) return;
+                TaskCardRenderer.applyMaskToContent(contentContainer, mask);
+            });
         }
     }
 
@@ -499,7 +505,7 @@ export class TaskCardRenderer extends Component {
      * (see NotationUtils contract), so the parent date substituted into
      * time-only child notations must live in the same raw coordinate system.
      */
-    private async renderInlineChildren(
+    private renderInlineChildren(
         contentContainer: HTMLElement,
         task: DisplayTask,
         items: ChildRenderItem[],
@@ -508,11 +514,11 @@ export class TaskCardRenderer extends Component {
         settings: TaskViewerSettings,
         parentMarkdown: string,
         forceExpand = false
-    ): Promise<void> {
+    ): LateContent {
         const nameAt = (index: number) => hold.childAt(index);
         if (!forceExpand && items.length >= settings.childCollapseThreshold) {
-            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
-            await this.childSectionRenderer.renderCollapsed(
+            const parentLate = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, component);
+            const childrenLate = this.childSectionRenderer.renderCollapsed(
                 contentContainer,
                 items,
                 nameAt,
@@ -524,12 +530,12 @@ export class TaskCardRenderer extends Component {
                 task.startDate,
                 this.getChildOverdueIcon(task, settings)
             );
-            return;
+            return Promise.all([parentLate, childrenLate]).then(() => undefined);
         }
 
         // Under the parent's line, each item goes one level in.
         const indentedItems = items.map(item => ({ ...item, markdown: '    ' + item.markdown }));
-        await this.childSectionRenderer.renderParentWithChildren(
+        return this.childSectionRenderer.renderParentWithChildren(
             contentContainer,
             parentMarkdown,
             indentedItems,
@@ -565,8 +571,11 @@ export class TaskCardRenderer extends Component {
      * Replace card-visible text with the mask string and hide any wikilinks /
      * internal links so the file name itself does not leak. Operates on the
      * `.task-card__content` subtree only (other card chrome — time, child
-     * count, checkbox — stays legible). Idempotent: every render starts from
-     * a freshly built content subtree, so no restore is necessary.
+     * count, checkbox — stays legible). Every draw starts from a freshly
+     * built content subtree, so no restore is necessary. Laying it again on
+     * the same subtree changes only text that came in since: the first run
+     * already holds the mask, the rest are empty and the links hidden. That
+     * is what the draw relies on to mask late content (`render`).
      *
      * Mirrors the old ExportUtils.applyMasking logic but as a forward-only
      * render-time transform — masking is now a live visual mode, not an

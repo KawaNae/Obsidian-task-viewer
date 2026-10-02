@@ -38,12 +38,12 @@ export class ScheduleTaskRenderer {
         this.timelineTopPaddingPx = options.timelineTopPaddingPx;
     }
 
-    async renderTaskCards(
+    renderTaskCards(
         container: HTMLElement,
         placements: TaskPlacement[],
         timelineHeight: number,
         reconciler: CardReconciler,
-    ): Promise<void> {
+    ): void {
         const tasksContainer = container.createDiv('schedule-tasks');
         tasksContainer.style.height = `${timelineHeight}px`;
 
@@ -62,7 +62,7 @@ export class ScheduleTaskRenderer {
             wrapper.style.width = `${widthPct}%`;
             wrapper.style.left = `${placement.column * widthPct}%`;
 
-            await this.renderTaskCard(wrapper, placement.task, true, reconciler);
+            this.renderTaskCard(wrapper, placement.task, true, reconciler);
         }
     }
 
@@ -97,7 +97,7 @@ export class ScheduleTaskRenderer {
         });
     }
 
-    async renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean, reconciler: CardReconciler): Promise<void> {
+    renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean, reconciler: CardReconciler): void {
         const wrapper = container.createDiv(flowCard ? 'schedule-tasks__card-wrap' : 'schedule-section__task-wrap');
 
         const scope = flowCard ? 'flow' : 'section';
@@ -110,7 +110,7 @@ export class ScheduleTaskRenderer {
         const options = flowCard
             ? { cardInstanceId, topRight: { mode: 'time' as const } }
             : { cardInstanceId, topRight: { mode: 'time' as const }, compact: true };
-        await this.taskRenderer.render(card, task, this.getSettings(), options);
+        this.taskRenderer.render(card, task, this.getSettings(), options);
         if (!reused) this.menuHandler.addTaskContextMenu(card);
     }
 
