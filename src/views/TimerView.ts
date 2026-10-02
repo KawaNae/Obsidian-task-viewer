@@ -24,7 +24,7 @@ import { AudioUtils } from '../timer/AudioUtils';
 import {
     advanceSegment,
     computeCompletedDuration,
-    computeTotalDuration,
+    totalDuration,
     getCurrentSegment,
 } from '../timer/IntervalMath';
 import {
@@ -239,7 +239,6 @@ export class TimerView extends ItemView {
                 }
                 const groups = this.selectedTemplate.groups;
                 const firstSeg = groups[0]?.segments[0];
-                const totalDuration = computeTotalDuration(groups);
                 return {
                     ...base,
                     timerType: 'interval',
@@ -249,7 +248,7 @@ export class TimerView extends ItemView {
                     currentRepeatIndex: 0,
                     segmentTimeRemaining: firstSeg?.durationSeconds ?? 0,
                     totalElapsedTime: 0,
-                    totalDuration,
+                    totalDuration: totalDuration(groups),
                 } as IntervalTimer;
             }
         }

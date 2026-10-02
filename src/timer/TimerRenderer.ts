@@ -21,7 +21,7 @@ import type {
 import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
-import { computeCompletedDuration, computeTotalDuration, getCurrentSegment } from './IntervalMath';
+import { computeCompletedDuration, totalDuration, getCurrentSegment } from './IntervalMath';
 import { createControlButton, type ControlButtonVariant } from './TimerControlButton';
 import type { TimerLifecycle } from './TimerLifecycle';
 import { getDisplayFileName, getTaskDisplayName } from '../services/display/TaskContent';
@@ -744,7 +744,7 @@ export class TimerRenderer {
                     isOn: () => group.repeatCount === 0,
                     toggle: () => {
                         group.repeatCount = group.repeatCount === 0 ? 1 : 0;
-                        timer.totalDuration = computeTotalDuration(timer.groups);
+                        timer.totalDuration = totalDuration(timer.groups);
                         this.ctx.persistTimersToStorage();
                     },
                 },
@@ -757,7 +757,7 @@ export class TimerRenderer {
      * 走行中に巻き戻すと、計っている区間が別物にすり替わる。
      */
     private syncIdleDisplay(timer: IntervalTimer): void {
-        timer.totalDuration = computeTotalDuration(timer.groups);
+        timer.totalDuration = totalDuration(timer.groups);
         if (timer.phase !== 'idle') return;
 
         timer.currentGroupIndex = 0;

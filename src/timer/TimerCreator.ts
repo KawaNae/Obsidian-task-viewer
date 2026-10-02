@@ -9,7 +9,6 @@ import type {
     CountdownTimer,
     CountupTimer,
     IdleTimer,
-    IntervalGroup,
     IntervalTimer,
     TimerInstance,
     TimerPhase,
@@ -18,7 +17,7 @@ import type {
 } from './TimerInstance';
 import { newTimerId } from './TimerInstance';
 import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
-import { computeTotalDuration, normalizeGroups, type IntervalDefaults } from './IntervalMath';
+import { normalizeGroups, pomodoroGroups, totalDuration, type IntervalDefaults } from './IntervalMath';
 
 export class TimerCreator {
     constructor(
@@ -62,17 +61,8 @@ export class TimerCreator {
 
         switch (config.timerType) {
             case 'pomodoro': {
-                const workSec = this.ctx.plugin.settings.pomodoroWorkMinutes * 60;
-                const breakSec = this.ctx.plugin.settings.pomodoroBreakMinutes * 60;
-                const groups: IntervalGroup[] = [
-                    {
-                        segments: [
-                            { label: 'Work', durationSeconds: workSec, type: 'work' },
-                            { label: 'Break', durationSeconds: breakSec, type: 'break' }
-                        ],
-                        repeatCount: 0
-                    }
-                ];
+                const { pomodoroWorkMinutes, pomodoroBreakMinutes } = this.ctx.plugin.settings;
+                const groups = pomodoroGroups(pomodoroWorkMinutes, pomodoroBreakMinutes);
                 const timer: IntervalTimer = {
                     ...base,
                     timerType: 'interval',
@@ -81,7 +71,7 @@ export class TimerCreator {
                     currentGroupIndex: 0,
                     currentSegmentIndex: 0,
                     currentRepeatIndex: 0,
-                    segmentTimeRemaining: workSec,
+                    segmentTimeRemaining: groups[0].segments[0].durationSeconds,
                     totalElapsedTime: 0,
                     totalDuration: 0,
                     phase: autoStart ? 'work' : 'idle'
@@ -120,7 +110,7 @@ export class TimerCreator {
                     currentRepeatIndex: 0,
                     segmentTimeRemaining: firstSegment.durationSeconds,
                     totalElapsedTime: 0,
-                    totalDuration: computeTotalDuration(groups),
+                    totalDuration: totalDuration(groups),
                     phase: autoStart ? firstSegment.type : 'idle'
                 };
                 return timer;

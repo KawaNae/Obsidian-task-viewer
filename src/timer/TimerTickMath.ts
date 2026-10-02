@@ -1,10 +1,8 @@
 /**
- * 1 秒ごとの経過計算。数値フィールドだけを更新し、起きたことを呼び出し側に返す。
+ * ウィジェット（`TimerLifecycle`）の 1 秒ごとの経過計算。数値フィールドだけを
+ * 更新し、起きたことを呼び出し側に返す。音、Notice、描画、記録は呼び出し側が持つ。
  *
- * ウィジェット（`TimerLifecycle`）と独立ビュー（`TimerView`）は、鳴らす音も、
- * 出す `Notice` も、描画の粒度も、記録の有無も違う。同じなのは経過の求め方だけ
- * なので、共有するのはそこに限る。`phase` も書かない — ウィジェットでは区間の
- * 種別、ビューでは表示色の元と、意味の重なりが完全ではないため。
+ * used by the widget until stage 8 step 3。新しい口は `TimerClock` と `TimerProgress`。
  */
 
 import type {
@@ -15,9 +13,7 @@ import type {
     TimerInstance,
 } from './TimerInstance';
 import { clampToTotalDuration, computeCompletedDuration, getCurrentSegment } from './IntervalMath';
-
-/** 残りがこれ以下になったら予告ビープ。 */
-export const WARN_THRESHOLD_SECONDS = 3;
+import { WARN_SECONDS } from './TimerProgress';
 
 /** 走り出してから今までの経過（停止中に積んだ分を含む）。 */
 export function elapsedSeconds(timer: TimerInstance, nowMs: number): number {
@@ -53,7 +49,7 @@ export function applyCountdownTick(timer: CountdownTimer, nowMs: number): Countd
     return {
         remaining: timer.timeRemaining,
         crossedZero: before > 0 && timer.timeRemaining <= 0,
-        warn: timer.timeRemaining > 0 && timer.timeRemaining <= WARN_THRESHOLD_SECONDS,
+        warn: timer.timeRemaining > 0 && timer.timeRemaining <= WARN_SECONDS,
     };
 }
 
@@ -84,7 +80,7 @@ export function applyIntervalTick(timer: IntervalTimer, nowMs: number): Interval
     if (timer.segmentTimeRemaining <= 0) {
         return { outcome: 'segment-complete', warn: false };
     }
-    return { outcome: 'running', warn: timer.segmentTimeRemaining <= WARN_THRESHOLD_SECONDS };
+    return { outcome: 'running', warn: timer.segmentTimeRemaining <= WARN_SECONDS };
 }
 
 /**
