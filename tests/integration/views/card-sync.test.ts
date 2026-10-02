@@ -5,7 +5,8 @@
  * renderer does but its API does not promise. This test watches that.
  *
  * The hub is opened on a row and its preview read in the same task, without
- * yielding: the card's body, its children and their checkboxes must be there.
+ * yielding: the card's body, its children, their checkboxes and the ⋯ menu
+ * laid on each child task after the markdown must be there.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
@@ -32,6 +33,7 @@ interface Preview {
     content: string | null;
     boxes: number;
     childBoxes: boolean[];
+    childMenus: number;
 }
 
 function evalOrThrow<T>(code: string): T {
@@ -56,6 +58,7 @@ function openAndRead(name: string): Preview {
             content: content ? content.textContent : null,
             boxes: boxes.length,
             childBoxes: boxes.slice(1).map(b => b.checked),
+            childMenus: content ? content.querySelectorAll('.task-card__child-menu-btn').length : 0,
         });
     })()`);
 }
@@ -84,7 +87,7 @@ afterAll(async () => {
 });
 
 describe('a card drawn by TaskCardRenderer.render', () => {
-    it('has its body, its children and their checkboxes when the draw returns', () => {
+    it('has its body, its children, their checkboxes and their menus when the draw returns', () => {
         const preview = openAndRead('同期の親');
 
         expect(preview.hub).toBe(true);
@@ -94,5 +97,6 @@ describe('a card drawn by TaskCardRenderer.render', () => {
         expect(preview.content).toContain('メモの行');
         expect(preview.boxes).toBe(3);
         expect(preview.childBoxes).toEqual([false, true]);
+        expect(preview.childMenus).toBe(2);
     });
 });

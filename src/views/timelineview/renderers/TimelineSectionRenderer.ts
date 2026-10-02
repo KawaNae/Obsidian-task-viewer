@@ -2,11 +2,9 @@ import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import { TaskLayout } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import type { HandleManager } from '../../sharedUI/handles/HandleManager';
@@ -29,7 +27,6 @@ const Z_MAX = 190;
 export class TimelineSectionRenderer {
     constructor(
         private plugin: PluginContext & TimerHost,
-        private menuHandler: MenuHandler,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
         private getZoomLevel: () => number,
@@ -63,10 +60,6 @@ export class TimelineSectionRenderer {
                 cardInstanceId,
                 topRight: { mode: 'time' },
             });
-            // addTaskContextMenu is idempotent (WeakSet-guarded) so re-calling
-            // on a reused element is a no-op, but skip the call to keep the
-            // hot path tight.
-            if (!reused) this.menuHandler.addTaskContextMenu(el);
         });
 
         if (renderOptions.showSunTimes) {
@@ -102,10 +95,6 @@ export class TimelineSectionRenderer {
 
         // Reset + apply split-segment variant classes (idempotent).
         TaskStyling.applySplitClasses(el, task);
-
-        TaskStyling.applyTaskColor(el, getEffectiveColor(task) ?? null);
-        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(task) ?? null);
-        TaskStyling.applyReadOnly(el, task);
 
         // Position: the task's span in its visual day, the same one TaskLayout stacks by.
         const { start: startMinutes, end: endMinutes } =

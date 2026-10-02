@@ -42,7 +42,6 @@ export class MenuHandler {
     private validationMenuBuilder: ValidationMenuBuilder;
 
     private viewStartDate: string | null = null;
-    private taskHubOpener: TaskHubOpener | null = null;
 
     // 同じ要素に二度 bind しない (TouchLongPressBinder は dispose を返すが
     // call site が 1-shot 想定で受け取らないため、reconcile で要素を再利用
@@ -53,10 +52,15 @@ export class MenuHandler {
     /** The index's copies, looked up by name (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
 
+    /**
+     * @param taskHubOpener where the menu's Properties items open the hub
+     *   (the hub of the view the menu is in; `createCardRendering`)
+     */
     constructor(
         private app: App,
         private operations: Operations,
-        private plugin: PluginContext & TimerHost
+        private plugin: PluginContext & TimerHost,
+        private readonly taskHubOpener: TaskHubOpener,
     ) {
         this.index = plugin.getIndex();
         // Initialize services
@@ -81,15 +85,6 @@ export class MenuHandler {
      */
     setViewStartDate(date: string | null) {
         this.viewStartDate = date;
-    }
-
-    /**
-     * メニューの Properties 項目からタスクハブモーダルを開くための opener を
-     * 登録する（ビューが自分のモーダル生成関数を束ねる — setDetailCallback と
-     * 同型の配線）。
-     */
-    setTaskHubOpener(opener: TaskHubOpener) {
-        this.taskHubOpener = opener;
     }
 
     /**
@@ -163,7 +158,7 @@ export class MenuHandler {
                 hooks.onOpenPropertiesFocus(field);
                 return;
             }
-            this.taskHubOpener?.(task.id, { focusField: field });
+            this.taskHubOpener(task.id, { focusField: field });
         };
 
         this.plugin.menuPresenter.present((menu) => {

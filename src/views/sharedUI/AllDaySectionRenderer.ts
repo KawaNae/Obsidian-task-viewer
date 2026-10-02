@@ -1,10 +1,7 @@
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { t } from '../../i18n';
-import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
-import { TaskStyling } from './TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { HandleManager } from './handles/HandleManager';
 import { markHandleSurface } from './handles/HandleSurface';
@@ -30,7 +27,6 @@ const ALLDAY_VARIANT_CLASSES = [
 export class AllDaySectionRenderer {
     constructor(
         private plugin: PluginContext & TimerHost,
-        private menuHandler: MenuHandler,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
         private viewId: string
@@ -122,7 +118,6 @@ export class AllDaySectionRenderer {
             topRight: { mode: 'none' },
             compact: true,
         });
-        if (!reused) this.menuHandler.addTaskContextMenu(el);
     }
 
     /**
@@ -136,7 +131,6 @@ export class AllDaySectionRenderer {
         gridRowOffset: number,
     ): void {
         const { task } = entry;
-        const dt = task as DisplayTask;
 
         // Reset variant classes; --allday is constant for this lane and stays.
         ALLDAY_VARIANT_CLASSES.forEach(cls => el.removeClass(cls));
@@ -149,10 +143,6 @@ export class AllDaySectionRenderer {
         // hold (`CardHold.name`).
         const originalTaskId = getOriginalTaskId(task);
         el.toggleClass('is-selected', originalTaskId === this.handleManager.getSelectedTaskId());
-
-        TaskStyling.applyTaskColor(el, getEffectiveColor(dt) ?? null);
-        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(dt) ?? null);
-        TaskStyling.applyReadOnly(el, dt);
 
         // Grid 座標を dataset で公開し、drag move/resize が style.gridColumn の
         // regex parse を経ずに済むようにする。calendar card と命名対称。

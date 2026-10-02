@@ -1,9 +1,8 @@
 import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { createCardRendering } from '../sharedUI/CardRendering';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -12,8 +11,6 @@ import { KanbanToolbar } from './KanbanToolbar';
 import { createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { PinnedListQuery } from '../../services/filter/PinnedListQuery';
 import { createEmptySortState } from '../../services/sort/SortTypes';
-import { TaskStyling } from '../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
@@ -24,17 +21,14 @@ import {
     type ListSectionClasses,
 } from '../sharedUI/ListSectionRenderer';
 
-import { openTaskInEditor } from '../../utils/NavigationUtils';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
-import type { PinnedListDefinition, DisplayTask, Task } from '../../types';
+import type { PinnedListDefinition, DisplayTask } from '../../types';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
-import type { Operations } from '../../services/operations/Operations';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
@@ -64,10 +58,8 @@ export class KanbanView extends ItemView {
     private readonly readService: TaskReadService;
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
-    private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly menuHandler: MenuHandler;
     private readonly listFilterMenu = new FilterMenuComponent();
     private readonly listSortMenu = new SortMenuComponent();
     private readonly viewFilterMenu = new FilterMenuComponent();
@@ -105,30 +97,15 @@ export class KanbanView extends ItemView {
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
         this.index = this.plugin.getIndex();
-        this.operations = this.plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+        const cards = createCardRendering({
+            app: this.app,
+            plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings, () => this.maskMode);
+            getMaskMode: () => this.maskMode,
+        });
+        this.taskRenderer = cards.taskRenderer;
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
-        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const openTaskHub = createTaskHubOpener(this.app, {
-            taskRenderer: this.taskRenderer,
-            menuHandler: this.menuHandler,
-            index: this.index,
-            operations: this.operations,
-            plugin: this.plugin,
-        });
-        this.taskRenderer.setDetailCallback((task) => openTaskHub(task));
-        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
-        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
-        this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.index.getTask(taskId);
-            if (task) openTaskHub(task, opts);
-        });
         this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.paging = new TaskPagingController(
@@ -389,23 +366,11 @@ export class KanbanView extends ItemView {
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
-            this.decorateKanbanCard(card, task);
             this.taskRenderer.render(card, task, settings, {
                 cardInstanceId,
                 topRight,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(card);
         }
-    }
-
-    /**
-     * Idempotent decoration for kanban cards (color / linestyle / readonly).
-     * Kanban tasks are never split in this path, so no split variants apply.
-     */
-    private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
-        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
-        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
-        TaskStyling.applyReadOnly(card, task);
     }
 
     // ─── Cell Context Menu ────────────────────────────────────

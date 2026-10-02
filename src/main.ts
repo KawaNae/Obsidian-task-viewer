@@ -35,12 +35,11 @@ import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsM
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { MenuPresenter } from './interaction/menu/MenuPresenter';
-import { MenuHandler } from './interaction/menu/MenuHandler';
-import { TaskCardRenderer } from './views/taskcard/TaskCardRenderer';
+import { createCardRendering, type CardRendering } from './views/sharedUI/CardRendering';
 import { TaskViewHoverParent } from './views/taskcard/TaskViewHoverParent';
 import { closeAllOverlays } from './views/sharedUI/OverlayRegistry';
 import { OverdueWatcher } from './services/display/OverdueWatcher';
-import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
+import type { TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
 import { fireFilter } from './editor/FlowFireExtension';
@@ -99,8 +98,8 @@ export default class TaskViewerPlugin extends Plugin {
     // ビュー外コンテキスト（editor ··· menu / file-menu）からタスクハブ
     // モーダルを開くための共有インスタンス（lazy 生成）
     private hubHoverParent = new TaskViewHoverParent();
-    private hubTaskRenderer: TaskCardRenderer | null = null;
-    private hubMenuHandler: MenuHandler | null = null;
+    /** The cards of a hub opened outside the views, made with the first. */
+    private hubCards: CardRendering | null = null;
 
     async onload() {
 
@@ -424,37 +423,23 @@ export default class TaskViewerPlugin extends Plugin {
 
     /**
      * ビュー外コンテキスト（editor ··· menu / file-menu）からタスクハブ
-     * モーダルを開く。ビュー内はビュー自身の openTaskHub（自前の
-     * TaskCardRenderer / MenuHandler を使用）を通る。
+     * モーダルを開く。ビュー内はビュー自身の openTaskHub を通る。どちらも
+     * renderer、MenuHandler、ハブを createCardRendering で組む。
      */
     openTaskHub(taskId: string, options?: TaskHubPanelOptions): void {
         const task = this.taskIndex.getTask(taskId);
         if (!task) return;
 
-        if (!this.hubTaskRenderer) {
-            this.hubTaskRenderer = new TaskCardRenderer(
-                this.app, this.readService, this.taskIndex, this.operations, this.menuPresenter,
-                {
-                    hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                    getHoverParent: () => this.hubHoverParent,
-                },
-                () => this.settings,
-                () => false,
-            );
-            this.addChild(this.hubTaskRenderer);
+        if (!this.hubCards) {
+            this.hubCards = createCardRendering({
+                app: this.app,
+                plugin: this,
+                getHoverParent: () => this.hubHoverParent,
+                getMaskMode: () => false,
+            });
+            this.addChild(this.hubCards.taskRenderer);
         }
-        if (!this.hubMenuHandler) {
-            this.hubMenuHandler = new MenuHandler(this.app, this.operations, this);
-            this.hubMenuHandler.setTaskHubOpener((id, opts) => this.openTaskHub(id, opts));
-        }
-
-        new TaskHubPanel(this.app, task, {
-            taskRenderer: this.hubTaskRenderer,
-            menuHandler: this.hubMenuHandler,
-            index: this.taskIndex,
-            operations: this.operations,
-            plugin: this,
-        }, options).open();
+        this.hubCards.openTaskHub(task, options);
     }
 
     // Public accessors for services

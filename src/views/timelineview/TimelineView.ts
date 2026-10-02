@@ -1,13 +1,12 @@
 import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import type { Task, PinnedListDefinition } from '../../types';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { createCardRendering } from '../sharedUI/CardRendering';
+import type { PinnedListDefinition } from '../../types';
 import type { ViewState } from './TimelineViewState';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
-import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
+import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { logDebug } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
@@ -39,8 +38,6 @@ import { createDefaultListFilterState, createEmptyFilterState, hasConditions } f
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { openTaskInEditor } from '../../utils/NavigationUtils';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
@@ -191,10 +188,26 @@ export class TimelineView extends ItemView {
             },
             getIsOpen: () => this.viewState.showSidebar,
         });
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+        const cards = createCardRendering({
+            app: this.app,
+            plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings, () => this.viewState.maskMode ?? false);
+            getMaskMode: () => this.viewState.maskMode ?? false,
+            // ハブが開いた時点で card の選択状態は不要なので解除する。
+            //
+            // `selectTask(null)` は handle DOM ごと除去する破壊的操作なので、トリガと
+            // なった pointerdown の touch sequence が **完全に終わってから** 走らせる。
+            // pointerdown handler 内で同期に呼ぶと、元 touch target (handle 内 SVG path)
+            // が detached → 後続 pointerup/click が `.modal-bg` にリターゲットされ、
+            // Obsidian Modal の outside-click で modal が即閉じる (Android Chromium で
+            // 観測。CDP 実機トレース確認済み)。`setTimeout(0)` の macrotask 境界で
+            // touchend / pointerup / click の dispatch をすべて消化させてから DOM を
+            // 触る。modal は selection ring を視覚的に覆い隠すので、close 後に ring が
+            // 残らないという元 commit (7c43222) の意図はそのまま満たされる。
+            afterHubOpen: () => setTimeout(() => this.handleManager?.selectTask(null), 0),
+        });
+        this.taskRenderer = cards.taskRenderer;
+        this.menuHandler = cards.menuHandler;
         this.addChild(this.taskRenderer);
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
@@ -312,18 +325,6 @@ export class TimelineView extends ItemView {
         this.sidebarManager.attach(this.container, (el, ev, handler) =>
             this.registerDomEvent(el, ev, handler),
         );
-
-        // Initialize MenuHandler
-        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
-        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
-        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
-        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
-        this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.index.getTask(taskId);
-            if (task) this.openTaskHub(task, opts);
-        });
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {
@@ -448,8 +449,8 @@ export class TimelineView extends ItemView {
         });
 
         // Initialize Renderers
-        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, VIEW_ID);
-        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
+        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.handleManager, this.taskRenderer, VIEW_ID);
+        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,
@@ -471,7 +472,7 @@ export class TimelineView extends ItemView {
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
         );
-        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.menuHandler, this.readService);
+        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.readService);
         // Persistent host for pinned lists. Lives outside the empty() target
         // (we explicitly detach it before container.empty() in performRender,
         // then reparent into the freshly-built sidebarBody).
@@ -647,30 +648,6 @@ export class TimelineView extends ItemView {
 
         this.initializeStartDate();
         // Future viewState-dependent init goes here.
-    }
-
-    /**
-     * タスクハブモーダルを開く共通エントリ (dblclick / menu 経由)。
-     * modal が出た時点で card の選択状態は不要なので解除する。
-     *
-     * `selectTask(null)` は handle DOM ごと除去する破壊的操作なので、トリガと
-     * なった pointerdown の touch sequence が **完全に終わってから** 走らせる。
-     * pointerdown handler 内で同期に呼ぶと、元 touch target (handle 内 SVG path)
-     * が detached → 後続 pointerup/click が `.modal-bg` にリターゲットされ、
-     * Obsidian Modal の outside-click で modal が即閉じる (Android Chromium で
-     * 観測。CDP 実機トレース確認済み)。`setTimeout(0)` の macrotask 境界で
-     * touchend / pointerup / click の dispatch をすべて消化させてから DOM を
-     * 触る。modal は selection ring を視覚的に覆い隠すので、close 後に ring が
-     * 残らないという元 commit (7c43222) の意図はそのまま満たされる。
-     */
-    private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
-        createTaskHubOpener(this.app, {
-            taskRenderer: this.taskRenderer,
-            menuHandler: this.menuHandler,
-            index: this.index,
-            operations: this.operations,
-            plugin: this.plugin,
-        }, () => setTimeout(() => this.handleManager.selectTask(null), 0))(task, options);
     }
 
     /**

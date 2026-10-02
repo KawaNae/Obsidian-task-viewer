@@ -25,7 +25,50 @@ export interface RenderOptions {
     doubleTap?: boolean;
     /** The view's mask mode applies to the card. Default true. */
     mask?: boolean;
-    hooks?: { onNavigate?: () => void };
+    hooks?: {
+        /** A link in the card was followed. */
+        onNavigate?: () => void;
+        /** What the card's context menu does in place of its defaults. */
+        menu?: TaskMenuHooks;
+    };
+}
+
+/**
+ * What a card does when the user acts on it, given once to the renderer.
+ * Every handler is handed the task the card shows when it is used
+ * (`CardHold`), or the child's name now.
+ */
+export interface CardActions {
+    /** Open the task's details (the hub). */
+    openDetail(task: Task): void;
+    /** Open the task's context menu at a point. */
+    showMenu(task: Task, x: number, y: number): void;
+    /** Open a child's context menu, from its ⋯ button. */
+    showChildMenu: ChildMenuCallback;
+    /** Open the task's line in the editor. */
+    openInEditor(task: Task): void;
+    /** What a double tap on a card does, read when it happens. */
+    doubleTapAction(): DoubleTapAction;
+    /** Give the card its context menu (a right click, a long press). */
+    bindMenu(card: HTMLElement, hooks?: TaskMenuHooks): void;
+}
+
+/** What a renderer draws with, given once. */
+export interface TaskCardRendererDeps {
+    app: App;
+    readService: TaskReadService;
+    index: IndexReads;
+    operations: Operations;
+    menuPresenter: MenuPresenter;
+    linkRuntime: TaskCardLinkRuntime;
+    getSettings: () => TaskViewerSettings;
+    /**
+     * The owning view's mask-mode toggle, read on every draw. When it is on,
+     * a card that takes the mask (`RenderOptions.mask`) shows its task's
+     * `tv-mask` value in place of its text (see `applyMaskToContent`).
+     */
+    getMaskMode: () => boolean;
+    actions: CardActions;
 }
 
 /** The policies of `options`, with their defaults filled in. */
@@ -66,7 +109,9 @@ import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { ChildRenderItem, TaskCardLinkRuntime } from './types';
-import { getEffectiveMask } from '../../services/data/EffectiveProperties';
+import { getEffectiveColor, getEffectiveLinestyle, getEffectiveMask } from '../../services/data/EffectiveProperties';
+import { TaskStyling } from '../sharedUI/TaskStyling';
+import type { TaskMenuHooks } from '../../interaction/menu/MenuHandler';
 import { mapRow } from '../../services/display/SegmentIds';
 import { holdCard, type CardHold } from './CardHold';
 import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
@@ -149,35 +194,28 @@ export class TaskCardRenderer extends Component {
     private childSectionRenderer: ChildSectionRenderer;
     private checkboxWiring: CheckboxWiring;
     private linkInteractionManager: TaskLinkInteractionManager;
-    private onDetailClick: ((task: Task) => void) | null = null;
-    private onContextMenu: ((task: Task, x: number, y: number) => void) | null = null;
-    private onOpenInEditor: ((task: Task) => void) | null = null;
-    private getDoubleTapAction: () => DoubleTapAction = () => 'detail';
+    private readonly app: App;
+    private readonly readService: TaskReadService;
+    private readonly index: IndexReads;
+    private readonly linkRuntime: TaskCardLinkRuntime;
+    private readonly getMaskMode: () => boolean;
+    private readonly actions: CardActions;
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
 
-    constructor(
-        private app: App,
-        private readonly readService: TaskReadService,
-        private readonly index: IndexReads,
-        operations: Operations,
-        menuPresenter: MenuPresenter,
-        private linkRuntime: TaskCardLinkRuntime,
-        getSettings: () => TaskViewerSettings,
-        /**
-         * Lazy reader for the owning view's mask-mode toggle. When it returns
-         * true, every card rendered through this renderer substitutes its
-         * content with the task's `tv-mask` value (see `applyMaskToContent`).
-         * Default returns false so the renderer keeps working uninstrumented
-         * in tests and lightweight call sites.
-         */
-        private getMaskMode: () => boolean = () => false
-    ) {
+    constructor(deps: TaskCardRendererDeps) {
         super();
-        this.checkboxWiring = new CheckboxWiring(operations, menuPresenter);
+        const { app, readService, index } = deps;
+        this.app = app;
+        this.readService = readService;
+        this.index = index;
+        this.linkRuntime = deps.linkRuntime;
+        this.getMaskMode = deps.getMaskMode;
+        this.actions = deps.actions;
+        this.checkboxWiring = new CheckboxWiring(deps.operations, deps.menuPresenter);
         this.childItemBuilder = new ChildItemBuilder(readService, index);
-        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, index);
-        this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
+        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, index, deps.actions.showChildMenu);
+        this.linkInteractionManager = new TaskLinkInteractionManager(app, deps.getSettings);
         // Clean up expandedTaskIds entries for rows whose names ended (the
         // index's delete notification) so the set does not grow unbounded
         // over the renderer's lifetime. Keys are
@@ -202,10 +240,6 @@ export class TaskCardRenderer extends Component {
         super.onunload();
     }
 
-    setChildMenuCallback(cb: ChildMenuCallback): void {
-        this.childSectionRenderer.setChildMenuCallback(cb);
-    }
-
     /**
      * Whether the card `cardInstanceId`, drawing the task `taskId`, was left
      * expanded. A key ends in the name the task had when it was expanded, and
@@ -228,22 +262,6 @@ export class TaskCardRenderer extends Component {
             return true;
         }
         return false;
-    }
-
-    setDetailCallback(cb: (task: Task) => void): void {
-        this.onDetailClick = cb;
-    }
-
-    setContextMenuCallback(cb: (task: Task, x: number, y: number) => void): void {
-        this.onContextMenu = cb;
-    }
-
-    setOpenInEditorCallback(cb: (task: Task) => void): void {
-        this.onOpenInEditor = cb;
-    }
-
-    setDoubleTapActionGetter(getter: () => DoubleTapAction): void {
-        this.getDoubleTapAction = getter;
     }
 
     /**
@@ -275,6 +293,13 @@ export class TaskCardRenderer extends Component {
         // card is drawn anew: a kept card acts on the task it shows.
         const hold = holdCard(container, task, cardInstanceId, children.map(item => item.handler?.taskId ?? null));
         container.dataset.cardInstanceId = cardInstanceId;
+
+        // The card's look outside its content, and its menu, on every draw:
+        // a kept card is drawn for a task whose color may have gone.
+        TaskStyling.applyTaskColor(container, getEffectiveColor(task) ?? null);
+        TaskStyling.applyTaskLinestyle(container, getEffectiveLinestyle(task) ?? null);
+        TaskStyling.applyReadOnly(container, task);
+        this.actions.bindMenu(container, options.hooks?.menu);
 
         // Compute content signature for render skip
         const topRightResolved = this.resolveTopRightString(task, settings, topRight);
@@ -316,13 +341,13 @@ export class TaskCardRenderer extends Component {
         if (policies.doubleTap) {
             bindTapIntents(container, {
                 onDoubleTap: (x, y) => {
-                    const action = this.getDoubleTapAction();
+                    const action = this.actions.doubleTapAction();
                     if (action === 'menu') {
-                        this.onContextMenu?.(hold.task, x, y);
+                        this.actions.showMenu(hold.task, x, y);
                     } else if (action === 'open') {
-                        this.onOpenInEditor?.(hold.task);
+                        this.actions.openInEditor(hold.task);
                     } else {
-                        this.onDetailClick?.(hold.task);
+                        this.actions.openDetail(hold.task);
                     }
                 },
             }, {

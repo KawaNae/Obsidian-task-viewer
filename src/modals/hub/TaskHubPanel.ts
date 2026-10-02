@@ -3,12 +3,9 @@ import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
 import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
-import { TaskStyling } from '../../views/sharedUI/TaskStyling';
-import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
@@ -19,7 +16,6 @@ import { indentUnit } from '../../utils/ObsidianConfig';
 
 export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
-    menuHandler: MenuHandler;
     index: IndexReads;
     operations: Operations;
     plugin: PluginContext;
@@ -166,15 +162,7 @@ export class TaskHubPanel {
         this.previewEl.empty();
 
         const card = this.previewEl.createDiv('task-card task-card--in-hub-preview');
-        TaskStyling.applyTaskColor(card, getEffectiveColor(this.task) ?? null);
-        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(this.task) ?? null);
-        TaskStyling.applyReadOnly(card, this.task);
-
         const closePanel = () => this.close();
-        this.deps.menuHandler.addTaskContextMenu(card, {
-            onDestructiveAction: closePanel,
-            onOpenPropertiesFocus: (field) => this.form?.focusField(field),
-        });
 
         const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.index.getTask(id));
         this.deps.taskRenderer.render(card, dt, settings, {
@@ -185,7 +173,15 @@ export class TaskHubPanel {
             alwaysLinks: true,
             doubleTap: false,
             mask: false,
-            hooks: { onNavigate: closePanel },
+            hooks: {
+                onNavigate: closePanel,
+                // The menu's destructive items close the hub, and its
+                // Properties items go to this hub's form, not a hub on top.
+                menu: {
+                    onDestructiveAction: closePanel,
+                    onOpenPropertiesFocus: (field) => this.form?.focusField(field),
+                },
+            },
         });
     }
 

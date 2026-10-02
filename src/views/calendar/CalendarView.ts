@@ -1,9 +1,10 @@
 import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import type { Task, DisplayTask, PinnedListDefinition, AstronomyDisplay } from '../../types';
+import type { MenuHandler } from '../../interaction/menu/MenuHandler';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { createCardRendering } from '../sharedUI/CardRendering';
+import type { DisplayTask, PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
@@ -25,8 +26,6 @@ import {
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { TaskStyling } from '../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { createDefaultListFilterState, createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
@@ -50,9 +49,6 @@ import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
-import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
-import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
-import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
@@ -129,12 +125,18 @@ export class CalendarView extends ItemView {
         this.readService = plugin.getTaskReadService();
         this.index = plugin.getIndex();
         this.operations = plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+        const cards = createCardRendering({
+            app: this.app,
+            plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings, () => this.maskMode);
+            getMaskMode: () => this.maskMode,
+            // The selection is let go once the gesture that opened the hub is
+            // over (see TimelineView's constructor).
+            afterHubOpen: () => setTimeout(() => this.handleManager?.selectTask(null), 0),
+        });
+        this.taskRenderer = cards.taskRenderer;
+        this.menuHandler = cards.menuHandler;
         this.addChild(this.taskRenderer);
-        this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager({
             mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
@@ -320,17 +322,8 @@ export class CalendarView extends ItemView {
             this.registerDomEvent(el, ev, handler),
         );
 
-        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
-        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
-        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
-        this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.index.getTask(taskId);
-            if (task) this.openTaskHub(task, opts);
-        });
         this.pinnedListRenderer = new PinnedListRenderer(
-            this.taskRenderer, this.plugin, this.menuHandler, this.readService,
+            this.taskRenderer, this.plugin, this.readService,
         );
         // Persistent host for pinned lists. Lives outside the empty() target —
         // detached before container.empty() in performRender and reparented
@@ -410,16 +403,6 @@ export class CalendarView extends ItemView {
 
     public redraw(): void {
         this.render();
-    }
-
-    private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
-        createTaskHubOpener(this.app, {
-            taskRenderer: this.taskRenderer,
-            menuHandler: this.menuHandler,
-            index: this.index,
-            operations: this.operations,
-            plugin: this.plugin,
-        }, () => setTimeout(() => this.handleManager?.selectTask(null), 0))(task, options);
     }
 
     private render(): void {
@@ -816,7 +799,6 @@ export class CalendarView extends ItemView {
                 topRight: { mode: 'none' },
                 compact: true,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(barEl);
             return;
         }
 
@@ -826,13 +808,12 @@ export class CalendarView extends ItemView {
         markHandleSurface(card, 'grid');
         if (reused) weekRow.appendChild(reused);
 
-        this.decorateCalendarCell(card, entry, colOffset);
+        this.applyCalendarGridPosition(card, entry, colOffset);
         this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
             cardInstanceId,
             topRight: { mode: 'time' },
             compact: true,
         });
-        if (!reused) this.menuHandler.addTaskContextMenu(card);
     }
 
     /**
@@ -847,21 +828,6 @@ export class CalendarView extends ItemView {
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
 
         this.applyCalendarGridPosition(el, entry, colOffset);
-
-        TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
-        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(entry.task) ?? null);
-        TaskStyling.applyReadOnly(el, entry.task);
-    }
-
-    /**
-     * Idempotent decoration for single-cell calendar cards (no multi-day span).
-     */
-    private decorateCalendarCell(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        this.applyCalendarGridPosition(el, entry, colOffset);
-
-        TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
-        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(entry.task) ?? null);
-        TaskStyling.applyReadOnly(el, entry.task);
     }
 
     private applyCalendarGridPosition(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
