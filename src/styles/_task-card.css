@@ -312,27 +312,27 @@
     padding: 4px 0 2px 1.5em;
     user-select: none;
     pointer-events: none;
-    /* Reserve height to keep allday card / section dimensions stable
-       across the markdown await, matching the previous expand-bar floor. */
+    /* The bar's own height, with or without a count, so compact cards of
+       one lane share one height. Also a guard for content that is truly
+       asynchronous: the card is drawn whole synchronously. */
     min-height: 21px;
     box-sizing: border-box;
 }
 
-/* Lock allday card height so the allday-section grid row keeps a
-   stable size across the sync→async render boundary. The compact
-   render path creates `.task-card__content` (markdown awaits) and
-   `.task-card__expand-bar` (icon awaits in microtask). Without a
-   floor, the card briefly collapses while those awaits resolve,
-   shrinking the entire allday-section by ~Δexpand-bar per stack row
-   and producing a 1-frame upward shift of the timed grid. */
+/* The allday card's size, and a guard for content that is truly
+   asynchronous. A card is drawn whole when TaskCardRenderer.render
+   returns (body, child count, notation, mask); only content that comes
+   in later (an image, an embed, math, code, a post-processor) can grow
+   it after the first paint. The floor keeps the allday-section grid row
+   from shrinking until then, which would shift the timed grid below. */
 .task-card--allday {
     min-height: var(--task-card-allday-min-height, 58px);
     box-sizing: border-box;
 }
 
 .task-card--allday .task-card__content {
-    /* Reserve content height so the inner markdown paragraph does
-       not collapse to 0 while MarkdownRenderer.render awaits. */
+    /* The content's size, and a guard for content that is truly
+       asynchronous (see above): the paragraph keeps its line. */
     min-height: var(--task-card-allday-content-min-height, 1.5em);
 }
 

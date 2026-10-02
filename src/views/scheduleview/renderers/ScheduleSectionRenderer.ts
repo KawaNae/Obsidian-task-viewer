@@ -22,7 +22,7 @@ export class ScheduleSectionRenderer {
         this.currentVisualDateProvider = options.currentVisualDateProvider;
     }
 
-    async renderAllDaySection(container: HTMLElement, tasks: DisplayTask[], reconciler: CardReconciler): Promise<void> {
+    renderAllDaySection(container: HTMLElement, tasks: DisplayTask[], reconciler: CardReconciler): void {
         const row = container.createDiv('tv-grid-row allday-section');
         row.style.gridTemplateColumns = this.getScheduleRowColumns();
 
@@ -68,18 +68,18 @@ export class ScheduleSectionRenderer {
         applyCollapsedState();
 
         for (const task of tasks) {
-            await this.taskRenderer.renderTaskCard(taskCell, task, false, reconciler);
+            this.taskRenderer.renderTaskCard(taskCell, task, false, reconciler);
         }
     }
 
-    async renderCollapsibleTaskSection(
+    renderCollapsibleTaskSection(
         container: HTMLElement,
         sectionClass: string,
         title: string,
         tasks: DisplayTask[],
         sectionKey: CollapsibleSectionKey,
         reconciler: CardReconciler,
-    ): Promise<void> {
+    ): void {
         const section = container.createDiv(`schedule-section schedule-section--collapsible ${sectionClass}`);
         const header = section.createEl('h4', { cls: 'schedule-section__header' });
         header.setAttribute('role', 'button');
@@ -119,7 +119,7 @@ export class ScheduleSectionRenderer {
 
         const tasksContainer = section.createDiv('schedule-section__tasks');
         for (const task of tasks) {
-            await this.taskRenderer.renderTaskCard(tasksContainer, task, false, reconciler);
+            this.taskRenderer.renderTaskCard(tasksContainer, task, false, reconciler);
         }
     }
 

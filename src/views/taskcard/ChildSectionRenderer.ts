@@ -1,10 +1,11 @@
-import { type App, MarkdownRenderer, type Component, setIcon } from 'obsidian';
+import { type App, type Component, setIcon } from 'obsidian';
 import { type TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { ChildRenderItem } from './types';
 import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 import { touchCard } from './CardHold';
+import { renderCardMarkdown, type LateContent } from './CardMarkdown';
 import { t } from '../../i18n';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
@@ -34,6 +35,10 @@ function countChildCompletion(
  * drawn: the section is kept while it shows the same items, across readings
  * that rename the tasks behind them (`CardHold`). `nameAt(i)` answers the
  * name behind `items[i]`.
+ *
+ * A section is drawn whole when its draw returns: the notation and the
+ * checkboxes are laid on the markdown at once (`renderCardMarkdown`). What a
+ * draw returns tells only when the late content is in (`LateContent`).
  */
 export class ChildSectionRenderer {
     private onChildMenuClick: ChildMenuCallback | null = null;
@@ -48,7 +53,7 @@ export class ChildSectionRenderer {
         this.onChildMenuClick = cb;
     }
 
-    async renderCollapsed(
+    renderCollapsed(
         contentContainer: HTMLElement,
         items: ChildRenderItem[],
         nameAt: (index: number) => string | undefined,
@@ -59,7 +64,7 @@ export class ChildSectionRenderer {
         settings: TaskViewerSettings,
         parentStartDate?: string,
         warnIcon = ''
-    ): Promise<void> {
+    ): LateContent {
         const { completed, total } = countChildCompletion(items, this.index, settings);
         const label = `${warnIcon}${completed}/${total}`;
         const wasExpanded = expandedTaskIds.has(expandKey());
@@ -77,7 +82,7 @@ export class ChildSectionRenderer {
             childrenContainer.addClass('task-card__children--collapsed');
         }
 
-        await this.renderAndPostProcess(childrenContainer, items, nameAt, filePath, component, parentStartDate);
+        const late = this.renderAndPostProcess(childrenContainer, items, nameAt, filePath, component, parentStartDate);
         this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings, nameAt);
 
         toggle.addEventListener('click', (e) => {
@@ -98,23 +103,10 @@ export class ChildSectionRenderer {
                 expandedTaskIds.delete(expandKey());
             }
         });
+        return late;
     }
 
-    async renderExpanded(
-        contentContainer: HTMLElement,
-        items: ChildRenderItem[],
-        nameAt: (index: number) => string | undefined,
-        filePath: string,
-        component: Component,
-        settings: TaskViewerSettings,
-        parentStartDate?: string
-    ): Promise<void> {
-        const childrenContainer = contentContainer.createDiv('task-card__children task-card__children--expanded');
-        await this.renderAndPostProcess(childrenContainer, items, nameAt, filePath, component, parentStartDate);
-        this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings, nameAt);
-    }
-
-    async renderParentWithChildren(
+    renderParentWithChildren(
         contentContainer: HTMLElement,
         parentLine: string,
         items: ChildRenderItem[],
@@ -123,28 +115,30 @@ export class ChildSectionRenderer {
         component: Component,
         settings: TaskViewerSettings,
         parentStartDate?: string
-    ): Promise<void> {
+    ): LateContent {
         const childTexts = items.map((item) => item.markdown);
         const fullText = [parentLine, ...childTexts].join('\n');
-        await MarkdownRenderer.render(this.app, fullText, contentContainer, filePath, component);
+        const late = renderCardMarkdown(this.app, fullText, contentContainer, filePath, component);
 
         // Parent checkbox occupies the first task-list-item, so child mapping starts at offset=1.
         this.insertChildNotations(contentContainer, items, nameAt, parentStartDate, 1);
         this.checkboxWiring.wireChildCheckboxesWithOffset(contentContainer, items, settings, 1, nameAt);
+        return late;
     }
 
-    private async renderAndPostProcess(
+    private renderAndPostProcess(
         container: HTMLElement,
         items: ChildRenderItem[],
         nameAt: (index: number) => string | undefined,
         filePath: string,
         component: Component,
         parentStartDate?: string
-    ): Promise<void> {
+    ): LateContent {
         const markdown = items.map((item) => item.markdown).join('\n');
-        await MarkdownRenderer.render(this.app, markdown, container, filePath, component);
+        const late = renderCardMarkdown(this.app, markdown, container, filePath, component);
         this.insertChildNotations(container, items, nameAt, parentStartDate, 0);
         this.markPropertyLines(container, items);
+        return late;
     }
 
     private insertChildNotations(

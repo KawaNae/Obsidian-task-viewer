@@ -20,7 +20,6 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
-import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
@@ -281,7 +280,7 @@ export class ScheduleView extends ItemView {
 
         await super.setState(state, result);
         if (this.container) {
-            await this.renderSerializer.request();
+            this.performRender();
         }
     }
 
@@ -306,7 +305,7 @@ export class ScheduleView extends ItemView {
 
         this.registerKeyboardNavigation();
         this.scrollToNowOnNextRender = true;
-        await this.renderSerializer.request();
+        this.performRender();
 
         this.renderScheduler = new RenderScheduler({
             performFull: () => this.render(),
@@ -378,20 +377,14 @@ export class ScheduleView extends ItemView {
         });
     }
 
-    /**
-     * Single serialization gate for every async render entry point
-     * (render / setState / onOpen), keeping the reconciler's
-     * detach→build→dispose cycle atomic against interleaving.
-     */
-    private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
     private renderScheduler: RenderScheduler | null = null;
 
     private render(): void {
         this.scrollRestorer.save();
-        void this.renderSerializer.request();
+        this.performRender();
     }
 
-    private async performRender(): Promise<void> {
+    private performRender(): void {
         if (!this.container) {
             return;
         }
@@ -423,7 +416,7 @@ export class ScheduleView extends ItemView {
         const bodyScroll = this.container.createDiv('schedule-view__body-scroll');
         const bodyContainer = bodyScroll.createDiv('schedule-view__scroll-content');
 
-        await this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized, reconciler);
+        this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized, reconciler);
 
         // Dispose any cards that did not turn up in the new render.
         reconciler.forEachStale(card => this.taskRenderer.dispose(card));
@@ -436,13 +429,13 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private async renderDayTimeline(
+    private renderDayTimeline(
         fixedContainer: HTMLElement,
         bodyContainer: HTMLElement,
         date: string,
         baseCategorized: BaseCategorizedTasks,
         reconciler: CardReconciler,
-    ): Promise<void> {
+    ): void {
         const categorized = this.taskCategorizer.toScheduleFormat(baseCategorized);
 
         this.periodicHeaderRenderer.render(fixedContainer, {
@@ -457,12 +450,12 @@ export class ScheduleView extends ItemView {
         this.renderMoonSection(fixedContainer, date);
 
         // Allday in scroll body (sticky on PC)
-        await this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay, reconciler);
+        this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay, reconciler);
 
-        await this.renderTimelineMain(bodyContainer, categorized.timed, reconciler);
+        this.renderTimelineMain(bodyContainer, categorized.timed, reconciler);
 
         if (categorized.dueOnly.length > 0) {
-            await this.sectionRenderer.renderCollapsibleTaskSection(
+            this.sectionRenderer.renderCollapsibleTaskSection(
                 bodyContainer,
                 'schedule-due-section',
                 t('calendar.due'),
@@ -473,7 +466,7 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private async renderTimelineMain(container: HTMLElement, tasks: TimedDisplayTask[], reconciler: CardReconciler): Promise<void> {
+    private renderTimelineMain(container: HTMLElement, tasks: TimedDisplayTask[], reconciler: CardReconciler): void {
         const main = container.createDiv('schedule-grid');
         const layout = this.gridCalculator.buildAdaptiveGrid(tasks);
         const timelineHeight = layout.totalHeight + ScheduleView.TIMELINE_TOP_PADDING_PX + ScheduleView.TIMELINE_BOTTOM_PADDING_PX;
@@ -483,7 +476,7 @@ export class ScheduleView extends ItemView {
 
         this.gridRenderer.renderTimeMarkers(main, layout.rows, tasks);
         const placements = this.scheduleTaskRenderer.placeTasksOnGrid(tasks, layout.rows);
-        await this.scheduleTaskRenderer.renderTaskCards(main, placements, timelineHeight, reconciler);
+        this.scheduleTaskRenderer.renderTaskCards(main, placements, timelineHeight, reconciler);
 
         if (this.isCurrentVisualDate(this.currentVisualDate)) {
             this.gridRenderer.renderNowLine(main, layout.rows, timelineHeight);

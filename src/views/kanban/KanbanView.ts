@@ -247,9 +247,7 @@ export class KanbanView extends ItemView {
         this.render();
 
         // Coalesce data-change bursts into one render per frame, as the other
-        // three card views do. Kanban's render is synchronous, so it needs no
-        // AsyncRenderSerializer on top (Calendar and Schedule await inside
-        // theirs and do).
+        // three card views do.
         this.renderScheduler = new RenderScheduler({
             performFull: () => this.render(),
             getHost: () => this.container,
