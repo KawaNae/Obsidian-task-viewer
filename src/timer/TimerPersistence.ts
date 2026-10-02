@@ -21,7 +21,7 @@ import type { TimerCreator } from './TimerCreator';
 import {
     clampToTotalDuration,
     computeCompletedDuration,
-    computeTotalDuration,
+    totalDuration,
     getCurrentSegment,
     normalizeGroups,
     type IntervalDefaults,
@@ -390,7 +390,7 @@ export class TimerPersistence {
                     currentRepeatIndex: Math.max(0, persisted.currentRepeatIndex ?? 0),
                     segmentTimeRemaining: Math.max(0, persisted.segmentTimeRemaining ?? groups[0].segments[0].durationSeconds),
                     totalElapsedTime: Math.max(0, persisted.totalElapsedTime ?? 0),
-                    totalDuration: Math.max(0, persisted.totalDuration ?? computeTotalDuration(groups))
+                    totalDuration: Math.max(0, persisted.totalDuration ?? totalDuration(groups))
                 };
                 const segment = getCurrentSegment(intervalTimer);
                 if (!segment) {
