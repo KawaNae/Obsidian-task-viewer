@@ -157,12 +157,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
             // 反映できなかった要素はここでも隠したままにする。
             this.dropReveal.finish([this.dragEl]);
             this.dragEl.style.transform = '';
-            // inline z は decorateLane が所有する lane z。可視に戻す要素では
-            // 消さない（1 フレームだけ重なり順が崩れるのを避ける）。隠したまま
-            // の要素は次 render で作り直されるのでどちらでもよい。
-            if (!this.dropReveal.isRevealable(this.dragEl)) {
-                this.dragEl.style.zIndex = '';
-            }
         }
 
         this.dragTask = null;

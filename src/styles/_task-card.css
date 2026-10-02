@@ -7,9 +7,11 @@
    ========================================================================== */
 
 .task-card {
-    /* Positioning */
+    /* Positioning. A lane card's rank (`--lane-z`, written inline by the
+       lane) sets its z, capped under the selected card; a card without one
+       stands at the floor. See the ladder [B] in _variables.css. */
     position: relative;
-    z-index: var(--z-task-card);
+    z-index: min(var(--lane-z, var(--z-task-card)), var(--z-task-card-max));
 
     /* Layout */
     display: flex;
@@ -728,7 +730,7 @@
 }
 
 .task-card--ghost-grid {
-    z-index: 10;
+    z-index: var(--z-task-card-ghost-grid);
 }
 
 .task-card--ghost-positioned {
@@ -766,14 +768,15 @@
     --task-card-frame-width: 2px;
 }
 
-/* Selection z-index overlay. The base z-index is owned by decorateLane (inline
-   style), so !important is required to layer a selected card above its
-   neighbours. The overlay drops the instant .is-selected is removed, leaving
-   the inline base z-index (always current from the latest render) intact — no
-   stale save/restore. Ghosts inherit .is-selected for the frame but must keep
-   their own drag z-index (210 / 10), so they are excluded here. */
+/* Selection z-index overlay. A lane gives a card only its rank (`--lane-z`),
+   and the z-index is the base rule's (`.task-card`), so this more specific
+   rule lays a selected card above its neighbours. It drops the instant
+   .is-selected is removed, and the card's rank (always current from the latest
+   render) takes over again — no stale save/restore. Ghosts inherit
+   .is-selected for the frame but must keep their own drag z-index (210 / 10),
+   so they are excluded here. */
 .task-card.is-selected:not(.task-card--ghost-positioned):not(.task-card--ghost-grid) {
-    z-index: var(--z-task-card-selected) !important;
+    z-index: var(--z-task-card-selected);
 }
 
 .task-card.is-dragging {

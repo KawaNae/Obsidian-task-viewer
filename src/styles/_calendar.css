@@ -50,7 +50,7 @@
 }
 
 .cal-week-row .due-arrow {
-    z-index: 5;
+    z-index: var(--z-due-arrow);
 }
 
 /* --- Split direction (horizontal for calendar) ---

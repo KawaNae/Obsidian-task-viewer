@@ -33,7 +33,7 @@
 .schedule-view__body-scroll > .allday-section {
     position: sticky;
     top: 0;
-    z-index: 30;
+    z-index: var(--z-schedule-allday);
 }
 
 /* Mobile: disable sticky so allday scrolls with timeline */
@@ -155,7 +155,7 @@
     right: 0;
     top: 0;
     height: 100%;
-    z-index: 1;
+    z-index: var(--z-schedule-marker);
     pointer-events: none;
 }
 
@@ -239,7 +239,7 @@
     right: 12px;
     height: 2px;
     background-color: var(--tv-accent);
-    z-index: 10;
+    z-index: var(--z-schedule-now-line);
     pointer-events: none;
 }
 
@@ -263,6 +263,6 @@
     /* Same layer as .schedule-grid__now-line so the chip rides along with
        it above task cards; deliberately covers a fixed time label /
        task-boundary label sharing this time slot instead of hiding either. */
-    z-index: 10;
+    z-index: var(--z-schedule-now-line);
     pointer-events: none;
 }

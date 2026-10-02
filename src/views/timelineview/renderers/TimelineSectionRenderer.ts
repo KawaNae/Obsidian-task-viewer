@@ -17,11 +17,10 @@ import {
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
+// The gap between the ranks of successive cards in a lane. The z-index is
+// CSS's: the rank capped under the selected card (`.task-card`, ladder [B]
+// in _variables.css).
 const Z_GAP = 10;
-// Cap base lane z-index one gap below the selection overlay (CSS:
-// .task-card.is-selected → --z-task-card-selected: 200) so a selected card
-// always layers above non-selected ones.
-const Z_MAX = 190;
 
 export class TimelineSectionRenderer {
     constructor(
@@ -106,7 +105,7 @@ export class TimelineSectionRenderer {
         el.style.setProperty('--duration-minutes', String(duration));
         el.style.width = `calc((100% - 8px) * ${widthFraction})`;
         el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
-        el.style.zIndex = String(Math.min(index * Z_GAP + taskLayout.zIndex, Z_MAX));
+        el.style.setProperty('--lane-z', String(index * Z_GAP + taskLayout.zIndex));
 
         // cascade-offset: leftmost = unset, 重なって右にずれた card に '1'。
         if (taskLayout.left > 0) {
