@@ -449,8 +449,8 @@ export class TimelineView extends ItemView {
         });
 
         // Initialize Renderers
-        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.handleManager, this.taskRenderer, VIEW_ID);
-        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
+        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.handleManager, this.taskRenderer);
+        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel());
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,
@@ -483,7 +483,6 @@ export class TimelineView extends ItemView {
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
             getViewFilterState: () => this.viewFilterMenu.getFilterState(),
             callbacks: this.getPinnedListCallbacks(),
-            viewId: VIEW_ID,
         });
         this.moonRenderer = new MoonPhaseRenderer();
         this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);

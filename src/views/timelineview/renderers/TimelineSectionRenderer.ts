@@ -30,7 +30,6 @@ export class TimelineSectionRenderer {
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
         private getZoomLevel: () => number,
-        private viewId: string
     ) { }
 
     public render(
@@ -48,8 +47,8 @@ export class TimelineSectionRenderer {
         timedTasks.forEach((task, index) => {
             if (!task.effectiveStartTime) return;
 
-            const cardInstanceId = `${this.viewId}::lane-${date}::${task.id}`;
-            const reused = reconciler.acquire(cardInstanceId, task);
+            const key = { scope: `lane-${date}`, name: task.id };
+            const reused = reconciler.acquire(key, task);
             const el = reused ?? container.createDiv('task-card');
             markHandleSurface(el, 'timeline');
             if (reused) container.appendChild(reused);
@@ -57,7 +56,7 @@ export class TimelineSectionRenderer {
             this.decorateLane(el, task, index, layout, startHour);
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
-                cardInstanceId,
+                key,
                 topRight: { mode: 'time' },
             });
         });

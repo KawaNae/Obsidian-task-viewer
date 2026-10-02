@@ -30,7 +30,7 @@ describe('a segment acts on its row', () => {
 
     it('a card holding a segment names its row', () => {
         const [first] = segments();
-        expect(new CardHold(first, 'k', []).name).toBe(NAME);
+        expect(new CardHold(first, { scope: 's', name: first.id }, []).name).toBe(NAME);
     });
 
     it('the menu looks the row up by its name', async () => {

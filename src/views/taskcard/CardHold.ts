@@ -1,5 +1,6 @@
 import type { DisplayTask } from '../../types';
 import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
+import type { CardKey } from './CardKey';
 
 /**
  * What a card acts on: the task it was last drawn from.
@@ -21,7 +22,7 @@ export class CardHold {
         /** The task the card was last drawn from (a segment of a split task, as drawn). */
         public task: DisplayTask,
         /** The card's key in its view; an expanded card is kept by it. */
-        public cardInstanceId: string,
+        public key: CardKey,
         /**
          * The names of the tasks behind the card's child items, in the order
          * the items are drawn; null for an item that is not a task.
@@ -50,17 +51,17 @@ const holds = new WeakMap<HTMLElement, CardHold>();
 export function holdCard(
     card: HTMLElement,
     task: DisplayTask,
-    cardInstanceId: string,
+    key: CardKey,
     children: readonly (string | null)[],
 ): CardHold {
     const held = holds.get(card);
     if (!held) {
-        const made = new CardHold(task, cardInstanceId, children);
+        const made = new CardHold(task, key, children);
         holds.set(card, made);
         return made;
     }
     held.task = task;
-    held.cardInstanceId = cardInstanceId;
+    held.key = key;
     held.children = children;
     return held;
 }

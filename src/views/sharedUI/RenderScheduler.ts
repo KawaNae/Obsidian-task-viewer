@@ -23,7 +23,7 @@ export interface RenderSchedulerHandlers {
  *
  * The renderer no longer makes a partial-vs-full decision: keyed
  * reconciliation inside `performFull` reuses surviving card elements by
- * `data-card-instance-id`, so a "full" render is cheap when most cards are
+ * their key (`CardKey`), so a "full" render is cheap when most cards are
  * unchanged. `blockId` flips have no visual effect at all
  * and are short-circuited here.
  *

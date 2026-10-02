@@ -335,7 +335,6 @@ export class CalendarView extends ItemView {
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
             getViewFilterState: () => this.viewFilterMenu.getFilterState(),
             callbacks: this.getPinnedListCallbacks(),
-            viewId: VIEW_ID,
         });
         this.handleManager = new HandleManager(this.container, {
             getTask: (id) => this.index.getTask(id),
@@ -441,7 +440,7 @@ export class CalendarView extends ItemView {
 
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the month grid. Survivors are re-parented and
-        // re-decorated when their cardInstanceId turns up in the new render;
+        // re-decorated when their key turns up in the new render;
         // unmatched ones are disposed at the end. Cards keep their inner DOM
         // (markdown, focus, expand state) intact across renders.
         const reconciler = new CardReconciler();
@@ -787,30 +786,30 @@ export class CalendarView extends ItemView {
         reconciler: CardReconciler,
     ): void {
         if (entry.useBarVariant) {
-            const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
-            const reused = reconciler.acquire(cardInstanceId, entry.task);
+            const key = { scope: 'lane-multi', name: entry.segmentId };
+            const reused = reconciler.acquire(key, entry.task);
             const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
             markHandleSurface(barEl, 'grid');
             if (reused) weekRow.appendChild(reused);
 
             this.decorateCalendarBar(barEl, entry, colOffset);
             this.taskRenderer.render(barEl, entry.task as DisplayTask, this.plugin.settings, {
-                cardInstanceId,
+                key,
                 topRight: { mode: 'none' },
                 compact: true,
             });
             return;
         }
 
-        const cardInstanceId = `${VIEW_ID}::lane::${entry.task.id}`;
-        const reused = reconciler.acquire(cardInstanceId, entry.task);
+        const key = { scope: 'lane', name: entry.task.id };
+        const reused = reconciler.acquire(key, entry.task);
         const card = reused ?? weekRow.createDiv('task-card');
         markHandleSurface(card, 'grid');
         if (reused) weekRow.appendChild(reused);
 
         this.applyCalendarGridPosition(card, entry, colOffset);
         this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
-            cardInstanceId,
+            key,
             topRight: { mode: 'time' },
             compact: true,
         });

@@ -29,7 +29,6 @@ export class AllDaySectionRenderer {
         private plugin: PluginContext & TimerHost,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
-        private viewId: string
     ) { }
 
     public render(
@@ -103,18 +102,18 @@ export class AllDaySectionRenderer {
         reconciler: CardReconciler,
     ): void {
         const { task } = entry;
-        const cardInstanceId = `${this.viewId}::allday::${entry.segmentId}`;
-        const reused = reconciler.acquire(cardInstanceId, task);
+        const key = { scope: 'allday', name: entry.segmentId };
+        const reused = reconciler.acquire(key, task);
         const el = reused ?? container.createDiv('task-card task-card--allday');
         markHandleSurface(el, 'grid');
         if (reused) container.appendChild(reused);
 
         this.decorateAllDay(el, entry, gridColOffset, gridRowOffset);
 
-        // Each split segment gets its own cardInstanceId via segmentId so a
+        // Each split segment gets its own key via segmentId so a
         // task spanning multiple days can be expanded independently per row.
         this.taskRenderer.render(el, task as DisplayTask, this.plugin.settings, {
-            cardInstanceId,
+            key,
             topRight: { mode: 'none' },
             compact: true,
         });

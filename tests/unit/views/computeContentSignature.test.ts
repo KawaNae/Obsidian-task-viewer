@@ -51,7 +51,7 @@ function makeSettings(overrides: Partial<TaskViewerSettings> = {}): TaskViewerSe
 
 function makeOptions(overrides: Record<string, any> = {}) {
     return {
-        cardInstanceId: 'card-1',
+        key: { scope: 's', name: 'card-1' },
         compact: false,
         ...overrides,
     };

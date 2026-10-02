@@ -166,7 +166,7 @@ export class TaskHubPanel {
 
         const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.index.getTask(id));
         this.deps.taskRenderer.render(card, dt, settings, {
-            cardInstanceId: `hub::${dt.id}`,
+            key: { scope: 'hub', name: dt.id },
             // The user asked to look at this task: all of it, its links
             // live, unmasked. A double tap would open the hub it is in.
             expandChildren: true,

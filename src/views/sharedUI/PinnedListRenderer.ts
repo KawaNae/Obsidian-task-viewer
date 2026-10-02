@@ -70,12 +70,6 @@ export interface PinnedListAttachParams {
     getCollapsed: () => Record<string, boolean>;
     getViewFilterState: () => FilterState | undefined;
     callbacks: PinnedListCallbacks;
-    /**
-     * Owning view's id (e.g. 'timeline', 'calendar'). Used to namespace the
-     * cardInstanceId fed to TaskCardRenderer so a task pinned in multiple
-     * places (or pinned + on the main grid) can be expanded independently.
-     */
-    viewId: string;
 }
 
 export class PinnedListRenderer {
@@ -92,7 +86,6 @@ export class PinnedListRenderer {
     private getCollapsed: (() => Record<string, boolean>) | null = null;
     private getViewFilterState: (() => FilterState | undefined) | null = null;
     private callbacks: PinnedListCallbacks | null = null;
-    private viewId: string | null = null;
     private unsubscribe: (() => void) | null = null;
     private pendingRaf: number | null = null;
     /** 再描画フレームは host（= attach された sidebar 要素）の window から取る。 */
@@ -129,7 +122,6 @@ export class PinnedListRenderer {
         this.getCollapsed = params.getCollapsed;
         this.getViewFilterState = params.getViewFilterState;
         this.callbacks = params.callbacks;
-        this.viewId = params.viewId;
 
         this.unsubscribe = this.plugin.getIndex().onChange((_taskId, changes) => {
             if (!shouldRenderForChanges(changes)) return;
@@ -151,7 +143,6 @@ export class PinnedListRenderer {
         this.getCollapsed = null;
         this.getViewFilterState = null;
         this.callbacks = null;
-        this.viewId = null;
         if (this.pendingRaf !== null) {
             this.frames.cancel(this.pendingRaf);
             this.pendingRaf = null;
@@ -192,7 +183,7 @@ export class PinnedListRenderer {
     ): void {
         // Keyed reconciliation: lift surviving cards across all lists before
         // tearing down the container. They will be re-parented + re-decorated
-        // when their cardInstanceId turns up in the new render. Lists added /
+        // when their key turns up in the new render. Lists added /
         // removed / reordered all reuse cards by key — no markdown reflow.
         const reconciler = new CardReconciler();
         reconciler.detach(container);
@@ -353,20 +344,21 @@ export class PinnedListRenderer {
 
     private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], listId: string): void {
         const settings = this.plugin.settings;
-        const viewId = this.viewId ?? 'unknown';
         const reconciler = this.currentReconciler;
         const listDef = this.listDefMap.get(listId);
         const topRight = listDef?.topRight
             ? { mode: 'template' as const, config: listDef.topRight }
             : { mode: 'none' as const };
         tasks.forEach(task => {
-            const cardInstanceId = `${viewId}::pl-${listId}::${task.id}`;
-            const reused = reconciler?.acquire(cardInstanceId, task);
+            // Each list is its own place, so a task pinned in several lists,
+            // or pinned and on the main grid, is opened apart in each.
+            const key = { scope: `pl-${listId}`, name: task.id };
+            const reused = reconciler?.acquire(key, task);
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
             this.taskRenderer.render(card, task, settings, {
-                cardInstanceId,
+                key,
                 topRight,
             });
         });
