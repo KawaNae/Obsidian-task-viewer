@@ -1,20 +1,18 @@
 import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { createCardRendering } from '../sharedUI/CardRendering';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import type { DisplayTask, AstronomyDisplay, Task } from '../../types';
+import type { AstronomyDisplay } from '../../types';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
+import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../utils/DateUtils';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { ScheduleToolbar } from './ScheduleToolbar';
-import { openTaskInEditor } from '../../utils/NavigationUtils';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
@@ -34,7 +32,6 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
-import type { Operations } from '../../services/operations/Operations';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
@@ -55,7 +52,6 @@ export class ScheduleView extends ItemView {
     private readonly readService: TaskReadService;
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
-    private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly moonRenderer: MoonPhaseRenderer;
@@ -97,11 +93,14 @@ export class ScheduleView extends ItemView {
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
         this.index = plugin.getIndex();
-        this.operations = plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+        const cards = createCardRendering({
+            app: this.app,
+            plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings, () => this.maskMode);
+            getMaskMode: () => this.maskMode,
+        });
+        this.taskRenderer = cards.taskRenderer;
+        this.menuHandler = cards.menuHandler;
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.moonRenderer = new MoonPhaseRenderer();
@@ -116,23 +115,6 @@ export class ScheduleView extends ItemView {
             plugin: this.plugin,
             hoverParent: this.hoverParent,
             linkInteractionManager: this.linkInteractionManager,
-        });
-        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
-        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const openTaskHub = createTaskHubOpener(this.app, {
-            taskRenderer: this.taskRenderer,
-            menuHandler: this.menuHandler,
-            index: this.index,
-            operations: this.operations,
-            plugin: this.plugin,
-        });
-        this.taskRenderer.setDetailCallback((task) => openTaskHub(task));
-        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
-        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
-        this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.index.getTask(taskId);
-            if (task) openTaskHub(task, opts);
         });
         this.gridCalculator = new ScheduleGridCalculator({
             getStartHour: () => this.plugin.settings.startHour,
@@ -149,7 +131,6 @@ export class ScheduleView extends ItemView {
         this.scheduleTaskRenderer = new ScheduleTaskRenderer({
             app: this.app,
             taskRenderer: this.taskRenderer,
-            menuHandler: this.menuHandler,
             getSettings: () => this.plugin.settings,
             gridCalculator: this.gridCalculator,
             overlapLayout: this.overlapLayout,

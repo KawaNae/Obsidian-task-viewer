@@ -11,12 +11,9 @@ import {
 } from './ListSectionRenderer';
 import type { DisplayTask, PinnedListDefinition } from '../../types';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { PinnedListQuery } from '../../services/filter/PinnedListQuery';
 import type { PluginContext } from '../../PluginContext';
-import { TaskStyling } from './TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from './TaskPagingController';
 import { CardReconciler } from './CardReconciler';
 import { shouldRenderForChanges } from './RenderScheduler';
@@ -104,7 +101,6 @@ export class PinnedListRenderer {
     constructor(
         private taskRenderer: TaskCardRenderer,
         private plugin: PluginContext,
-        private menuHandler: MenuHandler,
         private readService: TaskReadService,
     ) {
         this.paging = new TaskPagingController(
@@ -369,22 +365,10 @@ export class PinnedListRenderer {
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
-            this.decoratePinnedCard(card, task);
             this.taskRenderer.render(card, task, settings, {
                 cardInstanceId,
                 topRight,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(card);
         });
-    }
-
-    /**
-     * Idempotent decoration for pinned-list cards (color / linestyle / readonly).
-     * Pinned-list tasks are never split in this path, so no split variants apply.
-     */
-    private decoratePinnedCard(card: HTMLElement, task: DisplayTask): void {
-        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
-        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
-        TaskStyling.applyReadOnly(card, task);
     }
 }

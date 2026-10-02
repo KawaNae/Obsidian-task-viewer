@@ -1,5 +1,15 @@
 import { VALID_LINE_STYLES } from '../../constants/style';
 
+/** The properties `applyTaskColor` sets, all taken off before it sets any. */
+const ACCENT_PROPERTIES = [
+    '--accent-h',
+    '--accent-s',
+    '--accent-l',
+    '--color-accent-hsl',
+    '--file-accent',
+    '--file-accent-hover',
+] as const;
+
 /**
  * Task accent color and line style DOM utilities.
  * Applies CSS custom properties to task elements.
@@ -54,8 +64,11 @@ export class TaskStyling {
     /**
      * Applies a file-based accent color to a task element.
      * Sets CSS custom properties for the accent color (HSL format for flexibility).
+     * Null takes off the color the element had, so a reused element does not
+     * keep a color its task lost; so does a new color, before it is set.
      */
     static applyTaskColor(el: HTMLElement, color: string | null): void {
+        for (const prop of ACCENT_PROPERTIES) el.style.removeProperty(prop);
         if (!color) return;
 
         const hsl = TaskStyling.hexToHSL(color);
@@ -77,10 +90,15 @@ export class TaskStyling {
 
     /**
      * Applies task accent line style to CSS variable.
-     * Null means no linestyle — the default ::before (transparent) is used.
+     * Null means no linestyle — the default ::before (transparent) is used,
+     * and the one the element had is taken off.
      */
     static applyTaskLinestyle(el: HTMLElement, linestyle: string | null): void {
-        if (!linestyle) return;
+        if (!linestyle) {
+            el.style.removeProperty('--file-linestyle');
+            delete el.dataset.fileLinestyle;
+            return;
+        }
         const normalized = VALID_LINE_STYLES.has(linestyle) ? linestyle : 'solid';
         el.style.setProperty('--file-linestyle', normalized);
         el.dataset.fileLinestyle = normalized;
@@ -88,6 +106,7 @@ export class TaskStyling {
 
     static applyReadOnly(el: HTMLElement, task: { isReadOnly?: boolean }): void {
         if (task.isReadOnly) el.dataset.readOnly = 'true';
+        else delete el.dataset.readOnly;
     }
 
     /**

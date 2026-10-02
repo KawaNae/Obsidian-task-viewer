@@ -41,17 +41,12 @@ function countChildCompletion(
  * draw returns tells only when the late content is in (`LateContent`).
  */
 export class ChildSectionRenderer {
-    private onChildMenuClick: ChildMenuCallback | null = null;
-
     constructor(
         private app: App,
         private checkboxWiring: CheckboxWiring,
-        private index: Pick<IndexReads, 'getTask'>
+        private index: Pick<IndexReads, 'getTask'>,
+        private readonly onChildMenuClick: ChildMenuCallback,
     ) {}
-
-    setChildMenuCallback(cb: ChildMenuCallback): void {
-        this.onChildMenuClick = cb;
-    }
 
     renderCollapsed(
         contentContainer: HTMLElement,
@@ -163,10 +158,10 @@ export class ChildSectionRenderer {
             const handler = item.handler;
             const isTask = handler && handler.type === 'task';
 
-            // For tasks: show ⋯ menu button (if callback set)
+            // For tasks: show ⋯ menu button
             // For items with notation: show notation text
             let el: HTMLElement;
-            if (isTask && this.onChildMenuClick) {
+            if (isTask) {
                 const index = i;
                 el = this.createChildMenuButton(() => nameAt(index));
             } else if (item.notation) {
@@ -210,7 +205,7 @@ export class ChildSectionRenderer {
             const name = nameOf();
             if (name === undefined) return;
             const rect = btn.getBoundingClientRect();
-            this.onChildMenuClick?.(name, rect.left, rect.bottom);
+            this.onChildMenuClick(name, rect.left, rect.bottom);
         });
 
         btn.addEventListener('mousedown', (e) => {

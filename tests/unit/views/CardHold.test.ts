@@ -46,7 +46,11 @@ class FakeEl {
     checked = false;
     textContent = '';
     innerHTML = '';
-    style: Record<string, string> = {};
+    styles = new Map<string, string>();
+    style = {
+        setProperty: (name: string, value: string) => { this.styles.set(name, value); },
+        removeProperty: (name: string) => { this.styles.delete(name); },
+    };
     classList = {
         add: (...cs: string[]) => cs.forEach(c => this.classes.add(c)),
         remove: (...cs: string[]) => cs.forEach(c => this.classes.delete(c)),
@@ -276,7 +280,19 @@ function settingsWith(overrides: Partial<TaskViewerSettings> = {}): TaskViewerSe
     } as unknown as TaskViewerSettings;
 }
 
-function setup(settings = settingsWith()) {
+/** What the cards do, each a recorder a test can replace. */
+function recordingActions() {
+    return {
+        openDetail: vi.fn<(task: Task) => void>(),
+        showMenu: vi.fn<(task: Task, x: number, y: number) => void>(),
+        showChildMenu: vi.fn<(taskId: string, x: number, y: number) => void>(),
+        openInEditor: vi.fn<(task: Task) => void>(),
+        doubleTapAction: vi.fn<() => 'detail' | 'menu' | 'open'>(() => 'detail'),
+        bindMenu: vi.fn<(card: HTMLElement) => void>(),
+    };
+}
+
+function setup(settings = settingsWith(), actions = recordingActions()) {
     const idx = index();
     const writes: { id: string; updates: Record<string, unknown> }[] = [];
     const operations = {
@@ -284,11 +300,17 @@ function setup(settings = settingsWith()) {
     };
     let menu: ((m: unknown) => void) | null = null;
     const menuPresenter = { present: (build: (m: unknown) => void) => { menu = build; } };
-    const renderer = new TaskCardRenderer(
-        {} as never, idx.readService as never, { ...idx.readService, onTaskDeleted: () => () => {} } as never, operations as never, menuPresenter as never,
-        { hoverSource: 'test', getHoverParent: () => ({}) } as never,
-        () => settings,
-    );
+    const renderer = new TaskCardRenderer({
+        app: {} as never,
+        readService: idx.readService as never,
+        index: { ...idx.readService, onTaskDeleted: () => () => {} } as never,
+        operations: operations as never,
+        menuPresenter: menuPresenter as never,
+        linkRuntime: { hoverSource: 'test', getHoverParent: () => ({}) } as never,
+        getSettings: () => settings,
+        getMaskMode: () => false,
+        actions,
+    });
     const card = new FakeEl('div', 'task-card');
     const key = (r: Reading) => `kanban::cell-1::${r.parent}`;
     const draw = (r: Reading) => {
@@ -302,7 +324,12 @@ function setup(settings = settingsWith()) {
         menu!({ addItem: (cb: (i: typeof item) => void) => cb(item) });
         await items[0]();
     };
-    return { renderer, card, writes, draw, key, pickStatus };
+    /** Draw the task of `r` changed by `patch`, under the key of OLD. */
+    const drawPatched = (r: Reading, patch: Partial<Task>) => {
+        idx.read(r);
+        renderer.render(card as unknown as HTMLElement, { ...idx.drawn(), ...patch } as DisplayTask, settings, { cardInstanceId: key(OLD), topRight: { mode: 'none' } });
+    };
+    return { renderer, card, writes, draw, drawPatched, key, pickStatus, actions };
 }
 
 /** Draw from OLD, then from NOW; the card must be kept, not drawn anew. */
@@ -365,22 +392,21 @@ describe('a card kept across a reading', () => {
 
     it('opens a child\'s menu by the name the child has now', async () => {
         const s = setup();
-        const opened = vi.fn();
-        s.renderer.setChildMenuCallback(opened);
         const content = await keptAcrossAReading(s);
 
         content.querySelector('.task-card__child-menu-btn')!.fire('click');
 
-        expect(opened).toHaveBeenCalledWith(NOW.child, 0, 0);
+        expect(s.actions.showChildMenu).toHaveBeenCalledWith(NOW.child, 0, 0);
     });
 
     it.each(['menu', 'open', 'detail'] as const)('hands the task it has now to a double tap (%s)', async (action) => {
-        const s = setup();
         const got: Task[] = [];
-        s.renderer.setContextMenuCallback((task) => got.push(task));
-        s.renderer.setOpenInEditorCallback((task) => got.push(task));
-        s.renderer.setDetailCallback((task) => got.push(task));
-        s.renderer.setDoubleTapActionGetter(() => action);
+        const actions = recordingActions();
+        actions.showMenu.mockImplementation((task) => { got.push(task); });
+        actions.openInEditor.mockImplementation((task) => { got.push(task); });
+        actions.openDetail.mockImplementation((task) => { got.push(task); });
+        actions.doubleTapAction.mockImplementation(() => action);
+        const s = setup(settingsWith(), actions);
         await keptAcrossAReading(s);
 
         const target = new FakeEl('span');
@@ -425,6 +451,30 @@ describe('a card kept across a reading', () => {
         // the name the card shows, and the write layer refuses or follows it.
         expect(s.writes.map(w => w.id)).toEqual([OLD.parent]);
         expect(heldBy(s.card as unknown as HTMLElement)!.name).toBe(OLD.parent);
+    });
+});
+
+describe('a card drawn again', () => {
+    it('takes off the color, the line style and the read-only mark its task lost', () => {
+        const s = setup();
+        s.drawPatched(OLD, { color: '#ff0000', linestyle: 'dashed', isReadOnly: true });
+        expect(s.card.styles.get('--file-accent')).toBeDefined();
+        expect(s.card.dataset.fileLinestyle).toBe('dashed');
+        expect(s.card.dataset.readOnly).toBe('true');
+
+        s.drawPatched(NOW, {});
+
+        expect([...s.card.styles.keys()]).toEqual([]);
+        expect(s.card.dataset.fileLinestyle).toBeUndefined();
+        expect(s.card.dataset.readOnly).toBeUndefined();
+    });
+
+    it('is given its menu on every draw, kept or drawn anew', () => {
+        const s = setup();
+        s.drawPatched(OLD, {});
+        s.drawPatched(OLD, {});
+
+        expect(s.actions.bindMenu.mock.calls.map(c => c[0])).toEqual([s.card, s.card]);
     });
 });
 

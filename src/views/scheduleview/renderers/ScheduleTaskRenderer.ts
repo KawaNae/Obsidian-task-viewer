@@ -1,9 +1,7 @@
 import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../../types';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import type { GridRow, TaskPlacement, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
@@ -14,7 +12,6 @@ import type { CardReconciler } from '../../sharedUI/CardReconciler';
 export interface ScheduleTaskRendererOptions {
     app: App;
     taskRenderer: TaskCardRenderer;
-    menuHandler: MenuHandler;
     getSettings: () => TaskViewerSettings;
     gridCalculator: ScheduleGridCalculator;
     overlapLayout: ScheduleOverlapLayout;
@@ -23,7 +20,6 @@ export interface ScheduleTaskRendererOptions {
 
 export class ScheduleTaskRenderer {
     private readonly taskRenderer: TaskCardRenderer;
-    private readonly menuHandler: MenuHandler;
     private readonly getSettings: () => TaskViewerSettings;
     private readonly gridCalculator: ScheduleGridCalculator;
     private readonly overlapLayout: ScheduleOverlapLayout;
@@ -31,7 +27,6 @@ export class ScheduleTaskRenderer {
 
     constructor(options: ScheduleTaskRendererOptions) {
         this.taskRenderer = options.taskRenderer;
-        this.menuHandler = options.menuHandler;
         this.getSettings = options.getSettings;
         this.gridCalculator = options.gridCalculator;
         this.overlapLayout = options.overlapLayout;
@@ -106,23 +101,10 @@ export class ScheduleTaskRenderer {
         const card = reused ?? wrapper.createDiv('task-card');
         if (reused) wrapper.appendChild(reused);
 
-        this.decorateScheduleCard(card, task);
+        TaskStyling.applySplitClasses(card, task);
         const options = flowCard
             ? { cardInstanceId, topRight: { mode: 'time' as const } }
             : { cardInstanceId, topRight: { mode: 'time' as const }, compact: true };
         this.taskRenderer.render(card, task, this.getSettings(), options);
-        if (!reused) this.menuHandler.addTaskContextMenu(card);
-    }
-
-    /**
-     * Idempotent decoration for schedule cards. Variant classes reset before
-     * applying current task split state.
-     */
-    private decorateScheduleCard(card: HTMLElement, task: DisplayTask): void {
-        TaskStyling.applySplitClasses(card, task);
-
-        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
-        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
-        TaskStyling.applyReadOnly(card, task);
     }
 }
