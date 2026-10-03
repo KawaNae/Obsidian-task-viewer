@@ -9,7 +9,7 @@ import { mapRow, parseSegmentId } from '../../services/display/SegmentIds';
  */
 export interface CardKey {
     /**
-     * The place in the view: `lane-<date>`, `allday`, `lane-multi`, `lane`,
+     * The place in the view: `lane-<date>`, `allday`, `lane`,
      * `pl-<listId>`, `cell-<listId>`, `flow`, `section`, `hub`.
      */
     scope: string;
