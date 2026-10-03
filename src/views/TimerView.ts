@@ -10,7 +10,7 @@
 import { ItemView, type WorkspaceLeaf, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../log/log';
 import type { PluginContext } from '../PluginContext';
-import { VIEW_META_TIMER } from '../constants/viewRegistry';
+import { VIEW_DESCRIPTORS, viewDisplayName } from './ViewDescriptors';
 import { TimerProgressUI, type RingOptions, type RingState } from '../timer/TimerProgressUI';
 import { IntervalTemplateLoader, type IntervalTemplate } from '../timer/IntervalTemplateLoader';
 import { AudioUtils } from '../timer/AudioUtils';
@@ -24,11 +24,9 @@ import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
 import { TimerToolbar } from './TimerToolbar';
 import { TimerSettingsMenu } from '../timer/TimerSettingsMenu';
 import { createControlButton, type ControlButtonVariant } from '../timer/TimerControlButton';
-import { codecFor, type ViewConfigCodec } from '../services/viewConfig';
-import { TIMER_VIEW_MODES, type TimerConfig, type TimerViewMode } from './TimerSchema';
+import { TimerSchema, TimerCodec, TIMER_VIEW_MODES, type TimerViewMode } from './TimerSchema';
 import { t } from '../i18n';
 
-export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 
 /** 走行。時計が止まっていれば一時停止。 */
 interface Run {
@@ -100,15 +98,15 @@ export class TimerView extends ItemView {
     }
 
     getViewType(): string {
-        return VIEW_TYPE_TIMER;
+        return TimerSchema.viewType;
     }
 
     getDisplayText(): string {
-        return this.customName || VIEW_META_TIMER.displayText;
+        return this.customName || viewDisplayName(TimerSchema.viewType);
     }
 
     getIcon(): string {
-        return VIEW_META_TIMER.icon;
+        return VIEW_DESCRIPTORS[TimerSchema.viewType].icon;
     }
 
     async onOpen(): Promise<void> {
@@ -119,9 +117,7 @@ export class TimerView extends ItemView {
         this.render();
     }
 
-    private get codec(): ViewConfigCodec<TimerConfig> {
-        return codecFor(VIEW_TYPE_TIMER) as ViewConfigCodec<TimerConfig>;
-    }
+    private readonly codec = TimerCodec;
 
     /** 保存対象の状態が変わったことを workspace に伝える（次の保存で getState が呼ばれる）。 */
     private requestSaveState(): void {
@@ -509,7 +505,7 @@ export class TimerView extends ItemView {
                     .setIcon('external-link')
                     .onClick(async () => {
                         const uri = this.buildCurrentUri();
-                        const name = VIEW_META_TIMER.displayText;
+                        const name = viewDisplayName(TimerSchema.viewType);
                         const link = `[${name}](${uri})`;
                         await navigator.clipboard.writeText(link);
                         new Notice(t('notice.linkCopied'));
@@ -526,7 +522,7 @@ export class TimerView extends ItemView {
         if (this.timerViewMode === 'interval' && this.selectedTemplate) {
             opts.intervalTemplate = this.selectedTemplate.name;
         }
-        return ViewUriBuilder.build(VIEW_TYPE_TIMER, opts);
+        return ViewUriBuilder.build(TimerSchema.viewType, opts);
     }
 
     private async saveDurationSetting(

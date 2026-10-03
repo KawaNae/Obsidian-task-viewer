@@ -7,12 +7,11 @@ import { DateNavigator, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, Mask
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
+import { viewDisplayName } from '../ViewDescriptors';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { TimelineSchema, type TimelineConfig, type TimelineTransient, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from './TimelineSchema';
+import { TimelineSchema, TimelineCodec, type TimelineConfig, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from './TimelineSchema';
 import { exportFolderOf } from '../../services/export/ExportSave';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
@@ -104,9 +103,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         super();
     }
 
-    private get codec(): ViewConfigCodec<TimelineConfig, TimelineTransient> {
-        return codecFor(TimelineSchema.viewType) as ViewConfigCodec<TimelineConfig, TimelineTransient>;
-    }
+    private readonly codec = TimelineCodec;
 
     /** Synchronizes the sidebar toggle button with the view's sidebar state. */
     syncSidebarToggleState(): void {
@@ -285,17 +282,17 @@ export class TimelineToolbar extends ViewToolbarBase {
             app: deps.app,
             leaf: deps.getLeaf(),
             getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => VIEW_META_TIMELINE.displayText,
+            getDefaultName: () => viewDisplayName(TimelineSchema.viewType),
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
                 configParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
-            viewType: VIEW_META_TIMELINE.type,
+            viewType: TimelineSchema.viewType,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
             templateNotes: deps.plugin.getOperations(),
             getViewTemplate: () => ({
                 filePath: '',
-                name: deps.getCustomName() || VIEW_META_TIMELINE.displayText,
+                name: deps.getCustomName() || viewDisplayName(TimelineSchema.viewType),
                 viewType: TimelineSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),

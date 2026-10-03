@@ -1,11 +1,10 @@
-import { apiVersion, Notice, Platform, Plugin, TFile } from 'obsidian';
-import './views/registerAllSchemas';
+import { apiVersion, Notice, Platform, Plugin, TFile, type View, type WorkspaceLeaf } from 'obsidian';
 import { TaskIndex, type IndexReads } from './services/core/TaskIndex';
-import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
-import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
-import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/calendar';
-import { KanbanView, VIEW_TYPE_KANBAN } from './views/kanban';
-import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
+import { TimelineView } from './views/timelineview';
+import { ScheduleView } from './views/scheduleview';
+import { CalendarView, MiniCalendarView } from './views/calendar';
+import { KanbanView } from './views/kanban';
+import { TimerView } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
 import {
     type TaskViewerSettings,
@@ -24,7 +23,7 @@ import { untrackAllKeyboards } from './utils/KeyboardState';
 import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
-import { getViewMeta, isViewType } from './constants/viewRegistry';
+import { ALL_VIEWS, isViewType, viewTypesWhere, type ViewType } from './views/ViewDescriptors';
 import { openLeafFromState } from './services/viewConfig/LeafOpener';
 import { openViewFromUri } from './services/viewConfig/UriViewOpener';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
@@ -62,6 +61,20 @@ import { ViewEvents } from './views/sharedLogic/ViewEvents';
 import { applyBodyStyles, clearBodyStyles } from './settings/BodyStyles';
 import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
 
+/**
+ * The constructor of each view. The table (`VIEW_DESCRIPTORS`) cannot hold
+ * them without importing the view classes, which import the table; keyed by
+ * `ViewType`, a view left out here is a compile error.
+ */
+const VIEW_CONSTRUCTORS: Record<ViewType, (leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) => View> = {
+    'timeline-view': (leaf, plugin) => new TimelineView(leaf, plugin),
+    'schedule-view': (leaf, plugin) => new ScheduleView(leaf, plugin),
+    'timer-view': (leaf, plugin) => new TimerView(leaf, plugin),
+    'calendar-view': (leaf, plugin) => new CalendarView(leaf, plugin),
+    'mini-calendar-view': (leaf, plugin) => new MiniCalendarView(leaf, plugin),
+    'kanban-view': (leaf, plugin) => new KanbanView(leaf, plugin),
+};
+
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private readService: TaskReadService;
@@ -75,9 +88,9 @@ export default class TaskViewerPlugin extends Plugin {
     public exportService: ExportService;
     public menuPresenter: MenuPresenter;
 
-    // Settings-changed and day-rolled events to the open views
+    // Settings-changed and day-rolled events to the open views that hear them
     private viewEvents = new ViewEvents(
-        () => [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN]
+        () => viewTypesWhere(d => d.hearsEvents)
             .flatMap(viewType => this.app.workspace.getLeavesOfType(viewType).map(leaf => leaf.view)),
         () => DateUtils.getVisualDateOfNow(this.settings.startHour),
     );
@@ -192,121 +205,25 @@ export default class TaskViewerPlugin extends Plugin {
             defaultMod: false,
         });
 
-        this.registerView(
-            VIEW_TYPE_TIMELINE,
-            (leaf) => new TimelineView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_SCHEDULE,
-            (leaf) => new ScheduleView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_TIMER,
-            (leaf) => new TimerView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_CALENDAR,
-            (leaf) => new CalendarView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_MINI_CALENDAR,
-            (leaf) => new MiniCalendarView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_KANBAN,
-            (leaf) => new KanbanView(leaf, this)
-        );
+        // Each view: its constructor, a ribbon icon and a command, from the table
+        for (const view of ALL_VIEWS) {
+            this.registerView(view.type, (leaf) => VIEW_CONSTRUCTORS[view.type](leaf, this));
+            this.addRibbonIcon(view.icon, t(view.ribbonTitleKey), () => {
+                void this.activateView(view.type);
+            });
+            this.addCommand({
+                id: view.commandId,
+                name: t(view.commandNameKey),
+                callback: () => {
+                    void this.activateView(view.type);
+                },
+            });
+        }
 
         this.registerView(
             VIEW_TYPE_LOG,
             (leaf) => new LogView(leaf)
         );
-
-        const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
-        const scheduleViewMeta = getViewMeta(VIEW_TYPE_SCHEDULE);
-        const timerViewMeta = getViewMeta(VIEW_TYPE_TIMER);
-        const calendarViewMeta = getViewMeta(VIEW_TYPE_CALENDAR);
-        const miniCalendarViewMeta = getViewMeta(VIEW_TYPE_MINI_CALENDAR);
-        const kanbanViewMeta = getViewMeta(VIEW_TYPE_KANBAN);
-
-        // Add Ribbon Icon
-        this.addRibbonIcon(timelineViewMeta.icon, timelineViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_TIMELINE);
-        });
-
-        this.addRibbonIcon(scheduleViewMeta.icon, scheduleViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_SCHEDULE);
-        });
-
-        this.addRibbonIcon(timerViewMeta.icon, timerViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_TIMER);
-        });
-
-        this.addRibbonIcon(calendarViewMeta.icon, calendarViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_CALENDAR);
-        });
-
-        this.addRibbonIcon(miniCalendarViewMeta.icon, miniCalendarViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_MINI_CALENDAR);
-        });
-
-        this.addRibbonIcon(kanbanViewMeta.icon, kanbanViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_KANBAN);
-        });
-
-        // Add Command
-        this.addCommand({
-            id: 'open-timeline-view',
-            name: timelineViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_TIMELINE);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-schedule-view',
-            name: scheduleViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_SCHEDULE);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-timer-view',
-            name: timerViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_TIMER);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-calendar-view',
-            name: calendarViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_CALENDAR);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-mini-calendar-view',
-            name: miniCalendarViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_MINI_CALENDAR);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-kanban-view',
-            name: kanbanViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_KANBAN);
-            }
-        });
 
         this.addCommand({
             id: 'open-log-view',
@@ -628,12 +545,8 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     private countActiveViews(): number {
-        const viewTypes = [
-            VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR,
-            VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN, VIEW_TYPE_TIMER,
-        ];
         let count = 0;
-        for (const vt of viewTypes) {
+        for (const vt of viewTypesWhere(d => d.countsAsActive)) {
             count += this.app.workspace.getLeavesOfType(vt).length;
         }
         return count;

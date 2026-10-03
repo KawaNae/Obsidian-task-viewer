@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
-import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
+import { viewDisplayName } from '../ViewDescriptors';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
@@ -11,8 +11,7 @@ import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
+import { CalendarSchema, CalendarCodec, type CalendarConfig } from './CalendarSchema';
 import { exportFolderOf } from '../../services/export/ExportSave';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
@@ -69,9 +68,7 @@ export class CalendarToolbar extends ViewToolbarBase {
         super();
     }
 
-    private get codec(): ViewConfigCodec<CalendarConfig, CalendarTransient> {
-        return codecFor(CalendarSchema.viewType) as ViewConfigCodec<CalendarConfig, CalendarTransient>;
-    }
+    private readonly codec = CalendarCodec;
 
     syncSidebarToggleState(): void {
         if (this.sidebarToggleBtn) {
@@ -164,17 +161,17 @@ export class CalendarToolbar extends ViewToolbarBase {
             app: deps.app,
             leaf: deps.leaf,
             getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => VIEW_META_CALENDAR.displayText,
+            getDefaultName: () => viewDisplayName(CalendarSchema.viewType),
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
                 configParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
-            viewType: VIEW_META_CALENDAR.type,
+            viewType: CalendarSchema.viewType,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
             templateNotes: deps.plugin.getOperations(),
             getViewTemplate: () => ({
                 filePath: '',
-                name: deps.getCustomName() || VIEW_META_CALENDAR.displayText,
+                name: deps.getCustomName() || viewDisplayName(CalendarSchema.viewType),
                 viewType: CalendarSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),

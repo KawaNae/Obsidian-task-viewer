@@ -33,12 +33,10 @@ import type { IndexReads } from '../../services/core/TaskIndex';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
-import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
+import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
+import { ScheduleSchema, ScheduleCodec, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
-export const VIEW_TYPE_SCHEDULE = VIEW_META_SCHEDULE.type;
 
 type ScheduleViewState = Partial<ScheduleConfig> & Partial<ScheduleTransient>;
 
@@ -210,20 +208,18 @@ export class ScheduleView extends ItemView {
     }
 
     getViewType(): string {
-        return VIEW_TYPE_SCHEDULE;
+        return ScheduleSchema.viewType;
     }
 
     getDisplayText(): string {
-        return this.customName || VIEW_META_SCHEDULE.displayText;
+        return this.customName || viewDisplayName(ScheduleSchema.viewType);
     }
 
     getIcon(): string {
-        return VIEW_META_SCHEDULE.icon;
+        return VIEW_DESCRIPTORS[ScheduleSchema.viewType].icon;
     }
 
-    private get codec(): ViewConfigCodec<ScheduleConfig, ScheduleTransient> {
-        return codecFor(VIEW_TYPE_SCHEDULE) as ViewConfigCodec<ScheduleConfig, ScheduleTransient>;
-    }
+    private readonly codec = ScheduleCodec;
 
     /** REPLACE-over-defaults application of a parsed config. */
     applyConfig(cfg: Partial<ScheduleConfig>): void {

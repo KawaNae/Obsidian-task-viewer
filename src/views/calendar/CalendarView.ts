@@ -34,9 +34,8 @@ import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
+import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
+import { CalendarSchema, CalendarCodec, type CalendarConfig } from './CalendarSchema';
 import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { markHandleSurface } from '../sharedUI/handles/HandleSurface';
 import { SelectionController } from '../../interaction/selection/SelectionController';
@@ -53,7 +52,6 @@ import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
-export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
 
 /**
  * View id used as a namespace prefix for shared viewState fields whose keys
@@ -218,20 +216,18 @@ export class CalendarView extends ItemView {
     }
 
     getViewType(): string {
-        return VIEW_TYPE_CALENDAR;
+        return CalendarSchema.viewType;
     }
 
     getDisplayText(): string {
-        return this.customName || VIEW_META_CALENDAR.displayText;
+        return this.customName || viewDisplayName(CalendarSchema.viewType);
     }
 
     getIcon(): string {
-        return VIEW_META_CALENDAR.icon;
+        return VIEW_DESCRIPTORS[CalendarSchema.viewType].icon;
     }
 
-    private get codec(): ViewConfigCodec<CalendarConfig, CalendarTransient> {
-        return codecFor(VIEW_TYPE_CALENDAR) as ViewConfigCodec<CalendarConfig, CalendarTransient>;
-    }
+    private readonly codec = CalendarCodec;
 
     /**
      * Apply a parsed config with REPLACE semantics over schema defaults.

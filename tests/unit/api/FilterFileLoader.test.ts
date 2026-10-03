@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import '../../../src/views/registerAllSchemas';
 import { loadFilterFile } from '../../../src/api/FilterFileLoader';
 import { TaskApiError } from '../../../src/api/TaskApiTypes';
 import { toCliName } from '../../../src/api/OperationSchemas';

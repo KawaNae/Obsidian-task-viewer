@@ -7,11 +7,10 @@
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { AstronomyDisplay } from '../../types';
-import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
 
 export interface MiniCalendarConfig {
     customName?: string;
@@ -24,7 +23,7 @@ export interface MiniCalendarTransient {
 }
 
 export const MiniCalendarSchema: ViewSchema<MiniCalendarConfig, MiniCalendarTransient> = {
-    viewType: VIEW_META_MINI_CALENDAR.type,
+    viewType: 'mini-calendar-view',
     shortName: 'mini-calendar',
     defaults: {},
     config: {
@@ -38,4 +37,5 @@ export const MiniCalendarSchema: ViewSchema<MiniCalendarConfig, MiniCalendarTran
     },
 };
 
-registerSchema(MiniCalendarSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const MiniCalendarCodec = new ViewConfigCodec(MiniCalendarSchema);

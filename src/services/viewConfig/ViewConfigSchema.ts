@@ -16,6 +16,7 @@
  */
 
 import type { PinnedListDefinition } from '../../types';
+import type { ViewType } from '../../views/ViewDescriptors';
 
 /**
  * Tells of a part of a value a field read but dropped (a filter condition, a
@@ -59,8 +60,8 @@ export interface ViewSchema<
     TConfig extends object,
     TTransient extends object = Record<string, never>,
 > {
-    /** Obsidian view type, e.g. 'timeline-view'. Used by SchemaRegistry. */
-    readonly viewType: string;
+    /** Obsidian view type, e.g. 'timeline-view'. The view table reads it from here. */
+    readonly viewType: ViewType;
     /** URI shortName for `&view=<short>`, e.g. 'timeline'. */
     readonly shortName: string;
     /** Defaults applied on onReset and as the starting point for applyConfig. */

@@ -5,6 +5,7 @@ import {
     ViewConfigCodec,
     type ViewSchema,
 } from '../../../../src/services/viewConfig';
+import type { ViewType } from '../../../../src/views/ViewDescriptors';
 import type { ConfigIssue } from '../../../../src/services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../../../src/services/filter/FilterTypes';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../../../src/types';
@@ -29,7 +30,8 @@ interface TestTransient {
 }
 
 const SCHEMA: ViewSchema<TestConfig, TestTransient> = {
-    viewType: 'test-view',
+    // Not a view of the plugin: the codec reads only the fields.
+    viewType: 'test-view' as ViewType,
     shortName: 'test',
     defaults: { count: 3, rate: 1.0, enabled: false },
     config: {
@@ -446,20 +448,5 @@ describe('SchemaRegistry', () => {
     it('codecFor unknown viewType returns undefined', async () => {
         const { codecFor } = await import('../../../../src/services/viewConfig');
         expect(codecFor('nonexistent-view')).toBeUndefined();
-    });
-
-    it('registerSchema makes codec available via codecFor', async () => {
-        const { codecFor, schemaFor, resolveViewTypeFromShortName, registerSchema } = await import('../../../../src/services/viewConfig');
-        const localSchema: ViewSchema<{ x?: boolean }, Record<string, never>> = {
-            viewType: 'unit-test-throwaway-view',
-            shortName: 'utt',
-            defaults: {},
-            config: { x: F.boolean('x') },
-            transient: {},
-        };
-        registerSchema(localSchema);
-        expect(codecFor('unit-test-throwaway-view')).toBeDefined();
-        expect(schemaFor('unit-test-throwaway-view')).toBe(localSchema);
-        expect(resolveViewTypeFromShortName('utt')).toBe('unit-test-throwaway-view');
     });
 });

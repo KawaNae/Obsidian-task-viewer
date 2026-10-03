@@ -2,11 +2,10 @@ import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
+import { viewDisplayName } from '../ViewDescriptors';
 import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
+import { KanbanSchema, KanbanCodec, type KanbanConfig } from './KanbanSchema';
 import { exportFolderOf } from '../../services/export/ExportSave';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
@@ -45,9 +44,7 @@ export class KanbanToolbar extends ViewToolbarBase {
         super();
     }
 
-    private get codec(): ViewConfigCodec<KanbanConfig, KanbanTransient> {
-        return codecFor(KanbanSchema.viewType) as ViewConfigCodec<KanbanConfig, KanbanTransient>;
-    }
+    private readonly codec = KanbanCodec;
 
     protected override buildDom(toolbar: HTMLElement): void {
         const { deps } = this;
@@ -77,17 +74,17 @@ export class KanbanToolbar extends ViewToolbarBase {
             app: deps.app,
             leaf: deps.leaf,
             getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => VIEW_META_KANBAN.displayText,
+            getDefaultName: () => viewDisplayName(KanbanSchema.viewType),
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
                 configParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
-            viewType: VIEW_META_KANBAN.type,
+            viewType: KanbanSchema.viewType,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
             templateNotes: deps.plugin.getOperations(),
             getViewTemplate: () => ({
                 filePath: '',
-                name: deps.getCustomName() || VIEW_META_KANBAN.displayText,
+                name: deps.getCustomName() || viewDisplayName(KanbanSchema.viewType),
                 viewType: KanbanSchema.shortName,
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),

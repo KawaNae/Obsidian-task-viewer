@@ -1,54 +1,33 @@
 /**
  * SchemaRegistry
  *
- * Single source of truth mapping `viewType` → ViewSchema → ViewConfigCodec.
- * `codecFor()` is the only entry point used by the 5 persistence boundaries.
- *
- * Adding a new view: declare its `<View>Schema.ts`, import it here, add to
- * VIEW_SCHEMAS. No other location needs to change.
+ * The string-keyed lookups of a view's schema and codec, for the boundaries
+ * that hold only a name: a URI, the CLI, a template file, a pinned list's
+ * query. They read the view table (`VIEW_DESCRIPTORS`); a caller that knows
+ * its view imports that view's codec (`TimelineCodec`, …) instead.
  */
 
 import type { ViewSchema } from './ViewConfigSchema';
-import { ViewConfigCodec } from './ViewConfigCodec';
+import type { ViewConfigCodec } from './ViewConfigCodec';
+import { ALL_VIEWS, descriptorOf, type ViewType } from '../../views/ViewDescriptors';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySchema = ViewSchema<any, any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCodec = ViewConfigCodec<any, any>;
 
-/**
- * Internal registry. Populated by per-view modules calling registerSchema()
- * at import time. We use registration rather than a hard-coded map so a
- * view's schema lives next to its view code (better cohesion) and the
- * registry has no inverse import dependency on the views/ tree.
- */
-const SCHEMAS: Map<string, AnySchema> = new Map();
-const CODECS: Map<string, AnyCodec> = new Map();
-const SHORT_NAME_TO_TYPE: Map<string, string> = new Map();
-
-export function registerSchema(schema: AnySchema): void {
-    SCHEMAS.set(schema.viewType, schema);
-    CODECS.set(schema.viewType, new ViewConfigCodec(schema));
-    SHORT_NAME_TO_TYPE.set(schema.shortName, schema.viewType);
-}
-
 export function codecFor(viewType: string): AnyCodec | undefined {
-    return CODECS.get(viewType);
+    return descriptorOf(viewType)?.codec;
 }
 
 export function schemaFor(viewType: string): AnySchema | undefined {
-    return SCHEMAS.get(viewType);
+    return descriptorOf(viewType)?.schema;
 }
 
-export function resolveViewTypeFromShortName(shortName: string): string | undefined {
-    return SHORT_NAME_TO_TYPE.get(shortName);
+export function resolveViewTypeFromShortName(shortName: string): ViewType | undefined {
+    return ALL_VIEWS.find(d => d.shortName === shortName)?.type;
 }
 
 export function shortNameFor(viewType: string): string | undefined {
-    return SCHEMAS.get(viewType)?.shortName;
-}
-
-/** All registered view types (used for tests and iteration). */
-export function registeredViewTypes(): string[] {
-    return Array.from(SCHEMAS.keys());
+    return descriptorOf(viewType)?.shortName;
 }

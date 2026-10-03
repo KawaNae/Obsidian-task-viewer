@@ -10,9 +10,8 @@
  */
 
 import { F } from '../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../services/viewConfig/ViewConfigSchema';
-import { VIEW_META_TIMER } from '../constants/viewRegistry';
 
 /** モードの正。UI のメニューも setState の検証もここを見る。 */
 export const TIMER_VIEW_MODES = ['countup', 'countdown', 'pomodoro', 'interval'] as const;
@@ -25,7 +24,7 @@ export interface TimerConfig {
 }
 
 export const TimerSchema: ViewSchema<TimerConfig> = {
-    viewType: VIEW_META_TIMER.type,
+    viewType: 'timer-view',
     shortName: 'timer',
     defaults: { timerViewMode: 'pomodoro' },
     config: {
@@ -37,4 +36,5 @@ export const TimerSchema: ViewSchema<TimerConfig> = {
     transient: {},
 };
 
-registerSchema(TimerSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const TimerCodec = new ViewConfigCodec(TimerSchema);
