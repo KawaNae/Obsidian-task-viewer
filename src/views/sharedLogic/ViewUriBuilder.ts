@@ -6,8 +6,6 @@ export interface ViewUriOptions {
     position?: LeafPosition;
     name?: string;
     template?: string;
-    mode?: string;             // timer-only
-    intervalTemplate?: string; // timer-only
     /**
      * Every persisted ViewConfig field encoded as URI params, produced by
      * `codec.toUriParams` — the single source for days/zoom/date/showSidebar/
@@ -20,7 +18,7 @@ export interface ViewUriOptions {
 /**
  * Builds obsidian://task-viewer URIs.
  *
- * Schema-external params (position/name/template/mode/intervalTemplate) are
+ * Schema-external params (position/name/template) are
  * hand-coded here; every ViewConfig field flows through `configParams`
  * (codec.toUriParams), so this builder shares the single codec vocabulary with
  * the read path (codec.fromUriParams), template files, and workspace state —
@@ -41,8 +39,6 @@ export class ViewUriBuilder {
         // Schema-external params (not part of any ViewConfig schema).
         if (opts.position) uri += `&position=${opts.position}`;
         if (opts.name) uri += `&name=${encodeURIComponent(opts.name)}`;
-        if (opts.mode) uri += `&mode=${opts.mode}`;
-        if (opts.intervalTemplate) uri += `&intervalTemplate=${encodeURIComponent(opts.intervalTemplate)}`;
 
         // Config: a template reference replaces inline config; otherwise the
         // codec is the single source for every persisted field.

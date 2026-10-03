@@ -19,12 +19,11 @@ import { freeze, readSeconds, restart, resume, type Clock } from '../timer/Timer
 import { progressOf, tickOf, type Measure } from '../timer/TimerProgress';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
-import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
 import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
 import { TimerToolbar } from './TimerToolbar';
 import { TimerSettingsMenu } from '../timer/TimerSettingsMenu';
 import { createControlButton, type ControlButtonVariant } from '../timer/TimerControlButton';
-import { TimerSchema, TimerCodec, TIMER_VIEW_MODES, type TimerViewMode } from './TimerSchema';
+import { TimerSchema, TimerCodec, TIMER_VIEW_MODES, type TimerConfig, type TimerViewMode } from './TimerSchema';
 import { t } from '../i18n';
 
 
@@ -132,11 +131,16 @@ export class TimerView extends ItemView {
      * （記録を持つウィジェット側は `TimerPersistence` が別に面倒を見る）。
      */
     getState(): Record<string, unknown> {
-        return this.codec.serializeConfig({
+        return this.codec.serializeConfig(this.currentConfig());
+    }
+
+    /** The config this view holds: what the workspace saves and Copy URI writes. */
+    private currentConfig(): TimerConfig {
+        return {
             customName: this.customName,
             timerViewMode: this.timerViewMode,
             intervalTemplate: this.selectedTemplate?.name,
-        });
+        };
     }
 
     async setState(state: unknown, result: ViewStateResult): Promise<void> {
@@ -515,14 +519,10 @@ export class TimerView extends ItemView {
     }
 
     private buildCurrentUri(): string {
-        const opts: ViewUriOptions = {
+        return ViewUriBuilder.build(TimerSchema.viewType, {
             position: ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
-            mode: this.timerViewMode,
-        };
-        if (this.timerViewMode === 'interval' && this.selectedTemplate) {
-            opts.intervalTemplate = this.selectedTemplate.name;
-        }
-        return ViewUriBuilder.build(TimerSchema.viewType, opts);
+            configParams: this.codec.toUriParams(this.currentConfig()),
+        });
     }
 
     private async saveDurationSetting(
