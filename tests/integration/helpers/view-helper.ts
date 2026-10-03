@@ -34,11 +34,11 @@ export const PRELUDE = `
         if (type === 'schedule-view') out.dates = all('.date-header .date-header__cell').map(c => c.dataset.date).filter(Boolean);
         if (type === 'mini-calendar-view') {
             out.dates = all('.cal-day-cell--mini').map(c => c.dataset.date);
-            out.gridStart = v.gridStart();
+            out.gridStart = v.gridRange().start;
         }
         if (type === 'calendar-view') {
             out.labels = all('.cal-day-cell .cal-day-cell__date-label').map(s => s.textContent);
-            out.gridStart = v.gridStart();
+            out.gridStart = v.gridRange().start;
         }
         return out;
     };
@@ -69,7 +69,7 @@ export const PRELUDE = `
 /** What `read` gives back. */
 export interface ViewReading {
     type: string;
-    state: Record<string, unknown> & { date?: string };
+    state: Record<string, unknown> & { date?: string; weekOffset?: number };
     /** Whether a cell of today is drawn. */
     today: boolean;
     /** Timeline: its day columns. Schedule: its day. MiniCalendar: its cells. */
@@ -119,6 +119,27 @@ export function goToDate(name: string, day: string): ViewReading {
         const input = V(${JSON.stringify(name)}).contentEl.querySelector('input.view-toolbar__date-picker');
         input.value = ${JSON.stringify(day)};
         input.dispatchEvent(new Event('change'));
+    `);
+}
+
+/**
+ * Open `obsidian://task-viewer?<params>` in a new tab, through the handler the
+ * plugin registered for it, and keep the leaf it opened under `name`.
+ */
+export function openUri(name: string, params: Record<string, string>): ViewReading {
+    return act(name, `
+        if (R[${JSON.stringify(name)}]) { R[${JSON.stringify(name)}].detach(); await wait(100); }
+        app.workspace.protocolHandler.handlers.get('task-viewer')({ action: 'task-viewer', position: 'tab', ...${JSON.stringify(params)} });
+        await wait(300);
+        R[${JSON.stringify(name)}] = app.workspace.getMostRecentLeaf();
+    `);
+}
+
+/** Hand the view `name` a state, as Obsidian does with a URI opened over it (`position=override`). */
+export function setViewState(name: string, state: Record<string, unknown>): ViewReading {
+    return act(name, `
+        const leaf = R[${JSON.stringify(name)}];
+        await leaf.setViewState({ type: leaf.view.getViewType(), state: ${JSON.stringify(state)}, active: true });
     `);
 }
 
