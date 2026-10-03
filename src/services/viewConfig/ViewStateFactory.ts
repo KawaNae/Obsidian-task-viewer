@@ -1,6 +1,7 @@
 import type { App } from 'obsidian';
 import { ViewTemplateLoader } from '../template/ViewTemplateLoader';
 import { codecFor } from './index';
+import { descriptorOf } from '../../views/ViewDescriptors';
 import type { ConfigIssue } from './ViewConfigSchema';
 
 export interface BuildViewStateResult {
@@ -16,7 +17,8 @@ export interface BuildViewStateResult {
  *   schema defaults (via codec REPLACE inside the view's setState)
  *   ← template config ← params overrides.
  *
- * Shared by URI handler and CLI export-image.
+ * Shared by URI handler and CLI export-image. A view that keeps no templates
+ * (the timer) reads no `template` param.
  */
 export async function buildViewStateFromParams(
     app: App,
@@ -31,7 +33,7 @@ export async function buildViewStateFromParams(
     let baseName: string | undefined;
     let templateNotFound: string | undefined;
 
-    if (params.template) {
+    if (params.template && descriptorOf(viewType)?.hasTemplates) {
         const loader = new ViewTemplateLoader(app);
         const summary = loader.findByBasename(viewTemplateFolder, params.template);
         if (summary) {

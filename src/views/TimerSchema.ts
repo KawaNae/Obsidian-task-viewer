@@ -2,11 +2,11 @@
  * TimerSchema — declarative persistence schema for the timer view.
  *
  * タイマービューはタスクに紐付かないので、他ビューが持つフィルタや日付アンカーは
- * 無い。往復するのはモードと、interval モードで選んだテンプレート名だけ。
+ * 無い。往復するのは名前とモードと、interval モードで選んだテンプレート名だけ。
  *
- * URI の `mode` / `intervalTemplate` は今も `ViewUriBuilder` が手書きで組み立てて
- * おり、この schema の語彙とは別系統。読み側（`UriViewOpener` の `timerState`）も
- * 同じく手書きで、どちらもここには通っていない。
+ * ワークスペースの保存も URI も、他のビューと同じくこの schema を通る。Copy URI
+ * は `codec.toUriParams` で正の鍵（`timerViewMode`）を書き、`obsidian://` の読み
+ * 側は `buildViewStateFromParams` で読む。ビューのテンプレートは持たない。
  */
 
 import { F } from '../services/viewConfig/FieldCodecs';
