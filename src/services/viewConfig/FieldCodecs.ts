@@ -27,6 +27,7 @@ import { FilterSerializer, filterIssueText, type FilterRead } from '../filter/Fi
 import { SortSerializer, sortIssueText } from '../sort/SortSerializer';
 import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
+import { newListId } from './ListIds';
 
 interface FieldOptions {
     readonly legacyKeys?: readonly string[];
@@ -409,7 +410,7 @@ function parsePinnedLists(raw: unknown[], report?: ReportIssue): PinnedListDefin
         if (!name) continue;
         const id = (typeof obj.id === 'string' && obj.id)
             ? obj.id
-            : 'pl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5);
+            : newListId();
 
         if (!obj.filterState || typeof obj.filterState !== 'object') continue;
         const where = `list "${name}" `;

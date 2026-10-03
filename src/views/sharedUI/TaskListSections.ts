@@ -20,6 +20,7 @@ import { createDefaultListFilterState, type FilterState } from '../../services/f
 import { PinnedListQuery } from '../../services/filter/PinnedListQuery';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { createEmptySortState } from '../../services/sort/SortTypes';
+import { newListId } from '../../services/viewConfig/ListIds';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
@@ -60,11 +61,6 @@ export interface ListDrawContext {
     collapsed: Readonly<Record<string, boolean>>;
     /** The view's filter, which narrows a list that applies it. */
     viewFilter: FilterState | undefined;
-}
-
-/** A new list's id: unique in the view (the time and a random part). */
-export function newListId(): string {
-    return 'list-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
 }
 
 /** A new list: every task that is not a child (`createDefaultListFilterState`), the view's filter not applied. */
