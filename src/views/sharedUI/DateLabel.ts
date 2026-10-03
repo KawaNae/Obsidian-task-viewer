@@ -1,6 +1,7 @@
 import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
-import { linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
+import { periodicNotes } from '../../utils/PeriodicNotes';
+import { pointPeriodicLink } from './PeriodicNoteLink';
 import { openPeriodicNoteInLeaf, type PeriodicNoteOpener } from '../sharedLogic/OpenPeriodicNote';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -61,15 +62,11 @@ export class DateLabel {
             const settings = deps.getSettings();
 
             yearLink.textContent = `${year}`;
-            const yearTarget = linkTarget(periodicNotes(settings, 'yearly'), firstOf(year, 0));
-            yearLink.dataset.href = yearTarget;
-            yearLink.setAttribute('href', yearTarget);
+            pointPeriodicLink(yearLink, periodicNotes(settings, 'yearly'), firstOf(year, 0));
             yearWrapper.toggleClass('is-current', isCurrentYear);
 
             monthLink.textContent = String(month + 1).padStart(2, '0');
-            const monthTarget = linkTarget(periodicNotes(settings, 'monthly'), firstOf(year, month));
-            monthLink.dataset.href = monthTarget;
-            monthLink.setAttribute('href', monthTarget);
+            pointPeriodicLink(monthLink, periodicNotes(settings, 'monthly'), firstOf(year, month));
             monthWrapper.toggleClass('is-current', isCurrentMonth);
         };
 

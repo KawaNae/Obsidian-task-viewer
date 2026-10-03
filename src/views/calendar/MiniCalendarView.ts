@@ -5,18 +5,17 @@ import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
-import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
-import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
-import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
+import { dailyNotes } from '../../utils/PeriodicNotes';
+import { periodicNoteLink, type PeriodicLinkContext } from '../sharedUI/PeriodicNoteLink';
+import { renderWeekNumberCell } from './WeekNumberCell';
 import { isTaskCompleted as isTaskCompletedUtil } from '../../services/display/TaskStatusQuery';
 import { getGridColumnForDay } from './CalendarDateUtils';
-import { gridFollowingToday, gridRange, gridShifted, referenceMonth, weekStartOf } from './CalendarGrid';
+import { gridFollowingToday, gridRange, gridShifted, referenceMonth } from './CalendarGrid';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { MiniCalendarCodec, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
 import { hasConditions } from '../../services/filter/FilterTypes';
@@ -142,7 +141,7 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
             const weekEl = track.createDiv('cal-week-row cal-week-row--mini');
             if (showWeekNumbers) {
                 weekEl.addClass('has-week-numbers');
-                this.renderWeekNumberCell(weekEl, weekStartDate, today);
+                renderWeekNumberCell(weekEl, weekStartDate, today, this.plugin.settings, this.periodicLinks(), { mini: true });
             }
             for (let colIndex = 1; colIndex <= 7; colIndex++) {
                 const date = new Date(cursor);
@@ -193,16 +192,10 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
             cell.addClass('is-today');
         }
 
-        const dayTarget = linkTarget(dailyNotes(this.app), dateKey);
-        const link = cell.createEl('a', {
-            cls: 'internal-link cal-day-cell__date-link',
+        const link = periodicNoteLink(cell, this.periodicLinks(), dailyNotes(this.app), dateKey, {
+            cls: 'cal-day-cell__date-link',
+            opensFrom: cell,
         });
-        link.dataset.href = dayTarget;
-        link.setAttribute('href', dayTarget);
-        link.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-        });
-
         link.createSpan({
             cls: 'cal-day-cell__date-label',
             text: String(date.getDate()),
@@ -232,16 +225,16 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
                 });
             }
         }
+    }
 
-        this.linkInteractionManager.bind(cell, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+    /** What the grid's links to the daily and weekly notes open and preview with. */
+    private periodicLinks(): PeriodicLinkContext {
+        return {
+            app: this.app,
+            notes: this.plugin.getOperations(),
+            links: this.linkInteractionManager,
             hoverParent: this.hoverParent,
-        }, { bindClick: false });
-
-        cell.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), dailyNotes(this.app), dateKey);
-        });
+        };
     }
 
     private computeIndicators(rangeStart: string, rangeEnd: string): Map<string, IndicatorState> {
@@ -296,35 +289,6 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
 
     private shouldShowWeekNumbers(): boolean {
         return this.plugin.settings.calendarShowWeekNumbers;
-    }
-
-    private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date, today: string): void {
-        const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
-        const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
-
-        if (DateUtils.getLocalDateString(weekStartDate) === weekStartOf(today, this.plugin.settings.weekStartDay)) {
-            weekNumberEl.addClass('is-current-week');
-        }
-
-        const weekLinkTarget = linkTarget(periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
-        const weekLink = weekNumberEl.createEl('a', { cls: 'internal-link' });
-        weekLink.createSpan({
-            cls: 'cal-week-number__label',
-            text: `W${String(weekNumber).padStart(2, '0')}`,
-        });
-        weekLink.dataset.href = weekLinkTarget;
-        weekLink.setAttribute('href', weekLinkTarget);
-        weekLink.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-        });
-        this.linkInteractionManager.bind(weekNumberEl, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.hoverParent,
-        }, { bindClick: false });
-        weekNumberEl.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
-        });
     }
 
     /**
@@ -471,7 +435,7 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
         }
 
         if (this.shouldShowWeekNumbers()) {
-            this.renderWeekNumberCell(weekEl, startDate, today);
+            renderWeekNumberCell(weekEl, startDate, today, this.plugin.settings, this.periodicLinks(), { mini: true });
         }
 
         const cursor = new Date(startDate);
