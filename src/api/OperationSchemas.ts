@@ -176,7 +176,7 @@ export const EXPORT_IMAGE_SCHEMA: Record<string, ParamSpec> = {
     view:         { value: `<${exportableShortNames().join('|')}>`, description: 'View type to export' },
     template:     { value: '<name>',           description: 'View template name (infers view type if omitted)' },
     name:         { value: '<text>',           description: 'Custom name for the exported view' },
-    anchorDate:   { value: '<YYYY-MM-DD>',     description: 'The day the view looks at, as on opening it on that day in place of today (timeline puts its past days before it; calendar puts its week on the top row). Resolved to the view-specific field via schema' },
+    anchorDate:   { value: '<YYYY-MM-DD>',     description: 'The day the view looks at, as on opening it on that day in place of today (timeline puts its past days before it; calendar draws its month grid, as Go to date does). Resolved to the view-specific field via schema' },
     width:        { value: '<px>',             description: 'Render width in pixels (default: 1200)' },
     outputFolder: { value: '<path>',           description: 'Output folder (vault-relative or absolute path)' },
     filename:     { value: '<name.png>',       description: 'Output filename (default: {type}_{date}.png)' },

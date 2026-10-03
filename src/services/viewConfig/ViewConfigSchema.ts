@@ -74,6 +74,13 @@ export interface ViewSchema<
      */
     readonly anchorKey?: keyof TTransient & string;
     /**
+     * The transient fields laid over the anchor that, with it, say where the
+     * view is (Calendar's `weekOffset`). A reset keeps them with the anchor,
+     * and a state that names the anchor or one of them sets them all: a field
+     * it lacks is cleared (`ViewConfigCodec.positionKeys`).
+     */
+    readonly anchorOffsetKeys?: readonly (keyof TTransient & string)[];
+    /**
      * The pinned lists a config of this view holds, in the order the view
      * shows them; a view without lists has none. A template's lists are read
      * through here (`PinnedListQuery.fromTemplate`), so only the schema knows

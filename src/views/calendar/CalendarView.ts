@@ -16,7 +16,7 @@ import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { getColumnOffset, getGridColumnForDay } from './CalendarDateUtils';
-import { gridEnd, gridOfMonth, gridShifted, gridStart, pickerDay, referenceMonth, weekStartOf } from './CalendarGrid';
+import { gridAt, gridFollowingToday, gridRange, gridShifted, referenceMonth, weekStartOf } from './CalendarGrid';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
@@ -43,7 +43,7 @@ import { splitTasks } from '../../services/display/TaskSplitter';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { TaskViewerView } from '../base/TaskViewerView';
-import { followToday } from '../base/ViewedDay';
+import { viewedDay } from '../base/ViewedDay';
 
 
 /**
@@ -61,8 +61,8 @@ const PINNED_LIST_FIELDS: readonly (keyof CalendarState)[] = ['pinnedLists', 'fi
  * Calendar View - six weeks of tasks on a month grid.
  *
  * Its state is CalendarSchema's config and transient fields, held in the
- * base's store. The weeks it draws are read from the day it looks at
- * (`date`, absent while it follows today) by `CalendarGrid`.
+ * base's store. The weeks it draws are read from where it is (`date`,
+ * absent while it follows today, and `weekOffset`) by `CalendarGrid`.
  */
 export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransient> {
     private readonly readService: TaskReadService;
@@ -139,10 +139,10 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             host: this.toolbarHost(),
             commands: {
                 navigateWeeks: (n) => this.navigateWeeks(n),
-                today: () => this.update(followToday()),
-                goTo: (date) => this.update(gridOfMonth(date, this.plugin.settings.weekStartDay)),
-                pickerDay: () => pickerDay(this.gridStart()),
-                referenceMonth: () => referenceMonth(this.gridStart()),
+                today: () => this.update(gridFollowingToday()),
+                goTo: (date) => this.update(gridAt(date)),
+                viewedDay: () => viewedDay(this.state.date, this.visualToday()),
+                referenceMonth: () => referenceMonth(this.gridRange().start),
                 isSidebarOpen: () => this.isSidebarOpen(),
                 toggleSidebar: (open) => {
                     if (open) this.sidebarOpenedThisSession = true;
@@ -159,14 +159,14 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         });
     }
 
-    /** The grid's first day, read from the day looked at and the week start of the settings. */
-    private gridStart(): string {
-        return gridStart(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay);
+    /** The days the grid draws, read from where the view is and the week start of the settings. */
+    private gridRange(): { start: string; end: string } {
+        return gridRange(this.state, this.visualToday(), this.plugin.settings.weekStartDay);
     }
 
-    /** Move the grid by `weeks` weeks; the date is fixed on its new first day. */
+    /** Move the grid by `weeks` weeks: the offset moves, and a view following today fixes it. */
     private navigateWeeks(weeks: number): void {
-        this.update(gridShifted(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay, weeks));
+        this.update(gridShifted(this.state, this.visualToday(), weeks));
     }
 
     /** Whether the sidebar shows: closed at narrow width until the toggle opens it this session. */
@@ -220,8 +220,8 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
                 const baseId = parseSegmentId(taskId)?.baseId ?? taskId;
                 this.handleManager?.selectTask(baseId);
             },
-            () => this.gridStart(),
-            () => gridEnd(this.gridStart()),
+            () => this.gridRange().start,
+            () => this.gridRange().end,
             () => this.plugin.settings.zoomLevel
         );
 
@@ -298,8 +298,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
 
         const calendarHost = main.createDiv('cal-grid');
 
-        const rangeStartStr = this.gridStart();
-        const rangeEndStr = gridEnd(rangeStartStr);
+        const { start: rangeStartStr, end: rangeEndStr } = this.gridRange();
         this.menuHandler.setViewStartDate(rangeStartStr);
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
@@ -687,12 +686,12 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
 
     /**
      * The days drawn, for image export: the six weeks the grid draws (not the
-     * calendar month), read from the same grid start as the draw. The anchor
-     * is the grid's first day, the day a fixed `date` names.
+     * calendar month), read from the same range as the draw. The anchor is
+     * the day looked at (today while the view follows it), as in Timeline.
      */
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
-        const start = this.gridStart();
-        return { anchor: start, from: start, to: gridEnd(start) };
+        const { start, end } = this.gridRange();
+        return { anchor: viewedDay(this.state.date, this.visualToday()), from: start, to: end };
     }
 
     private getWeekdayNames(): string[] {

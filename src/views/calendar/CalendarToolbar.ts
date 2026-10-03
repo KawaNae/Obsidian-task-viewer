@@ -16,10 +16,10 @@ export interface CalendarCommands {
     navigateWeeks(n: number): void;
     /** Follow today again: today's month grid. */
     today(): void;
-    /** Show the month grid of `date`. */
+    /** Look at `date`: its month grid, no offset. */
     goTo(date: string): void;
-    /** The day the date picker opens on: the 1st of the month shown. */
-    pickerDay(): string;
+    /** The day looked at (today while following); the date picker opens on it. */
+    viewedDay(): string;
     /** The month the grid is read as. */
     referenceMonth(): { year: number; month: number };
     /** Whether the sidebar shows (closed at narrow width until opened). */
@@ -91,7 +91,7 @@ export class CalendarToolbar extends ViewToolbarBase {
             {
                 vertical: true,
                 dateJump: {
-                    getCurrentDate: () => commands.pickerDay(),
+                    getCurrentDate: () => commands.viewedDay(),
                     onJump: (date) => commands.goTo(date),
                 },
             }

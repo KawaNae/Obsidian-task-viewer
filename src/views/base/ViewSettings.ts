@@ -30,13 +30,14 @@ export type ViewStateOf<TConfig, TTransient> = Partial<TConfig> & Partial<TTrans
 /**
  * The patch that resets a view: its config back to the schema's defaults
  * (REPLACE, so the name and the filter go too), and its transient fields
- * cleared — the collapse of its lists — except the date it looks at, which
- * is where the view is, not how it is set up.
+ * cleared — the collapse of its lists — except where the view is (the date
+ * it looks at, Calendar's week offset), which is not how it is set up.
  */
 export function resetPatch<C extends object, T extends object>(codec: ViewConfigCodec<C, T>): ViewStateOf<C, T> {
     const patch: Record<string, unknown> = { ...codec.withDefaults({}) };
+    const position = codec.positionKeys();
     for (const key in codec.schema.transient) {
-        if (key === codec.schema.anchorKey) continue;
+        if (position.includes(key)) continue;
         patch[key] = undefined;
     }
     return patch as ViewStateOf<C, T>;

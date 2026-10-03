@@ -145,12 +145,13 @@ export abstract class TaskViewerView<
     /**
      * The workspace's state for this view: the config over the schema's
      * defaults (REPLACE — a field the state lacks goes back to its default),
-     * and the transient fields the state holds, over the ones the view has.
+     * and the transient fields the state holds, over the ones the view has
+     * (where the view is is set whole: `ViewConfigCodec.transientOfState`).
      */
     async setState(state: unknown, result: ViewStateResult): Promise<void> {
         const dict = (state ?? {}) as Record<string, unknown>;
         const config = this.codec.withDefaults(readViewConfig(this.codec, dict));
-        const transient = this.codec.parseTransient(dict);
+        const transient = this.codec.transientOfState(dict);
         this.restoring = true;
         try {
             this.store.update({ ...config, ...transient } as ViewStateOf<TConfig, TTransient>);

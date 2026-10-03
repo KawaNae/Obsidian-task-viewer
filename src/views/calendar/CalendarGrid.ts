@@ -1,77 +1,92 @@
 /**
- * The six weeks Calendar and MiniCalendar draw, derived from the day they
- * look at.
+ * The six weeks Calendar and MiniCalendar draw, derived from where the view
+ * is.
  *
- * The view holds the transient `date` (`ViewedDay`). Absent, it follows
- * today and draws today's month grid: the six weeks from the week of the
- * month's 1st. Present, `date`'s week is the grid's top row. The week is
- * read with the week start of the settings each time, so a change of the
- * week start shows at once.
+ * The view holds two transient fields. `date` is the day it looks at, as in
+ * every dated view (`ViewedDay`): absent, the view follows today. `weekOffset`
+ * is how many weeks the grid was moved from `date`'s month grid (absent: 0).
+ * The grid's top row is the week of the 1st of `date`'s month, moved by
+ * `weekOffset` weeks. The week is read with the week start of the settings
+ * each time, so a change of the week start shows at once and never moves a
+ * month grid off its month.
  *
- * Go to a day shows that day's month grid; the week arrows move the grid a
- * week at a time (stage9b-design, 設計から外れた所 1). Both fix the date to
- * the grid's new first day. Today clears it (`followToday`).
+ * Go to a day (the picker, a URI, the CLI) puts the day in `date` and clears
+ * the offset; the arrows and the wheel move only the offset, fixing today in
+ * `date` when the view follows it; Today clears both.
  */
 
 import { DateUtils } from '../../utils/DateUtils';
-import { followsToday } from '../base/ViewedDay';
+import { followToday, viewedDay } from '../base/ViewedDay';
 
 export type WeekStartDay = 0 | 1;
 
 /** The days the grid holds: six weeks. */
 export const GRID_DAYS = 42;
 
+/** Where a Calendar or a MiniCalendar is: its two transient fields. */
+export interface GridPosition {
+    date?: string;
+    weekOffset?: number;
+}
+
 /** The first day of the week `day` is in. */
 export function weekStartOf(day: string, weekStartDay: WeekStartDay): string {
     return DateUtils.getLocalDateString(DateUtils.getWeekStart(DateUtils.parseDate(day), weekStartDay));
 }
 
-/** The first day of the month grid of `day`: the week start of its month's 1st. */
-export function monthGridStartOf(day: string, weekStartDay: WeekStartDay): string {
-    return DateUtils.getMonthGridStart(DateUtils.parseDate(day), weekStartDay);
+/**
+ * The days the grid draws, first and last: from the week of the 1st of the
+ * day looked at's month (today while the view follows it), moved by the
+ * offset, six weeks.
+ */
+export function gridRange(
+    position: GridPosition,
+    today: string,
+    weekStartDay: WeekStartDay,
+): { start: string; end: string } {
+    const monthGridStart = DateUtils.getMonthGridStart(DateUtils.parseDate(viewedDay(position.date, today)), weekStartDay);
+    const start = DateUtils.addDays(monthGridStart, 7 * (position.weekOffset ?? 0));
+    return { start, end: DateUtils.addDays(start, GRID_DAYS - 1) };
+}
+
+/** An offset as it is held: 0 is absent. */
+function heldOffset(weeks: number): number | undefined {
+    return weeks === 0 ? undefined : weeks;
+}
+
+/** The patch that shows the month grid of `day` (Go to date): the day fixed, no offset. */
+export function gridAt(day: string): { date: string; weekOffset: undefined } {
+    return { date: day, weekOffset: undefined };
 }
 
 /**
- * The grid's first day: the week of `date`, or, while the view follows
- * today, the start of today's month grid.
+ * The patch that moves the grid by `weeks` weeks (the arrows, the wheel):
+ * only the offset moves. A view that follows today fixes today first, so the
+ * grid it moves from is the one it showed.
  */
-export function gridStart(date: string | undefined, today: string, weekStartDay: WeekStartDay): string {
-    return followsToday(date)
-        ? monthGridStartOf(today, weekStartDay)
-        : weekStartOf(date as string, weekStartDay);
-}
-
-/** The grid's last day. */
-export function gridEnd(start: string): string {
-    return DateUtils.addDays(start, GRID_DAYS - 1);
-}
-
-/** The patch that shows the month grid of `day` (Go to date). */
-export function gridOfMonth(day: string, weekStartDay: WeekStartDay): { date: string } {
-    return { date: monthGridStartOf(day, weekStartDay) };
-}
-
-/** The patch that moves the grid drawn by `weeks` weeks (the arrows, the wheel). */
 export function gridShifted(
-    date: string | undefined,
+    position: GridPosition,
     today: string,
-    weekStartDay: WeekStartDay,
     weeks: number,
-): { date: string } {
-    return { date: DateUtils.addDays(gridStart(date, today, weekStartDay), weeks * 7) };
+): { date: string; weekOffset: number | undefined } {
+    return {
+        date: viewedDay(position.date, today),
+        weekOffset: heldOffset((position.weekOffset ?? 0) + weeks),
+    };
+}
+
+/** The patch that follows today again (Today): the date and the offset cleared. */
+export function gridFollowingToday(): { date: undefined; weekOffset: undefined } {
+    return { ...followToday(), weekOffset: undefined };
 }
 
 /**
  * The month the grid starting at `start` is read as: the month of its
  * middle, the one its toolbar names and outside of which a cell is dimmed.
+ * With no offset this is the month of the day looked at (the middle of a
+ * month grid lies between the month's 15th and 21st).
  */
 export function referenceMonth(start: string): { year: number; month: number } {
     const mid = DateUtils.parseDate(DateUtils.addDays(start, 20));
     return { year: mid.getFullYear(), month: mid.getMonth() };
-}
-
-/** The day the date picker opens on: the 1st of the reference month. */
-export function pickerDay(start: string): string {
-    const { year, month } = referenceMonth(start);
-    return DateUtils.getLocalDateString(DateUtils.dateAt(year, month, 1));
 }
