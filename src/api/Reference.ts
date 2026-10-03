@@ -6,6 +6,7 @@ import {
     INSERT_CHILD_TASK_SCHEMA, EXPORT_IMAGE_SCHEMA, CLI_OUTPUT_SCHEMA, LIMIT_PARAM,
 } from './OperationSchemas';
 import { ALL_FIELD_NAMES } from './TaskNormalizer';
+import { exportableShortNames } from '../views/ViewDescriptors';
 import type { TaskApi } from './TaskApi';
 import { PROPERTY_OPERATORS, MAX_FILTER_DEPTH, RELATIVE_DATE_PRESETS, type FilterProperty } from '../services/filter/FilterTypes';
 import { NAMED_DATE_PRESETS } from '../services/filter/DatePreset';
@@ -79,7 +80,7 @@ does not move the window.`;
 
 const EXPORT_NOTE = `\
 Exports a view as a PNG image at 2× pixel ratio.
-Supported views: timeline, calendar, schedule, kanban.
+Supported views: ${exportableShortNames().join(', ')}.
 Very large calendars (thousands of task cards) may exceed rendering limits.
 
 Modes:

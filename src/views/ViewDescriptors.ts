@@ -175,6 +175,11 @@ export function viewTypesWhere(pred: (d: ViewDescriptor) => boolean): ViewType[]
     return ALL_VIEWS.filter(pred).map(d => d.type);
 }
 
+/** The short names of the views that export an image, for the CLI's help and errors. */
+export function exportableShortNames(): string[] {
+    return ALL_VIEWS.filter(d => d.exportable).map(d => d.shortName);
+}
+
 /** The view's name in the current language. */
 export function viewDisplayName(viewType: ViewType): string {
     return t(VIEW_DESCRIPTORS[viewType].displayNameKey);
