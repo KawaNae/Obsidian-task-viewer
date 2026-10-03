@@ -70,7 +70,7 @@ export class ScheduleView extends ItemView {
     private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
     // Latest grid layout, cached off the last full render so the per-minute
-    // now-line interval can re-paint without re-running buildAdaptiveGrid.
+    // now-line (`onMinute`) can re-paint without re-running buildAdaptiveGrid.
     private gridRows: GridRow[] = [];
     private gridTimelineHeight = 0;
     private readonly scrollRestorer = new PixelScrollRestorer(
@@ -291,14 +291,13 @@ export class ScheduleView extends ItemView {
         this.unsubscribe = this.index.onChange((taskId, changes) => {
             this.renderScheduler?.handleChange(taskId, changes);
         });
-
-        // Keep the now-line moving between full renders (task changes /
-        // navigation are the only other trigger). Mirrors TimelineView's
-        // 60s current-time interval.
-        this.registerInterval(window.setInterval(() => this.updateNowLine(), 60000));
     }
 
-    private updateNowLine(): void {
+    /**
+     * A minute passed: move the now-line without a full render (task changes
+     * and navigation are the only other triggers).
+     */
+    public onMinute(): void {
         if (!this.container || !this.isCurrentVisualDate(this.currentVisualDate)) {
             return;
         }

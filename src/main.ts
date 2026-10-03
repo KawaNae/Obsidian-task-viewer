@@ -58,6 +58,7 @@ import { LogManager } from './log/log-manager';
 import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
 import type { DeviceInfo } from './log/markdown-formatter';
 import { ViewEvents } from './views/sharedLogic/ViewEvents';
+import { startMinuteClock } from './views/sharedLogic/MinuteClock';
 import { applyBodyStyles, clearBodyStyles } from './settings/BodyStyles';
 import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
 
@@ -88,18 +89,15 @@ export default class TaskViewerPlugin extends Plugin {
     public exportService: ExportService;
     public menuPresenter: MenuPresenter;
 
-    // Settings-changed and day-rolled events to the open views that hear them
+    // Settings-changed, day-rolled and minute events to the open views that hear them
     private viewEvents = new ViewEvents(
         () => viewTypesWhere(d => d.hearsEvents)
             .flatMap(viewType => this.app.workspace.getLeavesOfType(viewType).map(leaf => leaf.view)),
         () => DateUtils.getVisualDateOfNow(this.settings.startHour),
     );
-    private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
 
-    // Overdue watch (clock-driven, see startOverdueWatch)
+    // Overdue judgement, swept every minute (see sweepOverdue)
     private overdueWatcher = new OverdueWatcher();
-    private overdueAlignTimeout: ReturnType<typeof setTimeout> | null = null;
-    private overdueInterval: ReturnType<typeof setInterval> | null = null;
 
     // Properties View color/linestyle suggest observer
     private propertySuggestObserver: PropertySuggestObserver | null = null;
@@ -287,9 +285,12 @@ export default class TaskViewerPlugin extends Plugin {
         // Body classes and root variables the settings drive
         applyBodyStyles(this.settings);
 
-        // Start day boundary check (every 5 minutes)
-        this.startDateBoundaryCheck();
-        this.startOverdueWatch();
+        // The one clock of minutes: the overdue sweep, the day check, the views
+        this.viewEvents.watch();
+        startMinuteClock(this, () => {
+            this.sweepOverdue();
+            this.viewEvents.minutePassed();
+        });
 
         // Start Properties View color suggest observer
         this.propertySuggestObserver = new PropertySuggestObserver(
@@ -381,7 +382,7 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     /**
-     * Turn the passage of time into a render, but only when it changed
+     * Turn the passage of a minute into a render, but only when it changed
      * something.
      *
      * A card that crosses its end or due moves no task field, so no vault
@@ -393,40 +394,15 @@ export default class TaskViewerPlugin extends Plugin {
      * The notification is a full invalidation on purpose: a span names one
      * task, and a tick can move several. It carries no field list because
      * NotifyCoalescer drops one without a task id anyway.
-     *
-     * The first tick lands on the next minute boundary so a card turns
-     * overdue within a second of the minute it belongs to, not up to a
-     * minute later.
      */
-    private startOverdueWatch(): void {
-        const sweep = () => {
-            const changed = this.overdueWatcher.sweep(
-                this.readService.getAllDisplayTasks(),
-                this.settings.startHour,
-                this.settings.statusDefinitions,
-                this.readService,
-            );
-            if (changed) this.taskIndex.notifyImmediate();
-        };
-
-        const msToNextMinute = 60000 - (Date.now() % 60000);
-        this.overdueAlignTimeout = setTimeout(() => {
-            this.overdueAlignTimeout = null;
-            sweep();
-            this.overdueInterval = setInterval(sweep, 60000);
-        }, msToNextMinute);
-    }
-
-    /**
-     * Start checking for day boundary changes every 5 minutes
-     */
-    private startDateBoundaryCheck(): void {
-        this.viewEvents.watch();
-
-        // Check every 5 minutes
-        this.dateCheckInterval = setInterval(() => {
-            this.viewEvents.rollIfChanged();
-        }, 5 * 60 * 1000); // 5 minutes
+    private sweepOverdue(): void {
+        const changed = this.overdueWatcher.sweep(
+            this.readService.getAllDisplayTasks(),
+            this.settings.startHour,
+            this.settings.statusDefinitions,
+            this.readService,
+        );
+        if (changed) this.taskIndex.notifyImmediate();
     }
 
     /** Open a view via ribbon / command. No state seeding — view uses its own defaults. */
@@ -447,22 +423,6 @@ export default class TaskViewerPlugin extends Plugin {
         AudioUtils.dispose();
         clearBodyStyles();
         this.timerWidget?.destroy();
-
-        // Clear day boundary check interval
-        if (this.dateCheckInterval) {
-            clearInterval(this.dateCheckInterval);
-            this.dateCheckInterval = null;
-        }
-
-        // Clear the overdue watch (alignment timeout may still be pending)
-        if (this.overdueAlignTimeout) {
-            clearTimeout(this.overdueAlignTimeout);
-            this.overdueAlignTimeout = null;
-        }
-        if (this.overdueInterval) {
-            clearInterval(this.overdueInterval);
-            this.overdueInterval = null;
-        }
 
         // Disconnect Properties color suggest observer
         this.propertySuggestObserver?.destroy();
