@@ -1,4 +1,6 @@
 import { obsidianEval, sleep } from './cli-helper';
+import en from '../../../src/i18n/locales/en.json';
+import ja from '../../../src/i18n/locales/ja.json';
 
 /**
  * Drive the plugin's views in the running Dev vault through `obsidian eval`.
@@ -64,7 +66,93 @@ export const PRELUDE = `
         item.callback(new MouseEvent('click'));
     };
     const closeMenus = () => P.menuPresenter.dismiss();
+    // The plugin's overlays (filter, sort, display label editors) live on the
+    // body. The panel of the newest one with class cls; its body.
+    const overlay = (cls) => {
+        const p = [...document.querySelectorAll('.tv-overlay__panel.' + cls)].pop();
+        if (!p) throw new Error('no overlay ' + cls);
+        return p.querySelector('.tv-overlay__body');
+    };
+    const closeOverlays = () => document.querySelectorAll('.tv-overlay__panel .tv-overlay__close').forEach(b => b.click());
+    // The button under root whose text is text.
+    const buttonText = (root, text) => {
+        const b = [...root.querySelectorAll('button')].find(e => e.textContent.trim() === text);
+        if (!b) throw new Error('no button ' + text + ' among ' + [...root.querySelectorAll('button')].map(e => e.textContent.trim()).join('|'));
+        return b;
+    };
+    // Click the row of the open dropdown (filter-child-popover) labelled label.
+    const pickChild = (label) => {
+        const rows = [...document.querySelectorAll('.filter-child-popover__item')];
+        const row = rows.find(r => r.querySelector('.filter-child-popover__label')?.textContent === label);
+        if (!row) throw new Error('no dropdown row ' + label + ' among ' + rows.map(r => r.textContent).join('|'));
+        row.click();
+    };
+    const key = (el, k) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+
+    // A list section (a pinned list, a Kanban cell), its classes named in C:
+    // { root, header, name, nameInput, count, body, collapsed }.
+    const headerBtn = (C, sec, icon) => {
+        const b = sec.querySelector('.' + C.header + ' button:has(svg.lucide-' + icon + ')');
+        if (!b) throw new Error('no ' + icon + ' button in ' + C.root);
+        return b;
+    };
+    const readSection = (C, sec) => {
+        const body = sec.querySelector('.' + C.body);
+        return {
+            id: sec.dataset.listId ?? null,
+            name: sec.querySelector('.' + C.name)?.textContent ?? null,
+            renaming: !!sec.querySelector('.' + C.nameInput),
+            count: Number((sec.querySelector('.' + C.count)?.textContent ?? '').replace(/[()]/g, '')),
+            collapsed: sec.classList.contains(C.collapsed),
+            sorted: headerBtn(C, sec, 'arrow-up-down').classList.contains('is-sorted'),
+            filtered: headerBtn(C, sec, 'filter').classList.contains('is-filtered'),
+            cards: body ? body.querySelectorAll(':scope > .task-card').length : 0,
+            labels: body ? [...body.querySelectorAll(':scope > .task-card .task-card__time')].map(e => e.textContent) : [],
+            more: body?.querySelector('.task-paging__show-more')?.textContent ?? null,
+        };
+    };
+
+    // The filter menu open (FilterMenuComponent), driven by its controls.
+    const fBody = () => overlay('filter-popover');
+    const fFooter = () => fBody().querySelector('.filter-popover__footer');
+    const fRows = () => [...fBody().querySelectorAll('.filter-popover__row')];
+    const fSetTags = (i, tag) => {
+        const input = fRows()[i].querySelector('.filter-popover__tag-value input');
+        input.value = tag;
+        key(input, 'Enter');
+    };
+    const fRowMenu = async (i, label) => {
+        fRows()[i].querySelector('.filter-popover__row-header .filter-popover__more-btn').click();
+        await wait(100);
+        pickChild(label);
+    };
+    const fGroupMenu = async (i, label) => {
+        fBody().querySelectorAll('.filter-popover__group-footer .filter-popover__more-btn')[i].click();
+        await wait(100);
+        pickChild(label);
+    };
 `;
+
+/**
+ * The plugin's text for `key` (`t` in src/i18n) in the vault's locale, so a
+ * menu item is picked by the name the user reads, not by its place.
+ */
+export function tr(key: string, params: Record<string, string | number> = {}): string {
+    localeData ??= (() => {
+        const lang = ev<string>(`(() => JSON.stringify(window.moment.locale()))()`).split('-')[0];
+        return (LOCALES[lang] ?? en) as unknown as Record<string, unknown>;
+    })();
+    const find = (data: unknown): string | undefined => {
+        const value = key.split('.').reduce<unknown>((o, p) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[p] : undefined), data);
+        return typeof value === 'string' ? value : undefined;
+    };
+    let text = find(localeData) ?? find(en);
+    if (text === undefined) throw new Error(`no text for ${key}`);
+    for (const [k, v] of Object.entries(params)) text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v));
+    return text;
+}
+const LOCALES: Record<string, unknown> = { en, ja };
+let localeData: Record<string, unknown> | undefined;
 
 /** What `read` gives back. */
 export interface ViewReading {
