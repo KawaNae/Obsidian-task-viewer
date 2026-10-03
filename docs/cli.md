@@ -271,7 +271,7 @@ obsidian obsidian-task-viewer:export-image template="My Timeline"
 | `view` | ※ | `timeline` \| `calendar` \| `schedule` \| `kanban`（`template=` 未指定なら必須） |
 | `template` | ※ | 保存済みビューテンプレート名（ビュー種別を推論。`view=` 未指定なら必須） |
 | `name` | | 書き出したビューの表示名 |
-| `anchor-date` | | ビューが見る日（`YYYY-MM-DD`）。今日の代わりにその日を見て開く。Timeline はその前に過去の表示日数を置き、Schedule はその日を描き、Calendar はその日の週を格子の最初の行にする。ビューごとのスキーマの日付フィールド（Timeline、Schedule、Calendar とも `date`）に解決される |
+| `anchor-date` | | ビューが見る日（`YYYY-MM-DD`）。今日の代わりにその日を見て開く。Timeline はその前に過去の表示日数を置き、Schedule はその日を描き、Calendar はその日の週を格子の最初の行にする。ビューごとのスキーマの日付フィールド（Timeline、Schedule、Calendar とも `date`）に解決される。テンプレートや開いているビューに残る旧い鍵 `startDate`、`currentDate`、`windowStart` は読まない |
 | `width` | | 描画幅（px、1 以上の整数。デフォルト: 1200） |
 | `output-folder` | | 出力先フォルダ（vault 相対か絶対パス。デフォルト: 設定の書き出し先、未設定なら `task-viewer-export`） |
 | `filename` | | 出力ファイル名（デフォルト: `{ビュー種別}_{日付}.png`） |
@@ -282,9 +282,9 @@ obsidian obsidian-task-viewer:export-image template="My Timeline"
 
 vault 相対のフォルダは vault を通して書くので、ファイルシステムでない vault でも書けます。絶対パスのフォルダはデスクトップ版でだけ書けます。テンプレートやフラグのフィルタに読めない条件があると、書き出さずにエラーを返します。
 
-**戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-03-01", "to": "2026-03-05" } }`
+**戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-02-26", "to": "2026-03-02" } }`（上の2つめの例で、過去の表示日数が3のとき）
 
-`resolvedAnchor`/`renderedRange` は、書き出したビューが自分で報告できる場合だけ含まれます（Timeline/Calendar/Schedule。Kanban には日付レンジの概念が無いため含まれません）。値は実際に描画された範囲そのものです。Calendar の `renderedRange` は暦月ではなく、実際のグリッドが描く週開始揃えの42日ぶんです。`anchor-date` 等を渡さず既に開いているビューをそのまま書き出す場合も、開いているビューが実際に表示している範囲がそのまま返ります。
+`resolvedAnchor` はビューが見た日（Calendar は格子の最初の日）、`renderedRange` は描いた範囲です。どちらも、書き出したビューが自分で報告できる場合だけ含まれます（Timeline/Calendar/Schedule。Kanban には日付レンジの概念が無いため含まれません）。値は実際に描画された範囲そのものです。Calendar の `renderedRange` は暦月ではなく、実際のグリッドが描く週開始揃えの42日ぶんです。`anchor-date` 等を渡さず既に開いているビューをそのまま書き出す場合も、開いているビューが実際に表示している範囲がそのまま返ります。
 
 ### insert-child-task — 子タスク挿入
 
