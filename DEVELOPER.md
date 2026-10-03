@@ -766,7 +766,7 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 | `name` | string | Custom view name (URL-encoded); set as the view's `customName` | `My%20Timeline` |
 | `daysToShow` (alias `days`) | integer | Timeline display days, 1–30 | `3` |
 | `zoomLevel` (alias `zoom`) | number | Timeline zoom level, 0.25–10 | `1.5` |
-| `startDate` (alias `date`) | YYYY-MM-DD | Timeline start date | `2026-02-28` |
+| `date` | YYYY-MM-DD | Timeline and Schedule: the day the view looks at (Timeline puts the past days to show before it). Absent, the view follows today. The older `startDate` and `currentDate` are not read | `2026-02-28` |
 | `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
 | `filterState` (alias `filter`) | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
 | `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
