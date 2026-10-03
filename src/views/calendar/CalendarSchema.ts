@@ -18,9 +18,16 @@ export interface CalendarConfig {
 }
 
 export interface CalendarTransient {
-    windowStart?: string;
+    /**
+     * The day the grid starts on: its week is the top row (`CalendarGrid`).
+     * Absent, the view follows today and draws today's month grid.
+     */
+    date?: string;
     pinnedListCollapsed?: Record<string, boolean>;
 }
+
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type CalendarState = Partial<CalendarConfig> & Partial<CalendarTransient>;
 
 export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
     viewType: 'calendar-view',
@@ -37,10 +44,10 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
         showSidebar:      F.boolean('showSidebar'),
         pinnedLists:      F.pinnedLists('pinnedLists'),
     },
-    anchorKey: 'windowStart',
+    anchorKey: 'date',
     listsOf: (config) => config.pinnedLists ?? [],
     transient: {
-        windowStart:         T.dateString('windowStart'),
+        date:                T.dateString('date'),
         pinnedListCollapsed: T.collapsedKeys('pinnedListCollapsed', 'calendar'),
     },
 };

@@ -1,9 +1,7 @@
-import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
-import { logDebug } from '../../log/log';
+import type { WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import type { DisplayTask, Task, AstronomyDisplay } from '../../types';
+import type { DisplayTask } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
-import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
@@ -13,23 +11,19 @@ import type { IndexReads } from '../../services/core/TaskIndex';
 import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
 import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { isTaskCompleted as isTaskCompletedUtil } from '../../services/display/TaskStatusQuery';
-import {
-    getCalendarDateRange,
-    getNormalizedWindowStart,
-    getReferenceMonth,
-    getGridColumnForDay,
-} from './CalendarDateUtils';
+import { getGridColumnForDay } from './CalendarDateUtils';
+import { gridEnd, gridShifted, gridStart, referenceMonth, weekStartOf } from './CalendarGrid';
 import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
-import { MiniCalendarSchema, MiniCalendarCodec, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
+import { MiniCalendarCodec, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
+import { hasConditions } from '../../services/filter/FilterTypes';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 import { hostWindow } from '../../utils/HostWindow';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import { TaskViewerView } from '../base/TaskViewerView';
+import { followToday } from '../base/ViewedDay';
 
 
 interface IndicatorState {
@@ -37,160 +31,66 @@ interface IndicatorState {
     hasComplete: boolean;
 }
 
-type MiniCalendarViewState = Partial<MiniCalendarConfig> & Partial<MiniCalendarTransient>;
-
-export class MiniCalendarView extends ItemView {
-    private readonly plugin: PluginContext;
+/**
+ * MiniCalendar View - six weeks of days with a dot for the tasks on each.
+ *
+ * Its state is MiniCalendarSchema's config and transient fields, held in the
+ * base's store. The weeks it draws are read from the day it looks at
+ * (`date`, absent while it follows today) by `CalendarGrid`, as Calendar's.
+ */
+export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCalendarTransient> {
     private readonly readService: TaskReadService;
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly viewFilterMenu = new FilterMenuComponent();
-    /** The view's own filter; the menu edits it and hands it back. */
-    private filterState: FilterState = createEmptyFilterState();
     private readonly toolbar: MiniCalendarToolbar;
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    private windowStart: string;
-    private customName: string | undefined;
-    private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private isAnimating: boolean = false;
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
     private readonly hoverParent = new TaskViewHoverParent();
 
-    constructor(leaf: WorkspaceLeaf, plugin: PluginContext) {
-        super(leaf);
-        this.plugin = plugin;
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
+        super(leaf, plugin, MiniCalendarCodec);
         this.readService = this.plugin.getTaskReadService();
         this.index = this.plugin.getIndex();
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
-        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
-
-        this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
-
         this.toolbar = new MiniCalendarToolbar({
-            app: this.app,
-            leaf: this.leaf,
-            plugin: this.plugin,
-            readService: this.readService,
-            viewFilterMenu: this.viewFilterMenu,
+            host: this.toolbarHost(),
+            commands: {
+                navigateWeeks: (n) => this.navigateWeeks(n),
+                today: () => {
+                    if (this.isAnimating) return;
+                    this.update(followToday());
+                },
+                referenceMonth: () => referenceMonth(this.gridStart()),
+            },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
-            getReferenceMonth: () => this.getReferenceMonth(),
-            onNavigateWeek: (direction) => this.navigateWeek(direction),
-            onJumpToCurrentMonth: () => {
-                if (this.isAnimating) return;
-                this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
-                void this.app.workspace.requestSaveLayout();
-                void this.render();
-            },
-            getFilterState: () => this.filterState,
-            onFilterChange: (next) => {
-                this.filterState = next;
-                void this.app.workspace.requestSaveLayout();
-                void this.render();
-            },
-            getCustomName: () => this.customName,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg) => this.applyConfig(cfg),
-            onConfigApplied: () => {
-                this.leaf.updateHeader();
-                void this.app.workspace.requestSaveLayout();
-                void this.render();
-            },
-            getAstronomyDisplay: () => this.astronomyDisplay,
-            setAstronomyDisplay: (next) => {
-                this.astronomyDisplay = next;
-                void this.app.workspace.requestSaveLayout();
-                void this.render();
-            },
         });
     }
 
-    getViewType(): string {
-        return MiniCalendarSchema.viewType;
+    /** The grid's first day, read from the day looked at and the week start of the settings. */
+    private gridStart(): string {
+        return gridStart(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay);
     }
 
-    getDisplayText(): string {
-        return this.customName || viewDisplayName(MiniCalendarSchema.viewType);
-    }
-
-    getIcon(): string {
-        return VIEW_DESCRIPTORS[MiniCalendarSchema.viewType].icon;
-    }
-
-    async setState(state: MiniCalendarViewState, result: ViewStateResult): Promise<void> {
-        const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = readViewConfig(this.codec, stateDict);
-        const transient = this.codec.parseTransient(stateDict);
-
-        this.applyConfig(config);
-
-        if (transient.windowStart) {
-            const parsedWindowStart = DateUtils.readDate(transient.windowStart);
-            if (parsedWindowStart) {
-                const weekStart = DateUtils.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
-                this.windowStart = DateUtils.getLocalDateString(weekStart);
-            }
-        }
-
-        await super.setState(state, result);
-        await this.render();
-    }
-
-    private readonly codec = MiniCalendarCodec;
-
-    applyConfig(cfg: Partial<MiniCalendarConfig>): void {
-        const next = this.codec.withDefaults(cfg);
-        this.filterState = next.filterState ?? createEmptyFilterState();
-        this.customName = next.customName;
-        this.astronomyDisplay = next.astronomyDisplay
-            ? { ...next.astronomyDisplay }
-            : undefined;
-    }
-
-    getCurrentConfig(): Partial<MiniCalendarConfig> {
-        const filterState = this.filterState;
-        return {
-            customName: this.customName,
-            filterState: hasConditions(filterState) ? filterState : undefined,
-            astronomyDisplay: this.astronomyDisplay,
-        };
-    }
-
-    getState(): Record<string, unknown> {
-        return {
-            ...this.codec.serializeConfig(this.getCurrentConfig()),
-            ...this.codec.serializeTransient({ windowStart: this.windowStart }),
-        };
-    }
-
-    async onOpen(): Promise<void> {
-        logDebug(`[${this.getViewType()}] opened`);
+    protected openView(): void {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('mini-calendar-view');
 
-        await this.render();
-
-        this.unsubscribe = this.index.onChange((_taskId, changes) => {
-            if (!shouldRenderForChanges(changes)) return;
-            void this.render();
+        this.unsubscribe = this.index.onChange((taskId, changes) => {
+            this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
-    async onClose(): Promise<void> {
-        logDebug(`[${this.getViewType()}] closed`);
+    protected closeView(): void {
         this.hoverParent.dispose();
-        this.viewFilterMenu.close();
+        this.toolbar.close();
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
             this.navigateWeekDebounceTimer = null;
@@ -204,21 +104,8 @@ export class MiniCalendarView extends ItemView {
         }
     }
 
-    public redraw(): void {
-        void this.render();
-    }
-
-    private async render(): Promise<void> {
-        if (!this.container) {
-            return;
-        }
-
+    protected draw(): void {
         this.isAnimating = false;
-
-        const normalizedWindowStart = getNormalizedWindowStart(this.windowStart, this.plugin.settings.weekStartDay);
-        if (normalizedWindowStart !== this.windowStart) {
-            this.windowStart = normalizedWindowStart;
-        }
 
         this.toolbar.detach();
         this.container.empty();
@@ -239,20 +126,19 @@ export class MiniCalendarView extends ItemView {
             this.navigateWeekDebounced(e.deltaY > 0 ? 1 : -1);
         }, { passive: false });
 
-        const { startDate, endDate } = this.getCalendarDateRange();
-        const rangeStartStr = DateUtils.getLocalDateString(startDate);
-        const rangeEndStr = DateUtils.getLocalDateString(endDate);
-        const indicators = this.computeIndicators(rangeStartStr, rangeEndStr);
-        const referenceMonth = this.getReferenceMonth();
+        const start = this.gridStart();
+        const indicators = this.computeIndicators(start, gridEnd(start));
+        const month = referenceMonth(start);
         const showWeekNumbers = this.shouldShowWeekNumbers();
+        const today = this.visualToday();
 
-        const cursor = new Date(startDate);
+        const cursor = DateUtils.parseDate(start);
         for (let weekIndex = 0; weekIndex < 6; weekIndex++) {
             const weekStartDate = new Date(cursor);
             const weekEl = track.createDiv('cal-week-row cal-week-row--mini');
             if (showWeekNumbers) {
                 weekEl.addClass('has-week-numbers');
-                this.renderWeekNumberCell(weekEl, weekStartDate);
+                this.renderWeekNumberCell(weekEl, weekStartDate, today);
             }
             for (let colIndex = 1; colIndex <= 7; colIndex++) {
                 const date = new Date(cursor);
@@ -262,8 +148,9 @@ export class MiniCalendarView extends ItemView {
                     date,
                     dateKey,
                     colIndex,
-                    referenceMonth,
-                    indicators.get(dateKey) ?? { hasIncomplete: false, hasComplete: false }
+                    month,
+                    indicators.get(dateKey) ?? { hasIncomplete: false, hasComplete: false },
+                    today,
                 );
                 cursor.setDate(cursor.getDate() + 1);
             }
@@ -288,7 +175,8 @@ export class MiniCalendarView extends ItemView {
         dateKey: string,
         colIndex: number,
         referenceMonth: { year: number; month: number },
-        indicatorState: IndicatorState = { hasIncomplete: false, hasComplete: false },
+        indicatorState: IndicatorState,
+        today: string,
     ): void {
         const cell = weekEl.createDiv('cal-day-cell cal-day-cell--mini');
         cell.style.gridColumn = `${getGridColumnForDay(colIndex, this.shouldShowWeekNumbers())}`;
@@ -297,7 +185,7 @@ export class MiniCalendarView extends ItemView {
         if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
             cell.addClass('is-outside-month');
         }
-        if (dateKey === DateUtils.getToday()) {
+        if (dateKey === today) {
             cell.addClass('is-today');
         }
 
@@ -320,7 +208,7 @@ export class MiniCalendarView extends ItemView {
         // When the moon overlay is on, it fully replaces task indicator dots
         // at the same spot (per user choice — single visual slot, no overlap).
         const astronomyDisplay = getEffectiveAstronomyDisplay(
-            this.astronomyDisplay,
+            this.state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
         if (astronomyDisplay.moonPhase) {
@@ -354,8 +242,8 @@ export class MiniCalendarView extends ItemView {
 
     private computeIndicators(rangeStart: string, rangeEnd: string): Map<string, IndicatorState> {
         const indicatorMap = new Map<string, IndicatorState>();
-        const filterState = this.filterState;
-        const filter = hasConditions(filterState) ? filterState : undefined;
+        const filterState = this.state.filterState;
+        const filter = filterState && hasConditions(filterState) ? filterState : undefined;
 
         const allTasks = this.readService.getTasksForDateRange(rangeStart, rangeEnd, filter);
         const startHour = this.plugin.settings.startHour;
@@ -394,10 +282,6 @@ export class MiniCalendarView extends ItemView {
         return isTaskCompletedUtil(task, this.plugin.settings.statusDefinitions, this.readService);
     }
 
-    private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
-    }
-
     private getWeekdayNames(): string[] {
         const labels = t('calendar.weekdaysNarrow').split(',');
         if (this.plugin.settings.weekStartDay === 1) {
@@ -410,12 +294,11 @@ export class MiniCalendarView extends ItemView {
         return this.plugin.settings.calendarShowWeekNumbers;
     }
 
-    private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
+    private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date, today: string): void {
         const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
         const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
-        const todayWeekStart = DateUtils.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
-        if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
+        if (DateUtils.getLocalDateString(weekStartDate) === weekStartOf(today, this.plugin.settings.weekStartDay)) {
             weekNumberEl.addClass('is-current-week');
         }
 
@@ -440,22 +323,20 @@ export class MiniCalendarView extends ItemView {
         });
     }
 
-    private getReferenceMonth(): { year: number; month: number } {
-        return getReferenceMonth(this.windowStart);
-    }
-
-    private navigateWeek(offset: number): void {
+    /**
+     * Slide the grid by `offset` weeks: the date is fixed on the grid's new
+     * first day, and the slide shows the change before the draw that ends it.
+     */
+    private navigateWeeks(offset: number): void {
         if (offset === 0 || this.isAnimating) {
             return;
         }
 
-        this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
-        void this.app.workspace.requestSaveLayout();
-        this.toolbar.update();
+        this.update(gridShifted(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay, offset), { draw: false });
 
         const body = this.container?.querySelector('.cal-grid__body--mini');
         if (!(body instanceof HTMLElement)) {
-            void this.render();
+            this.requestDraw();
             return;
         }
 
@@ -476,7 +357,7 @@ export class MiniCalendarView extends ItemView {
             this.pendingWeekOffset = 0;
             if (!this.isAnimating) {
                 // container の window のフレームで走らせる（popout の週送り）。
-                hostWindow(this.container).requestAnimationFrame(() => this.navigateWeek(nextOffset));
+                hostWindow(this.container).requestAnimationFrame(() => this.navigateWeeks(nextOffset));
             }
         }, 50);
     }
@@ -484,29 +365,27 @@ export class MiniCalendarView extends ItemView {
     private animateWeekSlide(body: HTMLElement, offset: number): void {
         const track = body.querySelector('.cal-grid__body-track');
         if (!(track instanceof HTMLElement)) {
-            void this.render();
+            this.requestDraw();
             return;
         }
 
         const weekRows = Array.from(track.querySelectorAll('.cal-week-row--mini'))
             .filter((el): el is HTMLElement => el instanceof HTMLElement);
         if (weekRows.length !== 6) {
-            void this.render();
+            this.requestDraw();
             return;
         }
 
         const rowHeight = body.clientHeight / 6;
         if (!Number.isFinite(rowHeight) || rowHeight <= 0) {
-            void this.render();
+            this.requestDraw();
             return;
         }
 
-        const { startDate, endDate } = this.getCalendarDateRange();
-        const indicators = this.computeIndicators(
-            DateUtils.getLocalDateString(startDate),
-            DateUtils.getLocalDateString(endDate)
-        );
-        const referenceMonth = this.getReferenceMonth();
+        const start = this.gridStart();
+        const indicators = this.computeIndicators(start, gridEnd(start));
+        const month = referenceMonth(start);
+        const today = this.visualToday();
 
         weekRows.forEach((row) => {
             row.style.height = `${rowHeight}px`;
@@ -524,14 +403,14 @@ export class MiniCalendarView extends ItemView {
                 }
             });
             this.isAnimating = false;
-            void this.render();
+            this.requestDraw();
         };
 
         this.isAnimating = true;
 
         if (offset > 0) {
-            const incomingWeekStart = DateUtils.addDays(this.windowStart, 35);
-            const incomingWeek = this.createWeekRow(incomingWeekStart, indicators, referenceMonth, rowHeight);
+            const incomingWeekStart = DateUtils.addDays(start, 35);
+            const incomingWeek = this.createWeekRow(incomingWeekStart, indicators, month, rowHeight, today);
             track.appendChild(incomingWeek);
             track.style.transform = 'translateY(0)';
             void track.offsetHeight;
@@ -548,8 +427,8 @@ export class MiniCalendarView extends ItemView {
             return;
         }
 
-        const incomingWeekStart = this.windowStart;
-        const incomingWeek = this.createWeekRow(incomingWeekStart, indicators, referenceMonth, rowHeight);
+        const incomingWeekStart = start;
+        const incomingWeek = this.createWeekRow(incomingWeekStart, indicators, month, rowHeight, today);
         track.insertBefore(incomingWeek, track.firstChild);
         track.style.transform = `translateY(-${rowHeight}px)`;
         track.style.willChange = 'transform';
@@ -571,6 +450,7 @@ export class MiniCalendarView extends ItemView {
         indicators: Map<string, IndicatorState>,
         referenceMonth: { year: number; month: number },
         rowHeight: number,
+        today: string,
     ): HTMLElement {
         const weekEl = document.createElement('div');
         weekEl.addClass('cal-week-row', 'cal-week-row--mini');
@@ -586,7 +466,7 @@ export class MiniCalendarView extends ItemView {
         }
 
         if (this.shouldShowWeekNumbers()) {
-            this.renderWeekNumberCell(weekEl, startDate);
+            this.renderWeekNumberCell(weekEl, startDate, today);
         }
 
         const cursor = new Date(startDate);
@@ -599,7 +479,8 @@ export class MiniCalendarView extends ItemView {
                 dateKey,
                 colIndex,
                 referenceMonth,
-                indicators.get(dateKey) ?? { hasIncomplete: false, hasComplete: false }
+                indicators.get(dateKey) ?? { hasIncomplete: false, hasComplete: false },
+                today,
             );
             cursor.setDate(cursor.getDate() + 1);
         }
