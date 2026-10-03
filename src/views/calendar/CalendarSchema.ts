@@ -19,10 +19,12 @@ export interface CalendarConfig {
 
 export interface CalendarTransient {
     /**
-     * The day the grid starts on: its week is the top row (`CalendarGrid`).
-     * Absent, the view follows today and draws today's month grid.
+     * The day looked at, as given (`ViewedDay`). Absent, the view follows
+     * today. The grid drawn is this day's month grid (`CalendarGrid`).
      */
     date?: string;
+    /** How many weeks the grid was moved from `date`'s month grid; absent is 0. */
+    weekOffset?: number;
     pinnedListCollapsed?: Record<string, boolean>;
 }
 
@@ -45,9 +47,11 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
         pinnedLists:      F.pinnedLists('pinnedLists'),
     },
     anchorKey: 'date',
+    anchorOffsetKeys: ['weekOffset'],
     listsOf: (config) => config.pinnedLists ?? [],
     transient: {
         date:                T.dateString('date'),
+        weekOffset:          T.int('weekOffset'),
         pinnedListCollapsed: T.collapsedKeys('pinnedListCollapsed', 'calendar'),
     },
 };

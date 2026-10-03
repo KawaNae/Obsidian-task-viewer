@@ -12,7 +12,7 @@ import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes
 import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { isTaskCompleted as isTaskCompletedUtil } from '../../services/display/TaskStatusQuery';
 import { getGridColumnForDay } from './CalendarDateUtils';
-import { gridEnd, gridShifted, gridStart, referenceMonth, weekStartOf } from './CalendarGrid';
+import { gridFollowingToday, gridRange, gridShifted, referenceMonth, weekStartOf } from './CalendarGrid';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -23,7 +23,6 @@ import { hasConditions } from '../../services/filter/FilterTypes';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 import { hostWindow } from '../../utils/HostWindow';
 import { TaskViewerView } from '../base/TaskViewerView';
-import { followToday } from '../base/ViewedDay';
 
 
 interface IndicatorState {
@@ -35,8 +34,9 @@ interface IndicatorState {
  * MiniCalendar View - six weeks of days with a dot for the tasks on each.
  *
  * Its state is MiniCalendarSchema's config and transient fields, held in the
- * base's store. The weeks it draws are read from the day it looks at
- * (`date`, absent while it follows today) by `CalendarGrid`, as Calendar's.
+ * base's store. The weeks it draws are read from where it is (`date`,
+ * absent while it follows today, and `weekOffset`) by `CalendarGrid`, as
+ * Calendar's.
  */
 export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCalendarTransient> {
     private readonly readService: TaskReadService;
@@ -68,18 +68,18 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
                 navigateWeeks: (n) => this.navigateWeeks(n),
                 today: () => {
                     if (this.isAnimating) return;
-                    this.update(followToday());
+                    this.update(gridFollowingToday());
                 },
-                referenceMonth: () => referenceMonth(this.gridStart()),
+                referenceMonth: () => referenceMonth(this.gridRange().start),
             },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
         });
     }
 
-    /** The grid's first day, read from the day looked at and the week start of the settings. */
-    private gridStart(): string {
-        return gridStart(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay);
+    /** The days the grid draws, read from where the view is and the week start of the settings. */
+    private gridRange(): { start: string; end: string } {
+        return gridRange(this.state, this.visualToday(), this.plugin.settings.weekStartDay);
     }
 
     protected openView(): void {
@@ -130,8 +130,8 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
             this.navigateWeekDebounced(e.deltaY > 0 ? 1 : -1);
         }, { passive: false });
 
-        const start = this.gridStart();
-        const indicators = this.computeIndicators(start, gridEnd(start));
+        const { start, end } = this.gridRange();
+        const indicators = this.computeIndicators(start, end);
         const month = referenceMonth(start);
         const showWeekNumbers = this.shouldShowWeekNumbers();
         const today = this.visualToday();
@@ -328,15 +328,16 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
     }
 
     /**
-     * Slide the grid by `offset` weeks: the date is fixed on the grid's new
-     * first day, and the slide shows the change before the draw that ends it.
+     * Slide the grid by `offset` weeks: the offset moves (a view following
+     * today fixes it), and the slide shows the change before the draw that
+     * ends it.
      */
     private navigateWeeks(offset: number): void {
         if (offset === 0 || this.isAnimating) {
             return;
         }
 
-        this.update(gridShifted(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay, offset), { draw: false });
+        this.update(gridShifted(this.state, this.visualToday(), offset), { draw: false });
 
         const body = this.container?.querySelector('.cal-grid__body--mini');
         if (!(body instanceof HTMLElement)) {
@@ -386,8 +387,8 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
             return;
         }
 
-        const start = this.gridStart();
-        const indicators = this.computeIndicators(start, gridEnd(start));
+        const { start, end } = this.gridRange();
+        const indicators = this.computeIndicators(start, end);
         const month = referenceMonth(start);
         const today = this.visualToday();
 

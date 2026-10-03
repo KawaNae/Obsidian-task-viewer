@@ -312,6 +312,12 @@ export const T = {
         return { key: f.key, parse: f.parse, serialize: f.serialize, legacyKeys: opts.legacyKeys };
     },
 
+    /** A whole number, read as `F.int` reads it (a URI's text included). */
+    int(key: string, opts: TransientOpts & NumberRange = {}): TransientField<number> {
+        const f = F.int(key, opts);
+        return { key: f.key, parse: f.parse, serialize: f.serialize, legacyKeys: opts.legacyKeys };
+    },
+
     boolean(key: string, opts: TransientOpts = {}): TransientField<boolean> {
         const f = F.boolean(key, opts);
         return { key: f.key, parse: f.parse, serialize: f.serialize, legacyKeys: opts.legacyKeys };

@@ -94,6 +94,27 @@ export class ViewConfigCodec<
         return out;
     }
 
+    /** The transient fields that say where the view is: the anchor and the fields laid over it. */
+    positionKeys(): readonly string[] {
+        const { anchorKey, anchorOffsetKeys } = this.schema;
+        return anchorKey ? [anchorKey, ...(anchorOffsetKeys ?? [])] : [];
+    }
+
+    /**
+     * The transient fields a state sets over the ones a view has: the fields
+     * it holds and can read, and, when it names where the view is, every
+     * position field, one it lacks cleared. A URI's `date=` thus shows that
+     * day's month grid even over a Calendar moved by weeks.
+     */
+    transientOfState(raw: Record<string, unknown> | undefined | null): Partial<TTransient> {
+        const out = this.parseTransient(raw) as Record<string, unknown>;
+        const position = this.positionKeys();
+        if (position.some(key => key in out)) {
+            for (const key of position) if (!(key in out)) out[key] = undefined;
+        }
+        return out as Partial<TTransient>;
+    }
+
     serializeTransient(transient: Partial<TTransient> | undefined | null): Record<string, unknown> {
         const out: Record<string, unknown> = {};
         if (!transient) return out;

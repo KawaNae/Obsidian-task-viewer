@@ -20,10 +20,12 @@ export interface MiniCalendarConfig {
 
 export interface MiniCalendarTransient {
     /**
-     * The day the grid starts on: its week is the top row (`CalendarGrid`).
-     * Absent, the view follows today and draws today's month grid.
+     * The day looked at, as given (`ViewedDay`). Absent, the view follows
+     * today. The grid drawn is this day's month grid (`CalendarGrid`).
      */
     date?: string;
+    /** How many weeks the grid was moved from `date`'s month grid; absent is 0. */
+    weekOffset?: number;
 }
 
 /** The view's state: its config and transient fields as one value (`ViewStore`). */
@@ -39,8 +41,10 @@ export const MiniCalendarSchema: ViewSchema<MiniCalendarConfig, MiniCalendarTran
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
     },
     anchorKey: 'date',
+    anchorOffsetKeys: ['weekOffset'],
     transient: {
-        date: T.dateString('date'),
+        date:       T.dateString('date'),
+        weekOffset: T.int('weekOffset'),
     },
 };
 
