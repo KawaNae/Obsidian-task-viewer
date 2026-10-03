@@ -334,22 +334,22 @@ describe('ViewConfigCodec', () => {
             const transient: TestTransient = {
                 date: '2026-05-22',
                 expanded: true,
-                collapsed: { 'test::a': true, 'test::b': true },
+                collapsed: { a: true, b: true },
             };
             const json = codec.serializeTransient(transient);
             const back = codec.parseTransient(json);
             expect(back).toEqual(transient);
         });
 
-        it('collapsedKeys migrates legacy un-prefixed entries', () => {
-            const json = { collapsed: { 'a': true, 'test::b': true } };
+        it("collapsedKeys reads a key saved with the view's name as the list id, and drops another view's", () => {
+            const json = { collapsed: { 'a': true, 'test::b': true, 'other::c': true } };
             const back = codec.parseTransient(json);
-            expect(back.collapsed).toEqual({ 'test::a': true, 'test::b': true });
+            expect(back.collapsed).toEqual({ a: true, b: true });
         });
 
         it('collapsedKeys drops false entries', () => {
-            const json = codec.serializeTransient({ collapsed: { 'test::a': true, 'test::b': false } });
-            expect(json.collapsed).toEqual({ 'test::a': true });
+            const json = codec.serializeTransient({ collapsed: { a: true, b: false } });
+            expect(json.collapsed).toEqual({ a: true });
         });
 
         it('transient stays separate from config', () => {

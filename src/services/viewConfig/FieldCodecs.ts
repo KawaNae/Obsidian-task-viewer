@@ -324,19 +324,18 @@ export const T = {
     },
 
     /**
-     * Record<string, boolean> for collapse maps. Only `true` entries are
-     * persisted (the per-view convention prior to this refactor).
+     * Which lists are collapsed, by list id. Only `true` entries are kept.
      *
-     * Optional `viewIdPrefix` handles the legacy un-prefixed key migration
-     * (`listId` → `${viewIdPrefix}::${listId}`). When set, parse migrates old
-     * entries; serialize emits only already-prefixed keys.
+     * A layout saved before 9c names each list `<legacyPrefix>::<id>` (the
+     * view's name, put on to keep views apart that never shared the map);
+     * it is read as `<id>`, and a key with another view's name is dropped.
      */
     collapsedKeys(
         key: string,
-        viewIdPrefix?: string,
+        legacyPrefix?: string,
         opts: TransientOpts = {},
     ): TransientField<Record<string, boolean>> {
-        const prefix = viewIdPrefix ? `${viewIdPrefix}::` : '';
+        const prefix = legacyPrefix ? `${legacyPrefix}::` : '';
         return {
             key,
             legacyKeys: opts.legacyKeys,
@@ -345,8 +344,8 @@ export const T = {
                 const out: Record<string, boolean> = {};
                 for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
                     if (v !== true) continue;
-                    const normalized = (prefix && !k.includes('::')) ? `${prefix}${k}` : k;
-                    out[normalized] = true;
+                    if (!k.includes('::')) out[k] = true;
+                    else if (prefix && k.startsWith(prefix)) out[k.slice(prefix.length)] = true;
                 }
                 return Object.keys(out).length > 0 ? out : undefined;
             },
