@@ -23,17 +23,15 @@ import {
 
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
+import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
+import { KanbanSchema, KanbanCodec, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
-export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 
 /**
  * Grid variant of the shared list section: a card with its own background and
@@ -148,20 +146,18 @@ export class KanbanView extends ItemView {
     }
 
     getViewType(): string {
-        return VIEW_TYPE_KANBAN;
+        return KanbanSchema.viewType;
     }
 
     getDisplayText(): string {
-        return this.customName || VIEW_META_KANBAN.displayText;
+        return this.customName || viewDisplayName(KanbanSchema.viewType);
     }
 
     getIcon(): string {
-        return VIEW_META_KANBAN.icon;
+        return VIEW_DESCRIPTORS[KanbanSchema.viewType].icon;
     }
 
-    private get codec(): ViewConfigCodec<KanbanConfig, KanbanTransient> {
-        return codecFor(VIEW_TYPE_KANBAN) as ViewConfigCodec<KanbanConfig, KanbanTransient>;
-    }
+    private readonly codec = KanbanCodec;
 
     applyConfig(cfg: Partial<KanbanConfig>): void {
         const next = this.codec.withDefaults(cfg);

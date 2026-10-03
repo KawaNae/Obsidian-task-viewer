@@ -7,11 +7,10 @@
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { PinnedListDefinition } from '../../types';
-import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 
 export interface KanbanConfig {
     customName?: string;
@@ -25,7 +24,7 @@ export interface KanbanTransient {
 }
 
 export const KanbanSchema: ViewSchema<KanbanConfig, KanbanTransient> = {
-    viewType: VIEW_META_KANBAN.type,
+    viewType: 'kanban-view',
     shortName: 'kanban',
     defaults: {
         maskMode: false,
@@ -43,4 +42,5 @@ export const KanbanSchema: ViewSchema<KanbanConfig, KanbanTransient> = {
     },
 };
 
-registerSchema(KanbanSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const KanbanCodec = new ViewConfigCodec(KanbanSchema);

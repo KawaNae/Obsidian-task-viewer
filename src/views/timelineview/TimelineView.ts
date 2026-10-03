@@ -39,16 +39,12 @@ import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
+import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import { codecFor } from '../../services/viewConfig';
-import type { TimelineConfig, TimelineTransient } from './TimelineSchema';
-import type { ViewConfigCodec } from '../../services/viewConfig';
+import { TimelineSchema, TimelineCodec, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
-
-export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
 
 /**
  * View id used as a namespace prefix for shared viewState fields whose keys
@@ -213,20 +209,18 @@ export class TimelineView extends ItemView {
     }
 
     getViewType() {
-        return VIEW_TYPE_TIMELINE;
+        return TimelineSchema.viewType;
     }
 
     getDisplayText() {
-        return this.viewState.customName || VIEW_META_TIMELINE.displayText;
+        return this.viewState.customName || viewDisplayName(TimelineSchema.viewType);
     }
 
     getIcon() {
-        return VIEW_META_TIMELINE.icon;
+        return VIEW_DESCRIPTORS[TimelineSchema.viewType].icon;
     }
 
-    private get codec(): ViewConfigCodec<TimelineConfig, TimelineTransient> {
-        return codecFor(VIEW_TYPE_TIMELINE) as ViewConfigCodec<TimelineConfig, TimelineTransient>;
-    }
+    private readonly codec = TimelineCodec;
 
     /**
      * Apply a parsed config with REPLACE semantics over schema defaults.

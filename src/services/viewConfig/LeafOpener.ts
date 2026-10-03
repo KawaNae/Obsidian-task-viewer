@@ -1,6 +1,6 @@
 import type { App, Workspace, WorkspaceLeaf } from 'obsidian';
 import type { DefaultLeafPosition, TaskViewerSettings } from '../../types';
-import type { ViewType } from '../../constants/viewRegistry';
+import { descriptorOf } from '../../views/ViewDescriptors';
 
 /**
  * Where a view is asked to open.
@@ -22,23 +22,6 @@ export function parseLeafPosition(raw: string | undefined): LeafPosition | undef
 }
 
 /**
- * Which settings field holds each view's home.
- *
- * Two vocabularies meet here — Obsidian's view types and the settings field
- * names — so the table is typed against both. A view type added to the
- * registry without a home to open in is a compile error rather than a silent
- * slide into the right sidebar.
- */
-const POSITION_FIELD: Record<ViewType, keyof TaskViewerSettings['defaultViewPositions']> = {
-    'timeline-view': 'timeline',
-    'schedule-view': 'schedule',
-    'calendar-view': 'calendar',
-    'mini-calendar-view': 'miniCalendar',
-    'timer-view': 'timer',
-    'kanban-view': 'kanban',
-};
-
-/**
  * The home the settings give this view.
  *
  * Views outside the registry — the log view is the only one — have no
@@ -47,8 +30,8 @@ const POSITION_FIELD: Record<ViewType, keyof TaskViewerSettings['defaultViewPosi
 export function defaultPositionFor(
     settings: TaskViewerSettings, viewType: string,
 ): DefaultLeafPosition {
-    const field = POSITION_FIELD[viewType as ViewType];
-    return field ? settings.defaultViewPositions[field] : 'right';
+    const view = descriptorOf(viewType);
+    return view ? settings.defaultViewPositions[view.positionField] : 'right';
 }
 
 /**

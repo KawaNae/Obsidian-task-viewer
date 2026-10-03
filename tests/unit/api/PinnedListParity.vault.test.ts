@@ -1,5 +1,4 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import '../../../src/views/registerAllSchemas';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { PinnedListQuery } from '../../../src/services/filter/PinnedListQuery';

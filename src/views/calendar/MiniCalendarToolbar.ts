@@ -10,9 +10,8 @@ import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
-import type { MiniCalendarConfig, MiniCalendarTransient } from './MiniCalendarSchema';
+import { viewDisplayName } from '../ViewDescriptors';
+import { MiniCalendarSchema, MiniCalendarCodec, type MiniCalendarConfig } from './MiniCalendarSchema';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
 export interface MiniCalendarToolbarDeps {
@@ -46,9 +45,7 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
         super();
     }
 
-    private get codec(): ViewConfigCodec<MiniCalendarConfig, MiniCalendarTransient> {
-        return codecFor(VIEW_META_MINI_CALENDAR.type) as ViewConfigCodec<MiniCalendarConfig, MiniCalendarTransient>;
-    }
+    private readonly codec = MiniCalendarCodec;
 
     protected override buildDom(toolbar: HTMLElement): void {
         const { deps } = this;
@@ -116,17 +113,17 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
             app: deps.app,
             leaf: deps.leaf,
             getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => VIEW_META_MINI_CALENDAR.displayText,
+            getDefaultName: () => viewDisplayName(MiniCalendarSchema.viewType),
             onRename: (newName) => deps.onRename(newName),
             buildUri: () => ({
                 configParams: this.codec.toUriParams(deps.getCurrentConfig()),
             }),
-            viewType: VIEW_META_MINI_CALENDAR.type,
+            viewType: MiniCalendarSchema.viewType,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
             templateNotes: deps.plugin.getOperations(),
             getViewTemplate: () => ({
                 filePath: '',
-                name: deps.getCustomName() || VIEW_META_MINI_CALENDAR.displayText,
+                name: deps.getCustomName() || viewDisplayName(MiniCalendarSchema.viewType),
                 viewType: 'calendar',
                 config: this.codec.serializeConfig(deps.getCurrentConfig()),
             }),

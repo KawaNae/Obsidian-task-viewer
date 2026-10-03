@@ -7,11 +7,10 @@
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
-import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
 /** Timeline days-per-screen bounds. Single constant closes the upper limit
  *  everywhere it's checked (schema, toolbar stepper, CLI export-image). At
@@ -43,7 +42,7 @@ export interface TimelineTransient {
 }
 
 export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
-    viewType: VIEW_META_TIMELINE.type,
+    viewType: 'timeline-view',
     shortName: 'timeline',
     defaults: {
         daysToShow: 3,
@@ -71,4 +70,5 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
     },
 };
 
-registerSchema(TimelineSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const TimelineCodec = new ViewConfigCodec(TimelineSchema);

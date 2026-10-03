@@ -1,6 +1,6 @@
 import { type App, Notice } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
-import type { ViewType } from '../../constants/viewRegistry';
+import type { ViewType } from '../../views/ViewDescriptors';
 import { t } from '../../i18n';
 import { resolveViewTypeFromShortName } from './SchemaRegistry';
 import { buildViewStateFromParams } from './ViewStateFactory';

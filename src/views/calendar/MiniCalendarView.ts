@@ -23,16 +23,14 @@ import type { PluginContext } from '../../PluginContext';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { VIEW_META_MINI_CALENDAR } from '../../constants/viewRegistry';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { MiniCalendarSchema, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
+import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
+import { MiniCalendarSchema, MiniCalendarCodec, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 import { hostWindow } from '../../utils/HostWindow';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 
-export const VIEW_TYPE_MINI_CALENDAR = VIEW_META_MINI_CALENDAR.type;
 
 interface IndicatorState {
     hasIncomplete: boolean;
@@ -114,15 +112,15 @@ export class MiniCalendarView extends ItemView {
     }
 
     getViewType(): string {
-        return VIEW_TYPE_MINI_CALENDAR;
+        return MiniCalendarSchema.viewType;
     }
 
     getDisplayText(): string {
-        return this.customName || VIEW_META_MINI_CALENDAR.displayText;
+        return this.customName || viewDisplayName(MiniCalendarSchema.viewType);
     }
 
     getIcon(): string {
-        return VIEW_META_MINI_CALENDAR.icon;
+        return VIEW_DESCRIPTORS[MiniCalendarSchema.viewType].icon;
     }
 
     async setState(state: MiniCalendarViewState, result: ViewStateResult): Promise<void> {
@@ -144,9 +142,7 @@ export class MiniCalendarView extends ItemView {
         await this.render();
     }
 
-    private get codec(): ViewConfigCodec<MiniCalendarConfig, MiniCalendarTransient> {
-        return codecFor(VIEW_TYPE_MINI_CALENDAR) as ViewConfigCodec<MiniCalendarConfig, MiniCalendarTransient>;
-    }
+    private readonly codec = MiniCalendarCodec;
 
     applyConfig(cfg: Partial<MiniCalendarConfig>): void {
         const next = this.codec.withDefaults(cfg);

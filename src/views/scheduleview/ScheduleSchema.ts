@@ -3,11 +3,10 @@
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { AstronomyDisplay } from '../../types';
-import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
 export interface ScheduleConfig {
     customName?: string;
@@ -21,7 +20,7 @@ export interface ScheduleTransient {
 }
 
 export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
-    viewType: VIEW_META_SCHEDULE.type,
+    viewType: 'schedule-view',
     shortName: 'schedule',
     defaults: {
         maskMode: false,
@@ -38,4 +37,5 @@ export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
     },
 };
 
-registerSchema(ScheduleSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const ScheduleCodec = new ViewConfigCodec(ScheduleSchema);
