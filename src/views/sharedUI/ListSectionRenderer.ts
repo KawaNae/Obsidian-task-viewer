@@ -2,10 +2,9 @@
  * Renders one saved list as a collapsible section: a header carrying its name,
  * task count and sort / filter / more buttons, plus a body of task cards.
  *
- * Two places show the same thing. PinnedListRenderer stacks these down the
- * sidebar; KanbanView lays them out on a grid, one per cell. Before this file
- * each had its own copy of the header markup, the collapse toggle with its
- * lazy first-paint, and the inline rename lifecycle.
+ * `TaskListSections` builds every saved list with it: the pinned lists
+ * stacked down the sidebar (`PinnedListPanel`) and Kanban's cells on its
+ * grid, one per cell.
  *
  * The BEM block name is a parameter rather than something this module decides.
  * What genuinely differs between the two is how the section looks — a compact

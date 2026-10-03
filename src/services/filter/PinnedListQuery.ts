@@ -23,7 +23,7 @@ export type TemplateQuery =
 
 /**
  * The one answer to "which tasks does this pinned list show": the lists of
- * Calendar and Timeline (`PinnedListRenderer`), Kanban's cells, and a filter
+ * Calendar and Timeline and Kanban's cells (`TaskListSections`), and a filter
  * file the API and the CLI are handed (`FilterFileLoader`) all ask here.
  */
 export class PinnedListQuery {
