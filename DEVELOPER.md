@@ -108,7 +108,7 @@ src/
 ├── main.ts                    # Plugin entry point (onload / onunload)
 ├── types/                     # Cross-layer types and settings (Task, DisplayTask, TaskViewerSettings, etc.)
 ├── settings/                  # Settings UI (9 tabs: Basic, Behavior, Views, View Details, Notes, Note scope, Parsers, Log, About)
-├── constants/                 # Constants and view registry
+├── constants/                 # Constants (layout, hover, styles, status options)
 ├── i18n/                      # Internationalization (locale files)
 ├── api/                       # Public API (TaskApi, TaskApiTypes, TaskIds, TaskNormalizer, OperationSchemas: the parameters; Reference: the help texts; FilterParamsBuilder, FilterFileLoader)
 ├── cli/                       # CLI handlers (CliRegistrar: registers Reference's CLI_COMMANDS; CliParamValidator, CliFilterBuilder, CliOutputFormatter, handlers/)
@@ -134,13 +134,15 @@ src/
 │       └── flow/              # ==> フロー記法の言語 (FlowAst/FlowParser/FlowChecker/FlowSegments/FlowSerializer/diagnosticText)。lang、i18n、types だけに依存する
 ├── editor/                    # Editor extensions (TaskMenuExtension, DiagnosticsExtension, GenHighlight, etc.)
 ├── views/
-│   ├── timelineview/          # Timeline view (including renderers/)
+│   ├── ViewDescriptors.ts     # The view table (VIEW_DESCRIPTORS); see "View Skeleton"
+│   ├── base/                  # TaskViewerView, ViewStore, ViewSettings (the settings menu), ViewedDay
+│   ├── timelineview/          # Timeline view (including renderers/, TimelineDays)
 │   ├── scheduleview/          # Schedule view (including renderers/, utils/)
-│   ├── calendar/              # CalendarView, MiniCalendarView
+│   ├── calendar/              # CalendarView, MiniCalendarView, CalendarGrid
 │   ├── kanban/                # Kanban view
 │   ├── taskcard/              # Task card rendering (see section above)
 │   ├── sharedUI/              # Shared UI components (ViewToolbar, PinnedListRenderer, etc.)
-│   ├── sharedLogic/           # Shared logic (GridTaskLayout, etc.)
+│   ├── sharedLogic/           # Shared logic (ViewEvents, MinuteClock, ViewUriBuilder, GridTaskLayout, etc.)
 │   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
 │   ├── sidebar/               # SidebarManager, SidebarToggleButton
 │   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup / Interval)
@@ -515,6 +517,75 @@ Due represents a deadline date (calendarDate). If time complement is needed,
 
 ---
 
+## View Skeleton
+
+The six views (Timeline, Schedule, Calendar, MiniCalendar, Kanban, Timer) share one skeleton: a table that says what each view is, a base class that holds its state and answers each change of it, and the plugin's events that tell the views what happened. The log view is not one of them.
+
+### The view table (`views/ViewDescriptors.ts`)
+
+`VIEW_DESCRIPTORS` declares each view once, keyed by `ViewType` (`satisfies Record<ViewType, ViewDescriptor>`): its schema's codec (and through it the type and the short name), icon, the i18n keys of its name, ribbon and command, the command id, the settings field of its default position, and whether it exports an image (`exportable`), keeps view templates (`hasTemplates`), hears the plugin's events (`hearsEvents`) and counts as open in the diagnostics (`countsAsActive`). The table imports the schemas only, never a view class; names are kept as keys and read with `t()` when used.
+
+What is read from the table:
+
+- `main`: the registration, the ribbon icon and the command of every view, the views `ViewEvents` tells (`hearsEvents`), the count of open views (`countsAsActive`)
+- `SchemaRegistry` (`codecFor`, `schemaFor`, the short names) for the string boundaries: the URI, the CLI, `PinnedListQuery`. A caller that knows the view imports its codec from the schema module instead
+- `ExportRegistry`'s keys (`ExportableViewType`, checked by the compiler), the CLI's and `Reference`'s view names, `ViewTemplateLoader`'s valid views, `LeafOpener`'s default position, the settings menu's template and export items
+
+Adding a view is one table entry plus its modules: `ViewType`, the schema module with its codec, the view class, its entry in `main`'s `VIEW_CONSTRUCTORS` (the table cannot hold the constructors without importing the classes, which import the table; a type left out there is a compile error), its i18n keys, its field in `defaultViewPositions`, and, when it exports, its target in `ExportRegistry`. The settings tab's list of default positions (`settings/ViewsTab.ts`) is still written by hand, one row per view with its label.
+
+A view answers `getViewType()` from its schema module (`TimelineCodec.schema.viewType`), not from a field: Obsidian's `View` constructor reads the type (the leaf's `data-type`) before the subclass has any field.
+
+### The base view and its store (`views/base/`)
+
+Each view extends `TaskViewerView<TConfig, TTransient>` (an `ItemView`). Its state is its schema's config and transient fields as one value, held in a `ViewStore`. The state changes only through `update(patch)`: the store merges the patch shallowly into a new value (the old one is never changed in place) and tells each listener the patch and the value before it. A patch is told even when it changes nothing (Now pressed while following today).
+
+The base answers every patch in one place:
+
+| The patch | The answer |
+|---|---|
+| any | One draw in the next frame (`RenderScheduler`, coalesced over `requestAnimationFrame` of the view's own window). `update(patch, { draw: false })` is for a change the view has already shown itself (a zoom gesture, the sidebar's slide, MiniCalendar's week slide) |
+| holds a field of the schema (config or transient) | The layout is saved (`requestSaveLayout`), except for the workspace's own state (`setState`) |
+| holds `customName` | The tab's header is retitled |
+
+`getState` and `setState` go through the codec: `setState` lays the config over the schema's defaults (REPLACE: a field the state lacks goes back to its default) and puts the transient fields it could read. Obsidian opens a view and hands it its state afterwards, and may hand it a state again (a URI opened over it); `onReady` runs once both have happened.
+
+The toolbars and the pinned lists subscribe to the store and mend themselves; they hold no copy of the state. A toolbar is handed the store and, apart from it, the few commands that are not a change of state (move by days, Now, Go to date). The filter menu edits a value it is handed and gives back a new one (`editViewFilter`).
+
+The settings (gear) menu is built once for every view, by `buildViewSettingsOptions` (`ViewSettings.ts`), from the descriptor and the store: Save and Load view (when the view keeps templates; saving names the view after the template), Copy URI and Copy as link (the config through `codec.toUriParams`), Reset (the config back to the defaults, the transient fields cleared except the date looked at), Export (when it exports). The view's own items go above them.
+
+### The plugin's events
+
+| Event | Who tells | Base default |
+|---|---|---|
+| `redraw()` | Settings saved (`ViewEvents.settingsChanged`) | Draw again |
+| `onDayRolled()` | The visual day changed (`ViewEvents.rollIfChanged`) | Draw again |
+| `onMinute()` | A minute passed (`ViewEvents.minutePassed`) | Nothing; Timeline and Schedule move their now-line |
+
+The plugin has one clock of minutes (`sharedLogic/MinuteClock.ts`, `startMinuteClock`): its first tick lands on the next minute boundary, every tick after it one minute later, and its timers are the plugin's, cleared when it unloads. Each tick sweeps the overdue judgement and calls `ViewEvents.minutePassed`, which checks the visual day (`startHour`) every minute and tells the views. `ViewEvents` is the one place that decides the day rolled; a settings save that moves the day (a new start hour) is told as a day roll instead of a redraw. A running timer's clock of seconds is not this clock.
+
+### The day a dated view looks at
+
+Timeline, Schedule, Calendar and MiniCalendar hold the transient `date` (`base/ViewedDay.ts`). Absent, the view follows today; present, it stays on that day. The workspace, the URI (`date=`) and the CLI (`anchor-date=`) read and write this one key; the older `startDate`, `currentDate` and `windowStart` are not read. Today is the visual day (`startHour`) in every view.
+
+| Moment | Following | Fixed |
+|---|---|---|
+| Now / Today | — | Clears `date`: follows again |
+| Go to date `d`, the arrows | Fixes `date` | Moves `date` |
+| The day rolls | Moves to the new today (Timeline and Schedule scroll to now) | Stays; only today's mark is drawn anew |
+| Restart | Opens following | Opens on the saved `date` |
+| Settings saved | The range is read anew from the settings | The range is read anew; `date` stays |
+
+What a view draws is derived from `date`, the settings and (Timeline) the tasks each time, never held, so a change of the past days to show or of the week start shows at the save:
+
+- **Timeline** (`timelineview/TimelineDays.ts`): the window starts at the day looked at minus the past days to show, and holds the days to show. An arrow moves the window drawn by `n` days and fixes `date` at the new start plus the past days, so a pulled window moves without a jump. Go to date looks at the day, the past days before it.
+    - "Start from the oldest overdue task" (S2) pulls the window's start back to the oldest overdue day only while the view follows today, read at the moments it enters following: opened with its tasks, Now, the day rolled, the settings saved. Between them the pull is kept, so completing the oldest overdue task does not move the window; it is not saved. A fixed day is never pulled. Pulled far enough, today can fall out of the window
+- **Schedule**: draws the day looked at; the arrows move `date` by a day
+- **Calendar** and **MiniCalendar** (`calendar/CalendarGrid.ts`): following, today's month grid (six weeks from the week of the month's 1st). Fixed, `date`'s week is the grid's top row. The week arrows move the grid a week and fix `date` on its new first day; Go to date (Calendar) fixes `date` on the first day of the picked day's month grid. The date picker opens on the 1st of the month shown. So `date` is where a view is put in place of today, but each view puts it its own way: Timeline after the past days, Calendar on the top row
+
+The E2E suite drives these rules through the toolbars in the Dev vault (`tests/integration/views/viewed-date.test.ts`, `toolbar-state.test.ts`).
+
+---
+
 ## Timeline View Implementation
 
 ### Type conversion rules for UI operations
@@ -761,7 +832,7 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 
 | Parameter | Format | Description | Example |
 |-----------|--------|-------------|---------|
-| `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` / `timer` |
+| `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` / `timer` / `kanban` |
 | `position` | string | Leaf placement | `left` / `right` / `tab` / `window` / `override` |
 | `name` | string | Custom view name (URL-encoded); set as the view's `customName` | `My%20Timeline` |
 | `daysToShow` (alias `days`) | integer | Timeline display days, 1–30 | `3` |
@@ -841,7 +912,7 @@ Each view's toolbar has a gear icon (settings) button. The menu is built once fo
 - **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
 - **ScheduleView**: `filterState`, `position`, `name`
 - **TimerView**: `timerViewMode`, `intervalTemplate`, `position`, `name` (no `template`: the timer keeps no view templates)
-- All views support `template` (when set, `filterState`/`pinnedLists` are omitted from URI)
+- Every view that keeps templates supports `template` (when set, `filterState`/`pinnedLists` are omitted from URI). Copy URI writes the config only: the date a view looks at is not in it
 
 ### Toolbar icon order
 
