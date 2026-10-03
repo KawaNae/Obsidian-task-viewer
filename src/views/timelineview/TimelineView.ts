@@ -110,7 +110,6 @@ export class TimelineView extends ItemView {
     private viewState: ViewState;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
-    private currentTimeInterval: number | null = null;
     // Scroll save/restore: save the visible time at the viewport top as
     // minutes from 00:00 and restore by recomputing scrollTop from current
     // --hour-height. Robust against zoom changes and async layout settle.
@@ -605,11 +604,6 @@ export class TimelineView extends ItemView {
             void this.app.workspace.requestSaveLayout();
         }, { passive: true });
 
-        // Start Current Time Interval
-        this.currentTimeInterval = window.setInterval(() => {
-            this.renderCurrentTimeIndicator();
-        }, 60000); // Every minute
-
         // DOM-side of the init barrier is now satisfied. If state has already
         // been applied and tasks are cached, this fires the initial logic
         // immediately; otherwise it waits for the missing gate.
@@ -668,10 +662,6 @@ export class TimelineView extends ItemView {
             this.unsubscribeDelete();
         }
         this.sidebarManager.detach();
-        if (this.currentTimeInterval) {
-            window.clearInterval(this.currentTimeInterval);
-            this.currentTimeInterval = null;
-        }
         if (this.stickyAnchorObserver) {
             this.stickyAnchorObserver.disconnect();
             this.stickyAnchorObserver = null;
@@ -725,6 +715,12 @@ export class TimelineView extends ItemView {
         this.jumpToNowStartDate();
         this.scrollToNowOnNextRender = true;
         this.render();
+    }
+
+    /** A minute passed: move the now-line. Before the view opens there is none. */
+    public onMinute(): void {
+        if (!this.container) return;
+        this.renderCurrentTimeIndicator();
     }
 
     // ==================== Core Rendering ====================
