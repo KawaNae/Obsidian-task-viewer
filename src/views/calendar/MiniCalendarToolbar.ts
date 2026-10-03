@@ -8,6 +8,7 @@ import { DateLabel } from '../sharedUI/DateLabel';
 import { DateNavigator } from '../sharedUI/ViewToolbar';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import type { FilterState } from '../../services/filter/FilterTypes';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { viewDisplayName } from '../ViewDescriptors';
@@ -26,7 +27,8 @@ export interface MiniCalendarToolbarDeps {
     getReferenceMonth: () => { year: number; month: number };
     onNavigateWeek: (direction: number) => void;
     onJumpToCurrentMonth: () => void;
-    onFilterChange: () => void;
+    getFilterState: () => FilterState;
+    onFilterChange: (next: FilterState) => void;
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
@@ -97,8 +99,9 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
                 .setIcon('filter')
                 .onClick(() => {
                     deps.viewFilterMenu.showMenuAtElement(moreBtn, {
-                        onFilterChange: () => {
-                            deps.onFilterChange();
+                        value: deps.getFilterState(),
+                        onChange: (next) => {
+                            deps.onFilterChange(next);
                             this.update();
                         },
                         getTasks: () => deps.plugin.getIndex().getTasks(),

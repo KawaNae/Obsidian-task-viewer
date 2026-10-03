@@ -5,6 +5,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import { viewDisplayName } from '../ViewDescriptors';
 import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { KanbanSchema, KanbanCodec, type KanbanConfig } from './KanbanSchema';
 import { exportFolderOf } from '../../services/export/ExportSave';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
@@ -17,7 +18,8 @@ export interface KanbanToolbarDeps {
     viewFilterMenu: FilterMenuComponent;
     container: HTMLElement;
 
-    onFilterChange: () => void;
+    getFilterState: () => FilterState;
+    onFilterChange: (next: FilterState) => void;
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
@@ -56,8 +58,9 @@ export class KanbanToolbar extends ViewToolbarBase {
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.onclick = (event) => {
             deps.viewFilterMenu.showMenu(event as MouseEvent, {
-                onFilterChange: () => {
-                    deps.onFilterChange();
+                value: deps.getFilterState(),
+                onChange: (next) => {
+                    deps.onFilterChange(next);
                     this.update();
                 },
                 getTasks: () => deps.plugin.getIndex().getTasks(),
@@ -106,7 +109,7 @@ export class KanbanToolbar extends ViewToolbarBase {
 
     override update(): void {
         if (this.filterBtn) {
-            this.filterBtn.classList.toggle('is-filtered', this.deps.viewFilterMenu.hasActiveFilters());
+            this.filterBtn.classList.toggle('is-filtered', hasConditions(this.deps.getFilterState()));
         }
         this.maskHandle?.update();
     }

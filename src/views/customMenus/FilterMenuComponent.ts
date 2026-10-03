@@ -9,7 +9,6 @@ import {
     createDefaultCondition,
     createEmptyFilterState,
     createFilterGroup,
-    hasConditions,
     isFilterCondition,
     isPresenceOperator,
     isListCondition,
@@ -31,8 +30,12 @@ import { OverlayShell } from '../sharedUI/OverlayShell';
 
 const anyCondition = (_c: FilterCondition): _c is FilterCondition => true;
 
-export interface FilterMenuCallbacks {
-    onFilterChange: () => void;
+/** What the menu is opened with. */
+export interface FilterEditOptions {
+    /** The filter to edit. */
+    value: FilterState;
+    /** Hears every edit, with the filter it made. */
+    onChange: (next: FilterState) => void;
     getTasks: () => Task[];
 }
 
@@ -40,10 +43,11 @@ export interface FilterMenuCallbacks {
  * Notion-style filter popover with recursive group nesting.
  * Groups can contain both conditions and sub-groups up to MAX_FILTER_DEPTH levels.
  *
- * The menu holds the filter it edits, a value (`FilterState`): each edit
- * makes a new one from the one held (`FilterEdit`) and tells the owner,
- * which reads it with `getFilterState`. What the owner read before stays as
- * it was, so neither side copies.
+ * The menu is an editor: it is handed the filter to edit, a value
+ * (`FilterState`), and each edit makes a new one from it (`FilterEdit`) and
+ * hands it to `onChange`. The owner keeps the filter; the menu holds it only
+ * while it is open. What the owner held before stays as it was, so neither
+ * side copies.
  */
 export class FilterMenuComponent {
     private state: FilterState = createEmptyFilterState();
@@ -51,7 +55,7 @@ export class FilterMenuComponent {
     private stack = new PopoverStack();
     private rootEl: HTMLElement | null = null;
     private lastTasks: Task[] = [];
-    private lastCallbacks: FilterMenuCallbacks | null = null;
+    private options: FilterEditOptions | null = null;
     private statusDefs: StatusDefinition[] = [];
 
     private dropdowns: FilterDropdownMenus;
@@ -68,40 +72,29 @@ export class FilterMenuComponent {
         );
     }
 
-    getFilterState(): FilterState {
-        return this.state;
-    }
-
-    setFilterState(state: FilterState): void {
-        this.state = state;
-    }
-
     setStatusDefinitions(defs: StatusDefinition[]): void {
         this.statusDefs = defs;
-    }
-
-    hasActiveFilters(): boolean {
-        return hasConditions(this.state);
     }
 
     isOpen(): boolean {
         return this.overlay.isOpen();
     }
 
-    showMenuAtElement(anchorEl: HTMLElement, callbacks: FilterMenuCallbacks): void {
-        this.openWith({ kind: 'element', element: anchorEl }, callbacks);
+    showMenuAtElement(anchorEl: HTMLElement, options: FilterEditOptions): void {
+        this.openWith({ kind: 'element', element: anchorEl }, options);
     }
 
-    showMenu(event: MouseEvent, callbacks: FilterMenuCallbacks): void {
-        this.openWith({ kind: 'event', event }, callbacks);
+    showMenu(event: MouseEvent, options: FilterEditOptions): void {
+        this.openWith({ kind: 'event', event }, options);
     }
 
     private openWith(
         anchor: { kind: 'element'; element: HTMLElement } | { kind: 'event'; event: MouseEvent },
-        callbacks: FilterMenuCallbacks,
+        options: FilterEditOptions,
     ): void {
-        this.lastTasks = callbacks.getTasks();
-        this.lastCallbacks = callbacks;
+        this.state = options.value;
+        this.lastTasks = options.getTasks();
+        this.options = options;
 
         this.overlay.open({
             mode: 'anchored',
@@ -139,7 +132,7 @@ export class FilterMenuComponent {
     }
 
     /**
-     * Hold `next` and tell the owner. `redraw` draws the menu from it; `keep`
+     * Hold `next` and hand it to the owner. `redraw` draws the menu from it; `keep`
      * leaves the controls, which already show it. An edit that changed
      * nothing tells no one.
      */
@@ -147,7 +140,7 @@ export class FilterMenuComponent {
         if (next === this.state) return;
         this.state = next;
         if (after === 'redraw') this.renderContent();
-        this.lastCallbacks?.onFilterChange();
+        this.options?.onChange(next);
     }
 
     private editGroup(path: NodePath, edit: (group: FilterGroup) => FilterGroup): void {

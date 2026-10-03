@@ -7,6 +7,8 @@ import { shortNameFor } from '../../services/viewConfig';
 import { InputModal } from '../../modals/InputModal';
 import type { Task, ViewTemplate } from '../../types';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
+import type { StateSource } from '../base/ViewStore';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
@@ -431,20 +433,41 @@ export class MaskToggleButton {
     }
 }
 
+/** The part of a view's state the filter and mask controls read and write. */
+export interface FilterAndMask {
+    filterState?: FilterState;
+    maskMode?: boolean;
+}
+
+/**
+ * Open the view's filter editor, at a click or under an element, on the
+ * filter the view holds; each edit is written back to the view's state.
+ */
+export function editViewFilter(
+    filterMenu: FilterMenuComponent,
+    at: { event: MouseEvent } | { element: HTMLElement },
+    store: StateSource<FilterAndMask>,
+    getTasks: () => Task[],
+): void {
+    const options = {
+        value: store.get().filterState ?? createEmptyFilterState(),
+        onChange: (next: FilterState) => store.update({ filterState: next }),
+        getTasks,
+    };
+    if ('event' in at) filterMenu.showMenu(at.event, options);
+    else filterMenu.showMenuAtElement(at.element, options);
+}
+
 /**
  * The two entries every compact ("⋮") toolbar menu carries: open the filter
  * popover, and toggle mask mode. Timeline, Calendar and Schedule each used to
- * spell these out; the wording, icons and the "refresh the toolbar afterwards"
- * step now live here.
+ * spell these out; the wording and icons live here. Both write the view's
+ * state, and the toolbar, subscribed to it, shows the change.
  */
 export interface CompactMenuDeps {
-    viewFilterMenu: FilterMenuComponent;
+    filterMenu: FilterMenuComponent;
+    store: StateSource<FilterAndMask>;
     getTasks: () => Task[];
-    onFilterChange: () => void;
-    getMaskMode: () => boolean;
-    setMaskMode: (next: boolean) => void;
-    /** Called after either item acts — the toolbars pass their `update()`. */
-    onAfter: () => void;
 }
 
 /** Append the filter + mask entries to a compact toolbar menu. */
@@ -456,26 +479,15 @@ export function appendCompactFilterAndMask(
     menu.addItem((item: MenuItem) => {
         item.setTitle(t('toolbar.filter'))
             .setIcon('filter')
-            .onClick(() => {
-                deps.viewFilterMenu.showMenuAtElement(anchorEl, {
-                    onFilterChange: () => {
-                        deps.onFilterChange();
-                        deps.onAfter();
-                    },
-                    getTasks: () => deps.getTasks(),
-                });
-            });
+            .onClick(() => editViewFilter(deps.filterMenu, { element: anchorEl }, deps.store, deps.getTasks));
     });
 
-    const maskOn = deps.getMaskMode();
+    const maskOn = deps.store.get().maskMode ?? false;
     menu.addItem((item: MenuItem) => {
         item.setTitle(t('toolbar.maskMode'))
             .setIcon(maskOn ? 'eye-off' : 'eye')
             .setChecked(maskOn)
-            .onClick(() => {
-                deps.setMaskMode(!maskOn);
-                deps.onAfter();
-            });
+            .onClick(() => deps.store.update({ maskMode: !maskOn }));
     });
 }
 

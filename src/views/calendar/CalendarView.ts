@@ -81,6 +81,8 @@ export class CalendarView extends ItemView {
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly viewFilterMenu = new FilterMenuComponent();
+    /** The view's own filter; the menu edits it and hands it back. */
+    private filterState: FilterState = createEmptyFilterState();
     private readonly listSortMenu = new SortMenuComponent();
 
     private menuHandler: MenuHandler;
@@ -163,7 +165,9 @@ export class CalendarView extends ItemView {
                 const parsed = DateUtils.readDate(date);
                 if (parsed) this.showMonthOf(parsed);
             },
-            onFilterChange: () => {
+            getFilterState: () => this.filterState,
+            onFilterChange: (next) => {
+                this.filterState = next;
                 void this.app.workspace.requestSaveLayout();
                 this.render();
                 this.pinnedListRenderer?.refresh();
@@ -242,8 +246,7 @@ export class CalendarView extends ItemView {
     applyConfig(cfg: Partial<CalendarConfig>): void {
         const next = this.codec.withDefaults(cfg);
 
-        // FilterMenu owns the in-memory FilterState — keep it in sync.
-        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.filterState = next.filterState ?? createEmptyFilterState();
 
         const sidebarOpen = next.showSidebar ?? true;
         this.showSidebar = sidebarOpen;
@@ -259,7 +262,7 @@ export class CalendarView extends ItemView {
 
     /** Snapshot for template save / URI build. */
     getCurrentConfig(): Partial<CalendarConfig> {
-        const filterState = this.viewFilterMenu.getFilterState();
+        const filterState = this.filterState;
         return {
             customName: this.customName,
             filterState: hasConditions(filterState) ? filterState : undefined,
@@ -329,7 +332,7 @@ export class CalendarView extends ItemView {
             host: this.pinnedHost,
             getLists: () => this.pinnedLists,
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.viewFilterMenu.getFilterState(),
+            getViewFilterState: () => this.filterState,
             callbacks: this.getPinnedListCallbacks(),
         });
         this.handleManager = new HandleManager(this.container, {
@@ -642,10 +645,10 @@ export class CalendarView extends ItemView {
     }
 
     private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.listFilterMenu.setFilterState(listDef.filterState);
         this.listFilterMenu.showMenuAtElement(anchorEl, {
-            onFilterChange: () => {
-                listDef.filterState = this.listFilterMenu.getFilterState();
+            value: listDef.filterState,
+            onChange: (next) => {
+                listDef.filterState = next;
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
             },
@@ -770,7 +773,7 @@ export class CalendarView extends ItemView {
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
-        const filterState = this.viewFilterMenu.getFilterState();
+        const filterState = this.filterState;
         return this.readService.getTasksForDateRange(rangeStart, rangeEnd, filterState);
     }
 

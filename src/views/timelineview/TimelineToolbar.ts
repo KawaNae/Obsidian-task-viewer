@@ -1,96 +1,50 @@
-import { type App, setIcon, type Menu, type WorkspaceLeaf } from 'obsidian';
+import { setIcon, type Menu } from 'obsidian';
 import { t } from '../../i18n';
-import type { AstronomyDisplay } from '../../types';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { PluginContext } from '../../PluginContext';
-import { DateNavigator, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
+import { DateNavigator, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, editViewFilter } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
-import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { viewDisplayName } from '../ViewDescriptors';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { TimelineSchema, TimelineCodec, type TimelineConfig, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from './TimelineSchema';
-import { exportFolderOf } from '../../services/export/ExportSave';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { DayWindow } from './TimelineDays';
+import { daysToShowOf, effectiveZoom, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW, type TimelineState } from './TimelineSchema';
 
-/**
- * Everything the toolbar needs from TimelineView, as a bundle of narrow
- * closures. Mirrors the contract Calendar / Schedule / Kanban / MiniCalendar
- * already use: reading and writing config lives in the View, the toolbar only
- * calls. In particular the toolbar holds no reference to the view's mutable
- * state object and no copy of the config-apply rules.
- */
+/** What Timeline does that is not a change of its state, or reads from more than it. */
+export interface TimelineCommands {
+    /** Move the drawn window by `n` days. */
+    navigateDays(n: number): void;
+    /** Follow today again and scroll to now. */
+    jumpToNow(): void;
+    /** Look at `date`. */
+    jumpToDate(date: string): void;
+    /** The day the view looks at; the date picker opens on it. */
+    viewedDay(): string;
+    /** The days drawn. */
+    window(): DayWindow;
+    /** Whether the sidebar shows (closed at narrow width until opened). */
+    isSidebarOpen(): boolean;
+    /** Open or close the sidebar, sliding. */
+    toggleSidebar(open: boolean): void;
+}
+
 export interface TimelineToolbarDeps {
-    app: App;
-    plugin: PluginContext;
-    readService: TaskReadService;
-    /** Owned by the view — the toolbar only opens and closes the popover. */
-    viewFilterMenu: FilterMenuComponent;
-    getLeaf: () => WorkspaceLeaf;
+    host: ViewToolbarHost<TimelineState>;
+    commands: TimelineCommands;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
-
-    onFilterChange: () => void;
-    onNavigateDays: (days: number) => void;
-    /** Jump to today (or the oldest overdue date) and scroll to now. */
-    onJumpToNow: () => void;
-    /** Show `date` the way the Now button shows today (same past-days lead). */
-    onJumpToDate: (date: string) => void;
-    /** The date (YYYY-MM-DD) the date picker opens on; `onJumpToDate` of it stays put. */
-    getCurrentDate: () => string;
-
-    getCustomName: () => string | undefined;
-    onRename: (newName: string | undefined) => void;
-
-    /** Snapshot the view's full persistable config for template save / URI build. */
-    getCurrentConfig: () => Partial<TimelineConfig>;
-    /** Apply a parsed config (template load / URI / reset). */
-    applyConfig: (cfg: Partial<TimelineConfig>) => void;
-    /**
-     * Reset to defaults. Separate from `applyConfig({})` because Timeline also
-     * drops its transient pinned-list collapse state, which is not part of the
-     * config at all.
-     */
-    onReset: () => void;
-    /** Trigger render + saveLayout side effects after applyConfig / onReset. */
-    onConfigApplied: () => void;
-
-    getReferenceMonth: () => { year: number; month: number };
-
-    getDaysToShow: () => number;
-    setDaysToShow: (days: number) => void;
-
-    /** Effective zoom: the per-view override if set, otherwise the global setting. */
-    getZoomLevel: () => number;
-    setZoomLevel: (zoom: number) => void;
-
-    getMaskMode: () => boolean;
-    setMaskMode: (next: boolean) => void;
-
-    getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
-    setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
-
-    /** undefined = follow the global setting. */
-    getShowAllDay: () => boolean | undefined;
-    setShowAllDay: (next: boolean | undefined) => void;
-    getShowTimeline: () => boolean | undefined;
-    setShowTimeline: (next: boolean | undefined) => void;
-    /** Drop every per-view override (astronomy / all-day / timeline). */
-    onFollowGlobal: () => void;
-
-    getShowSidebar: () => boolean;
-    onRequestSidebarToggle: (nextOpen: boolean) => void;
 }
 
 /**
  * Manages the toolbar UI for TimelineView.
  *
+ * It reads and writes the view's store, and mends its controls whenever the
+ * store changes, so it holds no copy of the view's state.
+ *
  * Why mount/update instead of render-from-scratch:
- *   The owning view calls performRender() on every data change, which used to
- *   construct a fresh TimelineToolbar. By preserving the toolbar instance and
- *   its child components, the filter popover survives across renders.
+ *   The owning view draws on every data change. By preserving the toolbar
+ *   instance and its child components, the filter popover survives draws.
  */
 export class TimelineToolbar extends ViewToolbarBase {
     private sidebarToggleBtn: HTMLElement | null = null;
@@ -98,24 +52,38 @@ export class TimelineToolbar extends ViewToolbarBase {
     private viewModeHandle: { update: () => void } | null = null;
     private zoomHandle: { update: () => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
+    private readonly filterMenu = new FilterMenuComponent();
 
     constructor(private deps: TimelineToolbarDeps) {
         super();
+        this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
+        deps.host.store.subscribe(() => this.update());
     }
 
-    private readonly codec = TimelineCodec;
+    private get store() {
+        return this.deps.host.store;
+    }
+
+    private get settings() {
+        return this.deps.host.plugin.settings;
+    }
+
+    /** Close the popovers the toolbar opened. */
+    close(): void {
+        this.filterMenu.close();
+    }
 
     /** Synchronizes the sidebar toggle button with the view's sidebar state. */
     syncSidebarToggleState(): void {
         if (this.sidebarToggleBtn) {
-            updateSidebarToggleButton(this.sidebarToggleBtn, this.deps.getShowSidebar());
+            updateSidebarToggleButton(this.sidebarToggleBtn, this.deps.commands.isSidebarOpen());
         }
     }
 
     /** Refreshes dynamic UI bits. Does NOT rebuild DOM. */
     override update(): void {
         if (!this.rootEl) return;
-        const { year, month } = this.deps.getReferenceMonth();
+        const { year, month } = this.referenceMonth();
         this.dateLabelHandle?.update(year, month);
         this.viewModeHandle?.update();
         this.zoomHandle?.update();
@@ -123,31 +91,38 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.syncSidebarToggleState();
     }
 
+    /** Year / month of the first day drawn. */
+    private referenceMonth(): { year: number; month: number } {
+        const d = this.deps.commands.window().start;
+        return { year: parseInt(d.substring(0, 4), 10), month: parseInt(d.substring(5, 7), 10) - 1 };
+    }
+
     protected override buildDom(toolbar: HTMLElement): void {
         const { deps } = this;
+        const { host, commands } = deps;
 
         // Date Label (YYYY - MM)
         const dateLabelDeps = {
-            app: deps.app,
-            getSettings: () => deps.plugin.settings,
-            notes: deps.plugin.getOperations(),
+            app: host.app,
+            getSettings: () => host.plugin.settings,
+            notes: host.plugin.getOperations(),
             linkInteractionManager: deps.linkInteractionManager,
             hoverParent: deps.hoverParent,
         };
         this.dateLabelHandle = DateLabel.render(toolbar, dateLabelDeps);
-        const ref = deps.getReferenceMonth();
+        const ref = this.referenceMonth();
         this.dateLabelHandle.update(ref.year, ref.month);
         DateLabel.bindHoverPreview(toolbar, dateLabelDeps);
 
         // Date Navigation
         DateNavigator.render(
             toolbar,
-            (days) => deps.onNavigateDays(days),
-            () => deps.onJumpToNow(),
+            (days) => commands.navigateDays(days),
+            () => commands.jumpToNow(),
             {
                 dateJump: {
-                    getCurrentDate: () => deps.getCurrentDate(),
-                    onJump: (date) => deps.onJumpToDate(date),
+                    getCurrentDate: () => commands.viewedDay(),
+                    onJump: (date) => commands.jumpToDate(date),
                 },
             }
         );
@@ -162,11 +137,11 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.renderFilterButton(actionZone);
 
         this.maskHandle = MaskToggleButton.render(actionZone, {
-            getMaskMode: () => deps.getMaskMode(),
-            setMaskMode: (next) => deps.setMaskMode(next),
+            getMaskMode: () => this.store.get().maskMode ?? false,
+            setMaskMode: (next) => this.store.update({ maskMode: next }),
         });
 
-        ViewSettingsMenu.renderButton(actionZone, this.getSettingsOptions());
+        ViewSettingsMenu.renderButton(actionZone, this.settingsOptions());
 
         // More button (compact mode — ⋮)
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
@@ -174,10 +149,10 @@ export class TimelineToolbar extends ViewToolbarBase {
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
 
         moreBtn.onclick = (e) => {
-            deps.plugin.menuPresenter.present((menu) => {
+            host.plugin.menuPresenter.present((menu) => {
                 this.appendCompactMenuItems(menu, moreBtn);
                 menu.addSeparator();
-                ViewSettingsMenu.appendItems(menu, this.getSettingsOptions());
+                ViewSettingsMenu.appendItems(menu, this.settingsOptions());
             }, { kind: 'mouseEvent', event: e });
         };
 
@@ -186,42 +161,54 @@ export class TimelineToolbar extends ViewToolbarBase {
     }
 
     private appendSectionToggles(menu: Menu): void {
-        const { deps } = this;
-        const effectiveAllDay = deps.getShowAllDay() ?? deps.plugin.settings.showAllDay;
+        const state = this.store.get();
+        const effectiveAllDay = state.showAllDay ?? this.settings.showAllDay;
         menu.addItem((item) => {
             item.setTitle(t('viewOptions.toggleAllDay'))
                 .setChecked(effectiveAllDay)
-                .onClick(() => deps.setShowAllDay(!effectiveAllDay));
+                .onClick(() => this.store.update({ showAllDay: !effectiveAllDay }));
         });
 
-        const effectiveTimeline = deps.getShowTimeline() ?? deps.plugin.settings.showTimeline;
+        const effectiveTimeline = state.showTimeline ?? this.settings.showTimeline;
         menu.addItem((item) => {
             item.setTitle(t('viewOptions.toggleTimeline'))
                 .setChecked(effectiveTimeline)
-                .onClick(() => deps.setShowTimeline(!effectiveTimeline));
+                .onClick(() => this.store.update({ showTimeline: !effectiveTimeline }));
         });
     }
 
     private appendFollowGlobal(menu: Menu): void {
-        const { deps } = this;
-        const astro = deps.getAstronomyDisplay();
+        const state = this.store.get();
+        const astro = state.astronomyDisplay;
         const hasAstroOverride = astro != null && Object.keys(astro).length > 0;
-        const hasAllDayOverride = deps.getShowAllDay() !== undefined;
-        const hasTimelineOverride = deps.getShowTimeline() !== undefined;
+        const hasAllDayOverride = state.showAllDay !== undefined;
+        const hasTimelineOverride = state.showTimeline !== undefined;
         menu.addItem((item) => {
             item.setTitle(t('viewOptions.followGlobal'))
                 .setIcon('rotate-ccw')
                 .setDisabled(!hasAstroOverride && !hasAllDayOverride && !hasTimelineOverride)
-                .onClick(() => deps.onFollowGlobal());
+                .onClick(() => this.store.update({
+                    astronomyDisplay: undefined,
+                    showAllDay: undefined,
+                    showTimeline: undefined,
+                }));
         });
+    }
+
+    private daysToShow(): number {
+        return daysToShowOf(this.store.get());
+    }
+
+    private zoom(): number {
+        return effectiveZoom(this.store.get(), this.settings);
     }
 
     private renderViewModeSwitch(toolbar: HTMLElement): void {
         this.viewModeHandle = DaysToShowSelector.render(
             toolbar,
-            () => this.deps.getDaysToShow(),
-            (newValue) => this.deps.setDaysToShow(newValue),
-            this.deps.plugin.menuPresenter,
+            () => this.daysToShow(),
+            (newValue) => this.store.update({ daysToShow: newValue }),
+            this.deps.host.plugin.menuPresenter,
             { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW }
         );
     }
@@ -229,123 +216,69 @@ export class TimelineToolbar extends ViewToolbarBase {
     private renderZoomControls(toolbar: HTMLElement): void {
         this.zoomHandle = ZoomSelector.render(
             toolbar,
-            () => this.deps.getZoomLevel(),
-            (newZoom) => this.deps.setZoomLevel(newZoom),
-            this.deps.plugin.menuPresenter
+            () => this.zoom(),
+            (newZoom) => this.store.update({ zoomLevel: newZoom }),
+            this.deps.host.plugin.menuPresenter
         );
     }
 
-    /** Shared filter + mask entries for the compact menu. */
-    private get compactDeps(): CompactMenuDeps {
-        const { deps } = this;
-        return {
-            viewFilterMenu: deps.viewFilterMenu,
-            getTasks: () => deps.plugin.getIndex().getTasks(),
-            onFilterChange: () => deps.onFilterChange(),
-            getMaskMode: () => deps.getMaskMode(),
-            setMaskMode: (next) => deps.setMaskMode(next),
-            onAfter: () => this.update(),
-        };
-    }
-
     private renderFilterButton(toolbar: HTMLElement): void {
-        const { deps } = this;
         const filterBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
 
         filterBtn.onclick = (e) => {
-            const allTasks = deps.plugin.getIndex().getTasks();
-
-            deps.viewFilterMenu.showMenu(e, {
-                onFilterChange: () => deps.onFilterChange(),
-                getTasks: () => allTasks,
-            });
+            const allTasks = this.deps.host.plugin.getIndex().getTasks();
+            editViewFilter(this.filterMenu, { event: e }, this.store, () => allTasks);
         };
     }
 
     private renderSidebarToggle(toolbar: HTMLElement): void {
+        const { commands } = this.deps;
         const toggleBtn = toolbar.createEl('button', {
             cls: 'view-toolbar__btn--icon sidebar-toggle-button-icon'
         });
         this.sidebarToggleBtn = toggleBtn;
-        updateSidebarToggleButton(toggleBtn, this.deps.getShowSidebar());
+        updateSidebarToggleButton(toggleBtn, commands.isSidebarOpen());
 
         toggleBtn.onclick = () => {
-            this.deps.onRequestSidebarToggle(!this.deps.getShowSidebar());
+            commands.toggleSidebar(!commands.isSidebarOpen());
         };
     }
 
-    private getSettingsOptions(): ViewSettingsOptions {
-        const { deps } = this;
-        return {
-            app: deps.app,
-            leaf: deps.getLeaf(),
-            getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => viewDisplayName(TimelineSchema.viewType),
-            onRename: (newName) => deps.onRename(newName),
-            buildUri: () => ({
-                configParams: this.codec.toUriParams(deps.getCurrentConfig()),
-            }),
-            viewType: TimelineSchema.viewType,
-            getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            templateNotes: deps.plugin.getOperations(),
-            getViewTemplate: () => ({
-                filePath: '',
-                name: deps.getCustomName() || viewDisplayName(TimelineSchema.viewType),
-                viewType: TimelineSchema.shortName,
-                config: this.codec.serializeConfig(deps.getCurrentConfig()),
-            }),
-            onApplyTemplate: (template) => {
-                const cfg = readViewConfig(this.codec, template.config ?? null);
-                deps.applyConfig(cfg);
-                if (template.name) deps.onRename(template.name);
-                deps.onConfigApplied();
-            },
-            getExportFolder: () => exportFolderOf(deps.plugin.settings),
-            onReset: () => {
-                deps.onReset();
-                deps.onRename(undefined);
-                deps.onConfigApplied();
-            },
-            menuPresenter: deps.plugin.menuPresenter,
-            appendCustomItems: (menu) => {
-                appendAstronomyMenuSection(menu, {
-                    overlays: ['sunTimes', 'moonPhase'],
-                    settings: deps.plugin.settings.astronomy,
-                    instance: deps.getAstronomyDisplay(),
-                    omitFollowGlobal: true,
-                    onChange: (next) => deps.setAstronomyDisplay(next),
-                });
-                this.appendSectionToggles(menu);
-                this.appendFollowGlobal(menu);
-            },
-        };
+    private settingsOptions() {
+        return this.deps.host.settingsOptions((menu) => {
+            appendAstronomyMenuSection(menu, {
+                overlays: ['sunTimes', 'moonPhase'],
+                settings: this.settings.astronomy,
+                instance: this.store.get().astronomyDisplay,
+                omitFollowGlobal: true,
+                onChange: (next) => this.store.update({ astronomyDisplay: next }),
+            });
+            this.appendSectionToggles(menu);
+            this.appendFollowGlobal(menu);
+        });
     }
 
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
-        const { deps } = this;
-
         DaysToShowSelector.appendSubmenu(
             menu,
-            () => deps.getDaysToShow(),
-            (value) => {
-                deps.setDaysToShow(value);
-                this.update();
-            },
+            () => this.daysToShow(),
+            (value) => this.store.update({ daysToShow: value }),
             { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW },
         );
         ZoomSelector.appendSubmenu(
             menu,
-            () => deps.getZoomLevel(),
-            (level) => {
-                deps.setZoomLevel(level);
-                this.update();
-            },
+            () => this.zoom(),
+            (level) => this.store.update({ zoomLevel: level }),
         );
 
         menu.addSeparator();
 
-        appendCompactFilterAndMask(menu, moreBtn, this.compactDeps);
+        appendCompactFilterAndMask(menu, moreBtn, {
+            filterMenu: this.filterMenu,
+            store: this.store,
+            getTasks: () => this.deps.host.plugin.getIndex().getTasks(),
+        });
     }
 }

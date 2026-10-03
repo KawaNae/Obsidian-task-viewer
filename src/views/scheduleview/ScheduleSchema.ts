@@ -16,8 +16,12 @@ export interface ScheduleConfig {
 }
 
 export interface ScheduleTransient {
-    currentDate?: string;
+    /** The day the view draws. Absent, the view follows today. */
+    date?: string;
 }
+
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type ScheduleState = Partial<ScheduleConfig> & Partial<ScheduleTransient>;
 
 export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
     viewType: 'schedule-view',
@@ -31,9 +35,9 @@ export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
         maskMode:         F.boolean('maskMode'),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
     },
-    anchorKey: 'currentDate',
+    anchorKey: 'date',
     transient: {
-        currentDate:             T.dateString('currentDate'),
+        date:                    T.dateString('date'),
     },
 };
 

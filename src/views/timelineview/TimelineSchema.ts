@@ -18,6 +18,7 @@ import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
  *  readable date label. */
 export const MIN_DAYS_TO_SHOW = 1;
 export const MAX_DAYS_TO_SHOW = 30;
+const DEFAULT_DAYS_TO_SHOW = 3;
 
 export interface TimelineConfig {
     customName?: string;
@@ -35,17 +36,24 @@ export interface TimelineConfig {
 }
 
 export interface TimelineTransient {
-    /** URI-seedable initial date. workspace persistence is intentional no-op:
-     *  TimelineView recomputes startDate on every onOpen from visualToday. */
-    startDate?: string;
+    /**
+     * The day the view looks at, drawn with the past days before it
+     * (`TimelineDays`). Absent, the view follows today. The workspace saves
+     * it, so a view on a fixed day reopens there; a URI and the CLI's
+     * `anchor-date` set it.
+     */
+    date?: string;
     pinnedListCollapsed?: Record<string, boolean>;
 }
+
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type TimelineState = Partial<TimelineConfig> & Partial<TimelineTransient>;
 
 export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
     viewType: 'timeline-view',
     shortName: 'timeline',
     defaults: {
-        daysToShow: 3,
+        daysToShow: DEFAULT_DAYS_TO_SHOW,
         zoomLevel: 1.0,
         showSidebar: true,
         maskMode: false,
@@ -62,13 +70,23 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         showAllDay:       F.boolean('showAllDay'),
         showTimeline:     F.boolean('showTimeline'),
     },
-    anchorKey: 'startDate',
+    anchorKey: 'date',
     listsOf: (config) => config.pinnedLists ?? [],
     transient: {
-        startDate:               T.dateString('startDate', { legacyKeys: ['date'] }),
+        date:                    T.dateString('date'),
         pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),
     },
 };
 
 /** The codec of this schema; the views, toolbars and the view table share this instance. */
 export const TimelineCodec = new ViewConfigCodec(TimelineSchema);
+
+/** The zoom drawn: the view's own, or the global setting. */
+export function effectiveZoom(state: Readonly<TimelineState>, settings: { zoomLevel: number }): number {
+    return state.zoomLevel ?? settings.zoomLevel;
+}
+
+/** The days per screen drawn. */
+export function daysToShowOf(state: Readonly<TimelineState>): number {
+    return state.daysToShow ?? DEFAULT_DAYS_TO_SHOW;
+}

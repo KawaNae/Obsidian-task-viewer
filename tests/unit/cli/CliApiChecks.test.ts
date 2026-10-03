@@ -83,7 +83,7 @@ describe('a flag given empty', () => {
         ['get', { id: '' }, 'id'],
         ['update', { id: 'a.md#^x', content: '' }, 'content'],
         ['export-image', { view: 'timeline', width: '' }, 'width'],
-        ['export-image', { view: 'timeline', 'start-date': '' }, 'start-date'],
+        ['export-image', { view: 'timeline', date: '' }, 'date'],
     ])('%s %j is refused, not taken as left out', async (command, params, flag) => {
         expect(errorOf(await handlers().get(command)!(params))).toBe(`${flag} must not be empty`);
     });

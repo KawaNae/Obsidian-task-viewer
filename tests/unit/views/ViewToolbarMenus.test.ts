@@ -5,7 +5,10 @@ import {
     ZoomSelector,
     appendCompactFilterAndMask,
     type CompactMenuDeps,
+    type FilterAndMask,
 } from '../../../src/views/sharedUI/ViewToolbar';
+import { ViewStore } from '../../../src/views/base/ViewStore';
+import type { FilterState } from '../../../src/services/filter/FilterTypes';
 import type { Menu } from 'obsidian';
 
 /**
@@ -207,29 +210,25 @@ describe('ZoomSelector menu items', () => {
 });
 
 describe('appendCompactFilterAndMask', () => {
-    function makeDeps(overrides: Partial<CompactMenuDeps> = {}) {
+    function makeDeps(state: FilterAndMask = {}) {
         const calls = {
             popoverAnchors: [] as unknown[],
-            filterChanges: 0,
-            maskWrites: [] as boolean[],
-            afters: 0,
+            editedFrom: [] as unknown[],
         };
-        let maskMode = false;
-        const deps = {
-            viewFilterMenu: {
-                showMenuAtElement(anchorEl: unknown, options: { onFilterChange: () => void }) {
+        const store = new ViewStore<FilterAndMask>(state);
+        const edited = { logic: 'and', filters: [{ property: 'tag' }] } as unknown as FilterState;
+        const deps: CompactMenuDeps = {
+            filterMenu: {
+                showMenuAtElement(anchorEl: unknown, options: { value: FilterState; onChange: (next: FilterState) => void }) {
                     calls.popoverAnchors.push(anchorEl);
-                    options.onFilterChange();
+                    calls.editedFrom.push(options.value);
+                    options.onChange(edited);
                 },
-            },
+            } as unknown as CompactMenuDeps['filterMenu'],
+            store,
             getTasks: () => [],
-            onFilterChange: () => { calls.filterChanges++; },
-            getMaskMode: () => maskMode,
-            setMaskMode: (next: boolean) => { calls.maskWrites.push(next); maskMode = next; },
-            onAfter: () => { calls.afters++; },
-            ...overrides,
-        } as unknown as CompactMenuDeps;
-        return { deps, calls };
+        };
+        return { deps, calls, store, edited };
     }
 
     it('appends exactly the filter and mask entries', () => {
@@ -239,29 +238,29 @@ describe('appendCompactFilterAndMask', () => {
         expect(menu.titles()).toEqual(['Filter', 'Mask mode']);
     });
 
-    it('opens the filter popover anchored to the element it was given', () => {
+    it('opens the filter editor under the element it was given, on the view\'s filter, and writes the edit back', () => {
         const anchor = { id: 'more-btn' } as unknown as HTMLElement;
         const menu = new RecordedMenu();
-        const { deps, calls } = makeDeps();
+        const held = { logic: 'and', filters: [] } as unknown as FilterState;
+        const { deps, calls, store, edited } = makeDeps({ filterState: held });
         appendCompactFilterAndMask(menu.asMenu(), anchor, deps);
         menu.click('Filter');
         expect(calls.popoverAnchors).toEqual([anchor]);
-        expect(calls.filterChanges).toBe(1);
-        expect(calls.afters).toBe(1);
+        expect(calls.editedFrom).toEqual([held]);
+        expect(store.get().filterState).toBe(edited);
     });
 
     it('toggles mask mode to the opposite of the current state', () => {
         const menu = new RecordedMenu();
-        const { deps, calls } = makeDeps();
+        const { deps, store } = makeDeps({ maskMode: false });
         appendCompactFilterAndMask(menu.asMenu(), {} as HTMLElement, deps);
         menu.click('Mask mode');
-        expect(calls.maskWrites).toEqual([true]);
-        expect(calls.afters).toBe(1);
+        expect(store.get().maskMode).toBe(true);
     });
 
     it('renders the mask entry checked, with the eye-off icon, while mask mode is on', () => {
         const menu = new RecordedMenu();
-        const { deps } = makeDeps({ getMaskMode: () => true });
+        const { deps } = makeDeps({ maskMode: true });
         appendCompactFilterAndMask(menu.asMenu(), {} as HTMLElement, deps);
         const mask = menu.items[1];
         expect(mask.checked).toBe(true);
@@ -270,7 +269,7 @@ describe('appendCompactFilterAndMask', () => {
 
     it('renders the mask entry unchecked, with the eye icon, while mask mode is off', () => {
         const menu = new RecordedMenu();
-        const { deps } = makeDeps({ getMaskMode: () => false });
+        const { deps } = makeDeps({});
         appendCompactFilterAndMask(menu.asMenu(), {} as HTMLElement, deps);
         const mask = menu.items[1];
         expect(mask.checked).toBe(false);

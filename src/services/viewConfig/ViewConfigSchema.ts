@@ -68,7 +68,10 @@ export interface ViewSchema<
     readonly defaults: Partial<TConfig>;
     readonly config: { readonly [K in keyof TConfig]-?: ConfigField<NonNullable<TConfig[K]>> };
     readonly transient: { readonly [K in keyof TTransient]-?: TransientField<NonNullable<TTransient[K]>> };
-    /** Transient field key used as the date anchor (the "Today" button target). */
+    /**
+     * The transient field that holds the day the view looks at (absent:
+     * following today). The CLI's `anchor-date` is written to it.
+     */
     readonly anchorKey?: keyof TTransient & string;
     /**
      * The pinned lists a config of this view holds, in the order the view

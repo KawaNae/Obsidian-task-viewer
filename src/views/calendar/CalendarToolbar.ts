@@ -4,7 +4,9 @@ import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { viewDisplayName } from '../ViewDescriptors';
-import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, editViewFilter, type ViewSettingsOptions, type CompactMenuDeps, type FilterAndMask } from '../sharedUI/ViewToolbar';
+import type { FilterState } from '../../services/filter/FilterTypes';
+import type { StateSource } from '../base/ViewStore';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -29,7 +31,8 @@ export interface CalendarToolbarDeps {
     onJumpToDate: (date: string) => void;
     /** The date (YYYY-MM-DD) the date picker opens on; `onJumpToDate` of it stays put. */
     getCurrentDate: () => string;
-    onFilterChange: () => void;
+    getFilterState: () => FilterState;
+    onFilterChange: (next: FilterState) => void;
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
@@ -114,13 +117,7 @@ export class CalendarToolbar extends ViewToolbarBase {
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.addEventListener('click', (event: MouseEvent) => {
-            deps.viewFilterMenu.showMenu(event, {
-                onFilterChange: () => {
-                    deps.onFilterChange();
-                    this.update();
-                },
-                getTasks: () => deps.plugin.getIndex().getTasks(),
-            });
+            editViewFilter(deps.viewFilterMenu, { event }, this.filterSource(), () => deps.plugin.getIndex().getTasks());
         });
 
         this.maskHandle = MaskToggleButton.render(actionZone, {
@@ -202,14 +199,27 @@ export class CalendarToolbar extends ViewToolbarBase {
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
         const compact: CompactMenuDeps = {
-            viewFilterMenu: deps.viewFilterMenu,
+            filterMenu: deps.viewFilterMenu,
+            store: this.filterSource(),
             getTasks: () => deps.plugin.getIndex().getTasks(),
-            onFilterChange: () => deps.onFilterChange(),
-            getMaskMode: () => deps.getMaskMode(),
-            setMaskMode: (next) => deps.setMaskMode(next),
-            onAfter: () => this.update(),
         };
         appendCompactFilterAndMask(menu, moreBtn, compact);
+    }
+
+    /**
+     * The view's filter and mask as the shared controls read and write them.
+     * Interim: Calendar does not hold a store yet (stage 9b part B2).
+     */
+    private filterSource(): StateSource<FilterAndMask> {
+        const { deps } = this;
+        return {
+            get: () => ({ filterState: deps.getFilterState(), maskMode: deps.getMaskMode() }),
+            update: (patch) => {
+                if (patch.filterState) deps.onFilterChange(patch.filterState);
+                if (patch.maskMode !== undefined) deps.setMaskMode(patch.maskMode);
+                this.update();
+            },
+        };
     }
 
     override update(): void {

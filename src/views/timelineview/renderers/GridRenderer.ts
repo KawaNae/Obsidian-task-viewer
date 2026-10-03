@@ -1,5 +1,5 @@
 import type { HoverParent } from 'obsidian';
-import type { ViewState } from '../TimelineViewState';
+import type { TimelineState } from '../TimelineSchema';
 import type { PluginContext } from '../../../PluginContext';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -23,7 +23,7 @@ import { getOverdueLevel } from '../../../services/display/TaskStatusQuery';
 export class GridRenderer {
     constructor(
         private container: HTMLElement,
-        private viewState: ViewState,
+        private getState: () => Readonly<TimelineState>,
         private plugin: PluginContext,
         private menuHandler: MenuHandler,
         private hoverParent: HoverParent,
@@ -41,7 +41,8 @@ export class GridRenderer {
         reconciler: CardReconciler,
     ) {
         const grid = parentContainer.createDiv('timeline-grid');
-        const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
+        const state = this.getState();
+        const colTemplate = `30px repeat(${dates.length}, minmax(0, 1fr))`;
 
         this.menuHandler.setViewStartDate(dates[0]);
 
@@ -68,9 +69,9 @@ export class GridRenderer {
             gridTemplateColumns: colTemplate,
         });
 
-        // 3. Date header — reference year-month from startDate for contextual labels
-        const refYear = parseInt(this.viewState.startDate.substring(0, 4), 10);
-        const refMonth = parseInt(this.viewState.startDate.substring(5, 7), 10) - 1;
+        // 3. Date header — reference year-month from the first day drawn, for contextual labels
+        const refYear = parseInt(dates[0].substring(0, 4), 10);
+        const refMonth = parseInt(dates[0].substring(5, 7), 10) - 1;
 
         this.dateHeaderRenderer.render(grid, {
             dates,
@@ -81,7 +82,7 @@ export class GridRenderer {
 
         // 4. Moon Phase Row
         const astronomyDisplay = getEffectiveAstronomyDisplay(
-            this.viewState.astronomyDisplay,
+            state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
         grid.toggleClass('is-sun-front', astronomyDisplay.sunTimes && astronomyDisplay.sunTimesInFront);
@@ -91,8 +92,8 @@ export class GridRenderer {
             moonRenderer.render(moonRow, dates);
         }
 
-        const showAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
-        const showTimeline = this.viewState.showTimeline ?? this.plugin.settings.showTimeline;
+        const showAllDay = state.showAllDay ?? this.plugin.settings.showAllDay;
+        const showTimeline = state.showTimeline ?? this.plugin.settings.showTimeline;
 
         // 5. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
