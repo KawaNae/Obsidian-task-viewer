@@ -104,6 +104,10 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
 
+    getViewType(): string {
+        return CalendarCodec.schema.viewType;
+    }
+
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, CalendarCodec);
         this.readService = plugin.getTaskReadService();

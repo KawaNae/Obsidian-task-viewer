@@ -141,6 +141,10 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
 
     // ==================== Lifecycle ====================
 
+    getViewType(): string {
+        return TimelineCodec.schema.viewType;
+    }
+
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, TimelineCodec);
         this.readService = plugin.getTaskReadService();

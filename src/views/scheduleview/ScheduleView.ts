@@ -79,6 +79,10 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
 
     private readonly hoverParent = new TaskViewHoverParent();
 
+    getViewType(): string {
+        return ScheduleCodec.schema.viewType;
+    }
+
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, ScheduleCodec);
         this.readService = plugin.getTaskReadService();

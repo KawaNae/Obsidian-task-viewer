@@ -84,6 +84,10 @@ export class KanbanView extends TaskViewerView<KanbanConfig, KanbanTransient> {
      */
     private currentReconciler: CardReconciler | null = null;
 
+    getViewType(): string {
+        return KanbanCodec.schema.viewType;
+    }
+
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, KanbanCodec);
         this.readService = this.plugin.getTaskReadService();

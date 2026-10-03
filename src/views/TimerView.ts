@@ -56,6 +56,10 @@ export class TimerView extends TaskViewerView<TimerConfig> {
     private templates: IntervalTemplate[] = [];
     private toolbar: TimerToolbar;
 
+    getViewType(): string {
+        return TimerCodec.schema.viewType;
+    }
+
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, TimerCodec);
         this.templateLoader = new IntervalTemplateLoader(plugin.app);

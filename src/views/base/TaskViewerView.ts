@@ -79,9 +79,13 @@ export abstract class TaskViewerView<
         this.store.subscribe(patch => this.answerChange(patch));
     }
 
-    getViewType(): string {
-        return this.descriptor.type;
-    }
+    /**
+     * The view's type, answered by each view from its schema module.
+     * Obsidian's View constructor reads it (the leaf's `data-type`) before
+     * this class has its fields, so it cannot be read from the codec the
+     * view hands the base.
+     */
+    abstract getViewType(): string;
 
     getDisplayText(): string {
         return this.store.get().customName || viewDisplayName(this.descriptor.type);
