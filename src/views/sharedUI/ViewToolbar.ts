@@ -513,11 +513,8 @@ export interface ViewSettingsOptions {
     onRename: (newName: string | undefined) => void;
     buildUri: () => ViewUriOptions;
     viewType: string;
-    getViewTemplateFolder: () => string;
-    /** What saves a view template as a note (`Operations.saveTemplateNote`). */
-    templateNotes: TemplateNoteSaver;
-    getViewTemplate: () => ViewTemplate;
-    onApplyTemplate: (template: ViewTemplate) => void;
+    /** Saving and loading view templates; a view without them has no such items. */
+    templates?: ViewTemplateOptions;
     onReset: () => void;
     menuPresenter: MenuPresenter;
     /** The folder an export from the menu is saved in (`exportFolderOf`); a view without it has no export item. */
@@ -528,9 +525,20 @@ export interface ViewSettingsOptions {
     appendCustomItems?: (menu: Menu) => void;
 }
 
+/** What the settings menu needs to save and load the view's templates. */
+export interface ViewTemplateOptions {
+    getFolder: () => string;
+    /** What saves a view template as a note (`Operations.saveTemplateNote`). */
+    notes: TemplateNoteSaver;
+    getViewTemplate: () => ViewTemplate;
+    onApply: (template: ViewTemplate) => void;
+}
+
 /**
  * View settings gear button and menu.
- * Provides: Rename, Save/Load view, Copy URI, Position display.
+ * Provides: the view's own items, Save/Load view (a view that keeps
+ * templates), Reset, Copy URI, Copy as link, Export (a view that exports an
+ * image) and the Position display.
  */
 export class ViewSettingsMenu {
     static renderButton(toolbar: HTMLElement, options: ViewSettingsOptions): HTMLElement {
@@ -549,80 +557,20 @@ export class ViewSettingsMenu {
 
     static appendItems(menu: Menu, options: ViewSettingsOptions): void {
         const {
-            app, leaf, getCustomName, getDefaultName, onRename,
-            buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
+            app, leaf, getCustomName, getDefaultName,
+            buildUri, viewType, templates, onReset,
             appendCustomItems,
         } = options;
 
-        const folder = getViewTemplateFolder();
+        /** The template folder, when the view keeps templates; a Copy URI names its template then. */
+        const folder = templates?.getFolder() ?? '';
 
         if (appendCustomItems) {
             appendCustomItems(menu);
             menu.addSeparator();
         }
 
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.saveView'))
-                .setIcon('save')
-                .onClick(() => {
-                    if (!folder) {
-                        new Notice(t('notice.setViewTemplateFolder'));
-                        return;
-                    }
-                    const defaultName = getCustomName() || getDefaultName();
-                    new InputModal(
-                        app,
-                        t('toolbar.saveViewTitle'),
-                        t('toolbar.saveViewLabel'),
-                        defaultName,
-                        async (value) => {
-                            const name = value.trim();
-                            if (!name) return;
-                            const template = getViewTemplate();
-                            template.name = name;
-                            const writer = new ViewTemplateWriter(options.templateNotes);
-                            const saved = await writer.saveTemplate(folder, template);
-                            // 書けなかったときは、書き込みの層が理由を通知済み。
-                            if (!saved) return;
-                            onRename(name);
-                            new Notice(t('notice.viewSaved', { name }));
-                        },
-                    ).open();
-                });
-        });
-
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.loadView'))
-                .setIcon('folder-open');
-
-            const shortViewType = ViewSettingsMenu.toShortViewType(viewType);
-
-            if (!folder) {
-                item.setSubmenu().addItem((sub: MenuItem) =>
-                    sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
-            } else {
-                const loader = new ViewTemplateLoader(app);
-                const summaries = loader.loadTemplates(folder)
-                    .filter(s => s.viewType === shortViewType);
-
-                const submenu = item.setSubmenu();
-                if (summaries.length === 0) {
-                    submenu.addItem((sub: MenuItem) =>
-                        sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
-                } else {
-                    for (const summary of summaries) {
-                        submenu.addItem((sub: MenuItem) => {
-                            sub.setTitle(summary.name)
-                                .onClick(async () => {
-                                    const full = await loader.loadFullTemplate(summary.filePath);
-                                    if (full) onApplyTemplate(full);
-                                    else new Notice(t('notice.failedToLoadTemplate'));
-                                });
-                        });
-                    }
-                }
-            }
-        });
+        if (templates) ViewSettingsMenu.appendTemplateItems(menu, options, templates, folder);
 
         menu.addItem((item) => {
             item.setTitle(t('toolbar.resetView'))
@@ -713,6 +661,77 @@ export class ViewSettingsMenu {
             item.setTitle(`  ${getPositionLabel(pos)}`)
                 .setChecked(true)
                 .setDisabled(true);
+        });
+    }
+
+    /** Save view... and Load view..., for a view that keeps templates. */
+    private static appendTemplateItems(
+        menu: Menu,
+        options: ViewSettingsOptions,
+        templates: ViewTemplateOptions,
+        folder: string,
+    ): void {
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.saveView'))
+                .setIcon('save')
+                .onClick(() => {
+                    if (!folder) {
+                        new Notice(t('notice.setViewTemplateFolder'));
+                        return;
+                    }
+                    const defaultName = options.getCustomName() || options.getDefaultName();
+                    new InputModal(
+                        options.app,
+                        t('toolbar.saveViewTitle'),
+                        t('toolbar.saveViewLabel'),
+                        defaultName,
+                        async (value) => {
+                            const name = value.trim();
+                            if (!name) return;
+                            const template = templates.getViewTemplate();
+                            template.name = name;
+                            const writer = new ViewTemplateWriter(templates.notes);
+                            const saved = await writer.saveTemplate(folder, template);
+                            // 書けなかったときは、書き込みの層が理由を通知済み。
+                            if (!saved) return;
+                            options.onRename(name);
+                            new Notice(t('notice.viewSaved', { name }));
+                        },
+                    ).open();
+                });
+        });
+
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.loadView'))
+                .setIcon('folder-open');
+
+            const shortViewType = ViewSettingsMenu.toShortViewType(options.viewType);
+
+            if (!folder) {
+                item.setSubmenu().addItem((sub: MenuItem) =>
+                    sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
+            } else {
+                const loader = new ViewTemplateLoader(options.app);
+                const summaries = loader.loadTemplates(folder)
+                    .filter(s => s.viewType === shortViewType);
+
+                const submenu = item.setSubmenu();
+                if (summaries.length === 0) {
+                    submenu.addItem((sub: MenuItem) =>
+                        sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
+                } else {
+                    for (const summary of summaries) {
+                        submenu.addItem((sub: MenuItem) => {
+                            sub.setTitle(summary.name)
+                                .onClick(async () => {
+                                    const full = await loader.loadFullTemplate(summary.filePath);
+                                    if (full) templates.onApply(full);
+                                    else new Notice(t('notice.failedToLoadTemplate'));
+                                });
+                        });
+                    }
+                }
+            }
         });
     }
 

@@ -50,7 +50,7 @@ export interface ViewToolbarHost<S extends object> {
  */
 export abstract class TaskViewerView<
     TConfig extends NamedConfig,
-    TTransient extends object = Record<string, never>,
+    TTransient extends object = Record<never, never>,
 > extends ItemView {
     protected readonly descriptor: ViewDescriptor;
     protected readonly store: ViewStore<ViewStateOf<TConfig, TTransient>>;

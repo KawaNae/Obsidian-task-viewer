@@ -757,7 +757,7 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 
 ### Parameters
 
-`view`, `position`, `name`, `template`, `mode` and `intervalTemplate` are the URI's own. Every other parameter is a field of the view's config schema (`<View>Schema.ts`), under its key or a legacy alias; Copy URI writes the key. A field added to a schema is read from a URI with no change here.
+`view`, `position`, `name` and `template` are the URI's own. Every other parameter is a field of the view's config schema (`<View>Schema.ts`), under its key or a legacy alias; Copy URI writes the key. A field added to a schema is read from a URI with no change here.
 
 | Parameter | Format | Description | Example |
 |-----------|--------|-------------|---------|
@@ -771,8 +771,8 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 | `filterState` (alias `filter`) | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
 | `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
 | `template` | string | View template name (URL-encoded). When set, `filterState`/`pinnedLists` are omitted | `My%20Template` |
-| `mode` | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
-| `intervalTemplate` | string | Interval template name (URL-encoded) | `Deep%20Work` |
+| `timerViewMode` (alias `mode`) | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
+| `intervalTemplate` | string | Timer: the interval template's name (URL-encoded) | `Deep%20Work` |
 
 ### Reading values
 
@@ -824,11 +824,11 @@ obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base6
 
 ### View settings menu
 
-Each view's toolbar has a gear icon (settings) button. The menu provides:
+Each view's toolbar has a gear icon (settings) button. The menu is built once for every view (`views/base/ViewSettings.ts`, `buildViewSettingsOptions`) from its descriptor and its store; the view's own items (astronomy, the timer's lengths) go above it. The menu provides:
 
 | Item | Action |
 |------|--------|
-| **Save view...** | Saves current view state as a named template (stored in configured `viewTemplateFolder`) |
+| **Save view...** | Saves current view state as a named template (stored in configured `viewTemplateFolder`). Not on the timer, which keeps no templates |
 | **Load view...** | Submenu listing saved templates; applies selected template to current view |
 | **Reset view** | Resets view state to defaults |
 | **Copy URI** | Copies `obsidian://task-viewer?...` with current state including auto-detected `position` and `name` |

@@ -3,6 +3,7 @@ import { buildViewSettingsOptions, resetPatch, templatePatch } from '../../../..
 import { ViewStore } from '../../../../src/views/base/ViewStore';
 import { VIEW_DESCRIPTORS } from '../../../../src/views/ViewDescriptors';
 import { TimelineCodec, type TimelineState } from '../../../../src/views/timelineview/TimelineSchema';
+import { TimerCodec } from '../../../../src/views/TimerSchema';
 import { MiniCalendarCodec } from '../../../../src/views/calendar/MiniCalendarSchema';
 
 function source<S extends object>(codec: unknown, viewType: keyof typeof VIEW_DESCRIPTORS, state: S) {
@@ -52,13 +53,13 @@ describe('templatePatch', () => {
 describe('buildViewSettingsOptions', () => {
     it('saves a template under the view\'s own short name (MiniCalendar used to write "calendar")', () => {
         const { options } = source(MiniCalendarCodec, 'mini-calendar-view', {});
-        expect(options.getViewTemplate().viewType).toBe('mini-calendar');
+        expect(options.templates!.getViewTemplate().viewType).toBe('mini-calendar');
     });
 
     it('reads the name and the config from the store, and writes a rename to it', () => {
         const { store, options } = source<TimelineState>(TimelineCodec, 'timeline-view', { daysToShow: 5, customName: 'Mine' });
         expect(options.getCustomName()).toBe('Mine');
-        const template = options.getViewTemplate();
+        const template = options.templates!.getViewTemplate();
         expect(template.name).toBe('Mine');
         expect(template.config).toEqual({ customName: 'Mine', daysToShow: 5 });
         options.onRename('Other');
@@ -72,9 +73,14 @@ describe('buildViewSettingsOptions', () => {
         options.onReset();
         expect(heard).toHaveBeenCalledTimes(1);
         expect(store.get()).toMatchObject({ daysToShow: 3, customName: undefined, date: '2026-10-01' });
-        options.onApplyTemplate({ filePath: '', name: 'T', viewType: 'timeline', config: { daysToShow: 2 } });
+        options.templates!.onApply({ filePath: '', name: 'T', viewType: 'timeline', config: { daysToShow: 2 } });
         expect(heard).toHaveBeenCalledTimes(2);
         expect(store.get()).toMatchObject({ daysToShow: 2, customName: 'T' });
+    });
+
+    it('offers templates only for a view that keeps them (not the timer)', () => {
+        expect(source(TimelineCodec, 'timeline-view', {}).options.templates).toBeDefined();
+        expect(source(TimerCodec, 'timer-view', {}).options.templates).toBeUndefined();
     });
 
     it('offers export only for a view that exports an image', () => {

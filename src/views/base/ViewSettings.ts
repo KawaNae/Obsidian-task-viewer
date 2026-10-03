@@ -80,9 +80,10 @@ export interface SettingsMenuSource<C extends NamedConfig, T extends object> {
 }
 
 /**
- * The options of the settings menu of the view `source` describes. A
- * template is saved under the view's own short name; the export item is
- * there when the view exports an image.
+ * The options of the settings menu of the view `source` describes. The
+ * template items are there when the view keeps templates (a template is
+ * saved under the view's own short name); the export item is there when the
+ * view exports an image.
  *
  * @param appendCustomItems the toolbar's own items, put above the shared block
  */
@@ -101,15 +102,17 @@ export function buildViewSettingsOptions<C extends NamedConfig, T extends object
         onRename: (name) => store.update({ customName: name } as ViewStateOf<C, T>),
         buildUri: () => ({ configParams: codec.toUriParams(configOf<C>(store.get())) }),
         viewType: descriptor.type,
-        getViewTemplateFolder: () => plugin.settings.viewTemplateFolder,
-        templateNotes: plugin.getOperations(),
-        getViewTemplate: () => ({
-            filePath: '',
-            name: customName() || defaultName(),
-            viewType: descriptor.shortName,
-            config: codec.serializeConfig(configOf<C>(store.get())),
-        }),
-        onApplyTemplate: (template) => store.update(templatePatch(codec, template)),
+        templates: descriptor.hasTemplates ? {
+            getFolder: () => plugin.settings.viewTemplateFolder,
+            notes: plugin.getOperations(),
+            getViewTemplate: () => ({
+                filePath: '',
+                name: customName() || defaultName(),
+                viewType: descriptor.shortName,
+                config: codec.serializeConfig(configOf<C>(store.get())),
+            }),
+            onApply: (template) => store.update(templatePatch(codec, template)),
+        } : undefined,
         onReset: () => store.update(resetPatch(codec)),
         getExportFolder: descriptor.exportable ? () => exportFolderOf(plugin.settings) : undefined,
         menuPresenter: plugin.menuPresenter,

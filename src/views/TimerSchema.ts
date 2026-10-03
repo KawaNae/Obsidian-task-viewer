@@ -23,6 +23,9 @@ export interface TimerConfig {
     intervalTemplate?: string;
 }
 
+/** The view's state: its config as one value (`ViewStore`); the timer has no transient field. */
+export type TimerState = Partial<TimerConfig>;
+
 export const TimerSchema: ViewSchema<TimerConfig> = {
     viewType: 'timer-view',
     shortName: 'timer',

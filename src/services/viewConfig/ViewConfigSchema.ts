@@ -58,13 +58,13 @@ export interface TransientField<T> {
 
 export interface ViewSchema<
     TConfig extends object,
-    TTransient extends object = Record<string, never>,
+    TTransient extends object = Record<never, never>,
 > {
     /** Obsidian view type, e.g. 'timeline-view'. The view table reads it from here. */
     readonly viewType: ViewType;
     /** URI shortName for `&view=<short>`, e.g. 'timeline'. */
     readonly shortName: string;
-    /** Defaults applied on onReset and as the starting point for applyConfig. */
+    /** The config's defaults: what a reset gives, and what a state, a URI or a template is laid over. */
     readonly defaults: Partial<TConfig>;
     readonly config: { readonly [K in keyof TConfig]-?: ConfigField<NonNullable<TConfig[K]>> };
     readonly transient: { readonly [K in keyof TTransient]-?: TransientField<NonNullable<TTransient[K]>> };

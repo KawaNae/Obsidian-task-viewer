@@ -14,7 +14,7 @@ type TransientDict<T> = { readonly [K in keyof T]-?: TransientField<NonNullable<
 
 export class ViewConfigCodec<
     TConfig extends object,
-    TTransient extends object = Record<string, never>,
+    TTransient extends object = Record<never, never>,
 > {
     constructor(readonly schema: ViewSchema<TConfig, TTransient>) {}
 
@@ -23,12 +23,13 @@ export class ViewConfigCodec<
      *
      * Every view applies a config the same way: fields present in `cfg` win,
      * fields absent from it revert to the schema default rather than keeping
-     * whatever the view happened to hold. Views call this at the top of their
-     * `applyConfig()` so the rule lives in one place instead of five.
+     * whatever the view happened to hold. The base view reads every state,
+     * reset and template through it (`TaskViewerView.setState`, `resetPatch`,
+     * `templatePatch`), so the rule lives in one place.
      *
      * Every field the schema declares is present in the result, holding
      * `undefined` when it has neither an incoming value nor a default. That
-     * matters for views that apply the result with `Object.assign`: a missing
+     * matters because the result is merged into the view's state: a missing
      * key would silently preserve the previous value, which is the opposite of
      * REPLACE. Fields with no default therefore clear rather than linger.
      */
