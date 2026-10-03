@@ -2,6 +2,8 @@
  * The day a dated view looks at, in the running Dev vault (stage9b-design,
  * 設計 3). Timeline, Schedule, Calendar and MiniCalendar hold the transient
  * `date`: absent, the view follows today; present, it stays on that day.
+ * Calendar and MiniCalendar also hold `weekOffset`, the weeks their grid was
+ * moved from `date`'s month grid.
  *
  * Each view is opened in a leaf of the test's own and driven through its
  * toolbar's buttons; what it shows is read from its DOM and what it saves
@@ -24,7 +26,7 @@ import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, act, addDays, calendarLabel, closeViews, ev, goToDate, gridDays, monthGridStart, navigate,
-    openView, readSettings, readView, restartView, saveSettings, visualDay, weekStart, type ViewReading,
+    openUri, openView, readSettings, readView, restartView, saveSettings, setViewState, visualDay, type ViewReading,
 } from '../helpers/view-helper';
 
 const KEYS = ['startHour', 'pastDaysToShow', 'startFromOldestOverdue', 'weekStartDay'] as const;
@@ -129,45 +131,81 @@ describe.each([
     ['Calendar', 'calendar-view', 'ca'],
     ['MiniCalendar', 'mini-calendar-view', 'mc'],
 ])('%s', (_label, type, name) => {
-    it("opens following today on today's month grid", () => {
-        const r = openView(name, type);
-        const start = monthGridStart(today, ws);
-        expect(r.state.date).toBeUndefined();
+    /** The grid drawn is the one starting on `start`. */
+    function expectGrid(r: ViewReading, start: string): void {
         expect(r.gridStart).toBe(start);
         expect(drawnGridStart(r)).toBe(expectedGridHead(type, start));
         if (type === 'mini-calendar-view') expect(r.dates).toEqual(gridDays(start));
         else expect(r.labels).toEqual(gridDays(start).map(calendarLabel));
+    }
+
+    it("opens following today on today's month grid", () => {
+        const r = openView(name, type);
+        expect(r.state.date).toBeUndefined();
+        expect(r.state.weekOffset).toBeUndefined();
+        expectGrid(r, monthGridStart(today, ws));
         expect(r.today).toBe(true);
     });
 
-    it('moves a week with the arrows, fixing the date on the new first day', () => {
+    it('moves a week with the arrows: today is fixed in date, and only the offset moves', () => {
         const start = monthGridStart(today, ws);
         let r = navigate(name, 'next');
-        expect(r.state.date).toBe(addDays(start, 7));
-        expect(drawnGridStart(r)).toBe(expectedGridHead(type, addDays(start, 7)));
+        expect(r.state).toMatchObject({ date: today, weekOffset: 1 });
+        expectGrid(r, addDays(start, 7));
         r = navigate(name, 'prev');
         r = navigate(name, 'prev');
-        expect(r.state.date).toBe(addDays(start, -7));
-        expect(drawnGridStart(r)).toBe(expectedGridHead(type, addDays(start, -7)));
+        expect(r.state).toMatchObject({ date: today, weekOffset: -1 });
+        expectGrid(r, addDays(start, -7));
     });
 
-    it('follows today again on Today: the saved state has no date', () => {
+    it('opens again where the weeks moved it, from the state it saved', () => {
+        const before = readView(name);
+        const r = restartView(name, `${name}-re`);
+        expect(r.state).toEqual(before.state);
+        expectGrid(r, addDays(monthGridStart(today, ws), -7));
+    });
+
+    it('follows today again on Today: the saved state has no date and no offset', () => {
         const r = navigate(name, 'today');
         expect(r.state).not.toHaveProperty('date');
-        expect(r.gridStart).toBe(monthGridStart(today, ws));
+        expect(r.state).not.toHaveProperty('weekOffset');
+        expectGrid(r, monthGridStart(today, ws));
     });
 
     if (type === 'calendar-view') {
-        it("shows the picked day's month grid on Go to date", () => {
+        it("looks at the picked day on Go to date: its month grid, no offset", () => {
+            navigate(name, 'next');
             const r = goToDate(name, FAR);
-            expect(r.state.date).toBe(monthGridStart(FAR, ws));
-            expect(drawnGridStart(r)).toBe(calendarLabel(monthGridStart(FAR, ws)));
+            expect(r.state.date).toBe(FAR);
+            expect(r.state).not.toHaveProperty('weekOffset');
+            expectGrid(r, monthGridStart(FAR, ws));
         });
     }
+
+    it('shows on a URI with date= the grid Go to date shows, and moves it by weekOffset=', () => {
+        const r = openUri(`${name}-uri`, { view: type === 'calendar-view' ? 'calendar' : 'mini-calendar', date: FAR });
+        expect(r.type).toBe(type);
+        expect(r.state.date).toBe(FAR);
+        expect(r.state).not.toHaveProperty('weekOffset');
+        expectGrid(r, monthGridStart(FAR, ws));
+        if (type === 'calendar-view') expect(r.state).toEqual(readView(name).state);
+
+        const moved = openUri(`${name}-uri2`, { view: type === 'calendar-view' ? 'calendar' : 'mini-calendar', date: FAR, weekOffset: '-2' });
+        expect(moved.state).toMatchObject({ date: FAR, weekOffset: -2 });
+        expectGrid(moved, addDays(monthGridStart(FAR, ws), -14));
+    });
+
+    it('clears the offset when a state names only a date (a URI opened over the view)', () => {
+        navigate(`${name}-uri2`, 'next');
+        const r = setViewState(`${name}-uri2`, { date: FAR });
+        expect(r.state.date).toBe(FAR);
+        expect(r.state).not.toHaveProperty('weekOffset');
+        expectGrid(r, monthGridStart(FAR, ws));
+    });
 });
 
 describe('a restart', () => {
-    /** Open a following and a fixed view of each type; the fixed one on `FAR` (Calendar: its week). */
+    /** Open a following and a fixed view of each type; the fixed one on `FAR` (Calendar: its month grid). */
     const VIEWS = [
         ['timeline-view', 'rs-tl'],
         ['schedule-view', 'rs-sc'],
@@ -190,8 +228,8 @@ describe('a restart', () => {
         if (type === 'timeline-view') expect(fixed.dates?.[0]).toBe(addDays(FAR, -past));
         if (type === 'schedule-view') expect(fixed.dates).toEqual([FAR]);
         if (type === 'calendar-view' || type === 'mini-calendar-view') {
-            expect(fixed.gridStart).toBe(weekStart(FAR, ws));
-            expect(drawnGridStart(fixed)).toBe(expectedGridHead(type, weekStart(FAR, ws)));
+            expect(fixed.gridStart).toBe(monthGridStart(FAR, ws));
+            expect(drawnGridStart(fixed)).toBe(expectedGridHead(type, monthGridStart(FAR, ws)));
         }
 
         const follow = restartView(`${name}-follow`, `${name}-follow-2`);
@@ -220,17 +258,25 @@ describe('a settings save', () => {
         expect(readView('ss-follow').dates?.[0]).toBe(addDays(today, -past));
     });
 
-    it("moves a following Calendar's grid at once by a new week start", () => {
+    it("redraws a Calendar's month grid at once by a new week start, following or on a picked day", () => {
         openView('ss-ca', 'calendar-view');
+        openView('ss-ca-fixed', 'calendar-view');
+        goToDate('ss-ca-fixed', FAR);
         const other = ws === 0 ? 1 : 0;
         try {
             saveSettings({ weekStartDay: other });
             const r = readView('ss-ca');
             expect(r.gridStart).toBe(monthGridStart(today, other));
             expect(r.labels?.[0]).toBe(calendarLabel(monthGridStart(today, other)));
+            // The picked day's month grid stays that month's grid: its top row holds the 1st.
+            const fixed = readView('ss-ca-fixed');
+            expect(fixed.state.date).toBe(FAR);
+            expect(fixed.gridStart).toBe(monthGridStart(FAR, other));
+            expect(fixed.labels?.slice(0, 7)).toContain(`${FAR.slice(0, 8)}01`);
         } finally {
             saveSettings({ weekStartDay: ws });
         }
+        expect(readView('ss-ca-fixed').gridStart).toBe(monthGridStart(FAR, ws));
     });
 });
 
@@ -286,8 +332,8 @@ describe('a day roll', () => {
         expect(rolled['dr-tl-fixed'].state.date).toBe(FAR);
         expect(rolled['dr-tl-fixed'].dates?.[0]).toBe(addDays(FAR, -past));
         expect(rolled['dr-sc-fixed'].dates).toEqual([FAR]);
-        expect(rolled['dr-ca-fixed'].gridStart).toBe(weekStart(FAR, ws));
-        expect(rolled['dr-mc-fixed'].gridStart).toBe(weekStart(FAR, ws));
+        expect(rolled['dr-ca-fixed'].gridStart).toBe(monthGridStart(FAR, ws));
+        expect(rolled['dr-mc-fixed'].gridStart).toBe(monthGridStart(FAR, ws));
 
         // And back: the start hour restored, the following views are on today again.
         expect(readView('dr-sc-follow').dates).toEqual([today]);
