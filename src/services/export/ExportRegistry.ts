@@ -1,11 +1,17 @@
 import type { ExportTargetSpec } from './ExportTypes';
+import { descriptorOf, type ExportableViewType } from '../../views/ViewDescriptors';
 
 export interface ViewExportDescriptor {
     containerSelector: string;
     spec: ExportTargetSpec;
 }
 
-const EXPORT_DESCRIPTORS: Record<string, ViewExportDescriptor> = {
+/**
+ * What to capture of each view that exports an image. Which views do is the
+ * view table's `exportable`; keyed by the type read from it, a view marked
+ * exportable without a target here is a compile error.
+ */
+const EXPORT_DESCRIPTORS: Record<ExportableViewType, ViewExportDescriptor> = {
     'timeline-view': {
         containerSelector: '.timeline-view',
         spec: {
@@ -50,7 +56,9 @@ const EXPORT_DESCRIPTORS: Record<string, ViewExportDescriptor> = {
 };
 
 export function exportDescriptorFor(viewType: string): ViewExportDescriptor | undefined {
-    return EXPORT_DESCRIPTORS[viewType];
+    return descriptorOf(viewType)?.exportable
+        ? EXPORT_DESCRIPTORS[viewType as ExportableViewType]
+        : undefined;
 }
 
 export function resolveExportContainer(

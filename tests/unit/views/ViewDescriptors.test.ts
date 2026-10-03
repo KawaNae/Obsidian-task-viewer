@@ -12,6 +12,8 @@ import {
     shortNameFor,
     resolveViewTypeFromShortName,
 } from '../../../src/services/viewConfig';
+import { exportDescriptorFor } from '../../../src/services/export/ExportRegistry';
+import { exportableShortNames } from '../../../src/views/ViewDescriptors';
 import { TimelineCodec } from '../../../src/views/timelineview/TimelineSchema';
 import { ScheduleCodec } from '../../../src/views/scheduleview/ScheduleSchema';
 import { TimerCodec } from '../../../src/views/TimerSchema';
@@ -96,6 +98,14 @@ describe('the lists read from the table', () => {
         expect(viewTypesWhere(d => d.exportable)).toEqual([
             'timeline-view', 'schedule-view', 'calendar-view', 'kanban-view',
         ]);
+        expect(exportableShortNames()).toEqual(['timeline', 'schedule', 'calendar', 'kanban']);
+    });
+
+    it('has an export target for exactly the views that export', () => {
+        for (const d of ALL_VIEWS) {
+            expect(exportDescriptorFor(d.type) !== undefined, d.type).toBe(d.exportable);
+        }
+        expect(exportDescriptorFor('task-viewer-log-view')).toBeUndefined();
     });
 });
 

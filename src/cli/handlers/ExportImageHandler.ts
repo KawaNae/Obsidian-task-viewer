@@ -12,6 +12,7 @@ import { buildViewStateFromParams } from '../../services/viewConfig/ViewStateFac
 import type { ExportResult } from '../../services/export/ExportService';
 import { toCliName } from '../../api/OperationSchemas';
 import { MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from '../../views/timelineview/TimelineSchema';
+import { exportableShortNames } from '../../views/ViewDescriptors';
 
 const EXPORT_SPECIFIC_KEYS = new Set([
     'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open', 'width',
@@ -31,7 +32,7 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
         const { viewType } = resolution;
 
         if (!exportDescriptorFor(viewType)) {
-            return cliError(`View '${params.view ?? viewType}' does not support image export. Supported: timeline, calendar, schedule, kanban`);
+            return cliError(`View '${params.view ?? viewType}' does not support image export. Supported: ${exportableShortNames().join(', ')}`);
         }
 
         // 2. Resolve anchor-date → view-specific transient key
@@ -139,7 +140,7 @@ type ViewTypeResolution = { viewType: string } | { error: string };
 function resolveViewType(params: CliData, plugin: PluginContext & ExportHost): ViewTypeResolution {
     if (params.view) {
         const resolved = resolveViewTypeFromShortName(params.view);
-        if (!resolved) return { error: cliError(`Unknown view: '${params.view}'. Use: timeline, calendar, schedule, kanban`) };
+        if (!resolved) return { error: cliError(`Unknown view: '${params.view}'. Use: ${exportableShortNames().join(', ')}`) };
         return { viewType: resolved };
     }
     if (params.template) {
@@ -154,7 +155,7 @@ function resolveViewType(params: CliData, plugin: PluginContext & ExportHost): V
     }
     const available = listTemplateNames(plugin);
     const templateHint = available ? ` Available templates: ${available}` : '';
-    return { error: cliError(`Missing required flag: view= or template=. Specify the view to export (view=timeline|calendar|schedule|kanban) or a saved template name.${templateHint}`) };
+    return { error: cliError(`Missing required flag: view= or template=. Specify the view to export (view=${exportableShortNames().join('|')}) or a saved template name.${templateHint}`) };
 }
 
 function validateFlags(params: CliData, viewType: string): string | null {

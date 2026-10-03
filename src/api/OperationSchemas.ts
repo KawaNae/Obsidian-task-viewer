@@ -1,4 +1,5 @@
 import { TaskApiError } from './TaskApiTypes';
+import { exportableShortNames } from '../views/ViewDescriptors';
 import type { NumberRange } from '../utils/values/NumberValues';
 import type {
     ListParams, TodayParams, GetParams, CreateParams, UpdateParams, DeleteParams,
@@ -172,7 +173,7 @@ export const CLI_OUTPUT_SCHEMA: Record<string, ParamSpec> = {
 };
 
 export const EXPORT_IMAGE_SCHEMA: Record<string, ParamSpec> = {
-    view:         { value: '<timeline|calendar|schedule|kanban>', description: 'View type to export' },
+    view:         { value: `<${exportableShortNames().join('|')}>`, description: 'View type to export' },
     template:     { value: '<name>',           description: 'View template name (infers view type if omitted)' },
     name:         { value: '<text>',           description: 'Custom name for the exported view' },
     anchorDate:   { value: '<YYYY-MM-DD>',     description: 'Date anchor — same as the "Today" button but for any date. Resolved to the view-specific field via schema' },
