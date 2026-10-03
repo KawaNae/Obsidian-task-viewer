@@ -1,24 +1,18 @@
-import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
-import { logDebug } from '../../log/log';
+import type { WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import type { AstronomyDisplay } from '../../types';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { DateUtils } from '../../utils/DateUtils';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { ScheduleToolbar } from './ScheduleToolbar';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyCellAdorner';
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
-import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
 import type { CollapsibleSectionKey, GridRow, TimedDisplayTask } from './ScheduleTypes';
@@ -33,20 +27,24 @@ import type { IndexReads } from '../../services/core/TaskIndex';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
-import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
-import { ScheduleSchema, ScheduleCodec, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import { ScheduleCodec, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
+import { TaskViewerView } from '../base/TaskViewerView';
+import { followToday, followsToday, shiftedDay, viewedDay } from '../base/ViewedDay';
 
 
-type ScheduleViewState = Partial<ScheduleConfig> & Partial<ScheduleTransient>;
-
-export class ScheduleView extends ItemView {
+/**
+ * Schedule View - one day on an adaptive time grid.
+ *
+ * Its state is ScheduleSchema's config and transient fields, held in the
+ * base's store. It draws the day it looks at (`date`, absent while it
+ * follows today).
+ */
+export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransient> {
     private static readonly HOURS_PER_DAY = 24;
     private static readonly MIN_GAP_HEIGHT_PX = 30;
     private static readonly MAX_GAP_HEIGHT_PX = 100;
     private static readonly TIMELINE_TOP_PADDING_PX = 16;
     private static readonly TIMELINE_BOTTOM_PADDING_PX = 16;
-    private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
@@ -55,7 +53,6 @@ export class ScheduleView extends ItemView {
     private readonly moonRenderer: MoonPhaseRenderer;
     private readonly dateHeaderRenderer: DateHeaderRenderer;
     private readonly periodicHeaderRenderer: PeriodicHeaderRenderer;
-    private readonly viewFilterMenu = new FilterMenuComponent();
     private readonly toolbar: ScheduleToolbar;
     private readonly menuHandler: MenuHandler;
     private readonly gridCalculator: ScheduleGridCalculator;
@@ -67,7 +64,6 @@ export class ScheduleView extends ItemView {
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
     // Latest grid layout, cached off the last full render so the per-minute
     // now-line (`onMinute`) can re-paint without re-running buildAdaptiveGrid.
@@ -76,9 +72,6 @@ export class ScheduleView extends ItemView {
     private readonly scrollRestorer = new PixelScrollRestorer(
         () => this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null,
     );
-    private customName: string | undefined;
-    private maskMode: boolean = false;
-    private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
         allDay: false,
         dueOnly: false,
@@ -87,15 +80,14 @@ export class ScheduleView extends ItemView {
     private readonly hoverParent = new TaskViewHoverParent();
 
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
-        super(leaf);
-        this.plugin = plugin;
+        super(leaf, plugin, ScheduleCodec);
         this.readService = plugin.getTaskReadService();
         this.index = plugin.getIndex();
         const cards = createCardRendering({
             app: this.app,
             plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-            getMaskMode: () => this.maskMode,
+            getMaskMode: () => this.state.maskMode ?? false,
         });
         this.taskRenderer = cards.taskRenderer;
         this.menuHandler = cards.menuHandler;
@@ -137,159 +129,49 @@ export class ScheduleView extends ItemView {
         this.sectionRenderer = new ScheduleSectionRenderer({
             taskRenderer: this.scheduleTaskRenderer,
             collapsedSections: this.collapsedSections,
-            currentVisualDateProvider: () => this.currentVisualDate,
+            currentVisualDateProvider: () => this.viewedDay(),
         });
-        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.toolbar = new ScheduleToolbar({
-            app: this.app,
-            leaf: this.leaf,
-            plugin: this.plugin,
-            readService: this.readService,
-            viewFilterMenu: this.viewFilterMenu,
-            container: this.containerEl,
-            onNavigate: (days) => this.navigateDate(days),
-            onToday: () => {
-                this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-                this.scrollToNowOnNextRender = true;
-                void this.app.workspace.requestSaveLayout();
-                this.render();
+            host: this.toolbarHost(),
+            commands: {
+                navigate: (days) => this.navigateDate(days),
+                today: () => {
+                    this.scrollToNowOnNextRender = true;
+                    this.update(followToday());
+                },
+                jumpToDate: (date) => this.update({ date }),
+                viewedDay: () => this.viewedDay(),
             },
-            onJumpToDate: (date) => {
-                this.currentVisualDate = date;
-                void this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            onFilterChange: () => {
-                void this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            getCustomName: () => this.customName,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg) => this.applyConfig(cfg),
-            onConfigApplied: () => {
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-                this.render();
-            },
-            getMaskMode: () => this.maskMode,
-            setMaskMode: (next) => {
-                this.maskMode = next;
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-            },
-            getAstronomyDisplay: () => this.astronomyDisplay,
-            setAstronomyDisplay: (next) => {
-                this.astronomyDisplay = next;
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-            },
-            getCurrentDate: () => this.currentVisualDate,
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
         });
     }
 
+    /** The day drawn: the fixed date, or today while the view follows it. */
+    private viewedDay(): string {
+        return viewedDay(this.state.date, this.visualToday());
+    }
+
     /**
-     * The date currently drawn, for image export. Schedule renders exactly
-     * one day (`this.currentVisualDate`, the same field `renderDayTimeline`
-     * is called with), so anchor/from/to all coincide.
+     * The date currently drawn, for image export. Schedule draws exactly one
+     * day, so anchor/from/to all coincide.
      */
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
-        if (!this.currentVisualDate) return null;
-        return { anchor: this.currentVisualDate, from: this.currentVisualDate, to: this.currentVisualDate };
+        const day = this.viewedDay();
+        return { anchor: day, from: day, to: day };
     }
 
-    getViewType(): string {
-        return ScheduleSchema.viewType;
-    }
-
-    getDisplayText(): string {
-        return this.customName || viewDisplayName(ScheduleSchema.viewType);
-    }
-
-    getIcon(): string {
-        return VIEW_DESCRIPTORS[ScheduleSchema.viewType].icon;
-    }
-
-    private readonly codec = ScheduleCodec;
-
-    /** REPLACE-over-defaults application of a parsed config. */
-    applyConfig(cfg: Partial<ScheduleConfig>): void {
-        const next = this.codec.withDefaults(cfg);
-        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
-        this.customName = next.customName;
-        this.maskMode = next.maskMode === true;
-        this.astronomyDisplay = next.astronomyDisplay
-            ? { ...next.astronomyDisplay }
-            : undefined;
-    }
-
-    /** Snapshot for template save / URI build. */
-    getCurrentConfig(): Partial<ScheduleConfig> {
-        const filterState = this.viewFilterMenu.getFilterState();
-        return {
-            customName: this.customName,
-            filterState: hasConditions(filterState) ? filterState : undefined,
-            maskMode: this.maskMode,
-            astronomyDisplay: this.astronomyDisplay,
-        };
-    }
-
-    async setState(state: ScheduleViewState, result: ViewStateResult): Promise<void> {
-        const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = readViewConfig(this.codec, stateDict);
-        const transient = this.codec.parseTransient(stateDict);
-
-        this.applyConfig(config);
-
-        if (transient.currentDate && DateUtils.isDateShape(transient.currentDate)) {
-            this.currentVisualDate = transient.currentDate;
-        }
-
-
-        await super.setState(state, result);
-        if (this.container) {
-            this.performRender();
-        }
-    }
-
-    getState(): Record<string, unknown> {
-        return {
-            ...this.codec.serializeConfig(this.getCurrentConfig()),
-            ...this.codec.serializeTransient({
-                currentDate: this.currentVisualDate,
-            }),
-        };
-    }
-
-    async onOpen(): Promise<void> {
-        logDebug(`[${this.getViewType()}] opened`);
+    protected openView(): void {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('schedule-view');
 
-        if (!this.currentVisualDate) {
-            this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        }
-
         this.registerKeyboardNavigation();
         this.scrollToNowOnNextRender = true;
-        this.performRender();
 
-        this.renderScheduler = new RenderScheduler({
-            performFull: () => this.render(),
-            getHost: () => this.container,
-        });
         this.unsubscribe = this.index.onChange((taskId, changes) => {
-            this.renderScheduler?.handleChange(taskId, changes);
+            this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
@@ -297,8 +179,8 @@ export class ScheduleView extends ItemView {
      * A minute passed: move the now-line without a full render (task changes
      * and navigation are the only other triggers).
      */
-    public onMinute(): void {
-        if (!this.container || !this.isCurrentVisualDate(this.currentVisualDate)) {
+    override onMinute(): void {
+        if (!this.container || !this.isCurrentVisualDate(this.viewedDay())) {
             return;
         }
         const main = this.container.querySelector('.schedule-grid') as HTMLElement | null;
@@ -308,29 +190,20 @@ export class ScheduleView extends ItemView {
         this.gridRenderer.updateNowLine(main, this.gridRows, this.gridTimelineHeight);
     }
 
-    async onClose(): Promise<void> {
-        logDebug(`[${this.getViewType()}] closed`);
+    protected closeView(): void {
         this.hoverParent.dispose();
-        this.viewFilterMenu.close();
+        this.toolbar.close();
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
         }
-        this.renderScheduler?.dispose();
-        this.renderScheduler = null;
         this.scrollRestorer.dispose();
     }
 
-    /** Settings changed: redraw the day the user is on (see `redrawView`). */
-    public redraw(): void {
-        this.render();
-    }
-
-    /** The visual day changed: move to the new today. */
-    public onDayRolled(): void {
-        this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        this.scrollToNowOnNextRender = true;
-        this.render();
+    /** The visual day changed: a view following today moves to it and scrolls to now; a fixed one stays. */
+    override onDayRolled(): void {
+        if (followsToday(this.state.date)) this.scrollToNowOnNextRender = true;
+        this.requestDraw();
     }
 
     private registerKeyboardNavigation(): void {
@@ -353,17 +226,14 @@ export class ScheduleView extends ItemView {
         });
     }
 
-    private renderScheduler: RenderScheduler | null = null;
-
-    private render(): void {
+    /** Draw the day, keeping the scroll. */
+    protected draw(): void {
         this.scrollRestorer.save();
         this.performRender();
     }
 
     private performRender(): void {
-        if (!this.container) {
-            return;
-        }
+        const day = this.viewedDay();
 
         // Keyed reconciliation: lift surviving cards before tearing down the
         // day-timeline scaffolding. They will be re-parented + re-decorated as
@@ -377,14 +247,11 @@ export class ScheduleView extends ItemView {
         const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
         this.toolbar.mount(toolbarHost);
 
-        const filterState = this.viewFilterMenu.getFilterState();
         const startHour = this.plugin.settings.startHour;
-        const rangeTasks = this.readService.getTasksForDateRange(
-            this.currentVisualDate, this.currentVisualDate, filterState
-        );
+        const rangeTasks = this.readService.getTasksForDateRange(day, day, this.state.filterState);
         const splitResult = splitTasks(rangeTasks, { type: 'visual-date', startHour });
-        const baseCategorized = categorizeTasksForDate(splitResult, this.currentVisualDate, startHour);
-        this.menuHandler.setViewStartDate(this.currentVisualDate);
+        const baseCategorized = categorizeTasksForDate(splitResult, day, startHour);
+        this.menuHandler.setViewStartDate(day);
 
         const fixedHost = this.container.createDiv('schedule-view__fixed-host');
         const fixedContainer = fixedHost.createDiv('schedule-view__fixed-rows');
@@ -392,7 +259,7 @@ export class ScheduleView extends ItemView {
         const bodyScroll = this.container.createDiv('schedule-view__body-scroll');
         const bodyContainer = bodyScroll.createDiv('schedule-view__scroll-content');
 
-        this.renderDayTimeline(fixedContainer, bodyContainer, this.currentVisualDate, baseCategorized, reconciler);
+        this.renderDayTimeline(fixedContainer, bodyContainer, day, baseCategorized, reconciler);
 
         // Dispose any cards that did not turn up in the new render.
         reconciler.forEachStale(card => this.taskRenderer.dispose(card));
@@ -428,7 +295,7 @@ export class ScheduleView extends ItemView {
         // Allday in scroll body (sticky on PC)
         this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay, reconciler);
 
-        this.renderTimelineMain(bodyContainer, categorized.timed, reconciler);
+        this.renderTimelineMain(bodyContainer, date, categorized.timed, reconciler);
 
         if (categorized.dueOnly.length > 0) {
             this.sectionRenderer.renderCollapsibleTaskSection(
@@ -442,7 +309,7 @@ export class ScheduleView extends ItemView {
         }
     }
 
-    private renderTimelineMain(container: HTMLElement, tasks: TimedDisplayTask[], reconciler: CardReconciler): void {
+    private renderTimelineMain(container: HTMLElement, date: string, tasks: TimedDisplayTask[], reconciler: CardReconciler): void {
         const main = container.createDiv('schedule-grid');
         const layout = this.gridCalculator.buildAdaptiveGrid(tasks);
         const timelineHeight = layout.totalHeight + ScheduleView.TIMELINE_TOP_PADDING_PX + ScheduleView.TIMELINE_BOTTOM_PADDING_PX;
@@ -454,12 +321,12 @@ export class ScheduleView extends ItemView {
         const placements = this.scheduleTaskRenderer.placeTasksOnGrid(tasks, layout.rows);
         this.scheduleTaskRenderer.renderTaskCards(main, placements, timelineHeight, reconciler);
 
-        if (this.isCurrentVisualDate(this.currentVisualDate)) {
+        if (this.isCurrentVisualDate(date)) {
             this.gridRenderer.renderNowLine(main, layout.rows, timelineHeight);
         }
 
         const astronomyDisplay = getEffectiveAstronomyDisplay(
-            this.astronomyDisplay,
+            this.state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
         // Raise sun lines above task cards when the per-view setting asks for it.
@@ -479,7 +346,7 @@ export class ScheduleView extends ItemView {
                 return this.gridCalculator.getTopForMinute(visualMinute, rows)
                     + ScheduleView.TIMELINE_TOP_PADDING_PX;
             };
-            attachSunIndicators(main, this.currentVisualDate, {
+            attachSunIndicators(main, date, {
                 startHour, latitude, longitude, minutesToTopPx,
             });
             // Anchor the line with a night-direction arrow on the axis right
@@ -487,7 +354,7 @@ export class ScheduleView extends ItemView {
             // the same y-coordinate system used by `minutesToTopPx`.
             const markers = main.querySelector<HTMLElement>('.schedule-grid__markers');
             if (markers) {
-                attachSunAxisArrows(markers, this.currentVisualDate, {
+                attachSunAxisArrows(markers, date, {
                     startHour, latitude, longitude, minutesToTopPx,
                 });
             }
@@ -495,10 +362,10 @@ export class ScheduleView extends ItemView {
     }
 
     private renderDateHeader(container: HTMLElement, date: string): void {
-        const todayVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        const todayVisualDate = this.visualToday();
         const isOverdue = (d: string): boolean => {
             if (d >= todayVisualDate) return false;
-            const tasksOnDate = this.readService.getTasksForDateRange(d, d, this.viewFilterMenu.getFilterState());
+            const tasksOnDate = this.readService.getTasksForDateRange(d, d, this.state.filterState);
             return tasksOnDate.some(dt =>
                 getOverdueLevel(dt, this.plugin.settings.startHour, this.plugin.settings.statusDefinitions, this.readService) !== 'none'
             );
@@ -521,7 +388,7 @@ export class ScheduleView extends ItemView {
      */
     private renderMoonSection(container: HTMLElement, date: string): void {
         const astronomyDisplay = getEffectiveAstronomyDisplay(
-            this.astronomyDisplay,
+            this.state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
         if (!astronomyDisplay.moonPhase) return;
@@ -535,21 +402,18 @@ export class ScheduleView extends ItemView {
         return 'var(--schedule-axis-width) minmax(0, 1fr)';
     }
 
+    /** Look at the day `offset` days from the one drawn (the toolbar's arrows, the arrow keys). */
     private navigateDate(offset: number): void {
-        const date = DateUtils.parseDate(this.currentVisualDate);
-        date.setDate(date.getDate() + offset);
-        this.currentVisualDate = DateUtils.getLocalDateString(date);
-        void this.app.workspace.requestSaveLayout();
-        this.render();
+        this.update(shiftedDay(this.state.date, this.visualToday(), offset));
     }
 
     private isCurrentVisualDate(dateStr: string): boolean {
-        return dateStr === DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
+        return dateStr === this.visualToday();
     }
 
     /** Scrolls the schedule body to center the now-line vertically. */
     private scrollToCurrentTime(): void {
-        if (!this.isCurrentVisualDate(this.currentVisualDate)) return;
+        if (!this.isCurrentVisualDate(this.viewedDay())) return;
         const bodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
         if (!bodyScroll) return;
         const nowLine = bodyScroll.querySelector('.schedule-grid__now-line') as HTMLElement | null;

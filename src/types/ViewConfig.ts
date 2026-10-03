@@ -2,8 +2,8 @@
  * Configuration a view persists: what its pinned lists hold, what a card's
  * top-right corner says, and what a saved view template carries.
  *
- * Per-view *runtime* state does not live here — it belongs to the view that
- * owns it (see `views/timelineview/TimelineViewState.ts`).
+ * A view's own state does not live here — it is the config and transient
+ * fields of the view's schema, held by the view (`views/base/ViewStore.ts`).
  */
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortState } from '../services/sort/SortTypes';

@@ -26,7 +26,7 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
 import { MiniCalendarSchema, MiniCalendarCodec, type MiniCalendarConfig, type MiniCalendarTransient } from './MiniCalendarSchema';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { MiniCalendarToolbar } from './MiniCalendarToolbar';
 import { hostWindow } from '../../utils/HostWindow';
 import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
@@ -46,6 +46,8 @@ export class MiniCalendarView extends ItemView {
     private readonly index: IndexReads;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly viewFilterMenu = new FilterMenuComponent();
+    /** The view's own filter; the menu edits it and hands it back. */
+    private filterState: FilterState = createEmptyFilterState();
     private readonly toolbar: MiniCalendarToolbar;
 
     private container: HTMLElement;
@@ -85,7 +87,9 @@ export class MiniCalendarView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },
-            onFilterChange: () => {
+            getFilterState: () => this.filterState,
+            onFilterChange: (next) => {
+                this.filterState = next;
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },
@@ -146,7 +150,7 @@ export class MiniCalendarView extends ItemView {
 
     applyConfig(cfg: Partial<MiniCalendarConfig>): void {
         const next = this.codec.withDefaults(cfg);
-        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.filterState = next.filterState ?? createEmptyFilterState();
         this.customName = next.customName;
         this.astronomyDisplay = next.astronomyDisplay
             ? { ...next.astronomyDisplay }
@@ -154,7 +158,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     getCurrentConfig(): Partial<MiniCalendarConfig> {
-        const filterState = this.viewFilterMenu.getFilterState();
+        const filterState = this.filterState;
         return {
             customName: this.customName,
             filterState: hasConditions(filterState) ? filterState : undefined,
@@ -350,7 +354,7 @@ export class MiniCalendarView extends ItemView {
 
     private computeIndicators(rangeStart: string, rangeEnd: string): Map<string, IndicatorState> {
         const indicatorMap = new Map<string, IndicatorState>();
-        const filterState = this.viewFilterMenu.getFilterState();
+        const filterState = this.filterState;
         const filter = hasConditions(filterState) ? filterState : undefined;
 
         const allTasks = this.readService.getTasksForDateRange(rangeStart, rangeEnd, filter);

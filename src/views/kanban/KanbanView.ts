@@ -8,7 +8,7 @@ import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
-import { createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createDefaultListFilterState, createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { PinnedListQuery } from '../../services/filter/PinnedListQuery';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
@@ -61,6 +61,8 @@ export class KanbanView extends ItemView {
     private readonly listFilterMenu = new FilterMenuComponent();
     private readonly listSortMenu = new SortMenuComponent();
     private readonly viewFilterMenu = new FilterMenuComponent();
+    /** The view's own filter; the menu edits it and hands it back. */
+    private filterState: FilterState = createEmptyFilterState();
     private readonly toolbar: KanbanToolbar;
 
     private container: HTMLElement;
@@ -118,7 +120,9 @@ export class KanbanView extends ItemView {
             readService: this.readService,
             viewFilterMenu: this.viewFilterMenu,
             container: this.containerEl,
-            onFilterChange: () => {
+            getFilterState: () => this.filterState,
+            onFilterChange: (next) => {
+                this.filterState = next;
                 this.requestSaveLayout();
                 this.render();
             },
@@ -170,11 +174,11 @@ export class KanbanView extends ItemView {
         }
         this.customName = next.customName;
         this.maskMode = next.maskMode === true;
-        this.viewFilterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
+        this.filterState = next.filterState ?? createEmptyFilterState();
     }
 
     getCurrentConfig(): Partial<KanbanConfig> {
-        const filterState = this.viewFilterMenu.getFilterState();
+        const filterState = this.filterState;
         return {
             customName: this.customName,
             filterState: hasConditions(filterState) ? filterState : undefined,
@@ -302,7 +306,7 @@ export class KanbanView extends ItemView {
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
         const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
 
-        const query = PinnedListQuery.resolve(listDef, this.viewFilterMenu.getFilterState());
+        const query = PinnedListQuery.resolve(listDef, this.filterState);
         const tasks = this.readService.getFilteredTasks(query.filter, query.sort);
 
         renderListSection(gridEl, {
@@ -323,10 +327,10 @@ export class KanbanView extends ItemView {
                 });
             },
             onFilterClick: (anchorEl) => {
-                this.listFilterMenu.setFilterState(listDef.filterState);
                 this.listFilterMenu.showMenuAtElement(anchorEl, {
-                    onFilterChange: () => {
-                        listDef.filterState = this.listFilterMenu.getFilterState();
+                    value: listDef.filterState,
+                    onChange: (next) => {
+                        listDef.filterState = next;
                         this.requestSaveLayout();
                         this.render();
                     },

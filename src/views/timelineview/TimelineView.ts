@@ -1,15 +1,13 @@
-import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import type { WorkspaceLeaf } from 'obsidian';
+import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
 import type { PinnedListDefinition } from '../../types';
-import type { ViewState } from './TimelineViewState';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { logDebug } from '../../log/log';
 
-import { DateUtils } from '../../utils/DateUtils';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
@@ -34,17 +32,16 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createDefaultListFilterState, createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
-import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import { TimelineSchema, TimelineCodec, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import { TaskViewerView } from '../base/TaskViewerView';
+import { TimelineCodec, daysToShowOf, effectiveZoom, type TimelineConfig, type TimelineState, type TimelineTransient } from './TimelineSchema';
+import { TimelineDays, windowDates, windowEnd, type DayWindow } from './TimelineDays';
 
 /**
  * View id used as a namespace prefix for shared viewState fields whose keys
@@ -54,22 +51,22 @@ import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 const VIEW_ID = 'timeline';
 const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
 
+/** The fields whose change the pinned lists show: their lists, the view's filter, the mask. */
+const PINNED_LIST_FIELDS: readonly (keyof TimelineState)[] = ['pinnedLists', 'filterState', 'maskMode'];
+
 /**
  * Timeline View - Displays tasks on a time-based grid layout.
  *
- * Persisted state shape is declared in TimelineSchema (config + transient).
- * This view-local type alias is the union seen by setState — Obsidian gives
- * us `unknown`-shaped dicts so the codec is what actually parses them.
+ * Its state is TimelineSchema's config and transient fields, held in the
+ * base's store. The days it draws are read from the day it looks at
+ * (`date`, absent while it follows today) by `TimelineDays`.
  */
-type TimelineViewState = Partial<TimelineConfig> & Partial<TimelineTransient>;
-
-export class TimelineView extends ItemView {
+export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransient> {
     // ==================== Services & Handlers ====================
     private readService: TaskReadService;
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
     private operations: Operations;
-    private plugin: PluginContext & TimerHost;
     private taskRenderer: TaskCardRenderer;
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
@@ -77,18 +74,13 @@ export class TimelineView extends ItemView {
     private selectionController!: SelectionController;
     private toolbar: TimelineToolbar | undefined;
     private sidebarManager: SidebarManager;
+    private readonly days: TimelineDays;
 
     // ==================== Renderers ====================
     private gridRenderer: GridRenderer;
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
-    private pinnedListRenderer: PinnedListRenderer;
-    /**
-     * The view's own filter (toolbar funnel). Owned here rather than by the
-     * toolbar so that `applyConfig` / `getCurrentConfig` have one authority for
-     * "the current filter" — same arrangement as Calendar / Schedule / Kanban.
-     */
-    private readonly viewFilterMenu = new FilterMenuComponent();
+    private pinnedListRenderer: PinnedListRenderer | undefined;
     private listFilterMenu = new FilterMenuComponent();
     private listSortMenu = new SortMenuComponent();
     private topRightEditor = new TopRightConfigEditor();
@@ -97,7 +89,7 @@ export class TimelineView extends ItemView {
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
     private linkInteractionManager: TaskLinkInteractionManager;
 
-    // ==================== State ====================
+    // ==================== DOM ====================
     private container: HTMLElement;
     /**
      * Stable host for PinnedListRenderer that survives container.empty() —
@@ -107,7 +99,6 @@ export class TimelineView extends ItemView {
      * full view renders.
      */
     private pinnedHost: HTMLElement;
-    private viewState: ViewState;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     // Scroll save/restore: save the visible time at the viewport top as
@@ -119,34 +110,18 @@ export class TimelineView extends ItemView {
     private stickyAnchorObserver: ResizeObserver | null = null;
 
     /**
-     * Init barrier: viewState-dependent initialization (e.g. computing the
-     * initial startDate from filterState) must wait for **all** of:
-     *   - DOM ready (onOpen completed)
-     *   - state applied (setState completed — even when no state was passed,
-     *     Obsidian still calls setState once with empty state)
-     *   - tasks loaded (readService has data — either cached at open time or
-     *     delivered later via onChange)
+     * The overdue pull is first read once the view is open, has its state
+     * and has tasks — in whatever order those come. The base answers the
+     * first two (`onReady`); the tasks come with the index's first change
+     * when they were not there at open.
      *
-     * Without this barrier, onOpen running before setState would compute the
-     * initial date with an empty filter (URI-restored filterState arrives in
-     * setState which fires after onOpen for fresh views), pinning the view to
-     * a filtered-out overdue task. The classic "init once" latch pattern was
-     * the bug.
-     *
-     * Add new viewState-dependent init to runInitialStateLogic() — never to
-     * onOpen directly — to stay race-free regardless of Obsidian's lifecycle
-     * order.
+     * Read before the state came, the pull would be taken with an empty
+     * filter (a URI's filter arrives in setState, after onOpen) and land on a
+     * task the filter drops.
      */
-    private startDateExplicit = false;
-    private initBarrier = {
-        domReady: false,
-        stateApplied: false,
-    };
-    private hasRunInitialLogic = false;
+    private stateReady = false;
+    private hasPulled = false;
 
-    // Render coalescing (frame-level): 同一 frame 内に複数の onChange が来ても render は 1 回
-    // 実装は RenderScheduler に委譲。
-    private renderScheduler: RenderScheduler;
     /** render 後の多段 scroll 再適用用。container の window に束ねる（popout 対応）。 */
     private readonly frames = new HostFrameScheduler(() => this.container);
 
@@ -156,38 +131,39 @@ export class TimelineView extends ItemView {
     private pinchInitialMidY: number = 0;
     private pinchInitialScrollTop: number = 0;
     private isPinching: boolean = false;
+    /**
+     * At narrow width the sidebar starts closed whatever the state says, and
+     * only the toggle button opens it. `showSidebar` states the desktop-width
+     * position; applying a config never marks the sidebar as user-opened.
+     */
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
 
     // ==================== Lifecycle ====================
 
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
-        super(leaf);
+        super(leaf, plugin, TimelineCodec);
         this.readService = plugin.getTaskReadService();
         this.index = plugin.getIndex();
         this.operations = plugin.getOperations();
-        this.plugin = plugin;
-        this.viewState = {
-            startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
-            daysToShow: 3,
-            showSidebar: true,
-            pinnedLists: [],
-        };
+        this.days = new TimelineDays({
+            today: () => this.visualToday(),
+            pastDaysToShow: () => this.plugin.settings.pastDaysToShow,
+            pullsToOverdue: () => this.plugin.settings.startFromOldestOverdue,
+            oldestOverdue: () => this.findOldestOverdueDate(),
+        });
         this.sidebarManager = new SidebarManager({
             mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
             onPersist: () => this.app.workspace.requestSaveLayout(),
             onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
-            onRequestClose: () => {
-                this.viewState.showSidebar = false;
-                this.sidebarManager.applyOpen(false, { animate: true, persist: true });
-            },
-            getIsOpen: () => this.viewState.showSidebar,
+            onRequestClose: () => this.setSidebarOpen(false),
+            getIsOpen: () => this.isSidebarOpen(),
         });
         const cards = createCardRendering({
             app: this.app,
             plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-            getMaskMode: () => this.viewState.maskMode ?? false,
+            getMaskMode: () => this.state.maskMode ?? false,
             // ハブが開いた時点で card の選択状態は不要なので解除する。
             //
             // `selectTask(null)` は handle DOM ごと除去する破壊的操作なので、トリガと
@@ -204,114 +180,16 @@ export class TimelineView extends ItemView {
         this.taskRenderer = cards.taskRenderer;
         this.menuHandler = cards.menuHandler;
         this.addChild(this.taskRenderer);
-        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
+
+        this.store.subscribe((patch, prev) => {
+            // A new day looked at, or following again: the pull is read anew.
+            if ('date' in patch && patch.date !== prev.date) this.days.settle(this.state.date);
+            // The pinned lists do not hear the view's state from the index.
+            if (PINNED_LIST_FIELDS.some(key => key in patch)) this.pinnedListRenderer?.refresh();
+        });
     }
 
-    getViewType() {
-        return TimelineSchema.viewType;
-    }
-
-    getDisplayText() {
-        return this.viewState.customName || viewDisplayName(TimelineSchema.viewType);
-    }
-
-    getIcon() {
-        return VIEW_DESCRIPTORS[TimelineSchema.viewType].icon;
-    }
-
-    private readonly codec = TimelineCodec;
-
-    /**
-     * Apply a parsed config with REPLACE semantics over schema defaults.
-     * Single entry point used by setState AND by the toolbar's template apply,
-     * so reset / load / restore all go through one path.
-     *
-     * `showSidebar` states the desktop-width starting position only. At mobile
-     * width the sidebar always starts closed whatever the config says, and
-     * only the toggle button opens it (see `sidebarOpenedThisSession`), so
-     * applying a config never marks the sidebar as user-opened. Calendar
-     * follows the same rule.
-     */
-    applyConfig(cfg: Partial<TimelineConfig>): void {
-        const { filterState, ...rest } = this.codec.withDefaults(cfg);
-        Object.assign(this.viewState, rest);
-
-        // FilterMenu owns the in-memory FilterState; viewState keeps no copy.
-        this.viewFilterMenu.setFilterState(filterState ?? createEmptyFilterState());
-
-        const sidebarOpen = rest.showSidebar ?? true;
-        this.viewState.showSidebar = sidebarOpen;
-        this.sidebarManager.applyOpen(sidebarOpen, { animate: false });
-    }
-
-    /** Snapshot for template save / URI build / workspace state. */
-    getCurrentConfig(): Partial<TimelineConfig> {
-        const filterState = this.viewFilterMenu.getFilterState();
-        return {
-            customName: this.viewState.customName,
-            filterState: hasConditions(filterState) ? filterState : undefined,
-            maskMode: this.viewState.maskMode,
-            astronomyDisplay: this.viewState.astronomyDisplay,
-            showSidebar: this.viewState.showSidebar,
-            pinnedLists: this.viewState.pinnedLists,
-            daysToShow: this.viewState.daysToShow,
-            zoomLevel: this.viewState.zoomLevel,
-            showAllDay: this.viewState.showAllDay,
-            showTimeline: this.viewState.showTimeline,
-        };
-    }
-
-    /**
-     * Reset to defaults. Beyond `applyConfig({})` this also drops the transient
-     * pinned-list collapse state, which is per-leaf and not part of the config.
-     */
-    private resetToDefaults(): void {
-        this.applyConfig({});
-        this.viewState.pinnedListCollapsed = undefined;
-    }
-
-    async setState(state: TimelineViewState, result: ViewStateResult): Promise<void> {
-        const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = readViewConfig(this.codec, stateDict);
-        const transient = this.codec.parseTransient(stateDict);
-
-        // Fields absent from `state` are restored to their declared defaults
-        // rather than retained. This is the single behavior that closes B5
-        // across all views (no per-view "else undefined" branches needed).
-        this.applyConfig(config);
-
-        // Transient is overlaid additively (no defaults — these are per-leaf).
-        Object.assign(this.viewState, transient);
-        if (transient.startDate !== undefined) this.startDateExplicit = true;
-
-        await super.setState(state, result);
-        // State-side of the init barrier is now satisfied. If onOpen has
-        // already run and tasks are loaded, this fires initial state-
-        // dependent logic (e.g. computing startDate from the restored
-        // filterState); otherwise it waits.
-        this.initBarrier.stateApplied = true;
-        this.tryRunInitialStateLogic();
-        this.render();
-        // setState may have changed filterState / pinnedLists / collapse — none
-        // of these go through index.onChange, so PinnedList wouldn't
-        // otherwise refresh. (Safe to call even before attach: refresh() no-ops
-        // when not attached.)
-        this.pinnedListRenderer?.refresh();
-    }
-
-    getState(): Record<string, unknown> {
-        const transient = this.viewState as Partial<TimelineTransient>;
-        return {
-            ...this.codec.serializeConfig(this.getCurrentConfig()),
-            ...this.codec.serializeTransient(transient),
-        };
-    }
-
-    async onOpen() {
-        logDebug(`[${this.getViewType()}] opened`);
-        // Set initial startDate - will be re-evaluated in onChange when tasks are loaded
-        this.viewState.startDate = this.startDateLeadingTo(DateUtils.getVisualDateOfNow(this.plugin.settings.startHour));
-
+    protected openView(): void {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('timeline-view');
@@ -330,120 +208,32 @@ export class TimelineView extends ItemView {
 
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
-        // after, so the toolbar's DOM survives renders. That, plus the view-owned
-        // viewFilterMenu, is what lets the filter popover stay open across
-        // data-driven re-renders.
+        // after, so the toolbar's DOM survives renders. That is what lets the
+        // filter popover stay open across data-driven re-renders.
         this.toolbar = new TimelineToolbar({
-            app: this.app,
-            plugin: this.plugin,
-            readService: this.readService,
-            viewFilterMenu: this.viewFilterMenu,
-            getLeaf: () => this.leaf,
+            host: this.toolbarHost(),
+            commands: {
+                navigateDays: (n) => this.update(this.days.moved(this.state.date, daysToShowOf(this.state), n)),
+                jumpToNow: () => {
+                    this.scrollToNowOnNextRender = true;
+                    this.update(this.days.now());
+                },
+                jumpToDate: (date) => this.update(this.days.goTo(date)),
+                viewedDay: () => this.days.viewedDay(this.state.date),
+                window: () => this.window(),
+                isSidebarOpen: () => this.isSidebarOpen(),
+                toggleSidebar: (open) => {
+                    if (open) this.sidebarOpenedThisSession = true;
+                    this.setSidebarOpen(open);
+                },
+            },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
-
-            onFilterChange: () => {
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                // Filter changes can affect pinned lists with
-                // applyViewFilter:true; PinnedList does not see view filter
-                // state via onChange, so refresh explicitly here.
-                this.pinnedListRenderer?.refresh();
-            },
-            onNavigateDays: (days) => {
-                this.viewState.startDate = DateUtils.addDays(this.viewState.startDate, days);
-                this.render();
-            },
-            onJumpToNow: () => {
-                this.jumpToNowStartDate();
-                this.scrollToNowOnNextRender = true;
-                this.render();
-            },
-            onJumpToDate: (date) => {
-                this.viewState.startDate = this.startDateLeadingTo(date);
-                this.render();
-            },
-            // Undoes startDateLeadingTo, so confirming it leaves the view put.
-            getCurrentDate: () => DateUtils.addDays(this.viewState.startDate, this.plugin.settings.pastDaysToShow),
-
-            getCustomName: () => this.viewState.customName,
-            onRename: (newName) => {
-                this.viewState.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-
-            getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg) => this.applyConfig(cfg),
-            onReset: () => this.resetToDefaults(),
-            onConfigApplied: () => {
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-
-            getReferenceMonth: () => this.getReferenceMonth(),
-
-            getDaysToShow: () => this.viewState.daysToShow,
-            setDaysToShow: (days) => {
-                this.viewState.daysToShow = days;
-                this.render();
-                this.app.workspace.requestSaveLayout();
-            },
-
-            getZoomLevel: () => this.getEffectiveZoomLevel(),
-            setZoomLevel: (zoom) => {
-                this.viewState.zoomLevel = zoom;
-                this.render();
-                this.app.workspace.requestSaveLayout();
-            },
-
-            getMaskMode: () => this.viewState.maskMode ?? false,
-            setMaskMode: (next) => {
-                this.viewState.maskMode = next;
-                this.render();
-                this.app.workspace.requestSaveLayout();
-            },
-
-            getAstronomyDisplay: () => this.viewState.astronomyDisplay,
-            setAstronomyDisplay: (next) => {
-                this.viewState.astronomyDisplay = next;
-                this.render();
-                this.app.workspace.requestSaveLayout();
-            },
-
-            getShowAllDay: () => this.viewState.showAllDay,
-            setShowAllDay: (next) => {
-                this.viewState.showAllDay = next;
-                this.render();
-                this.app.workspace.requestSaveLayout();
-            },
-            getShowTimeline: () => this.viewState.showTimeline,
-            setShowTimeline: (next) => {
-                this.viewState.showTimeline = next;
-                this.render();
-                this.app.workspace.requestSaveLayout();
-            },
-            onFollowGlobal: () => {
-                this.viewState.astronomyDisplay = undefined;
-                this.viewState.showAllDay = undefined;
-                this.viewState.showTimeline = undefined;
-                this.render();
-                this.app.workspace.requestSaveLayout();
-            },
-
-            getShowSidebar: () => this.viewState.showSidebar,
-            onRequestSidebarToggle: (nextOpen) => {
-                if (nextOpen) this.sidebarOpenedThisSession = true;
-                this.viewState.showSidebar = nextOpen;
-                this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
-            },
         });
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.taskRenderer);
-        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.taskRenderer, () => this.getEffectiveZoomLevel());
+        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.taskRenderer, () => this.zoom());
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,
@@ -458,29 +248,30 @@ export class TimelineView extends ItemView {
         });
         this.gridRenderer = new GridRenderer(
             this.container,
-            this.viewState,
+            () => this.state,
             this.plugin,
             this.menuHandler,
             this.hoverParent,
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
         );
-        this.pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.readService);
+        const pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.readService);
+        this.pinnedListRenderer = pinnedListRenderer;
         // Persistent host for pinned lists. Lives outside the empty() target
         // (we explicitly detach it before container.empty() in performRender,
         // then reparent into the freshly-built sidebarBody).
         this.pinnedHost = document.createElement('div');
-        this.pinnedListRenderer.attach({
+        pinnedListRenderer.attach({
             host: this.pinnedHost,
-            getLists: () => this.viewState.pinnedLists ?? [],
+            getLists: () => this.state.pinnedLists ?? [],
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.viewFilterMenu.getFilterState(),
+            getViewFilterState: () => this.state.filterState,
             callbacks: this.getPinnedListCallbacks(),
         });
         this.moonRenderer = new MoonPhaseRenderer();
         this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
-        // Initialize DragHandler with selection callback, move callback, and view start date provider
+        // Initialize DragHandler with selection callback, move callback, and the window drawn
         this.dragHandler = new DragHandler(this.container, this.operations, this.plugin,
             this.selectionController,
             (taskId: string) => {
@@ -490,9 +281,9 @@ export class TimelineView extends ItemView {
                 const baseId = segInfo?.baseId ?? taskId;
                 this.handleManager.selectTask(baseId);
             },
-            () => this.viewState.startDate,
-            () => DateUtils.addDays(this.viewState.startDate, this.viewState.daysToShow - 1),
-            () => this.getEffectiveZoomLevel()
+            () => this.window().start,
+            () => windowEnd(this.window()),
+            () => this.zoom()
         );
 
         // Background click → deselect、UI 経由 delete → deselect。両方 SelectionController に集約。
@@ -502,31 +293,20 @@ export class TimelineView extends ItemView {
         this.selectionController.attachBackgroundClick(this.container);
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
 
-        // Initialize render dispatch controller (rAF coalesce only — partial
-        // update was retired in favour of keyed reconciliation in performRender).
-        this.renderScheduler = new RenderScheduler({
-            performFull: () => {
-                this.saveScrollPosition();
-                this.performRender();
-            },
-            getHost: () => this.container,
-        });
-
         // Subscribe to data changes
         this.unsubscribe = this.index.onChange((taskId, changes) => {
-            // First task delivery is one of the gates for initial state setup
-            // (DOM + state + tasks). No auto-scroll here: user-driven scroll
-            // only via Now button / refresh / onOpen.
-            this.tryRunInitialStateLogic();
+            // The first tasks may be what the overdue pull waited for.
+            this.tryInitialPull();
             this.renderScheduler.handleChange(taskId, changes);
         });
 
-        // Ctrl+wheel zoom
+        // Ctrl+wheel zoom. The gesture shows the zoom itself (the hour height
+        // and the scroll); the state takes it without a draw.
         this.registerDomEvent(this.container, 'wheel', (e: WheelEvent) => {
             if (!e.ctrlKey) return;
             e.preventDefault();
             const delta = e.deltaY < 0 ? 0.25 : -0.25;
-            const oldZoom = this.getEffectiveZoomLevel();
+            const oldZoom = this.zoom();
             const newZoom = Math.min(10.0, Math.max(0.25, oldZoom + delta));
             if (newZoom === oldZoom) return;
 
@@ -542,10 +322,8 @@ export class TimelineView extends ItemView {
                 }
             }
 
-            this.viewState.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
-            this.toolbar?.update();
-            void this.app.workspace.requestSaveLayout();
+            this.update({ zoomLevel: newZoom }, { draw: false });
         }, { passive: false });
 
         // Pinch zoom (touch devices)
@@ -553,7 +331,7 @@ export class TimelineView extends ItemView {
             if (e.touches.length !== 2) return;
             this.isPinching = true;
             this.pinchInitialDistance = this.getTouchDistance(e.touches);
-            this.pinchInitialZoom = this.getEffectiveZoomLevel();
+            this.pinchInitialZoom = this.zoom();
 
             // Capture initial midpoint and scrollTop so scroll correction uses absolute values
             // instead of accumulating per-frame rounding errors.
@@ -572,7 +350,7 @@ export class TimelineView extends ItemView {
             const currentDistance = this.getTouchDistance(e.touches);
             if (this.pinchInitialDistance <= 0) return;
             const scale = currentDistance / this.pinchInitialDistance;
-            const oldZoom = this.getEffectiveZoomLevel();
+            const oldZoom = this.zoom();
             const newZoom = Math.min(10.0, Math.max(0.25, this.pinchInitialZoom * scale));
             if (newZoom === oldZoom) return;
 
@@ -586,71 +364,46 @@ export class TimelineView extends ItemView {
                 }
             }
 
-            this.viewState.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
-            this.toolbar?.update();
+            this.update({ zoomLevel: newZoom }, { draw: false });
         }, { passive: false });
 
         this.registerDomEvent(this.container, 'touchend', (e: TouchEvent) => {
             if (!this.isPinching) return;
-            if (e.touches.length < 2) {
-                this.isPinching = false;
-                void this.app.workspace.requestSaveLayout();
-            }
+            if (e.touches.length < 2) this.isPinching = false;
         }, { passive: true });
         this.registerDomEvent(this.container, 'touchcancel', () => {
-            if (!this.isPinching) return;
             this.isPinching = false;
-            void this.app.workspace.requestSaveLayout();
         }, { passive: true });
-
-        // DOM-side of the init barrier is now satisfied. If state has already
-        // been applied and tasks are cached, this fires the initial logic
-        // immediately; otherwise it waits for the missing gate.
-        this.initBarrier.domReady = true;
-        this.tryRunInitialStateLogic();
 
         this.stickyAnchorObserver = new ResizeObserver(() => {
             this.updateStickyHeaderTops();
         });
 
-        // Initial render — scroll to current time
+        // The first draw scrolls to the current time.
         this.scrollToNowOnNextRender = true;
-        this.render();
+    }
+
+    protected override onReady(): void {
+        this.stateReady = true;
+        this.tryInitialPull();
     }
 
     /**
-     * Init-barrier coordinator. Runs viewState-dependent initialization exactly
-     * once, after DOM ready + state applied + tasks loaded — in whatever order
-     * those gates fire. See `initBarrier` field comment for rationale.
-     *
-     * Add new viewState-dependent init steps inside this method.
+     * Read the overdue pull for the first time, once the view is open with
+     * its state and its tasks. A view on a fixed day has none to read.
      */
-    private tryRunInitialStateLogic(): void {
-        if (this.hasRunInitialLogic) return;
-        if (!this.initBarrier.domReady) return;
-        if (!this.initBarrier.stateApplied) return;
+    private tryInitialPull(): void {
+        if (this.hasPulled || !this.stateReady) return;
         if (this.index.getTasks().length === 0) return;
-        this.hasRunInitialLogic = true;
-
-        this.initializeStartDate();
-        // Future viewState-dependent init goes here.
+        this.hasPulled = true;
+        this.days.settle(this.state.date);
+        this.requestDraw();
     }
 
-    /**
-     * Compute the initial startDate from the restored filterState + tasks +
-     * settings. Called once via the init barrier.
-     */
-    private initializeStartDate(): void {
-        if (this.startDateExplicit) return;
-        if (!this.plugin.settings.startFromOldestOverdue) return;
-        this.jumpToNowStartDate();
-    }
-
-    async onClose() {
-        logDebug(`[${this.getViewType()}] closed`);
+    protected closeView(): void {
         this.hoverParent.dispose();
-        this.viewFilterMenu.close();
+        this.toolbar?.close();
         this.listFilterMenu.close();
         this.listSortMenu.close();
         this.dragHandler.destroy();
@@ -666,59 +419,45 @@ export class TimelineView extends ItemView {
             this.stickyAnchorObserver.disconnect();
             this.stickyAnchorObserver = null;
         }
-        this.renderScheduler?.dispose();
         this.frames.dispose();
     }
 
-    getEffectiveZoomLevel(): number {
-        return this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel;
+    /** The zoom drawn: the view's own, or the global setting. */
+    private zoom(): number {
+        return effectiveZoom(this.state, this.plugin.settings);
     }
 
-    /** Year / month the toolbar's date label shows, derived from startDate. */
-    private getReferenceMonth(): { year: number; month: number } {
-        const d = this.viewState.startDate;
-        return { year: parseInt(d.substring(0, 4), 10), month: parseInt(d.substring(5, 7), 10) - 1 };
+    /** The days drawn. */
+    private window(): DayWindow {
+        return this.days.window(this.state.date, daysToShowOf(this.state));
     }
 
-    /**
-     * Move startDate to the "now" window: today minus the configured past-days
-     * span, pulled further back to the oldest overdue date when the setting
-     * asks for it. Shared by the Now button, onDayRolled(), and initial state.
-     */
-    private jumpToNowStartDate(): void {
-        const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        const visualPastDate = this.startDateLeadingTo(visualToday);
-        if (this.plugin.settings.startFromOldestOverdue) {
-            const oldestOverdue = this.findOldestOverdueDate();
-            this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
-        } else {
-            this.viewState.startDate = visualPastDate;
-        }
+    /** Whether the sidebar shows: closed at narrow width until the toggle opens it this session. */
+    private isSidebarOpen(): boolean {
+        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) return false;
+        return this.state.showSidebar ?? true;
     }
 
-    /**
-     * The start date that shows `date` with the configured past-days lead in
-     * front of it. The Now button applies it to today; "Go to date" to the
-     * picked date, so a picked date sits where today would.
-     */
-    private startDateLeadingTo(date: string): string {
-        return DateUtils.addDays(date, -this.plugin.settings.pastDaysToShow);
+    /** Open or close the sidebar, sliding; the draw does not rebuild it. */
+    private setSidebarOpen(open: boolean): void {
+        this.update({ showSidebar: open }, { draw: false });
+        this.sidebarManager.applyOpen(open, { animate: true });
     }
 
-    /** Settings changed: redraw where the user is (see `redrawView`). */
-    public redraw(): void {
-        this.render();
+    /** Settings were saved: the window is read anew, and a view following today pulls anew. */
+    override redraw(): void {
+        this.days.settle(this.state.date);
+        this.requestDraw();
     }
 
-    /** The visual day changed: move to the new "now" window (Now button logic). */
-    public onDayRolled(): void {
-        this.jumpToNowStartDate();
-        this.scrollToNowOnNextRender = true;
-        this.render();
+    /** The visual day changed: a view following today moves to it and scrolls to now; a fixed one stays. */
+    override onDayRolled(): void {
+        if (this.days.dayRolled(this.state.date)) this.scrollToNowOnNextRender = true;
+        this.requestDraw();
     }
 
     /** A minute passed: move the now-line. Before the view opens there is none. */
-    public onMinute(): void {
+    override onMinute(): void {
         if (!this.container) return;
         this.renderCurrentTimeIndicator();
     }
@@ -746,15 +485,8 @@ export class TimelineView extends ItemView {
         indicator.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
     }
 
-    /**
-     * Synchronous render with scroll-save protection.
-     * If a rAF scroll restore is already pending (from a prior render in this frame),
-     * skip re-saving scroll — the previously saved value is still correct.
-     */
-    private render(): void {
-        // 保留中の coalesce 済み render をキャンセル（同 frame 内で同期 render が呼ばれたら
-        // 二重描画しない）
-        this.renderScheduler?.cancelPending();
+    /** Draw the whole view, keeping the time at the top of the scroll. */
+    protected draw(): void {
         this.saveScrollPosition();
         this.performRender();
     }
@@ -811,59 +543,67 @@ export class TimelineView extends ItemView {
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
     }
 
+    // ==================== Pinned lists ====================
+
+    /**
+     * Write the pinned lists. They show only in the sidebar, which redraws
+     * itself on the change (the store's listener), so the grid is not drawn.
+     */
+    private setPinnedLists(lists: PinnedListDefinition[]): void {
+        this.update({ pinnedLists: lists }, { draw: false });
+    }
+
+    private replacePinnedList(id: string, patch: Partial<PinnedListDefinition>): void {
+        const lists = this.state.pinnedLists ?? [];
+        this.setPinnedLists(lists.map(l => l.id === id ? { ...l, ...patch } : l));
+    }
+
     private getPinnedListCallbacks(): PinnedListCallbacks {
+        const lists = () => this.state.pinnedLists ?? [];
+        const indexOf = (listDef: PinnedListDefinition) => lists().findIndex(l => l.id === listDef.id);
         return {
             onCollapsedChange: (listId, collapsed) => {
-                if (!this.viewState.pinnedListCollapsed) this.viewState.pinnedListCollapsed = {};
-                this.viewState.pinnedListCollapsed[`${COLLAPSE_KEY_PREFIX}${listId}`] = collapsed;
-                this.app.workspace.requestSaveLayout();
+                this.update({
+                    pinnedListCollapsed: {
+                        ...this.state.pinnedListCollapsed,
+                        [`${COLLAPSE_KEY_PREFIX}${listId}`]: collapsed,
+                    },
+                }, { draw: false });
             },
             onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
             onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
             onDuplicate: (listDef) => {
-                const lists = this.viewState.pinnedLists!;
-                const idx = lists.indexOf(listDef);
+                const next = [...lists()];
                 const dup = {
                     ...listDef,
                     id: 'pl-' + Date.now(),
                     name: listDef.name + ' (copy)',
                 };
-                lists.splice(idx + 1, 0, dup);
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+                next.splice(indexOf(listDef) + 1, 0, dup);
+                this.setPinnedLists(next);
             },
             onRemove: (listDef) => {
-                const lists = this.viewState.pinnedLists!;
-                const idx = lists.indexOf(listDef);
-                if (idx >= 0) lists.splice(idx, 1);
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+                this.setPinnedLists(lists().filter(l => l.id !== listDef.id));
             },
             onMoveUp: (listDef) => {
-                const lists = this.viewState.pinnedLists!;
-                const idx = lists.indexOf(listDef);
-                if (idx > 0) {
-                    [lists[idx - 1], lists[idx]] = [lists[idx], lists[idx - 1]];
-                    this.app.workspace.requestSaveLayout();
-                    this.pinnedListRenderer.refresh();
-                }
+                const idx = indexOf(listDef);
+                if (idx <= 0) return;
+                const next = [...lists()];
+                [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                this.setPinnedLists(next);
             },
             onMoveDown: (listDef) => {
-                const lists = this.viewState.pinnedLists!;
-                const idx = lists.indexOf(listDef);
-                if (idx >= 0 && idx < lists.length - 1) {
-                    [lists[idx], lists[idx + 1]] = [lists[idx + 1], lists[idx]];
-                    this.app.workspace.requestSaveLayout();
-                    this.pinnedListRenderer.refresh();
-                }
+                const idx = indexOf(listDef);
+                const next = [...lists()];
+                if (idx < 0 || idx >= next.length - 1) return;
+                [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                this.setPinnedLists(next);
             },
             onToggleApplyViewFilter: (listDef) => {
-                listDef.applyViewFilter = !listDef.applyViewFilter;
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+                this.replacePinnedList(listDef.id, { applyViewFilter: !listDef.applyViewFilter });
             },
-            onRename: () => {
-                this.app.workspace.requestSaveLayout();
+            onRename: (listDef, newName) => {
+                this.replacePinnedList(listDef.id, { name: newName });
             },
             onTopRightEdit: (listDef, anchorEl) => {
                 const tasks = this.index.getTasks();
@@ -871,11 +611,7 @@ export class TimelineView extends ItemView {
                 this.topRightEditor.open(anchorEl, {
                     config: listDef.topRight,
                     propertyKeys,
-                    onChange: (config) => {
-                        listDef.topRight = config;
-                        this.app.workspace.requestSaveLayout();
-                        this.pinnedListRenderer.refresh();
-                    },
+                    onChange: (config) => this.replacePinnedList(listDef.id, { topRight: config }),
                 });
             },
         };
@@ -883,12 +619,12 @@ export class TimelineView extends ItemView {
 
     /**
      * Strip the `${viewId}::` prefix so PinnedListRenderer receives a plain
-     * Record<listId, boolean>. The viewState side keeps the prefix to avoid
+     * Record<listId, boolean>. The state keeps the prefix to avoid
      * timeline/calendar collapse-state collisions.
      */
     private buildCollapsedStateForRenderer(): Record<string, boolean> {
         const out: Record<string, boolean> = {};
-        const stored = this.viewState.pinnedListCollapsed;
+        const stored = this.state.pinnedListCollapsed;
         if (!stored) return out;
         for (const [key, val] of Object.entries(stored)) {
             if (key.startsWith(COLLAPSE_KEY_PREFIX)) {
@@ -899,11 +635,7 @@ export class TimelineView extends ItemView {
     }
 
     private performRender() {
-        // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
-        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
-            this.viewState.showSidebar = false;
-        }
-        this.sidebarManager.syncPresentation(this.viewState.showSidebar, { animate: false });
+        this.sidebarManager.syncPresentation(this.isSidebarOpen(), { animate: false });
 
         // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
         // bound to it) survives. We re-attach it via mount() below.
@@ -932,7 +664,7 @@ export class TimelineView extends ItemView {
         this.container.empty();
 
         // Apply Zoom Level
-        const zoomLevel = this.getEffectiveZoomLevel();
+        const zoomLevel = this.zoom();
         this.container.style.setProperty('--hour-height', `${60 * zoomLevel}px`);
 
         // Measure and set actual scrollbar width for grid alignment
@@ -953,26 +685,24 @@ export class TimelineView extends ItemView {
         addListBtn.appendText(t('pinnedList.addList'));
         addListBtn.addEventListener('click', () => {
             const newId = 'pl-' + Date.now();
-            if (!this.viewState.pinnedLists) this.viewState.pinnedLists = [];
-            this.viewState.pinnedLists.push({
+            // The rename starts on the refresh the new list brings.
+            this.pinnedListRenderer?.scheduleRename(newId);
+            this.setPinnedLists([...(this.state.pinnedLists ?? []), {
                 id: newId,
                 name: t('pinnedList.newList'),
                 filterState: createDefaultListFilterState(),
                 applyViewFilter: false,
-            });
-            this.app.workspace.requestSaveLayout();
-            this.pinnedListRenderer.scheduleRename(newId);
-            this.pinnedListRenderer.refresh();
+            }]);
         });
 
-        const dates = this.getDatesToShow();
+        const dates = windowDates(this.window());
 
         // Re-attach the persistent pinned host into the freshly-built sidebar body.
         // PinnedListRenderer manages its own contents via its onChange subscription
-        // and explicit refresh() calls (toolbar filter changes, list mutations) —
-        // we only relocate the host here. Avoid an unconditional refresh so a
-        // single onChange does not rebuild pinned DOM twice (PinnedList's own
-        // subscription already handled it before this performRender ran).
+        // and the refreshes the view's state changes bring — we only relocate the
+        // host here. Avoid an unconditional refresh so a single onChange does not
+        // rebuild pinned DOM twice (PinnedList's own subscription already handled
+        // it before this performRender ran).
         sidebarBody.appendChild(this.pinnedHost);
 
         // Mount the persistent toolbar instance into this render's toolbarHost.
@@ -981,7 +711,7 @@ export class TimelineView extends ItemView {
 
         // Use GridRenderer (render into main column)
         const filteredTasks = this.readService.getTasksForDateRange(
-            dates[0], dates[dates.length - 1], this.viewFilterMenu.getFilterState()
+            dates[0], dates[dates.length - 1], this.state.filterState
         );
         this.gridRenderer.render(
             main,
@@ -1073,69 +803,39 @@ export class TimelineView extends ItemView {
         this.listSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
         this.listSortMenu.showMenuAtElement(anchorEl, {
             onSortChange: () => {
-                listDef.sortState = this.listSortMenu.getSortState();
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+                this.replacePinnedList(listDef.id, { sortState: this.listSortMenu.getSortState() });
             },
         });
     }
 
     private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.listFilterMenu.setFilterState(listDef.filterState);
         this.listFilterMenu.showMenuAtElement(anchorEl, {
-            onFilterChange: () => {
-                listDef.filterState = this.listFilterMenu.getFilterState();
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
-            },
+            value: listDef.filterState,
+            onChange: (next) => this.replacePinnedList(listDef.id, { filterState: next }),
             getTasks: () => this.index.getTasks(),
         });
     }
 
-    // ==================== Grid & Layout ====================
-
-
-
-    private getDatesToShow(): string[] {
-        const dates = [];
-        for (let i = 0; i < this.viewState.daysToShow; i++) {
-            dates.push(DateUtils.addDays(this.viewState.startDate, i));
-        }
-        return dates;
-    }
+    // ==================== Export ====================
 
     /**
-     * The date range currently drawn, for image export. Reads the same
-     * `getDatesToShow()` the grid renders from rather than recomputing from
-     * `startDate`/`daysToShow` separately, so this can't drift from what's
-     * actually on screen if the day-list logic ever changes (e.g. an
-     * oldest-overdue start date).
+     * The days drawn, for image export, read from the same window the grid
+     * is drawn from; the anchor is the day the view looks at.
      */
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
-        const dates = this.getDatesToShow();
-        if (dates.length === 0) return null;
-        return { anchor: dates[0], from: dates[0], to: dates[dates.length - 1] };
+        const window = this.window();
+        return { anchor: this.days.viewedDay(this.state.date), from: window.start, to: windowEnd(window) };
     }
-
-
-
-    // ==================== Color & Styling ====================
-
-
-
-
-    // ==================== Task Creation ====================
 
     // ==================== Overdue Date Logic ====================
 
     /**
-     * Finds the oldest date with incomplete overdue tasks.
-     * Returns null if all past tasks are completed.
-     * Used for initial view date on open/reload.
+     * Finds the oldest date with incomplete overdue tasks the view's filter
+     * keeps. Returns null if all past tasks are completed.
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const displayTasks = this.readService.getFilteredTasks(this.viewFilterMenu.getFilterState());
+        const displayTasks = this.readService.getFilteredTasks(this.state.filterState ?? createEmptyFilterState());
 
         return findOldestOverdueDate(displayTasks, startHour, this.plugin.settings.statusDefinitions, this.readService);
     }
