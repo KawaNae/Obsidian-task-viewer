@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Placement, type SectionSide, headingKey } from '../../../src/services/persistence/utils/Placement';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { NoteSections } from '../../../src/services/parsing/tree/NoteSections';
 
 /**
  * Where lines go in a section (`Placement.into`): the heading a `[[#name]]`
@@ -133,5 +134,87 @@ describe('Placement.into, at the head', () => {
 
     it('is below a setext heading\'s underline', () => {
         expect(headOf(['Tasks', '---', '- [ ] a'], 'Tasks').at).toBe(2);
+    });
+});
+
+/**
+ * A section reads its property lines only above its first task
+ * (`NoteSections`), so a line put at its head goes past them: put above
+ * them, it would cut them off, and every row of the section would lose
+ * what they say. Where the block ends is the one `NoteSections` reads
+ * (`PropertyBlock.end`); these check both that the spot is past it and
+ * that the section reads the same properties with the line put there.
+ */
+describe('Placement.into, at the head of a section with property lines', () => {
+    /** The section `name`'s own property entries, as `NoteSections` reads them. */
+    const entriesOf = (lines: string[], name: string) => {
+        const node = NoteSections.all(NoteSections.read(Outline.read(lines))).find(s => s.heading?.text === name);
+        return node?.propertyBlock?.entries.map(e => [e.key, e.value]) ?? [];
+    };
+    /** The spot at the head of `name`, and the lines with `- [ ] m` put there, which read the section's properties as before. */
+    const putAtHead = (lines: string[], name: string) => {
+        const spot = headOf(lines, name);
+        const put = [...lines.slice(0, spot.at), `${spot.indent}- [ ] m`, ...lines.slice(spot.at)];
+        expect(entriesOf(put, name)).toEqual(entriesOf(lines, name));
+        return { spot, put };
+    };
+
+    it('goes past a property line straight below the heading, and the section still reads it (the report)', () => {
+        const { spot, put } = putAtHead(['### Section', '* tv-color:: #ffffff'], 'Section');
+        expect(spot).toEqual({ at: 2, parent: null, indent: '' });
+        expect(put).toEqual(['### Section', '* tv-color:: #ffffff', '- [ ] m']);
+        expect(entriesOf(put, 'Section')).toEqual([['tv-color', '#ffffff']]);
+    });
+
+    it('goes past the block and above the tasks below it', () => {
+        expect(putAtHead(['## S', '- tv-color:: red', '- tags:: a', '- [ ] a'], 'S').spot).toEqual({ at: 3, parent: null, indent: '' });
+    });
+
+    it('goes past the whole `- properties::` group, its entries with it', () => {
+        expect(putAtHead(['## S', '- properties::', '  - tv-color:: red', '  - tags:: a', '- [ ] a'], 'S').spot.at).toBe(4);
+    });
+
+    it('goes past the group when a task in it ends the block, which reads as it did', () => {
+        const lines = ['## S', '- properties::', '  - tv-color:: red', '  - [ ] t', '  - tags:: x', '- [ ] a'];
+        expect(putAtHead(lines, 'S').spot.at).toBe(5);
+        expect(entriesOf(lines, 'S')).toEqual([['tv-color', 'red']]);
+    });
+
+    it('goes past the subtree of the last property line, a task under it included', () => {
+        expect(putAtHead(['## S', '- tv-color:: red', '    - [ ] c', '- [ ] a'], 'S').spot.at).toBe(3);
+    });
+
+    it('goes past text and blank lines between the heading and the block, and leaves the blank lines past the block below it', () => {
+        expect(putAtHead(['## S', '', '- tv-color:: red', '', '- [ ] a'], 'S').spot.at).toBe(3);
+        expect(putAtHead(['## S', 'para', '', '- tv-color:: red', '- tags:: a', '', '- [ ] a'], 'S').spot.at).toBe(5);
+    });
+
+    it('goes past the last property line where text stands between them', () => {
+        expect(putAtHead(['## S', '- tv-color:: red', 'text', '- tags:: a', '- [ ] a'], 'S').spot.at).toBe(4);
+    });
+
+    it('takes the section\'s own block, not a nested heading\'s', () => {
+        const lines = ['## S', '- tv-color:: red', '### Sub', '- tv-color:: blue', '- [ ] s'];
+        expect(putAtHead(lines, 'S').spot.at).toBe(2);
+        expect(putAtHead(lines, 'Sub').spot.at).toBe(4);
+        expect(putAtHead(['## S', '### Sub', '- tv-color:: blue'], 'S').spot.at).toBe(1);
+    });
+
+    it('goes past the block of a section with nothing else in it', () => {
+        expect(putAtHead(['## S', '- tv-color:: red', '', '## T'], 'S').spot.at).toBe(2);
+    });
+
+    it('does not count a property-like line in code, as the section does not', () => {
+        expect(putAtHead(['## S', '```', '- tv-color:: red', '```', '- [ ] a'], 'S').spot.at).toBe(1);
+        expect(putAtHead(['## S', '```', '- a:: 1', '```', '- tv-color:: red', '- [ ] a'], 'S').spot.at).toBe(5);
+    });
+
+    it('stays just below the heading when the property lines stand below the first task, which the section does not read', () => {
+        expect(putAtHead(['## S', '- [ ] a', '- tv-color:: red'], 'S').spot.at).toBe(1);
+    });
+
+    it('leaves the end as it was: past the section\'s last line', () => {
+        expect(endOf(['## S', '- tv-color:: red', '- [ ] a', '', '## T'], 'S').at).toBe(3);
+        expect(endOf(['## S', '- tv-color:: red'], 'S').at).toBe(2);
     });
 });
