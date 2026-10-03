@@ -215,8 +215,6 @@ describe("Kanban's grid", () => {
     });
 
     it('renames a cell from its ⋯ menu on Enter, and keeps the old name on Escape', () => {
-        // Escape first: a second rename after one on Enter, before the board
-        // is drawn again, starts from the name before (reported, not pinned here).
         let r = op('kb', more(0, tr('menu.rename')), 200);
         expect(r.cells[0].renaming).toBe(true);
         r = op('kb', `
@@ -237,6 +235,33 @@ describe("Kanban's grid", () => {
         expect(r.grid[0][0].name).toBe('Alpha');
         expect(r.cells[0].name).toBe('Alpha');
         expect(r.cells[0].renaming).toBe(false);
+    });
+
+    it('starts a second rename from the name the first one wrote, and Escape keeps that name', () => {
+        op('kb', more(0, tr('menu.rename')), 200);
+        let r = op('kb', `
+            const input = cell(0).querySelector('.' + C.nameInput);
+            input.value = 'Beta';
+            key(input, 'Enter');
+        `);
+        expect(r.grid[0][0].name).toBe('Beta');
+
+        r = op('kb', more(0, tr('menu.rename')) + `
+            await wait(200);
+            const input = cell(0).querySelector('.' + C.nameInput);
+            window.__tvRenameStart = input.value;
+            key(input, 'Escape');
+        `);
+        expect(ev<string>(`JSON.stringify(window.__tvRenameStart)`)).toBe('Beta');
+        expect(r.grid[0][0].name).toBe('Beta');
+        expect(r.cells[0].name).toBe('Beta');
+
+        // A menu item used right after the rename reads the list as renamed.
+        r = op('kb', more(0, tr('menu.applyViewFilter')));
+        expect(r.grid[0][0].name).toBe('Beta');
+        r = op('kb', more(0, tr('menu.applyViewFilter')));
+        expect(r.grid[0][0].name).toBe('Beta');
+        expect(r.grid[0][0].applyViewFilter).toBe(false);
     });
 
     it("filters a cell by the condition added in its filter menu, and sorts it by its sort menu's rule", () => {
@@ -282,13 +307,13 @@ describe("Kanban's grid", () => {
         const [orig, copy] = r.grid[0];
         expect(orig.id).toBe(first);
         expect(copy.id).not.toBe(first);
-        expect(copy.name).toBe('Alpha (copy)');
+        expect(copy.name).toBe('Beta (copy)');
         expect(copy.filterState).toEqual(orig.filterState);
         expect(copy.sortState).toEqual(orig.sortState);
         expect(r.grid[1][0].id).toBe(below);
         expect(r.grid[1][1].name).toBe(tr('pinnedList.newList'));
         expect([first, copy.id, below]).not.toContain(r.grid[1][1].id);
-        expect(r.cells.map(c => c.name)).toEqual(['Alpha', 'Alpha (copy)', tr('pinnedList.newList'), tr('pinnedList.newList')]);
+        expect(r.cells.map(c => c.name)).toEqual(['Beta', 'Beta (copy)', tr('pinnedList.newList'), tr('pinnedList.newList')]);
         expect(r.cells[1].count).toBe(6);
     });
 
