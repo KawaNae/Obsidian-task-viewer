@@ -1,12 +1,13 @@
-import type { App, HoverParent } from 'obsidian';
+import type { App, Component, HoverParent } from 'obsidian';
 import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
+import { MenuHandler, type TaskHubOpener } from '../../interaction/menu/MenuHandler';
 import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
 import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 
 export interface CardRenderingDeps {
     app: App;
@@ -78,4 +79,46 @@ export function createCardRendering(deps: CardRenderingDeps): CardRendering {
     });
 
     return { taskRenderer, menuHandler, openTaskHub };
+}
+
+/** The task hub opened outside the views, and the cards it draws. */
+export interface TaskHubOpenerHandle {
+    open: TaskHubOpener;
+    /** The renderer, menu and hub, made with the first open; null before it. */
+    readonly cards: CardRendering | null;
+}
+
+/**
+ * Open the task hub from outside the views (the editor's ··· menu). A view
+ * opens it through its own `createCardRendering`; this one makes its cards
+ * the same way with the first open, adds the renderer to `owner` so it
+ * unloads with the plugin, and has no selection to clear or mask to apply.
+ */
+export function createTaskHubOpener(deps: {
+    app: App;
+    plugin: PluginContext & TimerHost;
+    owner: Pick<Component, 'addChild'>;
+}): TaskHubOpenerHandle {
+    const hoverParent = new TaskViewHoverParent();
+    let cards: CardRendering | null = null;
+
+    const open: TaskHubOpener = (taskId, options) => {
+        const task = deps.plugin.getIndex().getTask(taskId);
+        if (!task) return;
+        if (!cards) {
+            cards = createCardRendering({
+                app: deps.app,
+                plugin: deps.plugin,
+                getHoverParent: () => hoverParent,
+                getMaskMode: () => false,
+            });
+            deps.owner.addChild(cards.taskRenderer);
+        }
+        cards.openTaskHub(task, options);
+    };
+
+    return {
+        open,
+        get cards() { return cards; },
+    };
 }

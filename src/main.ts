@@ -34,8 +34,7 @@ import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsM
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { MenuPresenter } from './interaction/menu/MenuPresenter';
-import { createCardRendering, type CardRendering } from './views/sharedUI/CardRendering';
-import { TaskViewHoverParent } from './views/taskcard/TaskViewHoverParent';
+import { createTaskHubOpener, type TaskHubOpenerHandle } from './views/sharedUI/CardRendering';
 import { closeAllOverlays } from './views/sharedUI/OverlayRegistry';
 import { OverdueWatcher } from './services/display/OverdueWatcher';
 import type { TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
@@ -56,11 +55,10 @@ import { initLog, logInfo } from './log/log';
 import { LogStorage } from './log/log-storage';
 import { LogManager } from './log/log-manager';
 import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
-import type { DeviceInfo } from './log/markdown-formatter';
+import { collectDeviceInfo, deriveOsLabel } from './log/host-diagnostics';
 import { ViewEvents } from './views/sharedLogic/ViewEvents';
 import { startMinuteClock } from './views/sharedLogic/MinuteClock';
 import { applyBodyStyles, clearBodyStyles } from './settings/BodyStyles';
-import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
 
 /**
  * The constructor of each view. The table (`VIEW_DESCRIPTORS`) cannot hold
@@ -106,11 +104,8 @@ export default class TaskViewerPlugin extends Plugin {
     private taskMenuCleanup: (() => void) | null = null;
     private taskMenuNotifySettingsChanged: (() => void) | null = null;
 
-    // ビュー外コンテキスト（editor ··· menu / file-menu）からタスクハブ
-    // モーダルを開くための共有インスタンス（lazy 生成）
-    private hubHoverParent = new TaskViewHoverParent();
-    /** The cards of a hub opened outside the views, made with the first. */
-    private hubCards: CardRendering | null = null;
+    // The task hub opened outside the views (the editor's ··· menu)
+    private taskHub: TaskHubOpenerHandle;
 
     async onload() {
 
@@ -145,7 +140,7 @@ export default class TaskViewerPlugin extends Plugin {
             getPluginVersion: () => this.manifest.version,
             getObsidianVersion: () => apiVersion,
             getPlatform: () => ({
-                os: this.deriveOsLabel(),
+                os: deriveOsLabel(),
                 isMobile: Platform.isMobile,
             }),
             getTaskDiagnostics: () => ({
@@ -154,7 +149,7 @@ export default class TaskViewerPlugin extends Plugin {
                 enabledParsers: this.getEnabledParsers(),
                 startHour: this.settings.startHour,
             }),
-            getDeviceInfo: () => this.collectDeviceInfo(),
+            getDeviceInfo: collectDeviceInfo,
             vault: {
                 exists: (p) => this.app.vault.adapter.exists(p),
                 createBinary: async (p, d) => { await this.app.vault.createBinary(p, d); },
@@ -237,6 +232,8 @@ export default class TaskViewerPlugin extends Plugin {
         // Register Editor Suggest
         this.registerEditorSuggest(new ColorSuggest(this.app, this));
         this.registerEditorSuggest(new LineStyleSuggest(this.app, this));
+
+        this.taskHub = createTaskHubOpener({ app: this.app, plugin: this, owner: this });
 
         // Menu builders for inline task menu button
         const editorPropertiesBuilder = new PropertiesMenuBuilder(
@@ -340,24 +337,11 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     /**
-     * ビュー外コンテキスト（editor ··· menu / file-menu）からタスクハブ
-     * モーダルを開く。ビュー内はビュー自身の openTaskHub を通る。どちらも
-     * renderer、MenuHandler、ハブを createCardRendering で組む。
+     * Open the task hub outside the views (the editor's ··· menu); a view
+     * opens it through its own cards. See `createTaskHubOpener`.
      */
     openTaskHub(taskId: string, options?: TaskHubPanelOptions): void {
-        const task = this.taskIndex.getTask(taskId);
-        if (!task) return;
-
-        if (!this.hubCards) {
-            this.hubCards = createCardRendering({
-                app: this.app,
-                plugin: this,
-                getHoverParent: () => this.hubHoverParent,
-                getMaskMode: () => false,
-            });
-            this.addChild(this.hubCards.taskRenderer);
-        }
-        this.hubCards.openTaskHub(task, options);
+        this.taskHub.open(taskId, options);
     }
 
     // Public accessors for services
@@ -446,62 +430,6 @@ export default class TaskViewerPlugin extends Plugin {
             await leaf.setViewState({ type: VIEW_TYPE_LOG, active: true });
             this.app.workspace.revealLeaf(leaf);
         }
-    }
-
-    private deriveOsLabel(): string {
-        if (typeof process !== 'undefined' && process.platform) return process.platform;
-        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-        if (Platform.isAndroidApp) {
-            const m = /Android (\d+(?:\.\d+)?)/.exec(ua);
-            return m ? `android ${m[1]}` : 'android';
-        }
-        if (Platform.isIosApp) {
-            const base = Platform.isTablet ? 'ipados' : 'ios';
-            const m = /OS (\d+(?:_\d+)*)/.exec(ua);
-            return m ? `${base} ${m[1].replace(/_/g, '.')}` : base;
-        }
-        return 'unknown';
-    }
-
-    private collectDeviceInfo(): DeviceInfo {
-        const d: DeviceInfo = {};
-        try {
-            if (typeof navigator !== 'undefined') {
-                if (typeof navigator.hardwareConcurrency === 'number') {
-                    d.cpuCores = navigator.hardwareConcurrency;
-                }
-                if (navigator.userAgent) d.userAgent = navigator.userAgent;
-                const dm = deviceMemoryGb();
-                if (dm !== undefined) d.deviceMemoryGb = dm;
-            }
-        } catch { /* best effort */ }
-        try {
-            const pm = jsHeapStats();
-            if (pm) {
-                if (typeof pm.usedJSHeapSize === 'number') {
-                    d.jsHeapUsedMb = Math.round(pm.usedJSHeapSize / 1048576);
-                }
-                if (typeof pm.jsHeapSizeLimit === 'number') {
-                    d.jsHeapLimitMb = Math.round(pm.jsHeapSizeLimit / 1048576);
-                }
-            }
-        } catch { /* best effort */ }
-        try {
-            const os = nodeOs();
-            if (os) {
-                d.arch = os.arch();
-                d.osRelease = os.release();
-                const cpus = os.cpus();
-                if (cpus?.length) {
-                    d.cpuCores = cpus.length;
-                    const model = (cpus[0]?.model ?? '').trim();
-                    if (model) d.cpuModel = model;
-                }
-                d.totalRamGb = Math.round((os.totalmem() / 1073741824) * 10) / 10;
-                d.freeRamGb = Math.round((os.freemem() / 1073741824) * 10) / 10;
-            }
-        } catch { /* best effort */ }
-        return d;
     }
 
     private countActiveViews(): number {
