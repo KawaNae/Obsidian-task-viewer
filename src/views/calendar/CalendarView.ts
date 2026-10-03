@@ -14,7 +14,6 @@ import type { Operations } from '../../services/operations/Operations';
 import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
 import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
-import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { getColumnOffset, getGridColumnForDay } from './CalendarDateUtils';
 import { gridAt, gridFollowingToday, gridRange, gridShifted, referenceMonth, weekStartOf } from './CalendarGrid';
 import { DragHandler } from '../../interaction/drag/DragHandler';
@@ -24,18 +23,15 @@ import { CalendarToolbar } from './CalendarToolbar';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { CalendarCodec, type CalendarConfig, type CalendarState, type CalendarTransient } from './CalendarSchema';
+import { CalendarCodec, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
 import { HandleManager } from '../sharedUI/handles/HandleManager';
-import { markHandleSurface } from '../sharedUI/handles/HandleSurface';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { parseSegmentId } from '../../services/display/SegmentIds';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListPanel } from '../sharedUI/PinnedListPanel';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
-import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
-import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
-import { splitTasks } from '../../services/display/TaskSplitter';
+import { drawDateGridLane } from '../sharedUI/DateGridLane';
 import { TaskViewerView } from '../base/TaskViewerView';
 import { viewedDay } from '../base/ViewedDay';
 
@@ -408,107 +404,22 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         }, { bindClick: false });
     }
 
+    /** The week's tasks on the row, under the day headers: the lane Timeline's all-day row draws too. */
     private renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[], reconciler: CardReconciler): void {
-        const startHour = this.plugin.settings.startHour;
-        // Calendar 月セルは calendar day ベースで 1 セル = 1 日。startHour 境界
-        // (visual-date split) を視覚化する意味はなく、入れると view 内部に
-        // 不要な dashed boundary が現れる。週行が物理的に分かれることによる
-        // per-week split (date-range) のみ適用する。
-        const weekSplit = splitTasks(allTasks, { type: 'date-range', start: weekDates[0], end: weekDates[weekDates.length - 1], startHour });
-        const entries = computeGridLayout(weekSplit, {
+        const tracks = drawDateGridLane(weekRow, allTasks, {
             dates: weekDates,
-            getDateRange: (task) => {
-                const range = getTaskDateRange(task as DisplayTask, startHour);
-                if (!range.effectiveStart) return null;
-                return { effectiveStart: range.effectiveStart, effectiveEnd: range.effectiveEnd || range.effectiveStart };
-            },
-            computeDueArrows: true,
-        });
-
-        // Set grid-template-rows based on track count
-        let maxTrackIndex = -1;
-        for (const entry of entries) {
-            if (entry.trackIndex > maxTrackIndex) maxTrackIndex = entry.trackIndex;
-        }
-        if (maxTrackIndex >= 0) {
-            const trackCount = maxTrackIndex + 1;
-            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${trackCount}, minmax(var(--calendar-track-height), auto))`;
-        }
-
-        const colOffset = getColumnOffset(this.shouldShowWeekNumbers());
-
-        for (const entry of entries) {
-            this.renderGridTask(weekRow, entry, colOffset, reconciler);
-
-            if (entry.dueArrow) {
-                renderDueArrow(weekRow, entry, {
-                    gridRowOffset: 2,
-                    gridColOffset: colOffset,
-                });
-            }
+            colOffset: getColumnOffset(this.shouldShowWeekNumbers()),
+            firstRow: 2,
+            scope: 'lane',
+            timeOnSingleDay: true,
+        }, { taskRenderer: this.taskRenderer, settings: this.plugin.settings, reconciler });
+        if (tracks > 0) {
+            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${tracks}, minmax(var(--calendar-track-height), auto))`;
         }
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
         return this.readService.getTasksForDateRange(rangeStart, rangeEnd, this.state.filterState);
-    }
-
-    private renderGridTask(
-        weekRow: HTMLElement,
-        entry: GridTaskEntry,
-        colOffset: number,
-        reconciler: CardReconciler,
-    ): void {
-        if (entry.useBarVariant) {
-            const key = { scope: 'lane-multi', name: entry.segmentId };
-            const reused = reconciler.acquire(key, entry.task);
-            const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
-            markHandleSurface(barEl, 'grid');
-            if (reused) weekRow.appendChild(reused);
-
-            this.decorateCalendarBar(barEl, entry, colOffset);
-            this.taskRenderer.render(barEl, entry.task as DisplayTask, this.plugin.settings, {
-                key,
-                topRight: { mode: 'none' },
-                compact: true,
-            });
-            return;
-        }
-
-        const key = { scope: 'lane', name: entry.task.id };
-        const reused = reconciler.acquire(key, entry.task);
-        const card = reused ?? weekRow.createDiv('task-card');
-        markHandleSurface(card, 'grid');
-        if (reused) weekRow.appendChild(reused);
-
-        this.applyCalendarGridPosition(card, entry, colOffset);
-        this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
-            key,
-            topRight: { mode: 'time' },
-            compact: true,
-        });
-    }
-
-    /**
-     * Idempotent decoration for calendar multi-day bar cards. Variant classes
-     * are reset before applying the current entry's split state.
-     */
-    private decorateCalendarBar(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        // task-card--multi-day is the bar's defining class and stays.
-        el.removeClass('task-card--split-continues-before');
-        el.removeClass('task-card--split-continues-after');
-        if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
-        if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
-
-        this.applyCalendarGridPosition(el, entry, colOffset);
-    }
-
-    private applyCalendarGridPosition(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        el.style.gridColumn = `${entry.colStart + colOffset} / span ${entry.span}`;
-        el.style.gridRow = `${entry.trackIndex + 2}`;
-        el.dataset.colStart = `${entry.colStart}`;
-        el.dataset.span = `${entry.span}`;
-        el.dataset.trackIndex = `${entry.trackIndex}`;
     }
 
     /**

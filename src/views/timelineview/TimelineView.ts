@@ -1,6 +1,4 @@
 import type { WorkspaceLeaf } from 'obsidian';
-import { setIcon } from 'obsidian';
-import { t } from '../../i18n';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
@@ -34,7 +32,7 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { TaskViewerView } from '../base/TaskViewerView';
-import { TimelineCodec, daysToShowOf, effectiveZoom, type TimelineConfig, type TimelineState, type TimelineTransient } from './TimelineSchema';
+import { TimelineCodec, daysToShowOf, effectiveZoom, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
 import { TimelineDays, windowDates, windowEnd, type DayWindow } from './TimelineDays';
 
 
