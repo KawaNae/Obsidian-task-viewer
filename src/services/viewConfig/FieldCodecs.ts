@@ -327,7 +327,7 @@ export const T = {
     /**
      * Which lists are collapsed, by list id. Only `true` entries are kept.
      *
-     * A layout saved before 9c names each list `<legacyPrefix>::<id>` (the
+     * An older layout names each list `<legacyPrefix>::<id>` (the
      * view's name, put on to keep views apart that never shared the map);
      * it is read as `<id>`, and a key with another view's name is dropped.
      */

@@ -138,10 +138,10 @@ src/
 │   ├── base/                  # TaskViewerView, ViewStore, ViewSettings (the settings menu), ViewedDay
 │   ├── timelineview/          # Timeline view (including renderers/, TimelineDays)
 │   ├── scheduleview/          # Schedule view (including renderers/, utils/)
-│   ├── calendar/              # CalendarView, MiniCalendarView, CalendarGrid
+│   ├── calendar/              # CalendarView, MiniCalendarView, CalendarGrid, WeekNumberCell
 │   ├── kanban/                # Kanban view
 │   ├── taskcard/              # Task card rendering (see section above)
-│   ├── sharedUI/              # Shared UI components (ViewToolbar, PinnedListRenderer, etc.)
+│   ├── sharedUI/              # Shared UI components (ViewToolbar, TaskListSections, PinnedListPanel, DateGridLane, PeriodicNoteLink, etc.)
 │   ├── sharedLogic/           # Shared logic (ViewEvents, MinuteClock, ViewUriBuilder, GridTaskLayout, etc.)
 │   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
 │   ├── sidebar/               # SidebarManager, SidebarToggleButton
@@ -264,11 +264,11 @@ Quick reference for locating the right layer when implementing a feature.
 | **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; starts timers and owns their board, lifecycle and recorder |
 | **IntervalTemplateLoader/Writer** | `timer/IntervalTemplateLoader.ts` et al. | Interval template read/write |
 | **AudioUtils** | `timer/AudioUtils.ts` | Web Audio API notifications with serialized context management |
-| **KanbanView** | `views/kanban/KanbanView.ts` | Kanban board view |
+| **KanbanView** | `views/kanban/KanbanView.ts` | Kanban board view: the grid of its lists, their rows and columns (see "Saved lists, lanes and note links") |
 | **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup / Interval) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
-| **SidebarManager** | `views/sidebar/SidebarManager.ts` | Sidebar visibility and pinned list management. A new list (Kanban, Calendar and Timeline alike) starts with `createDefaultListFilterState()`, i.e. `parent isNotSet`: every checkbox is a task, and a nested one is already drawn inside its parent's card |
+| **SidebarManager** | `views/sidebar/SidebarManager.ts` | The sidebar of Timeline and Calendar: its layout, and whether it is open (closed at narrow width until the toggle opens it). What it holds is the pinned lists' panel (`PinnedListPanel`) |
 | **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI, also used by "Convert to inline" (shared form widgets live in `modals/form/`) |
 | **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`, owns a PopoverStack for SuggestController-based fields. Entry: card double-tap, menu Properties items (with field focus) |
 | **SuggestController** | `views/customMenus/SuggestController.ts` | Shared suggest-dropdown machinery (tv-ctrl__suggest) used by both filter-popover value selectors and TaskHubPanel form fields |
@@ -583,6 +583,33 @@ What a view draws is derived from `date`, the settings and (Timeline) the tasks 
 - **Calendar** and **MiniCalendar** (`calendar/CalendarGrid.ts`): they also hold the transient `weekOffset`, the weeks the grid was moved from `date`'s month grid (absent: 0). `gridRange` is the one function of the days drawn: the week of the 1st of the day looked at's month (today while following), moved by `weekOffset` weeks, six weeks. Go to date, a URI's `date=` and the CLI's `anchor-date=` put the day in `date` as given and clear the offset, so all three show the same screen. The arrows and MiniCalendar's wheel move only the offset; while following they fix today in `date` first. Today clears both. The week start is read at each draw, so a month grid keeps its month's 1st on the top row when it changes. The date picker opens on the day looked at, as Timeline's and Schedule's do. The toolbar names the month of the grid's middle, which is `date`'s month while the offset is 0. So `date` means the day looked at in every dated view; what each view draws around it is its own: Timeline puts the past days before it, Calendar draws its month grid
 
 The E2E suite drives these rules through the toolbars in the Dev vault (`tests/integration/views/viewed-date.test.ts`, `toolbar-state.test.ts`).
+
+### Saved lists, lanes and note links
+
+Three things more than one view draws are drawn by one part each.
+
+**Saved lists** (`sharedUI/TaskListSections.ts`). A saved list (`PinnedListDefinition`) is a pinned list of Timeline and Calendar, or a cell of Kanban. `TaskListSections` draws a list from its definition to its cards: which tasks it shows (`PinnedListQuery.resolve`, the view's filter added when the list applies it), its section (`ListSectionRenderer`), its pages (`TaskPagingController`, which hands each batch the draw's reconciler, or none for a page "Show more" adds), its cards (each list a card place of its own, `<scopePrefix>-<id>`), the sort and filter popovers, the top-right editor, the rename, and the items every list's ⋯ menu has (Rename, Duplicate, Top right, Apply view filter). Where the lists sit is the placement's (`ListPlacement`): it holds the lists, writes a list it is handed back (`replaceList`), puts a copy in and adds its own menu items.
+
+| Placement | Holds | Its own |
+|---|---|---|
+| `PinnedListPanel` (Timeline, Calendar) | `pinnedLists`, `pinnedListCollapsed` | The add button (a new list's name is edited once it is drawn), Move up / Move down, Remove. A copy goes right below its list |
+| `KanbanView` | `grid`, `gridCollapsed` | Insert a row or a column, remove one (never the last). A copy goes right of its list, and the other rows get a new list in that column |
+
+- A change of a list is a new list written into the view's state; nothing changes a definition in place. A rename writes the new name and the list is drawn with it
+- Which lists are collapsed is kept by list id. An older layout names them `timeline::<id>` or `calendar::<id>`; the codec reads that as `<id>` (`T.collapsedKeys`)
+- A new list's id is made by `newListId` (`services/viewConfig/ListIds.ts`), also for a list read without one. A new list shows every task that is not a child (`createDefaultListFilterState()`, `parent isNotSet`) and does not apply the view's filter. A copy shares its filter, sort and top-right values, which are never changed in place
+- The panel draws itself, on a change of its fields of the state and of the tasks; it writes with `update(patch, { draw: false })`, so a change of a list does not draw the view. Its element outlives the view's draws: the view takes it out before it gathers its own cards (`lift`) and puts it into the sidebar it built (`mount`), so the pages and the opened cards are kept. Kanban draws its cells in its own draw
+
+**Lanes** (`sharedUI/DateGridLane.ts`). `drawDateGridLane` lays the tasks of some days on a grid row as cards spanning their days: Calendar's week row and Timeline's all-day row (`AllDaySectionRenderer`, which also gives the row's empty space its menu). A task is cut at the lane's ends (`splitTasks` with `date-range` only: the `startHour` boundary is not drawn inside a lane), put on a track (`computeGridLayout`) and drawn compact, with the arrow to a later due. A card spanning days, or cut at an end, is a bar (`task-card--multi-day`) marked on the cut side; these classes are put on anew at each draw, so a kept card that became a bar or stopped being one is drawn right. The card's columns and track are written on it (`data-col-start`, `data-span`, `data-track-index`), where the grid drag reads them. The two lanes differ only in their offsets, their look and whether a one-day card shows its time:
+
+| Lane | Columns before the days | First track row | Card place | Class | Time on a one-day card |
+|---|---|---|---|---|---|
+| Calendar's week row | The week number, when shown | 2 | `lane` | — | Yes |
+| Timeline's all-day row | The time axis | 2 | `allday` | `task-card--allday` | No |
+
+**Links to periodic notes** (`sharedUI/PeriodicNoteLink.ts`). `periodicNoteLink` makes every link to a daily or weekly note in a view: an `a.internal-link` pointed at the note (`pointPeriodicLink`), previewed on hover, and a click on it, or on the cell given as `opensFrom`, opens the note in the current leaf, made from its template when it is not there (`openPeriodicNoteInLeaf`). The toolbar's year and month label points its links the same way. Calendar and MiniCalendar draw their week numbers with one cell (`calendar/WeekNumberCell.ts`).
+
+The E2E suite drives the lists and the lanes in the Dev vault (`tests/integration/views/pinned-lists.test.ts`, `kanban.test.ts`, `lanes.test.ts`).
 
 ---
 
@@ -1275,7 +1302,7 @@ allTasks (DisplayTask[])
      Position on grid with colStart, span, trackIndex
 ```
 
-AllDaySectionRenderer also uses only the date-range split (allDay tasks don't need visual-date splitting). The visual-date split is used by other views (e.g. Timeline) where a `startHour` boundary is visually meaningful within a day.
+Calendar's week rows and Timeline's all-day row are the same lane (`drawDateGridLane`, see "Saved lists, lanes and note links"), so both use only the date-range split. The visual-date split is used where a `startHour` boundary is visually meaningful within a day (Timeline's time grid).
 
 ### Split segment fields
 
