@@ -52,6 +52,10 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
     private pendingWeekOffset: number = 0;
     private readonly hoverParent = new TaskViewHoverParent();
 
+    getViewType(): string {
+        return MiniCalendarCodec.schema.viewType;
+    }
+
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, MiniCalendarCodec);
         this.readService = this.plugin.getTaskReadService();
