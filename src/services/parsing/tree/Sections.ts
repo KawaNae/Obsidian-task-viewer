@@ -75,6 +75,14 @@ export const NO_SOURCES: ResolvedSources = Object.freeze({
  */
 export interface PropertyBlock {
     entries: PropertyBlockEntry[];
+    /**
+     * The index just past the block: past the subtree of its last item at
+     * indent 0 that holds an entry (a `- key:: value` line, or the whole
+     * `- properties::` group). A line put in the section above it would
+     * stand before the block's lines and cut them off the lead area; the
+     * head of a section is here (`Placement.into`).
+     */
+    end: number;
 }
 
 export interface PropertyBlockEntry {

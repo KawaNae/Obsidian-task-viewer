@@ -104,6 +104,10 @@ function stretchOverChildren(sections: readonly SectionNode[]): void {
  * back to the task above it, and the root section's end does not run on.
  * Indent 0 only: the frontmatter's top level is its peer, and a
  * `- key:: value` under a wikilink bullet does not look like a section's.
+ *
+ * The block ends past the subtree of its last item that holds an entry
+ * (`PropertyBlock.end`): what a write puts at the section's head goes there,
+ * so that it is the block's own reading that says where it may go.
  */
 function propertyBlockOf(node: SectionNode, outline: OutlineReading): PropertyBlock | null {
     const lines = outline.lines;
@@ -114,10 +118,12 @@ function propertyBlockOf(node: SectionNode, outline: OutlineReading): PropertyBl
     const from = node.heading ? node.heading.line + 1 : node.startLine;
 
     const entries: PropertyBlockEntry[] = [];
-    const take = (line: number) => {
-        if (outline.inCode(line)) return;
+    let blockEnd = from;
+    const take = (line: number): boolean => {
+        if (outline.inCode(line)) return false;
         const match = lines[line].match(ChildLineClassifier.PROPERTY_LINE);
         if (match) entries.push({ key: match[1].trim(), value: match[2].trim(), line });
+        return match !== null;
     };
 
     for (let line = from; line < ownEnd; line++) {
@@ -128,18 +134,18 @@ function propertyBlockOf(node: SectionNode, outline: OutlineReading): PropertyBl
         // The group form: every entry in the `- properties::` item's subtree.
         if (PROPERTY_GROUP_HEADER.test(text) && outline.item(line)) {
             const end = Math.min(outline.subtreeEnd(line), ownEnd);
-            for (let entry = line + 1; entry < end; entry++) {
-                if (TaskLineClassifier.opensTask(outline, entry)) return result(entries);
-                take(entry);
+            let held = false;
+            let cut = false;
+            for (let entry = line + 1; entry < end && !cut; entry++) {
+                cut = TaskLineClassifier.opensTask(outline, entry);
+                if (!cut && take(entry)) held = true;
             }
+            if (held) blockEnd = end;
+            if (cut) break;
             line = end - 1;
             continue;
         }
-        take(line);
+        if (take(line)) blockEnd = Math.min(outline.subtreeEnd(line), ownEnd);
     }
-    return result(entries);
-}
-
-function result(entries: PropertyBlockEntry[]): PropertyBlock | null {
-    return entries.length > 0 ? { entries } : null;
+    return entries.length > 0 ? { entries, end: blockEnd } : null;
 }

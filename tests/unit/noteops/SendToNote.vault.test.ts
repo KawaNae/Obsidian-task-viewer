@@ -5,6 +5,8 @@ import { freezeDate } from '../helpers/fakeDate';
 import type { SubtreeLine } from '../../../src/services/persistence/TaskOps';
 import type { SendRow } from '../../../src/services/core/TaskIndex';
 import type { FrontmatterKey } from '../../../src/services/persistence/writers/SendWriter';
+import { NoteSections } from '../../../src/services/parsing/tree/NoteSections';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
 
 /**
  * A send to another note (`TaskIndex.send`, 段 B3): the note written first —
@@ -222,6 +224,18 @@ describe('to a note there is', () => {
         await note.send([note.row('A')], { path: 'dst.md', frontmatter: [{ key: 'j', yaml: ['j: 2'] }] });
 
         expect(note.lines('dst.md')).toEqual(['---', 'j: 2', '---', '## Tasks', '- [ ] A', '- [ ] x', '']);
+    });
+
+    it('at the head of a section with property lines: past them, so the section still reads them and the row takes their values', async () => {
+        const note = await open({ 'src.md': ['- [ ] A', ''], 'dst.md': ['### Section', '* tv-color:: #ffffff', '* [ ] x', ''] });
+
+        await note.send([note.row('A')], { path: 'dst.md', heading: 'Section' });
+
+        expect(note.lines('dst.md')).toEqual(['### Section', '* tv-color:: #ffffff', '- [ ] A', '* [ ] x', '']);
+        const sections = NoteSections.all(NoteSections.read(Outline.read(note.lines('dst.md')!)));
+        expect(sections.find(s => s.heading?.text === 'Section')?.propertyBlock?.entries.map(e => e.key)).toEqual(['tv-color']);
+        expect(note.task('A').cascadeContext?.color).toBe('ffffff');
+        expect(note.task('x').cascadeContext?.color).toBe('ffffff');
     });
 
     it('with two headings of the name: refused before anything is written, told once', async () => {

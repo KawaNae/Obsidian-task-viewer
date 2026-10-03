@@ -1,6 +1,7 @@
 import { Outline, type OutlineHeading, type OutlineReading } from '../../parsing/utils/Outline';
 import type { PlacedReading } from '../../parsing/utils/OutlineCheck';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
+import { NoteSections } from '../../parsing/tree/NoteSections';
 
 /**
  * Where a write puts lines: the index to put them at, the item they go under
@@ -25,7 +26,7 @@ export type HeadingLookup =
 
 /**
  * Which end of a heading's section new lines go to: its head, just below the
- * heading, or its end, just above the first heading below it. The setting
+ * heading and the section's own property lines, or its end, just above the first heading below it. The setting
  * `sectionSide`, the one answer for every write that adds lines to a section
  * (a flow's move, a task made under a heading, a timer's record in the daily
  * note).
@@ -230,7 +231,12 @@ export class Placement {
      * - `head`: just below the heading, past the paragraph and the code
      *   below it, at the top as a sibling of the items there. A task
      *   indented under the heading stays where it stands, not under the new
-     *   line.
+     *   line. A section with property lines of its own has its head just
+     *   past them (`PropertyBlock.end`, as `NoteSections` reads the block):
+     *   a line put above them would stand before them, and they would read
+     *   as no longer the section's, which reads its properties only above
+     *   its first task. The blank lines past the block stay below the line,
+     *   as those below the heading do.
      * - `end`: just past the section's last line that is not blank — past
      *   the subtree of an item that ends it, as a sibling at the top — so
      *   the blank lines that end it stay below. A section with nothing in it
@@ -240,7 +246,10 @@ export class Placement {
         const found = this.heading(outline, to.heading);
         if (found.kind !== 'one') return found;
         const { heading } = found;
-        if (to.side === 'head') return { kind: 'spot', spot: this.topSibling(outline, heading.end, head) };
+        if (to.side === 'head') {
+            const section = NoteSections.all(NoteSections.read(outline)).find(s => s.heading?.line === heading.line);
+            return { kind: 'spot', spot: this.topSibling(outline, section?.propertyBlock?.end ?? heading.end, head) };
+        }
         const { lines } = outline;
         const next = outline.headings.find(h => h.line >= heading.end);
         let at = next ? next.line : lines.length;
