@@ -86,7 +86,7 @@ export class GridResizeGesture extends BaseDragStrategy {
         this.colWidth = this.gridSurface.getColWidth();
 
         // startCol / initialSpan は **表示値** から取り直す。両 surface とも renderer で
-        // dataset に出力済 (calendar: CalendarView.ts、allday: AllDaySectionRenderer.ts)。
+        // dataset に出力済 (どちらも DateGridLane.ts の drawDateGridLane)。
         // 旧実装では allday だけ visual range 由来で initialSpan を計算しており、view 端
         // clip された split segment (visualSpan > displaySpan) で commit が delta ずれを
         // 起こす reference frame バグの根本だった。表示値統一で対称化。
