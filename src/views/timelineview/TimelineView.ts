@@ -3,7 +3,6 @@ import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
-import type { PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -27,13 +26,8 @@ import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
-import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
-import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { createDefaultListFilterState, createEmptyFilterState } from '../../services/filter/FilterTypes';
-import { createEmptySortState } from '../../services/sort/SortTypes';
+import { PinnedListPanel } from '../sharedUI/PinnedListPanel';
+import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -43,16 +37,7 @@ import { TaskViewerView } from '../base/TaskViewerView';
 import { TimelineCodec, daysToShowOf, effectiveZoom, type TimelineConfig, type TimelineState, type TimelineTransient } from './TimelineSchema';
 import { TimelineDays, windowDates, windowEnd, type DayWindow } from './TimelineDays';
 
-/**
- * View id used as a namespace prefix for shared viewState fields whose keys
- * collide between views (e.g. pinnedListCollapsed). Lets timeline and calendar
- * own independent collapse state for the same listId.
- */
-const VIEW_ID = 'timeline';
-const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
 
-/** The fields whose change the pinned lists show: their lists, the view's filter, the mask. */
-const PINNED_LIST_FIELDS: readonly (keyof TimelineState)[] = ['pinnedLists', 'filterState', 'maskMode'];
 
 /**
  * Timeline View - Displays tasks on a time-based grid layout.
@@ -80,10 +65,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     private gridRenderer: GridRenderer;
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
-    private pinnedListRenderer: PinnedListRenderer | undefined;
-    private listFilterMenu = new FilterMenuComponent();
-    private listSortMenu = new SortMenuComponent();
-    private topRightEditor = new TopRightConfigEditor();
+    /** The sidebar's pinned lists; they draw themselves, and outlive the view's draws. */
+    private readonly pinnedLists: PinnedListPanel;
     private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
@@ -91,14 +74,6 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
 
     // ==================== DOM ====================
     private container: HTMLElement;
-    /**
-     * Stable host for PinnedListRenderer that survives container.empty() —
-     * detached before each empty() and re-appended into sidebarBody after the
-     * sidebar layout is rebuilt. This preserves PinnedList's DOM (paging
-     * pages, expanded body content) and its onChange subscription across
-     * full view renders.
-     */
-    private pinnedHost: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     // Scroll save/restore: save the visible time at the viewport top as
@@ -188,8 +163,17 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.store.subscribe((patch, prev) => {
             // A new day looked at, or following again: the pull is read anew.
             if ('date' in patch && patch.date !== prev.date) this.days.settle(this.state.date);
-            // The pinned lists do not hear the view's state from the index.
-            if (PINNED_LIST_FIELDS.some(key => key in patch)) this.pinnedListRenderer?.refresh();
+        });
+
+        this.pinnedLists = new PinnedListPanel({
+            plugin: this.plugin,
+            readService: this.readService,
+            index: this.index,
+            taskRenderer: this.taskRenderer,
+        }, {
+            state: () => this.state,
+            subscribe: (listener) => this.store.subscribe(listener),
+            write: (patch) => this.update(patch, { draw: false }),
         });
     }
 
@@ -259,21 +243,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
         );
-        const pinnedListRenderer = new PinnedListRenderer(this.taskRenderer, this.plugin, this.readService);
-        this.pinnedListRenderer = pinnedListRenderer;
-        // Persistent host for pinned lists. Lives outside the empty() target
-        // (we explicitly detach it before container.empty() in performRender,
-        // then reparent into the freshly-built sidebarBody).
-        this.pinnedHost = document.createElement('div');
-        pinnedListRenderer.attach({
-            host: this.pinnedHost,
-            getLists: () => this.state.pinnedLists ?? [],
-            getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.state.filterState,
-            callbacks: this.getPinnedListCallbacks(),
-        });
+        this.pinnedLists.open();
         this.moonRenderer = new MoonPhaseRenderer();
-        this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         // Initialize DragHandler with selection callback, move callback, and the window drawn
         this.dragHandler = new DragHandler(this.container, this.operations, this.plugin,
@@ -408,10 +379,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     protected closeView(): void {
         this.hoverParent.dispose();
         this.toolbar?.close();
-        this.listFilterMenu.close();
-        this.listSortMenu.close();
         this.dragHandler.destroy();
-        this.pinnedListRenderer?.detach();
+        this.pinnedLists.close();
         if (this.unsubscribe) {
             this.unsubscribe();
         }
@@ -547,115 +516,16 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         if (dateHeader) this.stickyAnchorObserver.observe(dateHeader);
     }
 
-    // ==================== Pinned lists ====================
-
-    /**
-     * Write the pinned lists. They show only in the sidebar, which redraws
-     * itself on the change (the store's listener), so the grid is not drawn.
-     */
-    private setPinnedLists(lists: PinnedListDefinition[]): void {
-        this.update({ pinnedLists: lists }, { draw: false });
-    }
-
-    private replacePinnedList(id: string, patch: Partial<PinnedListDefinition>): void {
-        const lists = this.state.pinnedLists ?? [];
-        this.setPinnedLists(lists.map(l => l.id === id ? { ...l, ...patch } : l));
-    }
-
-    private getPinnedListCallbacks(): PinnedListCallbacks {
-        const lists = () => this.state.pinnedLists ?? [];
-        const indexOf = (listDef: PinnedListDefinition) => lists().findIndex(l => l.id === listDef.id);
-        return {
-            onCollapsedChange: (listId, collapsed) => {
-                this.update({
-                    pinnedListCollapsed: {
-                        ...this.state.pinnedListCollapsed,
-                        [`${COLLAPSE_KEY_PREFIX}${listId}`]: collapsed,
-                    },
-                }, { draw: false });
-            },
-            onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
-            onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
-            onDuplicate: (listDef) => {
-                const next = [...lists()];
-                const dup = {
-                    ...listDef,
-                    id: 'pl-' + Date.now(),
-                    name: listDef.name + ' (copy)',
-                };
-                next.splice(indexOf(listDef) + 1, 0, dup);
-                this.setPinnedLists(next);
-            },
-            onRemove: (listDef) => {
-                this.setPinnedLists(lists().filter(l => l.id !== listDef.id));
-            },
-            onMoveUp: (listDef) => {
-                const idx = indexOf(listDef);
-                if (idx <= 0) return;
-                const next = [...lists()];
-                [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                this.setPinnedLists(next);
-            },
-            onMoveDown: (listDef) => {
-                const idx = indexOf(listDef);
-                const next = [...lists()];
-                if (idx < 0 || idx >= next.length - 1) return;
-                [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-                this.setPinnedLists(next);
-            },
-            onToggleApplyViewFilter: (listDef) => {
-                this.replacePinnedList(listDef.id, { applyViewFilter: !listDef.applyViewFilter });
-            },
-            onRename: (listDef, newName) => {
-                this.replacePinnedList(listDef.id, { name: newName });
-            },
-            onTopRightEdit: (listDef, anchorEl) => {
-                const tasks = this.index.getTasks();
-                const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
-                this.topRightEditor.open(anchorEl, {
-                    config: listDef.topRight,
-                    propertyKeys,
-                    onChange: (config) => this.replacePinnedList(listDef.id, { topRight: config }),
-                });
-            },
-        };
-    }
-
-    /**
-     * Strip the `${viewId}::` prefix so PinnedListRenderer receives a plain
-     * Record<listId, boolean>. The state keeps the prefix to avoid
-     * timeline/calendar collapse-state collisions.
-     */
-    private buildCollapsedStateForRenderer(): Record<string, boolean> {
-        const out: Record<string, boolean> = {};
-        const stored = this.state.pinnedListCollapsed;
-        if (!stored) return out;
-        for (const [key, val] of Object.entries(stored)) {
-            if (key.startsWith(COLLAPSE_KEY_PREFIX)) {
-                out[key.slice(COLLAPSE_KEY_PREFIX.length)] = val;
-            }
-        }
-        return out;
-    }
-
     private performRender() {
         this.sidebarManager.syncPresentation(this.isSidebarOpen(), { animate: false });
 
         // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
         // bound to it) survives. We re-attach it via mount() below.
         this.toolbar?.detach();
-        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
-        // internal subscription / paging / collapse state) survives the empty().
-        // Re-appended into the freshly-built sidebarBody below.
-        // IMPORTANT: must run before our `reconciler.detach(this.container)` —
-        // otherwise the timeline reconciler scoops up the pinned-list cards
-        // (they live inside `this.container` until detached here), classifies
-        // them as stale, and disposes them. The PinnedListRenderer never gets
-        // told its DOM was emptied and only the show-more button stays in the
-        // body.
-        if (this.pinnedHost?.parentElement) {
-            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
-        }
+        // The pinned lists come out before the grid's cards are gathered, so
+        // their cards are neither taken for the grid's nor lost; they go back
+        // into the sidebar built below.
+        this.pinnedLists.lift();
 
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the scaffolding. Cards retain their inner DOM /
@@ -681,33 +551,9 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         // Build sidebar layout (bottom row)
         const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
-        // Sidebar header content
-        sidebarHeader.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
-
-        const addListBtn = sidebarHeader.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
-        setIcon(addListBtn, 'plus');
-        addListBtn.appendText(t('pinnedList.addList'));
-        addListBtn.addEventListener('click', () => {
-            const newId = 'pl-' + Date.now();
-            // The rename starts on the refresh the new list brings.
-            this.pinnedListRenderer?.scheduleRename(newId);
-            this.setPinnedLists([...(this.state.pinnedLists ?? []), {
-                id: newId,
-                name: t('pinnedList.newList'),
-                filterState: createDefaultListFilterState(),
-                applyViewFilter: false,
-            }]);
-        });
+        this.pinnedLists.mount(sidebarHeader, sidebarBody);
 
         const dates = windowDates(this.window());
-
-        // Re-attach the persistent pinned host into the freshly-built sidebar body.
-        // PinnedListRenderer manages its own contents via its onChange subscription
-        // and the refreshes the view's state changes bring — we only relocate the
-        // host here. Avoid an unconditional refresh so a single onChange does not
-        // rebuild pinned DOM twice (PinnedList's own subscription already handled
-        // it before this performRender ran).
-        sidebarBody.appendChild(this.pinnedHost);
 
         // Mount the persistent toolbar instance into this render's toolbarHost.
         // First call builds DOM; subsequent calls re-attach the existing rootEl.
@@ -801,23 +647,6 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         const dx = touches[0].clientX - touches[1].clientX;
         const dy = touches[0].clientY - touches[1].clientY;
         return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.listSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
-        this.listSortMenu.showMenuAtElement(anchorEl, {
-            onSortChange: () => {
-                this.replacePinnedList(listDef.id, { sortState: this.listSortMenu.getSortState() });
-            },
-        });
-    }
-
-    private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.listFilterMenu.showMenuAtElement(anchorEl, {
-            value: listDef.filterState,
-            onChange: (next) => this.replacePinnedList(listDef.id, { filterState: next }),
-            getTasks: () => this.index.getTasks(),
-        });
     }
 
     // ==================== Export ====================
