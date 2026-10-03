@@ -124,7 +124,7 @@ export class GridMoveGesture extends BaseDragStrategy {
                 ? Math.min(7, this.startCol + span - 1)
                 : this.startCol;
         } else {
-            this.startCol = colStart + 1; // AllDay: dataset.colStart は 0-based、+1 で grid 1-based
+            this.startCol = colStart + 1; // AllDay: dataset.colStart は日の列の 1 始まり。時刻の軸の列が前にあるので格子の列は +1
             this.grabCol = this.startCol;
         }
 
