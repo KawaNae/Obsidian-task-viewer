@@ -1,5 +1,4 @@
-import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
-import { logDebug } from '../../log/log';
+import type { WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
@@ -8,12 +7,11 @@ import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
-import { createDefaultListFilterState, createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
+import { createDefaultListFilterState } from '../../services/filter/FilterTypes';
 import { PinnedListQuery } from '../../services/filter/PinnedListQuery';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import {
     renderListSection,
@@ -23,14 +21,13 @@ import {
 
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
 import type { PinnedListDefinition, DisplayTask } from '../../types';
-import { KanbanSchema, KanbanCodec, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
+import { KanbanCodec, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import { TaskViewerView } from '../base/TaskViewerView';
 
 
 /**
@@ -49,10 +46,14 @@ const KANBAN_CELL_CLASSES: ListSectionClasses = {
     nameInput: 'kanban-view__cell-name-input',
 };
 
-type KanbanViewState = Partial<KanbanConfig> & Partial<KanbanTransient>;
-
-export class KanbanView extends ItemView {
-    private readonly plugin: PluginContext & TimerHost;
+/**
+ * Kanban View - a grid of task lists.
+ *
+ * Its state is KanbanSchema's config and transient fields, held in the
+ * base's store. The grid always holds a cell: a state without one (a new
+ * view, a reset, a template without a grid) is given a default list.
+ */
+export class KanbanView extends TaskViewerView<KanbanConfig, KanbanTransient> {
     private readonly readService: TaskReadService;
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
@@ -60,15 +61,10 @@ export class KanbanView extends ItemView {
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly listFilterMenu = new FilterMenuComponent();
     private readonly listSortMenu = new SortMenuComponent();
-    private readonly viewFilterMenu = new FilterMenuComponent();
-    /** The view's own filter; the menu edits it and hands it back. */
-    private filterState: FilterState = createEmptyFilterState();
     private readonly toolbar: KanbanToolbar;
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    /** rAF coalescing for data-change bursts. Created in onOpen. */
-    private renderScheduler: RenderScheduler | null = null;
     /**
      * Scroll position across full re-renders, on both axes. The element is
      * re-queried each time because `render()` builds a fresh grid host.
@@ -77,10 +73,6 @@ export class KanbanView extends ItemView {
         () => this.container?.querySelector('.kanban-view__grid-host') as HTMLElement | null,
         { axis: 'both' },
     );
-    private customName: string | undefined;
-    private grid: PinnedListDefinition[][] = [];
-    private gridCollapsed: Record<string, boolean> = {};
-    private maskMode: boolean = false;
     private readonly hoverParent = new TaskViewHoverParent();
     private listDefMap = new Map<string, PinnedListDefinition>();
     private topRightEditor = new TopRightConfigEditor();
@@ -93,168 +85,72 @@ export class KanbanView extends ItemView {
     private currentReconciler: CardReconciler | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
-        super(leaf);
-        this.plugin = plugin;
+        super(leaf, plugin, KanbanCodec);
         this.readService = this.plugin.getTaskReadService();
         this.index = this.plugin.getIndex();
         const cards = createCardRendering({
             app: this.app,
             plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-            getMaskMode: () => this.maskMode,
+            getMaskMode: () => this.state.maskMode ?? false,
         });
         this.taskRenderer = cards.taskRenderer;
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
-        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.paging = new TaskPagingController(
             () => this.plugin.settings.pinnedListPageSize,
             (container, tasks, listId) => this.renderTaskCards(container, tasks, listId),
         );
 
-        this.toolbar = new KanbanToolbar({
-            app: this.app,
-            leaf: this.leaf,
-            plugin: this.plugin,
-            readService: this.readService,
-            viewFilterMenu: this.viewFilterMenu,
-            container: this.containerEl,
-            getFilterState: () => this.filterState,
-            onFilterChange: (next) => {
-                this.filterState = next;
-                this.requestSaveLayout();
-                this.render();
-            },
-            getCustomName: () => this.customName,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg) => this.applyConfig(cfg),
-            onConfigApplied: () => {
-                this.leaf.updateHeader();
-                this.requestSaveLayout();
-                this.render();
-            },
-            getMaskMode: () => this.maskMode,
-            setMaskMode: (next) => {
-                this.maskMode = next;
-                this.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-            },
+        this.toolbar = new KanbanToolbar({ host: this.toolbarHost() });
+
+        // A grid without a cell is given the default list, in the same change.
+        this.store.subscribe((patch) => {
+            if ('grid' in patch && !hasCells(this.state.grid)) {
+                this.update({ grid: [[this.createDefaultList()]] });
+            }
         });
     }
 
-    getViewType(): string {
-        return KanbanSchema.viewType;
+    /** The grid drawn. */
+    private get grid(): PinnedListDefinition[][] {
+        return this.state.grid ?? [];
     }
 
-    getDisplayText(): string {
-        return this.customName || viewDisplayName(KanbanSchema.viewType);
+    /** Write the grid; the board is drawn again. */
+    private setGrid(grid: PinnedListDefinition[][]): void {
+        this.update({ grid });
     }
 
-    getIcon(): string {
-        return VIEW_DESCRIPTORS[KanbanSchema.viewType].icon;
+    /** Write one list of the grid, as a new grid. */
+    private replaceList(id: string, patch: Partial<PinnedListDefinition>, options?: { draw?: boolean }): void {
+        const grid = this.grid.map(row => row.map(l => l.id === id ? { ...l, ...patch } : l));
+        this.update({ grid }, options);
     }
 
-    private readonly codec = KanbanCodec;
-
-    applyConfig(cfg: Partial<KanbanConfig>): void {
-        const next = this.codec.withDefaults(cfg);
-        if (next.grid && next.grid.length > 0) {
-            this.grid = next.grid;
-            this.gridCollapsed = {};
-        } else {
-            this.grid = [[this.createDefaultList()]];
-            this.gridCollapsed = {};
-        }
-        this.customName = next.customName;
-        this.maskMode = next.maskMode === true;
-        this.filterState = next.filterState ?? createEmptyFilterState();
-    }
-
-    getCurrentConfig(): Partial<KanbanConfig> {
-        const filterState = this.filterState;
-        return {
-            customName: this.customName,
-            filterState: hasConditions(filterState) ? filterState : undefined,
-            maskMode: this.maskMode,
-            grid: this.grid.length > 0 ? this.grid : undefined,
-        };
-    }
-
-    async setState(state: KanbanViewState, result: ViewStateResult): Promise<void> {
-        const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = readViewConfig(this.codec, stateDict);
-        const transient = this.codec.parseTransient(stateDict);
-
-        this.applyConfig(config);
-
-        if (transient.gridCollapsed) {
-            this.gridCollapsed = transient.gridCollapsed;
-        }
-
-        await super.setState(state, result);
-
-        if (this.container) {
-            this.render();
-        }
-    }
-
-    getState(): Record<string, unknown> {
-        return {
-            ...this.codec.serializeConfig(this.getCurrentConfig()),
-            ...this.codec.serializeTransient({ gridCollapsed: this.gridCollapsed }),
-        };
-    }
-
-    async onOpen(): Promise<void> {
-        logDebug(`[${this.getViewType()}] opened`);
+    protected openView(): void {
         this.container = this.contentEl;
         this.container.addClass('kanban-view');
 
-        if (this.grid.length === 0) {
-            this.grid = [[this.createDefaultList()]];
-        }
-
-        this.render();
-
-        // Coalesce data-change bursts into one render per frame, as the other
-        // three card views do.
-        this.renderScheduler = new RenderScheduler({
-            performFull: () => this.render(),
-            getHost: () => this.container,
-        });
-
         this.unsubscribe = this.index.onChange((taskId, changes) => {
-            this.renderScheduler?.handleChange(taskId, changes);
+            this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
-    async onClose(): Promise<void> {
-        logDebug(`[${this.getViewType()}] closed`);
+    protected closeView(): void {
         this.hoverParent.dispose();
         this.listFilterMenu.close();
         this.listSortMenu.close();
-        this.viewFilterMenu.close();
+        this.toolbar.close();
         this.unsubscribe?.();
         this.unsubscribe = null;
-        this.renderScheduler?.dispose();
-        this.renderScheduler = null;
         this.scrollRestorer.dispose();
-    }
-
-    redraw(): void {
-        this.render();
     }
 
     // ─── Render ───────────────────────────────────────────────
 
-    private render(): void {
+    protected draw(): void {
         // The board is rebuilt from scratch below, so the scroll offsets of the
         // old grid host die with it. Both axes matter here: columns run
         // horizontally, so scrollLeft is the position a user notices most.
@@ -304,9 +200,9 @@ export class KanbanView extends ItemView {
     }
 
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
-        const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
+        const isCollapsed = this.state.gridCollapsed?.[listDef.id] ?? false;
 
-        const query = PinnedListQuery.resolve(listDef, this.filterState);
+        const query = PinnedListQuery.resolve(listDef, this.state.filterState);
         const tasks = this.readService.getFilteredTasks(query.filter, query.sort);
 
         renderListSection(gridEl, {
@@ -320,20 +216,14 @@ export class KanbanView extends ItemView {
                 this.listSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
                 this.listSortMenu.showMenuAtElement(anchorEl, {
                     onSortChange: () => {
-                        listDef.sortState = this.listSortMenu.getSortState();
-                        this.requestSaveLayout();
-                        this.render();
+                        this.replaceList(listDef.id, { sortState: this.listSortMenu.getSortState() });
                     },
                 });
             },
             onFilterClick: (anchorEl) => {
                 this.listFilterMenu.showMenuAtElement(anchorEl, {
                     value: listDef.filterState,
-                    onChange: (next) => {
-                        listDef.filterState = next;
-                        this.requestSaveLayout();
-                        this.render();
-                    },
+                    onChange: (next) => this.replaceList(listDef.id, { filterState: next }),
                     getTasks: () => this.index.getTasks(),
                 });
             },
@@ -343,8 +233,9 @@ export class KanbanView extends ItemView {
                 if (nameEl) this.showCellMenu(event, listDef, nameEl, row, col);
             },
             onCollapsedChange: (collapsed) => {
-                this.gridCollapsed[listDef.id] = collapsed;
-                this.requestSaveLayout();
+                this.update({
+                    gridCollapsed: { ...this.state.gridCollapsed, [listDef.id]: collapsed },
+                }, { draw: false });
             },
             renderBody: (body, opts) => {
                 if (opts.resetPaging) this.paging.resetOne(listDef.id);
@@ -398,11 +289,7 @@ export class KanbanView extends ItemView {
                     this.topRightEditor.open(nameEl, {
                         config: listDef.topRight,
                         propertyKeys,
-                        onChange: (config) => {
-                            listDef.topRight = config;
-                            this.requestSaveLayout();
-                            this.render();
-                        },
+                        onChange: (config) => this.replaceList(listDef.id, { topRight: config }),
                     });
                 });
         });
@@ -412,11 +299,7 @@ export class KanbanView extends ItemView {
                 .setTitle(t('menu.applyViewFilter'))
                 .setIcon('filter')
                 .setChecked(listDef.applyViewFilter)
-                .onClick(() => {
-                    listDef.applyViewFilter = !listDef.applyViewFilter;
-                    this.requestSaveLayout();
-                    this.render();
-                });
+                .onClick(() => this.replaceList(listDef.id, { applyViewFilter: !listDef.applyViewFilter }));
         });
 
         menu.addSeparator();
@@ -467,9 +350,9 @@ export class KanbanView extends ItemView {
     }
 
     private startCellRename(nameEl: HTMLElement, listDef: PinnedListDefinition): void {
+        // The rename shows the new name in place; the board is not drawn.
         startListSectionRename(nameEl, KANBAN_CELL_CLASSES, listDef.name, (newName) => {
-            listDef.name = newName;
-            this.requestSaveLayout();
+            this.replaceList(listDef.id, { name: newName }, { draw: false });
         });
     }
 
@@ -494,34 +377,28 @@ export class KanbanView extends ItemView {
         for (let c = 0; c < cols; c++) {
             newRow.push(this.createDefaultList());
         }
-        this.grid.splice(atIndex, 0, newRow);
-        this.requestSaveLayout();
-        this.render();
+        const grid = [...this.grid];
+        grid.splice(atIndex, 0, newRow);
+        this.setGrid(grid);
     }
 
     private insertColumn(atIndex: number): void {
-        for (const row of this.grid) {
-            row.splice(atIndex, 0, this.createDefaultList());
-        }
-        this.requestSaveLayout();
-        this.render();
+        this.setGrid(this.grid.map(row => {
+            const next = [...row];
+            next.splice(atIndex, 0, this.createDefaultList());
+            return next;
+        }));
     }
 
     private removeRow(index: number): void {
         if (this.grid.length <= 1) return;
-        this.grid.splice(index, 1);
-        this.requestSaveLayout();
-        this.render();
+        this.setGrid(this.grid.filter((_, r) => r !== index));
     }
 
     private removeColumn(index: number): void {
         const cols = this.grid[0]?.length ?? 1;
         if (cols <= 1) return;
-        for (const row of this.grid) {
-            row.splice(index, 1);
-        }
-        this.requestSaveLayout();
-        this.render();
+        this.setGrid(this.grid.map(row => row.filter((_, c) => c !== index)));
     }
 
     private duplicateCell(listDef: PinnedListDefinition, row: number, col: number): void {
@@ -535,15 +412,15 @@ export class KanbanView extends ItemView {
         // rectangular by inserting a default cell at the same column in every
         // other row. splice tolerates col+1 past a shorter row's length (it
         // appends), so a non-rectangular grid no longer silently no-ops.
-        for (let r = 0; r < this.grid.length; r++) {
-            this.grid[r].splice(col + 1, 0, r === row ? dup : this.createDefaultList());
-        }
-
-        this.requestSaveLayout();
-        this.render();
+        this.setGrid(this.grid.map((cells, r) => {
+            const next = [...cells];
+            next.splice(col + 1, 0, r === row ? dup : this.createDefaultList());
+            return next;
+        }));
     }
+}
 
-    private requestSaveLayout(): void {
-        this.app.workspace.requestSaveLayout();
-    }
+/** Whether a grid holds a cell. */
+function hasCells(grid: PinnedListDefinition[][] | undefined): boolean {
+    return !!grid && grid.some(row => row.length > 0);
 }

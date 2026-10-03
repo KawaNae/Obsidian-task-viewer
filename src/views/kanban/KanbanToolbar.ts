@@ -1,55 +1,41 @@
-import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
+import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
-import type { PluginContext } from '../../PluginContext';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import { viewDisplayName } from '../ViewDescriptors';
-import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
-import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { hasConditions, type FilterState } from '../../services/filter/FilterTypes';
-import { KanbanSchema, KanbanCodec, type KanbanConfig } from './KanbanSchema';
-import { exportFolderOf } from '../../services/export/ExportSave';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, editViewFilter } from '../sharedUI/ViewToolbar';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { hasConditions } from '../../services/filter/FilterTypes';
+import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { KanbanState } from './KanbanSchema';
 
 export interface KanbanToolbarDeps {
-    app: App;
-    leaf: WorkspaceLeaf;
-    plugin: PluginContext;
-    readService: TaskReadService;
-    viewFilterMenu: FilterMenuComponent;
-    container: HTMLElement;
-
-    getFilterState: () => FilterState;
-    onFilterChange: (next: FilterState) => void;
-
-    getCustomName: () => string | undefined;
-    onRename: (newName: string | undefined) => void;
-
-    /** Snapshot the view's full persistable config for template-save / URI build. */
-    getCurrentConfig: () => Partial<KanbanConfig>;
-    /** Apply a parsed config (from template load / URI / reset). */
-    applyConfig: (cfg: Partial<KanbanConfig>) => void;
-    /** Trigger render + saveLayout side effects after applyConfig. */
-    onConfigApplied: () => void;
-
-    getMaskMode: () => boolean;
-    setMaskMode: (next: boolean) => void;
+    host: ViewToolbarHost<KanbanState>;
 }
 
 /**
- * Persistent toolbar for KanbanView.
+ * Persistent toolbar for KanbanView. It reads and writes the view's store
+ * and mends itself when the store changes.
  */
 export class KanbanToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
     private maskHandle: { update: () => void } | null = null;
+    private readonly filterMenu = new FilterMenuComponent();
 
     constructor(private deps: KanbanToolbarDeps) {
         super();
+        this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
+        deps.host.store.subscribe(() => this.update());
     }
 
-    private readonly codec = KanbanCodec;
+    private get store() {
+        return this.deps.host.store;
+    }
+
+    /** Close the popovers the toolbar opened. */
+    close(): void {
+        this.filterMenu.close();
+    }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { deps } = this;
+        const { host } = this.deps;
 
         toolbar.createDiv('view-toolbar__spacer');
 
@@ -57,59 +43,22 @@ export class KanbanToolbar extends ViewToolbarBase {
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.onclick = (event) => {
-            deps.viewFilterMenu.showMenu(event as MouseEvent, {
-                value: deps.getFilterState(),
-                onChange: (next) => {
-                    deps.onFilterChange(next);
-                    this.update();
-                },
-                getTasks: () => deps.plugin.getIndex().getTasks(),
-            });
+            editViewFilter(this.filterMenu, { event }, this.store, () => host.plugin.getIndex().getTasks());
         };
         this.filterBtn = filterBtn;
 
         this.maskHandle = MaskToggleButton.render(toolbar, {
-            getMaskMode: () => deps.getMaskMode(),
-            setMaskMode: (next) => deps.setMaskMode(next),
+            getMaskMode: () => this.store.get().maskMode ?? false,
+            setMaskMode: (next) => this.store.update({ maskMode: next }),
         });
 
-        ViewSettingsMenu.renderButton(toolbar, {
-            app: deps.app,
-            leaf: deps.leaf,
-            getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => viewDisplayName(KanbanSchema.viewType),
-            onRename: (newName) => deps.onRename(newName),
-            buildUri: () => ({
-                configParams: this.codec.toUriParams(deps.getCurrentConfig()),
-            }),
-            viewType: KanbanSchema.viewType,
-            getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            templateNotes: deps.plugin.getOperations(),
-            getViewTemplate: () => ({
-                filePath: '',
-                name: deps.getCustomName() || viewDisplayName(KanbanSchema.viewType),
-                viewType: KanbanSchema.shortName,
-                config: this.codec.serializeConfig(deps.getCurrentConfig()),
-            }),
-            getExportFolder: () => exportFolderOf(deps.plugin.settings),
-            onApplyTemplate: (template) => {
-                const cfg = readViewConfig(this.codec, template.config ?? null);
-                deps.applyConfig(cfg);
-                if (template.name) deps.onRename(template.name);
-                deps.onConfigApplied();
-            },
-            onReset: () => {
-                deps.applyConfig({});
-                deps.onRename(undefined);
-                deps.onConfigApplied();
-            },
-            menuPresenter: deps.plugin.menuPresenter,
-        });
+        ViewSettingsMenu.renderButton(toolbar, host.settingsOptions());
     }
 
     override update(): void {
         if (this.filterBtn) {
-            this.filterBtn.classList.toggle('is-filtered', hasConditions(this.deps.getFilterState()));
+            const filterState = this.store.get().filterState;
+            this.filterBtn.classList.toggle('is-filtered', !!filterState && hasConditions(filterState));
         }
         this.maskHandle?.update();
     }
