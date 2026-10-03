@@ -1,109 +1,98 @@
-import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
+import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
-import type { PluginContext } from '../../PluginContext';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
-import { viewDisplayName } from '../ViewDescriptors';
-import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, editViewFilter, type ViewSettingsOptions, type CompactMenuDeps, type FilterAndMask } from '../sharedUI/ViewToolbar';
-import type { FilterState } from '../../services/filter/FilterTypes';
-import type { StateSource } from '../base/ViewStore';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, editViewFilter } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
-import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { CalendarSchema, CalendarCodec, type CalendarConfig } from './CalendarSchema';
-import { exportFolderOf } from '../../services/export/ExportSave';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { CalendarState } from './CalendarSchema';
+
+/** What Calendar does that is not a change of its state, or reads from more than it. */
+export interface CalendarCommands {
+    /** Move the grid by `n` weeks. */
+    navigateWeeks(n: number): void;
+    /** Follow today again: today's month grid. */
+    today(): void;
+    /** Show the month grid of `date`. */
+    goTo(date: string): void;
+    /** The day the date picker opens on: the 1st of the month shown. */
+    pickerDay(): string;
+    /** The month the grid is read as. */
+    referenceMonth(): { year: number; month: number };
+    /** Whether the sidebar shows (closed at narrow width until opened). */
+    isSidebarOpen(): boolean;
+    /** Open or close the sidebar, sliding. */
+    toggleSidebar(open: boolean): void;
+}
 
 export interface CalendarToolbarDeps {
-    app: App;
-    leaf: WorkspaceLeaf;
-    plugin: PluginContext;
-    readService: TaskReadService;
-    viewFilterMenu: FilterMenuComponent;
-    container: HTMLElement;
-
-    onNavigateWeek: (days: number) => void;
-    onJumpToCurrentMonth: () => void;
-    /** Show the month containing `date`, as the Today button shows this month. */
-    onJumpToDate: (date: string) => void;
-    /** The date (YYYY-MM-DD) the date picker opens on; `onJumpToDate` of it stays put. */
-    getCurrentDate: () => string;
-    getFilterState: () => FilterState;
-    onFilterChange: (next: FilterState) => void;
-
-    getCustomName: () => string | undefined;
-    onRename: (newName: string | undefined) => void;
-    getPinnedLists: () => PinnedListDefinition[];
-    setPinnedLists: (lists: PinnedListDefinition[]) => void;
-    getShowSidebar: () => boolean;
-    setShowSidebar: (open: boolean, opts: { animate: boolean; persist: boolean }) => void;
-
-    /** Snapshot the view's full persistable config for template-save / URI build. */
-    getCurrentConfig: () => Partial<CalendarConfig>;
-    /** Apply a parsed config (from template load / URI / reset). */
-    applyConfig: (cfg: Partial<CalendarConfig>) => void;
-    /** Trigger render + saveLayout side effects after applyConfig. */
-    onConfigApplied: () => void;
-
-    getMaskMode: () => boolean;
-    setMaskMode: (next: boolean) => void;
-
-    getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
-    setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
-
-    getReferenceMonth: () => { year: number; month: number };
+    host: ViewToolbarHost<CalendarState>;
+    commands: CalendarCommands;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
 }
 
 /**
- * Persistent toolbar for CalendarView.
+ * Persistent toolbar for CalendarView. Re-attached on each render via
+ * mount/detach so the filter popover survives draws. It reads and writes the
+ * view's store and mends itself when the store changes.
  */
 export class CalendarToolbar extends ViewToolbarBase {
     private sidebarToggleBtn: HTMLButtonElement | null = null;
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
+    private readonly filterMenu = new FilterMenuComponent();
 
     constructor(private deps: CalendarToolbarDeps) {
         super();
+        this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
+        deps.host.store.subscribe(() => this.update());
     }
 
-    private readonly codec = CalendarCodec;
+    private get store() {
+        return this.deps.host.store;
+    }
 
+    /** Close the popovers the toolbar opened. */
+    close(): void {
+        this.filterMenu.close();
+    }
+
+    /** Synchronizes the sidebar toggle button with the view's sidebar state. */
     syncSidebarToggleState(): void {
         if (this.sidebarToggleBtn) {
-            updateSidebarToggleButton(this.sidebarToggleBtn, this.deps.getShowSidebar());
+            updateSidebarToggleButton(this.sidebarToggleBtn, this.deps.commands.isSidebarOpen());
         }
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { deps } = this;
+        const { host, commands } = this.deps;
 
         // Date Label (YYYY - MM)
         const dateLabelDeps = {
-            app: deps.app,
-            getSettings: () => deps.plugin.settings,
-            notes: deps.plugin.getOperations(),
-            linkInteractionManager: deps.linkInteractionManager,
-            hoverParent: deps.hoverParent,
+            app: host.app,
+            getSettings: () => host.plugin.settings,
+            notes: host.plugin.getOperations(),
+            linkInteractionManager: this.deps.linkInteractionManager,
+            hoverParent: this.deps.hoverParent,
         };
         this.dateLabelHandle = DateLabel.render(toolbar, dateLabelDeps);
-        const ref = deps.getReferenceMonth();
+        const ref = commands.referenceMonth();
         this.dateLabelHandle.update(ref.year, ref.month);
         DateLabel.bindHoverPreview(toolbar, dateLabelDeps);
 
         DateNavigator.render(
             toolbar,
-            (days) => deps.onNavigateWeek(days),
-            () => deps.onJumpToCurrentMonth(),
+            (weeks) => commands.navigateWeeks(weeks),
+            () => commands.today(),
             {
                 vertical: true,
                 dateJump: {
-                    getCurrentDate: () => deps.getCurrentDate(),
-                    onJump: (date) => deps.onJumpToDate(date),
+                    getCurrentDate: () => commands.pickerDay(),
+                    onJump: (date) => commands.goTo(date),
                 },
             }
         );
@@ -117,15 +106,15 @@ export class CalendarToolbar extends ViewToolbarBase {
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.addEventListener('click', (event: MouseEvent) => {
-            editViewFilter(deps.viewFilterMenu, { event }, this.filterSource(), () => deps.plugin.getIndex().getTasks());
+            editViewFilter(this.filterMenu, { event }, this.store, () => host.plugin.getIndex().getTasks());
         });
 
         this.maskHandle = MaskToggleButton.render(actionZone, {
-            getMaskMode: () => deps.getMaskMode(),
-            setMaskMode: (next) => deps.setMaskMode(next),
+            getMaskMode: () => this.store.get().maskMode ?? false,
+            setMaskMode: (next) => this.store.update({ maskMode: next }),
         });
 
-        ViewSettingsMenu.renderButton(actionZone, this.getSettingsOptions());
+        ViewSettingsMenu.renderButton(actionZone, this.settingsOptions());
 
         // More button (compact mode — ⋮)
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
@@ -133,10 +122,14 @@ export class CalendarToolbar extends ViewToolbarBase {
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
 
         moreBtn.onclick = (e) => {
-            deps.plugin.menuPresenter.present((menu) => {
-                this.appendCompactMenuItems(menu, moreBtn);
+            host.plugin.menuPresenter.present((menu) => {
+                appendCompactFilterAndMask(menu, moreBtn, {
+                    filterMenu: this.filterMenu,
+                    store: this.store,
+                    getTasks: () => host.plugin.getIndex().getTasks(),
+                });
                 menu.addSeparator();
-                ViewSettingsMenu.appendItems(menu, this.getSettingsOptions());
+                ViewSettingsMenu.appendItems(menu, this.settingsOptions());
             }, { kind: 'mouseEvent', event: e });
         };
 
@@ -144,86 +137,26 @@ export class CalendarToolbar extends ViewToolbarBase {
         const toggleBtn = toolbar.createEl('button', {
             cls: 'view-toolbar__btn--icon sidebar-toggle-button-icon',
         });
-        updateSidebarToggleButton(toggleBtn, deps.getShowSidebar());
-        toggleBtn.onclick = () => {
-            const nextOpen = !deps.getShowSidebar();
-            deps.setShowSidebar(nextOpen, { animate: true, persist: true });
-        };
         this.sidebarToggleBtn = toggleBtn;
+        updateSidebarToggleButton(toggleBtn, commands.isSidebarOpen());
+        toggleBtn.onclick = () => commands.toggleSidebar(!commands.isSidebarOpen());
     }
 
-    private getSettingsOptions(): ViewSettingsOptions {
-        const { deps } = this;
-        return {
-            app: deps.app,
-            leaf: deps.leaf,
-            getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => viewDisplayName(CalendarSchema.viewType),
-            onRename: (newName) => deps.onRename(newName),
-            buildUri: () => ({
-                configParams: this.codec.toUriParams(deps.getCurrentConfig()),
-            }),
-            viewType: CalendarSchema.viewType,
-            getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            templateNotes: deps.plugin.getOperations(),
-            getViewTemplate: () => ({
-                filePath: '',
-                name: deps.getCustomName() || viewDisplayName(CalendarSchema.viewType),
-                viewType: CalendarSchema.shortName,
-                config: this.codec.serializeConfig(deps.getCurrentConfig()),
-            }),
-            getExportFolder: () => exportFolderOf(deps.plugin.settings),
-            onApplyTemplate: (template) => {
-                const cfg = readViewConfig(this.codec, template.config ?? null);
-                deps.applyConfig(cfg);
-                if (template.name) deps.onRename(template.name);
-                deps.onConfigApplied();
-            },
-            onReset: () => {
-                deps.applyConfig({});
-                deps.onRename(undefined);
-                deps.onConfigApplied();
-            },
-            menuPresenter: deps.plugin.menuPresenter,
-            appendCustomItems: (menu) => {
-                appendAstronomyMenuSection(menu, {
-                    overlays: ['moonPhase'],
-                    settings: deps.plugin.settings.astronomy,
-                    instance: deps.getAstronomyDisplay(),
-                    onChange: (next) => deps.setAstronomyDisplay(next),
-                });
-            },
-        };
-    }
-
-    private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
-        const { deps } = this;
-        const compact: CompactMenuDeps = {
-            filterMenu: deps.viewFilterMenu,
-            store: this.filterSource(),
-            getTasks: () => deps.plugin.getIndex().getTasks(),
-        };
-        appendCompactFilterAndMask(menu, moreBtn, compact);
-    }
-
-    /**
-     * The view's filter and mask as the shared controls read and write them.
-     * Interim: Calendar does not hold a store yet (stage 9b part B2).
-     */
-    private filterSource(): StateSource<FilterAndMask> {
-        const { deps } = this;
-        return {
-            get: () => ({ filterState: deps.getFilterState(), maskMode: deps.getMaskMode() }),
-            update: (patch) => {
-                if (patch.filterState) deps.onFilterChange(patch.filterState);
-                if (patch.maskMode !== undefined) deps.setMaskMode(patch.maskMode);
-                this.update();
-            },
-        };
+    private settingsOptions() {
+        const { host } = this.deps;
+        return host.settingsOptions((menu) => {
+            appendAstronomyMenuSection(menu, {
+                overlays: ['moonPhase'],
+                settings: host.plugin.settings.astronomy,
+                instance: this.store.get().astronomyDisplay,
+                onChange: (next) => this.store.update({ astronomyDisplay: next }),
+            });
+        });
     }
 
     override update(): void {
-        const ref = this.deps.getReferenceMonth();
+        if (!this.rootEl) return;
+        const ref = this.deps.commands.referenceMonth();
         this.dateLabelHandle?.update(ref.year, ref.month);
         this.maskHandle?.update();
         this.syncSidebarToggleState();

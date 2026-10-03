@@ -766,7 +766,7 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 | `name` | string | Custom view name (URL-encoded); set as the view's `customName` | `My%20Timeline` |
 | `daysToShow` (alias `days`) | integer | Timeline display days, 1–30 | `3` |
 | `zoomLevel` (alias `zoom`) | number | Timeline zoom level, 0.25–10 | `1.5` |
-| `date` | YYYY-MM-DD | Timeline and Schedule: the day the view looks at (Timeline puts the past days to show before it). Absent, the view follows today. The older `startDate` and `currentDate` are not read | `2026-02-28` |
+| `date` | YYYY-MM-DD | The day a dated view looks at. Timeline puts the past days to show before it; Schedule draws it; Calendar and MiniCalendar put its week on the grid's top row (Today and Go to date show a month grid, which starts on the week of the month's 1st). Absent, the view follows today. The older `startDate`, `currentDate` and `windowStart` are not read | `2026-02-28` |
 | `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
 | `filterState` (alias `filter`) | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
 | `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
@@ -838,9 +838,9 @@ Each view's toolbar has a gear icon (settings) button. The menu provides:
 ### Copy URI parameters per view
 
 - **TimelineView**: `filterState`, `daysToShow`, `zoomLevel`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
-- **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, `position`, `name`
+- **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
 - **ScheduleView**: `filterState`, `position`, `name`
-- **TimerView**: `mode`, `intervalTemplate`, `position`, `name`
+- **TimerView**: `timerViewMode`, `intervalTemplate`, `position`, `name` (no `template`: the timer keeps no view templates)
 - All views support `template` (when set, `filterState`/`pinnedLists` are omitted from URI)
 
 ### Toolbar icon order

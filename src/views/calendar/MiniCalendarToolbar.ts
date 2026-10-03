@@ -1,66 +1,66 @@
-import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
+import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
-import type { PluginContext } from '../../PluginContext';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { AstronomyDisplay } from '../../types';
-import { ViewToolbarBase, ViewSettingsMenu, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewToolbarBase, ViewSettingsMenu, editViewFilter } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
-import { DateNavigator } from '../sharedUI/ViewToolbar';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
-import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import type { FilterState } from '../../services/filter/FilterTypes';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { viewDisplayName } from '../ViewDescriptors';
-import { MiniCalendarSchema, MiniCalendarCodec, type MiniCalendarConfig } from './MiniCalendarSchema';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { MiniCalendarState } from './MiniCalendarSchema';
 
-export interface MiniCalendarToolbarDeps {
-    app: App;
-    leaf: WorkspaceLeaf;
-    plugin: PluginContext;
-    readService: TaskReadService;
-    viewFilterMenu: FilterMenuComponent;
-    linkInteractionManager: TaskLinkInteractionManager;
-    hoverParent: TaskViewHoverParent;
-
-    getReferenceMonth: () => { year: number; month: number };
-    onNavigateWeek: (direction: number) => void;
-    onJumpToCurrentMonth: () => void;
-    getFilterState: () => FilterState;
-    onFilterChange: (next: FilterState) => void;
-
-    getCustomName: () => string | undefined;
-    onRename: (newName: string | undefined) => void;
-    getCurrentConfig: () => Partial<MiniCalendarConfig>;
-    applyConfig: (cfg: Partial<MiniCalendarConfig>) => void;
-    onConfigApplied: () => void;
-
-    getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
-    setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
+/** What MiniCalendar does that is not a change of its state, or reads from more than it. */
+export interface MiniCalendarCommands {
+    /** Slide the grid by `n` weeks. */
+    navigateWeeks(n: number): void;
+    /** Follow today again: today's month grid. */
+    today(): void;
+    /** The month the grid is read as. */
+    referenceMonth(): { year: number; month: number };
 }
 
+export interface MiniCalendarToolbarDeps {
+    host: ViewToolbarHost<MiniCalendarState>;
+    commands: MiniCalendarCommands;
+    linkInteractionManager: TaskLinkInteractionManager;
+    hoverParent: TaskViewHoverParent;
+}
+
+/**
+ * Persistent toolbar for MiniCalendarView. It reads and writes the view's
+ * store and mends itself when the store changes.
+ */
 export class MiniCalendarToolbar extends ViewToolbarBase {
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
+    private readonly filterMenu = new FilterMenuComponent();
 
     constructor(private deps: MiniCalendarToolbarDeps) {
         super();
+        this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
+        deps.host.store.subscribe(() => this.update());
     }
 
-    private readonly codec = MiniCalendarCodec;
+    private get store() {
+        return this.deps.host.store;
+    }
+
+    /** Close the popovers the toolbar opened. */
+    close(): void {
+        this.filterMenu.close();
+    }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { deps } = this;
+        const { host, commands } = this.deps;
 
         const dateLabelDeps = {
-            app: deps.app,
-            getSettings: () => deps.plugin.settings,
-            notes: deps.plugin.getOperations(),
-            linkInteractionManager: deps.linkInteractionManager,
-            hoverParent: deps.hoverParent,
+            app: host.app,
+            getSettings: () => host.plugin.settings,
+            notes: host.plugin.getOperations(),
+            linkInteractionManager: this.deps.linkInteractionManager,
+            hoverParent: this.deps.hoverParent,
         };
         this.dateLabelHandle = DateLabel.render(toolbar, dateLabelDeps);
-        const ref = deps.getReferenceMonth();
+        const ref = commands.referenceMonth();
         this.dateLabelHandle.update(ref.year, ref.month);
         DateLabel.bindHoverPreview(toolbar, dateLabelDeps);
 
@@ -68,8 +68,8 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
 
         DateNavigator.render(
             toolbar,
-            (days) => deps.onNavigateWeek(days),
-            () => deps.onJumpToCurrentMonth(),
+            (weeks) => commands.navigateWeeks(weeks),
+            () => commands.today(),
             { vertical: true }
         );
 
@@ -78,78 +78,36 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
 
         moreBtn.onclick = (e) => {
-            deps.plugin.menuPresenter.present((menu) => {
-                this.appendCompactMenuItems(menu, moreBtn);
+            host.plugin.menuPresenter.present((menu) => {
+                menu.addItem((item) => {
+                    item.setTitle(t('toolbar.filter'))
+                        .setIcon('filter')
+                        .onClick(() => editViewFilter(
+                            this.filterMenu, { element: moreBtn }, this.store,
+                            () => host.plugin.getIndex().getTasks(),
+                        ));
+                });
                 menu.addSeparator();
-                ViewSettingsMenu.appendItems(menu, this.getSettingsOptions());
+                ViewSettingsMenu.appendItems(menu, this.settingsOptions());
             }, { kind: 'mouseEvent', event: e });
         };
     }
 
-    override update(): void {
-        const ref = this.deps.getReferenceMonth();
-        this.dateLabelHandle?.update(ref.year, ref.month);
-    }
-
-    private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
-        const { deps } = this;
-
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.filter'))
-                .setIcon('filter')
-                .onClick(() => {
-                    deps.viewFilterMenu.showMenuAtElement(moreBtn, {
-                        value: deps.getFilterState(),
-                        onChange: (next) => {
-                            deps.onFilterChange(next);
-                            this.update();
-                        },
-                        getTasks: () => deps.plugin.getIndex().getTasks(),
-                    });
-                });
+    private settingsOptions() {
+        const { host } = this.deps;
+        return host.settingsOptions((menu) => {
+            appendAstronomyMenuSection(menu, {
+                overlays: ['moonPhase'],
+                settings: host.plugin.settings.astronomy,
+                instance: this.store.get().astronomyDisplay,
+                onChange: (next) => this.store.update({ astronomyDisplay: next }),
+            });
         });
     }
 
-    private getSettingsOptions(): ViewSettingsOptions {
-        const { deps } = this;
-        return {
-            app: deps.app,
-            leaf: deps.leaf,
-            getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => viewDisplayName(MiniCalendarSchema.viewType),
-            onRename: (newName) => deps.onRename(newName),
-            buildUri: () => ({
-                configParams: this.codec.toUriParams(deps.getCurrentConfig()),
-            }),
-            viewType: MiniCalendarSchema.viewType,
-            getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            templateNotes: deps.plugin.getOperations(),
-            getViewTemplate: () => ({
-                filePath: '',
-                name: deps.getCustomName() || viewDisplayName(MiniCalendarSchema.viewType),
-                viewType: 'calendar',
-                config: this.codec.serializeConfig(deps.getCurrentConfig()),
-            }),
-            onApplyTemplate: (template) => {
-                const cfg = readViewConfig(this.codec, template.config ?? null);
-                deps.applyConfig(cfg);
-                if (template.name) deps.onRename(template.name);
-                deps.onConfigApplied();
-            },
-            onReset: () => {
-                deps.applyConfig({});
-                deps.onRename(undefined);
-                deps.onConfigApplied();
-            },
-            menuPresenter: deps.plugin.menuPresenter,
-            appendCustomItems: (menu) => {
-                appendAstronomyMenuSection(menu, {
-                    overlays: ['moonPhase'],
-                    settings: deps.plugin.settings.astronomy,
-                    instance: deps.getAstronomyDisplay(),
-                    onChange: (next) => deps.setAstronomyDisplay(next),
-                });
-            },
-        };
+    override update(): void {
+        if (!this.rootEl) return;
+        const ref = this.deps.commands.referenceMonth();
+        this.dateLabelHandle?.update(ref.year, ref.month);
     }
 }

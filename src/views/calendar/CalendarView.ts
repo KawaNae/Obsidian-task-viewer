@@ -1,10 +1,9 @@
-import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
-import { logDebug } from '../../log/log';
+import { type WorkspaceLeaf, setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
-import type { DisplayTask, PinnedListDefinition, AstronomyDisplay } from '../../types';
+import type { DisplayTask, PinnedListDefinition } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
@@ -16,33 +15,26 @@ import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes
 import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
-import {
-    getCalendarDateRange,
-    getNormalizedWindowStart,
-    getReferenceMonth,
-    getColumnOffset,
-    getGridColumnForDay,
-} from './CalendarDateUtils';
+import { getColumnOffset, getGridColumnForDay } from './CalendarDateUtils';
+import { gridEnd, gridOfMonth, gridShifted, gridStart, pickerDay, referenceMonth, weekStartOf } from './CalendarGrid';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { createDefaultListFilterState, createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
+import { createDefaultListFilterState } from '../../services/filter/FilterTypes';
 import { CalendarToolbar } from './CalendarToolbar';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { VIEW_DESCRIPTORS, viewDisplayName } from '../ViewDescriptors';
-import { CalendarSchema, CalendarCodec, type CalendarConfig } from './CalendarSchema';
+import { CalendarCodec, type CalendarConfig, type CalendarState, type CalendarTransient } from './CalendarSchema';
 import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { markHandleSurface } from '../sharedUI/handles/HandleSurface';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { parseSegmentId } from '../../services/display/SegmentIds';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
-import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { PinnedListRenderer, type PinnedListCallbacks } from '../sharedUI/PinnedListRenderer';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
@@ -50,7 +42,8 @@ import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
+import { TaskViewerView } from '../base/TaskViewerView';
+import { followToday } from '../base/ViewedDay';
 
 
 /**
@@ -61,28 +54,23 @@ import { readViewConfig } from '../../services/viewConfig/ConfigIssueNotice';
 const VIEW_ID = 'calendar';
 const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
 
-interface CalendarViewState {
-    windowStart?: string;
-    filterState?: FilterState;
-    showSidebar?: boolean;
-    pinnedListCollapsed?: Record<string, boolean>;
-    pinnedLists?: PinnedListDefinition[];
-    customName?: string;
-    maskMode?: boolean;
-    astronomyDisplay?: Partial<AstronomyDisplay>;
-}
+/** The fields whose change the pinned lists show: their lists, the view's filter, the mask. */
+const PINNED_LIST_FIELDS: readonly (keyof CalendarState)[] = ['pinnedLists', 'filterState', 'maskMode'];
 
-export class CalendarView extends ItemView {
-    private readonly plugin: PluginContext & TimerHost;
+/**
+ * Calendar View - six weeks of tasks on a month grid.
+ *
+ * Its state is CalendarSchema's config and transient fields, held in the
+ * base's store. The weeks it draws are read from the day it looks at
+ * (`date`, absent while it follows today) by `CalendarGrid`.
+ */
+export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransient> {
     private readonly readService: TaskReadService;
     /** The index's copies and changes (`PluginContext.getIndex`). */
     private readonly index: IndexReads;
     private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly viewFilterMenu = new FilterMenuComponent();
-    /** The view's own filter; the menu edits it and hands it back. */
-    private filterState: FilterState = createEmptyFilterState();
     private readonly listSortMenu = new SortMenuComponent();
 
     private menuHandler: MenuHandler;
@@ -90,7 +78,7 @@ export class CalendarView extends ItemView {
     private handleManager: HandleManager | null = null;
     private selectionController: SelectionController | null = null;
     private sidebarManager: SidebarManager;
-    private pinnedListRenderer: PinnedListRenderer;
+    private pinnedListRenderer: PinnedListRenderer | undefined;
     /**
      * Stable host for PinnedListRenderer that survives container.empty() —
      * detached before each empty() and re-appended into sidebarBody after the
@@ -101,27 +89,23 @@ export class CalendarView extends ItemView {
     private pinnedHost: HTMLElement;
     private listFilterMenu = new FilterMenuComponent();
     private topRightEditor = new TopRightConfigEditor();
-    private toolbar: CalendarToolbar;
+    private readonly toolbar: CalendarToolbar;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
-    private windowStart: string;
-    private showSidebar = true;
-    private pinnedListCollapsed: Record<string, boolean> = {};
-    private pinnedLists: PinnedListDefinition[] = [];
-    private customName: string | undefined;
-    private maskMode: boolean = false;
-    private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private readonly scrollRestorer = new PixelScrollRestorer(
         () => this.container?.querySelector('.cal-grid__body') as HTMLElement | null,
     );
+    /**
+     * At narrow width the sidebar starts closed whatever the state says, and
+     * only the toggle button opens it. `showSidebar` states the desktop-width
+     * position; applying a config never marks the sidebar as user-opened.
+     */
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
-    private renderScheduler: RenderScheduler;
 
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
-        super(leaf);
-        this.plugin = plugin;
+        super(leaf, plugin, CalendarCodec);
         this.readService = plugin.getTaskReadService();
         this.index = plugin.getIndex();
         this.operations = plugin.getOperations();
@@ -129,7 +113,7 @@ export class CalendarView extends ItemView {
             app: this.app,
             plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-            getMaskMode: () => this.maskMode,
+            getMaskMode: () => this.state.maskMode ?? false,
             // The selection is let go once the gesture that opened the hub is
             // over (see TimelineView's constructor).
             afterHubOpen: () => setTimeout(() => this.handleManager?.selectTask(null), 0),
@@ -142,178 +126,58 @@ export class CalendarView extends ItemView {
             mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
             onPersist: () => this.app.workspace.requestSaveLayout(),
             onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
-            onRequestClose: () => {
-                this.showSidebar = false;
-                this.sidebarManager.applyOpen(false, { animate: true, persist: true });
-            },
-            getIsOpen: () => this.showSidebar,
+            onRequestClose: () => this.setSidebarOpen(false),
+            getIsOpen: () => this.isSidebarOpen(),
         });
-        this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
-        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.listFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.toolbar = new CalendarToolbar({
-            app: this.app,
-            leaf: this.leaf,
-            plugin: this.plugin,
-            readService: this.readService,
-            viewFilterMenu: this.viewFilterMenu,
-            container: this.containerEl,
-            onNavigateWeek: (days) => this.navigateWeek(days),
-            onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
-            onJumpToDate: (date) => {
-                const parsed = DateUtils.readDate(date);
-                if (parsed) this.showMonthOf(parsed);
-            },
-            getFilterState: () => this.filterState,
-            onFilterChange: (next) => {
-                this.filterState = next;
-                void this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-            getCustomName: () => this.customName,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            getPinnedLists: () => this.pinnedLists,
-            setPinnedLists: (lists) => { this.pinnedLists = lists; },
-            getShowSidebar: () => this.showSidebar,
-            setShowSidebar: (open, opts) => {
-                if (open) this.sidebarOpenedThisSession = true;
-                this.showSidebar = open;
-                this.sidebarManager.applyOpen(open, opts);
-            },
-            getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg) => this.applyConfig(cfg),
-            onConfigApplied: () => {
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-            getMaskMode: () => this.maskMode,
-            setMaskMode: (next) => {
-                this.maskMode = next;
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-                this.pinnedListRenderer?.refresh();
-            },
-            getAstronomyDisplay: () => this.astronomyDisplay,
-            setAstronomyDisplay: (next) => {
-                this.astronomyDisplay = next;
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-            },
-            getReferenceMonth: () => this.getReferenceMonth(),
-            getCurrentDate: () => {
-                const { year, month } = this.getReferenceMonth();
-                return DateUtils.getLocalDateString(new Date(year, month, 1));
+            host: this.toolbarHost(),
+            commands: {
+                navigateWeeks: (n) => this.navigateWeeks(n),
+                today: () => this.update(followToday()),
+                goTo: (date) => this.update(gridOfMonth(date, this.plugin.settings.weekStartDay)),
+                pickerDay: () => pickerDay(this.gridStart()),
+                referenceMonth: () => referenceMonth(this.gridStart()),
+                isSidebarOpen: () => this.isSidebarOpen(),
+                toggleSidebar: (open) => {
+                    if (open) this.sidebarOpenedThisSession = true;
+                    this.setSidebarOpen(open);
+                },
             },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
         });
+
+        // The pinned lists do not hear the view's state from the index.
+        this.store.subscribe((patch) => {
+            if (PINNED_LIST_FIELDS.some(key => key in patch)) this.pinnedListRenderer?.refresh();
+        });
     }
 
-    getViewType(): string {
-        return CalendarSchema.viewType;
+    /** The grid's first day, read from the day looked at and the week start of the settings. */
+    private gridStart(): string {
+        return gridStart(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay);
     }
 
-    getDisplayText(): string {
-        return this.customName || viewDisplayName(CalendarSchema.viewType);
+    /** Move the grid by `weeks` weeks; the date is fixed on its new first day. */
+    private navigateWeeks(weeks: number): void {
+        this.update(gridShifted(this.state.date, this.visualToday(), this.plugin.settings.weekStartDay, weeks));
     }
 
-    getIcon(): string {
-        return VIEW_DESCRIPTORS[CalendarSchema.viewType].icon;
+    /** Whether the sidebar shows: closed at narrow width until the toggle opens it this session. */
+    private isSidebarOpen(): boolean {
+        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) return false;
+        return this.state.showSidebar ?? true;
     }
 
-    private readonly codec = CalendarCodec;
-
-    /**
-     * Apply a parsed config with REPLACE semantics over schema defaults.
-     * Single entry point used by setState AND by toolbar's template apply,
-     * so reset/load/restore all go through one path.
-     *
-     * `showSidebar` states the desktop-width starting position only. At mobile
-     * width the sidebar always starts closed whatever the config says, and
-     * only the toggle button opens it (see `sidebarOpenedThisSession`), so
-     * applying a config never marks the sidebar as user-opened.
-     */
-    applyConfig(cfg: Partial<CalendarConfig>): void {
-        const next = this.codec.withDefaults(cfg);
-
-        this.filterState = next.filterState ?? createEmptyFilterState();
-
-        const sidebarOpen = next.showSidebar ?? true;
-        this.showSidebar = sidebarOpen;
-        this.sidebarManager.applyOpen(sidebarOpen, { animate: false });
-
-        this.pinnedLists = next.pinnedLists ?? [];
-        this.customName = next.customName;
-        this.maskMode = next.maskMode === true;
-        this.astronomyDisplay = next.astronomyDisplay
-            ? { ...next.astronomyDisplay }
-            : undefined;
+    /** Open or close the sidebar, sliding; the draw does not rebuild it. */
+    private setSidebarOpen(open: boolean): void {
+        this.update({ showSidebar: open }, { draw: false });
+        this.sidebarManager.applyOpen(open, { animate: true });
     }
 
-    /** Snapshot for template save / URI build. */
-    getCurrentConfig(): Partial<CalendarConfig> {
-        const filterState = this.filterState;
-        return {
-            customName: this.customName,
-            filterState: hasConditions(filterState) ? filterState : undefined,
-            maskMode: this.maskMode,
-            astronomyDisplay: this.astronomyDisplay,
-            showSidebar: this.showSidebar,
-            pinnedLists: this.pinnedLists.length > 0 ? this.pinnedLists : undefined,
-        };
-    }
-
-    async setState(state: CalendarViewState, result: ViewStateResult): Promise<void> {
-        const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = readViewConfig(this.codec, stateDict);
-        const transient = this.codec.parseTransient(stateDict);
-
-        this.applyConfig(config);
-
-        // Transient: windowStart needs week alignment, so it's handled here
-        // rather than letting applyConfig blanket-overwrite.
-        if (transient.windowStart) {
-            const parsedWindowStart = DateUtils.readDate(transient.windowStart);
-            if (parsedWindowStart) {
-                const weekStart = DateUtils.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
-                this.windowStart = DateUtils.getLocalDateString(weekStart);
-            }
-        }
-        if (transient.pinnedListCollapsed) {
-            this.pinnedListCollapsed = transient.pinnedListCollapsed;
-        }
-
-        await super.setState(state, result);
-        this.performRender();
-        // setState may have changed filterState / pinnedLists / collapse — none
-        // of these go through index.onChange, so PinnedList wouldn't
-        // otherwise refresh. (Safe to call even before attach: refresh() no-ops
-        // when not attached.)
-        this.pinnedListRenderer?.refresh();
-    }
-
-    getState(): Record<string, unknown> {
-        return {
-            ...this.codec.serializeConfig(this.getCurrentConfig()),
-            ...this.codec.serializeTransient({
-                windowStart: this.windowStart,
-                pinnedListCollapsed: this.pinnedListCollapsed,
-            }),
-        };
-    }
-
-    async onOpen(): Promise<void> {
-        logDebug(`[${this.getViewType()}] opened`);
+    protected openView(): void {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('calendar-view');
@@ -321,18 +185,19 @@ export class CalendarView extends ItemView {
             this.registerDomEvent(el, ev, handler),
         );
 
-        this.pinnedListRenderer = new PinnedListRenderer(
+        const pinnedListRenderer = new PinnedListRenderer(
             this.taskRenderer, this.plugin, this.readService,
         );
+        this.pinnedListRenderer = pinnedListRenderer;
         // Persistent host for pinned lists. Lives outside the empty() target —
         // detached before container.empty() in performRender and reparented
         // into the freshly-built sidebarBody after.
         this.pinnedHost = document.createElement('div');
-        this.pinnedListRenderer.attach({
+        pinnedListRenderer.attach({
             host: this.pinnedHost,
-            getLists: () => this.pinnedLists,
+            getLists: () => this.state.pinnedLists ?? [],
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.filterState,
+            getViewFilterState: () => this.state.filterState,
             callbacks: this.getPinnedListCallbacks(),
         });
         this.handleManager = new HandleManager(this.container, {
@@ -351,35 +216,26 @@ export class CalendarView extends ItemView {
                 const baseId = parseSegmentId(taskId)?.baseId ?? taskId;
                 this.handleManager?.selectTask(baseId);
             },
-            () => this.getViewStartDateString(),
-            () => this.getViewEndDateString(),
+            () => this.gridStart(),
+            () => gridEnd(this.gridStart()),
             () => this.plugin.settings.zoomLevel
         );
 
         this.selectionController.attachBackgroundClick(this.container);
 
-        this.performRender();
-
         // Clear selection when the selected task is deleted via the UI.
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
-
-        // Initialize render dispatch controller (rAF coalesce only). Every
-        // change runs a full render(), which reconciles cards by key.
-        this.renderScheduler = new RenderScheduler({
-            performFull: () => this.render(),
-            getHost: () => this.container,
-        });
 
         this.unsubscribe = this.index.onChange((taskId, changes) => {
             this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
-    async onClose(): Promise<void> {
-        logDebug(`[${this.getViewType()}] closed`);
+    protected closeView(): void {
         this.hoverParent.dispose();
-        this.viewFilterMenu.close();
+        this.toolbar.close();
         this.listFilterMenu.close();
+        this.listSortMenu.close();
         this.sidebarManager.detach();
         this.pinnedListRenderer?.detach();
 
@@ -395,34 +251,17 @@ export class CalendarView extends ItemView {
             this.unsubscribeDelete();
             this.unsubscribeDelete = null;
         }
-        this.renderScheduler?.dispose();
         this.scrollRestorer.dispose();
     }
 
-    public redraw(): void {
-        this.render();
-    }
-
-    private render(): void {
+    /** Draw the grid, keeping the scroll. */
+    protected draw(): void {
         this.scrollRestorer.save();
         this.performRender();
     }
 
     private performRender(): void {
-        if (!this.container) {
-            return;
-        }
-
-        const normalizedWindowStart = getNormalizedWindowStart(this.windowStart, this.plugin.settings.weekStartDay);
-        if (normalizedWindowStart !== this.windowStart) {
-            this.windowStart = normalizedWindowStart;
-        }
-
-        // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
-        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
-            this.showSidebar = false;
-        }
-        this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
+        this.sidebarManager.syncPresentation(this.isSidebarOpen(), { animate: false });
 
         this.toolbar.detach();
         // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
@@ -455,18 +294,19 @@ export class CalendarView extends ItemView {
 
         const calendarHost = main.createDiv('cal-grid');
 
-        const { startDate, endDate } = this.getCalendarDateRange();
-        const rangeStartStr = DateUtils.getLocalDateString(startDate);
-        const rangeEndStr = DateUtils.getLocalDateString(endDate);
+        const rangeStartStr = this.gridStart();
+        const rangeEndStr = gridEnd(rangeStartStr);
         this.menuHandler.setViewStartDate(rangeStartStr);
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
         const body = calendarHost.createDiv('cal-grid__body');
         this.renderWeekdayHeader(body);
-        const referenceMonth = this.getReferenceMonth();
+        const month = referenceMonth(rangeStartStr);
         const showWeekNumbers = this.shouldShowWeekNumbers();
+        const today = this.visualToday();
 
-        let cursor = new Date(startDate);
+        const cursor = DateUtils.parseDate(rangeStartStr);
+        const endDate = DateUtils.parseDate(rangeEndStr);
         while (cursor <= endDate) {
             const weekRow = body.createDiv('cal-week-row');
             if (showWeekNumbers) {
@@ -479,14 +319,14 @@ export class CalendarView extends ItemView {
             const weekDates: string[] = [];
 
             if (showWeekNumbers) {
-                this.renderWeekNumberCell(weekRow, weekStartDate);
+                this.renderWeekNumberCell(weekRow, weekStartDate, today);
             }
 
             for (let i = 0; i < 7; i++) {
                 const cellDate = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(cellDate);
                 weekDates.push(dateKey);
-                this.renderDateHeader(weekRow, cellDate, i + 1, referenceMonth);
+                this.renderDateHeader(weekRow, cellDate, i + 1, month, today);
                 cursor.setDate(cursor.getDate() + 1);
             }
 
@@ -536,82 +376,89 @@ export class CalendarView extends ItemView {
         addBtn.appendText(t('pinnedList.addList'));
         addBtn.addEventListener('click', () => {
             const newId = 'pl-' + Date.now();
-            this.pinnedLists.push({
+            this.pinnedListRenderer?.scheduleRename(newId);
+            this.setPinnedLists([...(this.state.pinnedLists ?? []), {
                 id: newId,
                 name: t('pinnedList.newList'),
                 filterState: createDefaultListFilterState(),
                 applyViewFilter: false,
-            });
-            this.app.workspace.requestSaveLayout();
-            this.pinnedListRenderer.scheduleRename(newId);
-            this.pinnedListRenderer.refresh();
+            }]);
         });
 
         // Re-attach the persistent pinned host into the freshly-built sidebar body.
         // PinnedListRenderer manages its own contents via its onChange subscription
-        // and explicit refresh() calls — we only relocate the host here.
+        // and the store's listener — we only relocate the host here.
         body.appendChild(this.pinnedHost);
     }
 
-    private getPinnedListCallbacks() {
+    // ==================== Pinned lists ====================
+
+    /**
+     * Write the pinned lists. They show only in the sidebar, which redraws
+     * itself on the change (the store's listener), so the grid is not drawn.
+     */
+    private setPinnedLists(lists: PinnedListDefinition[]): void {
+        this.update({ pinnedLists: lists }, { draw: false });
+    }
+
+    private replacePinnedList(id: string, patch: Partial<PinnedListDefinition>): void {
+        const lists = this.state.pinnedLists ?? [];
+        this.setPinnedLists(lists.map(l => l.id === id ? { ...l, ...patch } : l));
+    }
+
+    private getPinnedListCallbacks(): PinnedListCallbacks {
+        const lists = () => this.state.pinnedLists ?? [];
+        const indexOf = (listDef: PinnedListDefinition) => lists().findIndex(l => l.id === listDef.id);
         return {
-            onCollapsedChange: (id: string, collapsed: boolean) => {
-                this.pinnedListCollapsed[`${COLLAPSE_KEY_PREFIX}${id}`] = collapsed;
-                this.app.workspace.requestSaveLayout();
+            onCollapsedChange: (listId, collapsed) => {
+                this.update({
+                    pinnedListCollapsed: {
+                        ...this.state.pinnedListCollapsed,
+                        [`${COLLAPSE_KEY_PREFIX}${listId}`]: collapsed,
+                    },
+                }, { draw: false });
             },
-            onSortEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => this.openPinnedListSort(listDef, anchorEl),
-            onFilterEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => this.openPinnedListFilter(listDef, anchorEl),
-            onDuplicate: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                this.pinnedLists.splice(idx + 1, 0, {
+            onSortEdit: (listDef, anchorEl) => this.openPinnedListSort(listDef, anchorEl),
+            onFilterEdit: (listDef, anchorEl) => this.openPinnedListFilter(listDef, anchorEl),
+            onDuplicate: (listDef) => {
+                const next = [...lists()];
+                next.splice(indexOf(listDef) + 1, 0, {
                     ...listDef,
                     id: 'pl-' + Date.now(),
                     name: listDef.name + ' (copy)',
                 });
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+                this.setPinnedLists(next);
             },
-            onRemove: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                if (idx >= 0) this.pinnedLists.splice(idx, 1);
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+            onRemove: (listDef) => {
+                this.setPinnedLists(lists().filter(l => l.id !== listDef.id));
             },
-            onMoveUp: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                if (idx > 0) {
-                    [this.pinnedLists[idx - 1], this.pinnedLists[idx]] = [this.pinnedLists[idx], this.pinnedLists[idx - 1]];
-                    this.app.workspace.requestSaveLayout();
-                    this.pinnedListRenderer.refresh();
-                }
+            onMoveUp: (listDef) => {
+                const idx = indexOf(listDef);
+                if (idx <= 0) return;
+                const next = [...lists()];
+                [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                this.setPinnedLists(next);
             },
-            onMoveDown: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                if (idx >= 0 && idx < this.pinnedLists.length - 1) {
-                    [this.pinnedLists[idx], this.pinnedLists[idx + 1]] = [this.pinnedLists[idx + 1], this.pinnedLists[idx]];
-                    this.app.workspace.requestSaveLayout();
-                    this.pinnedListRenderer.refresh();
-                }
+            onMoveDown: (listDef) => {
+                const idx = indexOf(listDef);
+                const next = [...lists()];
+                if (idx < 0 || idx >= next.length - 1) return;
+                [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                this.setPinnedLists(next);
             },
-            onToggleApplyViewFilter: (listDef: PinnedListDefinition) => {
-                listDef.applyViewFilter = !listDef.applyViewFilter;
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+            onToggleApplyViewFilter: (listDef) => {
+                this.replacePinnedList(listDef.id, { applyViewFilter: !listDef.applyViewFilter });
             },
-            onRename: () => {
-                this.app.workspace.requestSaveLayout();
+            onRename: (listDef, newName) => {
+                this.replacePinnedList(listDef.id, { name: newName });
             },
-            onTopRightEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => {
+            onTopRightEdit: (listDef, anchorEl) => {
                 const tasks = this.index.getTasks();
                 const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
                 this.topRightEditor.open(anchorEl, {
                     config: listDef.topRight,
                     propertyKeys,
-                    onChange: (config) => {
-                        listDef.topRight = config;
-                        this.app.workspace.requestSaveLayout();
-                        this.pinnedListRenderer.refresh();
-                    },
+                    onChange: (config) => this.replacePinnedList(listDef.id, { topRight: config }),
                 });
             },
         };
@@ -619,13 +466,14 @@ export class CalendarView extends ItemView {
 
     /**
      * Strip the `${viewId}::` prefix so PinnedListRenderer receives a plain
-     * Record<listId, boolean>. The view-side store keeps the prefix to avoid
-     * timeline/calendar collapse-state collisions when both views persist into
-     * the same workspace layout.
+     * Record<listId, boolean>. The state keeps the prefix to avoid
+     * timeline/calendar collapse-state collisions.
      */
     private buildCollapsedStateForRenderer(): Record<string, boolean> {
         const out: Record<string, boolean> = {};
-        for (const [key, val] of Object.entries(this.pinnedListCollapsed)) {
+        const stored = this.state.pinnedListCollapsed;
+        if (!stored) return out;
+        for (const [key, val] of Object.entries(stored)) {
             if (key.startsWith(COLLAPSE_KEY_PREFIX)) {
                 out[key.slice(COLLAPSE_KEY_PREFIX.length)] = val;
             }
@@ -637,9 +485,7 @@ export class CalendarView extends ItemView {
         this.listSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
         this.listSortMenu.showMenuAtElement(anchorEl, {
             onSortChange: () => {
-                listDef.sortState = this.listSortMenu.getSortState();
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
+                this.replacePinnedList(listDef.id, { sortState: this.listSortMenu.getSortState() });
             },
         });
     }
@@ -647,11 +493,7 @@ export class CalendarView extends ItemView {
     private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
         this.listFilterMenu.showMenuAtElement(anchorEl, {
             value: listDef.filterState,
-            onChange: (next) => {
-                listDef.filterState = next;
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
-            },
+            onChange: (next) => this.replacePinnedList(listDef.id, { filterState: next }),
             getTasks: () => this.index.getTasks(),
         });
     }
@@ -686,10 +528,15 @@ export class CalendarView extends ItemView {
         }
     }
 
-    private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number, referenceMonth: { year: number; month: number }): void {
+    private renderDateHeader(
+        weekRow: HTMLElement,
+        date: Date,
+        colIndex: number,
+        referenceMonth: { year: number; month: number },
+        todayKey: string,
+    ): void {
         const cell = weekRow.createDiv('cal-day-cell');
         const dateKey = DateUtils.getLocalDateString(date);
-        const todayKey = DateUtils.getLocalDateString(new Date());
         const isFirstOfMonth = date.getDate() === 1;
         const dateLabel = isFirstOfMonth
             ? dateKey
@@ -707,7 +554,7 @@ export class CalendarView extends ItemView {
         const headerRow = cell.createDiv('cal-day-cell__header');
 
         const astronomyDisplay = getEffectiveAstronomyDisplay(
-            this.astronomyDisplay,
+            this.state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
         if (astronomyDisplay.moonPhase) {
@@ -773,8 +620,7 @@ export class CalendarView extends ItemView {
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
-        const filterState = this.filterState;
-        return this.readService.getTasksForDateRange(rangeStart, rangeEnd, filterState);
+        return this.readService.getTasksForDateRange(rangeStart, rangeEnd, this.state.filterState);
     }
 
     private renderGridTask(
@@ -835,33 +681,14 @@ export class CalendarView extends ItemView {
         el.dataset.trackIndex = `${entry.trackIndex}`;
     }
 
-    private getViewStartDateString(): string {
-        const { startDate } = this.getCalendarDateRange();
-        return DateUtils.getLocalDateString(startDate);
-    }
-
-    private getViewEndDateString(): string {
-        const { endDate } = this.getCalendarDateRange();
-        return DateUtils.getLocalDateString(endDate);
-    }
-
-    private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
-    }
-
     /**
-     * The date range currently drawn, for image export. Calls the same
-     * `getCalendarDateRange()` the grid renders from (line ~492) — the
-     * week-aligned 42-day window, not the calendar month — so this can't
-     * drift from what's actually on screen.
+     * The days drawn, for image export: the six weeks the grid draws (not the
+     * calendar month), read from the same grid start as the draw. The anchor
+     * is the grid's first day, the day a fixed `date` names.
      */
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
-        const { startDate, endDate } = this.getCalendarDateRange();
-        return {
-            anchor: this.windowStart,
-            from: DateUtils.getLocalDateString(startDate),
-            to: DateUtils.getLocalDateString(endDate),
-        };
+        const start = this.gridStart();
+        return { anchor: start, from: start, to: gridEnd(start) };
     }
 
     private getWeekdayNames(): string[] {
@@ -876,12 +703,11 @@ export class CalendarView extends ItemView {
         return this.plugin.settings.calendarShowWeekNumbers;
     }
 
-    private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
+    private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date, today: string): void {
         const weekNumberEl = weekRow.createDiv('cal-week-number');
         const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
-        const todayWeekStart = DateUtils.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
-        if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
+        if (DateUtils.getLocalDateString(weekStartDate) === weekStartOf(today, this.plugin.settings.weekStartDay)) {
             weekNumberEl.addClass('is-current-week');
         }
 
@@ -904,26 +730,5 @@ export class CalendarView extends ItemView {
         weekNumberEl.addEventListener('click', () => {
             void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
         });
-    }
-
-    private getReferenceMonth(): { year: number; month: number } {
-        return getReferenceMonth(this.windowStart);
-    }
-
-    private navigateWeek(offset: number): void {
-        this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
-        void this.app.workspace.requestSaveLayout();
-        this.render();
-    }
-
-    /**
-     * Show the month that contains `date`, laid out from the week of its 1st.
-     * The Today button and "Go to date" both land here, so a
-     * picked date and "today" line up the same way.
-     */
-    private showMonthOf(date: Date): void {
-        this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);
-        void this.app.workspace.requestSaveLayout();
-        this.render();
     }
 }

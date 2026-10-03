@@ -271,7 +271,7 @@ obsidian obsidian-task-viewer:export-image template="My Timeline"
 | `view` | ※ | `timeline` \| `calendar` \| `schedule` \| `kanban`（`template=` 未指定なら必須） |
 | `template` | ※ | 保存済みビューテンプレート名（ビュー種別を推論。`view=` 未指定なら必須） |
 | `name` | | 書き出したビューの表示名 |
-| `anchor-date` | | ビューが見る日（`YYYY-MM-DD`）。今日の代わりにその日を見て開く。Timeline はその前に過去の表示日数を置き、Schedule はその日を描く。ビューごとのスキーマの日付フィールド（Timeline と Schedule は `date`）に解決される |
+| `anchor-date` | | ビューが見る日（`YYYY-MM-DD`）。今日の代わりにその日を見て開く。Timeline はその前に過去の表示日数を置き、Schedule はその日を描き、Calendar はその日の週を格子の最初の行にする。ビューごとのスキーマの日付フィールド（Timeline、Schedule、Calendar とも `date`）に解決される |
 | `width` | | 描画幅（px、1 以上の整数。デフォルト: 1200） |
 | `output-folder` | | 出力先フォルダ（vault 相対か絶対パス。デフォルト: 設定の書き出し先、未設定なら `task-viewer-export`） |
 | `filename` | | 出力ファイル名（デフォルト: `{ビュー種別}_{日付}.png`） |

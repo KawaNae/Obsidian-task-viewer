@@ -19,8 +19,15 @@ export interface MiniCalendarConfig {
 }
 
 export interface MiniCalendarTransient {
-    windowStart?: string;
+    /**
+     * The day the grid starts on: its week is the top row (`CalendarGrid`).
+     * Absent, the view follows today and draws today's month grid.
+     */
+    date?: string;
 }
+
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type MiniCalendarState = Partial<MiniCalendarConfig> & Partial<MiniCalendarTransient>;
 
 export const MiniCalendarSchema: ViewSchema<MiniCalendarConfig, MiniCalendarTransient> = {
     viewType: 'mini-calendar-view',
@@ -31,9 +38,9 @@ export const MiniCalendarSchema: ViewSchema<MiniCalendarConfig, MiniCalendarTran
         filterState:      F.filter('filterState', { legacyKeys: ['filter'] }),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
     },
-    anchorKey: 'windowStart',
+    anchorKey: 'date',
     transient: {
-        windowStart: T.dateString('windowStart'),
+        date: T.dateString('date'),
     },
 };
 
