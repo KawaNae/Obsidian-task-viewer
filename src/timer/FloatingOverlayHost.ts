@@ -6,7 +6,16 @@
  *   - container creation / disposal in a specific window's body
  *   - drag-to-move once a press moves (pointer capture, viewport-relative coordinates)
  *   - resize-driven viewport clamp so the widget never gets stranded off-screen
+ *   - lifting the widget above the on-screen keyboard (see `avoidKeyboard`)
  *   - drag-end notification used by the observer to defer window migration
+ *
+ * Where the widget shows is its layout position (`userPosition`, or the
+ * stylesheet's corner when null) plus a `translateY` that `avoidKeyboard`
+ * adds while the keyboard would cover it. The lift is only drawn: closing the
+ * keyboard drops it and the widget returns to its layout position. A drag
+ * starts by folding the lift into `userPosition` (`foldKeyboardLift`), so the
+ * widget moves from where it is seen and is placed, and checked against the
+ * keyboard, where it is let go.
  *
  * The widget's logical state (timers, intervals, render content) lives outside
  * this host, in plugin scope. attach()/detach() only move the DOM. Position
@@ -66,8 +75,8 @@ export class FloatingOverlayHost {
         this.resizeHandler = () => this.clampToViewport();
         win.addEventListener('resize', this.resizeHandler);
 
-        // 仮想キーボード退避: 被る分だけ transform で持ち上げ、閉じたら復元。
-        // clampToViewport（left/top の恒久書き換え）とは独立に動く。
+        // 仮想キーボード退避: 被る分だけ transform で持ち上げ、閉じたら外す
+        // （avoidKeyboard）。clampToViewport（left/top の書き換え）とは独立に動く。
         // 検知は KeyboardState と同じ二本立て（vv = Windows/Safari、
         // Capacitor イベント = Obsidian mobile）。
         trackKeyboard(win);
@@ -132,11 +141,14 @@ export class FloatingOverlayHost {
 
     /**
      * キーボードが widget に被る分だけ transform で持ち上げる。被らなければ
-     * transform なし。left/top（ドラッグ座標）は触らないので、キーボードが
-     * 閉じれば自然に元の位置へ戻る。
+     * transform なし。left/top（userPosition）は触らないので、キーボードが
+     * 閉じれば layout の位置へ戻る。ただしキーボードが出ている間にドラッグ
+     * すると、ドラッグの始めに持ち上げ分が userPosition へ取り込まれる
+     * （foldKeyboardLift）ため、置いた位置は閉じた後も残る。
+     * ドラッグ中は持ち上げない（指と widget がずれる）。離したときに測り直す。
      */
     private avoidKeyboard(): void {
-        if (!this.container || !this.win) return;
+        if (!this.container || !this.win || this.dragging) return;
         // 素の位置で測るため一旦リセット（同期処理内なので描画は挟まらない）
         this.container.style.transform = '';
         const kbTop = keyboardTop(this.win);
@@ -164,6 +176,19 @@ export class FloatingOverlayHost {
             this.userPosition = { left, top };
             this.applyPosition();
         }
+    }
+
+    /**
+     * 見えている位置（持ち上げ込み）を userPosition にし、transform を外す。
+     * 見た目は動かない。ドラッグの始めに呼び、以後の left/top が指の位置と
+     * 被りの判定に見た目どおりに使われるようにする。
+     */
+    private foldKeyboardLift(): { left: number; top: number } {
+        const rect = this.container!.getBoundingClientRect();
+        this.container!.style.transform = '';
+        this.userPosition = { left: rect.left, top: rect.top };
+        this.applyPosition();
+        return this.userPosition;
     }
 
     private applyPosition(): void {
@@ -197,15 +222,7 @@ export class FloatingOverlayHost {
                 if (target.closest(sel)) return;
             }
 
-            // キーボード退避 transform を除いた layout 座標で掴む（transform は
-            // ドラッグ中も維持され、drag 終了時に再計算される）
-            const t = this.container!.style.transform;
-            this.container!.style.transform = '';
-            const rect = this.container!.getBoundingClientRect();
-            this.container!.style.transform = t;
             this.press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
-            this.dragOffset.x = e.clientX - rect.left;
-            this.dragOffset.y = e.clientY - rect.top;
         });
 
         header.addEventListener('pointermove', (e) => {
@@ -214,6 +231,10 @@ export class FloatingOverlayHost {
                 const dx = e.clientX - this.press.x;
                 const dy = e.clientY - this.press.y;
                 if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+                // 見えている位置で掴む: 持ち上げを userPosition へ取り込み、
+                // 押した点からの距離を掴み位置にする
+                const at = this.foldKeyboardLift();
+                this.dragOffset = { x: this.press.x - at.left, y: this.press.y - at.top };
                 this.dragging = true;
                 this.container.style.cursor = 'grabbing';
                 try {
