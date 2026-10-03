@@ -23,6 +23,9 @@ export interface KanbanTransient {
     gridCollapsed?: Record<string, boolean>;
 }
 
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type KanbanState = Partial<KanbanConfig> & Partial<KanbanTransient>;
+
 export const KanbanSchema: ViewSchema<KanbanConfig, KanbanTransient> = {
     viewType: 'kanban-view',
     shortName: 'kanban',
