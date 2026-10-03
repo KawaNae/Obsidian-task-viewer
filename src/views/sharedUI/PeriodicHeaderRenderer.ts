@@ -1,12 +1,11 @@
 import type { App, HoverParent } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
-import { linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
-import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
+import { periodicNotes } from '../../utils/PeriodicNotes';
+import { periodicNoteLink } from './PeriodicNoteLink';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import { t } from '../../i18n';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 
 interface PeriodicHeaderRendererDeps {
     app: App;
@@ -53,12 +52,6 @@ export class PeriodicHeaderRenderer {
             this.appendWeekSegment(row, seg);
         }
 
-        this.deps.linkInteractionManager.bind(container, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.deps.hoverParent,
-        }, { bindClick: false });
-
         return container;
     }
 
@@ -70,24 +63,13 @@ export class PeriodicHeaderRenderer {
         const dateObj = DateUtils.parseDate(seg.anchorDate);
         const m = withWeekStartDay(dateObj, this.deps.plugin.settings.weekStartDay);
 
-        const link = segEl.createEl('a', {
-            cls: 'internal-link periodic-header__link periodic-header__link--week',
-            text: m.format('[W]ww'),
-        });
-        const target = linkTarget(periodicNotes(this.deps.plugin.settings, 'weekly'), seg.anchorDate);
-        link.dataset.href = target;
-        link.setAttribute('href', target);
-        link.setAttribute('aria-label', t('aria.openWeeklyNote', { label: m.format('gggg-[W]ww') }));
-        link.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void this.openWeeklyNote(seg.anchorDate);
-        });
-    }
-
-    private async openWeeklyNote(date: string): Promise<void> {
-        const { app, plugin } = this.deps;
-        await openPeriodicNoteInLeaf(app, plugin.getOperations(), periodicNotes(plugin.settings, 'weekly'), date);
+        const { app, plugin, linkInteractionManager, hoverParent } = this.deps;
+        periodicNoteLink(segEl, { app, notes: plugin.getOperations(), links: linkInteractionManager, hoverParent },
+            periodicNotes(plugin.settings, 'weekly'), seg.anchorDate, {
+                cls: 'periodic-header__link periodic-header__link--week',
+                text: m.format('[W]ww'),
+                ariaLabel: t('aria.openWeeklyNote', { label: m.format('gggg-[W]ww') }),
+            });
     }
 
     private computeWeekSegments(

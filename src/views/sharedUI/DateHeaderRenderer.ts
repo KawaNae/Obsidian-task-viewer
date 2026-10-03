@@ -1,10 +1,9 @@
 import type { App, HoverParent } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import { DateUtils } from '../../utils/DateUtils';
-import { dailyNotes, label as noteLabel, linkTarget } from '../../utils/PeriodicNotes';
-import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
+import { dailyNotes, label as noteLabel } from '../../utils/PeriodicNotes';
+import { periodicNoteLink } from './PeriodicNoteLink';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { t } from '../../i18n';
 
 interface DateHeaderRendererDeps {
@@ -73,24 +72,12 @@ export class DateHeaderRenderer {
             const dayName = weekdays[DateUtils.weekdayOf(date)];
 
             const daily = dailyNotes(app);
-            const target = linkTarget(daily, date);
-            const linkLabel = noteLabel(daily, date);
-
-            const label = contextualDateLabel(date, referenceYearMonth, dayName);
-
-            const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: label });
-            linkEl.dataset.href = target;
-            linkEl.setAttribute('href', target);
-            linkEl.setAttribute('aria-label', t('aria.openDailyNote', { label: `${linkLabel} ${dayName}` }));
-            linkEl.addEventListener('click', (event: MouseEvent) => {
-                event.preventDefault();
+            periodicNoteLink(cell, { app, notes: plugin.getOperations(), links: linkInteractionManager, hoverParent }, daily, date, {
+                cls: 'date-header__date-link',
+                text: contextualDateLabel(date, referenceYearMonth, dayName),
+                ariaLabel: t('aria.openDailyNote', { label: `${noteLabel(daily, date)} ${dayName}` }),
+                opensFrom: cell,
             });
-
-            linkInteractionManager.bind(cell, {
-                sourcePath: '',
-                hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                hoverParent,
-            }, { bindClick: false });
 
             if (date === todayVisualDate) {
                 cell.addClass('is-today');
@@ -100,10 +87,6 @@ export class DateHeaderRenderer {
             }
 
             cell.dataset.date = date;
-
-            cell.addEventListener('click', () => {
-                void openPeriodicNoteInLeaf(app, plugin.getOperations(), dailyNotes(app), date);
-            });
 
         });
 

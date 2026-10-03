@@ -7,20 +7,19 @@ import type { DisplayTask } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
-import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
-import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
-import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
+import { dailyNotes } from '../../utils/PeriodicNotes';
+import { periodicNoteLink, type PeriodicLinkContext } from '../sharedUI/PeriodicNoteLink';
+import { renderWeekNumberCell } from './WeekNumberCell';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import { getColumnOffset, getGridColumnForDay } from './CalendarDateUtils';
-import { gridAt, gridFollowingToday, gridRange, gridShifted, referenceMonth, weekStartOf } from './CalendarGrid';
+import { gridAt, gridFollowingToday, gridRange, gridShifted, referenceMonth } from './CalendarGrid';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { CalendarToolbar } from './CalendarToolbar';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { CalendarCodec, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
@@ -275,7 +274,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             const weekDates: string[] = [];
 
             if (showWeekNumbers) {
-                this.renderWeekNumberCell(weekRow, weekStartDate, today);
+                renderWeekNumberCell(weekRow, weekStartDate, today, this.plugin.settings, this.periodicLinks(), { mini: false });
             }
 
             for (let i = 0; i < 7; i++) {
@@ -387,21 +386,18 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             attachMoonPhase(headerRow, dateKey, { size: 14, modifier: 'moon-phase-inline--cal' });
         }
 
-        const dayTarget = linkTarget(dailyNotes(this.app), dateKey);
-        const dateLink = headerRow.createEl('a', { cls: 'internal-link' });
-        dateLink.createSpan({ cls: 'cal-day-cell__date-label', text: dateLabel });
-        dateLink.dataset.href = dayTarget;
-        dateLink.setAttribute('href', dayTarget);
-        dateLink.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), dailyNotes(this.app), dateKey);
-        });
+        periodicNoteLink(headerRow, this.periodicLinks(), dailyNotes(this.app), dateKey)
+            .createSpan({ cls: 'cal-day-cell__date-label', text: dateLabel });
+    }
 
-        this.linkInteractionManager.bind(cell, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+    /** What the grid's links to the daily and weekly notes open and preview with. */
+    private periodicLinks(): PeriodicLinkContext {
+        return {
+            app: this.app,
+            notes: this.operations,
+            links: this.linkInteractionManager,
             hoverParent: this.hoverParent,
-        }, { bindClick: false });
+        };
     }
 
     /** The week's tasks on the row, under the day headers: the lane Timeline's all-day row draws too. */
@@ -442,34 +438,5 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
 
     private shouldShowWeekNumbers(): boolean {
         return this.plugin.settings.calendarShowWeekNumbers;
-    }
-
-    private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date, today: string): void {
-        const weekNumberEl = weekRow.createDiv('cal-week-number');
-        const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
-
-        if (DateUtils.getLocalDateString(weekStartDate) === weekStartOf(today, this.plugin.settings.weekStartDay)) {
-            weekNumberEl.addClass('is-current-week');
-        }
-
-        const weekLinkTarget = linkTarget(periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
-        const weekLink = weekNumberEl.createEl('a', { cls: 'internal-link' });
-        weekLink.createSpan({
-            cls: 'cal-week-number__label',
-            text: `W${String(weekNumber).padStart(2, '0')}`,
-        });
-        weekLink.dataset.href = weekLinkTarget;
-        weekLink.setAttribute('href', weekLinkTarget);
-        weekLink.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-        });
-        this.linkInteractionManager.bind(weekNumberEl, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.hoverParent,
-        }, { bindClick: false });
-        weekNumberEl.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
-        });
     }
 }
