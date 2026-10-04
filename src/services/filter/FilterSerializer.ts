@@ -2,7 +2,7 @@ import type {
     FilterState, FilterCondition, FilterGroup, FilterItem, FilterProperty, DateFilterValue, FilterTarget, SingleDateValue,
 } from './FilterTypes';
 import {
-    createEmptyFilterState, hasConditions, isDateRange, isDateTimeText, isPresetValue, isFilterCondition, isFilterProperty, isPresenceOperator,
+    createEmptyFilterState, hasConditions, isDateRange, isReversedRange, isFilterCondition, isFilterProperty, isPresenceOperator,
     takesOperator, takesRange, PROPERTY_OPERATORS, RELATIVE_DATE_PRESETS,
 } from './FilterTypes';
 import { DateTimeInput } from '../../utils/values/DateValues';
@@ -300,7 +300,7 @@ function readDateFilterValue(property: FilterProperty, raw: unknown): { value: D
         if (value === undefined) return wrong;
         ends[side] = value;
     }
-    if (reversed(ends.from, ends.to)) return `'${property}' range: from ${String(ends.from)} is after to ${String(ends.to)}`;
+    if (isReversedRange(ends)) return `'${property}' range: from ${String(ends.from)} is after to ${String(ends.to)}`;
     return { value: ends };
 }
 
@@ -319,16 +319,4 @@ function readSingleDateValue(value: unknown): SingleDateValue | undefined {
     if (preset !== 'nextNDays' || value.n === undefined) return { preset };
     const n = value.n;
     return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? { preset, n } : undefined;
-}
-
-/**
- * Whether a range's ends are written the wrong way round: both are dates or
- * dates and times, and `from` comes after `to` (its day, or on one day its
- * time). Such a range names no time and matches nothing.
- */
-function reversed(from: SingleDateValue | undefined, to: SingleDateValue | undefined): boolean {
-    if (from === undefined || to === undefined || isPresetValue(from) || isPresetValue(to) || from === '' || to === '') return false;
-    const [fromDay, toDay] = [from.slice(0, 10), to.slice(0, 10)];
-    if (fromDay !== toDay) return fromDay > toDay;
-    return isDateTimeText(from) && isDateTimeText(to) && from > to;
 }

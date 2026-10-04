@@ -56,8 +56,7 @@ export class TimelineToolbar extends ViewToolbarBase {
 
     constructor(private deps: TimelineToolbarDeps) {
         super();
-        this.filterMenu = new FilterMenuComponent(deps.host.app);
-        this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
+        this.filterMenu = new FilterMenuComponent(deps.host.app, () => deps.host.plugin.settings);
         deps.host.store.subscribe(() => this.update());
     }
 

@@ -16,7 +16,7 @@ export type { SelectItem };
 /** The order the property menu lists the properties in. */
 const MENU_PROPERTIES: readonly FilterProperty[] = [
     'file', 'tag', 'status', 'content',
-    'startDate', 'endDate', 'due', 'anyDate',
+    'startDate', 'endDate', 'due', 'period', 'anyDate',
     'length', 'color', 'linestyle', 'notation',
     'parent', 'children', 'property',
 ];

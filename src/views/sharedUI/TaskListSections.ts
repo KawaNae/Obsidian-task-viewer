@@ -97,9 +97,8 @@ export class TaskListSections {
         this.paging = new TaskPagingController(() => this.deps.plugin.settings.pinnedListPageSize);
         const app = deps.plugin.app;
         this.sortMenu = new SortMenuComponent(app.keymap);
-        this.filterMenu = new FilterMenuComponent(app);
+        this.filterMenu = new FilterMenuComponent(app, () => this.deps.plugin.settings);
         this.topRightEditor = new TopRightConfigEditor(app);
-        this.filterMenu.setStatusDefinitions(this.deps.plugin.settings.statusDefinitions);
     }
 
     /** Start editing the name of the list `id` when it is next drawn. */

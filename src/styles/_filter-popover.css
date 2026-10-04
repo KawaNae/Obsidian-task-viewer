@@ -283,23 +283,60 @@ body:not(.theme-dark) .filter-popover__group-body[data-depth]:not([data-depth="0
 
 /* ── Date Value Selector ── */
 
+/* [kind ▾] then the value: a date field, a preset, or a range's two fields.
+   The fields are 段10's (`.tv-ctrl .tv-form__input-with-picker`, _form.css). */
 .filter-popover__date-value {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
     min-width: 0;
 }
 
-.filter-popover .filter-popover__date-mode-btn {
+.filter-popover .filter-popover__date-kind-btn {
     flex-shrink: 0;
     font-size: 10px;
     padding: 2px 6px;
     color: var(--tv-text-muted);
 }
 
-.filter-popover .filter-popover__date-input {
+/* A range: [from] 〜 [to]; narrow, the fields go to two lines */
+.filter-popover__range {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
     min-width: 0;
-    flex: 1;
+}
+
+.filter-popover__range-sep {
+    color: var(--tv-text-muted);
+}
+
+/* A date field, and the time of a value with one, faint beside it */
+.filter-popover__date-slot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.filter-popover__date-slot > .tv-form__input-with-picker {
+    flex: 1 1 auto;
+    min-width: 150px;
+}
+
+.filter-popover__date-time {
+    font-size: var(--font-ui-smaller);
+    color: var(--tv-text-faint);
+    white-space: nowrap;
+}
+
+/* Phone: the range under the kind button, the width of the row */
+.is-phone .filter-popover__range {
+    flex-basis: 100%;
 }
 
 /* Number Value Selector (Length filter) */

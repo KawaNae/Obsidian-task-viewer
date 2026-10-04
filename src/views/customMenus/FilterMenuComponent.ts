@@ -1,5 +1,5 @@
 import { setIcon, type App } from 'obsidian';
-import type { StatusDefinition, Task } from '../../types';
+import type { Task } from '../../types';
 import type { FilterState, FilterCondition, FilterGroup, FilterItem } from '../../services/filter/FilterTypes';
 import {
     MAX_FILTER_DEPTH,
@@ -13,6 +13,7 @@ import {
     isPresenceOperator,
     isListCondition,
     isDateCondition,
+    isPeriodCondition,
     isLengthCondition,
     isContentCondition,
     isPropertyCondition,
@@ -24,11 +25,12 @@ import { t } from '../../i18n';
 import { resolveGlue, type ConditionEditor } from './FilterValueHelpers';
 import { FilterDropdownMenus } from './FilterDropdownMenus';
 import type { SelectItem } from './FilterDropdownMenus';
-import { FilterConditionRenderer } from './FilterConditionRenderer';
+import { FilterConditionRenderer, type DateRowCondition, type FilterMenuSettings } from './FilterConditionRenderer';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import { OverlayShell } from '../sharedUI/OverlayShell';
 
 const anyCondition = (_c: FilterCondition): _c is FilterCondition => true;
+const isDateRow = (c: FilterCondition): c is DateRowCondition => isDateCondition(c) || isPeriodCondition(c);
 
 /** What the menu is opened with. */
 export interface FilterEditOptions {
@@ -56,25 +58,23 @@ export class FilterMenuComponent {
     private rootEl: HTMLElement | null = null;
     private lastTasks: Task[] = [];
     private options: FilterEditOptions | null = null;
-    private statusDefs: StatusDefinition[] = [];
 
     private dropdowns: FilterDropdownMenus;
     private conditionRenderer: FilterConditionRenderer;
 
-    /** @param app the app: its keymap, whose hotkeys the menu keeps out while it has the focus, and the lists under its fields. */
-    constructor(private readonly app: App) {
+    /**
+     * @param app the app: its keymap, whose hotkeys the menu keeps out while it has the focus, and the lists under its fields.
+     * @param settings the settings as they are now: the statuses' names, and the week and the day a preset turned to a range counts from.
+     */
+    constructor(private readonly app: App, settings: () => FilterMenuSettings) {
         const getStack = () => this.stack;
         this.dropdowns = new FilterDropdownMenus(getStack);
         this.conditionRenderer = new FilterConditionRenderer(
             app,
             this.dropdowns,
-            () => this.statusDefs,
+            settings,
             () => this.lastTasks,
         );
-    }
-
-    setStatusDefinitions(defs: StatusDefinition[]): void {
-        this.statusDefs = defs;
     }
 
     isOpen(): boolean {
@@ -289,25 +289,18 @@ export class FilterMenuComponent {
         // ── Upper row: [Target?] [Property] [Operator] [...] ──
         const headerLine = row.createDiv('filter-popover__row-header');
 
-        // Target dropdown (only shown when not 'self')
-        if (condition.target && condition.target !== 'self') {
-            const targetBtn = headerLine.createEl('button', {
-                cls: 'filter-popover__dropdown filter-popover__dropdown--target',
-            });
-            const targetIcon = targetBtn.createSpan('filter-popover__dropdown-icon');
-            setIcon(targetIcon, 'arrow-up');
-            targetBtn.createSpan().setText(t('filter.parent'));
-            targetBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.dropdowns.showTargetMenu(targetBtn, edit);
-            });
+        // Target dropdown: the parent spelled out, the task itself a subtle
+        // icon. A period row asks about the task itself only: its icon is
+        // there, and turns to nothing.
+        const onParent = condition.target === 'parent';
+        const targetBtn = headerLine.createEl('button', {
+            cls: onParent ? 'filter-popover__dropdown filter-popover__dropdown--target' : 'filter-popover__dropdown filter-popover__dropdown--target-self',
+        });
+        setIcon(targetBtn.createSpan('filter-popover__dropdown-icon'), onParent ? 'arrow-up' : 'user');
+        if (onParent) targetBtn.createSpan().setText(t('filter.parent'));
+        if (isPeriodCondition(condition)) {
+            targetBtn.disabled = true;
         } else {
-            // Subtle "self" indicator that can be clicked to switch
-            const targetBtn = headerLine.createEl('button', {
-                cls: 'filter-popover__dropdown filter-popover__dropdown--target-self',
-            });
-            const targetIcon = targetBtn.createSpan('filter-popover__dropdown-icon');
-            setIcon(targetIcon, 'user');
             targetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.dropdowns.showTargetMenu(targetBtn, edit);
@@ -376,8 +369,8 @@ export class FilterMenuComponent {
             this.conditionRenderer.renderPropertyRows(row, this.editorAt(path, isPropertyCondition));
         } else if (!isPresenceOperator(condition.operator)) {
             const valueLine = row.createDiv('filter-popover__row-value');
-            if (isDateCondition(condition)) {
-                this.conditionRenderer.renderDateValueSelector(valueLine, this.editorAt(path, isDateCondition));
+            if (isDateRow(condition)) {
+                this.conditionRenderer.renderDateValueSelector(valueLine, this.editorAt(path, isDateRow));
             } else if (isLengthCondition(condition)) {
                 this.conditionRenderer.renderNumberValueSelector(valueLine, this.editorAt(path, isLengthCondition));
             } else if (isContentCondition(condition)) {
