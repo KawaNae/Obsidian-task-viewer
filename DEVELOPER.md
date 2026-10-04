@@ -1346,6 +1346,14 @@ Raw calendarDates (`baseTask.startDate` / `baseTask.endDate`, endDate exclusive)
 
 Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `src/types/index.ts`). Defaults are in `DEFAULT_SETTINGS` in the same file; the scope keys live in `src/types/ScopeKeys.ts`.
 
+What each key may hold is said once, in `SETTINGS_SCHEMA` (`src/settings/SettingsSchema.ts`): for each key, how a stored value reads (`check`) and, for a key a text field sets, how its text reads (`codec`, from `utils/values` and the notation's own readings: `ScopeKeyInput`, `StatusCharInput`, `HeadingInput`). A group (`defaultViewPositions`, `astronomy`, `tasksPluginMapping`) is a table of its own keys. Three readers share it:
+
+- The load (`readSettings`, called by `loadSettings`) reads every key by the table, a group key by key. A missing key takes its default, and so does one that does not read, logged as a warning. A key the table does not hold is left out, and goes from `data.json` on the next save. There is no merge over the defaults.
+- The settings tab's text fields (`SettingFields`, on `bindField`) read what is typed by the key's codec and commit once, on a blur or the form's Enter; a value that does not read is said under the setting's description and not saved. What is typed is committed as the tab is hidden. A save (and, for a scope key, the notes read again) happens once per commit, not per key typed.
+- A menu that sets a key reads its range there: the timer's Custom... (`TimerSettingsMenu`) takes the work, break and countdown lengths in their keys' ranges. The work and the break take any length of a minute or more; the countdown 1 to 120.
+
+A new key is a field of `TaskViewerSettings`, its default in `DEFAULT_SETTINGS`, and its entry in `SETTINGS_SCHEMA`; the table is checked against the type (`satisfies`), so a key left out is a compile error.
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `startHour` | number | 5 | Visual day boundary hour. Times before this hour belong to the previous visualDate. |
@@ -1359,8 +1367,8 @@ Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `sr
 | `pomodoroWorkMinutes` | number | 25 | Pomodoro work segment length |
 | `pomodoroBreakMinutes` | number | 5 | Pomodoro break segment length |
 | `countdownMinutes` | number | 25 | Default countdown duration |
-| `dailyNoteHeader` | string | `'Tasks'` | Heading for daily note task insertion |
-| `dailyNoteHeaderLevel` | number | 2 | Heading level for daily note (2 = `##`) |
+| `taskHeading` | string | `'Tasks'` | The heading a new task goes under when nothing names one; its name alone, without `#` (`HeadingInput`) |
+| `taskHeadingLevel` | number | 2 | The level that heading is made at (2 = `##`) |
 | `weekStartDay` | 0 \| 1 | 0 | Calendar week start day (0=Sun, 1=Mon) |
 | `calendarShowWeekNumbers` | boolean | `false` | Show ISO week numbers in calendar |
 | `weeklyNoteFormat` | string | `'gggg-[W]ww'` | Weekly note filename format |
@@ -1391,7 +1399,7 @@ Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `sr
 
 **`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
 
-All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
+All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Each must be a key a property line reads (no `:`, `[`, `]`), none of `tags`, `position` and the file task's former keys, and none of the other scope keys (`ScopeKeyInput`); a stored set with one that is not falls back to the defaults whole. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
 
 ---
 
