@@ -13,6 +13,7 @@
  * 組み直しは dispatch が予約する）。
  */
 
+import { instantText } from '../utils/DayWindow';
 import { type App, setIcon } from 'obsidian';
 import type { DisplayTask } from '../types';
 import type { PluginContext } from '../PluginContext';
@@ -418,10 +419,10 @@ export class TimerRenderer {
             cls: 'timer-widget__next-name',
             text: getTaskDisplayName(task),
         });
-        if (task.effectiveStartTime && task.effectiveEndTime) {
+        if (task.span) {
             info.createSpan({
                 cls: 'timer-widget__next-time',
-                text: `${task.effectiveStartTime}–${task.effectiveEndTime}`,
+                text: `${instantText(task.span.startMs).time}–${instantText(task.span.endMs).time}`,
             });
         }
 

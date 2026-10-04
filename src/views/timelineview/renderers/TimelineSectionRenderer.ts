@@ -4,6 +4,7 @@ import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
+import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
@@ -43,7 +44,7 @@ export class TimelineSectionRenderer {
         const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour);
 
         timedTasks.forEach((task, index) => {
-            if (!task.effectiveStartTime) return;
+            if (!task.drawn) return;
 
             const key = { scope: `lane-${date}`, name: task.id };
             const reused = reconciler.acquire(key, task);
@@ -90,13 +91,10 @@ export class TimelineSectionRenderer {
         // Reset + apply split-segment variant classes (idempotent).
         TaskStyling.applySplitClasses(el, task);
 
-        // Position: the task's span in its visual day, the same one TaskLayout stacks by.
-        const { start: startMinutes, end: endMinutes } =
-            DateUtils.timedSpanMinutes(task.effectiveStartTime!, task.effectiveEndTime, startHour);
-        const startHourMinutes = startHour * 60;
-
-        const relativeStart = startMinutes - startHourMinutes;
-        const duration = endMinutes - startMinutes;
+        // Position: what the card is drawn over, in minutes of its visual day,
+        // the same minutes TaskLayout stacks by.
+        const { start: relativeStart, end: endMinutes } = minutesOfSpan(task.drawn!, startHour);
+        const duration = endMinutes - relativeStart;
 
         const taskLayout = layout.get(task.id) || { width: 100, left: 0, zIndex: 1 };
         const widthFraction = taskLayout.width / 100;

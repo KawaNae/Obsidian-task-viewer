@@ -1,6 +1,7 @@
 import type { DuplicateOptions, Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { resolveEffectiveDates } from '../../utils/EffectiveDates';
+import { instantText } from '../../utils/DayWindow';
+import { resolveSpan, statedDates } from '../../utils/TaskDates';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { shiftLineDates } from '../parsing/tv-inline/DateBlock';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
@@ -114,21 +115,15 @@ export function dayShiftedCopies(task: Task, dayOffset: number, count: number): 
  * the copy and would otherwise cut its length.
  */
 export function planInPlaceCopies(task: Task, startHour: number, count: number): CopyLines {
-    const dates = resolveEffectiveDates(task, startHour);
-    const shiftable = holdsTimeOfDay(task)
-        && !!dates.effectiveStartDate && !!dates.effectiveStartTime
-        && !!dates.effectiveEndDate && !!dates.effectiveEndTime;
+    const occupied = resolveSpan(statedDates(task), startHour).span;
+    if (!holdsTimeOfDay(task) || !occupied) return { verbatim: count };
 
-    if (!shiftable) return { verbatim: count };
-
-    const start: Instant = {
-        date: dates.effectiveStartDate,
-        minutes: DateUtils.timeToMinutes(dates.effectiveStartTime!),
+    const instant = (ms: number): Instant => {
+        const { date, time } = instantText(ms);
+        return { date, minutes: DateUtils.timeToMinutes(time) };
     };
-    const end: Instant = {
-        date: dates.effectiveEndDate!,
-        minutes: DateUtils.timeToMinutes(dates.effectiveEndTime!),
-    };
+    const start = instant(occupied.startMs);
+    const end = instant(occupied.endMs);
     const length = span(start, end);
 
     // A task of no length would put every copy on the original's own slot,

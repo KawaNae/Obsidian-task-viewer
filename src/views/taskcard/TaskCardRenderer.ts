@@ -176,11 +176,11 @@ export function computeContentSignature(
         task.parserId,
         // A child's time-only notation is shown with the parent's own date.
         task.startDate ?? '',
-        task.effectiveStartDate,
-        task.effectiveStartTime ?? '',
-        task.effectiveEndDate ?? '',
-        task.effectiveEndTime ?? '',
-        task.effectiveDue ?? '',
+        task.span?.startMs ?? '',
+        task.span?.endMs ?? '',
+        task.drawn?.startMs ?? '',
+        task.drawn?.endMs ?? '',
+        task.dueMs ?? '',
         task.isReadOnly ? '1' : '0',
         topRightResolved,
         // Overdue is judged against the clock, not against task fields, so

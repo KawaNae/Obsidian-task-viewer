@@ -4,7 +4,7 @@ import type { DisplayTask } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
-import { getTaskDateRange } from '../../services/display/VisualDateRange';
+import { visualDaysOf } from '../../utils/DayWindow';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import { dailyNotes } from '../../utils/PeriodicNotes';
@@ -246,10 +246,10 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
         const startHour = this.plugin.settings.startHour;
 
         for (const dt of allTasks) {
-            const dates = getTaskDateRange(dt, startHour);
-            const visualStart = dates.effectiveStart || dt.effectiveStartDate;
-            const visualEnd = dates.effectiveEnd || visualStart;
-            const duePart = DateUtils.dueDatePart(dt.effectiveDue);
+            const days = dt.drawn ? visualDaysOf(dt.drawn, startHour) : null;
+            const visualStart = days?.first;
+            const visualEnd = days?.last ?? '';
+            const duePart = DateUtils.dueDatePart(dt.stated.due);
 
             const completed = this.isTaskCompleted(dt);
 

@@ -2,7 +2,7 @@ import type { DragStrategy, DragContext } from '../DragStrategy';
 import { DropReveal } from '../DropReveal';
 import type { Task } from '../../../types';
 import { materializeRawDates, NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
-import { getTaskDateRange } from '../../../services/display/VisualDateRange';
+import { visualDaysOf } from '../../../utils/DayWindow';
 import type { DragPlan } from '../DragPlan';
 import { heldBy } from '../../../views/taskcard/CardHold';
 
@@ -183,10 +183,18 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string } {
         // Date range only depends on the task's own dates; childEntries are irrelevant.
         const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        const range = getTaskDateRange(dt, startHour);
-        const start = range.effectiveStart || task.startDate || '';
-        const end = range.effectiveEnd || start;
-        return { start, end };
+        if (!dt.drawn) {
+            const start = task.startDate || '';
+            return { start, end: start };
+        }
+        const { first, last } = visualDaysOf(dt.drawn, startHour);
+        return { start: first, end: last };
+    }
+
+    /** The first visual day the card `el` is drawn over (a segment's own part), or null. */
+    protected drawnFirstDay(el: HTMLElement, startHour: number): string | null {
+        const drawn = heldBy(el)?.task.drawn;
+        return drawn ? visualDaysOf(drawn, startHour).first : null;
     }
 
     /**

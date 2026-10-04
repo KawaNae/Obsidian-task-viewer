@@ -31,21 +31,6 @@ function dt(overrides: Partial<Task> = {}): DisplayTask {
     return toDisplayTask(makeTask(overrides), startHour, NO_TASK_LOOKUP);
 }
 
-/** Hand-built DisplayTask for branches the converter cannot produce. */
-function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
-        ...makeTask(),
-        effectiveStartDate: '',
-        startDateImplicit: true,
-        startTimeImplicit: true,
-        endDateImplicit: true,
-        endTimeImplicit: true,
-        originalTaskId: 'tv-inline:test.md:ln:1',
-        isSplit: false,
-        childEntries: [],
-        ...overrides,
-    };
-}
 
 function idsOf(tasks: DisplayTask[]): string[] {
     return tasks.map((t) => t.id);
@@ -79,12 +64,8 @@ describe('日付所属: allDay', () => {
         expect(idsOf(categorizeTasksForDate([task], '2026-01-17', startHour).allDay)).toEqual([]);
     });
 
-    it('反転 range（effectiveEndDate < effectiveStartDate）はクランプされ開始日 1 日に所属する', () => {
-        const task = makeDisplayTask({
-            id: 'inverted',
-            effectiveStartDate: '2026-01-17',
-            effectiveEndDate: '2026-01-15',
-        });
+    it('反転した期間（終了 < 開始）は時点として開始日 1 日に所属する', () => {
+        const task = { ...dt({ startDate: '2026-01-17', endDate: '2026-01-15' }), id: 'inverted' };
         expect(idsOf(categorizeTasksForDate([task], '2026-01-17', startHour).allDay)).toEqual(['inverted']);
         for (const date of ['2026-01-15', '2026-01-16']) {
             const buckets = categorizeTasksForDate([task], date, startHour);

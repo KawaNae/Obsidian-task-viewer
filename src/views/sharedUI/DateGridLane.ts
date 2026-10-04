@@ -1,6 +1,6 @@
 import type { DisplayTask, TaskViewerSettings } from '../../types';
 import { splitTasks } from '../../services/display/TaskSplitter';
-import { getTaskDateRange } from '../../services/display/VisualDateRange';
+import { visualDaysOf } from '../../utils/DayWindow';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../taskcard/TopRightFieldResolver';
 import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
@@ -57,11 +57,7 @@ export function drawDateGridLane(
     const split = splitTasks(tasks, { type: 'date-range', start: dates[0], end: dates[dates.length - 1], startHour });
     const entries = computeGridLayout(split, {
         dates: [...dates],
-        getDateRange: (task) => {
-            const range = getTaskDateRange(task, startHour);
-            if (!range.effectiveStart) return null;
-            return { effectiveStart: range.effectiveStart, effectiveEnd: range.effectiveEnd || range.effectiveStart };
-        },
+        getDateRange: (task) => task.drawn ? visualDaysOf(task.drawn, startHour) : null,
         computeDueArrows: true,
     });
 

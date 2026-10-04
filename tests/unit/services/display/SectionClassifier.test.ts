@@ -29,20 +29,6 @@ function dt(overrides: Partial<Task> = {}, hour = startHour): DisplayTask {
 }
 
 /** Hand-built DisplayTask for defensive branches the converter cannot produce. */
-function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
-        ...makeTask(),
-        effectiveStartDate: '',
-        startDateImplicit: true,
-        startTimeImplicit: true,
-        endDateImplicit: true,
-        endTimeImplicit: true,
-        originalTaskId: 'tv-inline:test.md:ln:1',
-        isSplit: false,
-        childEntries: [],
-        ...overrides,
-    };
-}
 
 describe('classifyForSection', () => {
     it('due のみ → dueOnly', () => {
@@ -81,6 +67,11 @@ describe('classifyForSection', () => {
         expect(classifyForSection(dt({ endDate: '2026-01-15', endTime: '10:00' }), startHour)).toBe('timed');
     });
 
+    it('夏時間の日の @D（23時間）も、開始が日付だけなので allDay', () => {
+        const short = { ...dt({ startDate: '2026-01-15' }), span: { startMs: 0, endMs: 23 * 3_600_000 } };
+        expect(classifyForSection(short)).toBe('allDay');
+    });
+
     it('startHour=0 でも 23.5h 閾値は同じ', () => {
         const allday = dt({
             startDate: '2026-01-15', startTime: '06:00',
@@ -94,14 +85,8 @@ describe('classifyForSection', () => {
         expect(classifyForSection(timed, 0)).toBe('timed');
     });
 
-    it('防御分岐: effectiveStartTime 不在の手組み task → allday', () => {
-        const task = makeDisplayTask({ effectiveStartDate: '2026-01-15' });
-        expect(classifyForSection(task, startHour)).toBe('allDay');
-    });
-
-    it('防御分岐: effectiveStartDate 空 + raw startDate あり → null', () => {
-        const task = makeDisplayTask({ effectiveStartDate: '', startDate: '2026-01-15' });
-        expect(classifyForSection(task, startHour)).toBe(null);
+    it('期間の無い行（日付の無い @T10:00）は due が無ければ null', () => {
+        expect(classifyForSection(dt({ startTime: '10:00' }))).toBe(null);
     });
 });
 

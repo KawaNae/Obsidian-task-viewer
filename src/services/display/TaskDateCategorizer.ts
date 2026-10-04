@@ -1,6 +1,6 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { getTaskDateRange } from './VisualDateRange';
+import { visualDaysOf } from '../../utils/DayWindow';
 import { classifyForSection, type Section } from './SectionClassifier';
 import {
     compareAllDayForRender,
@@ -11,7 +11,7 @@ import {
 /**
  * 日付ごとのタスクバケツ。キー集合は SectionKind（null 除く）と型で一致する。
  * 各バケツ (allDay / timed / dueOnly) は canonical render order でソート済みで返る:
- *   - allDay:  effectiveStartDate ASC
+ *   - allDay:  the start of what is drawn ASC
  *   - timed:   visual start ASC, duration DESC
  *   - dueOnly: due ASC
  * 同順位はファイル、行番号の順（TaskRenderOrder）。
@@ -37,11 +37,10 @@ function emptyBuckets(): CategorizedTasks {
  * The kind decision tree lives in classifyForSection (single source of
  * truth); this module only owns the per-kind date membership rules:
  *   - dueOnly: calendar date of the raw due (deadline = calendarDate semantics)
- *   - allDay:  inclusive visual range from getTaskDateRange — the same
- *              function the AllDay lane uses for card spans, so bucket
- *              membership and lane rendering agree by construction
- *              (an inverted effective range is clamped to a single day)
- *   - timed:   the task's visual date (startHour-adjusted)
+ *   - allDay:  the visual days it is drawn over (`visualDaysOf(drawn)`) —
+ *              the same function the AllDay lane uses for card spans, so
+ *              bucket membership and lane rendering agree by construction
+ *   - timed:   the visual day it is drawn from
  */
 type TaskPlacement =
     | { kind: 'allDay'; visualStart: string; visualEnd: string }
@@ -50,22 +49,13 @@ type TaskPlacement =
     | null;
 
 function placeTask(dt: DisplayTask, startHour: number): TaskPlacement {
-    const kind = classifyForSection(dt, startHour);
-    switch (kind) {
-        case 'dueOnly':
-            return { kind, dueDate: DateUtils.dueDatePart(dt.effectiveDue) ?? '' };
-        case 'allDay': {
-            const range = getTaskDateRange(dt, startHour);
-            const visualStart = range.effectiveStart || dt.effectiveStartDate;
-            return { kind, visualStart, visualEnd: range.effectiveEnd || visualStart };
-        }
-        case 'timed': {
-            const range = getTaskDateRange(dt, startHour);
-            return { kind, visualDate: range.effectiveStart || dt.effectiveStartDate };
-        }
-        default:
-            return null;
-    }
+    const kind = classifyForSection(dt);
+    if (kind === 'dueOnly') return { kind, dueDate: DateUtils.dueDatePart(dt.stated.due) ?? '' };
+    if (!kind || !dt.drawn) return null;
+    const { first, last } = visualDaysOf(dt.drawn, startHour);
+    return kind === 'allDay'
+        ? { kind, visualStart: first, visualEnd: last }
+        : { kind, visualDate: first };
 }
 
 function belongsToDate(placement: NonNullable<TaskPlacement>, date: string): boolean {

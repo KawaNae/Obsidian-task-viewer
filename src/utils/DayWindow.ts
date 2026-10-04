@@ -54,6 +54,14 @@ export function visualDayOf(ms: number, startHour: number): string {
 }
 
 /**
+ * The visual day of a date and an `HH:mm` time as written: a time before
+ * `startHour` belongs to the day before.
+ */
+export function visualDayAt(date: string, time: string, startHour: number): string {
+    return DateUtils.timeToMinutes(time) < startHour * 60 ? DateUtils.addDays(date, -1) : date;
+}
+
+/**
  * The first and the last visual day a span is drawn over. The last is the
  * day of the moment before the end, so a span that ends right at a day's
  * start does not reach that day; a point is drawn on its day. The one place

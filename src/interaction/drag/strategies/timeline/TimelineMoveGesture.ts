@@ -2,6 +2,7 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
+import { visualDayAt } from '../../../../utils/DayWindow';
 import { GhostRenderer } from '../../ghost/GhostRenderer';
 import type { GhostPlan } from '../../ghost/GhostPlan';
 import { toDisplayHeightPx, toDisplayTopPx } from '../../../../services/display/TimelineCardPosition';
@@ -64,7 +65,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         this.initialHeight = Number.isFinite(durationMinutes) ? durationMinutes * zoomLevel : 0;
 
         const dayCol = el.closest('.timeline-scroll-area__day-column') as HTMLElement;
-        this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
+        this.currentDayDate = dayCol ? dayCol.dataset.date || null : this.drawnFirstDay(el, context.plugin.settings.startHour);
 
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
@@ -324,13 +325,13 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         // これをそのまま `effective*` edits として commitPlan に渡すと、
         // materializeRawDates 内部の unshiftVisual が再度 +1 day shift し、
         // raw startDate が 1 日先送りされる (00:00 跨ぎで 1 日ズレるバグ)。
-        // toVisualDate で raw → visual に正規化することで round-trip を成立させる。
+        // visualDayAt で raw → visual に正規化することで round-trip を成立させる。
         const startHour = context.plugin.settings.startHour;
         const { startDate, startTime, endDate, endTime } = this.lastDragResult;
         const edits: DisplayDateEdits = {
-            effectiveStartDate: DateUtils.toVisualDate(startDate, startTime, startHour),
+            effectiveStartDate: visualDayAt(startDate, startTime, startHour),
             effectiveStartTime: startTime,
-            effectiveEndDate: DateUtils.toVisualDate(endDate, endTime, startHour),
+            effectiveEndDate: visualDayAt(endDate, endTime, startHour),
             effectiveEndTime: endTime,
         };
         const plan: DragPlan = { edits, baseTask: this.baseTask };
