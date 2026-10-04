@@ -32,10 +32,11 @@ export interface MiniCalendarToolbarDeps {
  */
 export class MiniCalendarToolbar extends ViewToolbarBase {
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
-    private readonly filterMenu = new FilterMenuComponent();
+    private readonly filterMenu: FilterMenuComponent;
 
     constructor(private deps: MiniCalendarToolbarDeps) {
         super();
+        this.filterMenu = new FilterMenuComponent(deps.host.app.keymap);
         this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
         deps.host.store.subscribe(() => this.update());
     }

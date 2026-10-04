@@ -88,6 +88,7 @@ export class IntervalTemplateCreator {
             anchor: { kind: 'element', element: anchorEl },
             panelClass: 'template-creator',
             childStack: this.stack,
+            keymap: this.app.keymap,
             build: (bodyEl) => {
                 this.rootEl = bodyEl;
                 this.renderContent();

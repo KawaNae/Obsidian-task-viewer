@@ -47,14 +47,14 @@ export class TimerStartOffsetModal {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog tv-timer-offset',
             keymap: this.app.keymap,
+            initialFocus: () => this.input(),
             build: (bodyEl) => this.build(bodyEl),
             onClose: () => this.stopTick?.(),
         });
-        // The window the overlay stands in (popout aware), as the other dialogs focus.
+        // The window the overlay stands in (popout aware).
         const win = hostWindow(this.overlay.getPanel());
         const tick = win.setInterval(() => this.render(), 1000);
         this.stopTick = () => win.clearInterval(tick);
-        win.requestAnimationFrame(() => this.input().focus());
     }
 
     private build(bodyEl: HTMLElement): void {
@@ -88,7 +88,7 @@ export class TimerStartOffsetModal {
 
         const actions = bodyEl.createDiv({ cls: 'tv-form__buttons' });
         const cancelBtn = actions.createEl('button', { text: t('modal.cancel'), attr: { type: 'button' } });
-        cancelBtn.addEventListener('click', () => this.overlay.requestClose());
+        cancelBtn.addEventListener('click', () => { void this.overlay.requestClose(); });
         this.applyBtn = actions.createEl('button', { cls: 'mod-cta', text: t('timer.offsetApply'), attr: { type: 'button' } });
         this.applyBtn.addEventListener('click', () => this.submit());
 

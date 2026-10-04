@@ -21,6 +21,13 @@
  * list). A press outside the surface asks to close; the focus in it keeps
  * Obsidian's hotkeys out (`HotkeyShield`).
  *
+ * Every overlay holds the focus the same way, so that the hotkeys are kept
+ * out from the moment it is open: a frame after it opens, the shell puts
+ * the focus where the body asks (`initialFocus`), or on the panel itself
+ * when the body names nothing or what it named did not take the focus. On
+ * the panel the focus raises no on-screen keyboard. Closed with the focus
+ * still in it, the overlay gives the focus back to what had it before.
+ *
  * Escape and the user's "back" (Android's back gesture, the desktop mouse's
  * back button: `HistoryBack`) step back alike: a child popover open closes
  * first, else the overlay is asked to close.
@@ -33,28 +40,53 @@ import type { PopoverStack } from './PopoverStack';
 import { registerOverlay, unregisterOverlay } from './OverlayRegistry';
 import { inLayerAbove } from './LayerOrder';
 import { HotkeyShield } from './HotkeyShield';
+import { CloseGate, type CloseAnswer } from './CloseGate';
 import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { trackKeyboard } from '../../utils/KeyboardState';
 import { t } from '../../i18n';
 
 export type OverlayMode = 'anchored' | 'centered';
+export type { CloseAnswer };
+
+/**
+ * What an overlay's first focus goes to: an element of the body, or a part
+ * of it that focuses itself (a CodeMirror editor, which puts its caret).
+ */
+export interface Focusable {
+    focus(options?: FocusOptions): void;
+}
 
 export interface OverlayOpenOpts {
     mode: OverlayMode;
     anchor?: PopoverAnchor;
     panelClass?: string;
     build: (bodyEl: HTMLElement) => void;
+    /**
+     * Obsidian's keymap (`app.keymap`): its hotkeys are kept out while the
+     * focus is in the overlay, its child popovers among it (`HotkeyShield`),
+     * so a key pressed in the overlay does not act on the note behind.
+     * Escape and the keys of the fields still work. Every overlay keeps them
+     * out; one that must not would say so by an option of its own.
+     */
+    keymap: Keymap;
+    /**
+     * What the focus goes to a frame after the overlay opens (the frame of
+     * the window it stands in, so a popout's). A text field's text is
+     * selected, so what is typed replaces it. Not given, or naming nothing,
+     * the panel itself takes the focus.
+     */
+    initialFocus?: () => Focusable | null;
     onClose?: () => void;
     /**
-     * Asked, synchronously, before a close the user asks for (the close
-     * button, Escape, the back, a click outside, a swipe, another overlay
-     * taking its place: `requestClose`): false keeps the overlay open, the body having
-     * said why in its own place (a draft to throw away or keep). Not asked
-     * where nothing can be kept open — the window going away, the plugin
-     * unloading — which close at once (`close`).
+     * Asked before a close the user asks for (the close button, Escape, the
+     * back, a click outside, a swipe, another overlay taking its place:
+     * `requestClose`), and answered as a {@link CloseAnswer}. While a
+     * promise it answered waits, a further close asked for waits on it too.
+     * Not asked where nothing can be kept open — the window going away, the
+     * plugin unloading — which close at once (`close`).
      */
-    beforeClose?: () => boolean;
+    beforeClose?: () => CloseAnswer;
     /**
      * Whether the body takes this Escape itself (a completion list of an
      * editor in it closing), so the overlay neither closes nor stops it.
@@ -68,13 +100,6 @@ export interface OverlayOpenOpts {
     takesBack?: () => boolean;
     childStack?: PopoverStack;
     hostDoc?: Document;
-    /**
-     * Obsidian's keymap (`app.keymap`): given, its hotkeys are kept out
-     * while the focus is in the overlay, its child popovers among it
-     * (`HotkeyShield`), so a key pressed in a field of the overlay does not
-     * act on the note behind. Escape and the keys of the fields still work.
-     */
-    keymap?: Keymap;
 }
 
 export class OverlayShell {
@@ -87,8 +112,15 @@ export class OverlayShell {
     private anchor: PopoverAnchor | null = null;
     private childStack: PopoverStack | null = null;
     private onCloseCb: (() => void) | null = null;
-    private beforeCloseCb: (() => boolean) | null = null;
+    private beforeCloseCb: (() => CloseAnswer) | null = null;
     private closing = false;
+    private readonly gate = new CloseGate({
+        isOpen: () => this.isOpen(),
+        ask: () => this.beforeCloseCb?.() ?? 'close',
+        close: () => this.close(),
+    });
+    /** What had the focus when the overlay opened, given it back on close. */
+    private focusBefore: Element | null = null;
     private kbAware: KeyboardAwareContainer | null = null;
     private hotkeys: HotkeyShield | null = null;
     private releaseBack: (() => void) | null = null;
@@ -109,6 +141,7 @@ export class OverlayShell {
         this.onCloseCb = opts.onClose ?? null;
         this.beforeCloseCb = opts.beforeClose ?? null;
         this.closing = false;
+        this.gate.reset();
 
         // Resolve host document (popout-aware)
         let hostDoc: Document;
@@ -123,6 +156,7 @@ export class OverlayShell {
         }
         this.hostDoc = hostDoc;
         this.hostWin = hostWin;
+        this.focusBefore = hostDoc.activeElement;
 
         // DOM skeleton
         const cls = `tv-overlay tv-overlay--${opts.mode} tv-ctrl`;
@@ -148,6 +182,8 @@ export class OverlayShell {
             ? `tv-overlay__panel ${opts.panelClass}`
             : 'tv-overlay__panel';
         const panel = root.createDiv({ cls: panelCls });
+        // Focusable by script only: the focus held when the body names no field.
+        panel.tabIndex = -1;
         this.panelEl = panel;
 
         const handle = panel.createDiv({ cls: 'tv-overlay__handle' });
@@ -156,7 +192,7 @@ export class OverlayShell {
         const closeBtn = panel.createEl('button', { cls: 'tv-icon-btn tv-overlay__close' });
         setIcon(closeBtn.createSpan(), 'x');
         closeBtn.setAttribute('aria-label', t('modal.cancel'));
-        closeBtn.addEventListener('click', () => this.requestClose());
+        closeBtn.addEventListener('click', () => { void this.requestClose(); });
 
         const body = panel.createDiv({ cls: 'tv-overlay__body' });
 
@@ -196,14 +232,20 @@ export class OverlayShell {
         // Outside-click
         this.outsideClickHandler = (e: MouseEvent) => {
             if (this.holds(e.target as Node | null)) return;
-            this.requestClose();
+            void this.requestClose();
         };
         hostDoc.addEventListener('pointerdown', this.outsideClickHandler, true);
 
         // Hotkeys: kept out while the focus is in the surface.
-        if (opts.keymap) {
-            this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => this.holds(node));
-        }
+        this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => this.holds(node));
+
+        // The first focus, a frame later: one put during the open animation
+        // can be lost.
+        const initialFocus = opts.initialFocus;
+        hostWin.requestAnimationFrame(() => {
+            if (this.panelEl !== panel) return;
+            this.focusFirst(panel, hostDoc, initialFocus?.() ?? null);
+        });
 
         // Pagehide (popout window close): nothing to keep open for, so not asked.
         this.pageHideHandler = () => this.close();
@@ -215,14 +257,26 @@ export class OverlayShell {
     }
 
     /**
-     * Close as the user asked, unless `beforeClose` keeps it open.
+     * Close as the user asked, unless `beforeClose` keeps it open. An answer
+     * already given closes, or keeps it open, before this returns.
      * @returns whether it closed (or was not open).
      */
-    requestClose(): boolean {
-        if (!this.rootEl || this.closing) return true;
-        if (this.beforeCloseCb && !this.beforeCloseCb()) return false;
-        this.close();
-        return true;
+    requestClose(): Promise<boolean> {
+        return this.gate.request();
+    }
+
+    /**
+     * Put the focus on `target`, a text field with its text selected, and
+     * on the panel when there is no target or the focus did not go into the
+     * surface (an element hidden, or disabled).
+     */
+    private focusFirst(panel: HTMLElement, doc: Document, target: Focusable | null): void {
+        if (target) {
+            target.focus({ preventScroll: true });
+            const field = target as Partial<HTMLInputElement>;
+            if (doc.activeElement === (target as unknown) && typeof field.select === 'function') field.select();
+        }
+        if (!this.holds(doc.activeElement)) panel.focus({ preventScroll: true });
     }
 
     /**
@@ -243,7 +297,7 @@ export class OverlayShell {
         if (this.childStack?.isOpen()) {
             this.childStack.closeAll();
         } else {
-            this.requestClose();
+            void this.requestClose();
         }
     }
 
@@ -252,6 +306,7 @@ export class OverlayShell {
         if (!this.rootEl || this.closing) return;
         this.closing = true;
         unregisterOverlay(this);
+        this.giveFocusBack();
 
         // Logical teardown (immediate — overlay is inert from here)
         this.kbAware?.detach();
@@ -280,6 +335,8 @@ export class OverlayShell {
         const cb = this.onCloseCb;
         this.onCloseCb = null;
         this.beforeCloseCb = null;
+        this.gate.reset();
+        this.focusBefore = null;
         this.hostDoc = null;
         this.hostWin = null;
         this.panelEl = null;
@@ -305,6 +362,21 @@ export class OverlayShell {
         } else {
             root.remove();
         }
+    }
+
+    /**
+     * Give the focus back to what had it when the overlay opened, if the
+     * focus is still the overlay's (in its surface, or lost to the body) and
+     * that element is still there. A focus that went elsewhere meanwhile (a
+     * note opened from the overlay) is left where it is.
+     */
+    private giveFocusBack(): void {
+        const doc = this.hostDoc;
+        const before = this.focusBefore as (Element & Partial<HTMLElement>) | null;
+        if (!doc || !before || !before.isConnected || typeof before.focus !== 'function') return;
+        const active = doc.activeElement;
+        if (active !== null && active !== doc.body && !this.holds(active)) return;
+        before.focus({ preventScroll: true });
     }
 
     isOpen(): boolean {
@@ -392,26 +464,34 @@ export class OverlayShell {
             }
         };
 
+        const slideOut = () => {
+            panel.style.transition = 'transform 150ms ease-in';
+            panel.style.transform = 'translateY(100%)';
+            if (backdrop) {
+                backdrop.style.transition = 'opacity 150ms ease-in';
+                backdrop.style.opacity = '0';
+            }
+            // Already asked: the panel is on its way out.
+            window.setTimeout(() => this.close(), 160);
+        };
+        const snapBack = () => {
+            panel.style.transition = 'transform 150ms ease-out';
+            panel.style.transform = '';
+            if (backdrop) {
+                backdrop.style.transition = 'opacity 150ms ease-out';
+                backdrop.style.opacity = '';
+            }
+        };
+
+        // A swipe far enough asks to close. Answered at once with 'close',
+        // the panel slides out; else it goes back in place, and an answer
+        // waited for closes it as any close does.
         const endDrag = () => {
             if (!dragging) return;
             dragging = false;
-            if (dy > 80 && (!this.beforeCloseCb || this.beforeCloseCb())) {
-                panel.style.transition = 'transform 150ms ease-in';
-                panel.style.transform = 'translateY(100%)';
-                if (backdrop) {
-                    backdrop.style.transition = 'opacity 150ms ease-in';
-                    backdrop.style.opacity = '0';
-                }
-                // Already asked, above: the panel is on its way out.
-                window.setTimeout(() => this.close(), 160);
-            } else {
-                panel.style.transition = 'transform 150ms ease-out';
-                panel.style.transform = '';
-                if (backdrop) {
-                    backdrop.style.transition = 'opacity 150ms ease-out';
-                    backdrop.style.opacity = '';
-                }
-            }
+            let slid = false;
+            if (dy > 80) void this.gate.request(() => { slid = true; slideOut(); });
+            if (!slid) snapBack();
         };
 
         handle.addEventListener('pointerdown', (e: PointerEvent) => {

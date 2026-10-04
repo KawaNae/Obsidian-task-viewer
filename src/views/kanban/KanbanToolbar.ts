@@ -17,10 +17,11 @@ export interface KanbanToolbarDeps {
 export class KanbanToolbar extends ViewToolbarBase {
     private filterBtn: HTMLButtonElement | null = null;
     private maskHandle: { update: () => void } | null = null;
-    private readonly filterMenu = new FilterMenuComponent();
+    private readonly filterMenu: FilterMenuComponent;
 
     constructor(private deps: KanbanToolbarDeps) {
         super();
+        this.filterMenu = new FilterMenuComponent(deps.host.app.keymap);
         this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
         deps.host.store.subscribe(() => this.update());
     }

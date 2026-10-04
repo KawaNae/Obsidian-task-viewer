@@ -36,10 +36,11 @@ export interface ScheduleToolbarDeps {
 export class ScheduleToolbar extends ViewToolbarBase {
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
-    private readonly filterMenu = new FilterMenuComponent();
+    private readonly filterMenu: FilterMenuComponent;
 
     constructor(private deps: ScheduleToolbarDeps) {
         super();
+        this.filterMenu = new FilterMenuComponent(deps.host.app.keymap);
         this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
         deps.host.store.subscribe(() => this.update());
     }

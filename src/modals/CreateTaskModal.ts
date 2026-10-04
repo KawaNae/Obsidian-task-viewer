@@ -8,7 +8,6 @@ import { attachBracketPairing } from './form/bracketPairing';
 import { onFormEnter } from './form/formEnter';
 import { DateFieldGroup } from './form/DateFieldGroup';
 import { OverlayShell } from '../views/sharedUI/OverlayShell';
-import { hostWindow } from '../utils/HostWindow';
 
 /**
  * What the dialog asks for: the fields of a new task line, less its status
@@ -66,12 +65,10 @@ export class CreateTaskModal {
         this.overlay.open({
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog',
+            keymap: this.app.keymap,
+            initialFocus: () => this.nameInput,
             build: (bodyEl) => this.buildContent(bodyEl),
         });
-        // open アニメーション中の focus は取りこぼすことがあるため 1 frame 遅らせる
-        // （TaskHubPanel.open() の focusField と同じパターン）。フレームは
-        // overlay が実際に載っている window から取る（popout 対応）。
-        hostWindow(this.overlay.getPanel()).requestAnimationFrame(() => this.nameInput?.focus());
     }
 
     close(): void {

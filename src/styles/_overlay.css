@@ -65,6 +65,12 @@ body:not(.theme-dark) .tv-overlay {
     overflow: hidden;
 }
 
+/* The panel holds the focus when no field is named (OverlayShell's first
+   focus); it is a surface, not a control, so it draws no ring */
+.tv-overlay__panel:focus {
+    outline: none;
+}
+
 /* --- Body --- */
 .tv-overlay__body {
     flex: 1;
