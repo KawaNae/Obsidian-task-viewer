@@ -10,15 +10,18 @@
 import type { App, Menu } from 'obsidian';
 import { askText } from '../modals/ask/askText';
 import { t } from '../i18n';
-import { IntInput } from '../utils/values/NumberValues';
+import { SETTINGS_SCHEMA, type IntSetting } from '../settings/SettingsSchema';
 
 /** 分数を 1 つ選ばせる項目。プリセットと Custom… を並べる。 */
 export interface DurationField {
     /** 見出しと入力ダイアログに出す名前。 */
     title: string;
     presets: readonly number[];
-    /** Custom… で受け付ける上限（分）。 */
-    maxMinutes: number;
+    /**
+     * Custom… が受け付ける分の範囲と読み方。設定の表（`SETTINGS_SCHEMA`）の
+     * その長さのキーで、設定画面の欄と同じ範囲を読む（論点6）。
+     */
+    setting: IntSetting;
     get(): number;
     set(minutes: number): Promise<void>;
 }
@@ -46,7 +49,7 @@ export class TimerSettingsMenu {
         this.addDurationField(menu, app, {
             title: t('timer.workDuration'),
             presets: WORK_PRESETS,
-            maxMinutes: 120,
+            setting: SETTINGS_SCHEMA.pomodoroWorkMinutes,
             get: () => target.getWorkMinutes(),
             set: (minutes) => target.setWorkMinutes(minutes),
         });
@@ -56,7 +59,7 @@ export class TimerSettingsMenu {
         this.addDurationField(menu, app, {
             title: t('timer.breakDuration'),
             presets: BREAK_PRESETS,
-            maxMinutes: 60,
+            setting: SETTINGS_SCHEMA.pomodoroBreakMinutes,
             get: () => target.getBreakMinutes(),
             set: (minutes) => target.setBreakMinutes(minutes),
         });
@@ -80,7 +83,7 @@ export class TimerSettingsMenu {
         this.addDurationField(menu, app, {
             title: t('timer.countdownDuration'),
             presets: COUNTDOWN_PRESETS,
-            maxMinutes: 120,
+            setting: SETTINGS_SCHEMA.countdownMinutes,
             get: () => target.get(),
             set: (minutes) => target.set(minutes),
         });
@@ -109,9 +112,9 @@ export class TimerSettingsMenu {
                     // under the field, and the dialog stays.
                     void askText(app, {
                         title: field.title,
-                        label: t('timer.minutesRange', { min: 1, max: field.maxMinutes }),
+                        label: minutesLabel(field.setting),
                         initial: current.toString(),
-                        codec: IntInput.codec({ min: 1, max: field.maxMinutes }),
+                        codec: field.setting.codec,
                         numeric: true,
                         submitLabel: t('modal.ok'),
                         submit: async (minutes) => {
@@ -122,4 +125,10 @@ export class TimerSettingsMenu {
                 });
         });
     }
+}
+
+/** The Custom… field's label: the minutes, and the range they are read in. */
+function minutesLabel(setting: IntSetting): string {
+    const { min = 1, max } = setting.range;
+    return max === undefined ? t('timer.minutesAtLeast', { min }) : t('timer.minutesRange', { min, max });
 }

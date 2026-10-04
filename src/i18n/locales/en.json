@@ -736,6 +736,7 @@
     "pinPending": "Release pending — click another window to move there",
     "autoRepeat": "Auto Repeat",
     "minutesRange": "Minutes ({{min}}-{{max}})",
+    "minutesAtLeast": "Minutes ({{min}} or more)",
     "offsetStart": "Shift the start",
     "offsetMinutesAgo": "From {{minutes}} min ago",
     "offsetFromTime": "From {{time}}",
