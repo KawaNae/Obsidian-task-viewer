@@ -314,3 +314,29 @@ describe('FrontmatterLineEditor', () => {
         });
     });
 });
+
+describe('FrontmatterLineEditor.valueRange', () => {
+    const at = (line: string, key = 'tv-color') => {
+        const range = FrontmatterLineEditor.valueRange(line, key);
+        return range && line.slice(range.start, range.end);
+    };
+
+    it('is the value after the key, its colon and the spaces after them', () => {
+        expect(at('tv-color: red')).toBe('red');
+        expect(at('tv-color  :\tdark blue  ')).toBe('dark blue');
+        expect(at('tv-color: "red"')).toBe('"red"');
+    });
+
+    it('ends before a comment, and is empty when the line holds none', () => {
+        expect(at('tv-color: red # mine')).toBe('red');
+        expect(at('tv-color:')).toBe('');
+        expect(at('tv-color: # no value')).toBe('');
+        expect(FrontmatterLineEditor.valueRange('tv-color:', 'tv-color')).toEqual({ start: 9, end: 9 });
+    });
+
+    it('is null on a line of another key, or no key line', () => {
+        expect(at('tv-colors: red')).toBeNull();
+        expect(at('  tv-color: red')).toBeNull();
+        expect(at('- item')).toBeNull();
+    });
+});

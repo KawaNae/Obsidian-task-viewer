@@ -1,7 +1,6 @@
 import { t } from '../../../i18n';
 import { VALID_LINE_STYLES } from '../../../constants/style';
-import { filterColors, renderColorSuggestion } from '../../../suggest/color/colorUtils';
-import { filterLineStyles, renderLineStyleSuggestion } from '../../../suggest/line/lineStyleUtils';
+import { COLOR_VALUES, LINE_STYLE_VALUES } from '../../../suggest/ScopeValues';
 import { ChoiceInput } from '../../../utils/values/ChoiceValues';
 import { ColorInput } from '../../../utils/values/ColorValues';
 import { optional, type FieldCodec } from '../../../utils/values/Read';
@@ -108,15 +107,15 @@ export class StyleFieldGroup implements ClosingPart {
                 this.bound.color.commit();
             });
             suggest = new ValueSuggest(this.ctx.app, input, {
-                candidates: (q) => (q.trim() === '' ? filterColors('', 20) : filterColors(q)),
-                render: renderColorSuggestion,
+                candidates: COLOR_VALUES.candidates,
+                render: COLOR_VALUES.render,
                 pick: (val) => { this.colorField.setText(val); this.updateColorSwatch(); this.bound.color.commit(); },
             });
             input.addEventListener('input', () => this.updateColorSwatch());
         } else if (field === 'linestyle') {
             suggest = new ValueSuggest(this.ctx.app, input, {
-                candidates: (q) => filterLineStyles(q),
-                render: renderLineStyleSuggestion,
+                candidates: LINE_STYLE_VALUES.candidates,
+                render: LINE_STYLE_VALUES.render,
                 pick: (val) => { input.value = val; this.bound.linestyle.commit(); },
             });
         }

@@ -15,8 +15,8 @@ import {
 } from './types';
 import type { Task } from './types';
 import { TaskViewerSettingTab } from './settings';
-import { ColorSuggest } from './suggest/color/ColorSuggest';
-import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
+import { FrontmatterValueSuggest } from './suggest/FrontmatterValueSuggest';
+import { COLOR_VALUES, LINE_STYLE_VALUES } from './suggest/ScopeValues';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
 import { untrackAllKeyboards } from './utils/KeyboardState';
@@ -233,8 +233,8 @@ export default class TaskViewerPlugin extends Plugin {
         this.addSettingTab(new TaskViewerSettingTab(this.app, this));
 
         // Register Editor Suggest
-        this.registerEditorSuggest(new ColorSuggest(this.app, this));
-        this.registerEditorSuggest(new LineStyleSuggest(this.app, this));
+        this.registerEditorSuggest(new FrontmatterValueSuggest(this.app, this, COLOR_VALUES));
+        this.registerEditorSuggest(new FrontmatterValueSuggest(this.app, this, LINE_STYLE_VALUES));
 
         this.taskHub = createTaskHubOpener({ app: this.app, plugin: this, owner: this });
 
