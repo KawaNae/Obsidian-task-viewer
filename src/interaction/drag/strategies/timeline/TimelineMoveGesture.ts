@@ -7,7 +7,7 @@ import { GhostRenderer } from '../../ghost/GhostRenderer';
 import type { GhostPlan } from '../../ghost/GhostPlan';
 import { toDisplayHeightPx, toDisplayTopPx } from '../../../../services/display/TimelineCardPosition';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
-import type { DragPlan } from '../../DragPlan';
+import { dragBase, type DragPlan } from '../../DragPlan';
 import { hostWindow } from '../../../../utils/HostWindow';
 
 /**
@@ -76,7 +76,8 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
         // 分割タスク: 元 task の絶対分時刻を取得して anchor 計算と initialHeight に使う
         const originalId = getOriginalTaskId(task);
-        const originalTask = context.index.getTask(originalId);
+        const raw = context.index.getTask(originalId);
+        const originalTask = raw ? dragBase(raw, startHour) : undefined;
         this.baseTask = originalTask ?? task;
 
         let originalTaskStartMinutes: number | null = null;

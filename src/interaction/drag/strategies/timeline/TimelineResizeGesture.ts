@@ -4,7 +4,7 @@ import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
 import { instantText, visualDayAt } from '../../../../utils/DayWindow';
 import { type DisplayDateEdits, getOriginalTaskId, toDisplayTask } from '../../../../services/display/DisplayTaskConverter';
-import type { DragPlan } from '../../DragPlan';
+import { dragBase, type DragPlan } from '../../DragPlan';
 
 /**
  * Timeline (timed タスク) の Resize Gesture。resize 方向は top / bottom のみ。
@@ -207,7 +207,7 @@ export class TimelineResizeGesture extends BaseDragStrategy {
                 endTime: newEndTime,
             };
 
-        const plan: DragPlan = { edits, baseTask: originalTask };
+        const plan: DragPlan = { edits, baseTask: dragBase(originalTask, startHour) };
         // 書けなかったときも後続は同じ。拒否の通知は書き込みの層が、伸ばした
         // 見た目の描き直しは DragSession.handleUp の、ノートを読み直したあとの
         // 全体の描画が行う。
