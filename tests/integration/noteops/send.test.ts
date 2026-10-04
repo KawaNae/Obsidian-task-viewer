@@ -291,13 +291,18 @@ const viewOf = which => {
     const el = panel()?.querySelector('.tv-source-editor__' + which + ' .cm-content');
     return el ? (el.cmTile?.view ?? el.cmView?.rootView?.view ?? null) : null;
 };
+/** What is said under the row of \`input\`: its errors, or what is not an error. */
+const saidUnder = (input, errors) => {
+    const el = input?.closest('.tv-form__row')?.nextElementSibling;
+    return el ? [...el.children].filter(c => c.classList.contains('tv-form__error') === errors).map(c => c.textContent) : [];
+};
 const state = () => ({
     open: !!panel(),
     closing: !!document.querySelector('.tv-overlay.is-closing'),
     folder: inputs()[0]?.value ?? null,
     name: inputs()[1]?.value ?? null,
     heading: inputs()[2]?.value ?? null,
-    says: shown(panel()?.querySelector('.tv-send__says')) ? panel().querySelector('.tv-send__says').textContent : null,
+    says: saidUnder(inputs()[2], false).join(' ') || null,
     asking: shown(panel()?.querySelector('.tv-form__ask')),
     canSend: panel() ? !panel().querySelector('.tv-form__buttons .mod-cta').disabled : false,
     editors: panel()?.querySelectorAll('.tv-send__rows .cm-content').length ?? 0,
@@ -416,6 +421,43 @@ describe('the send dialog', () => {
         `);
         expect(sent).toEqual({ open: false, notices: 0 });
         expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす', '    - [ ] 子2', '- [x] 済み', ''].join('\n'));
+    });
+
+    it('says why each row\'s draft cannot be written under that row, two rows of the same reason each', async () => {
+        await writeIndexedTestFile(SRC, ['- [ ] 一つ目', '- [ ] 二つ目', ''].join('\n'));
+        const said = onDialog<{ rows: string[][]; canSend: boolean }>(`
+            // The menu sends one row; the dialog is asked for both, as a send of two rows is made.
+            const ops = plugin.getNoteOps();
+            const rows = ['一つ目', '二つ目'].map(name => plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === name));
+            const previewSend = ops.previewSend;
+            ops.previewSend = () => previewSend.call(ops, rows.map(row => row.id));
+            try {
+                if (!plugin.taskHub.cards) {
+                    plugin.openTaskHub(rows[0].id);
+                    await until(() => document.querySelector('.task-hub'));
+                    document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
+                    await until(() => !document.querySelector('.task-hub'));
+                }
+                await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, rows[0]);
+                const menu = plugin.menuPresenter.currentMenu;
+                const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
+                menu.hide();
+                item.callback(new MouseEvent('click'));
+                await until(() => panel() && panel().querySelectorAll('.tv-source-editor__parent .cm-content').length === 2);
+            } finally {
+                ops.previewSend = previewSend;
+            }
+            // Each row's first line made no task line.
+            for (const content of panel().querySelectorAll('.tv-source-editor__parent .cm-content')) {
+                const view = content.cmTile?.view ?? content.cmView?.rootView?.view;
+                view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'ただの行' } });
+            }
+            await sleep(200);
+            const rowSays = [...panel().querySelectorAll('.tv-send__row-says')].map(el => [...el.children].map(c => c.className + ': ' + c.textContent));
+            return JSON.stringify({ rows: rowSays, canSend: state().canSend });
+        `);
+        const notTask = 'tv-form__error: 1行目がタスクの行ではありません。';
+        expect(said).toEqual({ rows: [[notTask], [notTask]], canSend: false });
     });
 
     it('shows a subtree it cannot open in the editor as it stands, from the first column, and sends it so', async () => {

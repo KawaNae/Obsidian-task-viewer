@@ -32,6 +32,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { tr } from '../helpers/view-helper';
 
 const FILE = 'test-int-timer-offset.md';
 
@@ -284,7 +285,7 @@ describe('shifting the start of a running count-up', () => {
         expect(titles.filter(title => /\b(5|10|15|30)\b/.test(title))).toHaveLength(4);
     });
 
-    it('"Set the shift...": an amount unreadable is warned under the field and not taken; a readable one is foreseen and shifts', async () => {
+    it('"Set the shift...": an amount unreadable is said under the field and not taken; a readable one is foreseen and shifts', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 量で', ''].join('\n'));
         open = startTimer('量で', 'child');
         pressElapsed(open, '...');
@@ -292,7 +293,7 @@ describe('shifting the start of a running count-up', () => {
         expect(surfaceOverWidget(open)).toContain('tv-overlay');
 
         const unreadable = offsetDialog({ type: '1.5' });
-        expect(unreadable).toMatchObject({ kind: 'minutes', says: 'warning', invalid: true, applicable: false });
+        expect(unreadable).toMatchObject({ kind: 'minutes', says: 'error', text: tr('issue.shape.int'), invalid: true, applicable: false });
 
         const now = minuteFloor(Date.now());
         const readable = offsetDialog({ type: '25', now });
@@ -411,7 +412,7 @@ function surfaceOverWidget(id: string): string {
  * it reads without waiting. The shift itself is then written at the real now.
  */
 function offsetDialog(act: { kind?: 'minutes' | 'time'; type?: string; apply?: boolean; now?: number }): {
-    kind: string; text: string; says: 'info' | 'warning' | null; invalid: boolean; applicable: boolean;
+    kind: string; text: string; says: 'info' | 'error' | null; invalid: boolean; applicable: boolean;
 } {
     return evalOrThrow(`(async () => {
         const dialog = document.querySelector('.tv-timer-offset');
@@ -427,12 +428,13 @@ function offsetDialog(act: { kind?: 'minutes' | 'time'; type?: string; apply?: b
                 input.value = act.type;
                 input.dispatchEvent(new Event('input', { bubbles: true }));
             }
-            const says = dialog.querySelector('.tv-timer-offset__says');
+            // The line under the field's row (IssueBoard): one sentence, its tone its class.
+            const line = rows[kind === 'minutes' ? 0 : 1].nextElementSibling.firstElementChild;
             const apply = dialog.querySelector('.tv-form__buttons .mod-cta');
             const seen = {
                 kind,
-                text: says.textContent,
-                says: says.style.display === 'none' ? null : says.classList.contains('tv-form__warning') ? 'warning' : says.classList.contains('tv-form__info') ? 'info' : null,
+                text: line?.textContent ?? '',
+                says: !line ? null : line.classList.contains('tv-form__error') ? 'error' : line.classList.contains('tv-form__info') ? 'info' : null,
                 invalid: input.classList.contains('tv-ctrl__text-input--invalid'),
                 applicable: !apply.disabled,
             };
