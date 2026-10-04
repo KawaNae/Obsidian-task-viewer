@@ -114,7 +114,7 @@ src/
 ├── cli/                       # CLI handlers (CliRegistrar: registers Reference's CLI_COMMANDS; CliParamValidator, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
 │   ├── core/                  # The index (TaskIndex, IndexReads, TaskStore, TaskScanner, NotifyCoalescer, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
-│   ├── data/                  # The display side of the read (TaskReadService), children in order, effective properties, NoteOps
+│   ├── data/                  # The display side of the read (TaskReadService), children in order, effective properties, NoteOps, CreatePlaces
 │   ├── operations/            # The one write port (Operations), DuplicateShift
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, SegmentIds, TaskDateCategorizer, TaskContent)
 │   ├── parsing/               # Parser layer (TaskParser: lineParsers; TaskLineFormat: formatTaskLine, formatRow; FileParsePipeline)
@@ -269,7 +269,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
 | **SidebarManager** | `views/sidebar/SidebarManager.ts` | The sidebar of Timeline and Calendar: its layout, and whether it is open (closed at narrow width until the toggle opens it). What it holds is the pinned lists' panel (`PinnedListPanel`) |
-| **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI, also used by "Convert to inline" (shared form widgets live in `modals/form/`). Opens on the name field and creates nothing while the name is empty |
+| **CreateDialog / CreateModal** | `modals/create/` | The create dialog: a new task line and the place it goes (`CreatePlace`: a daily note's task section, or the head of a row's children), its logic (`CreateDialog`) apart from how it looks (`CreateModal`), as the send dialog's is. It asks the place what it is (`CreatePlaces.facts`, `services/data/`) and says where the line goes; its placeholders and date rules read only what a line there inherits (the reading's answer, never a daily note's day). Opens on the name field and creates nothing while the name is empty; waits for the write, closing once written and saying why above its buttons when refused |
 | **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`, owns a PopoverStack for SuggestController-based fields. Entry: card double-tap, menu Properties items (with field focus) |
 | **OverlayShell** | `views/sharedUI/OverlayShell.ts` | The one surface of the plugin's dialogs and popovers (centered: a dialog, a bottom sheet on a phone; anchored: a popover). Every overlay is given Obsidian's keymap and keeps its hotkeys out while the focus is in it (`HotkeyShield`); a frame after it opens, it puts the focus on the field the body names (`initialFocus`, its text selected), else on the panel itself, and gives the focus back on close. A close the user asks for (×, Escape, the back, outside, a swipe) asks the body first (`beforeClose`, a `CloseAnswer`: close, stay, or a promise waited for; `CloseGate`) |
 | **askChoice / confirm / askText** | `modals/ask/` | The questions put to the user, on OverlayShell's centered panel (a sheet from below on a phone), each answered once when it has closed (`ask`): a choice of buttons opens with the focus on cancel and answers `'cancel'` however else it closes (×, Escape, the back, outside, a swipe); a text opens on its field, says under it what does not read (`issueWords`), and waits for its `submit` before closing. Their button row is `FormActions` (`modals/form/`) |
@@ -1373,8 +1373,8 @@ Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `sr
 | `pinnedListPageSize` | number | 10 | Pinned list page size |
 | `defaultViewPositions` | object | *(see below)* | Per-view default leaf position |
 | `reuseExistingTab` | boolean | `true` | Reuse existing tab of same view type |
-| `editorMenuForTasks` | boolean | `true` | Show task operations in editor context menu |
-| `editorMenuForCheckboxes` | boolean | `true` | Show checkbox operations in editor context menu |
+| `editorMenuForTasks` | boolean | `true` | The editor's line button on a task of this plugin's notation (none on a Tasks or Day Planner line: `lineMenuOf`) |
+| `editorMenuForCheckboxes` | boolean | `true` | The editor's line button on a checkbox the index reads no task on (a note the views do not read), with status, duplicate and delete |
 | `suggestColor` | boolean | `true` | Show color suggestions in property panel |
 | `suggestLinestyle` | boolean | `true` | Show linestyle suggestions in property panel |
 | `hideViewHeader` | boolean | `true` | Hide view header |
