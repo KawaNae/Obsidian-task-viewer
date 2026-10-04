@@ -179,11 +179,13 @@ describe.each([
         expect(r.sections[0].name).toBe('Alpha');
     });
 
-    it('renames a list from its ⋯ menu on Enter, and keeps the old name on Escape', () => {
+    it('renames a list from its ⋯ menu on Enter, with no blur coming to it, and keeps the old name on Escape', () => {
         let r = op(name, more(0, tr('menu.rename')), 200);
         expect(r.sections[0].renaming).toBe(true);
         r = op(name, `
             const input = sec(0).querySelector('.' + C.nameInput);
+            // As in a window that is not in front: no blur reaches the field.
+            input.addEventListener('blur', e => e.stopImmediatePropagation(), { capture: true });
             input.value = 'Renamed';
             key(input, 'Enter');
         `);

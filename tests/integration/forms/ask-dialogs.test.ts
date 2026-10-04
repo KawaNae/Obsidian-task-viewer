@@ -42,14 +42,14 @@ const askState = () => {
     const panel = askPanel();
     if (!panel) return { open: false };
     const active = document.activeElement;
-    const says = panel.querySelector('.tv-ask__says');
+    const says = [...panel.querySelectorAll('.tv-form__says > *')].map(el => el.textContent).join(' ');
     return {
         open: true,
         title: panel.querySelector('.tv-form__title')?.textContent ?? null,
         buttons: buttons().map(b => b.textContent),
         focus: active?.tagName === 'BUTTON' && panel.contains(active) ? active.textContent
             : active?.tagName === 'INPUT' && panel.contains(active) ? 'input' : null,
-        says: says && getComputedStyle(says).display !== 'none' ? says.textContent : null,
+        says: says || null,
     };
 };
 const key = (el, init) => el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
