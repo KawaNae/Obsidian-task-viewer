@@ -26,10 +26,10 @@ describe('date conditions compare moments (startHour 5)', () => {
         expect(matches({ due: '2026-10-05T05:00' }, { property: 'due', operator: 'equals', value: '2026-10-05' })).toBe(false);
     });
 
-    it('@D>E ends on E−1 under the rule until 11c, as it is drawn', () => {
+    it('@D>E ends on E, as it is drawn', () => {
         const task = { startDate: '2026-10-01', endDate: '2026-10-04' };
-        expect(matches(task, { property: 'endDate', operator: 'equals', value: '2026-10-03' })).toBe(true);
-        expect(matches(task, { property: 'endDate', operator: 'equals', value: '2026-10-04' })).toBe(false);
+        expect(matches(task, { property: 'endDate', operator: 'equals', value: '2026-10-04' })).toBe(true);
+        expect(matches(task, { property: 'endDate', operator: 'equals', value: '2026-10-03' })).toBe(false);
     });
 
     it('before and after keep to the edges', () => {

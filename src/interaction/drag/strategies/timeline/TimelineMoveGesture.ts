@@ -34,7 +34,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     private initialTop: number = 0;
     private initialHeight: number = 0;
     /** Original (pre-split) raw task. commitPlan の materializeRawDates が
-     *  endDate dual-semantic (inclusive vs exclusive) を判定するのに使う。 */
+     *  edit の無い側の時刻を引くのに使う。 */
     private baseTask: Task | null = null;
 
     private autoScrollTimer: number | null = null;
@@ -322,7 +322,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         // 例: visual day "2026-04-21" の 02:00 (startHour=5) ドロップ
         //   → totalStartMinutes=1560 → startDayOffset=1, normStart=120
         //   → lastDragResult = { startDate: "2026-04-22", startTime: "02:00" }
-        // これをそのまま `effective*` edits として commitPlan に渡すと、
+        // これをそのまま視覚日の edits として commitPlan に渡すと、
         // materializeRawDates 内部の unshiftVisual が再度 +1 day shift し、
         // raw startDate が 1 日先送りされる (00:00 跨ぎで 1 日ズレるバグ)。
         // visualDayAt で raw → visual に正規化することで round-trip を成立させる。

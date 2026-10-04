@@ -1,4 +1,5 @@
 import type { DisplayTask } from '../../types';
+import { spanDates } from '../../utils/TaskDates';
 
 /** A span this long or longer is drawn as an all-day task. */
 const ALL_DAY_MS = 23.5 * 60 * 60 * 1000;
@@ -6,12 +7,12 @@ const ALL_DAY_MS = 23.5 * 60 * 60 * 1000;
 /**
  * Whether a task with a span is drawn as an all-day task: its start is a
  * bare date (a start date with no start time, or with no start an end date
- * with no end time), or it lasts 23h30m or more. The bare date is asked
- * first, so a bare date on a day the clock changes (23 hours) is still all
- * day.
+ * with no end time, a due standing in for the end as `spanDates` reads it),
+ * or it lasts 23h30m or more. The bare date is asked first, so a bare date
+ * on a day the clock changes (23 hours) is still all day.
  */
 export function isAllDay(dt: Pick<DisplayTask, 'stated' | 'span'>): boolean {
-    const { startDate, startTime, endTime } = dt.stated;
+    const { startDate, startTime, endTime } = spanDates(dt.stated);
     if (startDate ? !startTime : !endTime) return true;
     return !!dt.span && dt.span.endMs - dt.span.startMs >= ALL_DAY_MS;
 }

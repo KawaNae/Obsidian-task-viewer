@@ -34,9 +34,9 @@ describe('durationMinutes counts the days between start and end', () => {
         expect(minutes).toBe(45);
     });
 
-    it('a task with only a due date has none', () => {
-        const { minutes } = minutesOf({ due: '2026-01-05' });
-        expect(minutes).toBeNull();
+    it('a task with only a due has the span read from it: a day, or the hour before', () => {
+        expect(minutesOf({ due: '2026-01-05' }).minutes).toBe(1440);
+        expect(minutesOf({ due: '2026-01-05T17:00' }).minutes).toBe(60);
     });
 
     it('agrees with the filter: a task `length greaterThan 24 hours` picks up reports more than 24 hours', () => {

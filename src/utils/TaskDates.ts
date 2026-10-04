@@ -1,6 +1,6 @@
 import type { DisplayTask, StatedDates, Task, TaskSpan } from '../types';
 import { DateUtils } from './DateUtils';
-import { dayStart, instantAt, instantText, visualDayOf } from './DayWindow';
+import { dayStart, endDayOf, instantAt, instantText, visualDayOf } from './DayWindow';
 
 /**
  * The dates a task's note states for it: what its line writes, and what its
@@ -41,7 +41,23 @@ export interface ResolvedSpan {
     dueMs: number | null;
 }
 
-const MINUTES_PER_DAY = 24 * 60;
+/**
+ * The dates a span is read from: what the note states, and for a task with
+ * neither a start date nor an end date but a due, the due as its end
+ * (`@>>D` is read as `@>D`, `@>>DT17:00` as `@>DT17:00`). A task with only
+ * a due occupies the time before it, as one with only an end does.
+ * `resolveSpan`, `isAllDay` and `sideValues` read the span through this.
+ */
+export function spanDates(stated: StatedDates): StatedDates {
+    if (stated.startDate || stated.endDate || !stated.due) return stated;
+    const due = DateUtils.splitDateTime(stated.due);
+    const date = due.date;
+    const time = DateUtils.timeOfDay(due.time);
+    const dates: StatedDates = { ...stated, endDate: date };
+    if (time) dates.endTime = time;
+    else delete dates.endTime;
+    return dates;
+}
 
 /**
  * The time a task occupies, `[startMs, endMs)`, and the moment it is due,
@@ -50,39 +66,40 @@ const MINUTES_PER_DAY = 24 * 60;
  * write that needs the slot a task fills (a duplicate moved on the clock)
  * asks it here.
  *
- * The rules (`dayStart(D)` is D at `startHour:00`):
+ * A bare date D is the whole visual day D: written as a start it is D's
+ * start, written as an end D's end. The rules (`dayStart(D)` is D at
+ * `startHour:00`):
  *
  * | written | start | end |
  * |---|---|---|
  * | `@D` | `dayStart(D)` | `dayStart(D+1)` |
- * | `@D>E` | `dayStart(D)` | the end of E's implicit `(startHour−1):59`: `dayStart(E)` |
- * | `@>E` | the start of the visual day that end is in | the same end |
+ * | `@D>E`, `@D>D` | `dayStart(D)` | `dayStart(E+1)` |
+ * | `@>E` | `dayStart(E)` | `dayStart(E+1)` |
  * | `@DT10:00` | D 10:00 | an hour later |
  * | `@DT10:00>11:00` | D 10:00 | D 11:00, the next day's when before the start |
- * | `@DT22:00>E` | D 22:00 | as `@D>E` |
- * | `@DT10:00>D` (the implicit end before the start) | D 10:00 | D 23:59 |
- * | `@>>D` | no span | due `dayStart(D+1)` |
- * | `@>>DT17:00` | no span | due D 17:00 |
+ * | `@DT10:00>D`, `@DT22:00>E` | the written start | `dayStart(E+1)` |
+ * | `@>ET17:00`, `@>>DT17:00` | an hour before the end | the written end |
+ * | `@>>D` | `dayStart(D)` | `dayStart(D+1)` |
  *
- * A date-only end is `(startHour−1):59` and the minute after it: at
- * `startHour` 0 that is the end of E itself. A time inherited from the
- * section or the note is a written time. The rows rule 4 calls errors
- * (`@D>ET10:00`, `@>ET17:00`, `@D>DT02:00`) are not drawn; they are
- * resolved the same way for the API's `includeInvalid`.
+ * A task with only a due is read as if the due were its end (`spanDates`).
+ * A time inherited from the section or the note is a written time. The rows
+ * rule 4 calls errors (`@D>ET10:00`, `@>ET17:00`, `@D>DT02:00`) are not
+ * drawn; they are read by the same rules and not mended (`@D>DT02:00` ends
+ * before it starts), for the API's `includeInvalid`.
  */
 export function resolveSpan(stated: StatedDates, startHour: number): ResolvedSpan {
-    return { span: spanOf(stated, startHour), dueMs: dueMsOf(stated.due, startHour) };
+    return { span: spanOf(spanDates(stated), startHour), dueMs: dueMsOf(stated.due, startHour) };
 }
 
-function spanOf(stated: StatedDates, startHour: number): TaskSpan | null {
-    const span = rawSpanOf(stated, startHour);
+function spanOf(dates: StatedDates, startHour: number): TaskSpan | null {
+    const span = rawSpanOf(dates, startHour);
     return span && Number.isFinite(span.startMs) && Number.isFinite(span.endMs) ? span : null;
 }
 
-function rawSpanOf(stated: StatedDates, startHour: number): TaskSpan | null {
-    const { startDate, startTime, endDate, endTime } = stated;
-    // The minute after a date-only end, `(startHour−1):59`.
-    const afterDateEnd = (startHour === 0 ? 24 : startHour) * 60;
+function rawSpanOf(dates: StatedDates, startHour: number): TaskSpan | null {
+    const { startDate, startTime, endDate, endTime } = dates;
+    /** The end of the visual day `day`. */
+    const endOf = (day: string) => dayStart(DateUtils.addDays(day, 1), startHour);
 
     if (!startDate) {
         if (!endDate) return null;
@@ -94,9 +111,8 @@ function rawSpanOf(stated: StatedDates, startHour: number): TaskSpan | null {
                 endMs: instantAt(endDate, end),
             };
         }
-        // A bare end date: the visual day its implicit end falls in.
-        const day = startHour === 0 ? endDate : DateUtils.addDays(endDate, -1);
-        return { startMs: dayStart(day, startHour), endMs: instantAt(endDate, afterDateEnd) };
+        // A bare end date: that whole day.
+        return { startMs: dayStart(endDate, startHour), endMs: endOf(endDate) };
     }
 
     const start = startTime ? DateUtils.timeToMinutes(startTime) : startHour * 60;
@@ -108,20 +124,11 @@ function rawSpanOf(stated: StatedDates, startHour: number): TaskSpan | null {
             return { startMs, endMs: instantAt(end < start ? DateUtils.addDays(startDate, 1) : startDate, end) };
         }
         if (startTime) return { startMs, endMs: instantAt(startDate, start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES) };
-        return { startMs, endMs: instantAt(startDate, start + MINUTES_PER_DAY) };
+        return { startMs, endMs: endOf(startDate) };
     }
 
-    // A written end date. The implicit end, `(startHour−1):59`, is read as
-    // that minute when weighed against the start.
-    const end = endTime ? DateUtils.timeToMinutes(endTime) : afterDateEnd - 1;
-    if (startDate === endDate && !startTime !== !endTime && end < start) {
-        // One side implicit and the end before the start on the same date:
-        // the implicit side gives way (start at 00:00, or end at 23:59).
-        return startTime
-            ? { startMs, endMs: instantAt(endDate, MINUTES_PER_DAY - 1) }
-            : { startMs: instantAt(startDate, 0), endMs: instantAt(endDate, end) };
-    }
-    return { startMs, endMs: instantAt(endDate, endTime ? end : afterDateEnd) };
+    // A written end date: its written time, or the end of that day.
+    return { startMs, endMs: endTime ? instantAt(endDate, DateUtils.timeToMinutes(endTime)) : endOf(endDate) };
 }
 
 function dueMsOf(due: string | undefined, startHour: number): number | null {
@@ -131,17 +138,6 @@ function dueMsOf(due: string | undefined, startHour: number): number | null {
         ? instantAt(date, DateUtils.timeToMinutes(time))
         : dayStart(DateUtils.addDays(date, 1), startHour);
     return Number.isFinite(ms) ? ms : null;
-}
-
-/**
- * The date a date-only end is written with to end at `endMs` (a day's
- * start), under the rule `resolveSpan` reads it by: the end of E's implicit
- * `(startHour−1):59`, which is `dayStart(E)`, or at `startHour` 0 the end of
- * E itself.
- */
-export function dateOnlyEndDate(endMs: number, startHour: number): string {
-    const { date } = instantText(endMs);
-    return startHour === 0 ? DateUtils.addDays(date, -1) : date;
 }
 
 /**
@@ -167,9 +163,11 @@ export function sideValues(task: SideSource, startHour: number): { start: SideVa
     const { span, stated } = task;
     if (!span) return null;
 
-    // A side rests on a bare date when no time stands behind it.
-    const bareStart = stated.startDate ? !stated.startTime : !stated.endTime;
-    const bareEnd = !stated.endTime && (!!stated.endDate || !stated.startTime);
+    // A side rests on a bare date when no time stands behind it. A task with
+    // only a due rests on the due (`spanDates`).
+    const dates = spanDates(stated);
+    const bareStart = dates.startDate ? !dates.startTime : !dates.endTime;
+    const bareEnd = !dates.endTime && (!!dates.endDate || !dates.startTime);
     const start = instantText(span.startMs);
     const end = instantText(span.endMs);
 
@@ -178,7 +176,7 @@ export function sideValues(task: SideSource, startHour: number): { start: SideVa
             bareStart ? visualDayOf(span.startMs, startHour) : start.date,
             bareStart ? undefined : start.time),
         end: side(task.endDate, task.endTime, stated.endDate, stated.endTime,
-            bareEnd ? dateOnlyEndDate(span.endMs, startHour) : end.date,
+            bareEnd ? endDayOf(span.endMs, startHour) : end.date,
             bareEnd ? undefined : end.time),
     };
 }

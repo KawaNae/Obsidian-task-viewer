@@ -81,22 +81,14 @@ function unshiftVisual(visualDate: string, time: string | undefined, startHour: 
 }
 
 /**
- * Convert inclusive visual edits to a raw `Partial<Task>` update.
+ * Convert a drag's edits in visual days to a raw `Partial<Task>` update: the
+ * single boundary between the drag and resize layer (which thinks in the
+ * visual days `visualDaysOf` gives) and the line's dates.
  *
- * This is the **single boundary** between drag/resize layer (which thinks in
- * inclusive visual days, as `visualDaysOf` gives them) and the raw Task
- * layer (where `endDate` is exclusive when `endTime` is absent and inclusive
- * when `endTime` is present — a dual semantic preserved for parser/writer
- * round-trip with the external @notation).
- *
- * `baseTask` provides the existing endTime to decide which semantic applies
- * to the raw `endDate` write. If `edits.endTime` is also being
- * changed, the edit value wins (a drag that adds/removes endTime can flip the
- * semantic).
- *
- * Drag write-back must always go through this function. Direct
- * `addDays(visualEnd, 1)` in caller code is the bug pattern this helper
- * eliminates.
+ * A side is written on the visual day it is on: a bare date as that day (a
+ * bare end date is the end of the day it names, so the last day drawn is the
+ * date written), a time before `startHour` on the next calendar date.
+ * `baseTask` gives the time a side keeps when the edit does not change it.
  */
 export function materializeRawDates(
     edits: DisplayDateEdits,
@@ -116,18 +108,10 @@ export function materializeRawDates(
     }
 
     if (edits.endDay !== undefined) {
-        const willHaveEndTime = edits.endTime !== undefined
-            ? !!edits.endTime
-            : !!baseTask.endTime;
-        if (willHaveEndTime) {
-            const endTime = edits.endTime !== undefined
-                ? edits.endTime
-                : baseTask.endTime;
-            updates.endDate = unshiftVisual(edits.endDay, endTime, startHour);
-        } else {
-            // pure all-day: visual inclusive end → raw exclusive (+1)
-            updates.endDate = DateUtils.addDays(edits.endDay, 1);
-        }
+        const time = edits.endTime !== undefined
+            ? edits.endTime
+            : baseTask.endTime;
+        updates.endDate = unshiftVisual(edits.endDay, time, startHour);
     }
     if (edits.endTime !== undefined) {
         updates.endTime = edits.endTime;

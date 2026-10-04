@@ -82,7 +82,7 @@ describe('toDisplayTask', () => {
 
     it('resolves E-AllDay (endDate only)', () => {
         const dt = shown({ endDate: '2026-01-15' });
-        expect(moments(dt.span)).toEqual({ start: '2026-01-14 05:00', end: '2026-01-15 05:00' });
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 05:00', end: '2026-01-16 05:00' });
         expect(dt.stated.startDate).toBeUndefined();
     });
 
@@ -102,7 +102,7 @@ describe('toDisplayTask', () => {
             startDate: '2026-01-15',
             endDate: '2026-01-17',
         });
-        expect(moments(dt.span)?.end).toBe('2026-01-17 05:00');
+        expect(moments(dt.span)?.end).toBe('2026-01-18 05:00');
         expect(dt.stated.endTime).toBeUndefined();
     });
 
@@ -202,7 +202,7 @@ describe('splitDisplayTaskAtBoundary', () => {
 });
 
 describe('materializeRawDates', () => {
-    it('endTime 有り: visual end → raw inclusive (no +1)', () => {
+    it('endTime 有り: 見た目の最後の日を書く', () => {
         const base = makeTask({
             startDate: '2026-05-13', startTime: '07:30',
             endDate: '2026-05-19', endTime: '09:45',
@@ -211,20 +211,26 @@ describe('materializeRawDates', () => {
             { endDay: '2026-05-19' },
             base, startHour,
         );
-        expect(updates.endDate).toBe('2026-05-19'); // +1 されない
+        expect(updates.endDate).toBe('2026-05-19');
     });
 
-    it('endTime 無し allday: visual end → raw exclusive (+1)', () => {
+    it('endTime 無し allday: 見た目の最後の日をそのまま書く', () => {
         const base = makeTask({
             startDate: '2026-05-04',
-            endDate: '2026-05-09', // exclusive raw (visual end = 5/8)
+            endDate: '2026-05-08',
         });
-        // visual end は inclusive 5/8
         const updates = materializeRawDates(
-            { endDay: '2026-05-08' },
+            { endDay: '2026-05-10' },
             base, startHour,
         );
-        expect(updates.endDate).toBe('2026-05-09'); // +1 される
+        expect(updates.endDate).toBe('2026-05-10');
+    });
+
+    it('startHour 0 でも見た目の最後の日をそのまま書く', () => {
+        const base = makeTask({ startDate: '2026-05-04', endDate: '2026-05-08' });
+        expect(materializeRawDates({ endDay: '2026-05-10' }, base, 0).endDate).toBe('2026-05-10');
+        const dt = toDisplayTask(base, 0, NO_TASK_LOOKUP);
+        expect(visualDaysOf(dt.drawn!, 0).last).toBe('2026-05-08');
     });
 
     it('cross-midnight start (startTime < startHour): unshift で +1 day', () => {
@@ -266,27 +272,24 @@ describe('materializeRawDates', () => {
     it('round-trip: pure allday task で no-op edit すると base と一致', () => {
         const base = makeTask({
             startDate: '2026-05-04',
-            endDate: '2026-05-09', // exclusive
+            endDate: '2026-05-08',
         });
         const dt = toDisplayTask(base, startHour, NO_TASK_LOOKUP);
-        // span は 5/9 05:00 で終わり、その前の瞬間の visual day は前日 (5/8)
+        // span は 5/9 05:00 で終わり、その前の瞬間の visual day は 5/8
         const days = visualDaysOf(dt.drawn!, startHour);
         expect(days.last).toBe('2026-05-08');
         const updates = materializeRawDates(
             { endDay: days.last },
             base, startHour,
         );
-        // edits に endTime を含めないので willHaveEndTime=false 経路 → +1
-        expect(updates.endDate).toBe(base.endDate); // 5-09 が再構築される
+        expect(updates.endDate).toBe(base.endDate);
     });
 
-    it('endTime を edit で「付ける」と inclusive 経路に切り替わる', () => {
-        // base は pure allday (endTime なし、endDate=exclusive 5-09)
+    it('endTime を edit で付けると、その日付と時刻を書く', () => {
         const base = makeTask({
             startDate: '2026-05-04',
-            endDate: '2026-05-09',
+            endDate: '2026-05-08',
         });
-        // edit で endTime を付ける → willHaveEndTime=true → 不変 (no +1)
         const updates = materializeRawDates(
             { endDay: '2026-05-08', endTime: '17:00' },
             base, startHour,
@@ -295,21 +298,17 @@ describe('materializeRawDates', () => {
         expect(updates.endTime).toBe('17:00');
     });
 
-    it('endTime を edit で「消す」と exclusive 経路に切り替わる', () => {
-        // base は endTime あり (raw endDate=inclusive)
+    it('endTime を edit で消すと、見た目の最後の日をそのまま書く', () => {
         const base = makeTask({
             startDate: '2026-05-13', startTime: '07:30',
             endDate: '2026-05-19', endTime: '09:45',
         });
-        // edit で endTime を空文字で消去 (undefined ではなく明示的に空)
-        // ただし現状の DisplayDateEdits は string 型なので空文字での消去は表現できない。
-        // ここでは endTime を空文字で渡すと willHaveEndTime=false になることを確認。
+        // 空文字の endTime は時刻を消す
         const updates = materializeRawDates(
             { endDay: '2026-05-19', endTime: '' as any },
             base, startHour,
         );
-        // willHaveEndTime=false 経路: visual 5-19 → raw 5-20 (exclusive)
-        expect(updates.endDate).toBe('2026-05-20');
+        expect(updates.endDate).toBe('2026-05-19');
         expect(updates.endTime).toBe('');
     });
 
@@ -369,9 +368,9 @@ describe('toDisplayTask — cascade 継承日時の解決', () => {
         expect(visualDaysOf(dt.drawn!, startHour).first).toBe('2026-01-15');
     });
 
-    it('時刻なしの継承 endDate は従来どおり allDay', () => {
+    it('時刻なしの継承 endDate はその日の allDay', () => {
         const dt = shown({ cascadeContext: { endDate: '2026-01-15' } });
-        expect(moments(dt.span)?.end).toBe('2026-01-15 05:00');
+        expect(moments(dt.span)?.end).toBe('2026-01-16 05:00');
         expect(classifyForSection(dt, startHour)).toBe('allDay');
     });
 

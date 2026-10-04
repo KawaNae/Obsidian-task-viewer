@@ -67,8 +67,8 @@ export abstract class BaseDragStrategy implements DragStrategy {
      *   されるため、再 render 後にも同じ task が selected であるよう保証）
      *
      * 各 finish は visual edits の組み立てに専念し、raw `Partial<Task>` を
-     * 直接作らない。これにより endDate inclusive/exclusive の dual semantic を
-     * 1 箇所（materializeRawDates）に閉じ込める。
+     * 直接作らない。視覚日から行の日付への変換は 1 箇所
+     * （materializeRawDates）だけが持つ。
      *
      * @returns 実際に書き戻したか。false は「掴んだが値は変わっていない」か
      *          「書き込みが拒否された」＝ファイルは旧ジオメトリのままで、ソース
