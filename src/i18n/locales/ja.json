@@ -478,6 +478,7 @@
     "dateOptional": "日付（オプション）",
     "editType": "{{type}}を編集",
     "emptyTaskWarning": "タスク名と日付が両方空です — このタスクはビューアーに表示されません。",
+    "nameRequired": "タスク名が必要です。",
     "openDatePicker": "日付ピッカーを開く",
     "openTimePicker": "時刻ピッカーを開く",
     "openColorPicker": "カラーピッカーを開く",

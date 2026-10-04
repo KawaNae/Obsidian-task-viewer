@@ -478,6 +478,7 @@
     "dateOptional": "Date (optional)",
     "editType": "Edit {{type}}",
     "emptyTaskWarning": "Task name and date are both empty — this task will not appear in the viewer.",
+    "nameRequired": "A task name is required.",
     "openDatePicker": "Open date picker",
     "openTimePicker": "Open time picker",
     "openColorPicker": "Open color picker",
