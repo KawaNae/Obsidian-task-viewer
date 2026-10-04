@@ -21,8 +21,7 @@ export class KanbanToolbar extends ViewToolbarBase {
 
     constructor(private deps: KanbanToolbarDeps) {
         super();
-        this.filterMenu = new FilterMenuComponent(deps.host.app);
-        this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
+        this.filterMenu = new FilterMenuComponent(deps.host.app, () => deps.host.plugin.settings);
         deps.host.store.subscribe(() => this.update());
     }
 

@@ -76,6 +76,20 @@ export function isDateTimeText(value: DateFilterValue): value is string {
     return typeof value === 'string' && DATE_TIME_TEXT.test(value);
 }
 
+/**
+ * Whether a range's ends are written the wrong way round: both are dates or
+ * dates and times, and `from` comes after `to` (its day, or on one day its
+ * time). Such a range names no time and matches nothing, so the reader
+ * refuses it and the menu does not take it.
+ */
+export function isReversedRange(range: DateRangeValue): boolean {
+    const { from, to } = range;
+    if (from === undefined || to === undefined || isPresetValue(from) || isPresetValue(to) || from === '' || to === '') return false;
+    const [fromDay, toDay] = [from.slice(0, 10), to.slice(0, 10)];
+    if (fromDay !== toDay) return fromDay > toDay;
+    return isDateTimeText(from) && isDateTimeText(to) && from > to;
+}
+
 export type FilterTarget = 'self' | 'parent';
 
 interface Targeted {

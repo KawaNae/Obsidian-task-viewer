@@ -1,15 +1,17 @@
 import { setIcon, type App } from 'obsidian';
 import type {
-    ContentCondition, DateCondition, LengthCondition, PropertyCondition, TagCondition, TextListCondition,
-    DateFilterValue,
+    ContentCondition, DateCondition, LengthCondition, PeriodCondition, PropertyCondition, TagCondition, TextListCondition,
+    DateFilterValue, DateRangeValue, PresetValue, SingleDateValue,
 } from '../../services/filter/FilterTypes';
 import {
-    DEFAULT_NEXT_N_DAYS, LENGTH_RANGE, NEXT_N_DAYS_RANGE, RELATIVE_DATE_PRESETS, getRelativeDateLabel, isPresetValue,
+    DEFAULT_NEXT_N_DAYS, LENGTH_RANGE, NEXT_N_DAYS_RANGE, RELATIVE_DATE_PRESETS, getRelativeDateLabel,
+    isDateRange, isDateTimeText, isPresetValue, isReversedRange, takesRange,
 } from '../../services/filter/FilterTypes';
-import type { StatusDefinition, Task } from '../../types';
+import { asDate, asPreset, asRange } from '../../services/filter/FilterEdit';
+import type { WindowContext } from '../../utils/DayWindow';
+import type { Task, TaskViewerSettings } from '../../types';
 import type { FilterDropdownMenus } from './FilterDropdownMenus';
 import { getAvailableValues, getValueDisplay, type ConditionEditor } from './FilterValueHelpers';
-import { DateUtils } from '../../utils/DateUtils';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { t } from '../../i18n';
 import { ValueSuggest, type ValueSuggestOptions } from '../../suggest/ValueSuggest';
@@ -17,9 +19,20 @@ import { onFormEnter } from '../../modals/form/formEnter';
 import { bindField } from '../../modals/form/bindField';
 import { IssueBoard, readIssue } from '../../modals/form/FormIssue';
 import { FloatInput, IntInput } from '../../utils/values/NumberValues';
+import { DateInput } from '../../utils/values/DateValues';
+import { createPickerTextField } from '../../modals/form/PickerTextField';
 import { optional, type FieldCodec } from '../../utils/values/Read';
 
 type ListCondition = TextListCondition | TagCondition;
+/** A row whose value is a date filter value. */
+export type DateRowCondition = DateCondition | PeriodCondition;
+/** The kinds of value the kind button picks. */
+type DateKind = 'date' | 'preset' | 'range';
+/** A row's date fields: its one value, or a range's two ends. */
+type DateSlot = 'value' | 'from' | 'to';
+
+/** What the menu reads of the settings: the statuses' names, and the week and the day relative values count from. */
+export type FilterMenuSettings = Pick<TaskViewerSettings, 'statusDefinitions' | 'weekStartDay' | 'startHour'>;
 
 /**
  * The value controls of one filter row. Each control reads the condition it
@@ -33,7 +46,7 @@ export class FilterConditionRenderer {
     constructor(
         private app: App,
         private dropdowns: FilterDropdownMenus,
-        private getStatusDefs: () => StatusDefinition[],
+        private settings: () => FilterMenuSettings,
         private getLastTasks: () => Task[],
     ) {}
 
@@ -192,7 +205,7 @@ export class FilterConditionRenderer {
             attr: { placeholder: prop === 'tag' ? t('filter.typeTag') : t('filter.typeToFilter') },
         });
 
-        const statusDefs = this.getStatusDefs();
+        const statusDefs = this.settings().statusDefinitions;
         const tasks = this.getLastTasks();
 
         const addValue = (val: string) => {
@@ -245,7 +258,7 @@ export class FilterConditionRenderer {
     }
 
     private renderValuePill(container: HTMLElement, value: string, edit: ConditionEditor<ListCondition>): void {
-        const statusDefs = this.getStatusDefs();
+        const statusDefs = this.settings().statusDefinitions;
         const property = edit.current().property;
         const pill = container.createDiv('tv-ctrl__pill');
         if (property === 'color') {
@@ -269,65 +282,175 @@ export class FilterConditionRenderer {
     }
 
     /**
-     * A date row's value: a preset, or a day. A row with no day chosen yet
-     * (none, or `''`) shows the day input empty: it constrains nothing.
+     * A date or period row's value, of one of three kinds the kind button
+     * picks: a date, a preset, or a range (where the row takes one,
+     * `takesRange`). A date is a field of the day (`DateInput`); a value
+     * with a time shows its day there and the time faint beside it, and
+     * keeps the time when the day changes. A row with no date chosen yet
+     * (none, or `''`) shows its field empty: it constrains nothing.
      */
-    renderDateValueSelector(row: HTMLElement, edit: ConditionEditor<DateCondition>): void {
+    renderDateValueSelector(row: HTMLElement, edit: ConditionEditor<DateRowCondition>): void {
         const container = row.createDiv('filter-popover__date-value');
-        const dateVal = edit.current().value;
-        const relVal = dateVal !== undefined && isPresetValue(dateVal) ? dateVal : null;
+        const value = edit.current().value ?? '';
+        const kind: DateKind = isDateRange(value) ? 'range' : isPresetValue(value) ? 'preset' : 'date';
+        const inputs: Partial<Record<DateSlot, HTMLElement>> = {};
+        const issues = this.issueBoard(row, inputs);
 
-        // Mode toggle button: "Relative" / "Absolute"
-        const modeBtn = container.createEl('button', {
-            cls: 'filter-popover__dropdown filter-popover__date-mode-btn',
-            text: relVal ? t('filter.relative') : t('filter.absolute'),
+        const kindBtn = container.createEl('button', {
+            cls: 'filter-popover__dropdown filter-popover__date-kind-btn',
+            text: t(`filter.dateKind.${kind}`),
         });
-        modeBtn.addEventListener('click', (e) => {
+        kindBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const value: DateFilterValue = relVal ? DateUtils.getToday() : { preset: 'today' };
+            this.showDateKindMenu(kindBtn, edit, kind);
+        });
+
+        if (isPresetValue(value)) {
+            this.renderPresetValue(container, row, edit, value);
+            return;
+        }
+        if (isDateRange(value)) {
+            const box = container.createDiv('filter-popover__range');
+            const end = (side: 'from' | 'to') => this.renderDateField(box, issues, inputs, side, {
+                value: () => {
+                    const now = edit.current().value;
+                    return now !== undefined && isDateRange(now) ? now[side] : undefined;
+                },
+                commit: (next) => {
+                    const now = edit.current().value;
+                    const range: DateRangeValue = { ...(now !== undefined && isDateRange(now) ? now : {}), [side]: next };
+                    if (isReversedRange(range)) {
+                        issues.set('reversed', [{ at: side, tone: 'error', text: t('filter.rangeReversed') }]);
+                        return false;
+                    }
+                    issues.set('reversed', []);
+                    edit.update(c => ({ ...c, value: range }), 'keep');
+                    return true;
+                },
+                label: side === 'from' ? t('filter.rangeFrom') : t('filter.rangeTo'),
+            });
+            end('from');
+            box.createSpan({ cls: 'filter-popover__range-sep', text: '〜' });
+            end('to');
+            return;
+        }
+        this.renderDateField(container, issues, inputs, 'value', {
+            value: () => {
+                const now = edit.current().value;
+                return now !== undefined && !isDateRange(now) ? now : undefined;
+            },
+            commit: (next) => {
+                edit.update(c => ({ ...c, value: next }), 'keep');
+                return true;
+            },
+        });
+    }
+
+    /** Turn the value to another kind (`asDate`, `asPreset`, `asRange`); a range only where the row takes one. */
+    private showDateKindMenu(anchorEl: HTMLElement, edit: ConditionEditor<DateRowCondition>, current: DateKind): void {
+        const { property, operator } = edit.current();
+        const kinds: DateKind[] = takesRange(property, operator) ? ['date', 'preset', 'range'] : ['date', 'preset'];
+        const items = kinds.map(k => ({ label: t(`filter.dateKind.${k}`), value: k, checked: k === current }));
+        this.dropdowns.showSelectPopover(anchorEl, items, (val) => {
+            const kind = kinds.find(k => k === val);
+            if (!kind || kind === current) return;
+            const now = edit.current().value ?? '';
+            const ctx = this.windowContext();
+            const value: DateFilterValue = kind === 'date' ? asDate(now, ctx) : kind === 'preset' ? asPreset(now) : asRange(now, ctx);
             edit.update(c => ({ ...c, value }), 'redraw');
         });
+    }
 
-        if (relVal) {
-            // Relative preset dropdown
-            const presetBtn = container.createEl('button', {
-                cls: 'filter-popover__dropdown',
-                text: relVal.preset === 'nextNDays'
-                    ? t('filter.relativeDate.nextNDaysValue', { n: relVal.n ?? DEFAULT_NEXT_N_DAYS })
-                    : getRelativeDateLabel(relVal.preset),
-            });
-            presetBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.showRelativeDateMenu(presetBtn, edit);
-            });
+    /** A preset's button, and the N of `nextNDays`. */
+    private renderPresetValue(container: HTMLElement, row: HTMLElement, edit: ConditionEditor<DateRowCondition>, value: PresetValue): void {
+        const presetBtn = container.createEl('button', { cls: 'filter-popover__dropdown', text: presetLabel(value) });
+        presetBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.showRelativeDateMenu(presetBtn, edit);
+        });
 
-            // N of nextNDays: a whole number, one or more
-            if (relVal.preset === 'nextNDays') {
-                this.renderNumberField(container, row, {
-                    codec: IntInput.codec(NEXT_N_DAYS_RANGE),
-                    current: () => {
-                        const value = edit.current().value;
-                        return (value !== undefined && isPresetValue(value) ? value.n : undefined) ?? DEFAULT_NEXT_N_DAYS;
-                    },
-                    commit: (n) => edit.update(c => ({ ...c, value: { preset: 'nextNDays', n } }), 'keep'),
-                    placeholder: 'N',
-                    inputMode: 'numeric',
-                });
-            }
-        } else {
-            // Absolute date: native date input
-            const dateInput = container.createEl('input', {
-                cls: 'tv-ctrl__text-input filter-popover__date-input',
-                type: 'date',
-            });
-            dateInput.value = typeof dateVal === 'string' ? dateVal : '';
-            dateInput.addEventListener('change', () => {
-                edit.update(c => ({ ...c, value: dateInput.value }), 'keep');
+        // N of nextNDays: a whole number, one or more
+        if (value.preset === 'nextNDays') {
+            this.renderNumberField(container, row, {
+                codec: IntInput.codec(NEXT_N_DAYS_RANGE),
+                current: () => {
+                    const now = edit.current().value;
+                    return (now !== undefined && isPresetValue(now) ? now.n : undefined) ?? DEFAULT_NEXT_N_DAYS;
+                },
+                commit: (n) => edit.update(c => ({ ...c, value: { preset: 'nextNDays', n } }), 'keep'),
+                placeholder: 'N',
+                inputMode: 'numeric',
             });
         }
     }
 
-    private showRelativeDateMenu(anchorEl: HTMLElement, edit: ConditionEditor<DateCondition>): void {
+    /**
+     * A field of a day (段10's field: text, a picker, a clear button),
+     * bound to the date of `value` (`bindField`). What does not read is said
+     * under the row's value line and is not committed. A value with a time
+     * shows the time faint beside the field and keeps it when the day
+     * changes; emptying the field takes the time too. A preset (a range's
+     * end) shows the field empty with the preset's name as its placeholder,
+     * and stays until a day is put in.
+     */
+    private renderDateField(
+        container: HTMLElement,
+        issues: IssueBoard<DateSlot>,
+        inputs: Partial<Record<DateSlot, HTMLElement>>,
+        at: DateSlot,
+        opts: {
+            value(): SingleDateValue | undefined;
+            /** Commit the end's next value; false when the menu does not take it (a reversed range). */
+            commit(next: SingleDateValue): boolean;
+            label?: string;
+        },
+    ): void {
+        const slot = container.createDiv('filter-popover__date-slot');
+        const codec = optional(DateInput);
+        const current = (): string | undefined => {
+            const v = opts.value();
+            if (v === undefined || v === '' || isPresetValue(v)) return undefined;
+            return isDateTimeText(v) ? v.slice(0, 10) : v;
+        };
+        const timeOf = (): string => {
+            const v = opts.value();
+            return v !== undefined && isDateTimeText(v) ? v.slice(11) : '';
+        };
+        const initial = opts.value();
+        const placeholder = initial !== undefined && isPresetValue(initial) ? presetLabel(initial) : 'YYYY-MM-DD';
+
+        const field = createPickerTextField(slot, 'date', placeholder, codec.show(current()), {
+            onPick: () => bound.commit(),
+            onClear: () => bound.commit(),
+        });
+        field.el.addClass('filter-popover__date-field');
+        if (opts.label) field.input.setAttribute('aria-label', opts.label);
+        inputs[at] = field.input;
+
+        const time = slot.createSpan({ cls: 'filter-popover__date-time' });
+        const showTime = () => {
+            const text = timeOf();
+            time.setText(text);
+            time.toggle(text !== '');
+        };
+        showTime();
+
+        const bound = bindField(field.input, {
+            codec,
+            current,
+            commit: (day) => {
+                const clock = timeOf();
+                const next: SingleDateValue = day === undefined ? '' : clock ? `${day}T${clock}` : day;
+                if (!opts.commit(next)) return false;
+                showTime();
+                return true;
+            },
+            issues: (issue) => issues.set(`read:${at}`, readIssue(at, issue)),
+            put: (text) => field.setText(text),
+        });
+    }
+
+    private showRelativeDateMenu(anchorEl: HTMLElement, edit: ConditionEditor<DateRowCondition>): void {
         const dateVal = edit.current().value;
         const currentPreset = dateVal !== undefined && isPresetValue(dateVal) ? dateVal.preset : 'today';
 
@@ -394,8 +517,7 @@ export class FilterConditionRenderer {
         input.inputMode = opts.inputMode;
         if (opts.placeholder) input.placeholder = opts.placeholder;
         input.value = opts.codec.show(opts.current());
-        const says = line.createDiv({ cls: 'tv-form__says filter-popover__says' });
-        const issues = new IssueBoard<'value'>({ field: () => ({ input, message: says }), form: says });
+        const issues = this.issueBoard<'value'>(line, { value: input });
         bindField(input, {
             codec: opts.codec,
             current: opts.current,
@@ -403,4 +525,27 @@ export class FilterConditionRenderer {
             issues: (issue) => issues.set('read', readIssue('value', issue)),
         });
     }
+
+    /**
+     * Where a row's fields say what is wrong: a line under the row's value
+     * line, each field marked by its error. `inputs` names the fields; one
+     * drawn after the board is made is put in it then.
+     */
+    private issueBoard<F extends string>(line: HTMLElement, inputs: Partial<Record<F, HTMLElement>>): IssueBoard<F> {
+        const says = line.createDiv({ cls: 'tv-form__says filter-popover__says' });
+        return new IssueBoard<F>({ field: (at) => ({ input: inputs[at] ?? null, message: says }), form: says });
+    }
+
+    /** What relative values count from: the settings' week and day, and now. */
+    private windowContext(): WindowContext {
+        const { weekStartDay, startHour } = this.settings();
+        return { weekStartDay, startHour, now: new Date() };
+    }
+}
+
+/** The name of a preset, `nextNDays` with its N. */
+function presetLabel(value: PresetValue): string {
+    return value.preset === 'nextNDays'
+        ? t('filter.relativeDate.nextNDaysValue', { n: value.n ?? DEFAULT_NEXT_N_DAYS })
+        : getRelativeDateLabel(value.preset);
 }
