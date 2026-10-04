@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../../src/services/display/DisplayTaskConverter';
-import { isTaskCompleted, getOverdueLevel } from '../../../../src/services/display/TaskStatusQuery';
+import { isTaskCompleted, getOverdueLevel, exceedsDue } from '../../../../src/services/display/TaskStatusQuery';
+import { cardOverdueLevel } from '../../../../src/views/taskcard/TaskCardRenderer';
 import type { DisplayTask, Task, StatusDefinition } from '../../../../src/types';
 import { DEFAULT_STATUS_DEFINITIONS } from '../../../../src/types';
 import type { TaskReadService } from '../../../../src/services/data/TaskReadService';
@@ -211,5 +212,68 @@ describe('getOverdueLevel', () => {
         };
         vi.setSystemTime(new Date(2026, 6, 18, 17, 0));
         expect(level(segment)).toBe('none');
+    });
+});
+
+describe('exceedsDue', () => {
+    // It does not read the clock: the same answer at any now (10/09 here).
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 9, 9, 10, 0));
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(undefined);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const exceeds = (dt: DisplayTask) => exceedsDue(dt, defs, mockReadService);
+
+    it('@2026-10-12>>2026-10-10 runs past its due', () => {
+        expect(exceeds(makeDisplayTask({ startDate: '2026-10-12', due: '2026-10-10' }))).toBe(true);
+    });
+
+    it('@2026-10-10>>2026-10-10 ends with its due', () => {
+        expect(exceeds(makeDisplayTask({ startDate: '2026-10-10', due: '2026-10-10' }))).toBe(false);
+    });
+
+    it('@2026-10-10T10:00>>2026-10-10T09:00 runs past its due', () => {
+        expect(exceeds(makeDisplayTask({ startDate: '2026-10-10', startTime: '10:00', due: '2026-10-10T09:00' }))).toBe(true);
+    });
+
+    it('a completed task does not', () => {
+        expect(exceeds(makeDisplayTask({ statusChar: 'x', startDate: '2026-10-12', due: '2026-10-10' }))).toBe(false);
+    });
+
+    it('a task with only a due, or no due, does not', () => {
+        expect(exceeds(makeDisplayTask({ due: '2026-10-10' }))).toBe(false);
+        expect(exceeds(makeDisplayTask({ startDate: '2026-10-12' }))).toBe(false);
+    });
+});
+
+describe('cardOverdueLevel', () => {
+    const at = (m: number, d: number, h: number) => new Date(2026, m - 1, d, h, 0).getTime();
+    const card = (dt: DisplayTask, now: number) => cardOverdueLevel(dt, defs, mockReadService, now);
+
+    beforeEach(() => {
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(undefined);
+    });
+
+    it('shows past-due before the due when the span runs past it', () => {
+        expect(card(makeDisplayTask({ startDate: '2026-10-12', due: '2026-10-10' }), at(10, 9, 10))).toBe('past-due');
+    });
+
+    it('turns none into past-due; the overdue level alone stays none', () => {
+        const dt = makeDisplayTask({ startDate: '2026-10-10', startTime: '10:00', due: '2026-10-10T09:00' });
+        expect(getOverdueLevel(dt, defs, mockReadService, at(10, 9, 10))).toBe('none');
+        expect(card(dt, at(10, 9, 10))).toBe('past-due');
+    });
+
+    // A span that has ended (past-end) and runs past the due has passed the
+    // due as well, so past-end and exceedsDue meet only as past-due.
+
+    it('is the overdue level otherwise', () => {
+        expect(card(makeDisplayTask({ startDate: '2026-10-10', due: '2026-10-10' }), at(10, 9, 10))).toBe('none');
+        expect(card(makeDisplayTask({ startDate: '2026-10-08', due: '2026-10-10' }), at(10, 9, 10))).toBe('past-end');
     });
 });
