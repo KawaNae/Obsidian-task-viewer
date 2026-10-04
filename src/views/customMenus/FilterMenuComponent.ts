@@ -1,4 +1,4 @@
-import { setIcon, type Keymap } from 'obsidian';
+import { setIcon, type App } from 'obsidian';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterState, FilterCondition, FilterGroup, FilterItem } from '../../services/filter/FilterTypes';
 import {
@@ -61,15 +61,15 @@ export class FilterMenuComponent {
     private dropdowns: FilterDropdownMenus;
     private conditionRenderer: FilterConditionRenderer;
 
-    /** @param keymap Obsidian's keymap, whose hotkeys the menu keeps out while it has the focus. */
-    constructor(private readonly keymap: Keymap) {
+    /** @param app the app: its keymap, whose hotkeys the menu keeps out while it has the focus, and the lists under its fields. */
+    constructor(private readonly app: App) {
         const getStack = () => this.stack;
         this.dropdowns = new FilterDropdownMenus(getStack);
         this.conditionRenderer = new FilterConditionRenderer(
+            app,
             this.dropdowns,
             () => this.statusDefs,
             () => this.lastTasks,
-            getStack,
         );
     }
 
@@ -102,12 +102,13 @@ export class FilterMenuComponent {
             anchor,
             panelClass: 'filter-popover',
             childStack: this.stack,
-            keymap: this.keymap,
+            keymap: this.app.keymap,
             build: (bodyEl) => {
                 this.rootEl = bodyEl;
                 this.renderContent();
             },
             onClose: () => {
+                this.conditionRenderer.closeLists();
                 this.stack.closeAll();
                 this.rootEl = null;
             },
@@ -122,6 +123,7 @@ export class FilterMenuComponent {
 
     private renderContent(): void {
         if (!this.rootEl) return;
+        this.conditionRenderer.closeLists();
         this.rootEl.empty();
 
         if (this.state.filters.length === 0) {

@@ -2,7 +2,6 @@ import type { App } from 'obsidian';
 import type { Task } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { IndexReads } from '../../../services/core/TaskIndex';
-import type { PopoverStack } from '../../../views/sharedUI/PopoverStack';
 import type { CascadeSourceKind } from '../CascadeSource';
 import type { DateKey } from '../../form/DateFieldGroup';
 import type { IssueBoard } from '../../form/FormIssue';
@@ -46,16 +45,6 @@ export interface FieldGroupContext {
     app: App;
     plugin: PluginContext;
     index: IndexReads;
-    stack: PopoverStack;
-    attachSuggest: (
-        input: HTMLInputElement,
-        anchorEl: HTMLElement,
-        opts: {
-            getCandidates: (query: string) => string[];
-            renderItem?: (itemEl: HTMLElement, value: string) => void;
-            onPick: (value: string) => void;
-        },
-    ) => void;
     sourceLabel: (source: CascadeSourceKind) => string;
     jumpToFile: () => void;
     /**

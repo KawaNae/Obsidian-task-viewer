@@ -13,6 +13,7 @@ import { createFormRow } from '../../form/formRow';
 import { onFormEnter } from '../../form/formEnter';
 import { bindField, type BoundField } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
+import { ValueSuggest, type ValueSuggestOptions } from '../../../suggest/ValueSuggest';
 import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
 
 /**
@@ -38,6 +39,8 @@ export class PropertiesFieldGroup implements ClosingPart {
     private addRow: { keyInput: HTMLInputElement; valueInput: HTMLInputElement; readKey(): Read<string> | null; commit(): void } | null = null;
     /** What is typed in the add row and not yet added: kept across a rebuild. */
     private draft = { key: '', value: '' };
+    /** The lists under the fields as last built: closed before the rows are built anew. */
+    private suggests: ValueSuggest[] = [];
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
         this.sectionEl = container.createDiv({ cls: 'task-hub__props' });
@@ -46,6 +49,8 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     render(force = false): void {
         if (!force && this.sectionEl.contains(this.sectionEl.ownerDocument.activeElement)) return;
+        for (const suggest of this.suggests) suggest.close();
+        this.suggests = [];
         this.sectionEl.empty();
         this.valueInputs.clear();
         this.valueSays.clear();
@@ -74,11 +79,11 @@ export class PropertiesFieldGroup implements ClosingPart {
             valueInput.disabled = shut;
             this.valueInputs.set(key, valueInput);
 
-            this.ctx.attachSuggest(valueInput, valueInput, {
-                getCandidates: (q) => FilterValueCollector
+            const suggest = this.offer(valueInput, {
+                candidates: (q) => FilterValueCollector
                     .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
-                onPick: (val) => { valueInput.value = val; value.commit(); },
+                pick: (val) => { valueInput.value = val; value.commit(); },
             });
             // The value the row shows: its own, or the inherited one (left as it is, no own value is made).
             const value = bindField(valueInput, {
@@ -86,6 +91,7 @@ export class PropertiesFieldGroup implements ClosingPart {
                 current: () => (isOwn ? this.ctx.getTask().properties?.[key]?.value ?? '' : pv.value),
                 commit: (raw) => this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: PropertyValues.fromText(raw) }),
                 issues: () => { /* any text is a value */ },
+                takesEnter: () => suggest.listShown,
             });
             this.valueBound.set(key, value);
 
@@ -99,7 +105,6 @@ export class PropertiesFieldGroup implements ClosingPart {
                     delete next[key];
                     this.commit(next);
                     // 構造コミット: 楽観 model から行を即時再構築
-                    this.ctx.stack.closeAll();
                     this.render(true);
                 });
             } else if (!isOwn) {
@@ -141,25 +146,31 @@ export class PropertiesFieldGroup implements ClosingPart {
         keyInput.addEventListener('compositionend', () => readKey());
         valueInput.addEventListener('input', () => { this.draft.value = valueInput.value; });
 
-        // 候補: 既存キー（vault 全体）から未使用のもの / 値はキーに応じて
-        this.ctx.attachSuggest(keyInput, keyInput, {
-            getCandidates: (q) => {
+        // 候補: 既存キー（vault 全体）から未使用のもの / 値はキーに応じて。
+        // キーを選ぶと値の欄へ移り、値を選ぶと行を足す。
+        const keySuggest = this.offer(keyInput, {
+            candidates: (q) => {
                 const used = new Set(Object.keys(effective));
                 return FilterValueCollector.collectPropertyKeys(this.ctx.index.getTasks())
                     .filter(k => !used.has(k))
                     .filter(k => !q || k.toLowerCase().includes(q.toLowerCase()));
             },
-            onPick: (val) => { keyInput.value = val; valueInput.focus(); },
+            pick: (val) => {
+                keyInput.value = val;
+                this.draft.key = val;
+                readKey();
+                valueInput.focus();
+            },
         });
-        this.ctx.attachSuggest(valueInput, valueInput, {
-            getCandidates: (q) => {
+        const valueSuggest = this.offer(valueInput, {
+            candidates: (q) => {
                 const key = keyInput.value.trim();
                 if (!key) return [];
                 return FilterValueCollector
                     .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
             },
-            onPick: (val) => { valueInput.value = val; commitAdd(); },
+            pick: (val) => { valueInput.value = val; commitAdd(); },
         });
 
         const commitAdd = () => {
@@ -169,7 +180,6 @@ export class PropertiesFieldGroup implements ClosingPart {
             const typed = { key: keyInput.value, value: raw };
             const write = this.commit({ ...(this.ctx.getTask().properties ?? {}), [key.value]: PropertyValues.fromText(raw) });
             this.draft = { key: '', value: '' };
-            this.ctx.stack.closeAll();
             this.render(true);
             // Refused: what was typed is the add row's again, unless something was typed since.
             void write?.then((written) => {
@@ -183,8 +193,8 @@ export class PropertiesFieldGroup implements ClosingPart {
             });
         };
         this.addRow = { keyInput, valueInput, readKey, commit: commitAdd };
-        for (const input of [keyInput, valueInput]) {
-            onFormEnter(input, commitAdd);
+        for (const [input, suggest] of [[keyInput, keySuggest], [valueInput, valueSuggest]] as const) {
+            onFormEnter(input, commitAdd, { takesEnter: () => suggest.listShown });
         }
         // blur 確定ルール: key があれば value 空でも確定（空値プロパティは有効）。
         // value だけでは書き込み先がないので確定しない。
@@ -198,6 +208,13 @@ export class PropertiesFieldGroup implements ClosingPart {
         valueInput.addEventListener('blur', blurCommit);
 
         this.ctx.issues.redraw();
+    }
+
+    /** A list of values under `input`, closed when the rows are built anew. */
+    private offer(input: HTMLInputElement, opts: ValueSuggestOptions): ValueSuggest {
+        const suggest = new ValueSuggest(this.ctx.app, input, opts);
+        this.suggests.push(suggest);
+        return suggest;
     }
 
     private commit(props: Record<string, PropertyValue>): Promise<boolean> | undefined {

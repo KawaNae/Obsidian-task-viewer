@@ -6,7 +6,7 @@ import type { PluginContext } from '../../PluginContext';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { DateFieldGroup } from '../form/DateFieldGroup';
-import { buildStatusOptions, getStatusLabel } from '../../constants/statusOptions';
+import { addStatusItems, getStatusLabel } from '../../constants/statusOptions';
 import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
 import { createFormRow } from '../form/formRow';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
@@ -18,8 +18,6 @@ import { TaskContentInput } from '../../services/parsing/tv-inline/TaskContentIn
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import { openFile } from '../../utils/NavigationUtils';
-import { SuggestController } from '../../views/customMenus/SuggestController';
-import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
 import type { DateTimeFields } from '../TaskDateValidator';
 import { logError } from '../../log/log';
@@ -43,8 +41,6 @@ export interface TaskHubFormDeps {
     plugin: PluginContext;
     index: IndexReads;
     operations: Operations;
-    /** suggest（SuggestController）の子ポップオーバーを積む先（パネル所有） */
-    stack: PopoverStack;
     /** 継承ラベルクリック等でファイルへ遷移した後に呼ぶ（パネルを閉じる） */
     onNavigate?: () => void;
     /** Ask the hub to close, as the user would (`OverlayShell.requestClose`): what a close the user said to go on with does. */
@@ -140,8 +136,6 @@ export class TaskHubForm {
             app: deps.app,
             plugin: deps.plugin,
             index: deps.index,
-            stack: deps.stack,
-            attachSuggest: (input, anchorEl, opts) => this.attachSuggest(input, anchorEl, opts),
             sourceLabel: (source) => this.sourceLabel(source),
             jumpToFile: () => this.jumpToFile(),
             issues: this.issues,
@@ -186,46 +180,23 @@ export class TaskHubForm {
         });
         this.renderStatusPill();
 
-        const statusSuggest = new SuggestController(this.deps.stack, this.statusPill, '', 'min');
-        const openStatusSuggest = () => {
+        // The statuses are the card menu's (Obsidian's Menu), under the button.
+        const openStatusMenu = () => {
             if (this.shut) return;
-            this.deps.stack.closeAll();
-            const defs = this.deps.plugin.settings.statusDefinitions;
-            statusSuggest.show(
-                buildStatusOptions(defs).map(o => o.char),
-                (item, char) => {
-                    this.renderStatusPreview(item, char);
-                    item.createSpan().setText(getStatusLabel(char, defs));
-                },
-                (char) => {
-                    statusSuggest.close();
-                    this.commitStatus(char);
-                },
+            this.deps.plugin.menuPresenter.present(
+                (menu) => addStatusItems(menu, this.deps.plugin.settings.statusDefinitions, this.task.statusChar, (char) => this.commitStatus(char)),
+                { kind: 'belowRect', rect: this.statusPill.getBoundingClientRect() },
             );
         };
-        this.statusPill.addEventListener('click', openStatusSuggest);
-        // 素の Space は native button click → openStatusSuggest。矢印はハイライトを
-        // 動かす。Enter は、ハイライトがあれば確定し、無ければ一覧を開く（素の
-        // Enter の click と同じ）。
+        // A click, Space or the form's Enter opens the menu, and so does the
+        // down arrow; the menu takes the keys while it is open.
+        this.statusPill.addEventListener('click', openStatusMenu);
         this.statusPill.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (statusSuggest.isOpen) statusSuggest.moveHighlight(1);
-                else openStatusSuggest();
-            } else if (e.key === 'ArrowUp' && statusSuggest.isOpen) {
-                e.preventDefault();
-                statusSuggest.moveHighlight(-1);
-            }
+            if (e.key !== 'ArrowDown') return;
+            e.preventDefault();
+            openStatusMenu();
         });
-        onFormEnter(this.statusPill, () => {
-            const char = statusSuggest.isOpen ? statusSuggest.highlightedValue : null;
-            if (char === null) {
-                openStatusSuggest();
-                return;
-            }
-            statusSuggest.close();
-            this.commitStatus(char);
-        });
+        onFormEnter(this.statusPill, openStatusMenu);
 
         // --- Start / End / Due ---
         this.dateGroup = new DateFieldGroup(scheduleGroup, {
@@ -290,9 +261,7 @@ export class TaskHubForm {
         return this.dateGroup?.slot(at as DateKey) ?? null;
     }
 
-    // ==================== suggest 共通（filter-popover と同機構） ====================
-
-    /** status の checkbox プレビュー（filter-popover の pill / suggest item と同型） */
+    /** status の checkbox プレビュー（filter-popover の pill と同型） */
     private renderStatusPreview(container: HTMLElement, char: string): void {
         const checkbox = container.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
         checkbox.type = 'checkbox';
@@ -308,70 +277,6 @@ export class TaskHubForm {
         this.statusPill.createSpan().setText(
             getStatusLabel(this.task.statusChar, this.deps.plugin.settings.statusDefinitions),
         );
-    }
-
-    /**
-     * text input に SuggestController（候補ドロップダウン）を取り付ける。
-     * FilterConditionRenderer.renderSuggestInput と同じイベント設計
-     * （input / focus で候補表示、ArrowDown/Up でハイライト移動）。
-     *
-     * Enter（onFormEnter）は「ハイライトがあれば input.value に反映して閉じる
-     * だけ」に留める — 各フィールドの既存 Enter コミットハンドラ（この後に
-     * 登録される）が反映後の値を読んで確定する。Escape はパネル側の capture
-     * ハンドラが stack を閉じるのでここでは扱わない。
-     *
-     * フィールドグループへは FieldGroupContext.attachSuggest 経由で公開する。
-     */
-    private attachSuggest(
-        input: HTMLInputElement,
-        anchorEl: HTMLElement,
-        opts: {
-            getCandidates: (query: string) => string[];
-            renderItem?: (itemEl: HTMLElement, value: string) => void;
-            onPick: (value: string) => void;
-        },
-    ): void {
-        const suggest = new SuggestController(this.deps.stack, anchorEl, '', 'min');
-        const render = opts.renderItem
-            ?? ((item: HTMLElement, val: string) => { item.createSpan().setText(val); });
-        const show = (showAll: boolean) => {
-            if (this.shut) return;
-            // hub の stack は suggest しか持たない（root popover なし）ので、
-            // closeAll = 「他フィールドの suggest を閉じる」。
-            this.deps.stack.closeAll();
-            suggest.show(opts.getCandidates(showAll ? '' : input.value), render, (val) => {
-                suggest.close();
-                opts.onPick(val);
-            });
-        };
-        input.addEventListener('input', (e: Event) => {
-            if (!(e as InputEvent).isComposing) show(false);
-        });
-        // IME 確定後に候補を絞り直す唯一の契機。Chromium では確定の 'input'
-        // が isComposing=true で飛ぶので（bracketPairing.ts の同じ箇所を
-        // 参照）、上の listener はそれを捨てて何も更新しない。WebKit は
-        // 'compositionend' が先で確定の 'input' が後に isComposing=false で
-        // 来るため、そちらではこの listener が確定前の値で走り、後続の
-        // 'input' が確定後の値で絞り直す。どちらの順序でも 1 回は確定後の
-        // 値で走り、二重に走っても候補の再描画が 1 回増えるだけである。
-        input.addEventListener('compositionend', () => show(false));
-        input.addEventListener('focus', () => show(!input.value));
-        input.addEventListener('blur', () => suggest.close());
-        input.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (!suggest.isOpen) show(!input.value);
-                else suggest.moveHighlight(1);
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                suggest.moveHighlight(-1);
-            }
-        });
-        onFormEnter(input, () => {
-            const hl = suggest.highlightedValue;
-            if (hl !== null) input.value = hl;
-            suggest.close();
-        });
     }
 
     // ==================== 共通小物 ====================

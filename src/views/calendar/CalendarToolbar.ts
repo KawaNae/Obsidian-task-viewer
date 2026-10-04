@@ -48,7 +48,7 @@ export class CalendarToolbar extends ViewToolbarBase {
 
     constructor(private deps: CalendarToolbarDeps) {
         super();
-        this.filterMenu = new FilterMenuComponent(deps.host.app.keymap);
+        this.filterMenu = new FilterMenuComponent(deps.host.app);
         this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
         deps.host.store.subscribe(() => this.update());
     }

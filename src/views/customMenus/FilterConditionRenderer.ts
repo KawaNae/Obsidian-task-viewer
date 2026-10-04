@@ -1,4 +1,4 @@
-import { setIcon } from 'obsidian';
+import { setIcon, type App } from 'obsidian';
 import type {
     ContentCondition, DateCondition, LengthCondition, PropertyCondition, TagCondition, TextListCondition,
     DateFilterValue,
@@ -12,8 +12,7 @@ import { getAvailableValues, getValueDisplay, type ConditionEditor } from './Fil
 import { DateUtils } from '../../utils/DateUtils';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { t } from '../../i18n';
-import type { PopoverStack } from '../sharedUI/PopoverStack';
-import { SuggestController } from './SuggestController';
+import { ValueSuggest, type ValueSuggestOptions } from '../../suggest/ValueSuggest';
 import { onFormEnter } from '../../modals/form/formEnter';
 
 type ListCondition = TextListCondition | TagCondition;
@@ -24,12 +23,28 @@ type ListCondition = TextListCondition | TagCondition;
  * condition it was drawn with.
  */
 export class FilterConditionRenderer {
+    /** The lists under the controls drawn since the last {@link closeLists}. */
+    private lists: ValueSuggest[] = [];
+
     constructor(
+        private app: App,
         private dropdowns: FilterDropdownMenus,
         private getStatusDefs: () => StatusDefinition[],
         private getLastTasks: () => Task[],
-        private getStack: () => PopoverStack,
     ) {}
+
+    /** Close the lists the controls opened: before the controls are drawn anew, and as the menu closes. */
+    closeLists(): void {
+        for (const list of this.lists) list.close();
+        this.lists = [];
+    }
+
+    /** A list of values under `input` (Obsidian's, as every list under a field of ours is). */
+    private offer(input: HTMLInputElement, opts: ValueSuggestOptions): ValueSuggest {
+        const list = new ValueSuggest(this.app, input, opts);
+        this.lists.push(list);
+        return list;
+    }
 
     renderTextInput(row: HTMLElement, edit: ConditionEditor<ContentCondition>): void {
         const input = row.createEl('input', {
@@ -78,7 +93,6 @@ export class FilterConditionRenderer {
             placeholder: t('filter.typePropertyKey'),
             wrapClass: 'tv-ctrl__input-wrap',
             inputClass: 'tv-ctrl__input',
-            suggestClass: 'filter-popover__property-key-suggest',
             getCandidates: () => FilterValueCollector.collectPropertyKeys(tasks),
             onCommit: (val) => {
                 // Another key's values are not this one's: the value starts over.
@@ -95,7 +109,6 @@ export class FilterConditionRenderer {
             placeholder: t('filter.typePropertyValue'),
             wrapClass: 'filter-popover__property-value-wrap',
             inputClass: 'tv-ctrl__text-input',
-            suggestClass: 'filter-popover__property-value-suggest',
             getCandidates: () => key ? FilterValueCollector.collectPropertyValuesForKey(tasks, key) : [],
             onCommit: (val) => {
                 edit.update(c => ({ ...c, value: val }), 'keep');
@@ -103,6 +116,13 @@ export class FilterConditionRenderer {
         });
     }
 
+    /**
+     * A text field of one value, its candidates in a list under it. The
+     * value is committed once: by an item picked, by the form's Enter (which
+     * leaves the field), or by leaving the field; a commit of the value
+     * committed last does nothing, so the blur that follows an Enter or a
+     * pick does not commit it again.
+     */
     private renderSuggestInput(
         container: HTMLElement,
         opts: {
@@ -110,7 +130,6 @@ export class FilterConditionRenderer {
             placeholder: string;
             wrapClass: string;
             inputClass: string;
-            suggestClass: string;
             getCandidates: () => string[];
             onCommit: (value: string) => void;
         },
@@ -123,53 +142,28 @@ export class FilterConditionRenderer {
         });
         input.value = opts.initialValue;
 
-        const suggest = new SuggestController(this.getStack(), inputWrap, opts.suggestClass, 'min');
-
-        const showSuggest = (query: string, showAll: boolean) => {
-            const q = query.toLowerCase();
-            const filtered = opts.getCandidates().filter(v => {
-                if (showAll || !q) return true;
-                return v.toLowerCase().includes(q);
-            });
-            suggest.show(
-                filtered,
-                (item, val) => { item.createSpan().setText(val); },
-                (val) => {
-                    input.value = val;
-                    suggest.close();
-                    opts.onCommit(val);
-                },
-            );
+        let committed = opts.initialValue;
+        const commit = (value: string) => {
+            if (value === committed) return;
+            committed = value;
+            opts.onCommit(value);
         };
 
-        input.addEventListener('input', () => {
-            showSuggest(input.value, false);
-        });
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (!suggest.isOpen) showSuggest(input.value, !input.value);
-                else suggest.moveHighlight(1);
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                suggest.moveHighlight(-1);
-            } else if (e.key === 'Escape') {
-                suggest.close();
-            }
+        const list = this.offer(input, {
+            candidates: (query) => {
+                const q = query.toLowerCase();
+                return opts.getCandidates().filter(v => !q || v.toLowerCase().includes(q));
+            },
+            pick: (value) => {
+                input.value = value;
+                commit(value);
+            },
         });
         onFormEnter(input, () => {
-            const picked = suggest.highlightedValue ?? input.value;
-            input.value = picked;
-            suggest.close();
-            opts.onCommit(picked);
+            commit(input.value);
             input.blur();
-        });
-        input.addEventListener('focus', () => {
-            showSuggest(input.value, !input.value);
-        });
-        input.addEventListener('change', () => {
-            opts.onCommit(input.value);
-        });
+        }, { takesEnter: () => list.listShown });
+        input.addEventListener('blur', () => commit(input.value));
     }
 
     renderPillValueSelector(row: HTMLElement, edit: ConditionEditor<ListCondition>): void {
@@ -186,16 +180,13 @@ export class FilterConditionRenderer {
             }
         }
 
-        // Input + suggest
+        // The field, its values in a list under it
         const inputWrap = container.createDiv('tv-ctrl__input-wrap');
         const input = inputWrap.createEl('input', {
             cls: 'tv-ctrl__input',
             type: 'text',
             attr: { placeholder: prop === 'tag' ? t('filter.typeTag') : t('filter.typeToFilter') },
         });
-
-        // Suggest state
-        const suggest = new SuggestController(this.getStack(), inputWrap, '', 'exact');
 
         const statusDefs = this.getStatusDefs();
         const tasks = this.getLastTasks();
@@ -204,73 +195,49 @@ export class FilterConditionRenderer {
             const normalized = prop === 'tag' ? val.trim().replace(/^#/, '') : prop === 'status' ? val : val.trim();
             if (!normalized) return;
             input.value = '';
-            suggest.close();
             edit.update(c => (valuesOf(c).includes(normalized) ? c : { ...c, value: [...valuesOf(c), normalized] }), 'redraw');
         };
 
-        const showSuggest = (query: string, showAll: boolean) => {
-            const available = getAvailableValues(prop, tasks);
-            const selected = new Set(valuesOf(edit.current()));
-            const q = prop === 'tag' ? query.toLowerCase().replace(/^#/, '') : query.toLowerCase();
-
-            const filtered = available.filter(v => {
-                if (selected.has(v)) return false;
-                if (showAll || !q) return true;
-                return getValueDisplay(prop, v, statusDefs).toLowerCase().includes(q) || v.toLowerCase().includes(q);
-            });
-
-            suggest.show(
-                filtered,
-                (item, val) => {
-                    if (prop === 'color') {
-                        const swatch = item.createSpan('tv-ctrl__color-swatch');
-                        swatch.style.backgroundColor = val;
-                    } else if (prop === 'status') {
-                        const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
-                        checkbox.type = 'checkbox';
-                        checkbox.checked = val !== ' ';
-                        checkbox.readOnly = true;
-                        checkbox.tabIndex = -1;
-                        if (val !== ' ') checkbox.dataset.task = val;
-                    }
-                    item.createSpan().setText(getValueDisplay(prop, val, statusDefs));
-                },
-                (val) => addValue(val),
-            );
-        };
-
-        // Input events
-        input.addEventListener('input', () => {
-            showSuggest(input.value, false);
+        const list = this.offer(input, {
+            candidates: (query) => {
+                const available = getAvailableValues(prop, tasks);
+                const selected = new Set(valuesOf(edit.current()));
+                const q = prop === 'tag' ? query.trim().toLowerCase().replace(/^#/, '') : query.trim().toLowerCase();
+                return available.filter(v => {
+                    if (selected.has(v)) return false;
+                    if (!q) return true;
+                    return getValueDisplay(prop, v, statusDefs).toLowerCase().includes(q) || v.toLowerCase().includes(q);
+                });
+            },
+            render: (val, el) => {
+                // A swatch or a checkbox before the label, as the pills show them.
+                const item = el.createSpan({ cls: 'tv-ctrl__suggestion' });
+                if (prop === 'color') {
+                    const swatch = item.createSpan('tv-ctrl__color-swatch');
+                    swatch.style.backgroundColor = val;
+                } else if (prop === 'status') {
+                    const checkbox = item.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = val !== ' ';
+                    checkbox.readOnly = true;
+                    checkbox.tabIndex = -1;
+                    if (val !== ' ') checkbox.dataset.task = val;
+                }
+                item.createSpan().setText(getValueDisplay(prop, val, statusDefs));
+            },
+            pick: (val) => addValue(val),
         });
 
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (!suggest.isOpen) showSuggest(input.value, !input.value);
-                else suggest.moveHighlight(1);
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                suggest.moveHighlight(-1);
-            } else if (e.key === 'Escape') {
-                suggest.close();
-            } else if (e.key === 'Backspace' && !input.value && valuesOf(edit.current()).length > 0) {
+            if (e.key === 'Backspace' && !input.value && valuesOf(edit.current()).length > 0) {
                 // Remove last pill on backspace in empty input
                 edit.update(c => ({ ...c, value: valuesOf(c).slice(0, -1) }), 'redraw');
             }
         });
+        // An Enter with no list open adds what is typed.
         onFormEnter(input, () => {
-            const hl = suggest.highlightedValue;
-            if (hl !== null) {
-                addValue(hl);
-            } else if (input.value.trim()) {
-                addValue(input.value);
-            }
-        });
-
-        input.addEventListener('focus', () => {
-            showSuggest(input.value, !input.value);
-        });
+            if (input.value.trim()) addValue(input.value);
+        }, { takesEnter: () => list.listShown });
     }
 
     private renderValuePill(container: HTMLElement, value: string, edit: ConditionEditor<ListCondition>): void {

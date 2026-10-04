@@ -95,10 +95,10 @@ export class TaskListSections {
         private readonly placement: ListPlacement,
     ) {
         this.paging = new TaskPagingController(() => this.deps.plugin.settings.pinnedListPageSize);
-        const keymap = deps.plugin.app.keymap;
-        this.sortMenu = new SortMenuComponent(keymap);
-        this.filterMenu = new FilterMenuComponent(keymap);
-        this.topRightEditor = new TopRightConfigEditor(keymap);
+        const app = deps.plugin.app;
+        this.sortMenu = new SortMenuComponent(app.keymap);
+        this.filterMenu = new FilterMenuComponent(app);
+        this.topRightEditor = new TopRightConfigEditor(app);
         this.filterMenu.setStatusDefinitions(this.deps.plugin.settings.statusDefinitions);
     }
 

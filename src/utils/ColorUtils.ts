@@ -32,16 +32,19 @@ export function normalizeColor(raw: string): string {
 }
 
 /**
- * Normalize any CSS color expression to 6-digit '#rrggbb'.
- * Returns '#000000' if value cannot be parsed.
+ * A color as a color picker takes it: 6-digit '#rrggbb'. The value is a
+ * color as the notation holds it (a hex value of 3 or 6 digits without its
+ * `#`, `f80` standing for `ff8800`, or a CSS color name) or any CSS color
+ * expression. '#000000' when it cannot be read, or is empty.
  *
- * Uses Canvas 2D fillStyle as the parser, so no DOM mutation and no
- * dependency on getComputedStyle / window.
+ * The one reading of a color for the pickers (the hub's, the Properties
+ * view's). Uses Canvas 2D fillStyle as the parser, so no DOM mutation and
+ * no dependency on getComputedStyle / window.
  */
 export function cssColorToHex(value: string, doc: Document): string {
     let v = value.trim();
     if (!v) return '#000000';
-    if (/^[0-9a-fA-F]{6}$/.test(v)) v = '#' + v;
+    if (/^(?:[0-9a-fA-F]{3}){1,2}$/.test(v)) v = '#' + v;
     const ctx = doc.createElement('canvas').getContext('2d');
     if (!ctx) return '#000000';
     ctx.fillStyle = '#000000';

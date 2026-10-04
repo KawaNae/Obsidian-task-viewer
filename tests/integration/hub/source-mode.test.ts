@@ -468,19 +468,18 @@ describe('the hub\'s source mode', () => {
         });
     });
 
-    it('takes the back as Escape: a child popover first, then a close that asks over a draft', async () => {
+    it('takes the back as Escape: a list open under a field first, then a close that asks over a draft', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         // Obsidian's history.back() calls what is on top of its stack, as Android's back and the mouse's back button do.
         const steps = run<Record<string, unknown>>(`
             const onBack = () => document.activeElement === document.querySelector('.task-hub__source-actions .tv-form__cancel');
             const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
-            plugin.openTaskHub(task.id);
-            await until(() => document.querySelector('.task-hub__status-pill'));
-            document.querySelector('.task-hub__status-pill').click();
-            await until(() => document.querySelector('.tv-ctrl__suggest'));
+            // The list under the tag field (Obsidian's), open as the field takes the focus.
+            plugin.openTaskHub(task.id, { focusField: 'tags' });
+            await until(() => document.querySelector('.suggestion-container'));
             window.history.back();
             await sleep(200);
-            const child = { child: !!document.querySelector('.tv-ctrl__suggest'), hub: state().hub };
+            const child = { child: !!document.querySelector('.suggestion-container'), hub: state().hub };
 
             document.querySelectorAll('.task-hub__mode-toggle button')[1].click();
             await until(() => viewOf('children'));
@@ -515,7 +514,7 @@ describe('the hub\'s source mode', () => {
         });
     });
 
-    it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, its child popovers among it', async () => {
+    it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, a list open under a field among it', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`
             const file = app.vault.getAbstractFileByPath(${JSON.stringify(TEST_FILE)});
@@ -536,16 +535,17 @@ describe('the hub\'s source mode', () => {
                 await sleep(200);
                 const inField = editor.getLine(4);
 
-                document.querySelector('.task-hub__status-pill').click();
-                await until(() => document.querySelector('.tv-ctrl__suggest button, .tv-ctrl__suggest input'));
-                document.querySelector('.tv-ctrl__suggest button, .tv-ctrl__suggest input').focus();
-                const inChild = { inPanel: !!document.activeElement.closest('.task-hub') };
+                // A list open under a field (Obsidian's, on the body): the focus stays in the field.
+                document.querySelector('.task-hub__tag-add-wrap input').focus();
+                await until(() => document.querySelector('.suggestion-container'));
+                const inChild = { inPanel: !!document.activeElement.closest('.task-hub'), list: !!document.querySelector('.suggestion-container') };
+                pick();
                 bold();
                 await sleep(200);
                 inChild.line = editor.getLine(4);
                 document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, cancelable: true }));
                 await sleep(200);
-                const afterEscape = { child: !!document.querySelector('.tv-ctrl__suggest'), hub: !!document.querySelector('.task-hub:not(.is-closing)') };
+                const afterEscape = { child: !!document.querySelector('.suggestion-container'), hub: !!document.querySelector('.task-hub:not(.is-closing)') };
 
                 // The same key with the focus moved to the note: the hotkey is let in again.
                 editor.focus();
@@ -560,7 +560,7 @@ describe('the hub\'s source mode', () => {
         `);
         expect(result).toMatchObject({
             inField: '- [ ] 次',
-            inChild: { inPanel: false, line: '- [ ] 次' },
+            inChild: { inPanel: true, list: true, line: '- [ ] 次' },
             afterEscape: { child: false, hub: true },
             inNote: '- [ ] **次**',
         });
