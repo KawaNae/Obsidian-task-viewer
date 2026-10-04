@@ -3,7 +3,9 @@
  * running Dev vault: a task holds its time as moments `[start, end)`, `@D`
  * being `[D startHour, D+1 startHour)`, and the CLI's windows, a pinned
  * list's date filter and sort, Timeline's overdue mark in its heading and
- * the hub's faint values all read that span.
+ * the hub's faint values all read that span. A task with only a due is
+ * read as `@>due` (段11c): the views, the CLI and the hub draw it on the
+ * due's day, the timed one the hour before its due.
  *
  * The days are counted from today's visual day (a day starts at the vault's
  * startHour), so what is asserted does not move with the hour the suite is
@@ -17,7 +19,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
-    cliGet, cliList, cliTasksForDateRange, cliToday, isObsidianRunning, obsidianEval,
+    cliCategorizedTasksForDateRange, cliGet, cliList, cliTasksForDateRange, cliToday, isObsidianRunning, obsidianEval,
 } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
@@ -44,6 +46,11 @@ function note(): string {
         `- [ ] sw-late-night @${at(0, 22)}>${at(1, startHour)}`,
         `- [ ] sw-next #tvswpl @${day(1)}`,
         `- [ ] sw-overdue #tvswtl @${day(-2)}`,
+        // Only a due: drawn as @>due, on the due's day, the timed one the hour before it.
+        `- [ ] sw-due #tvswdue @>>${day(2)}`,
+        `- [ ] sw-due-17 #tvswdue @>>${day(2)}T17:00`,
+        // Rule 4: an end time with no start time. Far from today, out of the windows above.
+        `- [ ] sw-rule4 @${day(10)}>${day(10)}T02:00`,
         '',
     ].join('\n');
 }
@@ -122,6 +129,76 @@ describe('the CLI answers by visual days', () => {
     });
 });
 
+describe('a task with only a due is drawn with the span read from its due', () => {
+    const FIELDS = { 'output-fields': 'id,content,file', limit: 'all' };
+    const DUE = () => day(2);
+
+    it('list date=<due> and tasks-for-date-range take @>>due', () => {
+        const listed = names(cliList({ ...FIELDS, file: FILE, date: DUE() }).tasks);
+        expect(listed).toEqual(['sw-due', 'sw-due-17']);
+        const ranged = names(cliTasksForDateRange({ ...FIELDS, file: FILE, from: DUE(), to: DUE() }).tasks);
+        expect(ranged).toEqual(['sw-due', 'sw-due-17']);
+    });
+
+    it('categorized-tasks-for-date-range puts @>>due in allDay and @>>dueT17:00 in timed, with no due-only bucket', () => {
+        const r = cliCategorizedTasksForDateRange(DUE(), DUE());
+        const d = r[DUE()];
+        expect(Object.keys(d).sort()).toEqual(['allDay', 'timed']);
+        expect(names(d.allDay)).toContain('sw-due');
+        expect(names(d.timed)).toContain('sw-due-17');
+        expect(names(d.allDay)).not.toContain('sw-due-17');
+    });
+
+    it("Timeline draws @>>due in the all-day row on its day and @>>dueT17:00 from 16:00 to 17:00", () => {
+        // The window's first column is the day before the due.
+        const past = readSettings(['pastDaysToShow']).pastDaysToShow as number;
+        const r = openView('sw-due-tl', 'timeline-view', {
+            date: addDays(day(1), past),
+            daysToShow: 3,
+            showSidebar: false,
+            filterState: { logic: 'and', filters: [{ property: 'tag', operator: 'includes', value: ['tvswdue'] }] },
+        });
+        expect(r.dates).toEqual([day(1), DUE(), day(3)]);
+        const drawn = ev<{ allDay: { col: number; span: number }[]; timed: { date: string | null; start: number; duration: number }[] }>(`(async () => {
+            ${PRELUDE}
+            const el = V('sw-due-tl').contentEl;
+            const named = (c, n) => ((c.querySelector('.task-card__content')?.textContent ?? c.textContent).match(/sw-[a-z0-9-]+/) ?? [])[0] === n;
+            return JSON.stringify({
+                allDay: [...el.querySelectorAll('.allday-section .task-card')].filter(c => named(c, 'sw-due'))
+                    .map(c => ({ col: Number(c.dataset.colStart), span: Number(c.dataset.span) })),
+                timed: [...el.querySelectorAll('.timeline-scroll-area__day-column .task-card')].filter(c => named(c, 'sw-due-17'))
+                    .map(c => ({
+                        date: c.closest('.timeline-scroll-area__day-column')?.dataset.date ?? null,
+                        start: Number(c.style.getPropertyValue('--start-minutes')),
+                        duration: Number(c.style.getPropertyValue('--duration-minutes')),
+                    })),
+            });
+        })()`);
+        expect(drawn.allDay).toEqual([{ col: 2, span: 1 }]);
+        expect(drawn.timed).toEqual([{ date: DUE(), start: (16 - startHour) * 60, duration: 60 }]);
+    });
+
+    it('Schedule draws them in its all-day row and its grid, with no section of dues', () => {
+        openView('sw-due-sc', 'schedule-view', {
+            date: DUE(),
+            filterState: { logic: 'and', filters: [{ property: 'tag', operator: 'includes', value: ['tvswdue'] }] },
+        });
+        const drawn = ev<{ allDay: string[]; grid: string[]; sections: number }>(`(async () => {
+            ${PRELUDE}
+            const el = V('sw-due-sc').contentEl;
+            const name = c => ((c.querySelector('.task-card__content')?.textContent ?? c.textContent).match(/sw-[a-z0-9-]+/) ?? ['?'])[0];
+            return JSON.stringify({
+                allDay: [...el.querySelectorAll('.allday-section .task-card')].map(name),
+                grid: [...el.querySelectorAll('.schedule-tasks .task-card')].map(name),
+                sections: el.querySelectorAll('.schedule-section, .schedule-section__header').length,
+            });
+        })()`);
+        expect(drawn.allDay).toEqual(['sw-due']);
+        expect(drawn.grid).toEqual(['sw-due-17']);
+        expect(drawn.sections).toBe(0);
+    });
+});
+
 describe("a pinned list's date filter and sort", () => {
     it("startDate equals today takes a start after midnight on tomorrow's date, and an end sort puts @today after @todayT10:00", () => {
         const list = {
@@ -177,8 +254,8 @@ describe("Timeline's heading", () => {
 });
 
 describe("the hub's faint values", () => {
-    /** The placeholders of the end's date and time fields in the hub opened on `name`. */
-    function endPlaceholders(name: string): { date: string; time: string } {
+    /** The placeholders of the `label` row's date and time fields in the hub opened on `name`. */
+    function placeholders(name: string, label = 'modal.end'): { date: string; time: string } {
         const r = obsidianEval(`(async () => {
             const sleep = ms => new Promise(r => setTimeout(r, ms));
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
@@ -189,7 +266,7 @@ describe("the hub's faint values", () => {
             plugin.openTaskHub(task.id);
             await until(() => hub() && hub().querySelector('.tv-form__row'));
             await sleep(200);
-            const row = [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === ${JSON.stringify(tr('modal.end'))});
+            const row = [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === ${JSON.stringify(tr(label))});
             const input = which => row.querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
             const out = { date: input('date').placeholder, time: input('time').placeholder };
             document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
@@ -200,11 +277,52 @@ describe("the hub's faint values", () => {
         return r as { date: string; time: string };
     }
 
-    it("@today's end: no faint time, and tomorrow's date for the date", () => {
-        expect(endPlaceholders('sw-today')).toEqual({ date: day(1), time: 'HH:mm' });
+    it("@today's end: no faint time, and today's date for the date", () => {
+        expect(placeholders('sw-today')).toEqual({ date: day(0), time: 'HH:mm' });
     });
 
     it("@todayT10:00's end: 11:00 for the time", () => {
-        expect(endPlaceholders('sw-today-10').time).toBe('11:00');
+        expect(placeholders('sw-today-10').time).toBe('11:00');
+    });
+
+    it("@>>due's start and end: the due's date, faint, and no faint time", () => {
+        expect(placeholders('sw-due', 'modal.start')).toEqual({ date: day(2), time: 'HH:mm' });
+        expect(placeholders('sw-due', 'modal.end')).toEqual({ date: day(2), time: 'HH:mm' });
+    });
+
+    it("@D>DT02:00's end says rule 4's reason and how to write the line with a start time", () => {
+        // The line's issue is said once the end's time is typed in (the hub reads what is typed).
+        const said = obsidianEval(`(async () => {
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            const plugin = app.plugins.plugins['obsidian-task-viewer'];
+            const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+            const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(FILE)} && t.content.startsWith('sw-rule4'));
+            if (!task) throw new Error('no row sw-rule4');
+            plugin.openTaskHub(task.id);
+            await until(() => hub() && hub().querySelector('.tv-form__row'));
+            await sleep(200);
+            const row = [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === ${JSON.stringify(tr('modal.end'))});
+            const input = row.querySelector('.tv-form__field--time input.tv-ctrl__text-input');
+            input.focus();
+            input.value = '02:00';
+            input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+            await sleep(300);
+            const out = [...row.nextElementSibling.children].map(c => c.textContent);
+            document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
+            await sleep(100);
+            hub()?.querySelector('.task-hub__form .tv-form__discard')?.click();
+            await until(() => !hub());
+            return JSON.stringify(out);
+        })()`);
+        const D10 = day(10);
+        expect(said).toEqual([
+            tr('validation.endTimeWithoutStart') + '\n' + tr('validationHint.endTimeWithoutStartExample', {
+                time: '02:00',
+                endDate: day(11),
+                sameDay: `@${D10}T01:00>02:00`,
+                otherDay: `@${D10}T09:00>${day(11)}T02:00`,
+            }),
+        ]);
     });
 });
