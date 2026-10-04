@@ -44,11 +44,3 @@ export function compareAllDayForRender(a: DisplayTask, b: DisplayTask): number {
     if (ad !== bd) return ad < bd ? -1 : 1;
     return compareWritten(a, b);
 }
-
-/** dueOnly バケツ: due フル ISO 昇順、同時刻は書かれた場所の順 */
-export function compareDueOnlyForRender(a: DisplayTask, b: DisplayTask): number {
-    const ad = a.due ?? '';
-    const bd = b.due ?? '';
-    if (ad !== bd) return ad < bd ? -1 : 1;
-    return compareWritten(a, b);
-}

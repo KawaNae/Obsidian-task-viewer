@@ -432,7 +432,7 @@ export class TaskApi {
     }
 
     /**
-     * Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
+     * Get tasks in a date range, categorized into allDay/timed per date.
      */
     async categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult> {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
@@ -448,7 +448,6 @@ export class TaskApi {
             result[date] = {
                 allDay: cats.allDay.map(this.out),
                 timed: cats.timed.map(this.out),
-                dueOnly: cats.dueOnly.map(this.out),
             };
         }
         return result;

@@ -4,7 +4,7 @@ import type { DisplayTask } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
-import { daysWindow, endDayOf, visualDaysOf } from '../../utils/DayWindow';
+import { daysWindow, visualDaysOf } from '../../utils/DayWindow';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import { dailyNotes } from '../../utils/PeriodicNotes';
@@ -246,21 +246,10 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
         const allTasks = this.readService.tasksInWindow(daysWindow(rangeStart, rangeEnd, startHour), filter);
 
         for (const dt of allTasks) {
-            const days = dt.drawn ? visualDaysOf(dt.drawn, startHour) : null;
-            const visualStart = days?.first;
-            const visualEnd = days?.last ?? '';
-            const duePart = dt.dueMs === null ? undefined : endDayOf(dt.dueMs, startHour);
+            if (!dt.drawn) continue;
+            const { first: visualStart, last: visualEnd } = visualDaysOf(dt.drawn, startHour);
 
             const completed = this.isTaskCompleted(dt);
-
-            if (!visualStart && duePart) {
-                const entry = indicatorMap.get(duePart) ?? { hasIncomplete: false, hasComplete: false };
-                if (completed) entry.hasComplete = true; else entry.hasIncomplete = true;
-                indicatorMap.set(duePart, entry);
-                continue;
-            }
-
-            if (!visualStart) continue;
 
             let cursor = visualStart < rangeStart ? rangeStart : visualStart;
             const end = visualEnd > rangeEnd ? rangeEnd : visualEnd;

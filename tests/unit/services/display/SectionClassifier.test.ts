@@ -115,7 +115,7 @@ describe('classifyForSection', () => {
 
 describe('bucketBySection', () => {
     it('混合配列を重複なくバケツに分配する（期限だけのタスクは終日）', () => {
-        const dueOnly = dt({ due: '2026-01-20' });
+        const dueDay = dt({ due: '2026-01-20' });
         const allday = dt({ startDate: '2026-01-15' });
         const timed = dt({ startDate: '2026-01-15', startTime: '09:00' });
         const boundary = dt({
@@ -124,9 +124,9 @@ describe('bucketBySection', () => {
         });
         const none = dt({});
 
-        const buckets = bucketBySection([dueOnly, allday, timed, boundary, none], startHour);
+        const buckets = bucketBySection([dueDay, allday, timed, boundary, none], startHour);
 
-        expect(buckets.allDay).toEqual([dueOnly, allday, boundary]);
+        expect(buckets.allDay).toEqual([dueDay, allday, boundary]);
         expect(buckets.timed).toEqual([timed]);
         // none はどのバケツにも入らない
         const total = buckets.allDay.length + buckets.timed.length;

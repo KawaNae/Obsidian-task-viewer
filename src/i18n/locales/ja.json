@@ -241,7 +241,6 @@
   },
   "aria": {
     "taskMenu": "タスクメニュー",
-    "toggleSection": "{{title}} セクションを切り替え",
     "openDailyNote": "デイリーノートを開く: {{label}}",
     "openWeeklyNote": "週次ノートを開く: {{label}}",
     "due": "期限: {{date}}"
@@ -833,8 +832,7 @@
     "weekdaysShort": "日,月,火,水,木,金,土",
     "weekdaysNarrow": "日,月,火,水,木,金,土",
     "wk": "週",
-    "w": "W",
-    "due": "期限"
+    "w": "W"
   },
   "astronomy": {
     "sunrise": "日の出",

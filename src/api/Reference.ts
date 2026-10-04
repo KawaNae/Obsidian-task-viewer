@@ -62,9 +62,9 @@ interface Operation {
 const WINDOW_NOTE = `\
 The window (date, or from and to) is visual (startHour-adjusted) days: it
 matches a task whose span ends after the window starts and starts before it
-ends, and leaves out due-only tasks. The date-range operations match the
-same span, as the views do, and include due-only tasks whose due closes in
-the window.`;
+ends, as the views draw it. A task with only a due has the span read from
+its due (the due's day, or the hour before a timed due), and matches by it.
+The date-range operations match the same span.`;
 
 const SOURCE_NOTE = `\
 Where the filter comes from: filterFile, else filter (API only), else the
@@ -123,8 +123,8 @@ export const OPERATIONS = {
         schema: TODAY_SCHEMA,
         notes: `\
 Today is the visual date of now. A task is active when its span overlaps
-today's visual day, as the views draw it, or, without a span, when its due
-closes in it.`,
+today's visual day, as the views draw it. A task with only a due has the
+span read from its due, and matches by it.`,
         api: { signature: 'today(params?: TodayParams): TaskListResult', returns: 'TaskListResult' },
         cli: { output: true },
     },
@@ -167,19 +167,19 @@ the same days as its start and end; a copy on the clock keeps the due.`,
     tasksForDateRange: {
         summary: 'List tasks whose visual span overlaps a date range',
         schema: TASKS_FOR_DATE_RANGE_SCHEMA,
-        notes: `${RANGE_NOTE}\nDue-only tasks are included when the due closes in the window.`,
+        notes: `${RANGE_NOTE}\nA task with only a due matches by the span read from its due.`,
         api: { signature: 'tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>', returns: 'TaskListResult' },
         cli: { output: true },
     },
     categorizedTasksForDateRange: {
-        summary: 'Get tasks in a date range, categorized into allDay/timed/dueOnly per date',
+        summary: 'Get tasks in a date range, categorized into allDay/timed per date',
         schema: CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-        notes: `${RANGE_NOTE}\nallDay and timed follow the visual span; dueOnly the visual day the due closes in.`,
+        notes: `${RANGE_NOTE}\nallDay and timed follow the visual span; a task with only a due is in one of them by the span read from its due.`,
         api: {
             signature: 'categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult>',
-            returns: 'Record<date, { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }>',
+            returns: 'Record<date, { allDay: NormalizedTask[], timed: NormalizedTask[] }>',
         },
-        cli: { returns: '{ "YYYY-MM-DD": { "allDay": [...], "timed": [...], "dueOnly": [...] }, ... }' },
+        cli: { returns: '{ "YYYY-MM-DD": { "allDay": [...], "timed": [...] }, ... }' },
     },
     insertChildTask: {
         summary: 'Insert a child task under a parent task',
