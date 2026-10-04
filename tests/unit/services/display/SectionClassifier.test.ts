@@ -39,7 +39,7 @@ describe('classifyForSection', () => {
         expect(classifyForSection(dt({}), startHour)).toBe(null);
     });
 
-    it('S-AllDay（日付のみ、解決後 05:00→翌 04:59 = 23h59m） → allday', () => {
+    it('S-AllDay（日付のみ、解決後 05:00→翌 05:00 = 24h） → allday', () => {
         expect(classifyForSection(dt({ startDate: '2026-01-15' }), startHour)).toBe('allDay');
     });
 
@@ -61,6 +61,24 @@ describe('classifyForSection', () => {
             endDate: '2026-01-16', endTime: '05:29',
         });
         expect(classifyForSection(task, startHour)).toBe('timed');
+    });
+
+    it('開始時刻が無ければ、終了時刻があっても allDay', () => {
+        expect(classifyForSection(dt({ startDate: '2026-01-15', endDate: '2026-01-15', endTime: '10:00' }), startHour)).toBe('allDay');
+    });
+
+    it('endDate なしで end < start は翌日に繰り上げて長さを測る', () => {
+        // 22:00 → 01:00 = 3h
+        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '22:00', endTime: '01:00' }), startHour)).toBe('timed');
+        // 06:00 → 05:30 = 23h30m
+        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '06:00', endTime: '05:30' }), startHour)).toBe('allDay');
+    });
+
+    it('時刻の無い endDate は endDate の startHour:00 まで', () => {
+        // Jan15 06:00 → Jan16 05:00 = 23h
+        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '06:00', endDate: '2026-01-16' }), startHour)).toBe('timed');
+        // Jan15 05:00 → Jan16 05:00 = 24h
+        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '05:00', endDate: '2026-01-16' }), startHour)).toBe('allDay');
     });
 
     it('E-Timed（endDate + endTime のみ） → timed', () => {

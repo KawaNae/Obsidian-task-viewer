@@ -76,7 +76,7 @@ describe('TaskSorter', () => {
             expect(tasks.map(t => t.id)).toEqual(['c', 'a', 'b']);
         });
 
-        it('sorts by startDate using effectiveStartDate', () => {
+        it('sorts by the start of the span', () => {
             const tasks = [
                 makeDT({ id: 'b', startDate: '2026-03-15' }),
                 makeDT({ id: 'a', startDate: '2026-03-10' }),
@@ -118,7 +118,7 @@ describe('TaskSorter', () => {
     });
 
     // A due inherited from a heading or the note is the one the filter matches
-    // (`effectiveDue`); the sort used to read the row's own `due` and put such
+    // (`stated.due`); the sort used to read the row's own `due` and put such
     // tasks among those without a deadline.
     describe('inherited due', () => {
         it('a rule on due sorts by the inherited due', () => {

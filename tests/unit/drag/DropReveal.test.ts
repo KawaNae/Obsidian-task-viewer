@@ -161,7 +161,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
         const context = makeContext(strategy.log);
         const el = makeEl('is-drag-hidden');
         const plan: DragPlan = {
-            edits: { effectiveStartDate: '2026-08-13', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-13', startTime: '10:00' },
             baseTask: makeTask(),
         };
 
@@ -179,7 +179,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
         const el = makeEl('is-drag-hidden');
 
         await strategy.run(context, {
-            edits: { effectiveStartDate: '2026-08-13', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-13', startTime: '10:00' },
             baseTask: makeTask(),
         }, [el]);
 
@@ -196,7 +196,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
         });
 
         await strategy.run(context, {
-            edits: { effectiveStartDate: '2026-08-13', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-13', startTime: '10:00' },
             baseTask: makeTask(),
         }, [el]);
 
@@ -211,7 +211,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
 
         // 掴んだだけで値が変わっていない → updateTask は呼ばれない
         await strategy.run(context, {
-            edits: { effectiveStartDate: '2026-08-12', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-12', startTime: '10:00' },
             baseTask: makeTask(),
         }, [el]);
 

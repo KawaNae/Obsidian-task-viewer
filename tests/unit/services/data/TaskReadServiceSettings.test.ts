@@ -22,6 +22,6 @@ describe('TaskReadService reads the settings at each question', () => {
         const after = read.getAllDisplayTasks();
         expect(after).not.toBe(before);
         expect(after[0]).toEqual(read.getDisplayTask('t'));
-        expect(after[0].effectiveEndTime).not.toBe(before[0].effectiveEndTime);
+        expect(after[0].span!.endMs).not.toBe(before[0].span!.endMs);
     });
 });

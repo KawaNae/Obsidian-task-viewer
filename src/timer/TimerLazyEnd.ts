@@ -43,9 +43,9 @@ export function nextExtendedEnd(nowMs: number): number {
  * 解決する規則はそちらが唯一の持ち主で、ここに書き写すと二重管理になる。明示 end
  * を持つ行（self モードで元タスクが時間帯を持っていた場合など）も同じ経路で扱える。
  */
-export function decideLazyEnd(nowMs: number, effectiveEndMs: number): LazyEndDecision {
-    if (effectiveEndMs > nowMs) {
-        return { kind: 'hold', floorMs: effectiveEndMs };
+export function decideLazyEnd(nowMs: number, endMs: number): LazyEndDecision {
+    if (endMs > nowMs) {
+        return { kind: 'hold', floorMs: endMs };
     }
     return { kind: 'extend', endMs: nextExtendedEnd(nowMs) };
 }

@@ -195,16 +195,16 @@ export class TimelineResizeGesture extends BaseDragStrategy {
 
         const edits: DisplayDateEdits = this.resizeDirection === 'top'
             ? {
-                effectiveStartDate: visualDayAt(newStartDate, newStartTime, startHour),
-                effectiveStartTime: newStartTime,
-                effectiveEndDate: visualDayAt(keptEnd.date, keptEnd.time, startHour),
-                effectiveEndTime: keptEnd.time,
+                startDay: visualDayAt(newStartDate, newStartTime, startHour),
+                startTime: newStartTime,
+                endDay: visualDayAt(keptEnd.date, keptEnd.time, startHour),
+                endTime: keptEnd.time,
             }
             : {
-                effectiveStartDate: visualDayAt(keptStart.date, keptStart.time, startHour),
-                effectiveStartTime: keptStart.time,
-                effectiveEndDate: visualDayAt(newEndDate, newEndTime, startHour),
-                effectiveEndTime: newEndTime,
+                startDay: visualDayAt(keptStart.date, keptStart.time, startHour),
+                startTime: keptStart.time,
+                endDay: visualDayAt(newEndDate, newEndTime, startHour),
+                endTime: newEndTime,
             };
 
         const plan: DragPlan = { edits, baseTask: originalTask };

@@ -82,10 +82,10 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         let originalTaskStartMinutes: number | null = null;
         let originalTaskEndMinutes: number | null = null;
 
-        const effectiveEndDate = originalTask?.endDate || originalTask?.startDate;
-        if (originalTask?.startDate && originalTask.startTime && effectiveEndDate && originalTask.endTime) {
+        const endDateOrStart = originalTask?.endDate || originalTask?.startDate;
+        if (originalTask?.startDate && originalTask.startTime && endDateOrStart && originalTask.endTime) {
             const start = DateUtils.toDateTime(originalTask.startDate, originalTask.startTime);
-            const end = DateUtils.toDateTime(effectiveEndDate, originalTask.endTime);
+            const end = DateUtils.toDateTime(endDateOrStart, originalTask.endTime);
             if (end < start) end.setDate(end.getDate() + 1);
 
             const dur = (end.getTime() - start.getTime()) / 60000;
@@ -329,10 +329,10 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         const startHour = context.plugin.settings.startHour;
         const { startDate, startTime, endDate, endTime } = this.lastDragResult;
         const edits: DisplayDateEdits = {
-            effectiveStartDate: visualDayAt(startDate, startTime, startHour),
-            effectiveStartTime: startTime,
-            effectiveEndDate: visualDayAt(endDate, endTime, startHour),
-            effectiveEndTime: endTime,
+            startDay: visualDayAt(startDate, startTime, startHour),
+            startTime: startTime,
+            endDay: visualDayAt(endDate, endTime, startHour),
+            endTime: endTime,
         };
         const plan: DragPlan = { edits, baseTask: this.baseTask };
         await this.commitAndReveal({

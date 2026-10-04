@@ -4,7 +4,6 @@ import { dayStart, visualDaysOf } from '../../utils/DayWindow';
 import { isAllDay } from './SectionClassifier';
 import { makeSegmentId } from './SegmentIds';
 import { buildChildEntries } from '../data/ChildEntryBuilder';
-import { resolveEffectiveDates } from '../../utils/EffectiveDates';
 import { resolveSpan, statedDates } from '../../utils/TaskDates';
 
 /** Lookup signature for resolving sibling tasks during ChildEntry materialization. */
@@ -27,7 +26,7 @@ export function getOriginalTaskId(task: { id: string; originalTaskId?: string })
 
 /**
  * Converts raw Task objects into DisplayTask with the dates the note states
- * (`statedDates`), resolved effective fields (`resolveEffectiveDates`) and
+ * (`statedDates`), the span and the due as moments (`resolveSpan`) and
  * materialized {@link ChildEntry} list.
  *
  * `getTask` resolves sibling tasks for child-entry partitioning. Pass
@@ -39,7 +38,6 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
     const { span, dueMs } = resolveSpan(stated, startHour);
     return {
         ...task,
-        ...resolveEffectiveDates(task, startHour),
         stated,
         span,
         dueMs,
@@ -56,25 +54,23 @@ export function toDisplayTasks(tasks: Task[], startHour: number, getTask: TaskLo
 }
 
 /**
- * Inclusive visual edits to a DisplayTask, expressed in the same coordinate
- * system as `effective*` fields. Pass only the fields that change; absent
- * fields are not touched.
+ * A drag's edits in visual days: the first and the last visual day a task is
+ * drawn over (`visualDaysOf`), and the times on them. Pass only the fields
+ * that change; absent fields are not touched.
  */
 export interface DisplayDateEdits {
-    /** Inclusive visual start date (matches DisplayTask.effectiveStartDate). */
-    effectiveStartDate?: string;
-    effectiveStartTime?: string;
-    /** Inclusive visual end date (matches DisplayTask.effectiveEndDate). */
-    effectiveEndDate?: string;
-    effectiveEndTime?: string;
+    /** The visual day the task starts on. */
+    startDay?: string;
+    startTime?: string;
+    /** The last visual day the task is drawn on (inclusive). */
+    endDay?: string;
+    endTime?: string;
 }
 
 /**
- * Inverse of `toVisualDate`. Given a visual date and the time at that visual
- * day, returns the underlying raw calendar date.
- *
- * `toVisualDate(date, time, startHour)` shifts -1 day when `time < startHour`,
- * so the inverse shifts +1 day in the same condition.
+ * Inverse of `DayWindow.visualDayAt`. Given a visual date and the time at
+ * that visual day, returns the underlying raw calendar date: a time before
+ * `startHour` is on the next calendar date.
  */
 function unshiftVisual(visualDate: string, time: string | undefined, startHour: number): string {
     if (!time) return visualDate;
@@ -88,13 +84,13 @@ function unshiftVisual(visualDate: string, time: string | undefined, startHour: 
  * Convert inclusive visual edits to a raw `Partial<Task>` update.
  *
  * This is the **single boundary** between drag/resize layer (which thinks in
- * inclusive visual dates, matching `DisplayTask.effective*`) and the raw Task
+ * inclusive visual days, as `visualDaysOf` gives them) and the raw Task
  * layer (where `endDate` is exclusive when `endTime` is absent and inclusive
  * when `endTime` is present — a dual semantic preserved for parser/writer
  * round-trip with the external @notation).
  *
  * `baseTask` provides the existing endTime to decide which semantic applies
- * to the raw `endDate` write. If `edits.effectiveEndTime` is also being
+ * to the raw `endDate` write. If `edits.endTime` is also being
  * changed, the edit value wins (a drag that adds/removes endTime can flip the
  * semantic).
  *
@@ -109,32 +105,32 @@ export function materializeRawDates(
 ): Partial<Task> {
     const updates: Partial<Task> = {};
 
-    if (edits.effectiveStartDate !== undefined) {
-        const time = edits.effectiveStartTime !== undefined
-            ? edits.effectiveStartTime
+    if (edits.startDay !== undefined) {
+        const time = edits.startTime !== undefined
+            ? edits.startTime
             : baseTask.startTime;
-        updates.startDate = unshiftVisual(edits.effectiveStartDate, time, startHour);
+        updates.startDate = unshiftVisual(edits.startDay, time, startHour);
     }
-    if (edits.effectiveStartTime !== undefined) {
-        updates.startTime = edits.effectiveStartTime;
+    if (edits.startTime !== undefined) {
+        updates.startTime = edits.startTime;
     }
 
-    if (edits.effectiveEndDate !== undefined) {
-        const willHaveEndTime = edits.effectiveEndTime !== undefined
-            ? !!edits.effectiveEndTime
+    if (edits.endDay !== undefined) {
+        const willHaveEndTime = edits.endTime !== undefined
+            ? !!edits.endTime
             : !!baseTask.endTime;
         if (willHaveEndTime) {
-            const endTime = edits.effectiveEndTime !== undefined
-                ? edits.effectiveEndTime
+            const endTime = edits.endTime !== undefined
+                ? edits.endTime
                 : baseTask.endTime;
-            updates.endDate = unshiftVisual(edits.effectiveEndDate, endTime, startHour);
+            updates.endDate = unshiftVisual(edits.endDay, endTime, startHour);
         } else {
             // pure all-day: visual inclusive end → raw exclusive (+1)
-            updates.endDate = DateUtils.addDays(edits.effectiveEndDate, 1);
+            updates.endDate = DateUtils.addDays(edits.endDay, 1);
         }
     }
-    if (edits.effectiveEndTime !== undefined) {
-        updates.endTime = edits.effectiveEndTime;
+    if (edits.endTime !== undefined) {
+        updates.endTime = edits.endTime;
     }
 
     return updates;

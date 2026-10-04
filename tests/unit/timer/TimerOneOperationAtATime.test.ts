@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { begin, timerOn, timerRig, type TimerRig } from '../helpers/timerRig';
 
@@ -135,7 +136,7 @@ describe('a second press while the record is on its way is dropped', () => {
         s.plugin.getTaskReadService = () => ({
             getDisplayTask: (id: string) => {
                 const t = s.index.getTask(id);
-                return t && { ...t, effectiveEndDate: t.endDate ?? t.startDate, effectiveEndTime: t.endTime ?? t.startTime };
+                return t && toDisplayTask(t, s.plugin.settings.startHour, NO_TASK_LOOKUP);
             },
         });
         const extend = vi.spyOn(s.recorder, 'extendRunningSession');

@@ -1,31 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { ScheduleOverlapLayout } from '../../../src/views/scheduleview/utils/ScheduleOverlapLayout';
-import type { DisplayTask } from '../../../src/types';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
+import { makeTask } from '../helpers/makeTask';
 import type { TimedDisplayTask } from '../../../src/views/scheduleview/ScheduleTypes';
 
 function makeTimed(id: string, startMin: number, endMin: number): TimedDisplayTask {
-    return {
-        id,
-        file: 'file.md',
-        line: 0,
-        content: id,
-        statusChar: ' ',
-        indent: 0,
-        childIds: [],
-        childLines: [],
-        originalText: '',
-        tags: [],
-        parserId: 'tv-inline',
-        effectiveStartDate: '2026-03-11',
-        startDateImplicit: false,
-        startTimeImplicit: false,
-        endDateImplicit: false,
-        endTimeImplicit: false,
-        originalTaskId: id,
-        isSplit: false,
-        visualStartMinute: startMin,
-        visualEndMinute: endMin,
-    } as TimedDisplayTask;
+    const task = toDisplayTask(makeTask({ id, content: id, startDate: '2026-03-11' }), 0, NO_TASK_LOOKUP);
+    return { ...task, visualStartMinute: startMin, visualEndMinute: endMin };
 }
 
 describe('ScheduleOverlapLayout', () => {

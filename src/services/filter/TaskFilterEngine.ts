@@ -86,8 +86,8 @@ export class TaskFilterEngine {
             if (!ancestor) return false;
             // Through the one conversion entry point, same as any other
             // task the engine sees. The hand-built object this replaces set
-            // no `effectiveDue` at all (the field is optional, so nothing
-            // caught it) and pinned `childEntries` to [], so a `target:
+            // no due at all (the field was optional, so nothing caught it)
+            // and pinned `childEntries` to [], so a `target:
             // parent` filter could not see a due date written plainly on the
             // parent, nor that the parent had children.
             const ancestorDt = toDisplayTask(ancestor, context.startHour, context.taskLookup);

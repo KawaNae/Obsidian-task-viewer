@@ -147,38 +147,6 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('toVisualDate', () => {
-        it('returns date when no time', () => {
-            expect(DateUtils.toVisualDate('2026-03-11', undefined, 5)).toBe('2026-03-11');
-        });
-
-        it('returns date when time >= startHour', () => {
-            expect(DateUtils.toVisualDate('2026-03-11', '09:00', 5)).toBe('2026-03-11');
-        });
-
-        it('returns previous day when time < startHour', () => {
-            expect(DateUtils.toVisualDate('2026-03-11', '03:00', 5)).toBe('2026-03-10');
-        });
-    });
-
-    describe('getTaskDurationMs', () => {
-        it('same day with start and end time → exact diff', () => {
-            const ms = DateUtils.getTaskDurationMs('2026-03-10', '09:00', '2026-03-10', '11:00', 0);
-            expect(ms).toBe(2 * 60 * 60 * 1000);
-        });
-
-        it('timed task without end → default 60 min', () => {
-            const ms = DateUtils.getTaskDurationMs('2026-03-10', '09:00', undefined, undefined, 0);
-            expect(ms).toBe(60 * 60 * 1000);
-        });
-
-        it('all-day task without time → ~24h', () => {
-            const ms = DateUtils.getTaskDurationMs('2026-03-10', undefined, undefined, undefined, 0);
-            // endDate at next day 23:59 (startHour=0 → endHour=23)
-            expect(ms).toBeGreaterThan(23 * 60 * 60 * 1000);
-        });
-    });
-
     describe('getVisualWeekKey', () => {
         // 2026-05-13 is Wednesday. Week containing it:
         // - weekStartDay=1 (Monday): starts 2026-05-11
@@ -232,36 +200,6 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('isAllDayTask', () => {
-        const startHour = 5;
-
-        it('startTime なしは常に all-day', () => {
-            expect(DateUtils.isAllDayTask('2026-01-15', undefined, undefined, undefined, startHour)).toBe(true);
-            expect(DateUtils.isAllDayTask('2026-01-15', undefined, '2026-01-15', '10:00', startHour)).toBe(true);
-        });
-
-        it('ちょうど 23h30m は all-day（閾値は ≥）', () => {
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', '05:30', startHour)).toBe(true);
-        });
-
-        it('23h29m は all-day ではない', () => {
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', '05:29', startHour)).toBe(false);
-        });
-
-        it('endDate なしで end < start は翌日繰上げで duration 計算する', () => {
-            // 22:00 → 01:00 = 3h → not all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '22:00', undefined, '01:00', startHour)).toBe(false);
-            // 06:00 → 05:30 = 23h30m → all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', undefined, '05:30', startHour)).toBe(true);
-        });
-
-        it('endDate 違い + endTime なしは endDate の startHour-1:59 まで', () => {
-            // Jan15 06:00 → Jan16 04:59 = 22h59m → not all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', undefined, startHour)).toBe(false);
-            // Jan15 05:00 → Jan16 04:59 = 23h59m → all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '05:00', '2026-01-16', undefined, startHour)).toBe(true);
-        });
-    });
     describe('dateAt / parseDate / readDate', () => {
         it('keeps a two-digit year as written', () => {
             expect(DateUtils.dateAt(26, 0, 1).getFullYear()).toBe(26);
@@ -340,33 +278,4 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('timedSpanMinutes / visualDayMinutes', () => {
-        it('counts a time before startHour past 24:00', () => {
-            expect(DateUtils.visualDayMinutes('04:00', 5)).toBe(28 * 60);
-            expect(DateUtils.visualDayMinutes('05:00', 5)).toBe(5 * 60);
-        });
-
-        it('an end that reads before the start is the next day', () => {
-            expect(DateUtils.timedSpanMinutes('23:00', '02:00', 5)).toEqual({ start: 23 * 60, end: 26 * 60 });
-            expect(DateUtils.timedSpanMinutes('06:00', '05:30', 5)).toEqual({ start: 360, end: 330 + 1440 });
-        });
-
-        it('no end is the default length', () => {
-            expect(DateUtils.timedSpanMinutes('10:00', undefined, 0)).toEqual({ start: 600, end: 660 });
-        });
-    });
-
-    describe('getDisplayTaskDurationMs', () => {
-        it('spans dates, not only the times of day', () => {
-            const ms = DateUtils.getDisplayTaskDurationMs({
-                effectiveStartDate: '2026-01-01', effectiveStartTime: '10:00',
-                effectiveEndDate: '2026-01-03', effectiveEndTime: '11:00',
-            }, 0);
-            expect(ms).toBe(49 * 60 * 60 * 1000);
-        });
-
-        it('null without a start', () => {
-            expect(DateUtils.getDisplayTaskDurationMs({ effectiveStartDate: '' }, 0)).toBeNull();
-        });
-    });
 });
