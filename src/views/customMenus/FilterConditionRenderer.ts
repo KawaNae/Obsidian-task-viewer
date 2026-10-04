@@ -88,7 +88,7 @@ export class FilterConditionRenderer {
 
     private renderPropertyKeyInput(row: HTMLElement, edit: ConditionEditor<PropertyCondition>): void {
         const tasks = this.getLastTasks();
-        this.renderSuggestInput(row, {
+        this.renderValueInput(row, {
             initialValue: edit.current().key ?? '',
             placeholder: t('filter.typePropertyKey'),
             wrapClass: 'tv-ctrl__input-wrap',
@@ -104,7 +104,7 @@ export class FilterConditionRenderer {
     private renderPropertyValueInput(row: HTMLElement, edit: ConditionEditor<PropertyCondition>): void {
         const tasks = this.getLastTasks();
         const key = edit.current().key ?? '';
-        this.renderSuggestInput(row, {
+        this.renderValueInput(row, {
             initialValue: edit.current().value ?? '',
             placeholder: t('filter.typePropertyValue'),
             wrapClass: 'filter-popover__property-value-wrap',
@@ -123,7 +123,7 @@ export class FilterConditionRenderer {
      * committed last does nothing, so the blur that follows an Enter or a
      * pick does not commit it again.
      */
-    private renderSuggestInput(
+    private renderValueInput(
         container: HTMLElement,
         opts: {
             initialValue: string;
