@@ -4,7 +4,7 @@ import { dayBoundaryAt } from './DayBoundary';
 import { makeSegmentId } from './SegmentIds';
 import { buildChildEntries } from '../data/ChildEntryBuilder';
 import { resolveEffectiveDates } from '../../utils/EffectiveDates';
-import { statedDates } from '../../utils/TaskDates';
+import { resolveSpan, statedDates } from '../../utils/TaskDates';
 
 /** Lookup signature for resolving sibling tasks during ChildEntry materialization. */
 export type TaskLookup = (id: string) => Task | undefined;
@@ -34,10 +34,15 @@ export function getOriginalTaskId(task: { id: string; originalTaskId?: string })
  * (modal placeholders, drag previews, etc.).
  */
 export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup): DisplayTask {
+    const stated = statedDates(task);
+    const { span, dueMs } = resolveSpan(stated, startHour);
     return {
         ...task,
         ...resolveEffectiveDates(task, startHour),
-        stated: statedDates(task),
+        stated,
+        span,
+        dueMs,
+        drawn: span,
         originalTaskId: task.id,
         isSplit: false,
         childEntries: buildChildEntries(task, getTask),
