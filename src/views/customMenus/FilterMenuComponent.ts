@@ -58,6 +58,8 @@ export class FilterMenuComponent {
     private rootEl: HTMLElement | null = null;
     private lastTasks: Task[] = [];
     private options: FilterEditOptions | null = null;
+    /** Which drawing of the menu is on screen: counted up each time it is drawn. */
+    private drawing = 0;
 
     private dropdowns: FilterDropdownMenus;
     private conditionRenderer: FilterConditionRenderer;
@@ -123,6 +125,8 @@ export class FilterMenuComponent {
 
     private renderContent(): void {
         if (!this.rootEl) return;
+        // The controls drawn before are gone from here on (`editorAt`).
+        this.drawing++;
         this.conditionRenderer.closeLists();
         this.rootEl.empty();
 
@@ -160,16 +164,25 @@ export class FilterMenuComponent {
      * The editor of the row at `path`, for a control that edits a condition
      * of the kind `isKind` tells. A row changes kind only by its property
      * menu, which redraws it, so the row's controls always find their kind.
+     *
+     * The editor belongs to one drawing of the menu. A control of a drawing
+     * that is gone (a field taken out by a redraw, whose blur comes as it
+     * goes) reads the row as it was drawn and edits nothing: what it would
+     * write was made for a row that is not there any more.
      */
     private editorAt<C extends FilterCondition>(path: NodePath, isKind: (c: FilterCondition) => c is C): ConditionEditor<C> {
-        const current = (): C => {
+        const drawn = this.drawing;
+        const read = (): C => {
             const node = nodeAt(this.state, path);
             if (!isFilterCondition(node) || !isKind(node)) throw new Error(`filter menu: the row at [${path.join(', ')}] changed kind under its controls`);
             return node;
         };
+        const asDrawn = read();
+        const current = (): C => (drawn === this.drawing ? read() : asDrawn);
         return {
             current,
             update: (edit, after) => {
+                if (drawn !== this.drawing) return;
                 this.commit(updateConditionAt(this.state, path, () => edit(current())), after);
             },
         };
