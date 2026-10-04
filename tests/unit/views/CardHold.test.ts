@@ -263,7 +263,7 @@ function index() {
         /** The parent as a view hands it to the renderer. */
         drawn(): DisplayTask {
             const parent = tasks().get(reading.parent)!;
-            return { ...parent, effectiveStartDate: '', originalTaskId: parent.id, isSplit: false } as unknown as DisplayTask;
+            return { ...parent, stated: {}, span: null, dueMs: null, drawn: null, originalTaskId: parent.id, isSplit: false };
         },
     };
 }

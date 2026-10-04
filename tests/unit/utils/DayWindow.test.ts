@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    dayStart, daysWindow, instantAt, instantText, minutesInDay, minutesOfSpan, ofValue, visualDayOf, visualDaysOf,
+    dayStart, daysWindow, instantAt, instantText, minutesInDay, minutesOfSpan, ofValue, visualDayAt, visualDayOf, visualDaysOf,
 } from '../../../src/utils/DayWindow';
 
 const at = (text: string): number => {
@@ -25,6 +25,12 @@ describe('DayWindow', () => {
     it('a moment before startHour is the day before', () => {
         expect(visualDayOf(at('2026-10-05 02:00'), 5)).toBe('2026-10-04');
         expect(visualDayOf(at('2026-10-05 05:00'), 5)).toBe('2026-10-05');
+    });
+
+    it('a date and a time as written: a time before startHour is the day before', () => {
+        expect(visualDayAt('2026-03-11', '09:00', 5)).toBe('2026-03-11');
+        expect(visualDayAt('2026-03-11', '05:00', 5)).toBe('2026-03-11');
+        expect(visualDayAt('2026-03-11', '03:00', 5)).toBe('2026-03-10');
     });
 
     it('a span is drawn over the days up to the moment before its end', () => {

@@ -428,10 +428,6 @@ describe('TaskFilterEngine', () => {
             startTime: '09:00',
             endDate: '2026-03-10',
             endTime: '11:00',
-            startDate: '2026-03-10',
-            startTime: '09:00',
-            endDate: '2026-03-10',
-            endTime: '11:00',
         });
 
         it('isSet — has start date', () => {
@@ -578,24 +574,18 @@ describe('TaskFilterEngine', () => {
         });
     });
 
-    // ── The effective dates are the ones compared ──
-    describe('DisplayTask effective fields', () => {
-        it('uses effectiveStartDate from DisplayTask', () => {
-            const dt = makeDisplayTask({
-                startDate: undefined,
-                startDate: '2026-03-10',
-                startDateImplicit: true,
-            });
+    // ── The resolved dates are the ones compared, inherited ones among them ──
+    describe('DisplayTask resolved dates', () => {
+        it('compares an inherited start the line does not write', () => {
+            const dt = makeDisplayTask({ cascadeContext: { startDate: '2026-03-10' } });
+            expect(dt.startDate).toBeUndefined();
             const state = stateFromCondition(cond('startDate', 'equals', '2026-03-10'));
             expect(evaluateFilter(dt, state)).toBe(true);
         });
 
-        it('uses effectiveEndDate from DisplayTask', () => {
-            const dt = makeDisplayTask({
-                endDate: undefined,
-                endDate: '2026-04-01',
-                endDateImplicit: true,
-            });
+        it('compares an inherited end the line does not write', () => {
+            const dt = makeDisplayTask({ startDate: '2026-03-30', cascadeContext: { endDate: '2026-04-01' } });
+            expect(dt.endDate).toBeUndefined();
             const state = stateFromCondition(cond('endDate', 'equals', '2026-04-01'));
             expect(evaluateFilter(dt, state)).toBe(true);
         });

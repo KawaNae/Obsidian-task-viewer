@@ -6,16 +6,9 @@ import {
     splitDisplayTaskAtBoundary,
     toDisplayTask,
 } from '../../../src/services/display/DisplayTaskConverter';
-import { visualDaysOf } from '../../../src/utils/DayWindow';
-import type { DisplayTask } from '../../../src/types';
-
-/** The visual days a display copy is drawn over, in the shape the old reader gave. */
-function getTaskDateRange(dt: DisplayTask, startHour: number) {
-    const days = visualDaysOf(dt.drawn!, startHour);
-    return { effectiveStart: days.first, effectiveEnd: days.last };
-}
 import { classifyForSection } from '../../../src/services/display/SectionClassifier';
-import type { Task } from '../../../src/types';
+import { dayStart, instantText, visualDaysOf } from '../../../src/utils/DayWindow';
+import type { DisplayTask, Task, TaskSpan } from '../../../src/types';
 
 /** Build a minimal Task for testing. */
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -37,109 +30,97 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 const startHour = 5; // default 5:00
 
+function shown(overrides: Partial<Task>): DisplayTask {
+    return toDisplayTask(makeTask(overrides), startHour, NO_TASK_LOOKUP);
+}
+
+/** A span's moments as `YYYY-MM-DD HH:mm` on the wall clock. */
+function moments(span: TaskSpan | null): { start: string; end: string } | null {
+    if (!span) return null;
+    const text = (ms: number) => { const { date, time } = instantText(ms); return `${date} ${time}`; };
+    return { start: text(span.startMs), end: text(span.endMs) };
+}
+
 describe('toDisplayTask', () => {
     it('resolves S-type (date only) to all-day', () => {
-        const task = makeTask({ startDate: '2026-01-15' });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveStartDate).toBe('2026-01-15');
-        expect(dt.effectiveStartTime).toBe('05:00');
-        expect(dt.effectiveEndDate).toBe('2026-01-16');
-        expect(dt.effectiveEndTime).toBe('04:59');
-        expect(dt.startDateImplicit).toBe(false);
-        expect(dt.startTimeImplicit).toBe(true);
-        expect(dt.endDateImplicit).toBe(true);
-        expect(dt.endTimeImplicit).toBe(true);
+        const dt = shown({ startDate: '2026-01-15' });
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 05:00', end: '2026-01-16 05:00' });
+        // Only what is written is stated; the rest the rules fill in on the span.
+        expect(dt.stated).toEqual({ startDate: '2026-01-15' });
+        expect(dt.drawn).toEqual(dt.span);
+        expect(dt.dueMs).toBeNull();
     });
 
     it('resolves S-Timed (date + time) with 1h default duration', () => {
-        const task = makeTask({ startDate: '2026-01-15', startTime: '09:00' });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveStartDate).toBe('2026-01-15');
-        expect(dt.effectiveStartTime).toBe('09:00');
-        expect(dt.effectiveEndDate).toBe('2026-01-15');
-        expect(dt.effectiveEndTime).toBe('10:00');
-        expect(dt.startTimeImplicit).toBe(false);
-        expect(dt.endDateImplicit).toBe(true);
-        expect(dt.endTimeImplicit).toBe(true);
+        const dt = shown({ startDate: '2026-01-15', startTime: '09:00' });
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 10:00' });
+        expect(dt.stated).toEqual({ startDate: '2026-01-15', startTime: '09:00' });
     });
 
     it('resolves SE-Timed (full range)', () => {
-        const task = makeTask({
+        const dt = shown({
             startDate: '2026-01-15',
             startTime: '09:00',
             endDate: '2026-01-15',
             endTime: '17:00',
         });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveStartTime).toBe('09:00');
-        expect(dt.effectiveEndDate).toBe('2026-01-15');
-        expect(dt.effectiveEndTime).toBe('17:00');
-        expect(dt.startDateImplicit).toBe(false);
-        expect(dt.startTimeImplicit).toBe(false);
-        expect(dt.endDateImplicit).toBe(false);
-        expect(dt.endTimeImplicit).toBe(false);
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 17:00' });
+        expect(dt.stated).toEqual({
+            startDate: '2026-01-15', startTime: '09:00', endDate: '2026-01-15', endTime: '17:00',
+        });
     });
 
     it('resolves E-Timed (endDate + endTime, no start) — 1h before end', () => {
-        const task = makeTask({
+        const dt = shown({
             endDate: '2026-01-15',
             endTime: '10:00',
         });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveStartDate).toBe('2026-01-15');
-        expect(dt.effectiveStartTime).toBe('09:00');
-        expect(dt.effectiveEndDate).toBe('2026-01-15');
-        expect(dt.effectiveEndTime).toBe('10:00');
-        expect(dt.startDateImplicit).toBe(true);
-        expect(dt.startTimeImplicit).toBe(true);
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 10:00' });
+        expect(dt.stated.startDate).toBeUndefined();
+        expect(dt.stated.startTime).toBeUndefined();
     });
 
     it('resolves E-AllDay (endDate only)', () => {
-        const task = makeTask({ endDate: '2026-01-15' });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveEndTime).toBe('04:59');
-        expect(dt.startDateImplicit).toBe(true);
+        const dt = shown({ endDate: '2026-01-15' });
+        expect(moments(dt.span)).toEqual({ start: '2026-01-14 05:00', end: '2026-01-15 05:00' });
+        expect(dt.stated.startDate).toBeUndefined();
     });
 
     it('resolves S with endTime (same-day end)', () => {
-        const task = makeTask({
+        const dt = shown({
             startDate: '2026-01-15',
             startTime: '09:00',
             endTime: '12:00',
         });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveEndDate).toBe('2026-01-15');
-        expect(dt.effectiveEndTime).toBe('12:00');
-        expect(dt.endDateImplicit).toBe(true);
-        expect(dt.endTimeImplicit).toBe(false);
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 12:00' });
+        expect(dt.stated.endDate).toBeUndefined();
+        expect(dt.stated.endTime).toBe('12:00');
     });
 
     it('resolves SE with endDate no endTime', () => {
-        const task = makeTask({
+        const dt = shown({
             startDate: '2026-01-15',
             endDate: '2026-01-17',
         });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveEndDate).toBe('2026-01-17');
-        expect(dt.effectiveEndTime).toBe('04:59');
-        expect(dt.endTimeImplicit).toBe(true);
+        expect(moments(dt.span)?.end).toBe('2026-01-17 05:00');
+        expect(dt.stated.endTime).toBeUndefined();
     });
 
     it('sets isSplit false and originalTaskId', () => {
         const task = makeTask({ startDate: '2026-01-15' });
-        const dt = toDisplayTask(task, startHour);
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
         expect(dt.isSplit).toBe(false);
         expect(dt.originalTaskId).toBe(task.id);
     });
 
     it('uses cascadeContext startDate when task has no startDate', () => {
-        const task = makeTask({
+        const dt = shown({
             startDate: undefined,
             cascadeContext: { startDate: '2026-01-15' },
         });
-        const dt = toDisplayTask(task, startHour);
-        expect(dt.effectiveStartDate).toBe('2026-01-15');
-        expect(dt.startDateImplicit).toBe(true);
+        expect(moments(dt.span)?.start).toBe('2026-01-15 05:00');
+        expect(dt.stated.startDate).toBe('2026-01-15');
+        expect(dt.startDate).toBeUndefined();
     });
 });
 
@@ -151,7 +132,7 @@ describe('shouldSplitDisplayTask', () => {
             endDate: '2026-01-15',
             endTime: '17:00',
         });
-        const dt = toDisplayTask(task, startHour);
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
         expect(shouldSplitDisplayTask(dt, startHour)).toBe(false);
     });
 
@@ -162,16 +143,15 @@ describe('shouldSplitDisplayTask', () => {
             endDate: '2026-01-16',
             endTime: '08:00',
         });
-        const dt = toDisplayTask(task, startHour);
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
         expect(shouldSplitDisplayTask(dt, startHour)).toBe(true);
     });
 
-    it('returns false when no effective end', () => {
+    it('returns false for an all-day task', () => {
         const task = makeTask({ startDate: '2026-01-15' });
         // toDisplayTask resolves implicit end, so build a minimal DisplayTask
-        const dt = toDisplayTask(task, startHour);
-        // S-AllDay resolved end is next day — should split
-        // Actually S-AllDay 05:00→next-day 04:59 crosses boundary
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        // S-AllDay 05:00 → next-day 05:00 is one visual day, and all-day is never split
         expect(shouldSplitDisplayTask(dt, startHour)).toBe(false);
     });
 });
@@ -187,12 +167,37 @@ describe('splitDisplayTaskAtBoundary', () => {
             endDate: '2026-01-16',
             endTime: '08:00',
         });
-        const [head, tail] = splitDisplayTaskAtBoundary(toDisplayTask(task, startHour), startHour);
+        const [head, tail] = splitDisplayTaskAtBoundary(toDisplayTask(task, startHour, NO_TASK_LOOKUP), startHour);
 
         expect(head.splitContinuesAfter).toBe(true);
         expect(head.splitContinuesBefore).toBe(false);
         expect(tail.splitContinuesBefore).toBe(true);
         expect(tail.splitContinuesAfter).toBe(false);
+    });
+
+    it("keeps the line's values, stated and span on both halves, and cuts only drawn at the day's start", () => {
+        const task = makeTask({
+            startDate: '2026-01-15',
+            startTime: '22:00',
+            endDate: '2026-01-16',
+            endTime: '08:00',
+        });
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        const [head, tail] = splitDisplayTaskAtBoundary(dt, startHour);
+        const boundary = dayStart('2026-01-16', startHour);
+
+        for (const segment of [head, tail]) {
+            expect(segment.startDate).toBe('2026-01-15');
+            expect(segment.startTime).toBe('22:00');
+            expect(segment.endDate).toBe('2026-01-16');
+            expect(segment.endTime).toBe('08:00');
+            expect(segment.stated).toEqual(dt.stated);
+            expect(segment.span).toEqual(dt.span);
+        }
+        expect(head.drawn).toEqual({ startMs: dt.span!.startMs, endMs: boundary });
+        expect(tail.drawn).toEqual({ startMs: boundary, endMs: dt.span!.endMs });
+        expect(visualDaysOf(head.drawn!, startHour)).toEqual({ first: '2026-01-15', last: '2026-01-15' });
+        expect(visualDaysOf(tail.drawn!, startHour)).toEqual({ first: '2026-01-16', last: '2026-01-16' });
     });
 });
 
@@ -203,7 +208,7 @@ describe('materializeRawDates', () => {
             endDate: '2026-05-19', endTime: '09:45',
         });
         const updates = materializeRawDates(
-            { effectiveEndDate: '2026-05-19' },
+            { endDay: '2026-05-19' },
             base, startHour,
         );
         expect(updates.endDate).toBe('2026-05-19'); // +1 されない
@@ -216,7 +221,7 @@ describe('materializeRawDates', () => {
         });
         // visual end は inclusive 5/8
         const updates = materializeRawDates(
-            { effectiveEndDate: '2026-05-08' },
+            { endDay: '2026-05-08' },
             base, startHour,
         );
         expect(updates.endDate).toBe('2026-05-09'); // +1 される
@@ -229,7 +234,7 @@ describe('materializeRawDates', () => {
         });
         // visual start day = 5-12 (3am < startHour 5)
         const updates = materializeRawDates(
-            { effectiveStartDate: '2026-05-12', effectiveStartTime: '03:00' },
+            { startDay: '2026-05-12', startTime: '03:00' },
             base, startHour,
         );
         expect(updates.startDate).toBe('2026-05-13'); // unshift で +1
@@ -242,13 +247,13 @@ describe('materializeRawDates', () => {
             endDate: '2026-05-19', endTime: '09:45',
         });
         const dt = toDisplayTask(base, startHour, NO_TASK_LOOKUP);
-        const range = getTaskDateRange(dt, startHour);
+        const days = visualDaysOf(dt.drawn!, startHour);
         const updates = materializeRawDates(
             {
-                effectiveStartDate: range.effectiveStart!,
-                effectiveStartTime: dt.effectiveStartTime,
-                effectiveEndDate: range.effectiveEnd!,
-                effectiveEndTime: dt.effectiveEndTime,
+                startDay: days.first,
+                startTime: instantText(dt.span!.startMs).time,
+                endDay: days.last,
+                endTime: instantText(dt.span!.endMs).time,
             },
             base, startHour,
         );
@@ -264,17 +269,18 @@ describe('materializeRawDates', () => {
             endDate: '2026-05-09', // exclusive
         });
         const dt = toDisplayTask(base, startHour, NO_TASK_LOOKUP);
-        const range = getTaskDateRange(dt, startHour);
-        // dt.effectiveEndTime は '04:59' に設定され、visualEnd は前日にシフトする (5/8)
+        // span は 5/9 05:00 で終わり、その前の瞬間の visual day は前日 (5/8)
+        const days = visualDaysOf(dt.drawn!, startHour);
+        expect(days.last).toBe('2026-05-08');
         const updates = materializeRawDates(
-            { effectiveEndDate: range.effectiveEnd! },
+            { endDay: days.last },
             base, startHour,
         );
-        // edits に effectiveEndTime を含めないので willHaveEndTime=false 経路 → +1
+        // edits に endTime を含めないので willHaveEndTime=false 経路 → +1
         expect(updates.endDate).toBe(base.endDate); // 5-09 が再構築される
     });
 
-    it('effectiveEndTime を edit で「付ける」と inclusive 経路に切り替わる', () => {
+    it('endTime を edit で「付ける」と inclusive 経路に切り替わる', () => {
         // base は pure allday (endTime なし、endDate=exclusive 5-09)
         const base = makeTask({
             startDate: '2026-05-04',
@@ -282,14 +288,14 @@ describe('materializeRawDates', () => {
         });
         // edit で endTime を付ける → willHaveEndTime=true → 不変 (no +1)
         const updates = materializeRawDates(
-            { effectiveEndDate: '2026-05-08', effectiveEndTime: '17:00' },
+            { endDay: '2026-05-08', endTime: '17:00' },
             base, startHour,
         );
         expect(updates.endDate).toBe('2026-05-08');
         expect(updates.endTime).toBe('17:00');
     });
 
-    it('effectiveEndTime を edit で「消す」と exclusive 経路に切り替わる', () => {
+    it('endTime を edit で「消す」と exclusive 経路に切り替わる', () => {
         // base は endTime あり (raw endDate=inclusive)
         const base = makeTask({
             startDate: '2026-05-13', startTime: '07:30',
@@ -297,9 +303,9 @@ describe('materializeRawDates', () => {
         });
         // edit で endTime を空文字で消去 (undefined ではなく明示的に空)
         // ただし現状の DisplayDateEdits は string 型なので空文字での消去は表現できない。
-        // ここでは effectiveEndTime を空文字で渡すと willHaveEndTime=false になることを確認。
+        // ここでは endTime を空文字で渡すと willHaveEndTime=false になることを確認。
         const updates = materializeRawDates(
-            { effectiveEndDate: '2026-05-19', effectiveEndTime: '' as any },
+            { endDay: '2026-05-19', endTime: '' as any },
             base, startHour,
         );
         // willHaveEndTime=false 経路: visual 5-19 → raw 5-20 (exclusive)
@@ -310,7 +316,7 @@ describe('materializeRawDates', () => {
     it('only-startDate 編集はそのまま raw に書く (時刻シフトなし)', () => {
         const base = makeTask({ startDate: '2026-05-13' });
         const updates = materializeRawDates(
-            { effectiveStartDate: '2026-05-15' },
+            { startDay: '2026-05-15' },
             base, startHour,
         );
         expect(updates.startDate).toBe('2026-05-15');
@@ -327,85 +333,62 @@ describe('materializeRawDates', () => {
  */
 describe('toDisplayTask — cascade 継承日時の解決', () => {
     it('継承 startTime + raw startDate は timed（既定 1h）になる', () => {
-        const task = makeTask({
+        const dt = shown({
             startDate: '2026-01-15',
             cascadeContext: { startTime: '09:00' },
         });
-        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        expect(dt.effectiveStartTime).toBe('09:00');
-        expect(dt.effectiveEndDate).toBe('2026-01-15');
-        expect(dt.effectiveEndTime).toBe('10:00');
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 10:00' });
         expect(classifyForSection(dt, startHour)).toBe('timed');
-        expect(getTaskDateRange(dt, startHour)).toEqual({
-            effectiveStart: '2026-01-15', effectiveEnd: '2026-01-15',
-        });
+        expect(visualDaysOf(dt.drawn!, startHour)).toEqual({ first: '2026-01-15', last: '2026-01-15' });
     });
 
     it('日付も時刻も継承（セクション tv-start:: 06:00 + ファイル tv-start）でも timed', () => {
-        const task = makeTask({
+        const dt = shown({
             cascadeContext: { startDate: '2026-06-30', startTime: '06:00' },
         });
-        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        expect(dt.effectiveStartDate).toBe('2026-06-30');
-        expect(dt.effectiveStartTime).toBe('06:00');
-        expect(dt.effectiveEndDate).toBe('2026-06-30');
-        expect(dt.effectiveEndTime).toBe('07:00');
+        expect(moments(dt.span)).toEqual({ start: '2026-06-30 06:00', end: '2026-06-30 07:00' });
         expect(classifyForSection(dt, startHour)).toBe('timed');
     });
 
     it('継承 endTime + raw endDate は捨てられない', () => {
-        const task = makeTask({
+        const dt = shown({
             endDate: '2026-01-15',
             cascadeContext: { endTime: '10:00' },
         });
-        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        expect(dt.effectiveEndTime).toBe('10:00');
         // E-Timed: 終端の 1 時間前が暗黙の開始
-        expect(dt.effectiveStartDate).toBe('2026-01-15');
-        expect(dt.effectiveStartTime).toBe('09:00');
+        expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 10:00' });
         expect(classifyForSection(dt, startHour)).toBe('timed');
     });
 
     it('継承 endDate のみのタスクはどのセクションからも消えない', () => {
-        const task = makeTask({
+        const dt = shown({
             cascadeContext: { endDate: '2026-01-15', endTime: '10:00' },
         });
-        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        expect(dt.effectiveStartDate).toBe('2026-01-15');
-        expect(dt.effectiveStartTime).toBe('09:00');
+        expect(moments(dt.span)?.start).toBe('2026-01-15 09:00');
         expect(classifyForSection(dt, startHour)).not.toBeNull();
-        expect(getTaskDateRange(dt, startHour).effectiveStart).toBe('2026-01-15');
+        expect(visualDaysOf(dt.drawn!, startHour).first).toBe('2026-01-15');
     });
 
     it('時刻なしの継承 endDate は従来どおり allDay', () => {
-        const task = makeTask({ cascadeContext: { endDate: '2026-01-15' } });
-        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        expect(dt.effectiveEndTime).toBe('04:59');
+        const dt = shown({ cascadeContext: { endDate: '2026-01-15' } });
+        expect(moments(dt.span)?.end).toBe('2026-01-15 05:00');
         expect(classifyForSection(dt, startHour)).toBe('allDay');
     });
 
     it('raw と継承で結果が一致する（同じ値ならどちらに書いても同じ）', () => {
-        const raw = toDisplayTask(
-            makeTask({ startDate: '2026-01-15', startTime: '09:00' }), startHour, NO_TASK_LOOKUP);
-        const cascaded = toDisplayTask(
-            makeTask({ cascadeContext: { startDate: '2026-01-15', startTime: '09:00' } }),
-            startHour, NO_TASK_LOOKUP);
-        expect({
-            s: cascaded.effectiveStartDate, st: cascaded.effectiveStartTime,
-            e: cascaded.effectiveEndDate, et: cascaded.effectiveEndTime,
-        }).toEqual({
-            s: raw.effectiveStartDate, st: raw.effectiveStartTime,
-            e: raw.effectiveEndDate, et: raw.effectiveEndTime,
-        });
+        const raw = shown({ startDate: '2026-01-15', startTime: '09:00' });
+        const cascaded = shown({ cascadeContext: { startDate: '2026-01-15', startTime: '09:00' } });
+        expect(cascaded.stated).toEqual(raw.stated);
+        expect(cascaded.span).toEqual(raw.span);
     });
 
-    it('*Implicit フラグは raw 基準のまま（継承値は placeholder 表示）', () => {
-        const task = makeTask({
+    it('生の値は行に書かれたまま（継承値は stated にだけ入り、placeholder 表示になる）', () => {
+        const dt = shown({
             startDate: '2026-01-15',
             cascadeContext: { startTime: '09:00' },
         });
-        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        expect(dt.startDateImplicit).toBe(false);
-        expect(dt.startTimeImplicit).toBe(true);
+        expect(dt.startDate).toBe('2026-01-15');
+        expect(dt.startTime).toBeUndefined();
+        expect(dt.stated).toEqual({ startDate: '2026-01-15', startTime: '09:00' });
     });
 });

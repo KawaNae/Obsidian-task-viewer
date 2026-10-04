@@ -9,6 +9,7 @@ import { renderTopRight } from '../../../../src/views/taskcard/TaskCardRenderer'
 import { toDisplayTask, NO_TASK_LOOKUP } from '../../../../src/services/display/DisplayTaskConverter';
 import { splitTasks } from '../../../../src/services/display/TaskSplitter';
 import { statedDates } from '../../../../src/utils/TaskDates';
+import { instantText } from '../../../../src/utils/DayWindow';
 import { DEFAULT_SETTINGS, type DisplayTask, type Task, type TaskViewerSettings } from '../../../../src/types';
 import { readLine } from '../../helpers/readLine';
 import { makeTask } from '../../helpers/makeTask';
@@ -106,8 +107,9 @@ describe('statedDates', () => {
         expect(statedDates(makeTask({ startDate: '2026-10-04', startTime: '10:00' })))
             .toEqual({ startDate: '2026-10-04', startTime: '10:00' });
         const allDay = shown(makeTask({ startDate: '2026-10-04' }));
-        expect(allDay.effectiveStartTime).toBe('05:00');
-        expect(allDay.effectiveEndDate).toBe('2026-10-05');
+        // The rules' start of the day and end live on the span, not in what is stated.
+        expect(instantText(allDay.span!.startMs)).toEqual({ date: '2026-10-04', time: '05:00' });
+        expect(instantText(allDay.span!.endMs)).toEqual({ date: '2026-10-05', time: '05:00' });
         expect(allDay.stated).toEqual({ startDate: '2026-10-04' });
     });
 });

@@ -237,7 +237,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **PinnedListQuery** | `services/filter/PinnedListQuery.ts` | Which tasks a pinned list shows: `resolve(list, viewFilter)` (the list's filter, and the view's when `applyViewFilter`) for the views' lists and Kanban's cells; `fromTemplate(template, listName?)` for a filter file, the template read by its view's schema and its lists by the schema's `listsOf` |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
 | **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order |
-| **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion with effective field resolution |
+| **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion (stated dates, span, drawn), the split at a day boundary |
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
 | **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed / dueOnly kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
 | **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Per-date bucketing: delegates kind to `classifyForSection`, owns date membership (allDay/timed = visual span, dueOnly = calendar due) and sort via TaskRenderOrder |
@@ -320,7 +320,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 |-------|-------|---------------------------|------------|---------|
 | **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `formatTaskLine`, all writers (round-trip fidelity) |
 | **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `NoteTasks`, from `SectionNode.resolvedX` | Merge step below |
-| **effective** | `DisplayTask.effectiveStartDate` etc. (materialized — merge needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
+| **effective** | `DisplayTask.stated` (merged), `span` and `dueMs` (resolved — needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
 Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
 
@@ -354,7 +354,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 
 フロープログラムはタスク行の `==>` の後ろと、直下の `- ==>` 行（`collectFlowLineIndices`: `directItems` のうちフロー行の形の行）の全部から1回で決まる。行のパーサ（`TVInlineParser`）は `==>` から後ろを本文から切り落とすだけで、読まない。`readFlow(outline, taskLine)` が行の尾とフロー行を集めて1回パースし、抽出（`tv-inline` の行）とエディタの診断（`DiagnosticsExtension`、`FlowGroup`）がこれを使う。
 
-フローの式が読む `due`（`start`、`end` も）は行に書かれた値で、節やノートから受け継いだ値（`effectiveDue`）ではない。式は次の回の行に書く値を作るもので、受け継いだ締切を入れると `at(due+7d)` が受け継ぎを行へ書き出してしまう。絞り込みと並べ替えが比べる値（`TaskValues`、受け継ぎを含む）とは目的が違う。
+フローの式が読む `due`（`start`、`end` も）は行に書かれた値で、節やノートから受け継いだ値（`stated.due`）ではない。式は次の回の行に書く値を作るもので、受け継いだ締切を入れると `at(due+7d)` が受け継ぎを行へ書き出してしまう。絞り込みと並べ替えが比べる値（`TaskValues`、受け継ぎを含む）とは目的が違う。
 
 `Task.validation` の1枠は抽出で1回だけ埋まる。行のパーサが入れた日付の規則、日付ブロックの parse-error を優先し、どちらも無い行だけがフローの最初の診断を受け取る。
 
@@ -407,8 +407,8 @@ The plugin recognizes eight task types internally.
 ### Display-based task classification
 
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
-All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
-Implicit value resolution is centralised in `resolveEffectiveDates()` (`utils/EffectiveDates.ts`); `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`) puts its answer on the display copy, and the in-place duplicate asks it for the slot a task fills.
+All times are relative to the configured `startHour` (default 5 → visual day `[05:00, 05:00 the next day)`).
+A task's dates are read two ways (`utils/TaskDates.ts`): the dates the note states (`statedDates`, `DisplayTask.stated`), and the time the task occupies, `[startMs, endMs)`, with the moment it is due (`resolveSpan`, `DisplayTask.span` and `dueMs`). `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`) puts both on the display copy, and the in-place duplicate asks `resolveSpan` for the slot a task fills.
 Parse-layer date inheritance is via `cascadeContext` (set by `NoteTasks`, consumed by `DisplayTaskConverter`).
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
@@ -424,7 +424,7 @@ At least one side has an explicit time, and only one side (start or end) is spec
 Only one side specified, no time on that side.
 
 - **Display**: Calendar (all-day) lane, 1 visual-day duration
-- **Inference**: implicit time = startHour:00 / (startHour−1):59; reverse date = same day
+- **Inference**: one visual day (see the span below)
 - Examples: `@2026-03-09`, `@>2026-03-09`, `@2026-03-09>>due`
 
 #### 3. SE / SED All-day (no time on either side)
@@ -432,7 +432,7 @@ Only one side specified, no time on that side.
 Both start and end are specified, neither has a time.
 
 - **Display**: Calendar (all-day) lane, spanning the specified days
-- **Inference**: implicit times = startHour:00 / (startHour−1):59
+- **Inference**: from the start of the first day (see the span below)
 - Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>due`
 
 #### 4. SE / SED Timed (at least one side has time)
@@ -440,14 +440,14 @@ Both start and end are specified, neither has a time.
 Both start and end are specified, at least one has an explicit time.
 
 - **Display**: < 23h30m → Timeline lane; ≥ 23h30m → Calendar (all-day) lane
-- **Inference**: if one side's time is missing, infer from startHour:00 / (startHour−1):59
+- **Inference**: a side without a time rests on its date (see the span below)
 - Examples: `@2026-03-09T10:00>12:00`, `@2026-03-09T10:00>2026-03-10T18:00`
 
 #### 5. D (due only)
 
 Only a due is specified, no start or end.
 
-- **Display**: Calendar (all-day) lane on the due date (display only), and Schedule's due section. Timeline does not draw it: `classifyForSection` gives it the `dueOnly` section and Timeline's `GridRenderer` draws only `allDay` and `timed`
+- **Display**: Schedule's due section, on the visual day the due closes (`endDayOf(dueMs)`, where the window queries find it). Timeline does not draw it: `classifyForSection` gives it the `dueOnly` section and Timeline's `GridRenderer` draws only `allDay` and `timed`
 - **Inference**: none — D does not affect display position or duration inference
 - The section is decided by the row's own `due`: a task whose due is only inherited (from a heading or the note) is in no section
 - Example: `@>>2026-03-13`
@@ -459,67 +459,36 @@ Only a due is specified, no start or end.
 | Section | Order |
 |---|---|
 | timed | visual start (minutes from startHour), then the longer first |
-| allDay | effective start date |
+| allDay | the start of what is drawn (`drawn.startMs`) |
 | dueOnly | the row's `due`, with its time |
 
 A tie goes by where the task is written: the file (`localeCompare`), then the line as a number, then the ID (only the segments of one row share a file and a line). The ID does not order tasks by itself: it is a name for one reading of the note, and compared as text it put line 10 before line 9.
 
-### Implicit value resolution rules (`resolveEffectiveDates()`)
+### The span (`resolveSpan()`)
 
-All implicit resolution is centralised in `resolveEffectiveDates()` (in `utils/EffectiveDates.ts`), which `toDisplayTask()` calls. It starts from the dates the note states (`statedDates`, the line's value or else the inherited one, field by field), the same values a card's top right shows.
-Written dates are **calendarDates**. Complement uses `startHour` where possible,
-falling back to `00:00`/`23:59` when same-day end < start occurs.
+`resolveSpan(stated, startHour)` fills in what the note does not state and gives moments (local epoch ms). `dayStart(D)` is D at `startHour:00` (`utils/DayWindow.ts`). A time inherited from the section or the note is a written time.
 
-#### Stage 1: E-type start resolution (no startDate, has endDate)
-
-| Subtype | Condition | Rule |
+| Written | Start | End |
 |---|---|---|
-| E-Timed | endTime present | start = endTime − 1h (may cross to previous calendarDate) |
-| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `toVisualDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
+| `@D` | `dayStart(D)` | `dayStart(D+1)` |
+| `@D>E` | `dayStart(D)` | `dayStart(E)` (a date-only end is its implicit `(startHour−1):59` and the minute after it; at `startHour` 0, `dayStart(E+1)`) |
+| `@>E` | the start of the visual day that end is in | as `@D>E` |
+| `@DT10:00` | D 10:00 | an hour later |
+| `@DT10:00>11:00` | D 10:00 | D 11:00, the next day's when before the start |
+| `@>ET11:00` | an hour before the end | E 11:00 |
+| `@DT10:00>D` (the implicit end before the start) | D 10:00 | D 23:59 |
+| `@>>D` | no span | due `dayStart(D+1)` |
+| `@>>DT17:00` | no span | due D 17:00 |
 
-#### Stage 2: All-day startTime complement
+The rows rule 4 calls errors (an end time on a line with no start time) are not drawn; they are resolved the same way for the API's `includeInvalid`.
 
-| Condition | Rule |
-|---|---|
-| startDate present, no startTime | startTime = `startHour:00` |
+A segment of a split task holds its line's values, `stated` and `span`; what it is drawn over is `drawn`, cut at `dayStart` of the boundary. The visual days a span is drawn over are `visualDaysOf` (the last is the day of the moment before the end, so `[D 05:00, D+1 05:00)` is D only); the place on the time grid is `minutesOfSpan`. Windows of days (`daysWindow`, a filter's value by `ofValue`) and how a span or a moment stands to them (`utils/SpanRelation.ts`: `overlaps`, `within`, `startIn`, `endIn`) answer the views, the window queries (`TaskReadService.tasksInWindow`), the API's `today`, Timeline's overdue heading, the filter and the sort alike. A start belongs to the window it is in; an end and a due to the window they close.
 
-#### Stage 3: S-type end resolution (has startDate, no endDate)
-
-| Subtype | Condition | Rule |
-|---|---|---|
-| S + explicit endTime | endTime present, no endDate, endTime ≥ startTime | endDate = startDate (same-day inheritance) |
-| S + explicit endTime (cross-midnight) | endTime present, no endDate, endTime < startTime | endDate = startDate + 1 day |
-| S-Timed | startTime present, no endTime | end = startTime + 1h (may cross to next calendarDate) |
-| S-AllDay | no startTime, no endTime | end = startTime + 23h59m |
-
-#### Stage 4: SE/SED endTime complement
-
-| Condition | Rule |
-|---|---|
-| endDate present, no endTime | endTime = `(startHour−1):59` |
-
-#### Stage 5: Same-day fallback
-
-| Condition | Rule |
-|---|---|
-| same calendarDate, one side implicit, end < start | implicit startTime → `00:00`, implicit endTime → `23:59` |
-
-#### D-Only
-
-D-Only tasks (`@>>due`) have no start or end — `toDisplayTask()` produces
-`effectiveStartDate = ''` and `effectiveEndDate = undefined`. No resolution is applied.
-
-#### Due complement (conceptual)
-
-Due represents a deadline date (calendarDate). If time complement is needed,
-`23:59` is used (end of calendar day, startHour-independent).
+The hub's faint values and the menu's dates are `sideValues`: the line's value, else the inherited one, else what the rules make, at the precision it is written with (a bare date gets no faint time).
 
 ### All-day boundary
 
-- Duration ≥ 23h30m → All-day lane
-- Duration < 23h30m → Timeline lane
-
-(`DateUtils.isAllDayTask`, threshold `23.5 * 60 * 60 * 1000` ms)
+A task is drawn all day when its start is a bare date (a start date with no start time, or with no start an end date with no end time), or it lasts 23h30m or more (`isAllDay` in `services/display/SectionClassifier.ts`). Otherwise it is drawn on the time grid.
 
 ---
 
@@ -1194,7 +1163,7 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 | Event | Dates | Properties / tags / style |
 |-------|-------|---------------------------|
 | Parse (NoteTasks) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
-| Effective merge | `DisplayTaskConverter` → `DisplayTask.effective*` via `\|\|` fallback | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
+| Effective merge | `statedDates` → `DisplayTask.stated` via `\|\|` fallback, then `resolveSpan` → `span`, `dueMs` | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
 | `formatTaskLine` / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
 | Explicit edit (drag / resize / future property edit) | Raw fields set explicitly → cascade no longer contributes | Same principle |
 
@@ -1209,11 +1178,11 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 | **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.due` are all calendar dates. | Fixed (midnight) |
 | **visualDate** | The date as perceived by the user, shifted by `startHour`. A task at 03:00 with `startHour=5` belongs to the previous visual day. | `startHour` setting |
 
-- `getVisualDateOfNow()`, `toVisualDate()` return **visualDate**
+- `getVisualDateOfNow()`, `DayWindow.visualDayOf()` return **visualDate**
 - `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
 - `startHour` is the boundary between two visual days (default: 5:00 AM)
 
-`DateUtils` is the one date module. Converting between `YYYY-MM-DD` text and `Date` (`parseDate`, `readDate`, `toDateTime`, `getLocalDateString`), the date shape (`DATE_PATTERN`, `isDateShape`), the visual today at a given moment (`visualDateAt(now, startHour)`), the week start, shifting by days (`shiftDateString`), splitting and joining a due (`splitDateTime`, `joinDateTime`), and a task's length (`getDisplayTaskDurationMs`, `timedSpanMinutes`) are answered there. Other code does not split date strings, build `new Date('...')` from them, or write the date regex; a grammar that embeds a date builds its pattern from `DATE_PATTERN`. Years are four digits (`0026` is the year 26).
+`DateUtils` is the one date module. Converting between `YYYY-MM-DD` text and `Date` (`parseDate`, `readDate`, `toDateTime`, `getLocalDateString`), the date shape (`DATE_PATTERN`, `isDateShape`), the visual today at a given moment (`visualDateAt(now, startHour)`), the week start, shifting by days (`shiftDateString`), and splitting and joining a due (`splitDateTime`, `joinDateTime`) are answered there. A day as a stretch of time, the day a moment is in and the days a span is drawn over are `utils/DayWindow.ts`'s. Other code does not split date strings, build `new Date('...')` from them, or write the date regex; a grammar that embeds a date builds its pattern from `DATE_PATTERN`. Years are four digits (`0026` is the year 26).
 
 ### @notation endDate semantics — **dual semantic at raw layer**
 
@@ -1224,51 +1193,35 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 | **absent** (pure all-day) | **exclusive** (one day past last covered day) | Matches `@2026-03-24>2026-03-29` notation: 5 visual days, 03-24 ~ 03-28 inclusive. |
 | **present** | **inclusive** (the day on which `endTime` occurs) | Matches `@2026-05-13T07:30>2026-05-19T09:45` notation: the task literally ends on 05-19 at 09:45. |
 
-This duality is preserved at the raw layer for round-trip with the external @notation. The display layer **collapses the duality** so that `DisplayTask.effectiveEndDate` is always the inclusive visual end:
+This duality is preserved at the raw layer for round-trip with the external @notation. The display layer **collapses the duality** into moments (`resolveSpan`): the span `[startMs, endMs)`, and the visual days it is drawn over read from it (`visualDaysOf`, whose last day is the day of the moment before the end):
 
 ```
 @2026-03-24>2026-03-29  (endTime absent → exclusive raw)
-toDisplayTask() resolves:  effectiveEndTime = '04:59' (startHour−1)
-toVisualDate('2026-03-29', '04:59', 5) → '2026-03-28'  ← inclusive visual
+span: [03-24 05:00, 03-29 05:00)  → visual days 03-24 … 03-28
 
 @2026-05-13T07:30>2026-05-19T09:45  (endTime present → inclusive raw)
-toDisplayTask():           effectiveEndTime = '09:45'
-toVisualDate('2026-05-19', '09:45', 5) → '2026-05-19'  ← inclusive visual
+span: [05-13 07:30, 05-19 09:45)  → visual days 05-13 … 05-19
 ```
-
-**Mechanism**: For all-day tasks, `toDisplayTask()` injects `effectiveEndTime = (startHour−1):59`. Since this time is before `startHour`, `toVisualDate` shifts back by 1 day, producing the inclusive last visual day. For timed tasks, `effectiveEndTime` is the real time, and `toVisualDate` shifts only when that time is before `startHour`.
-
-**Rule**: always use `toVisualDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.
 
 **Drag write-back rule**: never write `Task.endDate` directly with `addDays(visualEnd, 1)` — that pattern is correct only for the all-day branch and silently corrupts timed tasks. Funnel updates through `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`), the single boundary that converts inclusive visual edits to raw based on `baseTask.endTime`.
 
 ### Visual date pipeline
 
-All visual date calculations MUST flow through the same code path. Two canonical functions exist:
+All visual date calculations flow through the same code path:
 
 | Function | Location | Purpose |
 |----------|----------|---------|
-| `resolveEffectiveDates()` | `utils/EffectiveDates.ts` | Resolves implicit effective fields from raw Task |
-| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Raw Task → DisplayTask (effective fields, child entries) |
-| `getTaskDateRange()` | `services/display/VisualDateRange.ts` (canonical; re-exported from `views/calendar/CalendarDateUtils.ts`) | Converts DisplayTask effective fields to inclusive visual start/end dates |
+| `statedDates()`, `resolveSpan()` | `utils/TaskDates.ts` | The dates the note states; the span and the due as moments |
+| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Raw Task → DisplayTask (`stated`, `span`, `dueMs`, `drawn`, child entries) |
+| `visualDaysOf()`, `minutesOfSpan()` | `utils/DayWindow.ts` | The visual days a span is drawn over; its place on the time grid |
 
-Any code that needs a task's visual date range — renderers, grid layout, drag ghosts, split boundaries — must use this pipeline, never compute visual dates independently from raw task fields.
-
-```
-Raw Task
-  ↓  toDisplayTask(task, startHour)
-DisplayTask (effectiveStartDate/Time, effectiveEndDate/Time)
-  ↓  getTaskDateRange(displayTask, startHour)
-{ effectiveStart: visualDate, effectiveEnd: visualDate }  ← inclusive range
-```
+Any code that needs a task's visual date range — renderers, grid layout, drag ghosts, split boundaries — reads `visualDaysOf(drawn)` (a segment's own part) or `visualDaysOf(span)` (the whole task), never computes visual dates from raw task fields.
 
 ### Pitfall: raw endDate ≠ visual end (and the gap is conditional)
 
-`task.endDate` and the inclusive visual end date differ by 1 day **only for all-day tasks** (no `endTime`). For timed tasks they coincide. Any code that converts between the two must do so explicitly via the canonical helpers:
-
 | Direction | Method |
 |-----------|--------|
-| raw → visual (for rendering/ghost) | `getTaskDateRange(toDisplayTask(task, startHour), startHour).effectiveEnd` |
+| raw → visual (for rendering/ghost) | `visualDaysOf(toDisplayTask(task, startHour, NO_TASK_LOOKUP).span!, startHour).last` |
 | visual → raw (for write-back) | `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`) |
 
 `materializeRawDates` reads `baseTask.endTime` to pick the correct branch (no +1 for timed, +1 for all-day). Direct `addDays(visualEnd, 1)` is the bug pattern this helper eliminates — see Bug fix in commit history (Calendar end-handle 1-day drift on timed multi-day tasks).
@@ -1312,13 +1265,12 @@ Calendar's week rows and Timeline's all-day row are the same lane (`drawDateGrid
 
 ### Split segment fields
 
-Split segments inherit all fields from the original via `...dt` spread. Modified fields:
+Split segments inherit all fields from the original via `...dt` spread: the line's values, `stated` and `span` are the whole task's. Modified fields:
 
 | Field | Head segment | Tail segment |
 |-------|-------------|--------------|
-| `id` | `makeSegmentId(originalId, startDate)` | `makeSegmentId(originalId, boundaryDate)` |
-| `effectiveEndDate/Time` | Set to boundary | Inherited from original |
-| `effectiveStartDate/Time` | Inherited from original | Set to boundary |
+| `id` | `makeSegmentId(originalId, its first visual day)` | `makeSegmentId(originalId, boundaryDate)` |
+| `drawn` | From its start up to `dayStart(boundaryDate)` | From `dayStart(boundaryDate)` to its end |
 | `isSplit` | `true` | `true` |
 | `splitContinuesBefore` | From original (or `false`) | `true` |
 | `splitContinuesAfter` | `true` | From original (or `false`) |
@@ -1331,7 +1283,7 @@ Drag strategies (Move/Resize) must use the same visual date pipeline as the rend
 ```typescript
 // In BaseDragStrategy:
 protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string }
-  // Internally: toDisplayTask(task, startHour) → getTaskDateRange(dt, startHour)
+  // Internally: toDisplayTask(task, startHour) → visualDaysOf(dt.drawn, startHour)
 ```
 
 Each Gesture (`GridMoveGesture` / `GridResizeGesture`) caches the inclusive visual range at drag start:

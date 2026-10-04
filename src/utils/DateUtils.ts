@@ -1,10 +1,10 @@
-import type { DisplayTask, TimeOfDay } from '../types';
+import type { TimeOfDay } from '../types';
 
 /**
  * The date module: every conversion between a `YYYY-MM-DD` string and a
- * `Date`, the visual "today", the start of a week, shifting by days, and the
- * length of a task. Pure — the wall clock is read only by the entry points
- * that say so (`getVisualDateOfNow`, `getToday`, `isPastDate`); everything
+ * `Date`, the visual "today", the start of a week, and shifting by days. A
+ * day as a stretch of time is `DayWindow`'s. Pure — the wall clock is read only by the entry points
+ * that say so (`getVisualDateOfNow`, `getToday`); everything
  * else takes the moment as an argument.
  *
  * Dates are local calendar days. Years are four digits, as the `@` notation
@@ -204,25 +204,6 @@ export class DateUtils {
         return this.getLocalDateString(this.getWeekStart(date, weekStartDay));
     }
 
-    /**
-     * Get the visual start date for a task considering startHour.
-     * If a task's startTime is before startHour, it visually belongs to the previous day.
-     * 
-     * @param date YYYY-MM-DD - The calendar date
-     * @param time HH:mm or undefined - The time component
-     * @param startHour The configured start hour for visual day (e.g., 5 for 5:00 AM)
-     * @returns The visual date YYYY-MM-DD
-     */
-    static toVisualDate(date: string, time: string | undefined, startHour: number): string {
-        if (!time) return date;  // All-day tasks use actual date
-
-        const [h] = time.split(':').map(Number);
-        if (h < startHour) {
-            // time is before startHour → visually belongs to previous day
-            return this.addDays(date, -1);
-        }
-        return date;
-    }
 
     /**
      * Shift a date or date-time (`YYYY-MM-DD` / `YYYY-MM-DDTHH:mm`) by whole
@@ -257,172 +238,6 @@ export class DateUtils {
         const h = Math.floor(m / 60);
         const min = m % 60;
         return DateUtils.formatHHMM(h, min);
-    }
-
-    /**
-     * Calculate task duration in milliseconds based on README spec.
-     * Returns the duration considering start/end dates and times.
-     *
-     * @param startDate YYYY-MM-DD
-     * @param startTime HH:mm or undefined
-     * @param endDate YYYY-MM-DD or undefined
-     * @param endTime HH:mm or undefined
-     * @param startHour The configured start hour for visual day
-     * @returns Duration in milliseconds
-     */
-    static getTaskDurationMs(
-        startDate: string,
-        startTime: TimeOfDay | undefined,
-        endDate: string | undefined,
-        endTime: TimeOfDay | undefined,
-        startHour: number
-    ): number {
-        const startHourStr = startHour.toString().padStart(2, '0') + ':00';
-
-        // Calculate effective start datetime
-        const effectiveStartTime = startTime || startHourStr;
-        const startDateTime = new Date(`${startDate}T${effectiveStartTime}`);
-
-        // Calculate effective end datetime
-        let endDateTime: Date;
-
-        if (endTime) {
-            const effectiveEndDate = endDate || startDate;
-            endDateTime = new Date(`${effectiveEndDate}T${endTime}`);
-            // If end is strictly before start, assume next day
-            // Note: end == start means 0 duration, not 24 hours
-            if (endDateTime < startDateTime) {
-                endDateTime.setDate(endDateTime.getDate() + 1);
-            }
-        } else if (endDate && endDate !== startDate) {
-            // Different end date, no end time: end at startHour-1:59 of end date
-            let endHour = startHour - 1;
-            if (endHour < 0) endHour = 23;
-            endDateTime = new Date(`${endDate}T${endHour.toString().padStart(2, '0')}:59`);
-        } else {
-            // Same date or no end date: depends on whether there's a start time
-            if (startTime) {
-                // S-Timed: +1 hour
-                endDateTime = new Date(startDateTime.getTime() + DateUtils.DEFAULT_TIMED_DURATION_MINUTES * 60 * 1000);
-            } else {
-                // S-All, SD, etc: next day at startHour-1:59 (24 hours)
-                const nextDay = this.addDays(startDate, 1);
-                let endHour = startHour - 1;
-                if (endHour < 0) endHour = 23;
-                endDateTime = new Date(`${nextDay}T${endHour.toString().padStart(2, '0')}:59`);
-            }
-        }
-
-        return endDateTime.getTime() - startDateTime.getTime();
-    }
-
-    /**
-     * How long a task lasts, from its effective start (date and time) to its
-     * effective end. null for a task without a start (due only), or whose end
-     * comes before its start.
-     *
-     * The filter's `length` and the API's `durationMinutes` both read this, so
-     * a task that `length greaterThan 24 hours` picks up reports the same span.
-     */
-    static getDisplayTaskDurationMs(
-        task: Pick<DisplayTask, 'effectiveStartDate' | 'effectiveStartTime' | 'effectiveEndDate' | 'effectiveEndTime'>,
-        startHour: number,
-    ): number | null {
-        if (!task.effectiveStartDate) return null;
-        const ms = DateUtils.getTaskDurationMs(
-            task.effectiveStartDate, task.effectiveStartTime,
-            task.effectiveEndDate, task.effectiveEndTime,
-            startHour,
-        );
-        return Number.isFinite(ms) && ms >= 0 ? ms : null;
-    }
-
-    /**
-     * Minutes of an `HH:mm` time counted from midnight of the visual day's
-     * calendar date: a time before `startHour` belongs to the early morning
-     * after it, so it lands past 24:00.
-     */
-    static visualDayMinutes(time: string, startHour: number): number {
-        const minutes = DateUtils.timeToMinutes(time);
-        return minutes < startHour * 60 ? minutes + 24 * 60 : minutes;
-    }
-
-    /**
-     * Where a timed task sits in its visual day: start and end in
-     * {@link visualDayMinutes}. An end that reads before the start is the next
-     * day's; no end means the default length. The timeline's layout, its card
-     * placement and the render order all read this, so their stacking agrees.
-     */
-    static timedSpanMinutes(
-        startTime: string, endTime: string | undefined, startHour: number,
-    ): { start: number; end: number } {
-        const start = DateUtils.visualDayMinutes(startTime, startHour);
-        if (!endTime) return { start, end: start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES };
-        let end = DateUtils.visualDayMinutes(endTime, startHour);
-        if (end < start) end += 24 * 60;
-        return { start, end };
-    }
-
-    /**
-     * Check if a task duration is 24 hours or more
-     */
-    static isAllDayTask(
-        startDate: string,
-        startTime: TimeOfDay | undefined,
-        endDate: string | undefined,
-        endTime: TimeOfDay | undefined,
-        startHour: number
-    ): boolean {
-        // Tasks without start time are always considered All Day
-        // This covers S-All, SD, ED, E, D types per README spec
-        if (!startTime) return true;
-
-        const durationMs = this.getTaskDurationMs(startDate, startTime, endDate, endTime, startHour);
-        const threshold = 23.5 * 60 * 60 * 1000; // 23h30m
-        return durationMs >= threshold;
-    }
-
-    /**
-     * Check if a date/time is in the past considering startHour.
-     * For visual date boundary: if current time < startHour, yesterday is considered "today".
-     * 
-     * @param dateStr YYYY-MM-DD - The date to check
-     * @param timeStr HH:mm or undefined - The time to check (optional)
-     * @param startHour The configured start hour for visual day boundary
-     * @returns true if the date/time is in the past
-     */
-    static isPastDate(dateStr: string, timeStr: string | undefined, startHour: number): boolean {
-        const now = new Date();
-        const visualToday = this.getVisualDateOfNow(startHour);
-        const taskVisualDate = this.toVisualDate(dateStr, timeStr, startHour);
-
-        if (taskVisualDate < visualToday) return true;
-        if (taskVisualDate > visualToday) return false;
-
-        // Same visual date - compare in visual-day-relative minutes
-        if (timeStr) {
-            const startMinutes = startHour * 60;
-            const currentMinutes = now.getHours() * 60 + now.getMinutes();
-            const taskMinutes = this.timeToMinutes(timeStr);
-            const currentVisual = (currentMinutes - startMinutes + 1440) % 1440;
-            const taskVisual = (taskMinutes - startMinutes + 1440) % 1440;
-            return taskVisual < currentVisual;
-        }
-
-        // Same date, no time specified - not past yet (it's "today")
-        return false;
-    }
-
-    /**
-     * Check if a due date is in the past considering startHour.
-     *
-     * @param due YYYY-MM-DD or YYYY-MM-DDTHH:mm format
-     * @param startHour The configured start hour for visual day boundary
-     * @returns true if the due date is in the past
-     */
-    static isPastDue(due: string, startHour: number): boolean {
-        const { date, time } = DateUtils.splitDateTime(due);
-        return this.isPastDate(date, time, startHour);
     }
 
     static dueDatePart(due: string | undefined): string | undefined {

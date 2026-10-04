@@ -142,8 +142,8 @@ export interface Task {
      *
      * This duality is preserved at the raw layer for parser/writer round-trip
      * with the external @notation. Display code should not read `endDate`
-     * directly; use `DisplayTask.effectiveEndDate` (always inclusive visual
-     * end) instead. Drag write-back must funnel updates through
+     * directly; it reads the span (`DisplayTask.span`, `drawn`) and the
+     * visual days it is drawn over (`visualDaysOf`). Drag write-back must funnel updates through
      * `materializeRawDates()` which collapses the duality based on
      * `baseTask.endTime`.
      */

@@ -189,11 +189,11 @@ export class TimerRecorder {
         if (task.startTime) {
             // Timeline task (has time): parallel translation — preserve duration
             // Resolve implicit endDate for same-day notation (e.g., @dateThh:mm>hh:mm)
-            const effectiveEndDate = task.endDate ?? (task.endTime ? task.startDate : undefined);
+            const endDateOrStart = task.endDate ?? (task.endTime ? task.startDate : undefined);
 
-            if (task.startDate && effectiveEndDate && task.endTime) {
+            if (task.startDate && endDateOrStart && task.endTime) {
                 const oldStart = DateUtils.toDateTime(task.startDate, task.startTime);
-                const oldEnd = DateUtils.toDateTime(effectiveEndDate, task.endTime);
+                const oldEnd = DateUtils.toDateTime(endDateOrStart, task.endTime);
                 const durationMs = oldEnd.getTime() - oldStart.getTime();
                 const newEnd = new Date(now.getTime() + durationMs);
                 updates.endDate = this.formatDate(newEnd);

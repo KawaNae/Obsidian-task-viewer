@@ -52,9 +52,9 @@ describe('日付所属: dueOnly', () => {
 });
 
 describe('日付所属: allDay', () => {
-    // allDay の所属は AllDay レーンのカード配置と同じ getTaskDateRange の
-    // visual span。S-AllDay の effective 解決（翌日 04:59 終端）は
-    // toVisualDate シフトで吸収され、所属は 1 visual 日になる。
+    // allDay の所属は AllDay レーンのカード配置と同じ visualDaysOf の
+    // visual 日。S-AllDay の span（翌日 05:00 終端）は終端の直前の瞬間で
+    // 日を読むので、所属は 1 visual 日になる。
     it('S-AllDay Jan15 は visual 1 日分（Jan15）のみに所属する', () => {
         const task = dt({ id: 'allday-s', startDate: '2026-01-15' });
         expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).allDay)).toEqual(['allday-s']);

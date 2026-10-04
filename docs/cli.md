@@ -354,10 +354,10 @@ obsidian obsidian-task-viewer:help
 | `childIds` | `string[]` | 子タスクID一覧 |
 | `color` | `string \| null` | カードの色 |
 | `linestyle` | `string \| null` | 線スタイル |
-| `effectiveStartDate` | `string \| null` | 暗黙値解決済み開始日 |
-| `effectiveStartTime` | `string \| null` | 暗黙値解決済み開始時刻 |
-| `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
-| `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
+| `effectiveStartDate` | `string \| null` | 期間の開始の瞬間の暦の日付（`@2026-10-04` は `2026-10-04`） |
+| `effectiveStartTime` | `string \| null` | 期間の開始の瞬間の時刻（`@2026-10-04` は startHour の `05:00`） |
+| `effectiveEndDate` | `string \| null` | 期間の終了の瞬間の暦の日付（`@2026-10-04` は `2026-10-05`） |
+| `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
 | `effectiveDue` | `string \| null` | 受け継ぎを含む締切 |
 | `durationMinutes` | `number \| null` | 所要時間（分） |
 | `properties` | `Record<string, unknown>` | カスタムプロパティ |

@@ -2,11 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { computeContentSignature } from '../../../src/views/taskcard/TaskCardRenderer';
 import type { DisplayTask, TaskViewerSettings, ChildEntry, Task } from '../../../src/types';
 import type { TaskReadService } from '../../../src/services/data/TaskReadService';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { ChildItemBuilder } from '../../../src/views/taskcard/ChildItemBuilder';
 import type { ChildRenderItem } from '../../../src/views/taskcard/types';
 
 function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
+    const task = {
         id: 'test-1',
         file: 'test.md',
         line: 0,
@@ -19,20 +20,13 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
         childLines: [],
         originalText: '- [ ] task content',
         indent: 0,
-        effectiveStartDate: '2026-07-18',
-        effectiveStartTime: '09:00',
-        effectiveEndDate: '2026-07-18',
-        effectiveEndTime: '10:00',
-        effectiveDue: '2026-07-20',
-        startDateImplicit: false,
-        startTimeImplicit: false,
-        endDateImplicit: false,
-        endTimeImplicit: false,
-        originalTaskId: 'test-1',
-        isSplit: false,
-        childEntries: [],
-        ...overrides,
-    } as DisplayTask;
+        startDate: '2026-07-18',
+        startTime: '09:00',
+        endDate: '2026-07-18',
+        endTime: '10:00',
+        due: '2026-07-20',
+    } as Task;
+    return { ...toDisplayTask(task, 0, NO_TASK_LOOKUP), childEntries: [], ...overrides };
 }
 
 function makeSettings(overrides: Partial<TaskViewerSettings> = {}): TaskViewerSettings {

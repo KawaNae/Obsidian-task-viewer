@@ -245,8 +245,8 @@ export class GridResizeGesture extends BaseDragStrategy {
     }
 
     /**
-     * Resize の commit プラン。targetDate (絶対日付) を受け取って effectiveStartDate /
-     * effectiveEndDate を絶対値で書き出す。calendar / allday で完全共通、surface 由来の
+     * Resize の commit プラン。targetDate (絶対日付) を受け取って startDay /
+     * endDay を絶対値で書き出す。calendar / allday で完全共通、surface 由来の
      * delta / span は登場しない (= 過去 reference frame 不整合バグの再発防止)。
      */
     private buildResizePlan(targetDate: string): DragPlan | null {
@@ -254,12 +254,12 @@ export class GridResizeGesture extends BaseDragStrategy {
         let edits: DisplayDateEdits | null = null;
         if (this.resizeDirection === 'right') {
             const newEnd = targetDate < this.initialVisualStart ? this.initialVisualStart : targetDate;
-            edits = { effectiveEndDate: newEnd };
+            edits = { endDay: newEnd };
         } else {
             const newStart = targetDate > this.initialVisualEnd ? this.initialVisualEnd : targetDate;
-            edits = { effectiveStartDate: newStart };
+            edits = { startDay: newStart };
             if (!this.baseTask.endDate) {
-                edits.effectiveEndDate = this.initialVisualEnd;
+                edits.endDay = this.initialVisualEnd;
             }
         }
         return edits ? { edits, baseTask: this.baseTask } : null;

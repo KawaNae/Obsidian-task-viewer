@@ -28,7 +28,7 @@ describe('effectiveDue: cascade 継承', () => {
     it('raw due がある場合は effectiveDue = raw due', () => {
         const task = makeTask({ due: '2026-07-18' });
         const dt = toDisplayTask(task, 0, noLookup);
-        expect(dt.effectiveDue).toBe('2026-07-18');
+        expect(dt.stated.due).toBe('2026-07-18');
         expect(dt.due).toBe('2026-07-18');
     });
 
@@ -37,14 +37,14 @@ describe('effectiveDue: cascade 継承', () => {
             cascadeContext: { due: '2026-07-20' },
         });
         const dt = toDisplayTask(task, 0, noLookup);
-        expect(dt.effectiveDue).toBe('2026-07-20');
+        expect(dt.stated.due).toBe('2026-07-20');
         expect(dt.due).toBeUndefined();
     });
 
     it('raw due も cascadeContext.due もなし → effectiveDue は undefined', () => {
         const task = makeTask();
         const dt = toDisplayTask(task, 0, noLookup);
-        expect(dt.effectiveDue).toBeUndefined();
+        expect(dt.stated.due).toBeUndefined();
     });
 
     it('raw due は cascadeContext.due より優先', () => {
@@ -53,7 +53,7 @@ describe('effectiveDue: cascade 継承', () => {
             cascadeContext: { due: '2026-07-20' },
         });
         const dt = toDisplayTask(task, 0, noLookup);
-        expect(dt.effectiveDue).toBe('2026-07-18');
+        expect(dt.stated.due).toBe('2026-07-18');
     });
 });
 
