@@ -13,7 +13,7 @@ import type { ValidationMenuBuilder } from '../interaction/menu/builders/Validat
 import type { MenuPresenter } from '../interaction/menu/MenuPresenter';
 import type { TaskHubOpener } from '../interaction/menu/MenuHandler';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
-import { getTaskNotation } from '../services/filter/parserTaxonomy';
+import { lineMenuOf } from './LineMenu';
 import { t } from '../i18n';
 import { editorCm } from '../utils/editorCm';
 import { outlineFor } from './EditorOutline';
@@ -111,10 +111,12 @@ export function createTaskMenuExtension(
             new Notice(t('notice.editorMenuNotRead'));
             return;
         }
-        const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
+        // Read again since the button was drawn: the line may offer none now.
+        const kind = lineMenuOf(task, getSettings());
+        if (kind === 'none') return;
 
         menuPresenter.present((menu) => {
-            if (isTaskviewerTask && task) {
+            if (kind === 'task' && task) {
                 // Recognized taskviewer-notation task: full menu (G1〜G5)
                 validationBuilder.addValidationWarning(menu, task);
                 const dt = toDisplayTask(task, getSettings().startHour, (id) => index.getTask(id));
@@ -136,8 +138,8 @@ export function createTaskMenuExtension(
                 // G5: 破壊的変更
                 actionsBuilder.addDestructiveActions(menu, task);
             } else {
-                // Plain checkbox or external-notation task (tasks-plugin / day-planner):
-                // status + basic actions, writing through CheckboxLineOps preserves the original notation.
+                // A checkbox the index reads no task on: status and the basic
+                // actions, written through CheckboxLineOps as the line stands.
                 const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
                 // The line holds only in the content the menu was opened in.
@@ -167,13 +169,9 @@ export function createTaskMenuExtension(
         if (!settings.editorMenuForTasks && !settings.editorMenuForCheckboxes) {
             return RangeSet.of([]);
         }
-
-        const needsFilter = !settings.editorMenuForTasks || !settings.editorMenuForCheckboxes;
-        let filePath: string | undefined;
-        if (needsFilter) {
-            const info = view.state.field(editorInfoField);
-            filePath = info?.file?.path;
-        }
+        // Whatever the settings, each line asks the index what it holds: a
+        // line of the Tasks or Day Planner notation has no button.
+        const filePath = view.state.field(editorInfoField)?.file?.path;
 
         const widgets: { from: number; deco: Decoration }[] = [];
         const seen = new Set<number>();
@@ -193,15 +191,11 @@ export function createTaskMenuExtension(
 
                 if (TaskLineClassifier.opensTask(outline, lineNumber) && !seen.has(line.number)) {
                     seen.add(line.number);
-                    let show = true;
-                    if (needsFilter && filePath) {
-                        // Not read yet in what the editor shows: a checkbox
-                        // until the scan's change draws the buttons again.
-                        key ??= keyOf(view.state.doc);
-                        const found = index.taskAtEditorLine(filePath, lineNumber, key) ?? undefined;
-                        const isTaskviewerTask = !!found && getTaskNotation(found.parserId) === 'taskviewer';
-                        show = isTaskviewerTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
-                    }
+                    // Not read yet in what the editor shows: a checkbox
+                    // until the scan's change draws the buttons again.
+                    key ??= keyOf(view.state.doc);
+                    const found = filePath ? index.taskAtEditorLine(filePath, lineNumber, key) : undefined;
+                    const show = lineMenuOf(found, settings) !== 'none';
                     if (show) {
                         widgets.push({
                             from: line.to,
