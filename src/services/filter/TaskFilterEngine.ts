@@ -3,6 +3,7 @@ import type { FilterContext } from './FilterContext';
 import type { FilterExpr } from './FilterExpr';
 import type { DateFilterValue, DateComparison, LengthComparison } from './FilterTypes';
 import { ofValue } from '../../utils/DayWindow';
+import { overlaps, within } from '../../utils/SpanRelation';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskValues, type InstantValue } from './TaskValues';
 
@@ -55,11 +56,19 @@ export class TaskFilterEngine {
                         return TaskValues.of(task, expr.property).ms !== undefined;
                     case 'length':
                         return TaskValues.length(task).present;
+                    case 'period':
+                        return task.span !== null;
                     default:
                         return TaskValues.of(task, expr.property).set;
                 }
             case 'date':
                 return this.compareDate(TaskValues.of(task, expr.property), expr.op, expr.value, context);
+            case 'period': {
+                // The span only: a due is the due condition's.
+                if (!task.span) return false;
+                const w = ofValue(expr.value, context);
+                return expr.rel === 'overlaps' ? overlaps(task.span, w) : within(task.span, w);
+            }
             case 'length': {
                 const ms = TaskValues.length(task).value;
                 if (ms === undefined) return false;

@@ -437,6 +437,7 @@ console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
 | `startDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | `'YYYY-MM-DD'` か `{ preset, n? }`。実効の日付で比べ、時刻は見ない |
 | `endDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ |
 | `due` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ。受け継いだ締切（`effectiveDue`）で比べる |
+| `period` | `overlaps`, `within`, `notOverlaps`, `notWithin` | 日付、日時、プリセット、範囲。開始から終了までの期間が、値の窓と重なるか、窓に含まれるか（とその否定）。期限は見ない。期間の無いタスクはどれにも当たらない。`target: parent` は受けない |
 | `anyDate` | `isSet`, `isNotSet` | なし。開始、終了、締切のどれかがあれば set |
 | `color` | `includes`, `excludes` | `string[]` |
 | `linestyle` | `includes`, `excludes` | `string[]` |

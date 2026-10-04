@@ -2,7 +2,7 @@ import type {
     FilterState, FilterItem, FilterCondition, DateFilterValue,
     TextListProperty, DateProperty, DateComparison, LengthComparison,
 } from './FilterTypes';
-import { isFilterCondition, isPresenceOperator } from './FilterTypes';
+import { isDateRange, isFilterCondition, isPresenceOperator } from './FilterTypes';
 
 /**
  * The tree the engine evaluates, compiled from a FilterState.
@@ -17,6 +17,9 @@ import { isFilterCondition, isPresenceOperator } from './FilterTypes';
  * - `target: parent` is `ancestors(atom)`: some ancestor answers yes
  * - the two together are `not(ancestors(atom))`: no ancestor answers yes. A
  *   task without ancestors has none that does, so it passes
+ * - a period's negation (`notOverlaps`, `notWithin`) is
+ *   `all(has(period), not(atom))`: a task with no span matches neither the
+ *   positive nor the negative row
  *
  * A condition whose value is not chosen yet (an empty list, no date, no
  * number, no key) constrains nothing: it compiles to {@link ALWAYS} as a
@@ -44,10 +47,12 @@ export type FilterAtom =
     | { readonly kind: 'tagsExactly'; readonly tags: readonly string[] }
     /** The content contains `text`, ignoring case. */
     | { readonly kind: 'contentContains'; readonly text: string }
-    /** The task has the property: a date, a date of any kind, a parent, a child task, a span. */
-    | { readonly kind: 'has'; readonly property: DateProperty | 'anyDate' | 'parent' | 'children' | 'length' }
+    /** The task has the property: a date, a date of any kind, a parent, a child task, a measurable span, a span. */
+    | { readonly kind: 'has'; readonly property: DateProperty | 'anyDate' | 'parent' | 'children' | 'length' | 'period' }
     /** The date compares to the day or the days `value` names. */
     | { readonly kind: 'date'; readonly property: DateProperty; readonly op: DateComparison; readonly value: DateFilterValue }
+    /** The span overlaps the window `value` names, or lies within it (`SpanRelation`). */
+    | { readonly kind: 'period'; readonly rel: 'overlaps' | 'within'; readonly value: DateFilterValue }
     /** The span compares to `value` in `unit`. */
     | { readonly kind: 'length'; readonly op: LengthComparison; readonly value: number; readonly unit: 'hours' | 'minutes' }
     /** The task has the `key:: value` property. */
@@ -76,6 +81,10 @@ function compileItem(node: FilterItem): FilterExpr {
 function compileCondition(c: FilterCondition): FilterExpr {
     if (isUnfinished(c)) return ALWAYS;
     const { atom, negated } = positiveOf(c);
+    // A task with no span is matched by no period row, a negative one too.
+    if (atom.kind === 'period') {
+        return negated ? { kind: 'all', items: [{ kind: 'has', property: 'period' }, { kind: 'not', item: atom }] } : atom;
+    }
     const subject: FilterExpr = c.target === 'parent' ? { kind: 'ancestors', item: atom } : atom;
     return negated ? { kind: 'not', item: subject } : subject;
 }
@@ -92,7 +101,9 @@ function isUnfinished(c: FilterCondition): boolean {
         case 'startDate':
         case 'endDate':
         case 'due':
-            return !isPresenceOperator(c.operator) && (c.value === undefined || c.value === '');
+            return !isPresenceOperator(c.operator) && isUnchosen(c.value);
+        case 'period':
+            return isUnchosen(c.value);
         case 'length':
             return !isPresenceOperator(c.operator) && c.value === undefined;
         case 'anyDate':
@@ -104,13 +115,21 @@ function isUnfinished(c: FilterCondition): boolean {
     }
 }
 
+/** A date value not chosen yet: none, `''`, or a range with neither end chosen. */
+function isUnchosen(value: DateFilterValue | undefined): boolean {
+    if (value === undefined || value === '') return true;
+    if (!isDateRange(value)) return false;
+    return (value.from === undefined || value.from === '') && (value.to === undefined || value.to === '');
+}
+
 /**
  * The positive atom `c` asks, and whether `c` asks its negation. A row with
  * no value has been turned away by {@link isUnfinished} before this; the
  * fallbacks for an absent value only satisfy the type.
  */
 function positiveOf(c: FilterCondition): { atom: FilterAtom; negated: boolean } {
-    const negated = c.operator === 'excludes' || c.operator === 'notContains' || c.operator === 'isNotSet';
+    const negated = c.operator === 'excludes' || c.operator === 'notContains' || c.operator === 'isNotSet'
+        || c.operator === 'notOverlaps' || c.operator === 'notWithin';
     switch (c.property) {
         case 'file':
         case 'status':
@@ -136,6 +155,10 @@ function positiveOf(c: FilterCondition): { atom: FilterAtom; negated: boolean } 
             const { operator } = c;
             if (isPresenceOperator(operator)) return { atom: { kind: 'has', property: c.property }, negated };
             return { atom: { kind: 'date', property: c.property, op: operator, value: c.value ?? '' }, negated };
+        }
+        case 'period': {
+            const rel = c.operator === 'overlaps' || c.operator === 'notOverlaps' ? 'overlaps' : 'within';
+            return { atom: { kind: 'period', rel, value: c.value ?? '' }, negated };
         }
         case 'length': {
             const { operator } = c;

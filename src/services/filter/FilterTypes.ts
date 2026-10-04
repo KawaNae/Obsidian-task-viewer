@@ -11,6 +11,8 @@ export type FlagProperty = 'anyDate' | 'parent' | 'children';
 
 export type PresenceOperator = 'isSet' | 'isNotSet';
 export type DateComparison = 'equals' | 'before' | 'after' | 'onOrBefore' | 'onOrAfter';
+/** How a task's span stands to the window a value names; the last two are the first two's negations. */
+export type PeriodRelation = 'overlaps' | 'within' | 'notOverlaps' | 'notWithin';
 export type LengthComparison = 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual' | 'equals';
 
 /**
@@ -107,6 +109,19 @@ export interface DateCondition extends Targeted {
     readonly value?: DateFilterValue;
 }
 
+/**
+ * A task's span (`[start, end)`) against the window its value names: it
+ * overlaps the window or lies within it, or not. The due is not read. A task
+ * with no span matches none of the four. A period row asks about the task
+ * itself: what an ancestor's period would mean is left until a use asks it.
+ */
+export interface PeriodCondition {
+    readonly property: 'period';
+    readonly operator: PeriodRelation;
+    readonly target?: never;
+    readonly value?: DateFilterValue;
+}
+
 export interface FlagCondition extends Targeted {
     readonly property: FlagProperty;
     readonly operator: PresenceOperator;
@@ -141,6 +156,7 @@ export type FilterCondition =
     | TagCondition
     | ContentCondition
     | DateCondition
+    | PeriodCondition
     | FlagCondition
     | LengthCondition
     | PropertyCondition;
@@ -224,6 +240,7 @@ export const PROPERTY_OPERATORS: { readonly [P in FilterProperty]: readonly Oper
     startDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     endDate: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
     due: ['isSet', 'isNotSet', 'equals', 'before', 'after', 'onOrBefore', 'onOrAfter'],
+    period: ['overlaps', 'within', 'notOverlaps', 'notWithin'],
     anyDate: ['isSet', 'isNotSet'],
     color: ['includes', 'excludes'],
     linestyle: ['includes', 'excludes'],
@@ -259,6 +276,19 @@ export function isListCondition(c: FilterCondition): c is TextListCondition | Ta
 
 export function isDateCondition(c: FilterCondition): c is DateCondition {
     return isDateProperty(c.property);
+}
+
+export function isPeriodCondition(c: FilterCondition): c is PeriodCondition {
+    return c.property === 'period';
+}
+
+/**
+ * Whether a row on `property` asking `operator` takes a range: a period's
+ * every operator, and a start's, an end's or a due's `equals` (the moment
+ * is in the days). A range before or after a date has no one meaning.
+ */
+export function takesRange(property: FilterProperty, operator: FilterOperator): boolean {
+    return property === 'period' || (isDateProperty(property) && operator === 'equals');
 }
 
 export function isLengthCondition(c: FilterCondition): c is LengthCondition {
@@ -299,7 +329,8 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     startDate: 'calendar',
     endDate: 'calendar-check',
     due: 'alarm-clock',
-    anyDate: 'calendar-range',
+    period: 'calendar-range',
+    anyDate: 'calendar-search',
     color: 'palette',
     linestyle: 'minus',
     length: 'timer',

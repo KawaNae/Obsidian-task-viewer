@@ -248,6 +248,16 @@ function readCondition(c: Record<string, unknown>): FilterCondition | string {
                 ? { property, operator, ...on, value }
                 : `'${property}' takes a date that exists (YYYY-MM-DD) or a preset (${RELATIVE_DATE_PRESETS.join(', ')})`;
         }
+        case 'period': {
+            if (!takesOperator(property, operator)) return badOperator;
+            if (c.target === 'parent') return `'period' asks about the task itself: it takes no target parent`;
+            const raw = valueFor(operator);
+            if (raw === undefined) return { property, operator };
+            const value = readDateValue(raw);
+            return value !== undefined
+                ? { property, operator, value }
+                : `'${property}' takes a date that exists (YYYY-MM-DD) or a preset (${RELATIVE_DATE_PRESETS.join(', ')})`;
+        }
         case 'anyDate':
         case 'parent':
         case 'children':
