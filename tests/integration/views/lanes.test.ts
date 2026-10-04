@@ -25,7 +25,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, addDays, closeViews, ev, gridDays, monthGridStart, openView, readSettings,
 } from '../helpers/view-helper';
@@ -46,18 +46,22 @@ const TASKS: Record<string, [string, string]> = {
 };
 
 /**
- * The days written for a task drawn from `first` to `last`. An all-day
- * task's end is written as the day after its last (`@first>end`, the end
- * not counted: DisplayTaskConverter).
+ * The days written for a task drawn from `first` to `last`: a bare end date
+ * is the last day the task is drawn on (`@first>last`), so stretching an
+ * all-day card's right edge to E' writes `@D>E'`.
  */
 function written(first: string, last: string): { start: string; end: string } {
-    return { start: first, end: addDays(last, 1) };
+    return { start: first, end: last };
 }
+
+/** A task with only a due: drawn on the due's day, moved in Calendar. */
+const DUE_ONLY = 'lane-hotel';
+const DUE = '2027-03-24';
 
 const NOTE = Object.entries(TASKS).map(([name, [s, e]]) => {
     const w = written(s, e);
     return `- [ ] ${name} @${w.start}>${w.end}`;
-}).join('\n') + '\n';
+}).join('\n') + `\n- [ ] ${DUE_ONLY} @>>${DUE}\n`;
 
 interface Bar {
     /** The week row's first day (Calendar); null in Timeline. */
@@ -263,6 +267,38 @@ describe("Calendar's week rows", () => {
         const info = drag('lane-cal', 'lane-echo', 'resize-right', '2027-03-26', CALENDAR_AIM);
         expect(days('lane-echo'), info).toEqual(written('2027-03-23', '2027-03-26'));
         expect(bars('lane-cal', 'lane-echo')).toEqual(expectedBars('2027-03-23', '2027-03-26', weeks, 7, true));
+    });
+
+    it('draws a task with only a due on its day, and moving it writes the start and keeps the due', () => {
+        // A bar of one day: not drawn as a task of several days.
+        const oneDay = (d: string) => expectedBars(d, d, weeks, 7, true).map(b => ({ ...b, multi: false }));
+        expect(bars('lane-cal', DUE_ONLY)).toEqual(oneDay(DUE));
+        const to = '2027-03-26';
+        const info = drag('lane-cal', DUE_ONLY, 'move-bottom-left', to, CALENDAR_AIM);
+        expect(readTestFile(FILE).split('\n').find(l => l.includes(DUE_ONLY)), info).toBe(`- [ ] ${DUE_ONLY} @${to}>>${DUE}`);
+        expect(bars('lane-cal', DUE_ONLY)).toEqual(oneDay(to));
+    });
+
+    it('marks the card that runs past its due with 🚨 before the due, and not the heading of its days', () => {
+        const card = ev<{ overdue: string | null; text: string }>(`(async () => {
+            ${PRELUDE}
+            const card = [...V('lane-cal').contentEl.querySelectorAll('.cal-week-row .task-card')]
+                .find(c => c.textContent.includes(${JSON.stringify(DUE_ONLY)}));
+            return JSON.stringify({ overdue: card?.dataset.overdue ?? null, text: card?.textContent ?? '' });
+        })()`);
+        expect(card.overdue).toBe('past-due');
+        expect(card.text).toContain('🚨');
+        openView('lane-due-tl', 'timeline-view', { date: addDays(DUE, past), daysToShow: 3, showSidebar: false });
+        const heads = ev<{ dates: string[]; overdue: string[] }>(`(async () => {
+            ${PRELUDE}
+            const cells = [...V('lane-due-tl').contentEl.querySelectorAll('.date-header .date-header__cell')].filter(c => c.dataset.date);
+            return JSON.stringify({
+                dates: cells.map(c => c.dataset.date),
+                overdue: cells.filter(c => c.classList.contains('has-overdue')).map(c => c.dataset.date),
+            });
+        })()`);
+        expect(heads.dates).toEqual([DUE, addDays(DUE, 1), addDays(DUE, 2)]);
+        expect(heads.overdue).toEqual([]);
     });
 });
 
