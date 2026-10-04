@@ -302,6 +302,45 @@ export function saveSettings(patch: Record<string, unknown>, settleMs = SETTLE_M
     })()`);
 }
 
+/** Plugin settings a test changed, and what puts them back (`overrideSettings`). */
+export interface HeldSettings<K extends string> {
+    /** The values the settings had before the test changed them. */
+    readonly original: Record<K, unknown>;
+    /** Save the original values back; a setting that had none is removed. */
+    restore(settleMs?: number): void;
+}
+
+/**
+ * Save `patch` over the plugin settings for a test, keeping what its keys and
+ * those in `alsoHold` (settings the test changes later) were, so the Dev
+ * vault's own settings do not decide what the test sees. Call `restore` in
+ * `afterAll`; a run killed before it leaves the test's values in the vault.
+ */
+export function overrideSettings<K extends string>(
+    patch: Partial<Record<K, unknown>>,
+    alsoHold: readonly K[] = [],
+    settleMs = SETTLE_MS,
+): HeldSettings<K> {
+    const keys = [...new Set([...Object.keys(patch) as K[], ...alsoHold])];
+    // A setting that has no value is not in the reading (JSON leaves it out).
+    const original = readSettings(keys);
+    if (Object.keys(patch).length > 0) saveSettings(patch, settleMs);
+    return {
+        original,
+        restore(restoreSettleMs = settleMs) {
+            const absent = keys.filter(k => !(k in original));
+            ev(`(async () => {
+                const P = app.plugins.plugins['obsidian-task-viewer'];
+                Object.assign(P.settings, ${JSON.stringify(original)});
+                for (const k of ${JSON.stringify(absent)}) delete P.settings[k];
+                await P.saveSettings();
+                await new Promise(r => setTimeout(r, ${restoreSettleMs}));
+                return JSON.stringify(true);
+            })()`);
+        },
+    };
+}
+
 // ── Days, counted as the plugin counts them ──
 
 function pad(n: number): string {

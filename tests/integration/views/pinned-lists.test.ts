@@ -19,7 +19,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
-    PRELUDE, SETTLE_MS, closeViews, ev, openView, readSettings, restartView, saveSettings, tr,
+    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, restartView, tr, type HeldSettings,
 } from '../helpers/view-helper';
 
 const FILE = 'test-int-pinned-lists.md';
@@ -34,7 +34,7 @@ function note(extra: string[] = []): string {
 }
 
 const PAGE = 5;
-let originalPage: unknown;
+let held: HeldSettings<'pinnedListPageSize'>;
 
 /** The classes of a pinned list (PinnedListRenderer). */
 const C = {
@@ -136,15 +136,14 @@ beforeAll(async () => {
     }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
-    originalPage = readSettings(['pinnedListPageSize']).pinnedListPageSize;
-    saveSettings({ pinnedListPageSize: PAGE });
+    held = overrideSettings({ pinnedListPageSize: PAGE });
     expect(await writeIndexedTestFile(FILE, note())).toBe(true);
 });
 
 afterAll(async () => {
     ev(`(() => { document.querySelectorAll('.tv-overlay__panel .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`);
     await closeViews();
-    saveSettings({ pinnedListPageSize: originalPage });
+    held?.restore();
     deleteTestFile(FILE);
     await waitForFileDeindexed(FILE);
 });
