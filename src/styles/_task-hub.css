@@ -52,7 +52,6 @@
 
 .task-hub__source-message {
     font-size: var(--font-ui-small);
-    color: var(--text-error);
 }
 
 .task-hub__source-lost {

@@ -133,11 +133,35 @@ describe('PickerTextField', () => {
         expect(f.picker.tabIndex).toBe(-1);
     });
 
-    it('takes a picked value into the text', () => {
-        const f = dateField('');
-        f.picker.value = '2026-10-01';
-        f.picker.dispatchEvent(new Event('change'));
-        expect(f.field.input.value).toBe('2026-10-01');
+    it('takes a picked value into the text, and tells the pick with no event of the text', () => {
+        const root = new FakeEl('div');
+        const picked: string[] = [];
+        let inputs = 0;
+        const field = createPickerTextField(root as unknown as HTMLElement, 'date', 'YYYY-MM-DD', '', { onPick: (value) => picked.push(value) });
+        field.input.addEventListener('input', () => { inputs++; });
+        const p = parts(root);
+        p.picker.value = '2026-10-01';
+        p.picker.dispatchEvent(new Event('change'));
+        expect(field.input.value).toBe('2026-10-01');
+        expect(picked).toEqual(['2026-10-01']);
+        expect(inputs).toBe(0);
+        expect(p.clear!.style.display).toBe('');
+    });
+
+    it('tells a clear with no event of the text, and keeps its clear button and picker in step with a text set from outside', () => {
+        const root = new FakeEl('div');
+        let cleared = 0;
+        let inputs = 0;
+        const field = createPickerTextField(root as unknown as HTMLElement, 'date', 'YYYY-MM-DD', '2026-09-29', { onClear: () => { cleared++; } });
+        field.input.addEventListener('input', () => { inputs++; });
+        const p = parts(root);
+        expect(p.picker.value).toBe('2026-09-29');
+
+        p.clear!.click();
+        expect([field.input.value, cleared, inputs, p.clear!.style.display, p.picker.value]).toEqual(['', 1, 0, 'none', '']);
+
+        field.setText('2026-10-05');
+        expect([inputs, p.clear!.style.display, p.picker.value]).toEqual([0, '', '2026-10-05']);
     });
 
     it('disables a color field, which has no clear button, its picker with it', () => {
@@ -167,8 +191,9 @@ describe('DateFieldGroup.setEnabled', () => {
             getStartHour: () => 0,
             taskLookup: () => undefined,
             getValidationCtx: () => ({ hasImplicitStartDate: false }),
-            onInput: (group) => inputs.push(group),
+            onChange: () => inputs.push('change'),
             onCommit: (group) => inputs.push(`commit:${group}`),
+            issues: () => { /* none said */ },
         });
         group.setEnabled(false);
 

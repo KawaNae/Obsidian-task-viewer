@@ -1,16 +1,32 @@
 import { DateUtils } from '../../utils/DateUtils';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
+import { DateInput, TimeInput } from '../../utils/values/DateValues';
+import { optional, type FieldCodec, type Issue } from '../../utils/values/Read';
 import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
-import {
-    validateDateTimeFormats, validateDateRequirements, validateDateRange,
-    type DateTimeFields, type DateValidationError,
-} from '../TaskDateValidator';
+import { dateRuleIssues, type DateTimeFields, type ValidationContext } from '../TaskDateValidator';
+import { bindField, type BoundField } from './bindField';
+import { onFormEnter } from './formEnter';
+import { readIssue, type FormIssue, type IssueSlot } from './FormIssue';
 import { createPickerTextField, type PickerTextField } from './PickerTextField';
 import { createFormRow } from './formRow';
-import { onFormEnter } from './formEnter';
 
 export type DateGroupKey = 'start' | 'end' | 'due';
+/** One of the six fields: a group's date or its time. */
+export type DateKey = keyof DateTimeFields;
+
+const GROUP_KEYS: Record<DateGroupKey, readonly [DateKey, DateKey]> = {
+    start: ['startDate', 'startTime'],
+    end: ['endDate', 'endTime'],
+    due: ['dueDate', 'dueTime'],
+};
+const KEYS: readonly DateKey[] = ['startDate', 'startTime', 'endDate', 'endTime', 'dueDate', 'dueTime'];
+const DATE_FIELD = optional(DateInput);
+const TIME_FIELD = optional(TimeInput);
+
+function groupOf(key: DateKey): DateGroupKey {
+    return key.startsWith('start') ? 'start' : key.startsWith('end') ? 'end' : 'due';
+}
 
 export interface DateFieldGroupOptions {
     labels: { start: string; end: string; due: string };
@@ -19,12 +35,26 @@ export interface DateFieldGroupOptions {
     buildOverlayTask: (f: DateTimeFields) => Task;
     getStartHour: () => number;
     taskLookup: (id: string) => Task | undefined;
-    getValidationCtx: () => { hasImplicitStartDate: boolean; implicitStartDate?: string };
+    getValidationCtx: () => ValidationContext;
     getFallbackDatePlaceholder?: () => string | undefined;
-    isSuspended?: () => boolean;
-    onInput?: (group: DateGroupKey, f: DateTimeFields) => void;
+    /**
+     * The values the fields stand for now (the hub's row, `''` for none);
+     * absent for a task not yet written (the create dialog), whose fields
+     * stand for nothing until it is.
+     */
+    current?: () => DateTimeFields;
+    /**
+     * A group's fields were committed (a blur, the form's Enter, a pick, a
+     * clear), every field reading and the rules holding: `f` is the six as
+     * read. Not called while one does not read or a rule is broken.
+     */
     onCommit?: (group: DateGroupKey, f: DateTimeFields) => void;
+    /** The form's Enter in a field, after the field's commit: the create dialog's submit. */
     onEnter?: () => void;
+    /** A field's text changed, by typing, a pick or a clear. */
+    onChange?: () => void;
+    /** What the six fields say now, in place of what they said: each field's reading, then the rules across them. */
+    issues: (issues: FormIssue<DateKey>[]) => void;
 }
 
 /**
@@ -32,130 +62,157 @@ export interface DateFieldGroupOptions {
  * フォーム部品。CreateTaskModal と TaskHubForm が共用する。
  *
  * 行文法: ラベル左置き + date:time = 2:1 flex 配分（_form.css）。
+ *
+ * 各欄は `bindField` で値に結ぶ。日付は `DateInput`、時刻は `TimeInput` で
+ * 読み（全角と長音、1桁の時を読み、確定で `2026-10-05`、`09:40` の形に
+ * 書き換える）、空の欄は「宣言なし」と読む。読めない欄は欄の下に理由を出し、
+ * 確定しない。6 欄が読めたら、欄をまたぐ規則（時刻には日付が要る、終了は
+ * 開始の後）を `dateRuleIssues` で見て、破れた欄に出す。
+ *
+ * ピッカーの選択と × は `PickerTextField` の知らせで確定する。外からの値は
+ * {@link set} で入れ、イベントを投げない。
  */
 export class DateFieldGroup {
-    private startDateInput: HTMLInputElement;
-    private startTimeInput: HTMLInputElement;
-    private endDateInput: HTMLInputElement;
-    private endTimeInput: HTMLInputElement;
-    private dueDateInput: HTMLInputElement;
-    private dueTimeInput: HTMLInputElement;
-    private fields: PickerTextField[] = [];
-    private errorEl: HTMLElement | null = null;
+    private readonly inputs = new Map<DateKey, HTMLInputElement>();
+    private readonly bound = new Map<DateKey, BoundField<string | undefined>>();
+    private readonly says = new Map<DateKey, HTMLElement>();
+    private readonly fields: PickerTextField[] = [];
+    /** What each field's text reads as wrong now. */
+    private readonly readIssues = new Map<DateKey, Issue>();
 
     constructor(
         container: HTMLElement,
         private opts: DateFieldGroupOptions,
     ) {
-        const start = this.renderRow(container, 'start', opts.labels.start, opts.initial.startDate, opts.initial.startTime);
-        this.startDateInput = start.dateInput;
-        this.startTimeInput = start.timeInput;
-
-        const end = this.renderRow(container, 'end', opts.labels.end, opts.initial.endDate, opts.initial.endTime);
-        this.endDateInput = end.dateInput;
-        this.endTimeInput = end.timeInput;
-
-        const due = this.renderRow(container, 'due', opts.labels.due, opts.initial.dueDate, opts.initial.dueTime);
-        this.dueDateInput = due.dateInput;
-        this.dueTimeInput = due.timeInput;
-    }
-
-    private renderRow(
-        container: HTMLElement,
-        group: DateGroupKey,
-        label: string,
-        initialDate: string | undefined,
-        initialTime: string | undefined,
-    ): { dateInput: HTMLInputElement; timeInput: HTMLInputElement } {
-        const { row } = createFormRow(container, label, { dates: true, icon: this.opts.icons?.[group] });
-
-        const dateField = row.createDiv({ cls: 'tv-form__field tv-form__field--date' });
-        const date = createPickerTextField(dateField, 'date', 'YYYY-MM-DD', initialDate || '');
-        const dateInput = date.input;
-        dateInput.setAttribute('aria-label', `${label} — ${t('modal.date')}`);
-
-        const timeField = row.createDiv({ cls: 'tv-form__field tv-form__field--time' });
-        const time = createPickerTextField(timeField, 'time', 'HH:mm', initialTime || '');
-        const timeInput = time.input;
-        timeInput.setAttribute('aria-label', `${label} — ${t('modal.time')}`);
-
-        this.fields.push(date, time);
-
-        for (const input of [dateInput, timeInput]) {
-            input.addEventListener('input', (e: Event) => {
-                this.opts.onInput?.(group, this.collect());
-                this.updatePlaceholders();
-                this.validate();
-                if (!e.isTrusted && !(this.opts.isSuspended?.() ?? false)) {
-                    this.opts.onCommit?.(group, this.collect());
-                }
-            });
-            input.addEventListener('blur', () => {
-                this.opts.onCommit?.(group, this.collect());
-            });
-            onFormEnter(input, () => {
-                if (this.opts.onEnter) {
-                    this.opts.onEnter();
-                } else {
-                    this.opts.onCommit?.(group, this.collect());
-                }
-            });
+        for (const group of ['start', 'end', 'due'] as const) {
+            this.renderRow(container, group, opts.labels[group]);
         }
-
-        return { dateInput, timeInput };
     }
 
-    bindErrorEl(el: HTMLElement): void {
-        this.errorEl = el;
+    private renderRow(container: HTMLElement, group: DateGroupKey, label: string): void {
+        const { row, says } = createFormRow(container, label, { dates: true, icon: this.opts.icons?.[group] });
+        const [dateKey, timeKey] = GROUP_KEYS[group];
+
+        const dateBox = row.createDiv({ cls: 'tv-form__field tv-form__field--date' });
+        this.renderField(dateBox, dateKey, 'date', `${label} — ${t('modal.date')}`, says);
+        const timeBox = row.createDiv({ cls: 'tv-form__field tv-form__field--time' });
+        this.renderField(timeBox, timeKey, 'time', `${label} — ${t('modal.time')}`, says);
     }
 
-    collect(): DateTimeFields {
-        return {
-            startDate: this.startDateInput?.value.trim() || '',
-            startTime: this.startTimeInput?.value.trim() || '',
-            endDate: this.endDateInput?.value.trim() || '',
-            endTime: this.endTimeInput?.value.trim() || '',
-            dueDate: this.dueDateInput?.value.trim() || '',
-            dueTime: this.dueTimeInput?.value.trim() || '',
+    private renderField(box: HTMLElement, key: DateKey, kind: 'date' | 'time', ariaLabel: string, says: HTMLElement): void {
+        const codec: FieldCodec<string | undefined> = kind === 'date' ? DATE_FIELD : TIME_FIELD;
+        // The picker and the clear button put a value in: it is committed as a blur would.
+        const changedBy = () => {
+            this.changed();
+            this.bound.get(key)?.commit();
         };
+        const field = createPickerTextField(box, kind, kind === 'date' ? 'YYYY-MM-DD' : 'HH:mm', this.opts.initial[key] ?? '', {
+            onPick: changedBy,
+            onClear: changedBy,
+        });
+        field.input.setAttribute('aria-label', ariaLabel);
+        this.fields.push(field);
+        this.inputs.set(key, field.input);
+        this.says.set(key, says);
+
+        this.bound.set(key, bindField(field.input, {
+            codec,
+            current: () => this.currentOf(key),
+            commit: () => this.commitGroup(groupOf(key)),
+            issues: (issue) => {
+                if (issue) this.readIssues.set(key, issue);
+                else this.readIssues.delete(key);
+                this.tell();
+            },
+            put: (text) => field.setText(text),
+        }));
+        field.input.addEventListener('input', () => this.changed());
+        const onEnter = this.opts.onEnter;
+        if (onEnter) onFormEnter(field.input, () => onEnter());
     }
 
-    validate(): boolean {
-        const inputs = [
-            this.startDateInput, this.startTimeInput,
-            this.endDateInput, this.endTimeInput,
-            this.dueDateInput, this.dueTimeInput,
-        ];
-        inputs.forEach(el => el?.classList.remove('tv-ctrl__text-input--invalid'));
-        if (this.errorEl) this.errorEl.style.display = 'none';
+    private currentOf(key: DateKey): string | undefined {
+        return this.opts.current?.()[key] || undefined;
+    }
 
-        const fields = this.collect();
-        const ctx = this.opts.getValidationCtx();
+    private changed(): void {
+        this.updatePlaceholders();
+        this.opts.onChange?.();
+    }
 
-        const err = validateDateTimeFormats(fields)
-            ?? validateDateRequirements(fields, ctx)
-            ?? validateDateRange(fields, ctx);
-        if (err) return this.applyValidationError(err);
+    /**
+     * The six as read, `''` for an empty field; null while one does not
+     * read. A field that reads holds the value read, even before a commit.
+     */
+    private readAll(): DateTimeFields | null {
+        const out = {} as DateTimeFields;
+        for (const key of KEYS) {
+            const input = this.inputs.get(key)!;
+            const read = (key.endsWith('Date') ? DATE_FIELD : TIME_FIELD).read(input.value);
+            if (!read.ok) return null;
+            out[key] = read.value ?? '';
+        }
+        return out;
+    }
+
+    /** What the six say now: each field's reading, and, once all read, the rules across them. */
+    private issuesNow(): FormIssue<DateKey>[] {
+        const read = KEYS.flatMap(key => readIssue(key, this.readIssues.get(key) ?? null));
+        if (read.length > 0) return read;
+        const fields = this.readAll();
+        return fields ? dateRuleIssues(fields, this.opts.getValidationCtx()) : [];
+    }
+
+    private tell(): void {
+        this.opts.issues(this.issuesNow());
+    }
+
+    /** Commit `group` as its fields read, unless a field does not read or a rule is broken. */
+    private commitGroup(group: DateGroupKey): boolean {
+        const fields = this.readAll();
+        this.tell();
+        if (!fields || dateRuleIssues(fields, this.opts.getValidationCtx()).length > 0) return false;
+        this.opts.onCommit?.(group, fields);
         return true;
     }
 
-    private applyValidationError(err: DateValidationError): false {
-        const inputMap: Record<string, HTMLInputElement> = {
-            startDate: this.startDateInput, startTime: this.startTimeInput,
-            endDate: this.endDateInput, endTime: this.endTimeInput,
-            dueDate: this.dueDateInput, dueTime: this.dueTimeInput,
-        };
-        inputMap[err.field]?.classList.add('tv-ctrl__text-input--invalid');
-        if (this.errorEl) {
-            this.errorEl.empty();
-            this.errorEl.setText(err.message);
-            if (err.hint) {
-                this.errorEl.createEl('br');
-                this.errorEl.appendText(err.hint);
-            }
-            this.errorEl.style.display = 'block';
+    /** Where the field `key` says its issues: its input and the line under its row. */
+    slot(key: DateKey): IssueSlot {
+        return { input: this.inputs.get(key)!, message: this.says.get(key)! };
+    }
+
+    /**
+     * The six as read, every field reading and the rules holding (the create
+     * dialog's submit); null otherwise, with why said under the fields.
+     */
+    read(): DateTimeFields | null {
+        for (const key of KEYS) this.bound.get(key)!.commit();
+        const fields = this.readAll();
+        this.tell();
+        if (!fields || dateRuleIssues(fields, this.opts.getValidationCtx()).length > 0) return null;
+        return fields;
+    }
+
+    /**
+     * The six as they stand: a field that reads as its value (normalized),
+     * one that does not as its text. What the placeholders and the create
+     * dialog's notice of an empty task read.
+     */
+    collect(): DateTimeFields {
+        const out = {} as DateTimeFields;
+        for (const key of KEYS) {
+            const text = this.inputs.get(key)!.value;
+            const read = (key.endsWith('Date') ? DATE_FIELD : TIME_FIELD).read(text);
+            out[key] = read.ok ? read.value ?? '' : text.trim();
         }
-        return false;
+        return out;
+    }
+
+    /** Put values from outside in the fields (the hub's row as the index has it), firing no event. */
+    set(fields: DateTimeFields): void {
+        for (const key of KEYS) this.bound.get(key)!.set(fields[key] || undefined);
+        this.updatePlaceholders();
+        this.tell();
     }
 
     updatePlaceholders(): void {
@@ -163,56 +220,27 @@ export class DateFieldGroup {
         const overlay = this.opts.buildOverlayTask(fields);
         const dt = toDisplayTask(overlay, this.opts.getStartHour(), this.opts.taskLookup);
         const fallback = this.opts.getFallbackDatePlaceholder?.() || 'YYYY-MM-DD';
+        const input = (key: DateKey) => this.inputs.get(key)!;
 
-        if (this.startDateInput) {
-            this.startDateInput.placeholder =
-                (dt.startDateImplicit && dt.effectiveStartDate) || fallback;
-        }
-        if (this.startTimeInput) {
-            this.startTimeInput.placeholder =
-                (dt.startTimeImplicit && dt.effectiveStartDate && dt.effectiveStartTime) || 'HH:mm';
-        }
-        if (this.endDateInput) {
-            this.endDateInput.placeholder =
-                (dt.endDateImplicit && dt.effectiveEndDate) || fallback;
-        }
-        if (this.endTimeInput) {
-            this.endTimeInput.placeholder =
-                (dt.endTimeImplicit && dt.effectiveEndDate && dt.effectiveEndTime) || 'HH:mm';
-        }
+        input('startDate').placeholder = (dt.startDateImplicit && dt.effectiveStartDate) || fallback;
+        input('startTime').placeholder = (dt.startTimeImplicit && dt.effectiveStartDate && dt.effectiveStartTime) || 'HH:mm';
+        input('endDate').placeholder = (dt.endDateImplicit && dt.effectiveEndDate) || fallback;
+        input('endTime').placeholder = (dt.endTimeImplicit && dt.effectiveEndDate && dt.effectiveEndTime) || 'HH:mm';
 
         // due の implicit は cascade 継承のみ (raw due なし && effectiveDue あり)。
         // 開始/終了と同じく placeholder として注入する。fallback (dailyNoteDate)
         // は開始日の既定値であって due の既定値ではないため、due には使わない。
         const dueInherited: { date?: string; time?: string } = !dt.due && dt.effectiveDue ? DateUtils.splitDateTime(dt.effectiveDue) : {};
-        if (this.dueDateInput) {
-            this.dueDateInput.placeholder = dueInherited.date || 'YYYY-MM-DD';
-        }
-        if (this.dueTimeInput) {
-            this.dueTimeInput.placeholder = dueInherited.time || 'HH:mm';
-        }
+        input('dueDate').placeholder = dueInherited.date || 'YYYY-MM-DD';
+        input('dueTime').placeholder = dueInherited.time || 'HH:mm';
     }
 
-    getInput(key: keyof DateTimeFields): HTMLInputElement {
-        switch (key) {
-            case 'startDate': return this.startDateInput;
-            case 'startTime': return this.startTimeInput;
-            case 'endDate': return this.endDateInput;
-            case 'endTime': return this.endTimeInput;
-            case 'dueDate': return this.dueDateInput;
-            case 'dueTime': return this.dueTimeInput;
-        }
+    getInput(key: DateKey): HTMLInputElement {
+        return this.inputs.get(key)!;
     }
 
     /** Every field of the group taking input or not, its picker and clear buttons with it. */
     setEnabled(enabled: boolean): void {
         for (const field of this.fields) field.setEnabled(enabled);
-    }
-
-    setInputValue(input: HTMLInputElement, value: string, composing = false): void {
-        if (document.activeElement === input || composing) return;
-        if (input.value === value) return;
-        input.value = value;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
     }
 }

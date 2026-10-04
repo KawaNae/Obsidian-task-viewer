@@ -2,6 +2,7 @@ import { Notice, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import { SourceEditor, type DraftEditor } from '../form/source/SourceEditor';
+import { IssueBoard } from '../form/FormIssue';
 import type { SourceSurface, SourceViewState } from './TaskHubSource';
 
 /** What the view's controls do: the source mode's operations (`TaskHubSource`). */
@@ -35,6 +36,8 @@ export class TaskHubSourceView implements SourceSurface {
     private readonly pane: HTMLElement;
     private readonly editorHost: HTMLElement;
     private readonly messageEl: HTMLElement;
+    /** Why the last apply wrote nothing, said under the editor. */
+    private readonly issues: IssueBoard<never>;
     private readonly lostEl: HTMLElement;
     private readonly actionsEl: HTMLElement;
     private readonly discardBtn: HTMLButtonElement;
@@ -67,7 +70,8 @@ export class TaskHubSourceView implements SourceSurface {
         this.pane = paneHost;
         this.pane.addClass('task-hub__source-pane');
         this.editorHost = this.pane.createDiv({ cls: 'task-hub__source-editor' });
-        this.messageEl = this.pane.createDiv({ cls: 'task-hub__source-message' });
+        this.messageEl = this.pane.createDiv({ cls: 'task-hub__source-message tv-form__says' });
+        this.issues = new IssueBoard<never>({ field: () => null, form: this.messageEl });
 
         this.lostEl = this.pane.createDiv({ cls: 'task-hub__source-lost' });
         this.lostEl.createSpan({ text: t('modal.hub.source.lost') });
@@ -116,8 +120,8 @@ export class TaskHubSourceView implements SourceSurface {
 
         this.card.toggle(!open);
         this.pane.toggle(open);
-        this.messageEl.setText(state.message ?? '');
-        this.messageEl.toggle(open && state.message !== null);
+        this.issues.set('apply', state.issues);
+        this.messageEl.toggle(open);
         const asking = open && state.asking;
         this.pane.toggleClass('tv-source-drafts--asking', asking);
         this.lostEl.toggle(open && state.lost && !asking);
