@@ -49,6 +49,7 @@ import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
 import { Operations } from './services/operations/Operations';
 import { NoteOps } from './services/data/NoteOps';
+import { CreatePlaces } from './services/data/CreatePlaces';
 import { initI18n, t } from './i18n';
 import { enabledLineParserIds } from './services/parsing/TaskParser';
 import { initLog, logInfo } from './log/log';
@@ -79,6 +80,7 @@ export default class TaskViewerPlugin extends Plugin {
     private readService: TaskReadService;
     private operations: Operations;
     private noteOps: NoteOps;
+    private createPlaces: CreatePlaces;
     private timerWidget: TimerWidget;
     private logStorage: LogStorage;
     private logManager: LogManager;
@@ -164,6 +166,7 @@ export default class TaskViewerPlugin extends Plugin {
             getTask: (id) => this.taskIndex.getTask(id),
             timers: () => this.timerWidget ?? null,
         });
+        this.createPlaces = new CreatePlaces(this.app, this.operations, () => this.settings, (id) => this.taskIndex.getTask(id));
 
         // Single source of truth for menu lifecycle (dedup across all views/touch paths).
         this.menuPresenter = new MenuPresenter();
@@ -359,6 +362,10 @@ export default class TaskViewerPlugin extends Plugin {
 
     getNoteOps(): NoteOps {
         return this.noteOps;
+    }
+
+    getCreatePlaces(): CreatePlaces {
+        return this.createPlaces;
     }
 
     getTimerWidget(): TimerWidget {

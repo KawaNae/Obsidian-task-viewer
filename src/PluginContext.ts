@@ -4,6 +4,7 @@ import type { IndexReads } from './services/core/TaskIndex';
 import type { TaskReadService } from './services/data/TaskReadService';
 import type { Operations } from './services/operations/Operations';
 import type { NoteOps } from './services/data/NoteOps';
+import type { CreatePlaces } from './services/data/CreatePlaces';
 import type { MenuPresenter } from './interaction/menu/MenuPresenter';
 import type { LogManager } from './log/log-manager';
 
@@ -69,6 +70,8 @@ export interface PluginContext {
     getOperations(): Operations;
     /** The operations on notes: sending rows to a note (`NoteOps`). */
     getNoteOps(): NoteOps;
+    /** The places a new task line is made in: what one is, and the write there (`CreatePlaces`). */
+    getCreatePlaces(): CreatePlaces;
     getLogManager(): LogManager | null;
 
     /** Tell the editor's inline task menu that its settings moved. */
