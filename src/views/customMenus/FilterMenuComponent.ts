@@ -1,4 +1,4 @@
-import { setIcon } from 'obsidian';
+import { setIcon, type Keymap } from 'obsidian';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterState, FilterCondition, FilterGroup, FilterItem } from '../../services/filter/FilterTypes';
 import {
@@ -61,7 +61,8 @@ export class FilterMenuComponent {
     private dropdowns: FilterDropdownMenus;
     private conditionRenderer: FilterConditionRenderer;
 
-    constructor() {
+    /** @param keymap Obsidian's keymap, whose hotkeys the menu keeps out while it has the focus. */
+    constructor(private readonly keymap: Keymap) {
         const getStack = () => this.stack;
         this.dropdowns = new FilterDropdownMenus(getStack);
         this.conditionRenderer = new FilterConditionRenderer(
@@ -101,6 +102,7 @@ export class FilterMenuComponent {
             anchor,
             panelClass: 'filter-popover',
             childStack: this.stack,
+            keymap: this.keymap,
             build: (bodyEl) => {
                 this.rootEl = bodyEl;
                 this.renderContent();

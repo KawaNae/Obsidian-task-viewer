@@ -84,9 +84,9 @@ export function copyOfList(list: PinnedListDefinition): PinnedListDefinition {
 
 export class TaskListSections {
     private readonly paging: TaskPagingController;
-    private readonly sortMenu = new SortMenuComponent();
-    private readonly filterMenu = new FilterMenuComponent();
-    private readonly topRightEditor = new TopRightConfigEditor();
+    private readonly sortMenu: SortMenuComponent;
+    private readonly filterMenu: FilterMenuComponent;
+    private readonly topRightEditor: TopRightConfigEditor;
     /** The list whose name is edited once it is drawn (a list just added). */
     private pendingRenameId: string | null = null;
 
@@ -95,6 +95,10 @@ export class TaskListSections {
         private readonly placement: ListPlacement,
     ) {
         this.paging = new TaskPagingController(() => this.deps.plugin.settings.pinnedListPageSize);
+        const keymap = deps.plugin.app.keymap;
+        this.sortMenu = new SortMenuComponent(keymap);
+        this.filterMenu = new FilterMenuComponent(keymap);
+        this.topRightEditor = new TopRightConfigEditor(keymap);
         this.filterMenu.setStatusDefinitions(this.deps.plugin.settings.statusDefinitions);
     }
 

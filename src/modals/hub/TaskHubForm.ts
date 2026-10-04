@@ -479,17 +479,17 @@ export class TaskHubForm {
 
     // ==================== focus ====================
 
+    /** Focus the field named, its text selected (a property of the hub's menu). */
     focusField(field: TaskHubFocusField): void {
-        const target = this.resolveFocusTarget(field);
+        const target = this.fieldElement(field);
         target?.focus();
         if (target instanceof HTMLInputElement) target.select();
     }
 
-    protected resolveFocusTarget(field: TaskHubFocusField): HTMLElement | null {
+    /** The element of the field named: what the hub opens on (`initialFocus`) and the menu focuses. */
+    fieldElement(field: TaskHubFocusField): HTMLElement | null {
         if (field.startsWith('property:')) {
-            const key = field.slice('property:'.length);
-            this.propsField.focus(key);
-            return null;
+            return this.propsField.fieldElement(field.slice('property:'.length));
         }
         switch (field) {
             case 'name': return this.nameInput;
@@ -497,11 +497,11 @@ export class TaskHubForm {
             case 'start': return this.dateGroup?.getInput('startDate');
             case 'end': return this.dateGroup?.getInput('endDate');
             case 'due': return this.dateGroup?.getInput('dueDate');
-            case 'tags': this.tagsField.focus(); return null;
+            case 'tags': return this.tagsField.fieldElement();
             case 'color': return this.styleField?.getInput('color') ?? null;
             case 'linestyle': return this.styleField?.getInput('linestyle') ?? null;
             case 'mask': return this.styleField?.getInput('mask') ?? null;
-            case 'properties': this.propsField.focus(); return null;
+            case 'properties': return this.propsField.fieldElement();
             default: return null;
         }
     }

@@ -1,4 +1,4 @@
-import { setIcon } from 'obsidian';
+import { setIcon, type Keymap } from 'obsidian';
 import { t } from '../../i18n';
 import type { TopRightConfig } from '../../types';
 import { SuggestController } from './SuggestController';
@@ -23,6 +23,9 @@ export class TopRightConfigEditor {
     private prefix: string = '';
     private suffix: string = '';
 
+    /** @param keymap Obsidian's keymap, whose hotkeys the editor keeps out while it has the focus. */
+    constructor(private readonly keymap: Keymap) { }
+
     open(anchor: HTMLElement, opts: TopRightConfigEditorOpts): void {
         this.opts = opts;
         this.fields = opts.config ? [...opts.config.fields] : [];
@@ -35,6 +38,7 @@ export class TopRightConfigEditor {
             anchor: { kind: 'element', element: anchor },
             panelClass: 'top-right-config-editor',
             childStack: this.stack,
+            keymap: this.keymap,
             build: (bodyEl) => {
                 this.bodyEl = bodyEl;
                 this.renderContent();

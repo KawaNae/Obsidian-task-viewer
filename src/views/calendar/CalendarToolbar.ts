@@ -44,10 +44,11 @@ export class CalendarToolbar extends ViewToolbarBase {
     private sidebarToggleBtn: HTMLButtonElement | null = null;
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
-    private readonly filterMenu = new FilterMenuComponent();
+    private readonly filterMenu: FilterMenuComponent;
 
     constructor(private deps: CalendarToolbarDeps) {
         super();
+        this.filterMenu = new FilterMenuComponent(deps.host.app.keymap);
         this.filterMenu.setStatusDefinitions(deps.host.plugin.settings.statusDefinitions);
         deps.host.store.subscribe(() => this.update());
     }

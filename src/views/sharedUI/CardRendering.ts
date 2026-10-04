@@ -42,7 +42,7 @@ export function createCardRendering(deps: CardRenderingDeps): CardRendering {
     const operations = plugin.getOperations();
 
     const openTaskHub = (task: Task, options?: TaskHubPanelOptions): void => {
-        new TaskHubPanel(app, task, {
+        void new TaskHubPanel(app, task, {
             taskRenderer,
             index,
             operations,

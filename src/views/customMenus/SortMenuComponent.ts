@@ -1,4 +1,4 @@
-import { setIcon } from 'obsidian';
+import { setIcon, type Keymap } from 'obsidian';
 import type {
     SortState, SortRule, SortDirection,
 } from '../../services/sort/SortTypes';
@@ -39,6 +39,9 @@ export class SortMenuComponent {
     private dragGhostEl: HTMLElement | null = null;
     private dragStartY = 0;
     private dragCleanup: (() => void) | null = null;
+
+    /** @param keymap Obsidian's keymap, whose hotkeys the menu keeps out while it has the focus. */
+    constructor(private readonly keymap: Keymap) { }
 
     getSortState(): SortState {
         return this.state;
@@ -81,6 +84,7 @@ export class SortMenuComponent {
             anchor,
             panelClass: 'sort-popover',
             childStack: this.stack,
+            keymap: this.keymap,
             build: (bodyEl) => {
                 this.rootEl = bodyEl;
                 this.renderContent();

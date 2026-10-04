@@ -131,7 +131,8 @@ export class TagsFieldGroup {
         this.render(true);
     }
 
-    focus(): void {
-        this.addInput?.focus();
+    /** The field that adds a tag. */
+    fieldElement(): HTMLElement | null {
+        return this.addInput ?? null;
     }
 }

@@ -173,8 +173,8 @@ export class PropertiesFieldGroup {
         this.render(true);
     }
 
-    focus(key?: string): void {
-        const target = key ? (this.valueInputs.get(key) ?? this.addKeyInput) : this.addKeyInput;
-        target?.focus();
+    /** The value field of the property `key`; the new property's key field when there is none, or no key is named. */
+    fieldElement(key?: string): HTMLElement | null {
+        return (key ? this.valueInputs.get(key) : undefined) ?? this.addKeyInput ?? null;
     }
 }

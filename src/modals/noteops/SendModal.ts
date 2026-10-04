@@ -2,7 +2,6 @@ import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { NoteOps, SendPreview, SendResult } from '../../services/data/NoteOps';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
-import { hostWindow } from '../../utils/HostWindow';
 import { indentUnit } from '../../utils/ObsidianConfig';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { createFormRow } from '../form/formRow';
@@ -67,20 +66,16 @@ export class SendModal implements SendSurface {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog tv-send',
             keymap: this.app.keymap,
+            // The first draft; the note's name when no row opened in the editor.
+            initialFocus: () => this.dialog?.firstEditor() ?? this.field,
             build: (bodyEl) => this.build(bodyEl),
             onClose: () => {
                 this.dialog?.dispose();
                 this.dialog = null;
             },
-            beforeClose: () => this.dialog?.beforeClose() ?? true,
+            beforeClose: () => ((this.dialog?.beforeClose() ?? true) ? 'close' : 'stay'),
             yieldsEscape: () => this.dialog?.yieldsEscape() ?? false,
             takesBack: () => this.dialog?.takesBack() ?? false,
-        });
-        // The frame of the window the overlay stands in (popout aware), as the other dialogs focus.
-        hostWindow(this.overlay.getPanel()).requestAnimationFrame(() => {
-            const editor = this.dialog?.firstEditor();
-            if (editor) editor.focus();
-            else this.field.focus();
         });
     }
 
@@ -115,7 +110,10 @@ export class SendModal implements SendSurface {
         this.discardBtn = actions.createEl('button', { cls: 'mod-warning tv-form__discard', text: t('modal.send.discard'), attr: { type: 'button' } });
         this.discardBtn.addEventListener('click', () => this.dialog?.discard());
         this.cancelBtn = actions.createEl('button', { attr: { type: 'button' } });
-        this.cancelBtn.addEventListener('click', () => (this.asking ? this.dialog?.keep() : this.overlay.requestClose()));
+        this.cancelBtn.addEventListener('click', () => {
+            if (this.asking) this.dialog?.keep();
+            else void this.overlay.requestClose();
+        });
         this.sendBtn = actions.createEl('button', { cls: 'mod-cta', text: t('modal.send.send'), attr: { type: 'button' } });
         this.sendBtn.addEventListener('click', () => { void this.dialog?.send(); });
 

@@ -11,7 +11,6 @@ import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
-import { hostWindow } from '../../utils/HostWindow';
 import { indentUnit } from '../../utils/ObsidianConfig';
 
 export interface TaskHubDeps {
@@ -33,9 +32,12 @@ export interface TaskHubPanelOptions {
  * プレビューのみに縮退。プレビューの上の切り替えで、カードの代わりに
  * 行と部分木のソースを編集できる（TaskHubSource）。ソースに下書きがある間、
  * 利用者が閉じる経路は下書きを捨てるかを確かめる（OverlayShell.beforeClose）。
- * 別のハブを開こうとしたときも同じく確かめるだけで、開こうとした操作は忘れる。
+ * 別のハブを開こうとしたときも同じく確かめ（答えを待つ）、閉じなかったなら
+ * 開こうとした操作は忘れる。
  * パネルにフォーカスがある間は Obsidian のホットキーを止める（OverlayShell の
  * keymap）。フォームの欄やソースのエディタのキーが背後のノートに効かないように。
+ * 初めのフォーカスは focusField の欄、無ければパネル自身（OverlayShell の
+ * initialFocus）。開いた直後から止まり、スマホでキーボードは上がらない。
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
@@ -43,6 +45,8 @@ export interface TaskHubPanelOptions {
  */
 export class TaskHubPanel {
     private static active: TaskHubPanel | null = null;
+    /** The hub asked for last; one asked for while another waits for a hub to close goes before it. */
+    private static wanted: TaskHubPanel | null = null;
 
     private task: Task;
     private overlay = new OverlayShell();
@@ -64,33 +68,42 @@ export class TaskHubPanel {
         this.task = deps.index.getTask(originalId) ?? { ...task, id: originalId };
     }
 
-    open(): void {
+    /**
+     * Open, once the hub open now has given way as the user closing it
+     * would: not while it holds a draft, which it asks about in its own
+     * place. This hub is not opened then, nor later: throwing the draft
+     * away there closes that hub and goes no further. A close that waits
+     * (`CloseAnswer`) is waited for; a hub asked for meanwhile goes first.
+     */
+    async open(): Promise<void> {
         if (this.overlay.isOpen()) return;
-        // Another hub gives way as the user closing it would: not while it
-        // holds a draft, which it asks about in its own place. This hub is
-        // not opened then, nor later: throwing the draft away there closes
-        // that hub and goes no further.
-        const current = TaskHubPanel.active;
-        if (current && !current.overlay.requestClose()) return;
+        TaskHubPanel.wanted = this;
+        for (let current = TaskHubPanel.active; current; current = TaskHubPanel.active) {
+            const closed = await current.overlay.requestClose();
+            if (TaskHubPanel.wanted !== this) return;
+            if (!closed) {
+                TaskHubPanel.wanted = null;
+                return;
+            }
+            // Closed: its teardown let go of the place, which this makes sure of.
+            if (TaskHubPanel.active === current) TaskHubPanel.active = null;
+        }
+        TaskHubPanel.wanted = null;
         TaskHubPanel.active = this;
 
+        const focusField = this.options.focusField;
         this.overlay.open({
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog task-hub',
             childStack: this.stack,
             keymap: this.app.keymap,
+            initialFocus: () => (focusField ? this.form?.fieldElement(focusField) ?? null : null),
             build: (bodyEl) => this.buildContent(bodyEl),
             onClose: () => this.teardown(),
-            beforeClose: () => this.source?.beforeClose() ?? true,
+            beforeClose: () => ((this.source?.beforeClose() ?? true) ? 'close' : 'stay'),
             yieldsEscape: () => this.source?.yieldsEscape() ?? false,
             takesBack: () => this.source?.takesBack() ?? false,
         });
-
-        if (this.options.focusField && this.form) {
-            const field = this.options.focusField;
-            // overlay が実際に載っている window のフレームで focus する（popout 対応）。
-            hostWindow(this.overlay.getPanel()).requestAnimationFrame(() => this.form?.focusField(field));
-        }
 
         this.setupLiveUpdates();
     }

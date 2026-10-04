@@ -70,8 +70,9 @@ export class DestinationField {
         this.headingInput.toggleClass('tv-ctrl__text-input--invalid', invalid.heading);
     }
 
-    focus(): void {
-        this.note.nameInput.focus();
+    /** Focus the note's name. */
+    focus(options?: FocusOptions): void {
+        this.note.nameInput.focus(options);
     }
 }
 
