@@ -105,7 +105,7 @@ describe('listFilter', () => {
 
     it('invalid date throws error', () => {
         expect(() => listFilter({ date: 'invalid' }))
-            .toThrow(/Invalid date value for date: invalid\. Use YYYY-MM-DD or a preset \(today, /);
+            .toThrow(/Invalid date value for date: invalid\. Use YYYY-MM-DD, YYYY-MM-DD HH:mm or a preset \(today, /);
     });
 
     // Stage 7, input decision B: a date-shaped value naming no day was read
@@ -121,7 +121,7 @@ describe('listFilter', () => {
 
     it('names the presets when due is neither a date nor a preset', () => {
         expect(() => listFilter({ due: 'soon' }))
-            .toThrow(/Invalid date value for due: soon\. Use YYYY-MM-DD or a preset \(today, /);
+            .toThrow(/Invalid date value for due: soon\. Use YYYY-MM-DD, YYYY-MM-DD HH:mm or a preset \(today, /);
     });
 
     it('reads a full-width date', () => {

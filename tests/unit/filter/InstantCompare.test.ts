@@ -46,4 +46,17 @@ describe('date conditions compare moments (startHour 5)', () => {
         expect(matches({ startDate: '2026-10-04' },
             { property: 'length', operator: 'equals', value: 1440, unit: 'minutes' } as FilterCondition)).toBe(true);
     });
+
+    it('a date and a time is compared as a moment: a bare date starts before 10:00 that day', () => {
+        expect(matches({ startDate: '2026-10-04' }, { property: 'startDate', operator: 'before', value: '2026-10-04T10:00' })).toBe(true);
+    });
+
+    it('an end right at a moment is on or before it and equals it, not before it', () => {
+        const task = { startDate: '2026-10-04', startTime: '09:00', endTime: '10:00' };
+        expect(matches(task, { property: 'endDate', operator: 'before', value: '2026-10-04T10:00' })).toBe(false);
+        expect(matches(task, { property: 'endDate', operator: 'onOrBefore', value: '2026-10-04T10:00' })).toBe(true);
+        expect(matches(task, { property: 'endDate', operator: 'equals', value: '2026-10-04T10:00' })).toBe(true);
+        expect(matches(task, { property: 'endDate', operator: 'after', value: '2026-10-04T10:00' })).toBe(false);
+        expect(matches(task, { property: 'startDate', operator: 'onOrAfter', value: '2026-10-04T09:00' })).toBe(true);
+    });
 });

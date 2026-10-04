@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { endDayOf, ofValue, visualDayOf } from '../../../src/utils/DayWindow';
+import { daysOfValue, daysWindow, endDayOf, instantAt, ofValue, visualDayOf } from '../../../src/utils/DayWindow';
 import type { DateFilterValue } from '../../../src/services/filter/FilterTypes';
 
 /** The visual days, first and last, of the window `ofValue` names. */
@@ -110,5 +110,40 @@ describe('ofValue: the days a date value and a preset name', () => {
             const result = resolve({ preset: 'unknown' as any }, 1, 0, now);
             expect(result).toEqual({ start: '2026-03-11', end: '2026-03-11' });
         });
+    });
+});
+
+describe('ofValue: a date and a time, and a range (startHour 5, now 2026-10-04 12:00)', () => {
+    const ctx = { weekStartDay: 1 as const, startHour: 5, now: new Date(2026, 9, 4, 12, 0) };
+    const at = (date: string, hh: number, mm = 0) => instantAt(date, hh * 60 + mm);
+
+    it('a date and a time is the moment, a point', () => {
+        expect(ofValue('2026-10-04T10:00', ctx)).toEqual({ startMs: at('2026-10-04', 10), endMs: at('2026-10-04', 10) });
+    });
+
+    it('a range of dates runs from the start of its first day to the end of its last', () => {
+        expect(ofValue({ from: '2026-10-01', to: '2026-10-03' }, ctx))
+            .toEqual({ startMs: at('2026-10-01', 5), endMs: at('2026-10-04', 5) });
+    });
+
+    it('a range with one end is open on the other side; an end of \'\' is none', () => {
+        expect(ofValue({ from: '2026-10-01' }, ctx)).toEqual({ startMs: at('2026-10-01', 5), endMs: Infinity });
+        expect(ofValue({ from: '', to: '2026-10-03' }, ctx)).toEqual({ startMs: -Infinity, endMs: at('2026-10-04', 5) });
+    });
+
+    it('an end may be a preset: this week to next week is two weeks', () => {
+        expect(ofValue({ from: { preset: 'thisWeek' }, to: { preset: 'nextWeek' } }, ctx))
+            .toEqual(daysWindow('2026-09-28', '2026-10-11', 5));
+    });
+
+    it('an end may be a date and a time', () => {
+        expect(ofValue({ from: '2026-10-01T10:00', to: '2026-10-03T18:30' }, ctx))
+            .toEqual({ startMs: at('2026-10-01', 10), endMs: at('2026-10-03', 18, 30) });
+    });
+
+    it('daysOfValue: a preset is its days, a range its ends, a moment its visual day', () => {
+        expect(daysOfValue({ preset: 'thisWeek' }, ctx)).toEqual({ from: '2026-09-28', to: '2026-10-04' });
+        expect(daysOfValue({ from: { preset: 'thisWeek' } }, ctx)).toEqual({ from: '2026-09-28' });
+        expect(daysOfValue('2026-10-05T02:00', ctx)).toEqual({ from: '2026-10-04', to: '2026-10-04' });
     });
 });

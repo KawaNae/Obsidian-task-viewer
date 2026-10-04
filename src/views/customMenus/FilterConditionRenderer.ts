@@ -4,7 +4,7 @@ import type {
     DateFilterValue,
 } from '../../services/filter/FilterTypes';
 import {
-    DEFAULT_NEXT_N_DAYS, LENGTH_RANGE, NEXT_N_DAYS_RANGE, RELATIVE_DATE_PRESETS, getRelativeDateLabel,
+    DEFAULT_NEXT_N_DAYS, LENGTH_RANGE, NEXT_N_DAYS_RANGE, RELATIVE_DATE_PRESETS, getRelativeDateLabel, isPresetValue,
 } from '../../services/filter/FilterTypes';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterDropdownMenus } from './FilterDropdownMenus';
@@ -275,7 +275,7 @@ export class FilterConditionRenderer {
     renderDateValueSelector(row: HTMLElement, edit: ConditionEditor<DateCondition>): void {
         const container = row.createDiv('filter-popover__date-value');
         const dateVal = edit.current().value;
-        const relVal = typeof dateVal === 'object' ? dateVal : null;
+        const relVal = dateVal !== undefined && isPresetValue(dateVal) ? dateVal : null;
 
         // Mode toggle button: "Relative" / "Absolute"
         const modeBtn = container.createEl('button', {
@@ -307,7 +307,7 @@ export class FilterConditionRenderer {
                     codec: IntInput.codec(NEXT_N_DAYS_RANGE),
                     current: () => {
                         const value = edit.current().value;
-                        return (typeof value === 'object' ? value.n : undefined) ?? DEFAULT_NEXT_N_DAYS;
+                        return (value !== undefined && isPresetValue(value) ? value.n : undefined) ?? DEFAULT_NEXT_N_DAYS;
                     },
                     commit: (n) => edit.update(c => ({ ...c, value: { preset: 'nextNDays', n } }), 'keep'),
                     placeholder: 'N',
@@ -329,7 +329,7 @@ export class FilterConditionRenderer {
 
     private showRelativeDateMenu(anchorEl: HTMLElement, edit: ConditionEditor<DateCondition>): void {
         const dateVal = edit.current().value;
-        const currentPreset = typeof dateVal === 'object' ? dateVal.preset : 'today';
+        const currentPreset = dateVal !== undefined && isPresetValue(dateVal) ? dateVal.preset : 'today';
 
         const items = RELATIVE_DATE_PRESETS.map(p => ({
             label: getRelativeDateLabel(p),

@@ -34,8 +34,18 @@ describe('parseDatePreset', () => {
         expect(parseDatePreset('next0days')).toEqual({ ok: false, issue: { code: 'range', min: 1 } });
     });
 
+    it('reads a date and a time, with a space or a T, as YYYY-MM-DDTHH:mm', () => {
+        expect(parseDatePreset('2026-10-04 10:00')).toEqual(ok('2026-10-04T10:00'));
+        expect(parseDatePreset('2026-10-04T9:40')).toEqual(ok('2026-10-04T09:40'));
+    });
+
+    it('refuses a time that is not one, and a time alone', () => {
+        expect(parseDatePreset('2026-10-04 25:00')).toEqual({ ok: false, issue: { code: 'shape', kind: 'dateTime' } });
+        expect(parseDatePreset('10:00')).toEqual({ ok: false, issue: { code: 'dateRequired' } });
+    });
+
     it('rejects anything else as not a date', () => {
-        const notADate = { ok: false, issue: { code: 'shape', kind: 'date' } };
+        const notADate = { ok: false, issue: { code: 'shape', kind: 'dateTime' } };
         expect(parseDatePreset('nextndays')).toEqual(notADate);
         expect(parseDatePreset('2026/03/14')).toEqual(notADate);
         expect(parseDatePreset('yesterday')).toEqual(notADate);

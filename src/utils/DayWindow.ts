@@ -1,5 +1,7 @@
 import type { TaskSpan } from '../types';
-import { DEFAULT_NEXT_N_DAYS, type DateFilterValue } from '../services/filter/FilterTypes';
+import {
+    DEFAULT_NEXT_N_DAYS, isDateRange, isDateTimeText, isPresetValue, type DateFilterValue, type SingleDateValue,
+} from '../services/filter/FilterTypes';
 import { DateUtils } from './DateUtils';
 
 /**
@@ -14,7 +16,11 @@ import { DateUtils } from './DateUtils';
  * and then puts the time on it, so a day of a clock change counts as one day.
  */
 
-/** A stretch of time, `[startMs, endMs)`, as a filter's date or a view's days are. */
+/**
+ * A stretch of time, `[startMs, endMs)`, as a filter's date or a view's days
+ * are. A filter's moment is a point (`startMs === endMs`); a range open on a
+ * side has `-Infinity` or `Infinity` there.
+ */
 export interface TimeWindow {
     startMs: number;
     endMs: number;
@@ -109,16 +115,50 @@ export function instantText(ms: number): { date: string; time: string } {
 }
 
 /**
- * The window a filter's date value names: a date is its visual day, a preset
- * the visual days it counts from the visual day at `now`.
+ * The window a filter's value names: a date is its visual day, a date and a
+ * time the moment (a point, `startMs === endMs`), a preset the visual days it
+ * counts from the visual day at `now`, a range from the start of its `from`
+ * to the end of its `to`, open on a side with no end.
  */
 export function ofValue(value: DateFilterValue, ctx: WindowContext): TimeWindow {
-    const { from, to } = daysOfValue(value, ctx);
+    if (isDateRange(value)) {
+        return {
+            startMs: isChosen(value.from) ? ofValue(value.from, ctx).startMs : -Infinity,
+            endMs: isChosen(value.to) ? ofValue(value.to, ctx).endMs : Infinity,
+        };
+    }
+    if (isDateTimeText(value)) {
+        const ms = instantAt(value.slice(0, 10), DateUtils.timeToMinutes(value.slice(11)));
+        return { startMs: ms, endMs: ms };
+    }
+    const { from, to } = daysOf(value, ctx);
     return daysWindow(from, to, ctx.startHour);
 }
 
-function daysOfValue(value: DateFilterValue, ctx: WindowContext): { from: string; to: string } {
-    if (typeof value === 'string') return { from: value, to: value };
+/** Whether an end of a range is there: absent and `''` are not. */
+function isChosen(end: SingleDateValue | undefined): end is SingleDateValue {
+    return end !== undefined && end !== '';
+}
+
+/**
+ * The visual days a value names, first and last: what a menu reads to turn
+ * a preset into a range (this week is its Monday to its Sunday). A date and
+ * a time is the visual day of the moment; a side a range leaves open is
+ * absent.
+ */
+export function daysOfValue(value: DateFilterValue, ctx: WindowContext): { from?: string; to?: string } {
+    if (!isDateRange(value)) return daysOf(value, ctx);
+    return {
+        ...(isChosen(value.from) ? { from: daysOf(value.from, ctx).from } : {}),
+        ...(isChosen(value.to) ? { to: daysOf(value.to, ctx).to } : {}),
+    };
+}
+
+function daysOf(value: SingleDateValue, ctx: WindowContext): { from: string; to: string } {
+    if (!isPresetValue(value)) {
+        const day = isDateTimeText(value) ? visualDayAt(value.slice(0, 10), value.slice(11), ctx.startHour) : value;
+        return { from: day, to: day };
+    }
 
     const today = DateUtils.visualDateAt(ctx.now, ctx.startHour);
     const week = (anyDay: string) => {

@@ -28,9 +28,51 @@ export const DEFAULT_NEXT_N_DAYS = 7;
 /** The days `nextNDays` may take: a whole number, one or more (the menu's field, `next<N>days`). */
 export const NEXT_N_DAYS_RANGE: NumberRange = { min: 1 };
 
-export type DateFilterValue =
-    | string                                                        // "2024-01-01" (absolute)
-    | { readonly preset: RelativeDatePreset; readonly n?: number };  // relative
+/** A relative value: a preset, and the days of `nextNDays`. */
+export interface PresetValue {
+    readonly preset: RelativeDatePreset;
+    readonly n?: number;
+}
+
+/**
+ * One value a date condition names: a date (`YYYY-MM-DD`, its visual day), a
+ * date and a time (`YYYY-MM-DDTHH:mm`, that moment), or a preset (the visual
+ * days it counts from today). `''` is a date not chosen yet.
+ */
+export type SingleDateValue = string | PresetValue;
+
+/**
+ * The days from the start of `from` to the end of `to`. An end left out (or
+ * `''`, not chosen yet) leaves the window open on that side; a range with no
+ * end chosen is not chosen yet.
+ */
+export interface DateRangeValue {
+    readonly from?: SingleDateValue;
+    readonly to?: SingleDateValue;
+}
+
+/** What a date condition and a period condition compare with (`DayWindow.ofValue`). */
+export type DateFilterValue = SingleDateValue | DateRangeValue;
+
+/** Whether the value is a range. */
+export function isDateRange(value: DateFilterValue): value is DateRangeValue {
+    return typeof value === 'object' && !('preset' in value);
+}
+
+/** Whether the value is a preset. */
+export function isPresetValue(value: DateFilterValue): value is PresetValue {
+    return typeof value === 'object' && 'preset' in value;
+}
+
+const DATE_TIME_TEXT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+/**
+ * Whether the value is a date and a time (`YYYY-MM-DDTHH:mm`): a moment.
+ * A text that is not one is a date, or `''`.
+ */
+export function isDateTimeText(value: DateFilterValue): value is string {
+    return typeof value === 'string' && DATE_TIME_TEXT.test(value);
+}
 
 export type FilterTarget = 'self' | 'parent';
 

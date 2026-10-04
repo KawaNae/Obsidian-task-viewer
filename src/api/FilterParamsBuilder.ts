@@ -10,13 +10,14 @@ import { loadFilterFile } from './FilterFileLoader';
 
 /**
  * A date parameter that takes a preset (`due`, `date`, `from`, `to`):
- * a day that exists, or a preset. The one place its error is worded.
+ * a day that exists, with a time or not, or a preset. The one place its
+ * error is worded.
  */
 export function readDateParam(value: string, name: string): DateFilterValue {
     const read = parseDatePreset(value);
     if (read.ok) return read.value;
     if (read.issue.code === 'noSuchDay') throw TaskApiError.ofIssue(read.issue, name, value);
-    throw new TaskApiError(n => `Invalid date value for ${n(name)}: ${value}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`, name);
+    throw new TaskApiError(n => `Invalid date value for ${n(name)}: ${value}. Use YYYY-MM-DD, YYYY-MM-DD HH:mm or a preset (${DATE_PRESET_SYNTAX})`, name);
 }
 
 // ── Internal helpers ──
