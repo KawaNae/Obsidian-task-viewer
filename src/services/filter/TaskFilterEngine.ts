@@ -100,12 +100,24 @@ export class TaskFilterEngine {
     /**
      * A moment against the window a date value names (`DayWindow.ofValue`),
      * `[ws, we)`. A start is in the window from its start up to its end; an
-     * end or a due closes in it, from just after its start up to its end.
+     * end or a due closes in it, from just after its start up to its end. A
+     * window that is a moment (a date and a time) is compared as a number,
+     * a start and an end alike: `@2026-10-04T09:00>10:00` ends on or before
+     * 10:00, not before it.
      */
     private static compareDate(value: InstantValue, op: DateComparison, filterValue: DateFilterValue, context: FilterContext): boolean {
         const ms = value.ms;
         if (ms === undefined) return false;
         const { startMs: ws, endMs: we } = ofValue(filterValue, context);
+        if (ws === we) {
+            switch (op) {
+                case 'equals':     return ms === ws;
+                case 'before':     return ms < ws;
+                case 'after':      return ms > ws;
+                case 'onOrBefore': return ms <= ws;
+                case 'onOrAfter':  return ms >= ws;
+            }
+        }
         const start = value.edge === 'start';
         switch (op) {
             case 'equals':     return start ? ws <= ms && ms < we : ws < ms && ms <= we;

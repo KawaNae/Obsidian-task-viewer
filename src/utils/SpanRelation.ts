@@ -8,8 +8,15 @@ import type { TimeWindow } from './DayWindow';
  * start is the day before's.
  */
 
-/** Whether the span and the window share time. A point overlaps the window it is in. */
+/**
+ * Whether the span and the window share time. A point overlaps the window it
+ * is in. A window that is a moment M (a filter's date and time) is overlapped
+ * by a span it falls in, `start <= M < end`, and by a point at M.
+ */
 export function overlaps(span: TaskSpan, w: TimeWindow): boolean {
+    if (w.endMs === w.startMs) {
+        return span.endMs <= span.startMs ? span.startMs === w.startMs : span.startMs <= w.startMs && w.startMs < span.endMs;
+    }
     if (span.endMs <= span.startMs) return startIn(span.startMs, w);
     return span.startMs < w.endMs && w.startMs < span.endMs;
 }
