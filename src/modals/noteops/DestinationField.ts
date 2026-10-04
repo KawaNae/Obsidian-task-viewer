@@ -2,6 +2,7 @@ import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { DestinationAsk } from '../../services/data/NoteOps';
 import { ShownSuggest } from '../../suggest/ShownSuggest';
+import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
 import { NoteFields } from './NoteFields';
 
@@ -50,12 +51,7 @@ export class DestinationField {
         this.headingInput.value = opts.initial.heading;
         this.headingInput.addEventListener('input', () => opts.onChange());
         this.headingSuggest = new HeadingSuggest(app, this.headingInput);
-        this.headingInput.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key !== 'Enter' || e.isComposing) return;
-            if (this.headingSuggest.listShown) return;
-            e.preventDefault();
-            opts.onEnter();
-        });
+        onFormEnter(this.headingInput, () => opts.onEnter(), { takesEnter: () => this.headingSuggest.listShown });
     }
 
     /** What the fields hold now. */

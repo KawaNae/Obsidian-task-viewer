@@ -11,7 +11,7 @@ import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
 import { createFormRow } from '../form/formRow';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { attachBracketPairing, type BracketPairingHandle } from '../form/bracketPairing';
-import { isFormEnter } from '../form/formEnter';
+import { onFormEnter } from '../form/formEnter';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import { openFile } from '../../utils/NavigationUtils';
@@ -117,14 +117,11 @@ export class TaskHubForm {
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
         });
         this.nameInput.value = this.task.content ?? '';
-        new TaskNameSuggest(this.deps.app, this.nameInput);
+        const nameSuggest = new TaskNameSuggest(this.deps.app, this.nameInput);
         this.pairing = attachBracketPairing(this.nameInput, () => { /* 値取り込みは commit 時 */ });
         this.nameInput.addEventListener('blur', () => this.commitContent());
-        this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (isFormEnter(e, this.pairing.isComposing())) {
-                this.commitContent();
-            }
-        });
+        // An Enter that picks from the name's list is the list's.
+        onFormEnter(this.nameInput, () => this.commitContent(), { takesEnter: () => nameSuggest.listShown });
 
         // --- Status + Dates ---
         const scheduleGroup = c.createDiv({ cls: 'tv-form__group' });
@@ -153,8 +150,9 @@ export class TaskHubForm {
             );
         };
         this.statusPill.addEventListener('click', openStatusSuggest);
-        // 素の Enter / Space は native button click → openStatusSuggest。
-        // ここではハイライト操作（矢印移動・確定）だけを扱う。
+        // 素の Space は native button click → openStatusSuggest。矢印はハイライトを
+        // 動かす。Enter は、ハイライトがあれば確定し、無ければ一覧を開く（素の
+        // Enter の click と同じ）。
         this.statusPill.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -163,12 +161,16 @@ export class TaskHubForm {
             } else if (e.key === 'ArrowUp' && statusSuggest.isOpen) {
                 e.preventDefault();
                 statusSuggest.moveHighlight(-1);
-            } else if (e.key === 'Enter' && statusSuggest.isOpen && statusSuggest.highlightedValue !== null) {
-                e.preventDefault(); // native click（suggest 再オープン）を抑止して確定
-                const char = statusSuggest.highlightedValue;
-                statusSuggest.close();
-                this.commitStatus(char);
             }
+        });
+        onFormEnter(this.statusPill, () => {
+            const char = statusSuggest.isOpen ? statusSuggest.highlightedValue : null;
+            if (char === null) {
+                openStatusSuggest();
+                return;
+            }
+            statusSuggest.close();
+            this.commitStatus(char);
         });
 
         // --- Start / End / Due ---
@@ -250,9 +252,9 @@ export class TaskHubForm {
      * FilterConditionRenderer.renderSuggestInput と同じイベント設計
      * （input / focus で候補表示、ArrowDown/Up でハイライト移動）。
      *
-     * Enter は「ハイライトがあれば input.value に反映して閉じるだけ」に
-     * 留める — 各フィールドの既存 Enter コミットハンドラ（この後に登録
-     * される）が反映後の値を読んで確定する。Escape はパネル側の capture
+     * Enter（onFormEnter）は「ハイライトがあれば input.value に反映して閉じる
+     * だけ」に留める — 各フィールドの既存 Enter コミットハンドラ（この後に
+     * 登録される）が反映後の値を読んで確定する。Escape はパネル側の capture
      * ハンドラが stack を閉じるのでここでは扱わない。
      *
      * フィールドグループへは FieldGroupContext.attachSuggest 経由で公開する。
@@ -302,11 +304,12 @@ export class TaskHubForm {
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 suggest.moveHighlight(-1);
-            } else if (e.key === 'Enter' && !e.isComposing) {
-                const hl = suggest.highlightedValue;
-                if (hl !== null) input.value = hl;
-                suggest.close();
             }
+        });
+        onFormEnter(input, () => {
+            const hl = suggest.highlightedValue;
+            if (hl !== null) input.value = hl;
+            suggest.close();
         });
     }
 

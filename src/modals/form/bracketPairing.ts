@@ -1,7 +1,7 @@
 import { BRACKET_CLOSERS, BRACKET_PAIRS, shouldAutoClose } from '../../utils/BracketRules';
 
 export interface BracketPairingHandle {
-    /** IME composition 中か（Enter 確定の無視判定などに使う） */
+    /** IME composition 中か（外からの値の取り込みを打ちかけの間は控える判定に使う。Enter の判定は onFormEnter が欄ごとに持つ） */
     isComposing(): boolean;
 }
 

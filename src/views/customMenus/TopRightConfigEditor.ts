@@ -5,6 +5,7 @@ import { SuggestController } from './SuggestController';
 import { OverlayShell } from '../sharedUI/OverlayShell';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import { KNOWN_FIELDS } from '../taskcard/TopRightFieldResolver';
+import { onFormEnter } from '../../modals/form/formEnter';
 
 export interface TopRightConfigEditorOpts {
     config: TopRightConfig | undefined;
@@ -149,10 +150,6 @@ export class TopRightConfigEditor {
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                 e.preventDefault();
                 suggest.moveHighlight(e.key === 'ArrowDown' ? 1 : -1);
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                const val = suggest.highlightedValue ?? input.value;
-                if (val) addField(val);
             } else if (e.key === 'Escape') {
                 suggest.close();
             } else if (e.key === 'Backspace' && !input.value && this.fields.length > 0) {
@@ -160,6 +157,10 @@ export class TopRightConfigEditor {
                 this.emitChange();
                 this.renderContent();
             }
+        });
+        onFormEnter(input, () => {
+            const val = suggest.highlightedValue ?? input.value;
+            if (val) addField(val);
         });
     }
 

@@ -5,6 +5,7 @@ import { filterLineStyles, renderLineStyleSuggestion } from '../../../suggest/li
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
+import { onFormEnter } from '../../form/formEnter';
 import { PickerTextField } from '../../form/PickerTextField';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 import type { FieldGroupContext } from './FieldGroupContext';
@@ -99,9 +100,7 @@ export class StyleFieldGroup {
         }
 
         input.addEventListener('blur', commit);
-        input.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.isComposing) commit();
-        });
+        onFormEnter(input, commit);
 
         this.updateDecoration(field);
     }

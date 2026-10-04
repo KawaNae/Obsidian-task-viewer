@@ -8,6 +8,7 @@ import { reservedPropertyKeys } from '../../../services/parsing/utils/Frontmatte
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
+import { onFormEnter } from '../../form/formEnter';
 import type { FieldGroupContext } from './FieldGroupContext';
 
 /**
@@ -67,9 +68,7 @@ export class PropertiesFieldGroup {
                 onPick: (val) => { valueInput.value = val; commitValue(); },
             });
             valueInput.addEventListener('blur', commitValue);
-            valueInput.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key === 'Enter' && !e.isComposing) commitValue();
-            });
+            onFormEnter(valueInput, commitValue);
 
             if (isOwn) {
                 const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
@@ -146,9 +145,7 @@ export class PropertiesFieldGroup {
             this.render(true);
         };
         for (const input of [keyInput, valueInput]) {
-            input.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key === 'Enter' && !e.isComposing) commitAdd();
-            });
+            onFormEnter(input, commitAdd);
         }
         // blur 確定ルール: key があれば value 空でも確定（空値プロパティは有効）。
         // value だけでは書き込み先がないので確定しない。

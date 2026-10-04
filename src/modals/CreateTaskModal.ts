@@ -5,7 +5,7 @@ import { NO_TASK_LOOKUP } from '../services/display/DisplayTaskConverter';
 import { createTempTask } from '../services/data/createTempTask';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 import { attachBracketPairing } from './form/bracketPairing';
-import { isFormEnter } from './form/formEnter';
+import { onFormEnter } from './form/formEnter';
 import { DateFieldGroup } from './form/DateFieldGroup';
 import { OverlayShell } from '../views/sharedUI/OverlayShell';
 import { hostWindow } from '../utils/HostWindow';
@@ -93,14 +93,13 @@ export class CreateTaskModal {
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
         });
         this.nameInput.value = this.result.content ?? '';
-        new TaskNameSuggest(this.app, this.nameInput);
-        const pairing = attachBracketPairing(this.nameInput, () => {
+        const nameSuggest = new TaskNameSuggest(this.app, this.nameInput);
+        attachBracketPairing(this.nameInput, () => {
             this.result.content = this.nameInput.value;
             this.checkWarning();
         });
-        this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (isFormEnter(e, pairing.isComposing())) this.submit();
-        });
+        // An Enter that picks from the name's list is the list's.
+        onFormEnter(this.nameInput, () => this.submit(), { takesEnter: () => nameSuggest.listShown });
 
         // --- Start / End / Due ---
         const dlParts = DateUtils.splitDateTime(this.result.due ?? '');

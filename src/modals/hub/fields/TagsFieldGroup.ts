@@ -6,6 +6,7 @@ import { FilterValueCollector } from '../../../services/filter/FilterValueCollec
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
+import { onFormEnter } from '../../form/formEnter';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 import type { FieldGroupContext } from './FieldGroupContext';
 
@@ -88,11 +89,12 @@ export class TagsFieldGroup {
             renderItem: (item, val) => { item.createSpan().setText(`#${val}`); },
             onPick: (val) => addTags(val),
         });
+        onFormEnter(input, () => {
+            const raw = input.value.trim();
+            if (raw) addTags(raw);
+        });
         input.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.isComposing) {
-                const raw = input.value.trim();
-                if (raw) addTags(raw);
-            } else if (e.key === 'Backspace' && !input.value) {
+            if (e.key === 'Backspace' && !input.value) {
                 // 空入力での Backspace は末尾の削除可能タグ（own 宣言かつ
                 // content 由来でない）を除去する — filter pill と同じ操作感
                 const current = this.ctx.getTask();

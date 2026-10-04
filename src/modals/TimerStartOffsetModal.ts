@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import { agoLabel, readOffsetInput, startLabel, type OffsetInputKind } from '../timer/TimerStartOffset';
 import { hostWindow } from '../utils/HostWindow';
 import { OverlayShell } from '../views/sharedUI/OverlayShell';
+import { onFormEnter } from './form/formEnter';
 import { createFormRow } from './form/formRow';
 import { createPickerTextField, type PickerTextField } from './form/PickerTextField';
 
@@ -81,11 +82,7 @@ export class TimerStartOffsetModal {
 
         for (const input of [this.minutesInput, this.timeField.input]) {
             input.addEventListener('input', () => this.render());
-            input.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key !== 'Enter' || e.isComposing) return;
-                e.preventDefault();
-                this.submit();
-            });
+            onFormEnter(input, () => this.submit());
         }
         this.saysEl = group.createDiv({ cls: 'tv-timer-offset__says' });
 
