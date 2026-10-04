@@ -6,7 +6,7 @@
  * windows (host doc/win resolved from the anchor) and follow window resize.
  */
 
-import { type App, Notice, setIcon, getIconIds } from 'obsidian';
+import { type App, setIcon, getIconIds } from 'obsidian';
 import { t } from '../../i18n';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
 import type { IntervalGroup, IntervalSegment } from '../../timer/IntervalMath';
@@ -16,6 +16,7 @@ import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 import { OverlayShell } from '../sharedUI/OverlayShell';
 import type { TemplateNoteSaver } from '../../services/template/TemplateNote';
+import { refusalText } from '../../services/operations/WriteAnswer';
 
 export interface TemplateCreatorCallbacks {
     onSaved: (filePath: string) => void;
@@ -376,21 +377,23 @@ export class IntervalTemplateCreator {
                 groups,
             };
 
+            // 書けなかったときは、開いたまま理由をボタンの横に1回だけ出し、
+            // もう一度保存できるようにする（通知は出さない: tellRefusal false）。
             try {
-                const file = isEditing
-                    ? await writer.updateTemplate(this.editingFilePath!, data)
-                    : await writer.saveTemplate(this.folderPath, data);
-                // 書けなかった。理由は書き込みの層が通知済みなので、モーダルを
-                // 開いたまま残して、もう一度保存できるようにする。
-                if (!file) return;
+                const answer = isEditing
+                    ? await writer.updateTemplate(this.editingFilePath!, data, { tellRefusal: false })
+                    : await writer.saveTemplate(this.folderPath, data, { tellRefusal: false });
+                if (!answer.written || !answer.file) {
+                    errorEl.setText(refusalText(answer.written ? null : answer.refused));
+                    return;
+                }
                 this.close();
-                this.callbacks?.onSaved(file.path);
+                this.callbacks?.onSaved(answer.file.path);
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                new Notice(isEditing
+                errorEl.setText(isEditing
                     ? t('timer.template.saveFailed', { error: msg })
                     : t('timer.template.createFailed', { error: msg }));
-                errorEl.setText(msg);
             }
         });
     }

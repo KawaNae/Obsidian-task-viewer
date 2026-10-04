@@ -42,8 +42,8 @@ describe('after a card\'s update, before any scan', () => {
         const id = idOf(session, 'A');
         session.holdScans();
 
-        expect(await session.ops.updateTask(id, { content: 'A2' })).toBe(true);
-        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(id, { content: 'A2' })).written).toBe(true);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
 
         expect(contents.get(FILE)).toBe(['# note', '- [x] A2 @2026-09-21', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
@@ -54,7 +54,7 @@ describe('after a card\'s update, before any scan', () => {
         const id = idOf(session, 'A');
         session.holdScans();
 
-        expect(await session.ops.updateTask(id, { content: 'A2' })).toBe(true);
+        expect((await session.ops.updateTask(id, { content: 'A2' })).written).toBe(true);
         expect(await session.ops.deleteTask(id, { fireFlow: true })).toBe(true);
 
         // The renamed row went, and the next instance carries the new name.
@@ -70,7 +70,7 @@ describe('after a card\'s update, before any scan', () => {
         const id = idOf(session, 'A');
         session.holdScans();
 
-        expect(await session.ops.updateTask(id, { properties: { memo: { value: 'new', type: 'string' } } } as never)).toBe(true);
+        expect((await session.ops.updateTask(id, { properties: { memo: { value: 'new', type: 'string' } } } as never)).written).toBe(true);
         expect(contents.get(FILE)).toContain('\t- memo:: new');
         expect(await session.ops.deleteTask(id)).toBe(true);
 
@@ -82,11 +82,11 @@ describe('after a card\'s update, before any scan', () => {
         const id = idOf(session, 'A');
         session.holdScans();
 
-        expect(await session.ops.updateTask(id, { content: 'A2' })).toBe(true);
+        expect((await session.ops.updateTask(id, { content: 'A2' })).written).toBe(true);
         const edited = ['# note', '- [ ] A2 書き足し @2026-09-21', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
     });
 });
@@ -106,7 +106,7 @@ describe('a subtree written in from outside before the update', () => {
         const edited = ['# note', ROW, '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
         await session.settle(FILE);
         expect(session.index.getTask(id)).toBeUndefined();
@@ -130,8 +130,8 @@ describe('writes asked of one row before the one before them is back', () => {
         const id = idOf(session, 'A');
 
         const written = await Promise.all([
-            session.ops.updateTask(id, { statusChar: 'x' }),
-            session.ops.updateTask(id, { statusChar: ' ' }),
+            session.ops.updateTask(id, { statusChar: 'x' }).then(a => a.written),
+            session.ops.updateTask(id, { statusChar: ' ' }).then(a => a.written),
         ]);
 
         expect(written).toEqual([true, true]);
@@ -145,8 +145,8 @@ describe('writes asked of one row before the one before them is back', () => {
         session.holdScans();
 
         const done = await Promise.all([
-            session.ops.updateTask(id, { content: 'A2' }),
-            session.ops.updateTask(id, { statusChar: 'x' }),
+            session.ops.updateTask(id, { content: 'A2' }).then(a => a.written),
+            session.ops.updateTask(id, { statusChar: 'x' }).then(a => a.written),
         ]);
         expect(done).toEqual([true, true]);
         expect(contents.get(FILE)).toBe(['# note', '- [x] A2 @2026-09-21', '- [ ] Z', ''].join('\n'));
@@ -162,7 +162,7 @@ describe('writes asked of one row before the one before them is back', () => {
         session.holdScans();
 
         const done = await Promise.all([
-            session.ops.updateTask(id, { content: 'A2' }),
+            session.ops.updateTask(id, { content: 'A2' }).then(a => a.written),
             session.ops.deleteTask(id),
         ]);
 
@@ -186,7 +186,7 @@ describe('an update that rewrites property lines plans from them', () => {
         const edited = ['# note', '- [ ] A @2026-09-21', '\t- tags:: #a #b', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await session.ops.updateTask(id, { tags: [...task.tags, 'c'] })).toBe(false);
+        expect((await session.ops.updateTask(id, { tags: [...task.tags, 'c'] })).written).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
     });
 
@@ -195,7 +195,7 @@ describe('an update that rewrites property lines plans from them', () => {
         const id = idOf(session, 'A');
         const task = session.index.getTask(id)!;
 
-        expect(await session.ops.updateTask(id, { tags: [...task.tags, 'c'] })).toBe(true);
+        expect((await session.ops.updateTask(id, { tags: [...task.tags, 'c'] })).written).toBe(true);
         expect(contents.get(FILE)).toContain('#c');
     });
 });

@@ -54,7 +54,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.ops.updateTask(a.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(a.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -97,7 +97,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.ops.insertLine(a.id, '- [ ] 子タスク', 'firstChild');
+        const { written } = await session.ops.insertLine(a.id, '- [ ] 子タスク', 'firstChild');
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -187,7 +187,7 @@ describe('a note whose terminators disagree', () => {
         );
         const a = session.index.getTasks().find(task => task.content === '混在A')!;
 
-        const written = await session.ops.updateTask(a.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(a.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -225,7 +225,7 @@ describe('a note whose last line ends with a stray CR', () => {
         const { contents, session } = await openNote(STRAY);
         const beta = session.index.getTasks().find(task => task.content === 'beta')!;
 
-        const written = await session.ops.updateTask(beta.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(beta.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -256,7 +256,7 @@ describe('a note written in LF', () => {
         );
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.ops.updateTask(a.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(a.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);

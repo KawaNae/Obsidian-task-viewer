@@ -107,7 +107,7 @@ describe('a completion fire leaves the same bytes', () => {
         it(name, async () => {
             const { contents, session } = await open({ [FILE]: note });
 
-            expect(await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
+            expect((await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).written).toBe(true);
             await session.flowSettled(FILE);
 
             expect(bytes(contents)).toMatchSnapshot();

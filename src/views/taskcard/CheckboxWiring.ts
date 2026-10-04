@@ -94,7 +94,7 @@ export class CheckboxWiring {
                 this.putBack(input, !isChecked, previousChar);
                 return;
             }
-            void this.operations.updateTask(name, { statusChar: newStatusChar }).then(written => {
+            void this.operations.updateTask(name, { statusChar: newStatusChar }).then(({ written }) => {
                 if (!written) this.putBack(input, !isChecked, previousChar);
             });
         });

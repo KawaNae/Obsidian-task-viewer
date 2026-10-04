@@ -44,7 +44,7 @@ describe('a completion whose fire would disturb the note', () => {
     it('is written alone in one write, from a card', async () => {
         const note = await open();
         const id = note.session.index.getTasks().find(t => t.content === 'A')!.id;
-        expect(await note.session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(DONE.join('\n'));
         expect(note.processed()).toBe(1);
@@ -76,7 +76,7 @@ describe('a completion whose fire could not be planned', () => {
     it('is written, and told the flow was not run, from a card', async () => {
         const note = await open(FAILS);
         const id = note.session.index.getTasks().find(t => t.content === 'A')!.id;
-        expect(await note.session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(['# note', '- [x] A @2026-09-21 ==> at(end + 1d)', ''].join('\n'));
         expect(Notice.messages).toHaveLength(1);
@@ -121,7 +121,7 @@ describe('a completion whose fire is refused for a reason not of where its lines
     it('is written alone from a card, in one write, and told the flow was not run', async () => {
         const note = await open(ROW);
         const task = refusedAsGone(note.session);
-        expect(await note.session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(CHECKED.join('\n'));
         expect(note.processed()).toBe(1);

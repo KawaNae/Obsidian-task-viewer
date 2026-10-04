@@ -78,7 +78,7 @@ describe('a command line stripped by a fire', () => {
         const before = contents.get(FILE)!;
         const sub = idOf(session, 'sub');
 
-        expect(await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
@@ -93,7 +93,7 @@ describe('a move that leaves its command line behind', () => {
         const before = contents.get(FILE)!;
         const sub = idOf(session, 'sub');
 
-        expect(await session.ops.updateTask(idOf(session, 'X'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, 'X'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] X', '- [x] X'));
@@ -136,7 +136,7 @@ describe('a line with a note bullet below it', () => {
     it('is stripped by a fire, and the series goes on', async () => {
         const { contents, session } = await open(['# note', '- [ ] T @2026-09-21', '  - ==> every mon', '    - why weekly', '- [ ] U', '']);
 
-        expect(await session.ops.updateTask(idOf(session, 'T'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, 'T'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([
@@ -159,7 +159,7 @@ describe('a command line with a paragraph going on it', () => {
     it('is stripped by a fire, the paragraph going on the task instead', async () => {
         const { contents, session } = await open(['# note', '- [ ] 対象 @2026-09-21', '\t- ==> every mon', 'lazy', '- [ ] U', '']);
 
-        expect(await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([

@@ -60,7 +60,7 @@ describe.each(COMMANDS)('%s within the same file', (_name, command) => {
         const child = before.find(row => row.content === '子')!.id;
         const kept = before.filter(row => row.content.startsWith('行')).map(row => row.id);
 
-        expect(await live.ops.updateTask(moving, { statusChar: 'x' })).toBe(true);
+        expect((await live.ops.updateTask(moving, { statusChar: 'x' })).written).toBe(true);
         await live.flowSettled(FILE);
 
         const lines = contents.get(FILE)!.split('\n');

@@ -45,6 +45,7 @@ function buildHost(task: Task, written = true) {
         // The dispose guard every write goes through; these operations are open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
+        hearer: proto.hearer,
 
         copyToPlan: proto.copyToPlan,
         planCopy: proto.planCopy,
@@ -119,7 +120,7 @@ describe('updateTask: the answer', () => {
         const host = buildHost(task, false);
         Notice.messages.length = 0;
 
-        const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
+        const { written } = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
 
         expect(written).toBe(false);
         expect(Notice.messages).toHaveLength(0);
@@ -130,7 +131,7 @@ describe('updateTask: the answer', () => {
         const host = buildHost(task, true);
         Notice.messages.length = 0;
 
-        const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
+        const { written } = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
 
         expect(written).toBe(true);
         expect(Notice.messages).toHaveLength(0);
@@ -140,7 +141,7 @@ describe('updateTask: the answer', () => {
         const task = makeTask({ content: 'x', isReadOnly: true, parserId: 'tasks-plugin' });
         const host = buildHost(task, true);
 
-        const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
+        const { written } = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
 
         expect(written).toBe(false);
         expect(host.repository.write).not.toHaveBeenCalled();
@@ -186,7 +187,7 @@ describe('a read-only row', () => {
         const host = { ...buildHost(task), reportRefusal: vi.fn() };
         Notice.messages.length = 0;
 
-        expect(await proto.updateTask.call(host, task.id, { statusChar: 'x' })).toBe(false);
+        expect((await proto.updateTask.call(host, task.id, { statusChar: 'x' })).written).toBe(false);
         expect(host.repository.write).not.toHaveBeenCalled();
         expect(host.reportRefusal).not.toHaveBeenCalled();
         expect(Notice.messages).toHaveLength(0);

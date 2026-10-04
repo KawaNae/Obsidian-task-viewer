@@ -4,7 +4,7 @@ import type { PendingRecord, RecordMode, TimerState } from '../../../src/timer/T
 import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
 import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
-import { opsOver } from '../helpers/anchoredRow';
+import { opsOver, answerOf } from '../helpers/anchoredRow';
 import { timerOn, type MeasureKind } from '../helpers/timerRig';
 
 /**
@@ -55,7 +55,7 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         getIndex: () => taskIndex,
         getOperations: () => ({
             ...opsOver(taskIndex),
-            insertLine: async (_parentId: string, line: string, _place: string) => { inserted.push(line); return true; },
+            insertLine: async (_parentId: string, line: string, _place: string) => { inserted.push(line); return answerOf(true); },
         }),
     } as unknown as TaskViewerPlugin;
 

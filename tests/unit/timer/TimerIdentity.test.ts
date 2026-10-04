@@ -101,7 +101,7 @@ describe('timer identity', () => {
 
     it('refuses a second timer on the same day, and takes one on another day', () => {
         const widget = widgetOver(s);
-        s.ops.putInDailyNote = async () => null;
+        s.ops.putInDailyNote = async () => ({ written: false, refused: null });
 
         widget.startTimer({ daily: '2026-09-21' }, 'child', { kind: 'countup' });
         widget.startTimer({ daily: '2026-09-21' }, 'child', { kind: 'pomodoro' });

@@ -54,11 +54,11 @@ function harness() {
         getOperations: () => ({
             updateTask: (_id: string, u: Record<string, unknown>) => {
                 calls.push(u.content as string);
-                return new Promise<boolean>((resolve) => {
+                return new Promise<{ written: boolean }>((resolve) => {
                     settle = (written) => {
                         // A write that lands is on the line, as the index would read it.
                         if (written) tail = { ...tail, content: u.content as string };
-                        resolve(written);
+                        resolve({ written });
                     };
                 });
             },

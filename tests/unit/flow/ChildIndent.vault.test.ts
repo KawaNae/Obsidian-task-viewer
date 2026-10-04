@@ -58,7 +58,7 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit, confi
     it('lends no indentation to a first child', async () => {
         const { contents, session } = await open(NOTE, config);
 
-        expect(await session.ops.insertLine(taskWorded(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(taskWorded(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         // Past the task's text that goes on, which a child put above it would
@@ -81,7 +81,7 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit, confi
     it('lends no indentation to the next instance\'s command, which keeps the series going', async () => {
         const { contents, session } = await open(['# note', '- [ ] 対象 @2026-09-21', line, '\t- ==> every mon', '- [ ] U', '']);
 
-        expect(await session.ops.updateTask(taskWorded(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(taskWorded(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         const lines = contents.get(FILE)!.split('\n');
@@ -115,7 +115,7 @@ describe('a child carried by a move within the note', () => {
             await live.scanAll();
             const session = live;
 
-            expect(await session.ops.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
+            expect((await session.ops.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).written).toBe(true);
             await session.settle(FILE);
 
             const lines = contents.get(FILE)!.split('\n');

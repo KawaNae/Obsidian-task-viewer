@@ -32,7 +32,7 @@ describe('set content with a line break in its value', () => {
         const task = session.index.getTasks().find(t => t.content === 'A')!;
 
         // The completion is written; its fire is not, and says why.
-        expect(await session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(note.join('\n').replace('- [ ] A', '- [x] A'));

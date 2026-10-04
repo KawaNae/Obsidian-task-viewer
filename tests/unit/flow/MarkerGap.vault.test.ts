@@ -36,7 +36,7 @@ function taskWorded(session: VaultSession, content: string) {
 }
 
 async function complete(session: VaultSession, content: string): Promise<void> {
-    expect(await session.ops.updateTask(taskWorded(session, content).id, { statusChar: 'x' })).toBe(true);
+    expect((await session.ops.updateTask(taskWorded(session, content).id, { statusChar: 'x' })).written).toBe(true);
     await session.settle(FILE);
 }
 
@@ -113,7 +113,7 @@ describe('a task moved to another indentation', () => {
 
     async function completeIn(session: VaultSession, content: string, files: string[]): Promise<void> {
         const task = session.index.getTasks().find(each => each.content === content)!;
-        expect(await session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         for (const file of files) await session.settle(file);
     }
 

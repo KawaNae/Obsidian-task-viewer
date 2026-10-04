@@ -209,7 +209,7 @@ describe('a sweep', () => {
         s.reconciler!.start();
         await swept(1);
         const id = s.index.getTasks()[0].id;
-        expect(await s.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await s.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         disk.moved.set(FILE, { mtime: 7, size: 8 });
         const queueScan = vi.spyOn(s.scanner, 'queueScan');
 

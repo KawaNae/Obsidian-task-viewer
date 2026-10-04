@@ -1,5 +1,6 @@
 import type { AnchoredRow, AnchoredWrite, RowUpdates } from '../../../src/services/operations/Operations';
 import type { Task } from '../../../src/types';
+import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 
 /** An index double's reads, and the writes by name it stands in for. */
 interface IndexDouble {
@@ -30,15 +31,20 @@ export function opsOver(index: IndexDouble) {
     const freshByAnchor = heldByAnchor(index);
     return {
         freshByAnchor,
-        updateTask: (taskId: string, updates: Partial<Task>) => index.updateTask!(taskId, updates),
+        updateTask: async (taskId: string, updates: Partial<Task>): Promise<WriteAnswer> => answerOf(await index.updateTask!(taskId, updates)),
         deleteTask: (taskId: string, options?: { fireFlow?: boolean }) => index.deleteTask!(taskId, options),
         updateByAnchor: async (file: string, anchor: string, updates: RowUpdates): Promise<AnchoredWrite> => {
             const found = await freshByAnchor(file, anchor);
             if (found.kind !== 'row') return found;
             const made = typeof updates === 'function' ? updates(found.task) : updates;
-            return (await index.updateTask!(found.task.id, made)) ? { kind: 'written', task: found.task } : { kind: 'not-written' };
+            return (await index.updateTask!(found.task.id, made)) ? { kind: 'written', task: found.task } : { kind: 'not-written', refused: null };
         },
     };
+}
+
+/** A write's answer as a double's yes or no says it: not written with no reason to tell. */
+export function answerOf(written: boolean): WriteAnswer {
+    return written ? { written: true } : { written: false, refused: null };
 }
 
 /** The row an anchor found, or undefined when it found none or could not read the note. */

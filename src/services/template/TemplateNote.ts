@@ -6,7 +6,8 @@
  */
 
 import { type App, TFile, normalizePath } from 'obsidian';
-import { createFile, replaceWhole, type WriteChannel } from '../persistence/FileLines';
+import { createFile, replaceWhole, type WriteChannel, type WriteMade, type WriteRefused } from '../persistence/FileLines';
+import type { WriteAnswer, WriteTelling } from '../operations/WriteAnswer';
 
 /** The note a template named `name` is saved as in `folder`: the characters a file name cannot hold made `_`. */
 export function templateNotePath(folder: string, name: string): string {
@@ -34,14 +35,19 @@ export function templateNoteContent(fields: ReadonlyArray<readonly [string, stri
  * (`Operations.saveTemplateNote`): the one way a template writer writes.
  */
 export interface TemplateNoteSaver {
-    saveTemplateNote(path: string, name: string, content: string): Promise<TFile | null>;
+    /**
+     * Whether the note was written, with the note when it was. Not written,
+     * why is told once: by the write layer's notice, or by the caller that
+     * asked for it (`tellRefusal: false`), which says it in its dialog.
+     */
+    saveTemplateNote(path: string, name: string, content: string, opts?: WriteTelling): Promise<WriteAnswer & { file?: TFile }>;
 }
 
 /**
  * Save `content` as the note at `path`: the note there written over whole
  * (`replaceWhole`), or made, with the folders its path names
- * (`createFile`). Answers the note, or null when it was not written — the
- * write layer has told the user why.
+ * (`createFile`). Answers the note written, or why it was not, told through
+ * `channel`.
  */
 export async function saveTemplateNote(
     app: App,
@@ -49,12 +55,11 @@ export async function saveTemplateNote(
     channel: WriteChannel | undefined,
     name: string,
     content: string,
-): Promise<TFile | null> {
+): Promise<WriteRefused | (WriteMade & { file: TFile })> {
     const existing = app.vault.getAbstractFileByPath(path);
     if (existing instanceof TFile) {
-        const { written } = await replaceWhole(app, existing, channel, content);
-        return written ? existing : null;
+        const outcome = await replaceWhole(app, existing, channel, content);
+        return outcome.written ? { ...outcome, file: existing } : outcome;
     }
-    const created = await createFile(app, path, channel, name, () => content);
-    return created.written ? created.file : null;
+    return createFile(app, path, channel, name, () => content);
 }

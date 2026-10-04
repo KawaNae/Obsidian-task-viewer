@@ -6,7 +6,7 @@ import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
 import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
 import en from '../../../src/i18n/locales/en.json';
-import { opsOver } from '../helpers/anchoredRow';
+import { opsOver, answerOf } from '../helpers/anchoredRow';
 import { timerOn, type MeasureKind } from '../helpers/timerRig';
 
 /**
@@ -78,7 +78,7 @@ function makeHarness(options: Options = {}) {
             ...opsOver(taskIndex),
             insertLine: async (_parentId: string, line: string, _place: string) => {
                 inserted.push(line);
-                return options.insertResult ?? true;
+                return answerOf(options.insertResult ?? true);
             },
         }),
     } as unknown as TaskViewerPlugin;

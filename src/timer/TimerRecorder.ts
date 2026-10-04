@@ -15,6 +15,7 @@ import { DateUtils } from '../utils/DateUtils';
 import { type TaskLineFields, formatTaskLine } from '../services/parsing/TaskLineFormat';
 import type { Task } from '../types';
 import type { AnchoredRow } from '../services/operations/Operations';
+import type { WriteAnswer } from '../services/operations/WriteAnswer';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
@@ -233,8 +234,8 @@ export class TimerRecorder {
     }
 
     /** 書き込み `write` が書けたら、書いたノート `file` を答える。 */
-    private async wrote(write: Promise<boolean>, file: string): Promise<string | null> {
-        return (await write) ? file : null;
+    private async wrote(write: Promise<WriteAnswer>, file: string): Promise<string | null> {
+        return (await write).written ? file : null;
     }
 
     /**
@@ -417,7 +418,7 @@ export class TimerRecorder {
      */
     private async writeChildLine(timer: TimerState, line: string): Promise<string | null> {
         if (timer.subject.kind === 'daily') {
-            return this.plugin.getOperations().putInDailyNote(timer.subject.date, line);
+            return this.plugin.getOperations().putInDailyNote(timer.subject.date, line).then(answer => answer.path ?? null);
         }
         const target = await this.resolveTarget(timer);
         switch (target.kind) {

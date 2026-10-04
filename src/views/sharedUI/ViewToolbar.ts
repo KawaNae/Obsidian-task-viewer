@@ -19,6 +19,7 @@ import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
 import { createNativePicker } from './NativePicker';
 import type { TemplateNoteSaver } from '../../services/template/TemplateNote';
+import { refusalText } from '../../services/operations/WriteAnswer';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -692,9 +693,9 @@ export class ViewSettingsMenu {
                             const template = templates.getViewTemplate();
                             template.name = name;
                             const writer = new ViewTemplateWriter(templates.notes);
-                            const saved = await writer.saveTemplate(folder, template);
-                            // The write layer has told why; the dialog stays with the name typed.
-                            if (!saved) return { at: 'form', tone: 'error', text: t('toolbar.saveViewFailed') };
+                            // Not written, why is said in the dialog alone, which stays with the name typed.
+                            const saved = await writer.saveTemplate(folder, template, { tellRefusal: false });
+                            if (!saved.written) return { at: 'form', tone: 'error', text: refusalText(saved.refused) };
                             options.onRename(name);
                             new Notice(t('notice.viewSaved', { name }));
                             return null;

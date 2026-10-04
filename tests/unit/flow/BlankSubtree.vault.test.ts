@@ -42,7 +42,7 @@ function idOf(session: VaultSession, content: string, file = FILE): string {
 }
 
 async function complete(session: VaultSession, content: string, ...paths: string[]): Promise<void> {
-    expect(await session.ops.updateTask(idOf(session, content), { statusChar: 'x' })).toBe(true);
+    expect((await session.ops.updateTask(idOf(session, content), { statusChar: 'x' })).written).toBe(true);
     await session.flowSettled(FILE, ...paths);
 }
 

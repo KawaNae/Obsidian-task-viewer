@@ -367,7 +367,7 @@ export class TaskApi {
         // would report as done a change the file never took. A write that was
         // made is the index's next reading of the file (`landed`) by the time
         // it returns, so the read below sees the new values.
-        const written = await this.operations.updateTask(task.id, updates);
+        const { written } = await this.operations.updateTask(task.id, updates);
         if (!written) throw new TaskApiError(`Task could not be written: ${params.id}`);
 
         // The row's name now: our write moved its file on, and the name is
@@ -475,7 +475,7 @@ export class TaskApi {
         if (holdsLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
         const task = await this.rowToWrite(params.parentId);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        const written = await this.operations.insertLine(task.id, formatTaskLine({ statusChar: ' ', content: params.content }), 'firstChild');
+        const { written } = await this.operations.insertLine(task.id, formatTaskLine({ statusChar: ' ', content: params.content }), 'firstChild');
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }

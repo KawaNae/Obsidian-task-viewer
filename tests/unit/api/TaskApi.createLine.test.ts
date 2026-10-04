@@ -155,7 +155,7 @@ describe('the line create and insertChildTask write', () => {
             createdTask: undefined,
         });
         readService.getTask.mockReturnValue(makeFullTask({ id: 'parent-1' }));
-        operations.insertLine.mockResolvedValue(true);
+        operations.insertLine.mockResolvedValue({ written: true });
         await api.insertChildTask({ parentId: 'parent-1', content: 'child ' });
         expect(operations.insertLine).toHaveBeenCalledWith('parent-1', '- [ ] child', 'firstChild');
     });

@@ -231,6 +231,7 @@ function buildIndexHost(task: Task | undefined) {
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
+        hearer: proto.hearer,
 
         copyToPlan: proto.copyToPlan,
         planCopy: proto.planCopy,
@@ -276,7 +277,7 @@ describe('Operations.insertLine', () => {
         expect(host.repository.write.mock.calls[0][2]).toEqual([
             { kind: 'insert', place: 'afterCompletedRun', text: NEW_SESSION },
         ]);
-        expect(line).toBe(true);
+        expect(line.written).toBe(true);
     });
 
     // The line body arrives without indentation on purpose: the writer reads
@@ -292,10 +293,10 @@ describe('Operations.insertLine', () => {
 
     it('is a no-op for read-only and unknown tasks', async () => {
         const readOnly = buildIndexHost(makeTask({ isReadOnly: true, parserId: 'tasks-plugin' }));
-        expect(await proto.insertLine.call(readOnly, 'x', NEW_SESSION, 'afterSubtree')).toBe(false);
+        expect((await proto.insertLine.call(readOnly, 'x', NEW_SESSION, 'afterSubtree')).written).toBe(false);
 
         const unknown = buildIndexHost(undefined);
-        expect(await proto.insertLine.call(unknown, 'missing', NEW_SESSION, 'afterSubtree')).toBe(false);
+        expect((await proto.insertLine.call(unknown, 'missing', NEW_SESSION, 'afterSubtree')).written).toBe(false);
 
         for (const host of [readOnly, unknown]) {
             expect(host.repository.write).not.toHaveBeenCalled();
