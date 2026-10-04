@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { FilterCondition, FilterGroup, FilterState } from '../../../src/services/filter/FilterTypes';
 import {
     nodeAt, updateGroupAt, updateConditionAt, replaceAt, appendTo, toggleLogic,
-    conditionOn, withOperator, withTarget,
+    conditionOn, withOperator, withTarget, asDate, asPreset, asRange,
 } from '../../../src/services/filter/FilterEdit';
 
 const tag: FilterCondition = { property: 'tag', operator: 'includes', value: ['work'] };
@@ -81,5 +81,53 @@ describe('FilterEdit: the condition edits the filter menu makes', () => {
         expect(onParent).toEqual({ ...tag, target: 'parent' });
         expect(withTarget(onParent, 'self')).toEqual(tag);
         expect('target' in withTarget(onParent, 'self')).toBe(false);
+    });
+});
+
+describe('FilterEdit: periods and ranges', () => {
+    // startHour 5, the week on Monday, now Sunday 2026-10-04 12:00
+    const ctx = { startHour: 5, weekStartDay: 1 as const, now: new Date(2026, 9, 4, 12, 0) };
+    const range = { from: '2026-10-01', to: '2026-10-10' };
+
+    it('a period row starts as overlaps today, on the task itself', () => {
+        expect(conditionOn('period')).toEqual({ property: 'period', operator: 'overlaps', value: { preset: 'today' } });
+        expect(conditionOn('period', 'parent')).toEqual({ property: 'period', operator: 'overlaps', value: { preset: 'today' } });
+        expect(() => withTarget(conditionOn('period'), 'parent')).toThrow();
+    });
+
+    it('a period row keeps its value as its operator turns', () => {
+        expect(withOperator({ property: 'period', operator: 'overlaps', value: range }, 'notWithin'))
+            .toEqual({ property: 'period', operator: 'notWithin', value: range });
+    });
+
+    it('a range turned to an operator that takes none becomes its nearer end', () => {
+        const dueIn: FilterCondition = { property: 'due', operator: 'equals', value: range };
+        expect(withOperator(dueIn, 'before')).toEqual({ property: 'due', operator: 'before', value: '2026-10-01' });
+        expect(withOperator(dueIn, 'onOrAfter')).toEqual({ property: 'due', operator: 'onOrAfter', value: '2026-10-01' });
+        expect(withOperator(dueIn, 'onOrBefore')).toEqual({ property: 'due', operator: 'onOrBefore', value: '2026-10-10' });
+        expect(withOperator(dueIn, 'after')).toEqual({ property: 'due', operator: 'after', value: '2026-10-10' });
+        expect(withOperator({ property: 'due', operator: 'equals', value: { from: '2026-10-01' } }, 'onOrBefore'))
+            .toEqual({ property: 'due', operator: 'onOrBefore', value: { preset: 'today' } });
+    });
+
+    it('asDate: a date stays, a moment is its date, a preset and a range their first day', () => {
+        expect(asDate('2026-10-04', ctx)).toBe('2026-10-04');
+        expect(asDate('2026-10-04T10:00', ctx)).toBe('2026-10-04');
+        expect(asDate({ preset: 'thisWeek' }, ctx)).toBe('2026-09-28');
+        expect(asDate(range, ctx)).toBe('2026-10-01');
+        expect(asDate({ to: { preset: 'nextWeek' } }, ctx)).toBe('2026-10-05');
+    });
+
+    it('asPreset: a preset stays, any other is today', () => {
+        expect(asPreset({ preset: 'thisMonth' })).toEqual({ preset: 'thisMonth' });
+        expect(asPreset('2026-10-04')).toEqual({ preset: 'today' });
+        expect(asPreset(range)).toEqual({ preset: 'today' });
+    });
+
+    it('asRange: a date D is D to D, a preset its days, a moment that moment at both ends', () => {
+        expect(asRange('2026-10-04', ctx)).toEqual({ from: '2026-10-04', to: '2026-10-04' });
+        expect(asRange({ preset: 'thisWeek' }, ctx)).toEqual({ from: '2026-09-28', to: '2026-10-04' });
+        expect(asRange('2026-10-04T10:00', ctx)).toEqual({ from: '2026-10-04T10:00', to: '2026-10-04T10:00' });
+        expect(asRange(range, ctx)).toBe(range);
     });
 });
