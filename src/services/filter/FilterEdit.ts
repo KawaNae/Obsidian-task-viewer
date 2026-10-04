@@ -86,6 +86,8 @@ export function toggleLogic(group: FilterGroup): FilterGroup {
  * that operator with. `target` carries over from the row it replaces.
  */
 export function conditionOn(property: FilterProperty, target?: FilterTarget): FilterCondition {
+    // A period row asks about the task itself.
+    if (property === 'period') return { property, operator: 'overlaps', value: { preset: 'today' } };
     const on = target === 'parent' ? { target } : {};
     if (property === 'tag') return { property, operator: 'includes', value: [], ...on };
     if (isTextListProperty(property)) return { property, operator: 'includes', value: [], ...on };
@@ -112,6 +114,8 @@ export function withOperator(c: FilterCondition, operator: FilterOperator): Filt
             if (isPresenceOperator(operator)) return { ...rest, operator };
             return { ...rest, operator, value: value ?? { preset: 'today' } };
         }
+        case 'period':
+            return takesOperator(c.property, operator) ? { ...c, operator } : refuse();
         case 'length': {
             if (!takesOperator(c.property, operator)) return refuse();
             const { value, ...rest } = c;
@@ -142,8 +146,12 @@ export function withOperator(c: FilterCondition, operator: FilterOperator): Filt
     }
 }
 
-/** `c` asking about `target`; `self` is written as no target. */
+/** `c` asking about `target`; `self` is written as no target. A period row asks about the task itself. */
 export function withTarget(c: FilterCondition, target: FilterTarget): FilterCondition {
+    if (c.property === 'period') {
+        if (target === 'parent') throw new Error(`filter: 'period' asks about the task itself`);
+        return c;
+    }
     const { target: _target, ...rest } = c;
     return target === 'parent' ? { ...rest, target } : rest;
 }

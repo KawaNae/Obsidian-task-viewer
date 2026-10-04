@@ -268,6 +268,7 @@ export const FILTER_VALUE_DOC = {
     startDate: '"value": "YYYY-MM-DD" or { "preset": "<preset>", "n"?: number } — the visual days the value names; the task\'s moment is compared with them (an end or a due right at a day\'s start is the day before\'s)',
     endDate: '(as startDate)',
     due: '(as startDate)',
+    period: '"value": a date, a date and a time, a preset or a range — the span from start to end against the window the value names: overlaps, within (both ends in it), and their negations; the due is not read, and a task with no span matches none',
     anyDate: 'no value — set when any of start, end and due is',
     color: '"value": ["red"]',
     linestyle: '"value": ["dashed"]',

@@ -38,8 +38,8 @@ export interface NumberValue { kind: 'number'; present: boolean; value?: number 
 
 export type TaskValue = InstantValue | TextValue | SetValue | FlagValue | NumberValue;
 
-/** The properties {@link TaskValues.of} answers: all but those that take more than the task. */
-export type ValueProperty = Exclude<FilterProperty, 'length' | 'property'>;
+/** The properties {@link TaskValues.of} answers: all but those that take more than the task, and the span itself. */
+export type ValueProperty = Exclude<FilterProperty, 'length' | 'property' | 'period'>;
 
 /** The value each property holds. */
 export interface ValueOf {
