@@ -626,6 +626,7 @@
     "sameDayInversion": "Correct the end time or change the end date.",
     "endBeforeStart": "Correct the end date.",
     "endTimeWithoutStart": "Add a start time.",
+    "endTimeWithoutStartExample": "Write a start time. For example, `{{sameDay}}` to end at {{time}} the same day, or `{{otherDay}}` to end at {{time}} on {{endDate}}.",
     "dueWithoutDate": "Add a date to the due field."
   },
   "menu": {

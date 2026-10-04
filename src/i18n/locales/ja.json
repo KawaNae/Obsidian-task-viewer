@@ -626,6 +626,7 @@
     "sameDayInversion": "終了時刻を修正するか、終了日を変更してください。",
     "endBeforeStart": "終了日を修正してください。",
     "endTimeWithoutStart": "開始時刻を追加してください。",
+    "endTimeWithoutStartExample": "開始時刻を書いてください。例: 同じ日の {{time}} までなら `{{sameDay}}`、{{endDate}} の {{time}} までなら `{{otherDay}}`",
     "dueWithoutDate": "期限に日付を追加してください。"
   },
   "menu": {
