@@ -33,6 +33,24 @@ export class FrontmatterLineEditor {
     }
 
     /**
+     * Where the value of the top-level key `key` stands on `line`, as a key
+     * line of {@link findKeyRange} reads it: from past the key, its colon and
+     * the spaces after them, to before a comment (` # …`) and the spaces
+     * before it or the line's end. Null when the line is no line of `key`.
+     * What an edit of the value alone replaces: the key and the separator
+     * stay as they are spelled, and so does a comment.
+     */
+    static valueRange(line: string, key: string): { start: number; end: number } | null {
+        const head = line.match(/^([^:\s]+)\s*:[ \t]*/);
+        if (!head || head[1] !== key) return null;
+        const start = head[0].length;
+        const rest = line.slice(start);
+        const comment = rest.search(/(^|\s)#/);
+        const value = (comment < 0 ? rest : rest.slice(0, comment)).replace(/\s+$/, '');
+        return { start, end: start + value.length };
+    }
+
+    /**
      * frontmatter を持たないファイルのために空の block を先頭へ挿し、
      * fmEnd を返す。既にある場合は何も足さない。
      *

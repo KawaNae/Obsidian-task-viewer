@@ -1,4 +1,4 @@
-import { ItemView, type View, type WorkspaceLeaf } from 'obsidian';
+import { ItemView, TFile, type App, type View, type WorkspaceLeaf } from 'obsidian';
 
 /**
  * The content element of a leaf's view, or undefined when the view has none.
@@ -10,6 +10,23 @@ import { ItemView, type View, type WorkspaceLeaf } from 'obsidian';
  */
 export function viewContentEl(leaf: WorkspaceLeaf): HTMLElement | undefined {
     return leaf.view instanceof ItemView ? leaf.view.contentEl : undefined;
+}
+
+/**
+ * The note a control stands in: the file of the leaf whose view holds `el`
+ * (a note's editor, the Properties view beside it), in any window. Null
+ * when no leaf holds it (a hover preview) or its view shows no file. Not
+ * the active file: a control in the leaf beside the active one is about
+ * its own leaf's note.
+ */
+export function fileOfElement(app: App, el: Node): TFile | null {
+    let found: TFile | null = null;
+    app.workspace.iterateAllLeaves((leaf) => {
+        if (found || !leaf.view.containerEl.contains(el)) return;
+        const file = (leaf.view as View & { file?: unknown }).file;
+        if (file instanceof TFile) found = file;
+    });
+    return found;
 }
 
 /**

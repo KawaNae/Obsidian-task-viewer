@@ -7,7 +7,7 @@ const proto = Operations.prototype as unknown as {
 };
 
 /**
- * WindowAttachment / PropertyColorSuggest / PropertyLineStyleSuggest が
+ * WindowAttachment / PropertyValueSuggest が
  * Repository を直接呼ばず Operations 経由に揃えたことの配線を pin する。
  * 実装は TaskRepository/FrontmatterWriter のままで、行を持たない書き込みで
  * あることだけを確認する。

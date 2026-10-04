@@ -319,6 +319,23 @@ input.tv-native-picker {
     pointer-events: auto !important;
 }
 
+/* The color picker beside a color property in Obsidian's Properties view
+   (WindowAttachment): the button, and the unseen native input over it.
+   The box is what the input covers. */
+.task-viewer-color-picker {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-inline-start: 4px;
+}
+
+.task-viewer-color-picker > input.task-viewer-color-picker__input {
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
 /* date / time の shadow DOM の内部の欄は input の cursor を継承しない
    （color にはこの内部の構造がない）。input がヒット対象になる is-mobile +
    ポインタの環境（エミュレーション、iPad + トラックパッド）でも pointer を出す */
