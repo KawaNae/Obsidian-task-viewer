@@ -733,8 +733,6 @@
     "offsetPreviousDay": "前日 {{time}}",
     "offsetAgoMinutes": "{{minutes}} 分前",
     "offsetAgoHours": "{{hours}} 時間 {{minutes}} 分前",
-    "offsetMinutesUnreadable": "1 以上の整数で入れてください。",
-    "offsetTimeUnreadable": "HH:MM の形で入れてください（例 9:40）。",
     "offsetApply": "ずらす",
     "template": {
       "namePlaceholder": "テンプレート名",

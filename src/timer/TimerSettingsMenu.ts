@@ -111,7 +111,7 @@ export class TimerSettingsMenu {
                         title: field.title,
                         label: t('timer.minutesRange', { min: 1, max: field.maxMinutes }),
                         initial: current.toString(),
-                        read: (text) => IntInput.read(text, { min: 1, max: field.maxMinutes }),
+                        codec: IntInput.codec({ min: 1, max: field.maxMinutes }),
                         numeric: true,
                         submitLabel: t('modal.ok'),
                         submit: async (minutes) => {

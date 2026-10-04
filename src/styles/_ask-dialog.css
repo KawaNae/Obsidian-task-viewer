@@ -25,11 +25,6 @@
     margin-bottom: 0;
 }
 
-/* Why the text typed did not go, under the field. */
-.tv-ask .tv-ask__says {
-    margin: 8px 0 0;
-}
-
 /* Flow delete choice — the line the fire would write
    (tv-form__line-preview, _form.css).
 

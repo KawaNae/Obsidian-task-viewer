@@ -15,7 +15,7 @@ export interface FormAction {
  */
 export class FormActions {
     readonly cancelButton: HTMLButtonElement;
-    private readonly buttons: readonly HTMLButtonElement[];
+    private readonly buttons: readonly { el: HTMLButtonElement; tone: FormAction['tone'] }[];
 
     constructor(container: HTMLElement, spec: {
         cancel: { label?: string; run(): void };
@@ -23,15 +23,19 @@ export class FormActions {
     }) {
         const row = container.createDiv({ cls: 'tv-form__buttons' });
         this.cancelButton = button(row, spec.cancel.label ?? t('modal.cancel'), undefined, spec.cancel.run);
-        this.buttons = spec.actions.map(one => button(row, one.label, one.tone, one.run));
+        this.buttons = spec.actions.map(one => ({ el: button(row, one.label, one.tone, one.run), tone: one.tone }));
     }
 
     /**
      * While busy (an answer being written), the answers do not act again.
-     * Cancel stays: the close it asks for waits on what is under way.
+     * Cancel stays: the close it asks for waits on what is under way. The
+     * form's act (`'cta'`) is offered only while `ctaEnabled` (what the form
+     * holds can be acted on: a value that reads).
      */
-    render(state: { busy: boolean }): void {
-        for (const one of this.buttons) one.disabled = state.busy;
+    render(state: { busy: boolean; ctaEnabled?: boolean }): void {
+        for (const one of this.buttons) {
+            one.el.disabled = state.busy || (one.tone === 'cta' && state.ctaEnabled === false);
+        }
     }
 }
 
