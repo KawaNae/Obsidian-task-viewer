@@ -230,14 +230,20 @@
     border-top: 1px solid var(--tv-border);
 }
 
-.template-creator__error {
-    flex: 1;
+/* What the form says (IssueBoard): of a part under its row, of the form
+   (a write refused) beside the button. */
+.template-creator .tv-form__says > .tv-form__error {
+    margin: 2px 0 0;
     font-size: 0.75em;
-    color: var(--tv-text-danger);
+}
+
+.template-creator__says {
+    flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+}
+
+.template-creator .template-creator__says > .tv-form__error {
+    margin: 0;
 }
 
 .template-creator .template-creator__save-btn {
