@@ -277,9 +277,12 @@ export class DateFieldGroup {
     }
 
     /**
-     * What the fields imply, or what their rules allow, changed from outside
-     * (the create dialog's place answered): the placeholders and what the
-     * fields say are drawn again.
+     * The placeholders and what the fields say drawn again: once the form
+     * that holds the group can show them (the hub as it opens, a rule its
+     * row breaks said from the start), and when what the fields imply, or
+     * what their rules allow, changed from outside (the create dialog's
+     * place answered). The constructor tells nothing: the form's slots for
+     * the fields are not there yet.
      */
     refresh(): void {
         this.updatePlaceholders();
