@@ -1,12 +1,16 @@
 import { type App, Component } from 'obsidian';
 import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type TopRightConfig } from '../../types';
 import { getOverdueLevel, type OverdueLevel } from '../../services/display/TaskStatusQuery';
-import { resolveTopRightField } from './TopRightFieldResolver';
+import { composeTopRight, topRightText, TIME_TOP_RIGHT, type TopRightPiece } from './TopRightFieldResolver';
 
+/**
+ * What a card's top right shows: nothing, or the fields of a config
+ * (`TopRightFieldResolver`). A saved list passes its own config; Timeline,
+ * Calendar and Schedule pass `TIME_TOP_RIGHT`.
+ */
 export type TopRightSpec =
-    | { mode: 'time' }
-    | { mode: 'template'; config: TopRightConfig }
-    | { mode: 'none' };
+    | { mode: 'none' }
+    | { mode: 'fields'; config: TopRightConfig };
 
 /**
  * How one card is drawn. Every policy is its own field, so a caller that
@@ -119,6 +123,19 @@ import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
 import { renderCardMarkdown, type LateContent } from './CardMarkdown';
 
 /**
+ * Draws a card's top right (`composeTopRight`), each piece with the class of
+ * its role: `task-card__time-start`, `-end` (which a narrow card hides),
+ * `-sep` and `-seg`. Nothing when there are no pieces.
+ */
+export function renderTopRight(container: HTMLElement, pieces: readonly TopRightPiece[]): void {
+    if (pieces.length === 0) return;
+    const el = container.createDiv('task-card__time');
+    for (const piece of pieces) {
+        el.createSpan(`task-card__time-${piece.role}`).textContent = piece.text;
+    }
+}
+
+/**
  * What a card shows, to tell whether a kept card can stay as it is drawn.
  *
  * Everything the card shows is in it, and nothing else: not the task's name,
@@ -163,8 +180,6 @@ export function computeContentSignature(
         task.effectiveStartTime ?? '',
         task.effectiveEndDate ?? '',
         task.effectiveEndTime ?? '',
-        task.startTimeImplicit ? '1' : '0',
-        task.endTimeImplicit ? '1' : '0',
         task.effectiveDue ?? '',
         task.isReadOnly ? '1' : '0',
         topRightResolved,
@@ -246,7 +261,7 @@ export class TaskCardRenderer extends Component {
         options: RenderOptions
     ): void {
         const key = options.key;
-        const topRight: TopRightSpec = options.topRight ?? { mode: 'time' };
+        const topRight: TopRightSpec = options.topRight ?? { mode: 'fields', config: TIME_TOP_RIGHT };
         const compact = options.compact ?? false;
         const policies = policiesOf(options);
         const enableLinks = policies.alwaysLinks || settings.enableCardFileLink;
@@ -271,7 +286,10 @@ export class TaskCardRenderer extends Component {
         this.actions.bindMenu(container, options.hooks?.menu);
 
         // Compute content signature for render skip
-        const topRightResolved = this.resolveTopRightString(task, settings, topRight);
+        const topRightPieces = topRight.mode === 'fields'
+            ? composeTopRight(task, topRight.config, settings)
+            : [];
+        const topRightResolved = topRightText(topRightPieces);
         const isExpanded = this.expanded.isOpen(key, row => this.index.getTask(row)?.id);
         const overdueLevel = getOverdueLevel(
             task, settings.startHour, settings.statusDefinitions,
@@ -306,7 +324,7 @@ export class TaskCardRenderer extends Component {
         this.addChild(cardComp);
         this.cardComponents.set(container, cardComp);
 
-        this.renderTopRightMeta(container, task, settings, topRight);
+        renderTopRight(container, topRightPieces);
         if (policies.doubleTap) {
             bindTapIntents(container, {
                 onDoubleTap: (x, y) => {
@@ -441,56 +459,6 @@ export class TaskCardRenderer extends Component {
         }
 
         return { completed, total };
-    }
-
-    private resolveTopRightString(task: DisplayTask, settings: TaskViewerSettings, spec: TopRightSpec): string {
-        if (spec.mode === 'none') return '';
-        if (spec.mode === 'time') {
-            if (!task.effectiveStartTime || task.startTimeImplicit) return '';
-            const end = (task.effectiveEndTime && !task.endTimeImplicit) ? `>${task.effectiveEndTime}` : '';
-            return `${task.effectiveStartTime}${end}`;
-        }
-        const { fields, separator, prefix, suffix } = spec.config;
-        const segments = fields
-            .map(f => resolveTopRightField(task, f, settings))
-            .filter((v): v is string => v != null && v !== '');
-        if (segments.length === 0) return '';
-        return `${prefix ?? ''}${segments.join(separator ?? '')}${suffix ?? ''}`;
-    }
-
-    private renderTopRightMeta(
-        container: HTMLElement,
-        task: DisplayTask,
-        settings: TaskViewerSettings,
-        spec: TopRightSpec,
-    ): void {
-        if (spec.mode === 'none') return;
-
-        if (spec.mode === 'time') {
-            if (!task.effectiveStartTime || task.startTimeImplicit) return;
-            const el = container.createDiv('task-card__time');
-            el.createSpan('task-card__time-start').textContent = task.effectiveStartTime;
-            if (task.effectiveEndTime && !task.endTimeImplicit) {
-                el.createSpan('task-card__time-end').textContent = `>${task.effectiveEndTime}`;
-            }
-            return;
-        }
-
-        const { fields, separator, prefix, suffix } = spec.config;
-        const segments = fields
-            .map(f => resolveTopRightField(task, f, settings))
-            .filter((v): v is string => v != null && v !== '');
-        if (segments.length === 0) return;
-
-        const el = container.createDiv('task-card__time');
-        if (prefix) el.createSpan('task-card__time-seg').textContent = prefix;
-        for (let i = 0; i < segments.length; i++) {
-            if (i > 0 && separator) {
-                el.createSpan('task-card__time-sep').textContent = separator;
-            }
-            el.createSpan('task-card__time-seg').textContent = segments[i];
-        }
-        if (suffix) el.createSpan('task-card__time-seg').textContent = suffix;
     }
 
     private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {

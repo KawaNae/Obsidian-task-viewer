@@ -2,6 +2,7 @@ import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../../types';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
+import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import type { GridRow, TaskPlacement, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
@@ -101,9 +102,8 @@ export class ScheduleTaskRenderer {
         if (reused) wrapper.appendChild(reused);
 
         TaskStyling.applySplitClasses(card, task);
-        const options = flowCard
-            ? { key, topRight: { mode: 'time' as const } }
-            : { key, topRight: { mode: 'time' as const }, compact: true };
+        const topRight = { mode: 'fields' as const, config: TIME_TOP_RIGHT };
+        const options = flowCard ? { key, topRight } : { key, topRight, compact: true };
         this.taskRenderer.render(card, task, this.getSettings(), options);
     }
 }
