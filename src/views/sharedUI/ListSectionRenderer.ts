@@ -161,8 +161,11 @@ export function startListSectionRename(
         if (input.parentElement) input.replaceWith(span);
     };
 
-    input.addEventListener('blur', () => commit(input.value.trim() || currentName));
-    onFormEnter(input, () => input.blur());
+    // The form's Enter commits by itself: a blur does not come to a window
+    // that is not in front, and a name left in the field then is lost.
+    const commitTyped = () => commit(input.value.trim() || currentName);
+    input.addEventListener('blur', commitTyped);
+    onFormEnter(input, commitTyped);
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { e.preventDefault(); commit(currentName); }
     });
