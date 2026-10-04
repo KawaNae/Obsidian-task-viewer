@@ -24,7 +24,7 @@ import { holdsLineBreak } from '../../utils/LineBreak';
 import { type DateAnchor, type NextOccurrence, nextOccurrence } from './ScheduleEngine';
 
 export interface FlowPlanDeps {
-    /** Local calendar date of "now" (YYYY-MM-DD). */
+    /** The visual day of "now" (YYYY-MM-DD), which startHour starts. */
     today: string;
     /** Local date+time of "now". */
     now: { date: string; time: string };
@@ -540,8 +540,9 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
         content: { type: 'string', value: task.content },
         'file.name': { type: 'string', value: fileName(task.file) },
         // Completion moment, two granularities: `done` carries the clock
-        // (at(done + 2h)), `today` is the plain calendar date (at(today + 3d))
-        // so day-granular offsets don't smear the completion time onto tasks.
+        // (at(done + 2h)), `today` is the visual day it falls in, which
+        // startHour starts (at(today + 3d)), so day-granular offsets don't
+        // smear the completion time onto tasks.
         done: { type: 'datetime', date: deps.now.date, time: deps.now.time },
         today: { type: 'date', value: deps.today },
         // The whole date block, built where the line formatter builds it. A

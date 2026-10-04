@@ -1,5 +1,6 @@
 import type { Task, TaskViewerSettings } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { visualDayOf } from '../../utils/DayWindow';
 import { logInfo, logWarn } from '../../log/log';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { EvalError } from '../lang/ExprEvaluator';
@@ -279,13 +280,16 @@ export class FlowExecutor {
 
     private buildDeps(): FlowPlanDeps {
         const now = new Date();
+        const settings = this.getSettings();
         return {
-            today: DateUtils.getLocalDateString(now),
+            // A relative day is a visual day: completing at 02:00 with
+            // startHour 5 is still the day before's work.
+            today: visualDayOf(now.getTime(), settings.startHour),
             now: {
                 date: DateUtils.getLocalDateString(now),
                 time: DateUtils.formatHHMM(now.getHours(), now.getMinutes()),
             },
-            weekStartDay: this.getSettings().weekStartDay,
+            weekStartDay: settings.weekStartDay,
             host: this.host,
             getBlock: (filePath, name) => this.reads.getGenBlock(filePath, name),
         };
