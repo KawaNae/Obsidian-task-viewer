@@ -238,19 +238,18 @@ describe('listFilter', () => {
 // ── overlap 窓の実挙動（TaskFilterEngine を通した検証） ──
 
 import { evaluateFilter } from '../helpers/filterContext';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import type { DisplayTask } from '../../../src/types';
 import type { FilterState } from '../../../src/services/filter/FilterTypes';
 
-function displayTask(id: string, effectiveStartDate: string, effectiveEndDate?: string): DisplayTask {
-    return {
+/** A task from `startDate` to `endDate`, both days included (startHour 0, as testContext). */
+function displayTask(id: string, startDate: string, endDate?: string): DisplayTask {
+    return toDisplayTask({
         id, file: 'test.md', line: 0, content: id, statusChar: ' ', indent: 0,
         childIds: [], childLines: [], tags: [], originalText: `- [ ] ${id}`,
         parserId: 'tv-inline',
-        effectiveStartDate, effectiveEndDate,
-        startDateImplicit: false, startTimeImplicit: true,
-        endDateImplicit: false, endTimeImplicit: true,
-        originalTaskId: id, isSplit: false, childEntries: [],
-    };
+        startDate: startDate || undefined, endDate,
+    }, 0, NO_TASK_LOOKUP);
 }
 
 function matches(params: ListParams, dt: DisplayTask): boolean {

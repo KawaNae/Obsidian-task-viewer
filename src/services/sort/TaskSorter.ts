@@ -11,8 +11,9 @@ export const DEFAULT_SORT_ORDER: readonly SortProperty[] = ['due', 'startDate', 
  *
  * A rule compares the value the filter matches ({@link TaskValues}): the
  * effective one, so a due date inherited from a heading or the note sorts as
- * the filter matches it. {@link TaskValues.sortKey} says what text a value
- * compares as.
+ * the filter matches it. {@link TaskValues.sortKey} says what a value compares
+ * as: a moment as its number, so a bare-date end sorts after the times of its
+ * day.
  */
 export class TaskSorter {
     static sort(tasks: DisplayTask[], state: SortState | undefined): void {
@@ -32,7 +33,7 @@ export class TaskSorter {
     static defaultSort(tasks: DisplayTask[]): void {
         tasks.sort((a, b) => {
             for (const property of DEFAULT_SORT_ORDER) {
-                const cmp = TaskSorter.keyOf(a, property).localeCompare(TaskSorter.keyOf(b, property));
+                const cmp = TaskSorter.compareKeys(TaskSorter.keyOf(a, property), TaskSorter.keyOf(b, property));
                 if (cmp !== 0) return cmp;
             }
             return 0;
@@ -40,11 +41,17 @@ export class TaskSorter {
     }
 
     private static compare(a: DisplayTask, b: DisplayTask, rule: SortRule): number {
-        const cmp = TaskSorter.keyOf(a, rule.property).localeCompare(TaskSorter.keyOf(b, rule.property));
+        const cmp = TaskSorter.compareKeys(TaskSorter.keyOf(a, rule.property), TaskSorter.keyOf(b, rule.property));
         return rule.direction === 'desc' ? -cmp : cmp;
     }
 
-    private static keyOf(task: DisplayTask, property: SortProperty): string {
+    /** Moments compare as numbers, text as text. */
+    private static compareKeys(a: number | string, b: number | string): number {
+        if (typeof a === 'number' && typeof b === 'number') return a < b ? -1 : a > b ? 1 : 0;
+        return String(a).localeCompare(String(b));
+    }
+
+    private static keyOf(task: DisplayTask, property: SortProperty): number | string {
         return TaskValues.sortKey(TaskValues.of(task, property));
     }
 }

@@ -2,40 +2,25 @@ import { describe, it, expect } from 'vitest';
 import { TaskSorter } from '../../../src/services/sort/TaskSorter';
 import type { DisplayTask } from '../../../src/types';
 import type { SortState } from '../../../src/services/sort/SortTypes';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 
+/** A display copy of a task with the given line values (startHour 5). */
 function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
-        id: overrides.id ?? 'test-1',
-        file: overrides.file ?? 'file.md',
-        line: overrides.line ?? 0,
-        content: overrides.content ?? '',
-        statusChar: overrides.statusChar ?? ' ',
-        indent: 0,
-        childIds: [],
-        childLines: [],
-        originalText: '',
-        tags: overrides.tags ?? [],
-        parserId: 'tv-inline',
-        effectiveStartDate: overrides.effectiveStartDate ?? '',
-        startDateImplicit: false,
-        startTimeImplicit: false,
-        endDateImplicit: false,
-        endTimeImplicit: false,
-        originalTaskId: overrides.id ?? 'test-1',
-        isSplit: false,
+    const task = {
+        id: 'test-1', file: 'file.md', line: 0, content: '', statusChar: ' ', indent: 0,
+        childIds: [], childLines: [], originalText: '', tags: [], parserId: 'tv-inline',
         ...overrides,
-        // toDisplayTask resolves effectiveDue from the row's own due when it has one.
-        effectiveDue: overrides.effectiveDue ?? overrides.due,
-    } as DisplayTask;
+    };
+    return { ...toDisplayTask(task, 5, NO_TASK_LOOKUP), ...overrides };
 }
 
 describe('TaskSorter', () => {
     describe('defaultSort', () => {
         it('sorts by due → startDate → content', () => {
             const tasks = [
-                makeDT({ id: 'c', content: 'C', due: '2026-03-15', effectiveStartDate: '2026-03-10' }),
-                makeDT({ id: 'a', content: 'A', due: '2026-03-10', effectiveStartDate: '2026-03-10' }),
-                makeDT({ id: 'b', content: 'B', due: '2026-03-10', effectiveStartDate: '2026-03-05' }),
+                makeDT({ id: 'c', content: 'C', due: '2026-03-15', startDate: '2026-03-10' }),
+                makeDT({ id: 'a', content: 'A', due: '2026-03-10', startDate: '2026-03-10' }),
+                makeDT({ id: 'b', content: 'B', due: '2026-03-10', startDate: '2026-03-05' }),
             ];
             TaskSorter.defaultSort(tasks);
             expect(tasks.map(t => t.id)).toEqual(['b', 'a', 'c']);
@@ -93,8 +78,8 @@ describe('TaskSorter', () => {
 
         it('sorts by startDate using effectiveStartDate', () => {
             const tasks = [
-                makeDT({ id: 'b', effectiveStartDate: '2026-03-15' }),
-                makeDT({ id: 'a', effectiveStartDate: '2026-03-10' }),
+                makeDT({ id: 'b', startDate: '2026-03-15' }),
+                makeDT({ id: 'a', startDate: '2026-03-10' }),
             ];
             const state: SortState = { rules: [{ id: 'r1', property: 'startDate', direction: 'asc' }] };
             TaskSorter.sort(tasks, state);
@@ -139,7 +124,7 @@ describe('TaskSorter', () => {
         it('a rule on due sorts by the inherited due', () => {
             const tasks = [
                 makeDT({ id: 'own-later', due: '2026-03-20' }),
-                makeDT({ id: 'inherited', effectiveDue: '2026-03-01' }),
+                makeDT({ id: 'inherited', cascadeContext: { due: '2026-03-01' } }),
                 makeDT({ id: 'none' }),
             ];
             TaskSorter.sort(tasks, { rules: [{ id: 'r', property: 'due', direction: 'asc' }] });
@@ -149,7 +134,7 @@ describe('TaskSorter', () => {
         it('the default order reads the inherited due too', () => {
             const tasks = [
                 makeDT({ id: 'own-later', due: '2026-03-20' }),
-                makeDT({ id: 'inherited', effectiveDue: '2026-03-01' }),
+                makeDT({ id: 'inherited', cascadeContext: { due: '2026-03-01' } }),
             ];
             TaskSorter.sort(tasks, undefined);
             expect(tasks.map(t => t.id)).toEqual(['inherited', 'own-later']);
@@ -164,33 +149,38 @@ describe('the values a rule compares', () => {
     const by = (...rules: Array<[SortState['rules'][number]['property'], 'asc' | 'desc']>): SortState =>
         ({ rules: rules.map(([property, direction], i) => ({ id: `r${i}`, property, direction })) });
 
-    it('due compares the time with the date: a date alone before its times, earlier times first', () => {
+    it('due compares moments: a bare date is due at the end of its day, after its times', () => {
         const tasks = [
             makeDT({ id: 'nine', due: '2026-03-10T09:00' }),
             makeDT({ id: 'bare', due: '2026-03-10' }),
             makeDT({ id: 'eight', due: '2026-03-10T08:00' }),
         ];
         TaskSorter.sort(tasks, by(['due', 'asc']));
-        expect(ids(tasks)).toEqual(['bare', 'eight', 'nine']);
+        expect(ids(tasks)).toEqual(['eight', 'nine', 'bare']);
+        const plan = [makeDT({ id: 'bare', due: '2026-10-04' }), makeDT({ id: 'five', due: '2026-10-04T17:00' })];
+        TaskSorter.sort(plan, by(['due', 'asc']));
+        expect(ids(plan)).toEqual(['five', 'bare']);
     });
 
-    it('startDate compares the date only: a later time on the same day ties, and the next rule decides', () => {
+    it('startDate compares moments: a bare date first in its day, a small hour last', () => {
         const tasks = [
-            makeDT({ id: 'early-b', content: 'B', effectiveStartDate: '2026-03-10', effectiveStartTime: '08:00' }),
-            makeDT({ id: 'late-a', content: 'A', effectiveStartDate: '2026-03-10', effectiveStartTime: '20:00' }),
+            makeDT({ id: 'night', startDate: '2026-10-05', startTime: '02:00' }),
+            makeDT({ id: 'three', startDate: '2026-10-04', startTime: '15:00' }),
+            makeDT({ id: 'bare', startDate: '2026-10-04' }),
+            makeDT({ id: 'nine', startDate: '2026-10-04', startTime: '09:00' }),
         ];
-        TaskSorter.sort(tasks, by(['startDate', 'asc'], ['content', 'asc']));
-        expect(ids(tasks)).toEqual(['late-a', 'early-b']);
+        TaskSorter.sort(tasks, by(['startDate', 'asc']));
+        expect(ids(tasks)).toEqual(['bare', 'nine', 'three', 'night']);
     });
 
-    it('endDate compares the effective end date only', () => {
+    it('endDate compares moments: a bare date ends at the end of its day', () => {
         const tasks = [
-            makeDT({ id: 'early-b', content: 'B', effectiveEndDate: '2026-03-10', effectiveEndTime: '08:00' }),
-            makeDT({ id: 'late-a', content: 'A', effectiveEndDate: '2026-03-10', effectiveEndTime: '20:00' }),
-            makeDT({ id: 'before', content: 'Z', effectiveEndDate: '2026-03-09' }),
+            makeDT({ id: 'bare', startDate: '2026-10-04' }),
+            makeDT({ id: 'ten', startDate: '2026-10-04', startTime: '10:00' }),
+            makeDT({ id: 'before', content: 'Z', endDate: '2026-10-03' }),
         ];
-        TaskSorter.sort(tasks, by(['endDate', 'asc'], ['content', 'asc']));
-        expect(ids(tasks)).toEqual(['before', 'late-a', 'early-b']);
+        TaskSorter.sort(tasks, by(['endDate', 'asc']));
+        expect(ids(tasks)).toEqual(['before', 'ten', 'bare']);
     });
 
     it('tag compares the first of the effective tags, the section\'s merged in', () => {
@@ -205,7 +195,7 @@ describe('the values a rule compares', () => {
 
     it('a missing value is the smallest: first ascending, last descending', () => {
         const make = () => [
-            makeDT({ id: 'has', due: '2026-03-10', effectiveStartDate: '2026-03-10', effectiveEndDate: '2026-03-10', tags: ['x'] }),
+            makeDT({ id: 'has', due: '2026-03-10', startDate: '2026-03-10', endDate: '2026-03-10', tags: ['x'] }),
             makeDT({ id: 'none' }),
         ];
         for (const property of ['due', 'startDate', 'endDate', 'tag'] as const) {
