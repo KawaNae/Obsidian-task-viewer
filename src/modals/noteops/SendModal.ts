@@ -6,7 +6,8 @@ import { indentUnit } from '../../utils/ObsidianConfig';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { createFormRow } from '../form/formRow';
 import { IssueBoard } from '../form/FormIssue';
-import { SourceEditor, type DraftEditor } from '../form/source/SourceEditor';
+import { editorOn, type DraftEditor } from '../form/source/SourceEditor';
+import { FormActions } from '../form/FormActions';
 import { DestinationField } from './DestinationField';
 import { SendDialog, initialAsk, type SendField, type SendSurface, type SendViewState } from './SendDialog';
 
@@ -30,9 +31,8 @@ import { SendDialog, initialAsk, type SendField, type SendSurface, type SendView
  * It stands on an overlay (`OverlayShell`, centered), which keeps
  * Obsidian's hotkeys off the note behind while the focus is in it, and asks
  * the dialog before a close the user asks for (`beforeClose`). Asked
- * whether to throw the draft away, the row of buttons asks, as the hub's
- * source mode does: the question at its start, discard beside it, and
- * cancel reads back, which keeps the draft.
+ * whether to throw the draft away, the row of buttons asks, as every form's
+ * row does (`FormActions`).
  */
 export class SendModal implements SendSurface {
     private readonly overlay = new OverlayShell();
@@ -45,12 +45,7 @@ export class SendModal implements SendSurface {
     private candidatesEl!: HTMLElement;
     private formSays!: HTMLElement;
     private issues!: IssueBoard<SendField>;
-    private askEl!: HTMLElement;
-    private discardBtn!: HTMLButtonElement;
-    private cancelBtn!: HTMLButtonElement;
-    private sendBtn!: HTMLButtonElement;
-    /** Asked as last drawn: the cancel button is back then. */
-    private asking = false;
+    private actions!: FormActions;
 
     /**
      * @param sent what the caller does once the rows went, all or some: the
@@ -109,17 +104,11 @@ export class SendModal implements SendSurface {
             form: this.formSays,
         });
 
-        const actions = bodyEl.createDiv({ cls: 'tv-form__buttons' });
-        this.askEl = actions.createSpan({ cls: 'tv-form__ask', text: t('modal.send.discardAsk') });
-        this.discardBtn = actions.createEl('button', { cls: 'mod-warning tv-form__discard', text: t('modal.send.discard'), attr: { type: 'button' } });
-        this.discardBtn.addEventListener('click', () => this.dialog?.discard());
-        this.cancelBtn = actions.createEl('button', { attr: { type: 'button' } });
-        this.cancelBtn.addEventListener('click', () => {
-            if (this.asking) this.dialog?.keep();
-            else void this.overlay.requestClose();
+        this.actions = new FormActions(bodyEl, {
+            cancel: { run: () => { void this.overlay.requestClose(); } },
+            actions: [{ label: t('modal.send.send'), busyLabel: t('modal.send.sending'), tone: 'cta', run: () => { void this.dialog?.send(); } }],
+            ask: { discardLabel: t('modal.draft.discard'), keepLabel: t('modal.draft.keep'), discard: () => this.dialog?.discard(), keep: () => this.dialog?.keep() },
         });
-        this.sendBtn = actions.createEl('button', { cls: 'mod-cta', text: t('modal.send.send'), attr: { type: 'button' } });
-        this.sendBtn.addEventListener('click', () => { void this.dialog?.send(); });
 
         this.dialog = new SendDialog(this.preview, {
             facts: (ask) => this.ops.destinationFacts(this.preview, ask),
@@ -133,14 +122,7 @@ export class SendModal implements SendSurface {
     }
 
     openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor {
-        const editor = new SourceEditor(this.rowsEl, {
-            parent: frame.parent,
-            children: frame.children,
-            indentUnit: frame.unit,
-            app: this.app,
-            onSubmit: hooks.submit,
-            onChange: hooks.edited,
-        });
+        const editor = editorOn(this.rowsEl, frame, this.app, hooks);
         this.rowSays.push(this.rowsEl.createDiv({ cls: 'tv-form__says tv-send__row-says' }));
         return editor;
     }
@@ -165,12 +147,11 @@ export class SendModal implements SendSurface {
         this.renderCandidates(state.candidates);
         this.issues.set('dialog', state.issues);
 
-        this.askEl.toggle(state.asking);
-        this.discardBtn.toggle(state.asking);
-        this.cancelBtn.setText(state.asking ? t('modal.send.keep') : t('modal.cancel'));
-        this.sendBtn.disabled = !state.canSend;
-        this.sendBtn.setText(state.phase === 'sending' ? t('modal.send.sending') : t('modal.send.send'));
-        this.asking = state.asking;
+        this.actions.render({
+            busy: state.phase === 'sending',
+            ctaEnabled: state.canSend,
+            ask: state.asking ? t('modal.draft.discardAsk') : null,
+        });
     }
 
     /**
@@ -203,7 +184,7 @@ export class SendModal implements SendSurface {
 
     /** Asked, first or again: back takes the focus, where cancel was. */
     asked(): void {
-        this.cancelBtn.focus();
+        this.actions.focusKeep();
     }
 }
 

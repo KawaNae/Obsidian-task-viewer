@@ -64,7 +64,7 @@ const state = () => ({
     parent: viewOf('parent')?.state.doc.toString() ?? null,
     children: viewOf('children')?.state.doc.toString() ?? null,
     message: shown('.task-hub__source-message') ? document.querySelector('.task-hub__source-message').textContent : null,
-    asking: shown('.task-hub__source-ask'),
+    asking: shown('.task-hub__source-actions .tv-form__ask'),
     lost: shown('.task-hub__source-lost'),
     actions: shown('.task-hub__source-actions'),
     shut: shown('.task-hub__mode-shut') ? document.querySelector('.task-hub__mode-shut').textContent : null,
@@ -142,7 +142,7 @@ function closeHub(): void {
     run(`
         document.querySelector('.task-hub .tv-overlay__close, .tv-overlay__close')?.click();
         await sleep(100);
-        document.querySelector('.task-hub__source-discard')?.click();
+        document.querySelector('.task-hub__source-actions .tv-form__discard')?.click();
         await until(() => !document.querySelector('.task-hub'));
         return 'ok';
     `);
@@ -194,12 +194,12 @@ describe('the hub\'s source mode', () => {
                 askAtStart: Math.abs(rects[0].left - box.left) < 2,
                 applyAtEnd: Math.abs(rects[3].right - box.right) < 2,
                 apart: rects[2].left - rects[1].right > 16,
-                focused: document.activeElement === actions.querySelector('.task-hub__source-cancel'),
+                focused: document.activeElement === actions.querySelector('.task-hub__source-actions .tv-form__cancel'),
             });
         `);
         expect(row).toEqual({ items: ['下書きを捨てますか', '捨てる', '戻る', '適用'], oneLine: true, askAtStart: true, applyAtEnd: true, apart: true, focused: true });
-        const kept = click('.task-hub__source-cancel');
-        expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual(['キャンセル', '適用']);
+        const kept = click('.task-hub__source-actions .tv-form__cancel');
+        expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions .tv-form__buttons > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual(['キャンセル', '適用']);
         expect(kept).toMatchObject({ source: true, asking: false, children: '- [ ] 子a2\n- [ ] 子b\n    - [ ] 孫' });
 
         const applied = run<SourceState>(`
@@ -390,7 +390,7 @@ describe('the hub\'s source mode', () => {
         expect(asked).toMatchObject({ hub: true, source: true, asking: true, marked: true, red: true, children: '- [ ] 子a\n- [ ] 子b 下書き' });
 
         const discarded = run<Record<string, unknown>>(`
-            document.querySelector('.task-hub__source-discard').click();
+            document.querySelector('.task-hub__source-actions .tv-form__discard').click();
             await until(() => !document.querySelector('.task-hub'));
             await sleep(300);
             return JSON.stringify(state());
@@ -439,7 +439,7 @@ describe('the hub\'s source mode', () => {
         const steps = run<Record<string, unknown>>(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.length, insert: ' 下書き' } });
-            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-cancel');
+            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-actions .tv-form__cancel');
             const outside = () => document.querySelector('.task-hub .tv-overlay__backdrop, .tv-overlay__backdrop')
                 .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
             // First asked by a press outside, with the focus in the editor.
@@ -472,7 +472,7 @@ describe('the hub\'s source mode', () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         // Obsidian's history.back() calls what is on top of its stack, as Android's back and the mouse's back button do.
         const steps = run<Record<string, unknown>>(`
-            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-cancel');
+            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-actions .tv-form__cancel');
             const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
             plugin.openTaskHub(task.id);
             await until(() => document.querySelector('.task-hub__status-pill'));
@@ -495,7 +495,7 @@ describe('the hub\'s source mode', () => {
             await sleep(100);
             const again = { ...state(), onBack: onBack() };
 
-            document.querySelector('.task-hub__source-discard').click();
+            document.querySelector('.task-hub__source-actions .tv-form__discard').click();
             await until(() => !document.querySelector('.task-hub:not(.is-closing)'));
             const discarded = state().hub;
 

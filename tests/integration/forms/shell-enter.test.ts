@@ -110,7 +110,7 @@ function cleanUp(): void {
     run(`
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
         await sleep(100);
-        document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub__source-discard').forEach(b => b.click());
+        document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub__source-actions .tv-form__discard').forEach(b => b.click());
         for (const name of Object.keys(R)) { R[name]?.detach(); delete R[name]; }
         plugin.menuPresenter.dismiss();
         await sleep(250);

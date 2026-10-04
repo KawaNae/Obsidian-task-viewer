@@ -27,10 +27,6 @@ class FakeEditor implements DraftEditor {
         this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
     }
     draft(): SourceDraft { return { parent: this.parent, children: this.children.map(line => ({ ...line })) }; }
-    isDirty(): boolean {
-        return this.parent !== this.frame.parent
-            || this.children.map(line => line.text).join('\n') !== this.frame.children.join('\n');
-    }
     isCompleting(): boolean { return this.completing; }
     closeCompletion(): boolean {
         const was = this.completing;
@@ -280,6 +276,16 @@ describe('cancelling', () => {
 });
 
 describe('closing the hub (beforeClose)', () => {
+    it('lets it close over an edit that writes nothing: a blank line added at the end of the children (論点2)', async () => {
+        const h = await opened();
+        h.editor().children.push({ text: '', was: null });
+        expect(h.source.beforeClose()).toBe(true);
+        expect(h.asked()).toBe(0);
+        // Back to the card, too, without asking.
+        h.source.cancel();
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+    });
+
     it('lets it close on the card, and in the source without a draft', async () => {
         const h = setUp();
         expect(h.source.beforeClose()).toBe(true);

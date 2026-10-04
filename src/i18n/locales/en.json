@@ -514,14 +514,16 @@
         "notWritable": "This task cannot be written.",
         "parentBreak": "The task's line must stay one line.",
         "notTask": "The first line is not a task line.",
-        "discardAsk": "Discard the draft?",
-        "discard": "Discard",
-        "keep": "Back",
         "lost": "The task was lost: its note changed elsewhere. The draft cannot be applied; copy it, then discard it.",
         "copy": "Copy",
         "copied": "Draft copied",
         "copyFailed": "Could not copy the draft"
       }
+    },
+    "draft": {
+      "discardAsk": "Discard the draft?",
+      "discard": "Discard",
+      "keep": "Back"
     },
     "noteFields": {
       "name": "Note name",
@@ -559,10 +561,7 @@
       "ignored": "{{note}} is a note the views do not show",
       "namesakes": "Notes of the same name are in other folders: {{notes}}",
       "send": "Send",
-      "sending": "Sending…",
-      "discardAsk": "Discard the draft?",
-      "discard": "Discard",
-      "keep": "Back"
+      "sending": "Sending…"
     }
   },
   "issue": {

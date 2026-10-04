@@ -5,6 +5,7 @@ import type { SubtreeReplacement } from '../../services/persistence/TaskOps';
 import { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor } from '../form/source/SourceEditor';
 import type { FormIssue } from '../form/FormIssue';
+import { DraftGuard } from '../form/DraftGuard';
 
 /**
  * The hub's source mode: the row and its subtree as text, written from a
@@ -28,7 +29,10 @@ import type { FormIssue } from '../form/FormIssue';
  *   the index holds has changed what the write would say of it.
  * - A draft the user has not thrown away is never lost to a close the user
  *   asks for: the hub asks first (`beforeClose`), in the same place as a
- *   cancel does. Going back to the draft withdraws the question as its keep
+ *   cancel does (`DraftGuard`). A draft is what writes something: an editor
+ *   whose text the frame reads as other lines than it opened on
+ *   (`SubtreeFrame.check` is not `same`), so a blank line added at the end
+ *   asks nothing. Going back to the draft withdraws the question as its keep
  *   does: an edit of the text, or an apply, which goes on as asked. A focus
  *   given back to the editor without an edit leaves the question, since
  *   reading the draft or copying from it is a way to answer it.
@@ -47,7 +51,7 @@ export interface SourceViewState {
     shut: string | null;
     /** Under the editor: why the last apply wrote nothing, as an error of the source (`'form'`); none after one that wrote, or before any. */
     issues: readonly FormIssue<never>[];
-    /** Asking whether to throw the draft away. */
+    /** Asking whether to throw the draft away (`DraftGuard`). */
     asking: boolean;
     /** The hub lost the row: the draft cannot be written. */
     lost: boolean;
@@ -97,7 +101,16 @@ export class TaskHubSource {
     private current: Task | undefined;
     private opened: Opened | null = null;
     private message: string | null = null;
-    private asking: After | null = null;
+    /** Whether to throw the draft away, asked before a step that would lose it. */
+    private readonly guard: DraftGuard<After> = new DraftGuard<After>({
+        loss: () => (this.hasDraft() ? { kind: 'draft' } : null),
+        render: () => this.render(),
+        asked: () => this.surface.asked(),
+        goOn: (after) => {
+            this.leave();
+            if (after === 'close') this.host.closeHub();
+        },
+    });
     /** The draft last refused, and why: not written again while it stays the same. */
     private refused: { key: string; message: string } | null = null;
     private disposed = false;
@@ -118,7 +131,7 @@ export class TaskHubSource {
             phase: this.phase,
             shut: this.phase === 'view' ? this.shutReason() : null,
             issues: this.message === null ? [] : [{ at: 'form', tone: 'error', text: this.message }],
-            asking: this.asking !== null,
+            asking: this.guard.asking !== null,
             lost: this.current === undefined,
         };
     }
@@ -167,7 +180,7 @@ export class TaskHubSource {
         const opened = this.opened;
         const row = this.current;
         if (this.phase !== 'source' || !opened || !row) return;
-        this.asking = null;
+        this.guard.withdraw();
 
         const check = opened.frame.check(opened.editor.draft());
         if (check.kind === 'same') return this.leave();
@@ -197,9 +210,8 @@ export class TaskHubSource {
     /** Back to the card: the cancel button, or the switch. Asks first when there is a draft. */
     cancel(): void {
         if (this.phase === 'entering') return this.back();
-        if (this.phase !== 'source' || this.asking) return;
-        if (this.opened?.editor.isDirty()) return this.ask('view');
-        this.leave();
+        if (this.phase !== 'source' || this.guard.asking) return;
+        if (this.guard.request('view')) this.leave();
     }
 
     /**
@@ -214,32 +226,30 @@ export class TaskHubSource {
      */
     beforeClose(): boolean {
         if (this.phase !== 'source' && this.phase !== 'applying') return true;
-        if (!this.asking && !this.opened?.editor.isDirty()) return true;
-        this.ask('close');
-        return false;
+        return this.guard.request('close');
     }
 
-    /** Throw the draft away, as asked, and go on to what asked. */
+    /** Throw the draft away: as asked, going on to what asked; unasked (a lost row's own way out), back to the card. */
     discard(): void {
-        const after = this.asking ?? 'view';
-        this.asking = null;
-        this.leave();
-        if (after === 'close') this.host.closeHub();
+        if (this.guard.asking) this.guard.discard();
+        else this.leave();
     }
 
-    /** Keep the draft: the question is withdrawn. */
+    /** Keep the draft: the question is withdrawn, and the editor takes the focus. */
     keep(): void {
-        if (!this.asking) return;
-        this.asking = null;
-        this.render();
-        this.opened?.editor.focus();
+        if (this.guard.keep()) this.opened?.editor.focus();
     }
 
     /** The draft's text changed: asked whether to throw it away, the question is withdrawn. */
     private edited(): void {
-        if (!this.asking) return;
-        this.asking = null;
-        this.render();
+        this.guard.withdraw();
+    }
+
+    /** Whether the editor holds a draft that writes something: other lines than the subtree opened (`SubtreeFrame.check`). */
+    private hasDraft(): boolean {
+        const opened = this.opened;
+        if (!opened || (this.phase !== 'source' && this.phase !== 'applying')) return false;
+        return opened.frame.check(opened.editor.draft()).kind !== 'same';
     }
 
     /** Whether an Escape is the editor's own (a completion list to close), not the hub's. */
@@ -296,17 +306,9 @@ export class TaskHubSource {
         this.render();
     }
 
-    /** Put the question, first or again, and go on to `after` if the draft is thrown away. */
-    private ask(after: After): void {
-        const drawn = this.asking !== null;
-        this.asking = after;
-        if (!drawn) this.render();
-        this.surface.asked();
-    }
-
     /** The source closed, the draft with it: the card again, and the form open. */
     private leave(): void {
-        this.asking = null;
+        this.guard.withdraw();
         this.opened?.editor.destroy();
         this.opened = null;
         this.message = null;
