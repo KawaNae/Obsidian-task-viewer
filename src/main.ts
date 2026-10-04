@@ -246,10 +246,7 @@ export default class TaskViewerPlugin extends Plugin {
         const editorTimerBuilder = new TimerMenuBuilder(this);
         const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.operations, this);
         const editorValidationBuilder = new ValidationMenuBuilder();
-        const editorCheckboxBuilder = new CheckboxMenuBuilder(
-            this.app,
-            () => this.settings.startHour,
-        );
+        const editorCheckboxBuilder = new CheckboxMenuBuilder();
 
         // Register inline menu button on checkbox lines (CM6 extension)
         const taskMenuResult = createTaskMenuExtension(

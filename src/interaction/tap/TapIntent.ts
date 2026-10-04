@@ -8,7 +8,7 @@ import type { Component } from 'obsidian';
  *     pointerup の中で modal を開くと `.modal-bg` にリターゲットされる
  *     (= 開いた直後に閉じる元凶)。
  *   - click event 自体は touch sequence 終了後の境界なので、click handler
- *     内で modal を同期 open しても safe (CreateTaskModal が Menu の
+ *     内で modal を同期 open しても safe (CreateModal が Menu の
  *     onClick callback で safe に open しているのと同じ条件)。
  *
  * `bindTapIntents` は click を 1 本だけ listen し、`threshold` 以内に同一

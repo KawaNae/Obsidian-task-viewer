@@ -3,8 +3,7 @@ import type { Task } from '../../../types';
 import type { Operations } from '../../../services/operations/Operations';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import { CreateTaskModal } from '../../../modals/CreateTaskModal';
-import { formatTaskLine } from '../../../services/parsing/TaskLineFormat';
+import { CreateModal } from '../../../modals/create/CreateModal';
 import { confirm } from '../../../modals/ask/askChoice';
 import { askFlowDelete } from '../../../modals/ask/flowDeleteChoice';
 import { SendModal } from '../../../modals/noteops/SendModal';
@@ -92,7 +91,8 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * "Add Child Task" 単独項目（CreateTaskModal）
+     * "Add Child Task": the create dialog on the head of the row's children
+     * (`CreatePlace` `childOf`).
      */
     private addChildTaskItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
@@ -100,10 +100,12 @@ export class TaskActionsMenuBuilder {
                 .setIcon('plus')
                 .onClick(() => {
                     menu.close();
-                    new CreateTaskModal(this.app, async (result) => {
-                        const taskLine = formatTaskLine({ statusChar: ' ', ...result });
-                        await this.operations.insertLine(task.id, taskLine, 'firstChild');
-                    }, {}, { startHour: this.plugin.settings.startHour }).open();
+                    new CreateModal(
+                        this.app,
+                        this.plugin.getCreatePlaces(),
+                        () => this.plugin.settings.startHour,
+                        { kind: 'childOf', taskId: task.id },
+                    ).open();
                 });
         });
     }

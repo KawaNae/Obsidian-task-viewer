@@ -475,7 +475,6 @@
     "due": "Due",
     "date": "Date",
     "time": "Time",
-    "emptyTaskWarning": "Task name and date are both empty — this task will not appear in the viewer.",
     "nameRequired": "A task name is required.",
     "openDatePicker": "Open date picker",
     "openTimePicker": "Open time picker",
@@ -525,6 +524,17 @@
         "copied": "Draft copied",
         "copyFailed": "Could not copy the draft"
       }
+    },
+    "newTask": {
+      "creating": "Creating…",
+      "toHead": "Puts the task at the top of the heading {{heading}} in {{note}}",
+      "toEnd": "Puts the task at the end of the heading {{heading}} in {{note}}",
+      "toMade": "Makes the heading {{heading}} at the end of {{note}} and puts the task under it",
+      "toNew": "Makes the daily note {{note}} and puts the task under the heading {{heading}}",
+      "headings": "{{note}} has {{count}} headings named {{heading}}, so there is no one place to put the task.",
+      "ignored": "{{note}} is a note the views do not show: the task will not appear in them",
+      "toChild": "Puts the task first among the children of {{parent}}",
+      "gone": "The parent task is no longer there."
     },
     "draft": {
       "discardAsk": "Discard the draft?",
@@ -638,7 +648,6 @@
     "asNext": "As Next",
     "forTomorrow": "For Tomorrow",
     "forWeek": "For Week (7 days)",
-    "convertToInline": "Convert to Inline",
     "switchTo": "Switch Date/Time",
     "allDay": "All Day",
     "allDayKeepDate": "All Day (keep date)",

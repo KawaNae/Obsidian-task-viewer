@@ -1,11 +1,11 @@
 /* ======================================================
    Shared form widgets (tv-form__*)
-   TaskHubForm、CreateTaskModal（+ PickerTextField）、SendModal が共有する
+   TaskHubForm、CreateModal（+ PickerTextField）、SendModal が共有する
    フォーム部品。問いのダイアログは _ask-dialog.css、コントロール原子は
    _controls.css（tv-ctrl__*）。
    ====================================================== */
 
-/* OverlayShell の上のフォームダイアログ（CreateTaskModal など）の
+/* OverlayShell の上のフォームダイアログ（CreateModal など）の
    見出しとボタン行。ボタン行は Obsidian の Setting を枠なしで置く */
 .tv-form__title {
     margin: 0 0 12px;
