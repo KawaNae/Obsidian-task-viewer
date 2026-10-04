@@ -1,9 +1,11 @@
-import type { FilterState, FilterCondition, FilterGroup, FilterItem, FilterProperty, DateFilterValue, FilterTarget } from './FilterTypes';
-import {
-    createEmptyFilterState, hasConditions, isFilterCondition, isFilterProperty, isPresenceOperator, takesOperator,
-    PROPERTY_OPERATORS, RELATIVE_DATE_PRESETS,
+import type {
+    FilterState, FilterCondition, FilterGroup, FilterItem, FilterProperty, DateFilterValue, FilterTarget, SingleDateValue,
 } from './FilterTypes';
-import { DateUtils } from '../../utils/DateUtils';
+import {
+    createEmptyFilterState, hasConditions, isDateRange, isDateTimeText, isPresetValue, isFilterCondition, isFilterProperty, isPresenceOperator,
+    takesOperator, takesRange, PROPERTY_OPERATORS, RELATIVE_DATE_PRESETS,
+} from './FilterTypes';
+import { DateTimeInput } from '../../utils/values/DateValues';
 import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
 
 /**
@@ -243,20 +245,18 @@ function readCondition(c: Record<string, unknown>): FilterCondition | string {
             if (!takesOperator(property, operator)) return badOperator;
             const raw = valueFor(operator);
             if (raw === undefined) return { property, operator, ...on };
-            const value = readDateValue(raw);
-            return value !== undefined
-                ? { property, operator, ...on, value }
-                : `'${property}' takes a date that exists (YYYY-MM-DD) or a preset (${RELATIVE_DATE_PRESETS.join(', ')})`;
+            const value = readDateFilterValue(property, raw);
+            if (typeof value === 'string') return value;
+            if (isDateRange(value.value) && !takesRange(property, operator)) return `'${property}' takes a range only with equals`;
+            return { property, operator, ...on, value: value.value };
         }
         case 'period': {
             if (!takesOperator(property, operator)) return badOperator;
             if (c.target === 'parent') return `'period' asks about the task itself: it takes no target parent`;
             const raw = valueFor(operator);
             if (raw === undefined) return { property, operator };
-            const value = readDateValue(raw);
-            return value !== undefined
-                ? { property, operator, value }
-                : `'${property}' takes a date that exists (YYYY-MM-DD) or a preset (${RELATIVE_DATE_PRESETS.join(', ')})`;
+            const value = readDateFilterValue(property, raw);
+            return typeof value === 'string' ? value : { property, operator, value: value.value };
         }
         case 'anyDate':
         case 'parent':
@@ -274,10 +274,44 @@ function readStrings(property: FilterProperty, raw: unknown): { value?: readonly
         : `'${property}' takes a list of strings`;
 }
 
-/** A date filter value: a day that exists, `''` (none chosen yet), or a known preset. */
-function readDateValue(value: unknown): DateFilterValue | undefined {
+/**
+ * A date filter value, or why it is not one: `''` (none chosen yet), a date
+ * that exists, a date and a time (read by `DateTimeInput`, written back as
+ * `YYYY-MM-DDTHH:mm`: `2026-10-04 10:00` is read as `2026-10-04T10:00`), a
+ * known preset, or a range of these with an end or both. The words are the
+ * reference's (`FILTER_VALUE_DOC`).
+ */
+function readDateFilterValue(property: FilterProperty, raw: unknown): { value: DateFilterValue } | string {
+    const wrong = `'${property}' takes a date that exists (YYYY-MM-DD), a date and a time (YYYY-MM-DDTHH:mm), ` +
+        `a preset (${RELATIVE_DATE_PRESETS.join(', ')}) or a range ({ "from", "to" })`;
+    if (!isRecord(raw) || 'preset' in raw) {
+        const value = readSingleDateValue(raw);
+        return value !== undefined ? { value } : wrong;
+    }
+
+    // A range: its ends are single values, and at least one is written.
+    if (raw.from === undefined && raw.to === undefined) return `'${property}' range: give from, to or both`;
+    const ends: { from?: SingleDateValue; to?: SingleDateValue } = {};
+    for (const side of ['from', 'to'] as const) {
+        const end = raw[side];
+        if (end === undefined) continue;
+        if (isRecord(end) && !('preset' in end)) return `'${property}' range: ${side} is a range; an end is a date, a date and a time or a preset`;
+        const value = readSingleDateValue(end);
+        if (value === undefined) return wrong;
+        ends[side] = value;
+    }
+    if (reversed(ends.from, ends.to)) return `'${property}' range: from ${String(ends.from)} is after to ${String(ends.to)}`;
+    return { value: ends };
+}
+
+/** A single value: `''`, a date, a date and a time in the `T` form, or a preset. */
+function readSingleDateValue(value: unknown): SingleDateValue | undefined {
     if (typeof value === 'string') {
-        return value === '' || DateUtils.isValidDateString(value) ? value : undefined;
+        if (value === '') return value;
+        const read = DateTimeInput.read(value, { timeOnly: 'refuse' });
+        if (!read.ok) return undefined;
+        const { date, time } = read.value;
+        return time ? `${date}T${time}` : date;
     }
     if (!isRecord(value)) return undefined;
     const preset = RELATIVE_DATE_PRESETS.find(p => p === value.preset);
@@ -285,4 +319,16 @@ function readDateValue(value: unknown): DateFilterValue | undefined {
     if (preset !== 'nextNDays' || value.n === undefined) return { preset };
     const n = value.n;
     return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? { preset, n } : undefined;
+}
+
+/**
+ * Whether a range's ends are written the wrong way round: both are dates or
+ * dates and times, and `from` comes after `to` (its day, or on one day its
+ * time). Such a range names no time and matches nothing.
+ */
+function reversed(from: SingleDateValue | undefined, to: SingleDateValue | undefined): boolean {
+    if (from === undefined || to === undefined || isPresetValue(from) || isPresetValue(to) || from === '' || to === '') return false;
+    const [fromDay, toDay] = [from.slice(0, 10), to.slice(0, 10)];
+    if (fromDay !== toDay) return fromDay > toDay;
+    return isDateTimeText(from) && isDateTimeText(to) && from > to;
 }

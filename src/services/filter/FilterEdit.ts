@@ -1,7 +1,12 @@
 import type {
     FilterState, FilterGroup, FilterItem, FilterCondition, FilterProperty, FilterOperator, FilterTarget,
+    DateFilterValue, DateRangeValue, DateComparison, PresetValue, SingleDateValue,
 } from './FilterTypes';
-import { isFilterCondition, isPresenceOperator, takesOperator, isDateProperty, isTextListProperty, isFlagProperty } from './FilterTypes';
+import {
+    isFilterCondition, isPresenceOperator, takesOperator, takesRange, isDateProperty, isTextListProperty, isFlagProperty,
+    isDateRange, isDateTimeText, isPresetValue,
+} from './FilterTypes';
+import { daysOfValue, type WindowContext } from '../../utils/DayWindow';
 
 /**
  * The edits the filter menu makes, each a function from a filter to a new
@@ -102,6 +107,8 @@ export function conditionOn(property: FilterProperty, target?: FilterTarget): Fi
  * `c` asking `operator`. An operator that takes no value drops the value; one
  * that takes a value keeps the value there is, or starts with the menu's
  * (today for a date, 1 hour for a length). The property's key and unit stay.
+ * A range, on an operator that takes none, becomes its end nearer in meaning
+ * ({@link nearEnd}).
  */
 export function withOperator(c: FilterCondition, operator: FilterOperator): FilterCondition {
     const refuse = (): never => { throw new Error(`filter: '${c.property}' takes no '${operator}'`); };
@@ -112,6 +119,9 @@ export function withOperator(c: FilterCondition, operator: FilterOperator): Filt
             if (!takesOperator(c.property, operator)) return refuse();
             const { value, ...rest } = c;
             if (isPresenceOperator(operator)) return { ...rest, operator };
+            if (value !== undefined && isDateRange(value) && !takesRange(c.property, operator)) {
+                return { ...rest, operator, value: nearEnd(value, operator) };
+            }
             return { ...rest, operator, value: value ?? { preset: 'today' } };
         }
         case 'period':
@@ -154,4 +164,50 @@ export function withTarget(c: FilterCondition, target: FilterTarget): FilterCond
     }
     const { target: _target, ...rest } = c;
     return target === 'parent' ? { ...rest, target } : rest;
+}
+
+// ── Date values ──
+
+/**
+ * The end of `range` an operator that takes no range reads it by: before
+ * and on or after look from its first day, after and on or before from its
+ * last (`due = 10/01 to 10/10` turned to before is before 10/01, to on or
+ * before is on or before 10/10). Today when that end is not there.
+ */
+function nearEnd(range: DateRangeValue, operator: DateComparison): SingleDateValue {
+    const end = operator === 'before' || operator === 'onOrAfter' ? range.from : range.to;
+    return end === undefined || end === '' ? { preset: 'today' } : end;
+}
+
+/**
+ * The value as a date, for the menu's "date" kind: a date stays, a date and
+ * a time is its date, a preset its first day, a range the date of its first
+ * end there is (`''` when none is).
+ */
+export function asDate(value: DateFilterValue, ctx: WindowContext): string {
+    if (isDateRange(value)) {
+        const end = value.from !== undefined && value.from !== '' ? value.from : value.to;
+        return end === undefined ? '' : asDate(end, ctx);
+    }
+    if (isPresetValue(value)) return daysOfValue(value, ctx).from ?? '';
+    return isDateTimeText(value) ? value.slice(0, 10) : value;
+}
+
+/** The value as a preset, for the menu's "relative" kind: a preset stays, any other is today. */
+export function asPreset(value: DateFilterValue): PresetValue {
+    return isPresetValue(value) ? value : { preset: 'today' };
+}
+
+/**
+ * The value as a range, for the menu's "range" kind: a date D is D to D, a
+ * date and a time is that moment at both ends, a preset its days (this week
+ * is its Monday to its Sunday), a range stays.
+ */
+export function asRange(value: DateFilterValue, ctx: WindowContext): DateRangeValue {
+    if (isDateRange(value)) return value;
+    if (isPresetValue(value)) {
+        const { from, to } = daysOfValue(value, ctx);
+        return { from, to };
+    }
+    return { from: value, to: value };
 }
