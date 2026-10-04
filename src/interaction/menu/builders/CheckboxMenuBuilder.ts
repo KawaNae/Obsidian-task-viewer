@@ -1,6 +1,6 @@
 import type { Menu } from 'obsidian';
 import type { StatusDefinition, TaskViewerSettings } from '../../../types';
-import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
+import { addStatusItems } from '../../../constants/statusOptions';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
@@ -52,26 +52,15 @@ export class CheckboxMenuBuilder {
         statusMenuChars: StatusDefinition[],
         ops: CheckboxLineOps
     ): void {
-        const options = buildStatusOptions(statusMenuChars);
-
         menu.addItem((item) => {
             const statusDisplay = `[${currentChar}]`;
             item.setTitle(t('menu.status', { status: statusDisplay }))
                 .setIcon('check-square')
                 .setSubmenu();
 
-            const statusMenu = item.submenu;
-
-            options.forEach(s => {
-                statusMenu.addItem(sub => {
-                    sub.setTitle(createStatusTitle(s))
-                        .setChecked(currentChar === s.char)
-                        .onClick(async () => {
-                            menu.close();
-                            const newLine = prefix + s.char + suffix;
-                            await ops.updateLine(newLine);
-                        });
-                });
+            addStatusItems(item.submenu, statusMenuChars, currentChar, (char) => {
+                menu.close();
+                void ops.updateLine(prefix + char + suffix);
             });
         });
     }

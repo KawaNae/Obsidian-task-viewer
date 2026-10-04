@@ -11,6 +11,7 @@ import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { TagInput } from '../../../services/parsing/utils/TagInput';
 import { optional } from '../../../utils/values/Read';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
+import { ValueSuggest } from '../../../suggest/ValueSuggest';
 import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
 
 const ADD_TAGS = optional(TagInput);
@@ -31,6 +32,8 @@ export class TagsFieldGroup implements ClosingPart {
     private addWrap: HTMLElement | null = null;
     private says: HTMLElement | null = null;
     private addBound: BoundField<string[] | undefined> | null = null;
+    /** The list under the add field as last built: closed before the rows are built anew. */
+    private suggest: ValueSuggest | null = null;
     /** What is typed in the add field and not yet added: kept across a rebuild. */
     private draft = '';
 
@@ -41,6 +44,7 @@ export class TagsFieldGroup implements ClosingPart {
 
     render(force = false): void {
         if (!force && this.sectionEl.contains(this.sectionEl.ownerDocument.activeElement)) return;
+        this.suggest?.close();
         this.sectionEl.empty();
 
         const task = this.ctx.getTask();
@@ -102,16 +106,16 @@ export class TagsFieldGroup implements ClosingPart {
             });
         };
 
-        this.ctx.attachSuggest(input, inputWrap, {
-            getCandidates: (query) => {
-                const q = query.toLowerCase().replace(/^#/, '');
+        this.suggest = new ValueSuggest(this.ctx.app, input, {
+            candidates: (query) => {
+                const q = query.trim().toLowerCase().replace(/^#/, '');
                 const selected = new Set(getEffectiveTags(this.ctx.getTask()));
                 return FilterValueCollector.collectTags(this.ctx.index.getTasks())
                     .filter(v => !selected.has(v))
                     .filter(v => !q || v.toLowerCase().includes(q));
             },
-            renderItem: (item, val) => { item.createSpan().setText(`#${val}`); },
-            onPick: (val) => addTags([val]),
+            render: (val, el) => el.setText(`#${val}`),
+            pick: (val) => addTags([val]),
         });
         // The field stands for nothing: what it reads is added, and it empties.
         this.addBound = bindField(input, {
@@ -119,6 +123,7 @@ export class TagsFieldGroup implements ClosingPart {
             current: () => undefined,
             commit: (added) => { if (added) addTags(added); },
             issues: (issue) => this.ctx.issues.set('tags', readIssue('tags', issue)),
+            takesEnter: () => this.suggest?.listShown ?? false,
         });
         input.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Backspace' && !input.value) {
@@ -139,7 +144,6 @@ export class TagsFieldGroup implements ClosingPart {
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。
         const restoreFocus = !!this.addInput && this.addInput.ownerDocument.activeElement === this.addInput;
-        this.ctx.stack.closeAll();
         this.render(true);
         if (restoreFocus) this.addInput?.focus();
         return write;

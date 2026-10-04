@@ -6,7 +6,7 @@ import type { PropertyCalculator, PropertyCalculationContext, CalculatedProperty
 import type { PropertyFormatter } from '../PropertyFormatter';
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../services/display/TaskContent';
-import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
+import { addStatusItems } from '../../../constants/statusOptions';
 import { openFile } from '../../../utils/NavigationUtils';
 import { t } from '../../../i18n';
 import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
@@ -85,19 +85,9 @@ export class PropertiesMenuBuilder {
                 .setIcon('check-square')
                 .setSubmenu();
 
-            const statusMenu = sub.submenu;
-
-            buildStatusOptions(this.plugin.settings.statusDefinitions).forEach(s => {
-                statusMenu.addItem(item => {
-                    item.setTitle(createStatusTitle(s))
-                        .setChecked(task.statusChar === s.char)
-                        .onClick(async () => {
-                            menu.close();
-                            await this.operations.updateTask(task.id, {
-                                statusChar: s.char
-                            });
-                        });
-                });
+            addStatusItems(sub.submenu, this.plugin.settings.statusDefinitions, statusChar, (char) => {
+                menu.close();
+                void this.operations.updateTask(task.id, { statusChar: char });
             });
         });
     }

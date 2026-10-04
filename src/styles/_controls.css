@@ -1,7 +1,7 @@
 /* ── Shared UI Controls (tv-ctrl) ──
  *
- * filter-popover とタスクハブパネルが共有する UI 部品（pill / suggest /
- * input / swatch / checkbox / segments）。
+ * filter-popover とタスクハブパネルが共有する UI 部品（pill / input /
+ * swatch / checkbox / segments）。
  *
  * 詳細度の設計:
  * Obsidian は button / input[type="text"] に border・padding・background・
@@ -9,12 +9,12 @@
  * `.tv-ctrl .tv-ctrl__*` の二重セレクタで詳細度を上げる（旧 filter-popover の
  * `.filter-popover .filter-popover__*` パターンの一般化）。利用側は表面の
  * root 要素に `tv-ctrl` クラスを付けるだけでこの保護を得る。
- * div ベースの部品（pill / suggest-item / swatch）は Obsidian 既定と競合
- * しないため単一クラスで定義する。
+ * div ベースの部品（pill / swatch）は Obsidian 既定と競合しないため単一
+ * クラスで定義する。
  *
- * suggest コンテナは PopoverShell が document.body 直下に生成するため
- * `.tv-ctrl` の子孫にならない。SuggestController がコンテナ自身に
- * `tv-ctrl tv-ctrl__suggest` を付けて自己完結させる。
+ * 欄の下の候補の一覧は Obsidian のもの（`ValueSuggest`、`.suggestion-container`）
+ * で、見た目も Obsidian が決める。行の中身の並びだけをここで持つ
+ * （`tv-ctrl__suggestion`）。
  */
 
 /* --- Field: the box a value is typed in ---
@@ -226,7 +226,7 @@ button.tv-icon-btn:hover {
     height: 10px;
 }
 
-/* --- Value previews (pill & suggest item) --- */
+/* --- Value previews (pill & suggestion) --- */
 .tv-ctrl__color-swatch {
     display: inline-block;
     width: 12px;
@@ -245,31 +245,12 @@ button.tv-icon-btn:hover {
     pointer-events: none;
 }
 
-/* --- Suggest dropdown (PopoverShell 生成、body 直下・fixed) --- */
-.tv-ctrl__suggest {
-    position: fixed;
-    z-index: calc(var(--z-overlay) + 1);
-    background: var(--modal-background, var(--tv-bg-secondary));
-    border: 1px solid var(--tv-border);
-    border-radius: var(--tv-radius-s);
-    box-shadow: 0 4px 12px var(--tv-shadow-medium);
-    max-height: 200px;
-    overflow-y: auto;
-    padding: 4px 0;
-    min-width: 160px;
-}
-
-.tv-ctrl__suggest-item {
-    display: flex;
+/* --- An item of a list under a field (Obsidian's suggestion item): its
+   swatch or checkbox before its label, as a pill shows them --- */
+.tv-ctrl__suggestion {
+    display: inline-flex;
     align-items: center;
-    padding: 4px 8px;
-    cursor: pointer;
-    font-size: var(--font-ui-small);
-    color: var(--tv-text);
-}
-.tv-ctrl__suggest-item:hover,
-.tv-ctrl__suggest-item--active {
-    background: var(--tv-bg-hover);
+    gap: 6px;
 }
 
 /* ── TopRight Config Editor ── */

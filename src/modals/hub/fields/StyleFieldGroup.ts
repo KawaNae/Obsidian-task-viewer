@@ -13,6 +13,8 @@ import { bindField, type BoundField } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { PickerTextField } from '../../form/PickerTextField';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
+import { ValueSuggest } from '../../../suggest/ValueSuggest';
+import { cssColorToHex } from '../../../utils/ColorUtils';
 import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
 
 type StyleField = 'color' | 'linestyle' | 'mask';
@@ -86,11 +88,12 @@ export class StyleFieldGroup implements ClosingPart {
         sourceEl.addEventListener('click', () => this.ctx.jumpToFile());
         this.sourceEls[field] = sourceEl;
 
-        // The list's Enter is put on first: it puts the item in, and the
-        // field's Enter (bindField) commits it (10f makes this one piece).
+        // An item picked from the list is put in and committed; the field's
+        // own Enter (bindField) commits what is typed when no list is open.
+        let suggest: ValueSuggest | null = null;
         if (field === 'color') {
             const nci = this.nativeColorInput;
-            nci.value = this.resolveColorForPicker(input.value);
+            nci.value = cssColorToHex(input.value, nci.ownerDocument);
             // ドラッグ中は swatch とテキストだけ更新し、nci.value への
             // 書き戻し（updateColorSwatch 内）を避ける — 書き戻すと
             // ピッカーの内部状態が壊れるフィードバックループになる
@@ -104,17 +107,17 @@ export class StyleFieldGroup implements ClosingPart {
                 this.updateColorSwatch();
                 this.bound.color.commit();
             });
-            this.ctx.attachSuggest(input, input, {
-                getCandidates: (q) => (q.trim() === '' ? filterColors('', 20) : filterColors(q)),
-                renderItem: (item, val) => renderColorSuggestion(val, item),
-                onPick: (val) => { input.value = val; this.updateColorSwatch(); this.bound.color.commit(); },
+            suggest = new ValueSuggest(this.ctx.app, input, {
+                candidates: (q) => (q.trim() === '' ? filterColors('', 20) : filterColors(q)),
+                render: renderColorSuggestion,
+                pick: (val) => { this.colorField.setText(val); this.updateColorSwatch(); this.bound.color.commit(); },
             });
             input.addEventListener('input', () => this.updateColorSwatch());
         } else if (field === 'linestyle') {
-            this.ctx.attachSuggest(input, input, {
-                getCandidates: (q) => filterLineStyles(q),
-                renderItem: (item, val) => renderLineStyleSuggestion(val, item),
-                onPick: (val) => { input.value = val; this.bound.linestyle.commit(); },
+            suggest = new ValueSuggest(this.ctx.app, input, {
+                candidates: (q) => filterLineStyles(q),
+                render: renderLineStyleSuggestion,
+                pick: (val) => { input.value = val; this.bound.linestyle.commit(); },
             });
         }
 
@@ -123,6 +126,7 @@ export class StyleFieldGroup implements ClosingPart {
             current: () => this.ctx.getTask()[field],
             commit: (value) => this.commit(field, value),
             issues: (issue) => this.ctx.issues.set(field, readIssue(field, issue)),
+            takesEnter: () => suggest?.listShown ?? false,
             put,
         });
 
@@ -176,24 +180,7 @@ export class StyleFieldGroup implements ClosingPart {
         this.colorSwatch.style.backgroundColor = value
             ? (/^[0-9a-fA-F]{3,6}$/.test(value) ? `#${value}` : value)
             : 'transparent';
-        this.nativeColorInput.value = this.resolveColorForPicker(value);
-    }
-
-    private resolveColorForPicker(raw: string): string {
-        const v = raw.trim();
-        if (!v) return '#000000';
-        if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v}`;
-        if (/^[0-9a-fA-F]{3}$/.test(v)) {
-            return `#${v[0]}${v[0]}${v[1]}${v[1]}${v[2]}${v[2]}`;
-        }
-        // CSS 色名 → canvas で正規化（'red' → '#ff0000'）
-        const ctx = document.createElement('canvas').getContext('2d');
-        if (ctx) {
-            ctx.fillStyle = '#000000';
-            ctx.fillStyle = v;
-            return ctx.fillStyle;
-        }
-        return '#000000';
+        this.nativeColorInput.value = cssColorToHex(value, this.nativeColorInput.ownerDocument);
     }
 
     /** 外部変更（echo）の取り込み。打ちかけの欄は `BoundField.set` が守る。 */

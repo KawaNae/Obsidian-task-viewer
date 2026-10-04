@@ -4,7 +4,7 @@
  * is provided by OverlayShell (_overlay.css). This file only defines
  * content-specific sizing and the inner layout.
  *
- * 原子部品（pill / suggest / text input / input-wrap / swatch /
+ * 原子部品（pill / text input / input-wrap / swatch /
  * status-checkbox）は共有部品 tv-ctrl__*（_controls.css）を使う。
  */
 

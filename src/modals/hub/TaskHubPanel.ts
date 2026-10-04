@@ -6,7 +6,6 @@ import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
-import { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
@@ -52,7 +51,6 @@ export class TaskHubPanel {
 
     private task: Task;
     private overlay = new OverlayShell();
-    readonly stack = new PopoverStack();
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
     private source: TaskHubSource | null = null;
@@ -97,7 +95,6 @@ export class TaskHubPanel {
         this.overlay.open({
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog task-hub',
-            childStack: this.stack,
             keymap: this.app.keymap,
             initialFocus: () => (focusField ? this.form?.fieldElement(focusField) ?? null : null),
             build: (bodyEl) => this.buildContent(bodyEl),
@@ -130,7 +127,6 @@ export class TaskHubPanel {
                 plugin: this.deps.plugin,
                 index: this.deps.index,
                 operations: this.deps.operations,
-                stack: this.stack,
                 onNavigate: () => this.close(),
                 requestClose: () => { void this.overlay.requestClose(); },
             });
