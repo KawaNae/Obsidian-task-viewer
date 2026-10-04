@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TaskApi } from '../../../../src/api/TaskApi';
+import { filterOfParams } from '../../../../src/api/FilterParamsBuilder';
+import { compileFilter } from '../../../../src/services/filter/FilterExpr';
+import { TaskFilterEngine } from '../../../../src/services/filter/TaskFilterEngine';
 import { TaskReadService } from '../../../../src/services/data/TaskReadService';
 import { splitTasks } from '../../../../src/services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../../../../src/services/display/TaskDateCategorizer';
@@ -74,6 +77,14 @@ describe.each(CASES)('$name', ({ task, days }) => {
             vi.setSystemTime(new Date(y, m - 1, day + 1, 3, 0)); // 03:00 the next morning: still d
             return api.today().total > 0;
         });
+        expect(found).toEqual(days);
+    });
+
+    it("list's date window takes it on the same days", () => {
+        const [dt] = service.getAllDisplayTasks();
+        const context = { startHour, weekStartDay: 1 as const, taskLookup: () => undefined, now: new Date() };
+        const found = DAYS.filter(d =>
+            TaskFilterEngine.evaluate(dt, compileFilter(filterOfParams({}, { date: d })!), context));
         expect(found).toEqual(days);
     });
 

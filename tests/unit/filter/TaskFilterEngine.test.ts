@@ -3,6 +3,7 @@ import { evaluateFilter } from '../helpers/filterContext';
 import type { Task, DisplayTask } from '../../../src/types';
 import type { FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
 import { createDefaultListFilterState } from '../../../src/services/filter/FilterTypes';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 
 // ── Helper: minimal Task factory ──
 
@@ -23,27 +24,9 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     };
 }
 
+/** A display copy of a task with the given line values (startHour 0, as testContext). */
 function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    const base = makeTask(overrides) as DisplayTask;
-    const result = {
-        ...base,
-        effectiveStartDate: overrides.effectiveStartDate ?? overrides.startDate ?? '',
-        effectiveStartTime: overrides.effectiveStartTime,
-        effectiveEndDate: overrides.effectiveEndDate,
-        effectiveEndTime: overrides.effectiveEndTime,
-        startDateImplicit: overrides.startDateImplicit ?? false,
-        startTimeImplicit: overrides.startTimeImplicit ?? false,
-        endDateImplicit: overrides.endDateImplicit ?? false,
-        endTimeImplicit: overrides.endTimeImplicit ?? false,
-        originalTaskId: overrides.originalTaskId ?? overrides.id ?? 'test-1',
-        isSplit: overrides.isSplit ?? false,
-        childEntries: overrides.childEntries ?? [],
-        ...overrides,
-    };
-    if (result.due && !('effectiveDue' in overrides)) {
-        (result as any).effectiveDue = result.due;
-    }
-    return result;
+    return { ...toDisplayTask(makeTask(overrides), 0, NO_TASK_LOOKUP), ...overrides };
 }
 
 // ── Helper: build FilterState from conditions ──
@@ -407,7 +390,7 @@ describe('TaskFilterEngine', () => {
         });
 
         it('isSet — task with only endDate matches', () => {
-            const task = makeDisplayTask({ endDate: '2026-03-10', effectiveEndDate: '2026-03-10' });
+            const task = makeDisplayTask({ endDate: '2026-03-10' });
             const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(evaluateFilter(task, state)).toBe(true);
         });
@@ -431,7 +414,7 @@ describe('TaskFilterEngine', () => {
         });
 
         it('uses effective date fields when provided (DisplayTask)', () => {
-            const dt = makeDisplayTask({ effectiveStartDate: '2026-03-10' });
+            const dt = makeDisplayTask({ startDate: '2026-03-10' });
             const state = stateFromCondition(cond('anyDate', 'isSet'));
             expect(evaluateFilter(dt, state)).toBe(true);
         });
@@ -445,10 +428,10 @@ describe('TaskFilterEngine', () => {
             startTime: '09:00',
             endDate: '2026-03-10',
             endTime: '11:00',
-            effectiveStartDate: '2026-03-10',
-            effectiveStartTime: '09:00',
-            effectiveEndDate: '2026-03-10',
-            effectiveEndTime: '11:00',
+            startDate: '2026-03-10',
+            startTime: '09:00',
+            endDate: '2026-03-10',
+            endTime: '11:00',
         });
 
         it('isSet — has start date', () => {
@@ -600,7 +583,7 @@ describe('TaskFilterEngine', () => {
         it('uses effectiveStartDate from DisplayTask', () => {
             const dt = makeDisplayTask({
                 startDate: undefined,
-                effectiveStartDate: '2026-03-10',
+                startDate: '2026-03-10',
                 startDateImplicit: true,
             });
             const state = stateFromCondition(cond('startDate', 'equals', '2026-03-10'));
@@ -610,7 +593,7 @@ describe('TaskFilterEngine', () => {
         it('uses effectiveEndDate from DisplayTask', () => {
             const dt = makeDisplayTask({
                 endDate: undefined,
-                effectiveEndDate: '2026-04-01',
+                endDate: '2026-04-01',
                 endDateImplicit: true,
             });
             const state = stateFromCondition(cond('endDate', 'equals', '2026-04-01'));

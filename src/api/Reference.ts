@@ -60,10 +60,11 @@ interface Operation {
 }
 
 const WINDOW_NOTE = `\
-The window (date, or from and to) matches the task's effective calendar
-dates and leaves out due-only tasks. The date-range operations match the
-visual (startHour-adjusted) span, as the views do, and include due-only
-tasks whose due falls in the window.`;
+The window (date, or from and to) is visual (startHour-adjusted) days: it
+matches a task whose span ends after the window starts and starts before it
+ends, and leaves out due-only tasks. The date-range operations match the
+same span, as the views do, and include due-only tasks whose due closes in
+the window.`;
 
 const SOURCE_NOTE = `\
 Where the filter comes from: filterFile, else filter (API only), else the
@@ -121,9 +122,9 @@ export const OPERATIONS = {
         summary: 'List tasks active today (visual-date aware)',
         schema: TODAY_SCHEMA,
         notes: `\
-Today is the visual date of now. A task is active when its effective start
-is on or before today and its effective end on or after (a start without
-an end: that day only), or, without a start, when its due is today.`,
+Today is the visual date of now. A task is active when its span overlaps
+today's visual day, as the views draw it, or, without a span, when its due
+closes in it.`,
         api: { signature: 'today(params?: TodayParams): TaskListResult', returns: 'TaskListResult' },
         cli: { output: true },
     },
@@ -166,14 +167,14 @@ the same days as its start and end; a copy on the clock keeps the due.`,
     tasksForDateRange: {
         summary: 'List tasks whose visual span overlaps a date range',
         schema: TASKS_FOR_DATE_RANGE_SCHEMA,
-        notes: `${RANGE_NOTE}\nDue-only tasks are included when the due falls in the window.`,
+        notes: `${RANGE_NOTE}\nDue-only tasks are included when the due closes in the window.`,
         api: { signature: 'tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>', returns: 'TaskListResult' },
         cli: { output: true },
     },
     categorizedTasksForDateRange: {
         summary: 'Get tasks in a date range, categorized into allDay/timed/dueOnly per date',
         schema: CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-        notes: `${RANGE_NOTE}\nallDay and timed follow the visual span; dueOnly the calendar date of the due.`,
+        notes: `${RANGE_NOTE}\nallDay and timed follow the visual span; dueOnly the visual day the due closes in.`,
         api: {
             signature: 'categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult>',
             returns: 'Record<date, { allDay: NormalizedTask[], timed: NormalizedTask[], dueOnly: NormalizedTask[] }>',
@@ -264,13 +265,13 @@ export const FILTER_VALUE_DOC = {
     tag: '"value": ["work"] — includes and excludes take sub-tags too (work matches work/x); equals is the exact tag; only = the task\'s tags are this set and no other',
     status: '"value": [" ", "x"] — status characters',
     content: '"value": "text" — contained, any case',
-    startDate: '"value": "YYYY-MM-DD" or { "preset": "<preset>", "n"?: number } — the effective date, without its time',
+    startDate: '"value": "YYYY-MM-DD" or { "preset": "<preset>", "n"?: number } — the visual days the value names; the task\'s moment is compared with them (an end or a due right at a day\'s start is the day before\'s)',
     endDate: '(as startDate)',
     due: '(as startDate)',
     anyDate: 'no value — set when any of start, end and due is',
     color: '"value": ["red"]',
     linestyle: '"value": ["dashed"]',
-    length: '"value": number, "unit"?: "hours" (default) | "minutes" — from the effective start to the effective end',
+    length: '"value": number, "unit"?: "hours" (default) | "minutes" — from the start of the span to its end (a bare date is 24 hours)',
     notation: '"value": ["taskviewer" | "tasks" | "dayplanner"]',
     parent: 'no value',
     children: 'no value — child tasks only (plain checkbox lines and links are not)',
@@ -419,8 +420,8 @@ ${heading('Task IDs')}
 
 const VOCABULARY = `\
 ${heading('Vocabulary')}
-  from / to         = query window (inclusive overlap). A task matches when
-                      its span intersects [from, to].
+  from / to         = query window of visual days (overlap). A task matches
+                      when its span overlaps [from, to].
   date              = single-day window, sugar for from=X to=X (list only)
   start / end / due = the task's own fields (create / update)`;
 

@@ -2,9 +2,9 @@ import type { DisplayTask, Task } from '../../types';
 import type { FilterContext } from './FilterContext';
 import type { FilterExpr } from './FilterExpr';
 import type { DateFilterValue, DateComparison, LengthComparison } from './FilterTypes';
-import { DateResolver } from './DateResolver';
+import { ofValue } from '../../utils/DayWindow';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
-import { TaskValues } from './TaskValues';
+import { TaskValues, type InstantValue } from './TaskValues';
 
 /**
  * Evaluates whether a task passes a compiled filter tree ({@link FilterExpr},
@@ -52,18 +52,16 @@ export class TaskFilterEngine {
                     case 'startDate':
                     case 'endDate':
                     case 'due':
-                        return !!TaskValues.of(task, expr.property).date;
+                        return TaskValues.of(task, expr.property).ms !== undefined;
                     case 'length':
-                        return TaskValues.length(task, context.startHour).present;
+                        return TaskValues.length(task).present;
                     default:
                         return TaskValues.of(task, expr.property).set;
                 }
-            case 'date': {
-                const date = TaskValues.of(task, expr.property).date;
-                return !!date && this.compareDate(date, expr.op, expr.value, context);
-            }
+            case 'date':
+                return this.compareDate(TaskValues.of(task, expr.property), expr.op, expr.value, context);
             case 'length': {
-                const ms = TaskValues.length(task, context.startHour).value;
+                const ms = TaskValues.length(task).value;
                 if (ms === undefined) return false;
                 return this.compareLength(ms / (expr.unit === 'minutes' ? 60_000 : 3_600_000), expr.op, expr.value);
             }
@@ -99,14 +97,22 @@ export class TaskFilterEngine {
         return false;
     }
 
-    private static compareDate(date: string, op: DateComparison, value: DateFilterValue, context: FilterContext): boolean {
-        const { start, end } = DateResolver.resolve(value, context.weekStartDay, context.startHour, context.now);
+    /**
+     * A moment against the window a date value names (`DayWindow.ofValue`),
+     * `[ws, we)`. A start is in the window from its start up to its end; an
+     * end or a due closes in it, from just after its start up to its end.
+     */
+    private static compareDate(value: InstantValue, op: DateComparison, filterValue: DateFilterValue, context: FilterContext): boolean {
+        const ms = value.ms;
+        if (ms === undefined) return false;
+        const { startMs: ws, endMs: we } = ofValue(filterValue, context);
+        const start = value.edge === 'start';
         switch (op) {
-            case 'equals':     return date >= start && date <= end;
-            case 'before':     return date < start;
-            case 'after':      return date > end;
-            case 'onOrBefore': return date <= end;
-            case 'onOrAfter':  return date >= start;
+            case 'equals':     return start ? ws <= ms && ms < we : ws < ms && ms <= we;
+            case 'before':     return start ? ms < ws : ms <= ws;
+            case 'after':      return start ? ms >= we : ms > we;
+            case 'onOrBefore': return start ? ms < we : ms <= we;
+            case 'onOrAfter':  return start ? ms >= ws : ms > ws;
         }
     }
 
