@@ -37,12 +37,17 @@ function idsOf(tasks: DisplayTask[]): string[] {
 }
 
 describe('日付所属: dueOnly', () => {
-    it('due の calendar 日付に所属する（visual 日付ではない）', () => {
-        // due 2026-01-16T02:00 は startHour=5 の visual では Jan15 夜だが、
-        // 所属は raw due の calendar 日付 Jan16（締切 = calendarDate の意味論）
+    it('due が閉じる視覚日に所属する（窓の問い合わせが見つける日と同じ）', () => {
+        // due 2026-01-16T02:00 は startHour=5 の視覚日 Jan15 の夜。tasksInWindow
+        // は Jan15 の窓で見つける（endIn）ので、所属も Jan15
         const task = dt({ id: 'due-task', due: '2026-01-16T02:00' });
-        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).dueOnly)).toEqual(['due-task']);
-        expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).dueOnly)).toEqual([]);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).dueOnly)).toEqual(['due-task']);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).dueOnly)).toEqual([]);
+    });
+
+    it('日付だけの due はその日に所属する', () => {
+        const task = dt({ id: 'due-day', due: '2026-01-16' });
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).dueOnly)).toEqual(['due-day']);
     });
 });
 
@@ -118,8 +123,8 @@ describe('categorizeTasksForDate ≡ categorizeTasksByDate（単日と複数日�
         });
         expect(snapshot).toEqual([
             '2026-01-14 allDay=[f-se] timed=[] dueOnly=[]',
-            '2026-01-15 allDay=[f-se,f-allday] timed=[f-timed,f-latenight] dueOnly=[]',
-            '2026-01-16 allDay=[] timed=[] dueOnly=[f-due]',
+            '2026-01-15 allDay=[f-se,f-allday] timed=[f-timed,f-latenight] dueOnly=[f-due]',
+            '2026-01-16 allDay=[] timed=[] dueOnly=[]',
             '2026-01-17 allDay=[] timed=[] dueOnly=[]',
         ]);
     });

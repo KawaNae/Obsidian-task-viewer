@@ -4,7 +4,7 @@ import type { DisplayTask } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
-import { visualDaysOf } from '../../utils/DayWindow';
+import { daysWindow, endDayOf, visualDaysOf } from '../../utils/DayWindow';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import { dailyNotes } from '../../utils/PeriodicNotes';
@@ -242,14 +242,14 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
         const filterState = this.state.filterState;
         const filter = filterState && hasConditions(filterState) ? filterState : undefined;
 
-        const allTasks = this.readService.getTasksForDateRange(rangeStart, rangeEnd, filter);
         const startHour = this.plugin.settings.startHour;
+        const allTasks = this.readService.tasksInWindow(daysWindow(rangeStart, rangeEnd, startHour), filter);
 
         for (const dt of allTasks) {
             const days = dt.drawn ? visualDaysOf(dt.drawn, startHour) : null;
             const visualStart = days?.first;
             const visualEnd = days?.last ?? '';
-            const duePart = DateUtils.dueDatePart(dt.stated.due);
+            const duePart = dt.dueMs === null ? undefined : endDayOf(dt.dueMs, startHour);
 
             const completed = this.isTaskCompleted(dt);
 

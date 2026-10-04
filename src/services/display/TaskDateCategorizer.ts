@@ -1,6 +1,6 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { visualDaysOf } from '../../utils/DayWindow';
+import { endDayOf, visualDaysOf } from '../../utils/DayWindow';
 import { classifyForSection, type Section } from './SectionClassifier';
 import {
     compareAllDayForRender,
@@ -36,7 +36,8 @@ function emptyBuckets(): CategorizedTasks {
  *
  * The kind decision tree lives in classifyForSection (single source of
  * truth); this module only owns the per-kind date membership rules:
- *   - dueOnly: calendar date of the raw due (deadline = calendarDate semantics)
+ *   - dueOnly: the visual day the due closes (`endDayOf`), the day the
+ *              window queries find it in
  *   - allDay:  the visual days it is drawn over (`visualDaysOf(drawn)`) —
  *              the same function the AllDay lane uses for card spans, so
  *              bucket membership and lane rendering agree by construction
@@ -50,7 +51,7 @@ type TaskPlacement =
 
 function placeTask(dt: DisplayTask, startHour: number): TaskPlacement {
     const kind = classifyForSection(dt);
-    if (kind === 'dueOnly') return { kind, dueDate: DateUtils.dueDatePart(dt.stated.due) ?? '' };
+    if (kind === 'dueOnly') return { kind, dueDate: dt.dueMs === null ? '' : endDayOf(dt.dueMs, startHour) };
     if (!kind || !dt.drawn) return null;
     const { first, last } = visualDaysOf(dt.drawn, startHour);
     return kind === 'allDay'

@@ -1,4 +1,5 @@
 import type { WorkspaceLeaf } from 'obsidian';
+import { daysWindow } from '../../utils/DayWindow';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
@@ -558,8 +559,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.toolbar!.mount(toolbarHost);
 
         // Use GridRenderer (render into main column)
-        const filteredTasks = this.readService.getTasksForDateRange(
-            dates[0], dates[dates.length - 1], this.state.filterState
+        const filteredTasks = this.readService.tasksInWindow(
+            daysWindow(dates[0], dates[dates.length - 1], this.plugin.settings.startHour), this.state.filterState
         );
         this.gridRenderer.render(
             main,

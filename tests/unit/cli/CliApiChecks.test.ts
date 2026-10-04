@@ -17,7 +17,7 @@ function realApi() {
     const read = {
         getAllDisplayTasks: vi.fn().mockReturnValue([]),
         getFilteredTasks: vi.fn().mockReturnValue([]),
-        getTasksForDateRange: vi.fn().mockReturnValue([]),
+        tasksInWindow: vi.fn().mockReturnValue([]),
         getTask: vi.fn(),
     };
     const plugin = {

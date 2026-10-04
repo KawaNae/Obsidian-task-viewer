@@ -7,7 +7,8 @@ import { t } from '../../../i18n';
 
 import type { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import type { TimelineSectionRenderer } from './TimelineSectionRenderer';
-import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
+import { daysWindow } from '../../../utils/DayWindow';
+import { overlaps } from '../../../utils/SpanRelation';
 import type { DisplayTask } from '../../../types';
 import type { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
 import { getEffectiveAstronomyDisplay } from '../../../services/astronomy/AstronomyService';
@@ -57,7 +58,7 @@ export class GridRenderer {
             if (getOverdueLevel(dt, startHour, defs, readService) === 'none') continue;
             for (const date of dates) {
                 if (date >= todayVisualDate) continue;
-                if (isDisplayTaskOnVisualDate(dt, date, startHour)) {
+                if (dt.span && overlaps(dt.span, daysWindow(date, date, startHour))) {
                     overdueDates.add(date);
                 }
             }

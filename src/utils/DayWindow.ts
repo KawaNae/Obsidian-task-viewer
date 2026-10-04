@@ -54,6 +54,14 @@ export function visualDayOf(ms: number, startHour: number): string {
 }
 
 /**
+ * The visual day an end or a due closes: the day of the moment before it,
+ * so one right at a day's start is the day before's (`SpanRelation.endIn`).
+ */
+export function endDayOf(ms: number, startHour: number): string {
+    return visualDayOf(ms - 1, startHour);
+}
+
+/**
  * The visual day of a date and an `HH:mm` time as written: a time before
  * `startHour` belongs to the day before.
  */

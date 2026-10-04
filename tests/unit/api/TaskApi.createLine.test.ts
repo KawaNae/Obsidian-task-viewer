@@ -37,7 +37,7 @@ function createMockApiForCreate(opts: {
         getTasks: vi.fn().mockReturnValue([]),
         getAllDisplayTasks: vi.fn().mockReturnValue([]),
         getFilteredTasks: vi.fn().mockReturnValue([]),
-        getTasksForDateRange: vi.fn().mockReturnValue([]),
+        tasksInWindow: vi.fn().mockReturnValue([]),
     };
     const operations = {
         createTask: vi.fn().mockResolvedValue(opts.insertedLine),
