@@ -150,7 +150,7 @@ src/
 ├── interaction/
 │   ├── drag/                  # Drag & drop (DragHandler, DragStrategy, strategies/, ghost/)
 │   └── menu/                  # Context menus (MenuHandler, PropertyCalculator, PropertyFormatter, builders/)
-├── modals/                    # Modal UI (CreateTaskModal, ConfirmModal, etc.)
+├── modals/                    # Dialogs (CreateTaskModal, the hub, the send dialog, the questions in modals/ask/)
 ├── suggest/                   # Obsidian property panel autocomplete (color/, line/, tags/)
 ├── utils/                     # Layer-less leaves used by two or more layers (DateUtils, LineBreak, HostWindow, etc.; see "utils placement rule")
 │   └── values/                # Input codecs: how typed text is read into a value (Read<T>, Normalize, DateValues, NumberValues, ChoiceValues, IssueText)
@@ -272,6 +272,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI, also used by "Convert to inline" (shared form widgets live in `modals/form/`). Opens on the name field and creates nothing while the name is empty |
 | **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`, owns a PopoverStack for SuggestController-based fields. Entry: card double-tap, menu Properties items (with field focus) |
 | **OverlayShell** | `views/sharedUI/OverlayShell.ts` | The one surface of the plugin's dialogs and popovers (centered: a dialog, a bottom sheet on a phone; anchored: a popover). Every overlay is given Obsidian's keymap and keeps its hotkeys out while the focus is in it (`HotkeyShield`); a frame after it opens, it puts the focus on the field the body names (`initialFocus`, its text selected), else on the panel itself, and gives the focus back on close. A close the user asks for (×, Escape, the back, outside, a swipe) asks the body first (`beforeClose`, a `CloseAnswer`: close, stay, or a promise waited for; `CloseGate`) |
+| **askChoice / confirm / askText** | `modals/ask/` | The questions put to the user, on OverlayShell's centered panel (a sheet from below on a phone), each answered once when it has closed (`ask`): a choice of buttons opens with the focus on cancel and answers `'cancel'` however else it closes (×, Escape, the back, outside, a swipe); a text opens on its field, says under it what does not read (`issueWords`), and waits for its `submit` before closing. Their button row is `FormActions` (`modals/form/`) |
 | **onFormEnter** | `modals/form/formEnter.ts` | The one answer to whether a field's Enter is the form's: not an IME's commit (`isComposing`, `keyCode` 229, the field's own composition flag; Windows sends `Process`), nor one a list open on the field takes (`takesEnter`, e.g. `ShownSuggest.listShown`). Every field of ours puts its Enter through it; the commit Enter of an IME commits only, and the next Enter is the form's |
 | **SuggestController** | `views/customMenus/SuggestController.ts` | Shared suggest-dropdown machinery (tv-ctrl__suggest) used by both filter-popover value selectors and TaskHubPanel form fields |
 | **PropertyUpdatePlanner** | `services/persistence/PropertyUpdatePlanner.ts` | Pure diff: `Partial<Task>` updates → normalized PropertyOp[] for non-time properties (canonical-location / clear semantics) |
@@ -733,7 +734,7 @@ src/styles/
 ├── _pinned-list.css          # Pinned list component
 ├── _sidebar.css              # Sidebar styles
 ├── _settings.css             # Settings tab
-├── _modal.css                # Modal dialogs
+├── _ask-dialog.css           # Question dialogs (askChoice, confirm, askText)
 ├── _kanban.css               # Kanban view
 ├── _template-creator.css     # Template creator UI
 ├── _cal-base.css             # Shared calendar base styles
@@ -1054,7 +1055,7 @@ Every run is one record, whichever the measure; only the clock differs on ▶. A
 startTimer(subject: Task | { daily: string }, mode: RecordMode, start: { kind: 'countup' } | { kind: 'countdown'; seconds } | { kind: 'pomodoro' })
 ```
 
-`TimerStartRules` answers both the command and the menus: a read-only notation is refused, a task that can trigger a flow does not take `self` (it falls back to `child`, and `TimerMenuBuilder` does not offer the self items), and `self` on a `[x]` row asks (`TimerStartChoiceModal`). The display copies are taken from the Task once, here.
+`TimerStartRules` answers both the command and the menus: a read-only notation is refused, a task that can trigger a flow does not take `self` (it falls back to `child`, and `TimerMenuBuilder` does not offer the self items), and `self` on a `[x]` row asks (`askTimerStart`). The display copies are taken from the Task once, here.
 
 ### Anchors
 

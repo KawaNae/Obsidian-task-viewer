@@ -338,20 +338,6 @@
     box-shadow: none;
 }
 
-/* ─── Input Modal Styles ───────────────────────────────────── */
-
-.input-modal__input-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
-}
-
-.input-modal__label {
-    color: var(--tv-text-muted);
-    font-size: 0.9rem;
-}
-
 .timer-view__toolbar-host {
     flex-shrink: 0;
 }

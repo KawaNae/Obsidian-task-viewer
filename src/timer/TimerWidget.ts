@@ -11,8 +11,7 @@ import type { EventRegistrar, PluginContext } from '../PluginContext';
 import type { Task } from '../types';
 import { AudioUtils } from './AudioUtils';
 import { TimerRecorder } from './TimerRecorder';
-import { TimerStartChoiceModal } from '../modals/TimerStartChoiceModal';
-import type { TimerStartChoice } from './TimerStartMode';
+import { askTimerStart } from '../modals/ask/timerStartChoice';
 import { decideStart } from './TimerStartRules';
 import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
@@ -173,10 +172,10 @@ export class TimerWidget implements SendTimers {
                 new Notice(t('notice.timerTargetReadOnly'));
                 return;
             case 'ask':
-                new TimerStartChoiceModal(this.app, getTaskDisplayName(task), (choice: TimerStartChoice) => {
+                void askTimerStart(this.app, getTaskDisplayName(task)).then((choice) => {
                     if (choice === 'cancel') return;
                     this.startOnTask(task, choice === 'continue' ? 'sibling' : 'self', start);
-                }).open();
+                });
                 return;
             case 'start':
                 this.startOnTask(task, verdict.mode, start);

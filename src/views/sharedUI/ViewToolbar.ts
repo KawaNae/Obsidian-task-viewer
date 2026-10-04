@@ -4,7 +4,8 @@ import { t } from '../../i18n';
 import { ViewUriBuilder, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
 import type { LeafPosition } from '../../services/viewConfig/LeafOpener';
 import { shortNameFor } from '../../services/viewConfig';
-import { InputModal } from '../../modals/InputModal';
+import { askText } from '../../modals/ask/askText';
+import { readFail, readOk } from '../../utils/values/Read';
 import type { Task, ViewTemplate } from '../../types';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
@@ -680,24 +681,28 @@ export class ViewSettingsMenu {
                         return;
                     }
                     const defaultName = options.getCustomName() || options.getDefaultName();
-                    new InputModal(
-                        options.app,
-                        t('toolbar.saveViewTitle'),
-                        t('toolbar.saveViewLabel'),
-                        defaultName,
-                        async (value) => {
-                            const name = value.trim();
-                            if (!name) return;
+                    void askText(options.app, {
+                        title: t('toolbar.saveViewTitle'),
+                        label: t('toolbar.saveViewLabel'),
+                        initial: defaultName,
+                        // A name, as typed: not normalized, only the space around it taken off.
+                        read: (text) => {
+                            const name = text.trim();
+                            return name ? readOk(name) : readFail({ code: 'empty' });
+                        },
+                        submitLabel: t('modal.save'),
+                        submit: async (name) => {
                             const template = templates.getViewTemplate();
                             template.name = name;
                             const writer = new ViewTemplateWriter(templates.notes);
                             const saved = await writer.saveTemplate(folder, template);
-                            // 書けなかったときは、書き込みの層が理由を通知済み。
-                            if (!saved) return;
+                            // The write layer has told why; the dialog stays with the name typed.
+                            if (!saved) return t('toolbar.saveViewFailed');
                             options.onRename(name);
                             new Notice(t('notice.viewSaved', { name }));
+                            return null;
                         },
-                    ).open();
+                    });
                 });
         });
 
