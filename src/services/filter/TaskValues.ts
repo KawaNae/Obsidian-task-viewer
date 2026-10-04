@@ -99,7 +99,7 @@ const WORDS: { [P in ValueProperty]: string } = {
     notation: 'the notation (taskviewer, tasks, dayplanner)',
     tag: 'the tags, inherited ones included; a sort compares the first',
     startDate: 'the moment the task starts; a bare date starts at the start of its day',
-    endDate: 'the moment the task ends; a bare date ends at the end of a day',
+    endDate: 'the moment the task ends; a bare date ends at the end of its day',
     due: 'the moment of the due, inherited ones included; a bare date is due at the end of its day',
     anyDate: 'whether any of start, end and due is set',
     parent: 'whether the task has a parent',

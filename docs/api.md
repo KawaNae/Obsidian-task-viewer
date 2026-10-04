@@ -112,7 +112,7 @@ const result = api.today({
 
 フィルタの元は、`filterFile`、`filter`、単純フィルタと窓（`date`、`from`、`to`）の順に1つだけ使います。上のものがあれば下は読みません（検査もしません）。`list` は `filterFile`（`.md` のテンプレート）と一緒でなければならず、`filterFile` なしで渡すと `'list' requires 'filterFile' (a .md view template)` のエラーです。テンプレートは、そのビューが読むのと同じ形で読みます。ピン留めリストは、`sort` が無ければリストに保存された並べ替えで並びます（ビューと同じ並び）。
 
-`list` の窓は、タスクの実効の日付（暦日）と重なるかで判定し、締切だけのタスクは含みません。`tasksForDateRange` 系の窓は visual な日付（ビューと同じ基準）で判定し、締切だけのタスクを含みます。
+`list` の窓も `tasksForDateRange` 系の窓も、タスクの期間が startHour を考慮した visual な日（ビューと同じ基準）と重なるかで判定します。時刻の無い終了日はその日を含みます（`@2026-10-01>2026-10-04` は 10/04 に当たる）。締切だけのタスクは締切を終了とみなした期間（締切の日、時刻付きの締切なら締切の前の1時間）で当たります。
 
 `leaf` は子タスクを持たないタスクです。チェックボックスの無い子の行やリンクは子タスクに数えません。`today` の `leaf` も同じです。
 
@@ -149,7 +149,7 @@ const result = api.today({
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
-`today` の「本日」は、startHour を考慮した今の visual な日付です。実効の開始が本日以前で実効の終了が本日以後のタスク（終了の無いタスクは開始の日だけ）と、開始の無いタスクのうち締切が本日のものを返します。
+`today` の「本日」は、startHour を考慮した今の visual な日付です。期間が本日の visual な日と重なるタスクを返します。締切だけのタスクは、締切を終了とみなした期間で当たります。
 
 **ApiSortRule:** `{ property, direction? }`。`property` は次のいずれかで、`direction` は `'asc'`（既定）か `'desc'` です。値の無いタスクは `asc` で先に来ます。`sort` を渡さないときは `due`、`startDate`、`content` の順です。知らない `property` はエラーです（`Invalid sort: rules[0]: Unknown sort property: ...`）。
 
@@ -157,8 +157,8 @@ const result = api.today({
 |----------|----------|
 | `content` | タスクの内容 |
 | `due` | 実効の締切（見出しやノートから受け継いだものを含む）。時刻があれば時刻も |
-| `startDate` | 実効の開始日。時刻は比べない |
-| `endDate` | 実効の終了日。時刻は比べない |
+| `startDate` | 期間の開始の瞬間。時刻まで比べ、日付だけの開始はその日の先頭 |
+| `endDate` | 期間の終了の瞬間。時刻まで比べ、日付だけの終了はその日の最後 |
 | `file` | ファイルパス |
 | `status` | ステータス文字 |
 | `tag` | タグ（受け継いだものを含む）の先頭 |
@@ -295,7 +295,7 @@ const result = await api.tasksForDateRange({
 // => TaskListResult（list と同じ { total, count, truncated, limit, tasks }）
 ```
 
-visual な期間が窓 [from, to] と重なるタスクを返します。締切だけのタスクは、締切が窓に入れば含みます。プリセットは期間の全体をとります（`from: 'thisWeek', to: 'thisWeek'` はその週）。単純フィルタ、`filter`、`filterFile` と `list` は窓の中のタスクを絞るだけで、窓は動かしません。フィルタの元の選び方は list と同じです。
+visual な期間が窓 [from, to] と重なるタスクを返します。締切だけのタスクは、締切を終了とみなした期間で当たります。プリセットは期間の全体をとります（`from: 'thisWeek', to: 'thisWeek'` はその週）。単純フィルタ、`filter`、`filterFile` と `list` は窓の中のタスクを絞るだけで、窓は動かしません。フィルタの元の選び方は list と同じです。
 
 **TasksForDateRangeParams:**
 
@@ -326,12 +326,12 @@ const result = await api.categorizedTasksForDateRange({
   from: '2026-03-01',
   to: '2026-03-31',
 });
-// => { "2026-03-01": { allDay: [...], timed: [...], dueOnly: [...] }, ... }
+// => { "2026-03-01": { allDay: [...], timed: [...] }, ... }
 ```
 
-日付範囲のタスクを日付ごとに allDay（終日）/ timed（時刻あり）/ dueOnly（締切のみ）に分類して返します。
+日付範囲のタスクを日付ごとに allDay（終日）/ timed（時刻あり）に分類して返します。
 
-日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインのカード表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。絞り込みのパラメータは tasksForDateRange と同じで、窓の中のタスクを絞るだけです。
+日付への所属は、startHour を考慮した visual な日付（タイムラインのカード表示と同じ基準）で判定されます。締切だけのタスクは締切を終了とみなした期間を持ち、日付の締切は allDay、時刻付きの締切は timed に入ります。絞り込みのパラメータは tasksForDateRange と同じで、窓の中のタスクを絞るだけです。
 
 **CategorizedTasksForDateRangeParams:**
 
@@ -492,7 +492,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `effectiveEndDate` | `string \| null` | 期間の終了の瞬間の暦の日付（`@2026-10-04` は `2026-10-05`） |
 | `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
 | `effectiveDue` | `string \| null` | 受け継ぎを含む締切。行に無ければ見出しやノートの締切（フィルタと並べ替えの `due` はこの値） |
-| `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（フィルタの `length` と同じ。`@2026-10-04` は 1440）。期間の無いタスクは `null` |
+| `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（フィルタの `length` と同じ。`@2026-10-04` と `@>>2026-10-04` は 1440）。日付も締切も無いタスクは `null` |
 | `properties` | `Record<string, unknown>` | カスタムプロパティ。値は型に従う: 数は `number`、真偽値（`true` `True` `TRUE` `false` `False` `FALSE`。行でも frontmatter でも同じ）は `boolean`、配列は `string[]`、ほかは `string` |
 | `flow` | `string \| null` | `==>` に続くフローのコマンドを正規の形で1行にしたもの（例: `every tue,fri`、[コマンド](commands.md)）。子の `- ==>` 行も含む。無ければ `null` |
 

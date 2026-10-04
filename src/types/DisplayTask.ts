@@ -47,8 +47,9 @@ export interface DisplayTask extends Task {
     stated: StatedDates;
     /**
      * The time the whole task occupies (`resolveSpan`): a segment of a split
-     * task holds its line's span. null for a task with no date and for a
-     * task with a due only.
+     * task holds its line's span. A task with only a due has the span read
+     * from its due (`spanDates`); null only for a task with no date and no
+     * due.
      */
     span: TaskSpan | null;
     /** The moment of the due (`resolveSpan`): a bare date's is the end of its visual day. */

@@ -78,7 +78,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 
 > `from`/`to` は inclusive なクエリ窓です。窓と期間が重なるタスクが対象になります（例: 6/28〜7/2 のタスクは `from=2026-07-01` に含まれます）。`date` と `from`/`to` の同時指定はエラーです。
 >
-> list の窓は effective な日付（カレンダー基準、締切のみのタスクは対象外）で判定します。tasks-for-date-range 系の窓は visual な日付（タイムライン表示と同じ基準、締切のみのタスクを含む）で判定します。
+> list の窓も tasks-for-date-range 系の窓も、期間が visual な日（タイムライン表示と同じ基準）と重なるかで判定します。時刻の無い終了日はその日を含みます。締切のみのタスクは締切を終了とみなした期間で当たります。
 >
 > `filter-file` は Public API にそのまま渡し、ファイルは API が読みます（[api.md の list](api.md#list--today)）。`filter-file` があると、単純フィルタフラグと `date`/`from`/`to` は読まれません。`list` は `filter-file`（`.md` テンプレート）と一緒でなければならず、`list` だけを渡すと `'list' requires 'filter-file' (a .md view template)` のエラーです。ピン留めリストは、`sort` が無ければリストに保存された並べ替えで並びます（ビューと同じ並び）。`filter-file` を使うと、ビューと同じく検証エラーのあるタスクを外します。`filter-file` を使わなければ、検証エラーのあるタスクも返します。
 >
@@ -226,7 +226,7 @@ obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31
 
 ### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 
-日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインの表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。単純フィルタフラグはこの分類の後に絞り込みをかけるだけで、期間・分類の判定には関与しません。
+日付範囲のタスクを日付ごとに allDay / timed に分類して返します。日付への所属は、startHour を考慮した visual な日付（タイムラインの表示と同じ基準）で判定されます。締切のみのタスクは締切を終了とみなした期間を持ち、日付の締切は allDay、時刻付きの締切は timed に入ります。単純フィルタフラグはこの分類の後に絞り込みをかけるだけで、期間・分類の判定には関与しません。
 
 ```bash
 obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 to=2026-03-31 status=x
@@ -249,7 +249,7 @@ obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 t
 | `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
 | `list` | | ピン留めリスト名（`.md` テンプレート用） |
 
-**戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...], "dueOnly": [...] }, ... }`
+**戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...] }, ... }`
 
 ### export-image — ビューを画像として保存
 
@@ -359,7 +359,7 @@ obsidian obsidian-task-viewer:help
 | `effectiveEndDate` | `string \| null` | 期間の終了の瞬間の暦の日付（`@2026-10-04` は `2026-10-05`） |
 | `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
 | `effectiveDue` | `string \| null` | 受け継ぎを含む締切 |
-| `durationMinutes` | `number \| null` | 所要時間（分） |
+| `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（`@2026-10-04` と `@>>2026-10-04` は 1440） |
 | `properties` | `Record<string, unknown>` | カスタムプロパティ |
 | `flow` | `string \| null` | `==>` に続くフローのコマンド |
 
