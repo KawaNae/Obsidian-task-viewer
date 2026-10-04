@@ -5,7 +5,10 @@
  * view shows is read from its DOM and what it saves from `getState`.
  *
  * Copy URI is read by standing in for the clipboard while the menu item
- * runs, so the user's clipboard is left alone.
+ * runs, so the user's clipboard is left alone. It writes the view's config
+ * when no view template folder is set, and the name of a template when one
+ * is (`view-templates.test.ts`), so the folder is cleared for these tests and
+ * put back after them.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault open, with the current build
@@ -15,7 +18,11 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
-import { act, closeViews, copyUri, ev, openView, readView, restartView } from '../helpers/view-helper';
+import {
+    act, closeViews, copyUri, ev, openView, overrideSettings, readView, restartView, type HeldSettings,
+} from '../helpers/view-helper';
+
+let held: HeldSettings<'viewTemplateFolder'>;
 
 beforeAll(() => {
     if (!isObsidianRunning()) {
@@ -23,10 +30,12 @@ beforeAll(() => {
     }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
+    held = overrideSettings({ viewTemplateFolder: '' });
 });
 
 afterAll(async () => {
     await closeViews();
+    held?.restore();
 });
 
 /** The toolbar's controls of a Timeline, as it shows them. */
@@ -105,11 +114,13 @@ describe("Timeline's toolbar", () => {
         expect(cards).toBe(0);
     });
 
-    it('copies a URI of its config', () => {
+    it('copies a URI of its config, with no template folder set', () => {
         act('tl', `V('tl').store.update({ filterState: undefined, daysToShow: 5 });`);
         const uri = copyUri('tl');
         expect(uri).toMatch(/^obsidian:\/\/task-viewer\?view=timeline&/);
         expect(uri).toContain('daysToShow=5');
+        expect(uri).toContain('zoomLevel=1');
+        expect(uri).not.toContain('template=');
         expect(uri).not.toContain('date=');
     });
 });
@@ -120,7 +131,10 @@ describe('Kanban', () => {
         expect(r.type).toBe('kanban-view');
         const masked = act('kb', `click('kb', 'button[aria-pressed]');`);
         expect(masked.state.maskMode).toBe(true);
-        expect(copyUri('kb')).toMatch(/^obsidian:\/\/task-viewer\?view=kanban/);
+        const uri = copyUri('kb');
+        expect(uri).toMatch(/^obsidian:\/\/task-viewer\?view=kanban/);
+        expect(uri).toContain('maskMode=true');
+        expect(uri).not.toContain('template=');
         const off = act('kb', `click('kb', 'button[aria-pressed]');`);
         expect(off.state.maskMode).toBe(false);
     });

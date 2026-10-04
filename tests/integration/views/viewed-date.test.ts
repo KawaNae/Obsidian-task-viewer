@@ -26,13 +26,15 @@ import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, act, addDays, calendarLabel, closeViews, ev, goToDate, gridDays, monthGridStart, navigate,
-    openUri, openView, readSettings, readView, restartView, saveSettings, setViewState, visualDay, type ViewReading,
+    openUri, openView, overrideSettings, readView, restartView, saveSettings, setViewState, visualDay,
+    type HeldSettings, type ViewReading,
 } from '../helpers/view-helper';
 
 const KEYS = ['startHour', 'pastDaysToShow', 'startFromOldestOverdue', 'weekStartDay'] as const;
 type Settings = { startHour: number; pastDaysToShow: number; startFromOldestOverdue: boolean; weekStartDay: number };
 
 let original: Settings;
+let held: HeldSettings<typeof KEYS[number]>;
 let today: string;
 let past: number;
 let ws: number;
@@ -56,8 +58,8 @@ beforeAll(async () => {
     }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
-    original = readSettings(KEYS) as unknown as Settings;
-    saveSettings({ startFromOldestOverdue: false });
+    held = overrideSettings({ startFromOldestOverdue: false }, KEYS);
+    original = held.original as unknown as Settings;
     today = visualDay(original.startHour);
     past = original.pastDaysToShow;
     ws = original.weekStartDay;
@@ -66,7 +68,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
     await closeViews();
-    saveSettings({ ...original });
+    held?.restore();
 });
 
 describe('Timeline', () => {
