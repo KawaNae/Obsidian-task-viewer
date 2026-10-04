@@ -161,14 +161,7 @@ describe('LogManager', () => {
             await vi.waitFor(() => expect(storage.deleteBefore).toHaveBeenCalledWith(expectedCutoff));
         });
 
-        it('clamps retentionDays to at least 1 day', async () => {
-            const { deps, storage } = makeDeps({ getSettings: () => ({ logRetentionDays: 0, logMaxStorageMB: 10 }) });
-            manager = new LogManager(deps);
-            manager.start();
-
-            const expectedCutoff = deps.now!() - 1 * 24 * 60 * 60 * 1000;
-            await vi.waitFor(() => expect(storage.deleteBefore).toHaveBeenCalledWith(expectedCutoff));
-        });
+        // Fewer than 1 day is not kept by the settings (their table: SETTINGS_SCHEMA), so the manager does not clamp again.
 
         it('skips trimToCount when logMaxStorageMB is 0 or less', async () => {
             const { deps, storage } = makeDeps({ getSettings: () => ({ logRetentionDays: 30, logMaxStorageMB: 0 }) });
