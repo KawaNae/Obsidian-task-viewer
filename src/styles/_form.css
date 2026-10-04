@@ -18,7 +18,7 @@
     margin: 24px 0 0;
 }
 
-/* --- 行文法: 左固定幅ラベル列 + コントロール領域 --- */
+/* --- 行文法: 始まり側の固定幅ラベル列 + コントロール領域 --- */
 .tv-form {
     --tv-form-label-width: 7em;
 }
@@ -88,12 +88,12 @@
     min-width: 0;
 }
 
-/* 日付 input 右端の clear(×) と時刻 input 左端の picker が隣接して
+/* 日付 input の終わり側の clear(×) と時刻 input の始まり側の picker が隣接して
    誤タップしやすい → 日付・時刻の間を 1 文字分広げる（余白ぶんは
    flex 配分 3:2 により主に date 側が縮む） */
 .tv-form__field--date {
     flex: 3 1 0;
-    margin-right: 1ch;
+    margin-inline-end: 1ch;
 }
 
 .tv-form__field--time {
@@ -198,21 +198,21 @@
 }
 
 .tv-ctrl .tv-form__input-with-picker .tv-ctrl__text-input {
-    padding-left: 46px;
-    padding-right: 28px;
+    padding-inline-start: 46px;
+    padding-inline-end: 28px;
 }
 
-/* color picker: swatch(16px) がボタン右に入るので padding-left を拡大、
-   clear ボタンなし → padding-right はデフォルトに戻す */
+/* color picker: swatch(16px) がボタンの後ろに入るので始まり側の padding を拡大、
+   clear ボタンなし → 終わり側の padding はデフォルトに戻す */
 .tv-ctrl .tv-form__input-with-picker--color .tv-ctrl__text-input {
-    padding-left: 66px;
-    padding-right: 12px;
+    padding-inline-start: 66px;
+    padding-inline-end: 12px;
 }
 
 .tv-ctrl .tv-form__picker-button {
     position: absolute;
     top: 0;
-    left: 0;
+    inset-inline-start: 0;
     width: 36px;
     height: 100%;
     padding: 0;
@@ -221,7 +221,9 @@
     color: var(--tv-text-muted);
     /* hover 背景が親 input の角丸を貫通しないよう、外側の角は input と
        同じ radius に追従させる（mobile の 44px pill でも clamp で一致） */
-    border-radius: var(--input-radius, var(--tv-radius-s)) 0 0 var(--input-radius, var(--tv-radius-s));
+    border-radius: 0;
+    border-start-start-radius: var(--input-radius, var(--tv-radius-s));
+    border-end-start-radius: var(--input-radius, var(--tv-radius-s));
     box-shadow: none;
     cursor: pointer;
     display: inline-flex;
@@ -234,7 +236,7 @@
 .tv-form__picker-button::before {
     content: '';
     position: absolute;
-    right: 0;
+    inset-inline-end: 0;
     top: 4px;
     bottom: 4px;
     width: 1px;
@@ -281,16 +283,16 @@
    見えなさと、どの端末でタップを受けるかは _controls.css の共通の規則 */
 .tv-form__input-with-picker > input.tv-form__native-picker-input {
     top: 0 !important;
-    left: 0 !important;
+    inset-inline-start: 0 !important;
     width: 36px !important;
     height: 100% !important;
 }
 
-/* Clear button (right side, visible only when input has a value) */
+/* Clear button (at the end of the field, visible only when input has a value) */
 .tv-ctrl .tv-form__clear-button {
     position: absolute;
     top: 0;
-    right: 0;
+    inset-inline-end: 0;
     width: 28px;
     height: 100%;
     display: inline-flex;
@@ -302,7 +304,9 @@
     border: none;
     background: transparent;
     box-shadow: none;
-    border-radius: 0 var(--input-radius, var(--tv-radius-s)) var(--input-radius, var(--tv-radius-s)) 0;
+    border-radius: 0;
+    border-start-end-radius: var(--input-radius, var(--tv-radius-s));
+    border-end-end-radius: var(--input-radius, var(--tv-radius-s));
 }
 
 .tv-ctrl .tv-form__clear-button:enabled:hover {
