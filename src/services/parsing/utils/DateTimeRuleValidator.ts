@@ -31,6 +31,28 @@ export interface DateTimeValidationResult {
  * raw 値 + コンテキストフラグで検証する（effective 値ではなく）。
  * 全ルールを適用し、最初に見つかった警告を返す。
  */
+/**
+ * Rule 4's hint, with the line's own date and end time written the way the
+ * notation allows: a start time on the start date, ending the same day, or
+ * on the end date the line writes (the next day when it writes none). With
+ * no date on the line, the bare request for a start time.
+ */
+function endTimeWithoutStartHint(date: string | undefined, endDate: string | undefined, endTime: string): string {
+    if (!date || !DateUtils.isValidDateString(date) || !DateUtils.isValidTimeString(endTime)) {
+        return t('validationHint.endTimeWithoutStart');
+    }
+    const end = DateUtils.timeToMinutes(endTime);
+    // A start before the end on the same day: 09:00, or the hour before an early end.
+    const sameDayStart = end > 9 * 60 ? '09:00' : DateUtils.minutesToTime(Math.max(0, end - 60));
+    const otherDate = endDate && endDate !== date ? endDate : DateUtils.addDays(date, 1);
+    return t('validationHint.endTimeWithoutStartExample', {
+        time: endTime,
+        endDate: otherDate,
+        sameDay: `@${date}T${sameDayStart}>${endTime}`,
+        otherDay: `@${date}T09:00>${otherDate}T${endTime}`,
+    });
+}
+
 export function validateDateTimeRules(
     input: DateTimeValidationInput
 ): DateTimeValidationResult | undefined {
@@ -80,7 +102,7 @@ export function validateDateTimeRules(
             severity: 'error',
             rule: 'end-time-without-start',
             message: t('validation.endTimeWithoutStart'),
-            hint: t('validationHint.endTimeWithoutStart'),
+            hint: endTimeWithoutStartHint(effectiveStartDate ?? input.endDate, input.endDate, input.endTime),
         };
     }
 
