@@ -1,6 +1,6 @@
 import { type App, Component } from 'obsidian';
-import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type TopRightConfig } from '../../types';
-import { getOverdueLevel, type OverdueLevel } from '../../services/display/TaskStatusQuery';
+import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type StatusDefinition, type TopRightConfig } from '../../types';
+import { exceedsDue, getOverdueLevel, type OverdueLevel } from '../../services/display/TaskStatusQuery';
 import { composeTopRight, topRightText, TIME_TOP_RIGHT, type TopRightPiece } from './TopRightFieldResolver';
 
 /**
@@ -204,6 +204,23 @@ export function computeContentSignature(
     ]);
 }
 
+/**
+ * The overdue mark a card shows: the overdue level (`getOverdueLevel`), and
+ * 🚨 (`past-due`) as well when the task's span runs past its due
+ * (`exceedsDue`), before the due too. The one place a card reads
+ * `exceedsDue`; the overdue counts read `getOverdueLevel` alone.
+ */
+export function cardOverdueLevel(
+    task: DisplayTask,
+    defs: StatusDefinition[],
+    readService: Pick<TaskReadService, 'getDisplayTask'>,
+    now: number = Date.now(),
+): OverdueLevel {
+    const level = getOverdueLevel(task, defs, readService, now);
+    if (level === 'past-due') return level;
+    return exceedsDue(task, defs, readService) ? 'past-due' : level;
+}
+
 export class TaskCardRenderer extends Component {
     private expanded = new ExpandedCards();
     private childItemBuilder: ChildItemBuilder;
@@ -291,7 +308,7 @@ export class TaskCardRenderer extends Component {
             : [];
         const topRightResolved = topRightText(topRightPieces);
         const isExpanded = this.expanded.isOpen(key, row => this.index.getTask(row)?.id);
-        const overdueLevel = getOverdueLevel(task, settings.statusDefinitions, this.readService);
+        const overdueLevel = cardOverdueLevel(task, settings.statusDefinitions, this.readService);
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
             masked, isExpanded, children,
@@ -428,7 +445,7 @@ export class TaskCardRenderer extends Component {
     }
 
     private getOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
-        const level = getOverdueLevel(task, settings.statusDefinitions, this.readService);
+        const level = cardOverdueLevel(task, settings.statusDefinitions, this.readService);
         return level === 'past-due' ? '🚨 '
             : level === 'past-end' ? '⚠️ '
             : '';

@@ -44,3 +44,20 @@ export function getOverdueLevel(
     if (task.span && task.span.endMs <= now) return 'past-end';
     return 'none';
 }
+
+/**
+ * Whether an unfinished task's span runs past its due (`span.endMs > dueMs`):
+ * planned to end after it is due. It does not read the clock, so it holds
+ * before the due too. Only a card's mark reads it (`cardOverdueLevel`); the
+ * overdue counts (Timeline's heading, Schedule, the oldest overdue, the
+ * watcher) do not.
+ */
+export function exceedsDue(
+    task: DisplayTask,
+    defs: StatusDefinition[],
+    readService: Pick<TaskReadService, 'getDisplayTask'>,
+): boolean {
+    if (!task.span || task.dueMs === null) return false;
+    if (task.span.endMs <= task.dueMs) return false;
+    return !isTaskCompleted(task, defs, readService);
+}
