@@ -1,7 +1,8 @@
 import { DateInput } from '../../utils/values/DateValues';
 import { typed } from '../../utils/values/Normalize';
+import { IntInput } from '../../utils/values/NumberValues';
 import { readOk, type Read } from '../../utils/values/Read';
-import { RELATIVE_DATE_PRESETS, type DateFilterValue, type RelativeDatePreset } from './FilterTypes';
+import { NEXT_N_DAYS_RANGE, RELATIVE_DATE_PRESETS, type DateFilterValue, type RelativeDatePreset } from './FilterTypes';
 
 /**
  * The text form of a date filter value, as the API and the CLI take it:
@@ -34,7 +35,8 @@ export function parseDatePreset(input: string): Read<DateFilterValue> {
     const normalized = typed(input).toLowerCase();
     const nextNMatch = normalized.match(/^next(\d+)days$/);
     if (nextNMatch) {
-        return readOk({ preset: 'nextNDays', n: parseInt(nextNMatch[1], 10) });
+        const n = IntInput.read(nextNMatch[1], NEXT_N_DAYS_RANGE);
+        return n.ok ? readOk({ preset: 'nextNDays', n: n.value }) : n;
     }
 
     const preset = BY_LOWER_NAME.get(normalized);

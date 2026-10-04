@@ -1,4 +1,5 @@
 import { t } from '../../i18n';
+import type { NumberRange } from '../../utils/values/NumberValues';
 
 // ── Conditions ──
 
@@ -23,6 +24,9 @@ export type RelativeDatePreset = typeof RELATIVE_DATE_PRESETS[number];
 
 /** `n` of `nextNDays` when none is given. */
 export const DEFAULT_NEXT_N_DAYS = 7;
+
+/** The days `nextNDays` may take: a whole number, one or more (the menu's field, `next<N>days`). */
+export const NEXT_N_DAYS_RANGE: NumberRange = { min: 1 };
 
 export type DateFilterValue =
     | string                                                        // "2024-01-01" (absolute)
@@ -65,6 +69,9 @@ export interface FlagCondition extends Targeted {
     readonly property: FlagProperty;
     readonly operator: PresenceOperator;
 }
+
+/** The length a length condition compares with: a number, 0 or more, in its unit (the menu's field). */
+export const LENGTH_RANGE: NumberRange = { min: 0 };
 
 export interface LengthCondition extends Targeted {
     readonly property: 'length';
