@@ -1,6 +1,6 @@
 import { DateUtils } from '../DateUtils';
 import { dashed, typed } from './Normalize';
-import { readFail, readOk, type Issue, type Read } from './Read';
+import { readFail, readOk, type FieldCodec, type Issue, type Read } from './Read';
 
 /**
  * Dates and times typed by a person or a script.
@@ -24,7 +24,7 @@ export interface DateTimeValue {
     readonly time?: string;
 }
 
-export const DateInput = {
+export const DateInput: FieldCodec<string> = {
     read(text: string): Read<string> {
         const t = dashed(typed(text));
         if (t === '') return readFail({ code: 'empty' });
@@ -32,9 +32,10 @@ export const DateInput = {
         if (DateUtils.readDate(t) === null) return readFail({ code: 'noSuchDay' });
         return readOk(t);
     },
+    show: (date) => date,
 };
 
-export const TimeInput = {
+export const TimeInput: FieldCodec<string> = {
     read(text: string): Read<string> {
         const t = typed(text);
         if (t === '') return readFail({ code: 'empty' });
@@ -43,6 +44,7 @@ export const TimeInput = {
         if (!DateUtils.isValidTimeString(time)) return readFail({ code: 'shape', kind: 'time' });
         return readOk(time);
     },
+    show: (time) => time,
 };
 
 export const DateTimeInput = {

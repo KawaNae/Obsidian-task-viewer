@@ -1,5 +1,5 @@
 import { typed } from './Normalize';
-import { readFail, readOk, type Read } from './Read';
+import { readFail, readOk, type FieldCodec, type Read } from './Read';
 
 /** `true` or `false`, as written. */
 export const BoolInput = {
@@ -12,16 +12,22 @@ export const BoolInput = {
     },
 };
 
-/** One word out of a fixed set, matched as written. */
+/**
+ * One word out of a fixed set, matched as written; with `caseless`, matched
+ * in any case and given back as the set spells it (`Dashed` is `dashed`).
+ */
 export const ChoiceInput = {
-    of<const S extends string>(allowed: readonly S[]) {
-        const set = new Set<string>(allowed);
+    of<const S extends string>(allowed: readonly S[], opts: { caseless?: boolean } = {}): FieldCodec<S> {
+        const fold = (word: string) => (opts.caseless ? word.toLowerCase() : word);
+        const byWord = new Map<string, S>(allowed.map(word => [fold(word), word]));
         return {
             read(text: string): Read<S> {
                 const t = typed(text);
                 if (t === '') return readFail({ code: 'empty' });
-                return set.has(t) ? readOk(t as S) : readFail({ code: 'oneOf', allowed });
+                const word = byWord.get(fold(t));
+                return word !== undefined ? readOk(word) : readFail({ code: 'oneOf', allowed });
             },
+            show: (word) => word,
         };
     },
 };

@@ -1,4 +1,4 @@
-import type { Issue, ShapeKind } from './Read';
+import type { Issue, NotationKind, ShapeKind } from './Read';
 
 /**
  * An issue as one English sentence, for the API's and the CLI's errors
@@ -16,6 +16,13 @@ const SHAPE: Record<ShapeKind, string> = {
     int: 'a whole number',
     number: 'a number',
     bool: 'true or false',
+    color: 'a hex color (ff0000) or a color name (red)',
+};
+
+const NOTATION: Record<NotationKind, string> = {
+    dateBlock: 'a date block (@…); dates go in their own fields',
+    command: 'a command (==>)',
+    blockId: 'a block ID (^id) at its end',
 };
 
 function sentence(issue: Issue, label: string): string {
@@ -29,6 +36,9 @@ function sentence(issue: Issue, label: string): string {
             return `${label} must be at most ${issue.max}`;
         case 'oneOf': return `${label} must be one of: ${issue.allowed.join(', ')}`;
         case 'dateRequired': return `${label} must include a date`;
+        case 'notation': return `${label} must not hold ${NOTATION[issue.kind]}`;
+        case 'chars': return `${label} must not hold: ${issue.chars}`;
+        case 'reserved': return `${label} is reserved`;
     }
 }
 
