@@ -331,6 +331,7 @@ obsidian obsidian-task-viewer:help
 | `thisYear` | 今年 |
 | `next<N>days` | 今後 N 日間（例: `next7days`、`next30days`） |
 | `YYYY-MM-DD` | 絶対日付 |
+| `YYYY-MM-DD HH:mm`、`YYYY-MM-DDTHH:mm` | 日時。日の窓でなく、その瞬間 |
 
 ## 出力フィールド
 
