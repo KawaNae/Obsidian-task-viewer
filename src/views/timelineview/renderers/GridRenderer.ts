@@ -55,7 +55,7 @@ export class GridRenderer {
         const defs = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
         for (const dt of filteredTasks) {
-            if (getOverdueLevel(dt, startHour, defs, readService) === 'none') continue;
+            if (getOverdueLevel(dt, defs, readService) === 'none') continue;
             for (const date of dates) {
                 if (date >= todayVisualDate) continue;
                 if (dt.span && overlaps(dt.span, daysWindow(date, date, startHour))) {

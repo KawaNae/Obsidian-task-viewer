@@ -373,7 +373,7 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
             const tasksOnDate = this.readService.tasksInWindow(
                 daysWindow(d, d, this.plugin.settings.startHour), this.state.filterState);
             return tasksOnDate.some(dt =>
-                getOverdueLevel(dt, this.plugin.settings.startHour, this.plugin.settings.statusDefinitions, this.readService) !== 'none'
+                getOverdueLevel(dt, this.plugin.settings.statusDefinitions, this.readService) !== 'none'
             );
         };
 

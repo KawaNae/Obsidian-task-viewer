@@ -17,8 +17,6 @@ const CHILD_ID = 'tv-inline:notes/a.md:blk:tv-timer-1';
 const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', content: 'parent', blockId: 'tv-timer-anchor', anchor: 'tv-timer-anchor' });
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const dateOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const timeOf = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 function makeHarness(effectiveEnd: Date, written = true) {
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
@@ -40,8 +38,7 @@ function makeHarness(effectiveEnd: Date, written = true) {
             getDisplayTask: (id: string) => (id === CHILD_ID
                 ? {
                     ...child,
-                    effectiveEndDate: dateOf(effectiveEnd),
-                    effectiveEndTime: timeOf(effectiveEnd),
+                    span: { startMs: 0, endMs: effectiveEnd.getTime() },
                 }
                 : undefined),
         }),

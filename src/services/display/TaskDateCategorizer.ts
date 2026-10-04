@@ -1,5 +1,4 @@
 import type { DisplayTask } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
 import { endDayOf, visualDaysOf } from '../../utils/DayWindow';
 import { classifyForSection, type Section } from './SectionClassifier';
 import {

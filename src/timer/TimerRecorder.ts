@@ -291,12 +291,9 @@ export class TimerRecorder {
         const target = tail.task;
 
         const display = this.plugin.getTaskReadService().getDisplayTask(target.id);
-        if (!display?.effectiveEndDate || !display.effectiveEndTime) return undefined;
+        if (!display?.span) return undefined;
 
-        const effectiveEndMs = DateUtils.toDateTime(display.effectiveEndDate, display.effectiveEndTime).getTime();
-        if (Number.isNaN(effectiveEndMs)) return undefined;
-
-        const decision = decideLazyEnd(Date.now(), effectiveEndMs);
+        const decision = decideLazyEnd(Date.now(), display.span.endMs);
         if (decision.kind === 'hold') return decision.floorMs;
 
         const end = new Date(decision.endMs);

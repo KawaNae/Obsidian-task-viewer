@@ -16,7 +16,7 @@ export function findOldestOverdueDate(
         // the previous visual day).
         if (!dt.span) continue;
         const first = visualDaysOf(dt.span, startHour).first;
-        if (getOverdueLevel(dt, startHour, statusDefinitions, readService) === 'none') continue;
+        if (getOverdueLevel(dt, statusDefinitions, readService) === 'none') continue;
         if (!oldest || first < oldest) {
             oldest = first;
         }

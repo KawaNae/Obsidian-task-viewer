@@ -1,4 +1,5 @@
-import { DateUtils } from '../utils/DateUtils';
+import { instantText } from '../utils/DayWindow';
+import { TaskValues } from '../services/filter/TaskValues';
 import type { DisplayTask, PropertyValue } from '../types';
 import type { NormalizedTask } from './TaskApiTypes';
 import {
@@ -38,12 +39,14 @@ const FIELD_EXTRACTORS: { [K in keyof NormalizedTask]: (task: DisplayTask, env: 
     childIds:    (t, { lookup }) => t.childIds.map(id => apiIdOf(id, lookup)),
     color:       t => getEffectiveColor(t) ?? null,
     linestyle:   t => getEffectiveLinestyle(t) ?? null,
-    effectiveStartDate: t => t.effectiveStartDate || null,
-    effectiveStartTime: t => t.effectiveStartTime ?? null,
-    effectiveEndDate:   t => t.effectiveEndDate ?? null,
-    effectiveEndTime:   t => t.effectiveEndTime ?? null,
-    effectiveDue:       t => t.effectiveDue ?? null,
-    durationMinutes:    (t, { startHour }) => computeDurationMinutes(t, startHour),
+    // The span's moments on the calendar and the clock (`@2026-10-04` ends
+    // `2026-10-05` `05:00`); the due as stated, inherited ones included.
+    effectiveStartDate: t => (t.span ? instantText(t.span.startMs).date : null),
+    effectiveStartTime: t => (t.span ? instantText(t.span.startMs).time : null),
+    effectiveEndDate:   t => (t.span ? instantText(t.span.endMs).date : null),
+    effectiveEndTime:   t => (t.span ? instantText(t.span.endMs).time : null),
+    effectiveDue:       t => t.stated.due ?? null,
+    durationMinutes:    t => computeDurationMinutes(t),
     properties:         t => {
         const result: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(getEffectiveProperties(t))) {
@@ -78,9 +81,10 @@ function toNativeValue(pv: PropertyValue): unknown {
 
 // ── Duration computation ──
 
-function computeDurationMinutes(task: DisplayTask, startHour: number): number | null {
-    const ms = DateUtils.getDisplayTaskDurationMs(task, startHour);
-    return ms === null ? null : Math.round(ms / 60_000);
+/** How long the span lasts (`@2026-10-04` is 1440); null with no span, or one that ends before it starts. */
+function computeDurationMinutes(task: DisplayTask): number | null {
+    const length = TaskValues.length(task).value;
+    return length === undefined ? null : Math.round(length / 60_000);
 }
 
 // ── Record extraction (for CLI field selection) ──

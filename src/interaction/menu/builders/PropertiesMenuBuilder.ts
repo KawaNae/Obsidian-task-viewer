@@ -1,10 +1,10 @@
 import type { App, Menu } from 'obsidian';
+import { TaskValues } from '../../../services/filter/TaskValues';
 import type { Task, DisplayTask, PropertyType } from '../../../types';
 import type { Operations } from '../../../services/operations/Operations';
 import type { PluginContext } from '../../../PluginContext';
 import type { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import type { PropertyFormatter } from '../PropertyFormatter';
-import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../services/display/TaskContent';
 import { addStatusItems } from '../../../constants/statusOptions';
 import { openFile } from '../../../utils/NavigationUtils';
@@ -266,8 +266,8 @@ export class PropertiesMenuBuilder {
 
     /** The span the filter's `length` and the API's `durationMinutes` read. */
     private addLengthItem(menu: Menu, task: DisplayTask, startHour: number): void {
-        const durationMs = DateUtils.getDisplayTaskDurationMs(task, startHour);
-        const lengthText = durationMs !== null && durationMs > 0 ? PropertiesMenuBuilder.lengthText(durationMs) : '-';
+        const durationMs = TaskValues.length(task).value;
+        const lengthText = durationMs !== undefined && durationMs > 0 ? PropertiesMenuBuilder.lengthText(durationMs) : '-';
 
         menu.addItem((item) => {
             item.setTitle(t('menu.lengthLabel', { value: lengthText }))

@@ -8,6 +8,7 @@
  * 時刻を決めて言い表すだけの純粋な関数で、どれも「今」を引数で受ける。
  */
 
+import { visualDayOf } from '../utils/DayWindow';
 import type { TimerState } from './TimerState';
 import { DateUtils } from '../utils/DateUtils';
 import { TimeInput } from '../utils/values/DateValues';
@@ -46,9 +47,7 @@ export function rememberedStart(timer: Pick<TimerState, 'recorded' | 'priorStart
 }
 
 function visualDateOf(ms: number, startHour: number): string {
-    const at = new Date(ms);
-    return DateUtils.toVisualDate(
-        DateUtils.getLocalDateString(at), DateUtils.formatHHMM(at.getHours(), at.getMinutes()), startHour);
+    return visualDayOf(ms, startHour);
 }
 
 /**
