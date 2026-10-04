@@ -34,7 +34,7 @@ export const FLOW_TYPE_ENV: Record<PropName, StaticType> = {
     'file.name': 'string',
     /** Completion date+time. Arithmetic on it carries the time along. */
     done: 'datetime',
-    /** Completion calendar date (no time) — for day-granular offsets. */
+    /** The visual day of the completion (no time) — for day-granular offsets. */
     today: 'date',
     /**
      * The whole `@` block of the task as the notation writes it.

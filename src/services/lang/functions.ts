@@ -181,7 +181,7 @@ export interface EvalHost {
 }
 
 export interface EvalRuntime {
-    /** Local calendar date of "now" (YYYY-MM-DD). */
+    /** The visual day of "now" (YYYY-MM-DD), which startHour starts. */
     today: string;
     /** Local date+time of "now" (minute/hour grids need the clock). */
     now: { date: string; time: string };

@@ -17,7 +17,7 @@ export interface NextOccurrence {
 }
 
 export interface ScheduleRuntime {
-    /** Local calendar date of "now". */
+    /** The visual day of "now", which startHour starts. */
     today: string;
     /** Local date+time of "now" (minute/hour grids). */
     now: { date: string; time: string };

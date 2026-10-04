@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { FlowExecutor, type FirePlan } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
@@ -109,6 +109,29 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
 
     it('x1: generated line carries no command', () => {
         expect(instanceOf(opsOf(planOf(flowTask('at(today + 1d) x1')))).head).not.toContain('==>');
+    });
+});
+
+describe('FlowExecutor: today is the visual day of the fire', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    /** The next instance's head when `at(today + 1d)` fires at 2026-10-05 02:00 under `startHour`. */
+    function headAt0200(startHour: number): string {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 9, 5, 2, 0));
+        const executor = new FlowExecutor(
+            { getTask: vi.fn(() => undefined), getGenBlock: vi.fn(() => undefined) },
+            () => ({ ...DEFAULT_SETTINGS, startHour }),
+        );
+        return instanceOf(opsOf(executor.planTask(flowTask('at(today + 1d)'), () => undefined, []))).head;
+    }
+
+    it('at 02:00 with startHour 5, today is the day before: today + 1d is the calendar date of now', () => {
+        expect(headAt0200(5)).toContain('@2026-10-05');
+    });
+
+    it('with startHour 0, today is the calendar date: today + 1d is the next date', () => {
+        expect(headAt0200(0)).toContain('@2026-10-06');
     });
 });
 
