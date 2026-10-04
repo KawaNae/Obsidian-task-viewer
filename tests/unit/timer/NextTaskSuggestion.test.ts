@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { DateUtils } from '../../../src/utils/DateUtils';
 import { NextTaskSuggester } from '../../../src/timer/NextTaskSuggester';
 import type TaskViewerPlugin from '../../../src/main';
-import type { DisplayTask } from '../../../src/types';
+import type { DisplayTask, TimeOfDay } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 
 /**
@@ -29,11 +30,12 @@ function window(startOffset: number, endOffset: number, overrides: Partial<Displ
     const e = at(endOffset);
     return {
         ...makeTask({ id: overrides.id ?? 'rw' }),
-        effectiveStartDate: s.date,
-        effectiveStartTime: s.time,
-        effectiveEndDate: e.date,
-        effectiveEndTime: e.time,
-        effectiveDue: undefined,
+        stated: { startDate: s.date, startTime: s.time as TimeOfDay, endDate: e.date, endTime: e.time as TimeOfDay },
+        span: {
+            startMs: DateUtils.toDateTime(s.date, s.time).getTime(),
+            endMs: DateUtils.toDateTime(e.date, e.time).getTime(),
+        },
+        dueMs: null,
         childEntries: [],
         ...overrides,
     } as DisplayTask;

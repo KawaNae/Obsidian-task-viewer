@@ -1,4 +1,5 @@
 import { DateUtils } from '../../utils/DateUtils';
+import { sideValues } from '../../utils/TaskDates';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import { DateInput, TimeInput } from '../../utils/values/DateValues';
@@ -258,14 +259,19 @@ export class DateFieldGroup {
         const dt = toDisplayTask(overlay, this.opts.getStartHour(), this.opts.taskLookup);
         const input = (key: DateKey) => this.inputs.get(key)!;
 
-        input('startDate').placeholder = (dt.startDateImplicit && dt.effectiveStartDate) || 'YYYY-MM-DD';
-        input('startTime').placeholder = (dt.startTimeImplicit && dt.effectiveStartDate && dt.effectiveStartTime) || 'HH:mm';
-        input('endDate').placeholder = (dt.endDateImplicit && dt.effectiveEndDate) || 'YYYY-MM-DD';
-        input('endTime').placeholder = (dt.endTimeImplicit && dt.effectiveEndDate && dt.effectiveEndTime) || 'HH:mm';
+        // What the line does not write is shown faint: the inherited value,
+        // else what the rules make of it, at the precision it is written with
+        // (a bare date has no time).
+        const sides = sideValues(dt, this.opts.getStartHour());
+        const faint = (value: string | undefined, written: boolean | undefined, shape: string) =>
+            (!written && value) || shape;
+        input('startDate').placeholder = faint(sides?.start.date, sides?.start.dateWritten, 'YYYY-MM-DD');
+        input('startTime').placeholder = faint(sides?.start.time, sides?.start.timeWritten, 'HH:mm');
+        input('endDate').placeholder = faint(sides?.end.date, sides?.end.dateWritten, 'YYYY-MM-DD');
+        input('endTime').placeholder = faint(sides?.end.time, sides?.end.timeWritten, 'HH:mm');
 
-        // due の implicit は cascade 継承のみ (raw due なし && effectiveDue あり)。
-        // 開始/終了と同じく placeholder として注入する。
-        const dueInherited: { date?: string; time?: string } = !dt.due && dt.effectiveDue ? DateUtils.splitDateTime(dt.effectiveDue) : {};
+        // due の implicit は cascade 継承のみ (raw due なし && 受け継いだ due あり)。
+        const dueInherited: { date?: string; time?: string } = !dt.due && dt.stated.due ? DateUtils.splitDateTime(dt.stated.due) : {};
         input('dueDate').placeholder = dueInherited.date || 'YYYY-MM-DD';
         input('dueTime').placeholder = dueInherited.time || 'HH:mm';
     }

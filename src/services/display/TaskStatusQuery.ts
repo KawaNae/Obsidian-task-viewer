@@ -1,7 +1,6 @@
 import type { DisplayTask, StatusDefinition } from '../../types';
 import { isCompleteStatusChar } from '../../types';
 import type { TaskReadService } from '../data/TaskReadService';
-import { DateUtils } from '../../utils/DateUtils';
 
 export type OverdueLevel = 'none' | 'past-end' | 'past-due';
 
@@ -29,30 +28,19 @@ export function isTaskCompleted(
     return true;
 }
 
+/**
+ * Whether an unfinished task is late at `now`: past its due (`dueMs ≤ now`),
+ * else past the end of its span (`span.endMs ≤ now`). A segment of a split
+ * task holds the span of its line, so it is judged as the whole task.
+ */
 export function getOverdueLevel(
     task: DisplayTask,
-    startHour: number,
     defs: StatusDefinition[],
     readService: Pick<TaskReadService, 'getDisplayTask'>,
+    now: number = Date.now(),
 ): OverdueLevel {
-    // overdue は「現在時刻 × タスク本来の日付」の絶対判定。split セグメントは
-    // ビュー境界で切られた effective 日付を持つため、元タスクに解決して判定する。
-    if (task.isSplit && task.originalTaskId !== task.id) {
-        const original = readService.getDisplayTask(task.originalTaskId);
-        if (original) task = original;
-    }
-
     if (isTaskCompleted(task, defs, readService)) return 'none';
-
-    if (task.effectiveDue && DateUtils.isPastDue(task.effectiveDue, startHour)) {
-        return 'past-due';
-    }
-
-    if (task.effectiveEndDate) {
-        if (DateUtils.isPastDate(task.effectiveEndDate, task.effectiveEndTime, startHour)) {
-            return 'past-end';
-        }
-    }
-
+    if (task.dueMs !== null && task.dueMs <= now) return 'past-due';
+    if (task.span && task.span.endMs <= now) return 'past-end';
     return 'none';
 }

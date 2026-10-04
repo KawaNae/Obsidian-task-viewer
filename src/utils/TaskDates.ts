@@ -1,6 +1,6 @@
-import type { StatedDates, Task, TaskSpan } from '../types';
+import type { DisplayTask, StatedDates, Task, TaskSpan } from '../types';
 import { DateUtils } from './DateUtils';
-import { dayStart, instantAt } from './DayWindow';
+import { dayStart, instantAt, instantText, visualDayOf } from './DayWindow';
 
 /**
  * The dates a task's note states for it: what its line writes, and what its
@@ -131,4 +131,67 @@ function dueMsOf(due: string | undefined, startHour: number): number | null {
         ? instantAt(date, DateUtils.timeToMinutes(time))
         : dayStart(DateUtils.addDays(date, 1), startHour);
     return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * The date a date-only end is written with to end at `endMs` (a day's
+ * start), under the rule `resolveSpan` reads it by: the end of E's implicit
+ * `(startHour−1):59`, which is `dayStart(E)`, or at `startHour` 0 the end of
+ * E itself.
+ */
+export function dateOnlyEndDate(endMs: number, startHour: number): string {
+    const { date } = instantText(endMs);
+    return startHour === 0 ? DateUtils.addDays(date, -1) : date;
+}
+
+/**
+ * One side of a task (its start or its end) as the hub and the menu show
+ * it: what the line writes, else what it inherits, else what the rules make
+ * of it. A value the rules make is given at the precision it would be
+ * written with, so copied into the line it means the same: a side that rests
+ * on a bare date has a date and no time (no `05:00`), and a side the rules
+ * time (the default hour's end, `T23:30`'s `00:30` the next day) has both.
+ */
+export interface SideValue {
+    date?: string;
+    time?: string;
+    /** Whether the line writes the date / the time (the rest is shown faint). */
+    dateWritten: boolean;
+    timeWritten: boolean;
+}
+
+type SideSource = Pick<DisplayTask, 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'stated' | 'span'>;
+
+/** The start and the end as {@link SideValue}s; null for a task with no span. */
+export function sideValues(task: SideSource, startHour: number): { start: SideValue; end: SideValue } | null {
+    const { span, stated } = task;
+    if (!span) return null;
+
+    // A side rests on a bare date when no time stands behind it.
+    const bareStart = stated.startDate ? !stated.startTime : !stated.endTime;
+    const bareEnd = !stated.endTime && (!!stated.endDate || !stated.startTime);
+    const start = instantText(span.startMs);
+    const end = instantText(span.endMs);
+
+    return {
+        start: side(task.startDate, task.startTime, stated.startDate, stated.startTime,
+            bareStart ? visualDayOf(span.startMs, startHour) : start.date,
+            bareStart ? undefined : start.time),
+        end: side(task.endDate, task.endTime, stated.endDate, stated.endTime,
+            bareEnd ? dateOnlyEndDate(span.endMs, startHour) : end.date,
+            bareEnd ? undefined : end.time),
+    };
+}
+
+function side(
+    ownDate: string | undefined, ownTime: string | undefined,
+    statedDate: string | undefined, statedTime: string | undefined,
+    madeDate: string, madeTime: string | undefined,
+): SideValue {
+    const value: SideValue = { dateWritten: !!ownDate, timeWritten: !!ownTime };
+    const date = ownDate || statedDate || madeDate;
+    const time = ownTime || statedTime || madeTime;
+    if (date) value.date = date;
+    if (time) value.time = time;
+    return value;
 }

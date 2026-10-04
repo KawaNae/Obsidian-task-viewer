@@ -380,7 +380,6 @@ export default class TaskViewerPlugin extends Plugin {
     private sweepOverdue(): void {
         const changed = this.overdueWatcher.sweep(
             this.readService.getAllDisplayTasks(),
-            this.settings.startHour,
             this.settings.statusDefinitions,
             this.readService,
         );

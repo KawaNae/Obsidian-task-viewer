@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OverdueWatcher } from '../../../../src/services/display/OverdueWatcher';
-import type { DisplayTask } from '../../../../src/types';
+import type { DisplayTask, TimeOfDay } from '../../../../src/types';
+import { DateUtils } from '../../../../src/utils/DateUtils';
 import { DEFAULT_STATUS_DEFINITIONS } from '../../../../src/types';
 import type { TaskReadService } from '../../../../src/services/data/TaskReadService';
 
 const defs = DEFAULT_STATUS_DEFINITIONS;
-const startHour = 5;
 
 const readService = {
     getTask: vi.fn(() => undefined),
@@ -27,14 +27,10 @@ function makeTask(id: string, endTime: string, overrides: Partial<DisplayTask> =
         tags: [],
         originalText: `- [ ] ${id}`,
         isReadOnly: false,
-        effectiveStartDate: '2026-07-13',
-        effectiveStartTime: '09:00',
-        effectiveEndDate: '2026-07-13',
-        effectiveEndTime: endTime,
-        startDateImplicit: false,
-        startTimeImplicit: false,
-        endDateImplicit: false,
-        endTimeImplicit: false,
+        stated: { startDate: '2026-07-13', startTime: '09:00', endTime: endTime as TimeOfDay },
+        span: { startMs: new Date(2026, 6, 13, 9, 0).getTime(), endMs: DateUtils.toDateTime('2026-07-13', endTime).getTime() },
+        dueMs: null,
+        drawn: null,
         originalTaskId: id,
         isSplit: false,
         childEntries: [],
@@ -43,7 +39,7 @@ function makeTask(id: string, endTime: string, overrides: Partial<DisplayTask> =
 }
 
 function sweep(watcher: OverdueWatcher, tasks: DisplayTask[]): boolean {
-    return watcher.sweep(tasks, startHour, defs, readService);
+    return watcher.sweep(tasks, defs, readService);
 }
 
 describe('OverdueWatcher', () => {
@@ -117,7 +113,7 @@ describe('OverdueWatcher', () => {
     it('reports a task that goes from past its end to past its due', () => {
         const watcher = new OverdueWatcher();
         // End at 09:30 (already gone), due later the same day.
-        const withDue = (id: string) => makeTask(id, '09:30', { effectiveDue: '2026-07-13T11:00' });
+        const withDue = (id: string) => makeTask(id, '09:30', { dueMs: new Date(2026, 6, 13, 11, 0).getTime() });
 
         sweep(watcher, [withDue('a')]);
         vi.setSystemTime(new Date(2026, 6, 13, 11, 1));

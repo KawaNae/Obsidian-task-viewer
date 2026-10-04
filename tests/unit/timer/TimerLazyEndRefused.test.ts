@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { DateUtils } from '../../../src/utils/DateUtils';
 import { Notice } from 'obsidian';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
@@ -35,7 +36,7 @@ async function runningPastEnd(mode: RecordMode) {
     s.plugin.getTaskReadService = () => ({
         getDisplayTask: (id: string) => {
             const t = s.index.getTask(id);
-            return t && { ...t, effectiveEndDate: t.endDate ?? t.startDate, effectiveEndTime: t.endTime ?? t.startTime };
+            return t && { ...t, span: { startMs: 0, endMs: DateUtils.toDateTime(t.endDate ?? t.startDate!, t.endTime ?? t.startTime!).getTime() } };
         },
     });
     vi.setSystemTime(at(9, 10));

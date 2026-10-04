@@ -291,10 +291,7 @@ export class TaskCardRenderer extends Component {
             : [];
         const topRightResolved = topRightText(topRightPieces);
         const isExpanded = this.expanded.isOpen(key, row => this.index.getTask(row)?.id);
-        const overdueLevel = getOverdueLevel(
-            task, settings.startHour, settings.statusDefinitions,
-            this.readService,
-        );
+        const overdueLevel = getOverdueLevel(task, settings.statusDefinitions, this.readService);
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
             masked, isExpanded, children,
@@ -431,7 +428,7 @@ export class TaskCardRenderer extends Component {
     }
 
     private getOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
-        const level = getOverdueLevel(task, settings.startHour, settings.statusDefinitions, this.readService);
+        const level = getOverdueLevel(task, settings.statusDefinitions, this.readService);
         return level === 'past-due' ? '🚨 '
             : level === 'past-end' ? '⚠️ '
             : '';
