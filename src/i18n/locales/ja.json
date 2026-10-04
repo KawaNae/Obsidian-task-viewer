@@ -736,6 +736,7 @@
     "pinPending": "解除中 — 移動先のウィンドウをクリック",
     "autoRepeat": "自動繰り返し",
     "minutesRange": "分 ({{min}}〜{{max}})",
+    "minutesAtLeast": "分 ({{min}} 以上)",
     "offsetStart": "開始をずらす",
     "offsetMinutesAgo": "{{minutes}} 分前から",
     "offsetFromTime": "{{time}} から",

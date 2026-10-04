@@ -5,7 +5,8 @@
  * open with the focus on cancel, and answer once: the button pressed, or
  * cancel however else they close (Escape, the close button, a press
  * outside). The timer's Custom... length (`askText`) says under its field
- * what does not read, stays open, and closes on a value that does.
+ * what does not read, stays open, and closes on a value that does, in the
+ * range of the settings' table (a work of a minute or more, 論点6).
  *
  * The delete is chosen from a card's menu, as a user chooses it; the timer
  * is started on the completed row as its menu starts it. The note's bytes
@@ -316,16 +317,17 @@ describe('the timer\'s Custom... length', () => {
             button(${JSON.stringify(tr('modal.ok'))}).click();
             await sleep(200);
             out.abc = askState();
-            type('30');
+            // 論点6: no upper bound on the work's length.
+            type('200');
             enter(input());
-            out.thirty = await closed();
+            out.long = await closed();
             return JSON.stringify(out);
         `);
         expect(steps.opened).toMatchObject({ open: true, title: tr('timer.workDuration'), focus: 'input', value: '25', selected: true, says: null });
-        expect(steps.zero).toMatchObject({ open: true, says: tr('issue.rangeBetween', { min: 1, max: 120 }) });
+        expect(steps.zero).toMatchObject({ open: true, says: tr('issue.rangeAtLeast', { min: 1 }) });
         expect(steps.typing).toMatchObject({ open: true, says: null });
         expect(steps.abc).toMatchObject({ open: true, says: tr('issue.shape.int') });
-        expect(steps.thirty).toEqual({ open: false });
-        expect(readSettings(KEYS)).toEqual({ pomodoroWorkMinutes: 30 });
+        expect(steps.long).toEqual({ open: false });
+        expect(readSettings(KEYS)).toEqual({ pomodoroWorkMinutes: 200 });
     });
 });
