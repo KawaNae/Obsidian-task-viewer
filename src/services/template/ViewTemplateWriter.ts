@@ -12,6 +12,7 @@
 import type { TFile } from 'obsidian';
 import type { ViewTemplate } from '../../types';
 import { templateNoteContent, templateNotePath, yamlQuoted, type TemplateNoteSaver } from './TemplateNote';
+import type { WriteAnswer, WriteTelling } from '../operations/WriteAnswer';
 
 export class ViewTemplateWriter {
     constructor(
@@ -22,12 +23,12 @@ export class ViewTemplateWriter {
      * Save a view template to the configured folder, over the note of the
      * same name if there is one (`saveTemplateNote`).
      *
-     * @returns the note, or null when it was not written, overwritten or
-     * created (the write layer has told the user why).
+     * @returns whether the note was written, overwritten or created, and why
+     * not when it was not (`TemplateNoteSaver.saveTemplateNote`).
      */
-    async saveTemplate(folderPath: string, template: ViewTemplate): Promise<TFile | null> {
+    async saveTemplate(folderPath: string, template: ViewTemplate, opts: WriteTelling = {}): Promise<WriteAnswer & { file?: TFile }> {
         const filePath = templateNotePath(folderPath, template.name);
-        return this.notes.saveTemplateNote(filePath, template.name, this.buildFileContent(template));
+        return this.notes.saveTemplateNote(filePath, template.name, this.buildFileContent(template), opts);
     }
 
     private buildFileContent(template: ViewTemplate): string {

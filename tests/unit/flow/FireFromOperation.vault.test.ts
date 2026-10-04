@@ -170,7 +170,7 @@ describe('rows that read alike (N2, Q2)', () => {
         const note = await open(['# note', WEEKLY, WEEKLY, '']);
         const [, second] = note.session.index.getTasks().sort((a, b) => a.line - b.line);
 
-        expect(await note.session.ops.updateTask(second.id, { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(second.id, { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
 
         expect(note.fired).toEqual(['週報']);
@@ -184,7 +184,7 @@ describe('a card\'s completion', () => {
     it('writes the check and the fire in one write, and fires once', async () => {
         const note = await open(['# note', WEEKLY, '- [ ] U', '']);
 
-        expect(await note.session.ops.updateTask(note.idOf('週報'), { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(note.idOf('週報'), { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
 
         expect(note.writes()).toBe(1);
@@ -197,9 +197,9 @@ describe('a card\'s completion', () => {
     it('fires nothing for a write that does not complete the row: a completed row edited, or given another complete status', async () => {
         const note = await open(['# note', WEEKLY.replace('[ ]', '[x]'), '']);
 
-        expect(await note.session.ops.updateTask(note.idOf('週報'), { color: 'ff0000' })).toBe(true);
+        expect((await note.session.ops.updateTask(note.idOf('週報'), { color: 'ff0000' })).written).toBe(true);
         await note.session.flowSettled(FILE);
-        expect(await note.session.ops.updateTask(note.idOf('週報'), { statusChar: '-' })).toBe(true);
+        expect((await note.session.ops.updateTask(note.idOf('週報'), { statusChar: '-' })).written).toBe(true);
         await note.session.flowSettled(FILE);
 
         expect(note.fired).toEqual([]);
@@ -224,8 +224,8 @@ describe('a card\'s completion', () => {
         const id = note.idOf('T');
         note.session.holdScans();
 
-        expect(await note.session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
-        expect(await note.session.ops.updateTask(id, { content: 'T2' })).toBe(true);
+        expect((await note.session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
+        expect((await note.session.ops.updateTask(id, { content: 'T2' })).written).toBe(true);
 
         expect(note.fired).toEqual([]);
         expect(note.contents.get(FILE)!.split('\n')).toEqual([

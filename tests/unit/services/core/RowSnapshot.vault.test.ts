@@ -59,7 +59,7 @@ describe('rowSnapshot', () => {
     it('a name from before a write of ours: the copy that write left, in the lines it left', async () => {
         const { contents, session } = await open();
         const id = idOf(session, 'A');
-        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
 
         const snapshot = await session.ops.rowSnapshot(id);
         expect(snapshot?.task.statusChar).toBe('x');
@@ -80,7 +80,7 @@ describe('rowSnapshot while the note is dragged', () => {
         const { session } = await open();
         const id = idOf(session, 'A');
         session.index.setDraggingFile(FILE);
-        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         Notice.messages.length = 0;
 
         // The store still holds the reading from before the write, under its name.

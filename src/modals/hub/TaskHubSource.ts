@@ -1,6 +1,6 @@
 import { t } from '../../i18n';
 import type { Task } from '../../types';
-import { refusalNotice, type IndexRefusal } from '../../services/core/RefusalClause';
+import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import type { SubtreeReplacement } from '../../services/persistence/TaskOps';
 import { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor } from '../form/source/SourceEditor';
@@ -66,8 +66,6 @@ export interface SourceSurface {
     asked(): void;
 }
 
-export type ReplaceAnswer = { written: true } | { written: false; refused: IndexRefusal | null };
-
 export interface SourceHost {
     /** Resolves once the form's writes queued so far are done. */
     drained(): Promise<void>;
@@ -76,7 +74,7 @@ export interface SourceHost {
     /** The index's copy of the row, followed through our own writes (`IndexReads.getTask`). */
     reread(taskId: string): Task | undefined;
     /** Write the draft (`Operations.replaceSubtree`), the refusal shown here rather than in a notice. */
-    replace(taskId: string, base: readonly string[], replacement: SubtreeReplacement): Promise<ReplaceAnswer>;
+    replace(taskId: string, base: readonly string[], replacement: SubtreeReplacement): Promise<WriteAnswer>;
     /** A new level of indentation, as Obsidian's settings say (`ObsidianConfig.indentUnit`). */
     indentUnit(): string;
     /** Shut the form while the source is open, and open it again after. */
@@ -189,7 +187,7 @@ export class TaskHubSource {
         const answer = await this.host.replace(row.id, opened.frame.base, check.replacement);
         if (this.disposed || this.opened !== opened) return;
         if (answer.written) return this.leave();
-        const message = answer.refused ? refusalNotice(answer.refused) : t('modal.hub.source.notWritable');
+        const message = refusalText(answer.refused);
         this.refused = { key, message };
         this.phase = 'source';
         this.message = message;

@@ -31,7 +31,7 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
         const { s, contents, id } = await session();
         const [deleted, updated] = await Promise.all([
             s.ops.deleteTask(id),
-            s.ops.updateTask(id, { statusChar: 'x' }),
+            s.ops.updateTask(id, { statusChar: 'x' }).then(a => a.written),
         ]);
         expect(deleted).toBe(true);
         expect(updated).toBe(false);
@@ -61,8 +61,8 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
     });
 
     const ops = [
-        { name: 'insertLine (firstChild)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'firstChild') },
-        { name: 'insertLine (afterSubtree)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'afterSubtree') },
+        { name: 'insertLine (firstChild)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'firstChild').then(a => a.written) },
+        { name: 'insertLine (afterSubtree)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'afterSubtree').then(a => a.written) },
     ] as const;
 
     for (const { name, call } of ops) {
@@ -89,7 +89,7 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
         expect(s.index.getTask(id)).toBeUndefined();
         const before = contents.get(FILE);
         Notice.messages.length = 0;
-        expect(await s.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect((await s.ops.updateTask(id, { statusChar: 'x' })).written).toBe(false);
         expect(Notice.messages).toEqual([gone(FILE)]);
         expect(contents.get(FILE)).toBe(before);
         s.dispose();

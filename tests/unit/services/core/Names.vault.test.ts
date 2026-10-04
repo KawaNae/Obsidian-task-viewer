@@ -103,7 +103,7 @@ describe('a name given before our writes brought the file back to a content it h
         const now = session.index.getTask(r2);
         expect(now?.line).toBe(0);
 
-        expect(await session.ops.updateTask(r2, { content: 'A2' })).toBe(true);
+        expect((await session.ops.updateTask(r2, { content: 'A2' })).written).toBe(true);
         expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', ''].join('\n'));
     });
 
@@ -118,7 +118,7 @@ describe('a name given before our writes brought the file back to a content it h
         expect(back).toBe(['- [ ] B', '- [ ] other', ''].join('\n'));
 
         expect(session.index.getTask(b)).toBeUndefined();
-        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(false);
         expect(contents.get(FILE)).toBe(back);
     });
 
@@ -154,7 +154,7 @@ describe('a name given before edits from outside brought the file back to the co
         await session.scanner.queueScan(makeFile(FILE));
 
         expect(session.index.getTask(r2)).toBeUndefined();
-        expect(await session.ops.updateTask(r2, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(r2, { statusChar: 'x' })).written).toBe(false);
         const written = await updateRow(session.repository, held.file, plannedOn(held), { ...held, statusChar: 'x', originalText: '- [x] A' });
         expect(written.written).toBe(false);
         expect(contents.get(FILE)).toBe(first);
@@ -181,9 +181,9 @@ describe('a name given before a write of ours', () => {
         const b = idOf(session, 'B');
         session.holdScans();
 
-        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(true);
-        expect(await session.ops.updateTask(b, { statusChar: ' ' })).toBe(true);
-        expect(await session.ops.updateTask(b, { content: 'B2' })).toBe(true);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(true);
+        expect((await session.ops.updateTask(b, { statusChar: ' ' })).written).toBe(true);
+        expect((await session.ops.updateTask(b, { content: 'B2' })).written).toBe(true);
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] A', '- [ ] B2', ''].join('\n'));
         expect(session.index.getTask(b)?.content).toBe('B2');
@@ -196,9 +196,9 @@ describe('a name given before a write of ours', () => {
         const b = idOf(session, 'B');
 
         const written = await Promise.all([
-            session.ops.updateTask(b, { content: 'B2' }),
-            session.ops.updateTask(b, { statusChar: 'x' }),
-            session.ops.updateTask(b, { startDate: '2026-10-01' }),
+            session.ops.updateTask(b, { content: 'B2' }).then(a => a.written),
+            session.ops.updateTask(b, { statusChar: 'x' }).then(a => a.written),
+            session.ops.updateTask(b, { startDate: '2026-10-01' }).then(a => a.written),
         ]);
 
         expect(written).toEqual([true, true, true]);
@@ -211,12 +211,12 @@ describe('a name given before a write of ours', () => {
         const { contents, session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
         const b = idOf(session, 'B');
 
-        const first = session.ops.updateTask(b, { content: 'B2' });
-        const second = session.ops.updateTask(b, { statusChar: 'x' });
+        const first = session.ops.updateTask(b, { content: 'B2' }).then(a => a.written);
+        const second = session.ops.updateTask(b, { statusChar: 'x' }).then(a => a.written);
         expect(await first).toBe(true);
         const now = session.index.getTask(b)!.id;
         expect(now).not.toBe(b);
-        const third = session.ops.updateTask(now, { startDate: '2026-10-01' });
+        const third = session.ops.updateTask(now, { startDate: '2026-10-01' }).then(a => a.written);
 
         expect(await Promise.all([second, third])).toEqual([true, true]);
         expect(contents.get(FILE)).toBe(['# note', '- [ ] A', '- [x] B2 @2026-10-01', ''].join('\n'));
@@ -232,7 +232,7 @@ describe('a name given before a write of ours', () => {
     it('names nothing once the file changed some other way after it', async () => {
         const { contents, session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
         const b = idOf(session, 'B');
-        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(true);
         expect(session.index.getTask(b)?.statusChar).toBe('x');
 
         contents.set(FILE, ['メモ', ...contents.get(FILE)!.split('\n')].join('\n'));
@@ -269,10 +269,10 @@ describe('a name given before writes of ours to the file being dragged', () => {
         expect(contents.get(FILE)).toBe(['- [ ] A', '- [ ] A', '- [ ] B', ''].join('\n'));
         // Handed the content the file was given in: the write starts from the
         // reading our two writes left, not from the one the names are of.
-        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(true);
 
         // The row is on line 0; the copy on line 1, where it stood.
-        expect(await session.ops.updateTask(r2, { content: 'A2' })).toBe(true);
+        expect((await session.ops.updateTask(r2, { content: 'A2' })).written).toBe(true);
         expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', '- [x] B', ''].join('\n'));
     });
 });
@@ -285,7 +285,7 @@ describe('a copy of a row that names no reading', () => {
         delete session.index.getTask(id)!.reading;
         const told = vi.spyOn(session.ops as unknown as { reportRefusal(refusal: unknown): Promise<void> }, 'reportRefusal');
 
-        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(false);
         expect(told).toHaveBeenCalledTimes(1);
         expect(told.mock.calls[0][0]).toMatchObject({ file: FILE, reason: { kind: 'gone' } });
         expect(contents.get(FILE)).toBe(['- [ ] A', ''].join('\n'));

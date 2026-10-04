@@ -146,18 +146,19 @@ describe('writes after dispose', () => {
     const host = () => buildHost({ disposed: true, refuseAfterDispose: proto.refuseAfterDispose, update: proto.update });
 
     it('are refused rather than written', async () => {
-        expect(await proto.updateTask.call(host(), 'id', {})).toBe(false);
+        expect((await proto.updateTask.call(host(), 'id', {})).written).toBe(false);
         expect(await proto.deleteTask.call(host(), 'id')).toBe(false);
         expect(await proto.duplicateTask.call(host(), 'id')).toBe(false);
         expect(await proto.createTask.call(host(), FILE, '- [ ] x')).toBe(null);
-        expect(await proto.insertLine.call(host(), 'id', '- [ ] x', 'afterSubtree')).toBe(false);
-        expect(await proto.updateByAnchor.call(host(), FILE, 'a', {})).toEqual({ kind: 'not-written' });
+        expect((await proto.insertLine.call(host(), 'id', '- [ ] x', 'afterSubtree')).written).toBe(false);
+        expect(await proto.updateByAnchor.call(host(), FILE, 'a', {})).toEqual({ kind: 'not-written', refused: null });
     });
 
     it('reach neither the index nor the repository', async () => {
         const closed = buildHost({
             disposed: true,
             refuseAfterDispose: proto.refuseAfterDispose,
+            hearer: proto.hearer,
             update: proto.update,
             index: { getTask: vi.fn() },
             repository: { write: vi.fn() },
@@ -174,6 +175,7 @@ describe('writes after dispose', () => {
         const closed = buildHost({
             disposed: true,
             refuseAfterDispose: proto.refuseAfterDispose,
+            hearer: proto.hearer,
             repository: { write: vi.fn() },
         });
 

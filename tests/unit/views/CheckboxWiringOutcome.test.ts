@@ -45,7 +45,7 @@ function wiringAnswering(written: boolean) {
     const operations = {
         updateTask: async (id: string, updates: Record<string, unknown>) => {
             calls.push({ id, updates });
-            return written;
+            return { written };
         },
     } as unknown as Operations;
     return { wiring: new CheckboxWiring(operations, {} as MenuPresenter), calls };

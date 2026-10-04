@@ -162,7 +162,7 @@ describe('a write of one op to a long note', () => {
 
     it('puts a first child under a row that has none', async () => {
         const readings = await readingsOf(async (session) => {
-            expect(await session.ops.insertLine(idOf(session, 'row 1600'), '- [ ] new', 'firstChild')).toBe(true);
+            expect((await session.ops.insertLine(idOf(session, 'row 1600'), '- [ ] new', 'firstChild')).written).toBe(true);
         });
         expect(readings).toEqual({ handed: 1, all: 3 });
     });
@@ -197,7 +197,7 @@ describe('an update of a long note', () => {
             // has landed: it then reads what the index already holds, and
             // reads no outline.
             const scans = session.holdScans();
-            expect(await session.ops.updateTask(row.id, { content: 'row 1500 renamed' })).toBe(true);
+            expect((await session.ops.updateTask(row.id, { content: 'row 1500 renamed' })).written).toBe(true);
             await scans.release();
             await session.settle(FILE);
             const long = read.mock.calls.filter(([lines]) => lines.length > 3000);

@@ -30,10 +30,10 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
     // 変更系は「書けた」を返す。API は書けなかった write をエラーにするので、
     // 既定の undefined のままだとパラメータ検証のケースが書き込み失敗で落ちる。
     const mockWriteService = {
-        updateTask: vi.fn().mockResolvedValue(lands),
+        updateTask: vi.fn().mockResolvedValue({ written: lands, refused: null }),
         deleteTask: vi.fn().mockResolvedValue(lands),
         duplicateTask: vi.fn().mockResolvedValue(lands),
-        insertLine: vi.fn().mockResolvedValue(lands),
+        insertLine: vi.fn().mockResolvedValue({ written: lands, refused: null }),
         createTask: vi.fn().mockResolvedValue(lands ? 0 : null),
     };
     const mockPlugin = {

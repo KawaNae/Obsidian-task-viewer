@@ -199,7 +199,7 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
     it('goes past the task\'s text that goes on, as its first child', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', 'lazy words', '- [ ] U', '']);
 
-        expect(await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).toBe(true);
+        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', 'lazy words', '    - memo:: x', '- [ ] U', '']);
@@ -209,7 +209,7 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
     it('goes past the last property\'s subtree, as its sibling, tab and spaces mixed', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '- [ ] U', '']);
 
-        expect(await session.ops.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number', number: 1 }, b: { value: '2', type: 'number', number: 2 } } } as never)).toBe(true);
+        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number', number: 1 }, b: { value: '2', type: 'number', number: 2 } } } as never)).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '\t    - b:: 2', '- [ ] U', '']);
@@ -221,7 +221,7 @@ describe('the next instance (insert-instance, groupHead)', () => {
     it('writes the next instance spelled as the row, its command its child, so the series goes on (H2)', async () => {
         const { contents, session } = await open(['# n', '1.    [ ] 対象 @2026-09-21', '      - ==> every mon', '']);
 
-        expect(await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '1.    [ ] 対象 @2026-09-28', '      - ==> every mon', '1.    [x] 対象 @2026-09-21', '']);
@@ -233,7 +233,7 @@ describe('the next instance (insert-instance, groupHead)', () => {
     it('goes under the parent past its text that goes on', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '  words', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
 
-        expect(await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '  words', '  - [ ] 対象 @2026-09-28 ==> every mon', '  - [x] 対象 @2026-09-21', '']);
@@ -265,7 +265,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
         const { contents, session } = await open(['# n', '1. [ ] T', '  - [ ] U', '']);
         expect(parents(session)).toEqual([['T', null], ['U', null]]);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '1. [ ] T', '  - [x] rec', '  - [ ] U', '']);
@@ -275,7 +275,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes past the completed run, at the indentation of the last of it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '- [ ] U', '']);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [x] r2', 'afterCompletedRun')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] r2', 'afterCompletedRun')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '    - [x] r2', '- [ ] U', '']);
@@ -285,7 +285,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes above a fence at the top that never closes, which ends the row', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '```', 'x', '']);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).written).toBe(true);
         await session.settle(FILE);
 
         // T's subtree is its own line (the fence at column 0 ends T): the
@@ -301,7 +301,7 @@ describe('siblings spelled at different columns (the P1 counterexample run\'s C)
         const { contents, session } = await open(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['U', 'P'], ['c', 'U']]);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [x] N', 'afterCompletedRun')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] N', 'afterCompletedRun')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '  - [x] N', '']);
@@ -312,7 +312,7 @@ describe('siblings spelled at different columns (the P1 counterexample run\'s C)
         const { contents, session } = await open(['# n', '- note', '1. [ ] A', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
         expect(parents(session)).toEqual([['A', null], ['対象', null]]);
 
-        expect(await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- note', '- [ ] 対象 @2026-09-28 ==> every mon', '1. [ ] A', '  - [x] 対象 @2026-09-21', '']);
@@ -324,7 +324,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
     it('puts a first child past the task\'s code below a blank line', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '', '\t\tcode', '- [ ] U', '']);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '', '\t\tcode', '    - [ ] c', '- [ ] U', '']);
@@ -343,7 +343,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
     it('puts the next instance under its parent past the parent\'s second paragraph, so the series goes on', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '', '    desc', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
 
-        expect(await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '', '    desc', '  - [ ] 対象 @2026-09-28 ==> every mon', '  - [x] 対象 @2026-09-21', '']);
@@ -353,7 +353,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
     it('stops before a blank line past which the text is shallower than the line put', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '', '  para', '']);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         // The file's unit is four spaces (its first indented line).
@@ -365,7 +365,7 @@ describe('a first child (insertLine, firstChild)', () => {
     it('goes below the task, before its children, in an indented fence\'s item', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '  - [ ] T', '    ```', '    x', '    ```', '- [ ] U', '']);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         // No child item to copy: T's indentation and the file's unit (four
@@ -444,7 +444,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('puts a child of a task a quote ends above the quote', async () => {
         const { contents, session } = await open(QUOTE);
 
-        expect(await session.ops.insertLine(only(session, 'T').id, '- [ ] n', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] n', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '    - [ ] n', '> quote', '  - [ ] c', '']);
@@ -465,7 +465,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('puts a child of s3#18255\'s t2 past the empty item underlining it, above the quote', async () => {
         const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
 
-        expect(await session.ops.insertLine(only(session, 't2').id, '- [ ] n', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 't2').id, '- [ ] n', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] t2', '  -', '    - [ ] n', '> text', '  -  [ ] t8', '']);
@@ -486,7 +486,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         // it, where P's text has ended.
         const { contents, session } = await open(ORDERED);
 
-        expect(await session.ops.insertLine(only(session, 'P').id, '- [ ] f', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'P').id, '- [ ] f', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] f', '  - [ ] c', '']);
@@ -502,7 +502,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         it('puts a first child', async () => {
             const { contents, session } = await open(NOTE);
 
-            expect(await session.ops.insertLine(only(session, 'T').id, '- [ ] f', 'firstChild')).toBe(true);
+            expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] f', 'firstChild')).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - [ ] f', '- [ ] V', '']);
@@ -512,7 +512,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         it('puts a property', async () => {
             const { contents, session } = await open(NOTE);
 
-            expect(await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).toBe(true);
+            expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - memo:: x', '- [ ] V', '']);

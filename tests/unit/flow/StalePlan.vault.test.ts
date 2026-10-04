@@ -50,7 +50,7 @@ function idOf(session: VaultSession, content: string): string {
 
 /** Complete the row as a card's check does: the completion and its fire, one write. */
 async function check(session: VaultSession, id: string, ...files: string[]): Promise<void> {
-    expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+    expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
     await session.flowSettled(FILE, ...files);
 }
 
@@ -65,7 +65,7 @@ const CHANGED = t('notice.readAgain', { subject: 'A' });
  */
 async function refusedUntilScanned(contents: Map<string, string>, session: VaultSession, id: string): Promise<string> {
     const edited = contents.get(FILE);
-    expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
+    expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(false);
     expect(contents.get(FILE)).toBe(edited);
     expect(Notice.messages).toEqual([CHANGED]);
     Notice.messages.length = 0;

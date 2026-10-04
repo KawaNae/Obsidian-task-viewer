@@ -45,7 +45,7 @@ describe('a row whose indentation alone was changed from outside', () => {
                 contents.set(FILE, shape.to.join('\n'));
 
                 const write = () => op === 'update'
-                    ? s.ops.updateTask(id, { statusChar: 'x' })
+                    ? s.ops.updateTask(id, { statusChar: 'x' }).then(a => a.written)
                     : s.ops.duplicateTask(id);
                 expect(await write()).toBe(false);
                 expect(contents.get(FILE)).toBe(shape.to.join('\n'));
@@ -55,7 +55,7 @@ describe('a row whose indentation alone was changed from outside', () => {
                 await s.settle(FILE);
                 const again = s.index.getTasks().find(t => t.content === 'A')!.id;
                 expect(await (op === 'update'
-                    ? s.ops.updateTask(again, { statusChar: 'x' })
+                    ? s.ops.updateTask(again, { statusChar: 'x' }).then(a => a.written)
                     : s.ops.duplicateTask(again))).toBe(true);
                 s.dispose();
             });
@@ -64,7 +64,7 @@ describe('a row whose indentation alone was changed from outside', () => {
 
     it('keeps its indentation when an update goes through', async () => {
         const { s, contents, id } = await over(['- [ ] P', '\t- [ ] A', '']);
-        expect(await s.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await s.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         expect(contents.get(FILE)).toBe(['- [ ] P', '\t- [x] A', ''].join('\n'));
         s.dispose();
     });

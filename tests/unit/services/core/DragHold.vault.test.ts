@@ -43,10 +43,10 @@ async function replay(drag: boolean, dupBy: 'anchor' | 'name') {
         const steps: unknown[] = [];
         steps.push(['delete', Boolean((await api.delete({ id: byLine.get(2)! })).deleted)]);
         // Its row went with the delete: refused, and the file is asked to be read again.
-        steps.push(['update-gone', await session.ops.updateTask(byLine.get(3)!, { startDate: '2026-09-15' })]);
+        steps.push(['update-gone', (await session.ops.updateTask(byLine.get(3)!, { startDate: '2026-09-15' })).written]);
         if (dupBy === 'anchor') steps.push(['duplicate', Boolean((await api.duplicate({ id: `${FILE}#^dd` })).duplicated)]);
         else steps.push(['duplicate', await session.ops.duplicateTask(byLine.get(5)!)]);
-        steps.push(['update-child', await session.ops.updateTask(byLine.get(6)!, { startDate: '2026-09-16' })]);
+        steps.push(['update-child', (await session.ops.updateTask(byLine.get(6)!, { startDate: '2026-09-16' })).written]);
         const during = session.index.getTasks().filter(t => t.file === FILE).map(t => t.originalText).sort();
         if (drag) session.index.setDraggingFile(null);
         await session.settle(FILE);

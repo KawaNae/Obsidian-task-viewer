@@ -148,7 +148,7 @@ function makeContext(log: string[], onUpdate?: () => void, written = true): Drag
                 log.push('commit');
                 onUpdate?.();
                 await Promise.resolve();
-                return written;
+                return { written };
             },
         },
         onTaskClick: () => log.push('restoreSelection'),

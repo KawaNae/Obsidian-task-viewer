@@ -45,7 +45,7 @@ function tasksWorded(session: VaultSession, content: string) {
 
 async function fire(session: VaultSession): Promise<void> {
     const [row] = tasksWorded(session, '対象');
-    expect(await session.ops.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+    expect((await session.ops.updateTask(row.id, { statusChar: 'x' })).written).toBe(true);
     await session.flowSettled(FILE);
 }
 
@@ -108,7 +108,7 @@ describe('a next instance with nowhere in the body to go', () => {
         const before = contents.get(FILE);
         const [row] = tasksWorded(session, '対象');
 
-        expect(await session.ops.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(row.id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         const checked = before!.replace('  - [ ] 対象', '  - [x] 対象');

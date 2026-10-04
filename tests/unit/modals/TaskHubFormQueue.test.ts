@@ -16,7 +16,7 @@ import type { Task } from '../../../src/types';
 
 function formAnswering(written: boolean, fresh: Task | undefined) {
     const task = makeTask({ id: 'task-1', content: '元の名前' });
-    const updateTask = vi.fn(async () => written);
+    const updateTask = vi.fn(async () => ({ written }));
     const getTask = vi.fn(() => fresh);
     const refresh = vi.fn();
 
@@ -76,9 +76,9 @@ describe('TaskHubForm.drained', () => {
         const h = formAnswering(true, makeTask({ id: 'task-1' }));
         const order: string[] = [];
         let release!: () => void;
-        h.updateTask.mockImplementationOnce(async () => { await new Promise<void>(resolve => { release = resolve; }); order.push('first'); return true; });
+        h.updateTask.mockImplementationOnce(async () => { await new Promise<void>(resolve => { release = resolve; }); order.push('first'); return { written: true }; });
         let releaseSecond!: () => void;
-        h.updateTask.mockImplementationOnce(async () => { await new Promise<void>(resolve => { releaseSecond = resolve; }); order.push('second'); return true; });
+        h.updateTask.mockImplementationOnce(async () => { await new Promise<void>(resolve => { releaseSecond = resolve; }); order.push('second'); return { written: true }; });
 
         h.queue({ content: 'A' });
         const drained = h.form.drained().then(() => { order.push('drained'); });

@@ -5,7 +5,7 @@ import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
 import type TaskViewerPlugin from '../../../src/main';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
-import { opsOver, rowOf } from '../helpers/anchoredRow';
+import { opsOver, rowOf, answerOf } from '../helpers/anchoredRow';
 import { timerOnDay } from '../helpers/timerRig';
 
 /**
@@ -34,10 +34,10 @@ function makeHarness(): Harness {
     let idSeq = 0;
 
     /** Where a line put in the daily note goes: the harness's own record of it. */
-    const putInDailyNote = async (_date: string, line: string): Promise<string | null> => {
+    const putInDailyNote = async (_date: string, line: string) => {
         appended.push(line);
         registerWrittenLine(line);
-        return DAILY_PATH;
+        return { written: true as const, path: DAILY_PATH };
     };
 
     /** 書いた行を index に載せる（スキャンの代役）。 */
@@ -69,7 +69,7 @@ function makeHarness(): Harness {
             insertLine: async (afterTaskId: string, line: string) => {
                 siblings.push({ afterTaskId, line });
                 registerWrittenLine(line);
-                return true;
+                return answerOf(true);
             },
         }),
     } as unknown as TaskViewerPlugin;

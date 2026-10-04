@@ -194,9 +194,9 @@ export function openPeriodicNote(app: App, desc: PeriodicNote, date: string, cha
  * (`YYYY-MM-DD`; {@link putInNote}), the note made of its template with the
  * line in it when it is not there, in one write.
  *
- * @returns the path of the note written, or null when it was not, the
- * reason told once through the channel of its path. A caller finds the line
- * again by the path: a timer follows its running line by its `^id`, and
+ * @returns what the write did (`NotePut`): the note written, or why not,
+ * told once through the channel of its path. A caller finds the line again
+ * by the note's path: a timer follows its running line by its `^id`, and
  * closes it where it stands when it stops.
  */
 export async function putInPeriodicNote(
@@ -206,12 +206,11 @@ export async function putInPeriodicNote(
     line: string,
     to: Section,
     channelFor: WriteChannels,
-): Promise<string | null> {
+): Promise<NotePut> {
     const path = notePath(desc, date);
-    const outcome = await putInNote(app, path, channelFor(path), {
+    return putInNote(app, path, channelFor(path), {
         where: to, block: Block.line(line), create: () => templateOf(app, desc, date),
     });
-    return outcome.written ? outcome.file.path : null;
 }
 
 /**

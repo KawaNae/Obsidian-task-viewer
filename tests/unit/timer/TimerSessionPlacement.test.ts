@@ -5,7 +5,7 @@ import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
 import type TaskViewerPlugin from '../../../src/main';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
-import { opsOver, rowOf } from '../helpers/anchoredRow';
+import { opsOver, rowOf, answerOf } from '../helpers/anchoredRow';
 import { timerOn } from '../helpers/timerRig';
 
 /**
@@ -88,9 +88,9 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
                 if (place === 'firstChild') {
                     childInserts.push(line);
                     appearWritten(NEW_BLOCK_ID);
-                    return true;
+                    return answerOf(true);
                 }
-                if (options.siblingFails) return false;
+                if (options.siblingFails) return answerOf(false);
                 // `rowId === null` takes the `^id` off the row it names, in the
                 // same write as the insert.
                 if (rowId === null) {
@@ -100,7 +100,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
                 }
                 siblingInserts.push({ taskId, line, opts: { afterCompletedRun: place === 'afterCompletedRun' ? true : undefined } });
                 appearWritten(NEW_BLOCK_ID);
-                return true;
+                return answerOf(true);
             },
         }),
     } as unknown as TaskViewerPlugin;

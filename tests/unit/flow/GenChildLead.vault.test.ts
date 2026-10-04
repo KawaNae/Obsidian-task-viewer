@@ -36,7 +36,7 @@ describe('gen child line led by U+3000 / NBSP after its indentation', () => {
             await live.scanAll();
             expect(live.index.getTasks().map(t => t.content)).toEqual(['target']);
 
-            expect(await live.ops.updateTask(idOf(live, 'target'), { statusChar: 'x' })).toBe(true);
+            expect((await live.ops.updateTask(idOf(live, 'target'), { statusChar: 'x' })).written).toBe(true);
             await live.flowSettled(FILE);
 
             const written = contents.get(FILE)!.split(LF);

@@ -39,7 +39,7 @@ describe('a date block that does not read, through a write', () => {
             expect(row.startDate).toBe('');
             expect(row.validation?.rule).toBe('parse-error');
 
-            expect(await session.ops.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+            expect((await session.ops.updateTask(row.id, { statusChar: 'x' })).written).toBe(true);
             expect(contents.get(FILE)).toBe(['# note', `- [x] A ${block}`, ''].join('\n'));
         });
     }

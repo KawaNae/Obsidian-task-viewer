@@ -58,7 +58,7 @@ describe('1. an update of status or content', () => {
         const { session, contents } = await open(['# note', '- [ ] ', '- [ ] 名前あり', '']);
         const task = expectIndexedBare(session, 1, ' ');
 
-        expect(await session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         const lines = written(contents);
@@ -71,7 +71,7 @@ describe('1. an update of status or content', () => {
         const { session, contents } = await open(['# note', '- [ ] 消す', '- [ ] 残す', '']);
         const task = onlyTask(session, t => t.content === '消す');
 
-        expect(await session.ops.updateTask(task.id, { content: '' })).toBe(true);
+        expect((await session.ops.updateTask(task.id, { content: '' })).written).toBe(true);
         await session.settle(FILE);
 
         const lines = written(contents);
@@ -87,7 +87,7 @@ describe('2. a child inserted with no content', () => {
         const parent = onlyTask(session, t => t.content === '親');
 
         // What TaskApi.insertChildTask sends for `content: ''`.
-        expect(await session.ops.insertLine(parent.id, '- [ ] ', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(parent.id, '- [ ] ', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         const lines = written(contents);
@@ -104,7 +104,7 @@ describe('3. a strip-flow on a task with no content and no date', () => {
         const task = expectIndexedBare(session, 1, ' ');
         expect(task.flow).toBeDefined();
 
-        expect(await session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         const lines = written(contents);
@@ -125,7 +125,7 @@ describe('4. a generated child line with no content', () => {
             '```tv-gen g', '- [ ] 親', '\t- [ ] ', '```', '']);
         const parent = onlyTask(session, t => t.content === '親');
 
-        expect(await session.ops.updateTask(parent.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(parent.id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         const lines = written(contents);
@@ -142,7 +142,7 @@ describe('5. a generated parent line with no content', () => {
             '```tv-gen g', '- [ ] ', '\t- [ ] 子', '```', '']);
         const parent = onlyTask(session, t => t.content === '親');
 
-        expect(await session.ops.updateTask(parent.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(parent.id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         const lines = written(contents);
@@ -177,7 +177,7 @@ describe('7. reading `- [ ] ^abc`', () => {
         const task = expectIndexedBare(session, 1, ' ');
         expect(task.blockId).toBe('abc');
 
-        expect(await session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         const line = written(contents)[1];
@@ -193,7 +193,7 @@ describe('7. reading `- [ ] ^abc`', () => {
     it('writes the checked line as `- [x] ^abc` byte for byte', async () => {
         const { session, contents } = await open(['# note', '- [ ] ^abc', '']);
         const task = expectIndexedBare(session, 1, ' ');
-        expect(await session.ops.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
         expect(written(contents)[1]).toBe('- [x] ^abc');
     });

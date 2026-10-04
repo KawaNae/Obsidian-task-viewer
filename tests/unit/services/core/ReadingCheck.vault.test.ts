@@ -36,13 +36,36 @@ function idOf(session: VaultSession, content: string): string {
     return task.id;
 }
 
+describe('a refusal the caller tells itself (tellRefusal: false)', () => {
+    const operations: [string, (s: VaultSession, id: string) => ReturnType<VaultSession['ops']['updateTask']>][] = [
+        ['updateTask', (s, id) => s.ops.updateTask(id, { statusChar: 'x' }, { tellRefusal: false })],
+        ['insertLine', (s, id) => s.ops.insertLine(id, '- [ ] child', 'firstChild', undefined, { tellRefusal: false })],
+    ];
+
+    for (const [name, operate] of operations) {
+        it(`${name}: answers why, tells no notice, and the index has read the note again`, async () => {
+            const { contents, session } = await open();
+            const id = idOf(session, 'A');
+            contents.set(FILE, OUTSIDE);
+
+            const answer = await operate(session, id);
+
+            expect(answer).toMatchObject({ written: false, refused: { file: FILE, reason: { kind: 'stale' }, subject: 'A' } });
+            expect(contents.get(FILE)).toBe(OUTSIDE);
+            expect(Notice.messages).toEqual([]);
+            // Learnt from all the same: the row is read at its new line.
+            expect(session.index.getTask(idOf(session, 'A'))?.line).toBe(1);
+        });
+    }
+});
+
 describe('an operation over an edit from outside that no scan has read', () => {
     const operations: [string, (s: VaultSession, id: string) => Promise<boolean>][] = [
-        ['updateTask', (s, id) => s.ops.updateTask(id, { statusChar: 'x' })],
+        ['updateTask', (s, id) => s.ops.updateTask(id, { statusChar: 'x' }).then(a => a.written)],
         ['deleteTask', (s, id) => s.ops.deleteTask(id)],
         ['deleteTask with its fire', (s, id) => s.ops.deleteTask(id, { fireFlow: true })],
         ['duplicateTask', (s, id) => s.ops.duplicateTask(id)],
-        ['insertLine', (s, id) => s.ops.insertLine(id, '- [ ] child', 'firstChild')],
+        ['insertLine', (s, id) => s.ops.insertLine(id, '- [ ] child', 'firstChild').then(a => a.written)],
     ];
 
     for (const [name, operate] of operations) {
@@ -80,7 +103,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
         const b = idOf(session, 'B');
 
         expect(await session.ops.duplicateTask(a)).toBe(true);
-        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(true);
 
         expect(contents.get(FILE)).toContain('- [x] B @2026-09-21');
         expect(Notice.messages).toEqual([]);
@@ -98,7 +121,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
         const queueScan = scanner.queueScan.bind(scanner);
         let second: Promise<boolean> | undefined;
         scanner.queueScan = (file) => {
-            second ??= session.ops.updateTask(b, { statusChar: 'x' });
+            second ??= session.ops.updateTask(b, { statusChar: 'x' }).then(a => a.written);
             return queueScan(file);
         };
 
@@ -116,7 +139,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
         session.index.setDraggingFile(FILE);
 
         expect(await session.ops.duplicateTask(a)).toBe(true);
-        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(true);
         session.index.setDraggingFile(null);
 
         expect(contents.get(FILE)).toContain('- [x] B @2026-09-21');
@@ -128,7 +151,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
         const id = idOf(session, 'A');
         contents.delete(FILE);
 
-        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(false);
 
         expect(contents.has(FILE)).toBe(false);
         expect(Notice.messages).toEqual([t('notice.notReadable', { subject: 'A' })]);
@@ -162,7 +185,7 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         const found = await session.ops.freshByAnchor(FILE, 'keep');
         const row = rowOf(found);
         expect(row?.line).toBe(2);
-        expect(await session.ops.updateTask(row!.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(row!.id, { statusChar: 'x' })).written).toBe(true);
 
         expect(contents.get(FILE)).toBe(['メモ', '- [ ] A', '- [x] A ^keep', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
@@ -174,7 +197,7 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         const edited = ['- [ ] A', '- [ ] A ^keep', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await session.ops.updateTask(twin, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(twin, { statusChar: 'x' })).written).toBe(false);
 
         expect(contents.get(FILE)).toBe(edited);
         expect(Notice.messages).toEqual([readAgain('A')]);

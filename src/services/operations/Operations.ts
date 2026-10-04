@@ -16,7 +16,7 @@ import { formatRow } from '../parsing/TaskLineFormat';
 import { planDuplicate } from './DuplicateShift';
 import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { splitLines, type Refusal, type RowRef, type WriteChannels } from '../persistence/FileLines';
+import { splitLines, withRefused, type Refusal, type RowRef, type WriteChannels } from '../persistence/FileLines';
 import type { FiringOutcome } from '../persistence/FiringTrials';
 import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination } from '../persistence/Destination';
@@ -27,6 +27,7 @@ import { outermostRows } from '../persistence/writers/SendRows';
 import { openPeriodicNote, putInPeriodicNote } from '../persistence/Notes';
 import { saveTemplateNote } from '../template/TemplateNote';
 import { dailyNotes, type PeriodicNote } from '../../utils/PeriodicNotes';
+import { notWritten, WRITTEN, type WriteAnswer, type WriteTelling } from './WriteAnswer';
 
 /**
  * A row looked up by its anchor in a reading of the note as the disk holds it
@@ -40,12 +41,13 @@ export type AnchoredRow =
 
 /**
  * What came of a write to the row an anchor names (`Operations.updateByAnchor`):
- * written, with the copy the anchor found; not written, and told the user
- * unless the row is read-only; or the row not found, as {@link AnchoredRow}.
+ * written, with the copy the anchor found; not written, and why (told the
+ * user unless the row is read-only or the caller tells it); or the row not
+ * found, as {@link AnchoredRow}.
  */
 export type AnchoredWrite =
     | { kind: 'written'; task: Task }
-    | { kind: 'not-written' }
+    | { kind: 'not-written'; refused: IndexRefusal | null }
     | { kind: 'none' }
     | { kind: 'unreadable' };
 
@@ -180,11 +182,13 @@ export class Operations {
      * that shows the new values before then shows them from its own state
      * (the hub's draft, the box a click changed), not from the copy.
      *
-     * @returns whether the file was written. Not written: the user has been
-     * told why, once, and the copy still says what the file says.
+     * @returns whether the file was written, and when not, why not
+     * (`WriteAnswer`). Not written, the copy still says what the file says,
+     * and the user has been told why once: by a notice, or by the caller
+     * that asked for the refusal (`tellRefusal: false`).
      */
-    async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
-        return this.update(taskId, updates);
+    async updateTask(taskId: string, updates: Partial<Task>, opts: WriteTelling = {}): Promise<WriteAnswer> {
+        return this.update(taskId, updates, opts);
     }
 
     /**
@@ -197,30 +201,33 @@ export class Operations {
      *
      * @returns `written`, with the copy the anchor found (its name is
      * followed to the row's name now, `IndexReads.getTask`); `not-written`,
-     * told the user unless the row is read-only; `none`, no row carries the
+     * and why, told the user unless the row is read-only or the caller asked
+     * for the refusal (`tellRefusal: false`); `none`, no row carries the
      * anchor; `unreadable`, the note could not be read, which says nothing of
      * whether the row is there. Nothing but `not-written` is told the user.
      */
-    async updateByAnchor(filePath: string, anchor: string, updates: RowUpdates): Promise<AnchoredWrite> {
-        if (this.refuseAfterDispose('updateByAnchor')) return { kind: 'not-written' };
+    async updateByAnchor(filePath: string, anchor: string, updates: RowUpdates, opts: WriteTelling = {}): Promise<AnchoredWrite> {
+        if (this.refuseAfterDispose('updateByAnchor')) return { kind: 'not-written', refused: null };
         const found = await this.freshByAnchor(filePath, anchor);
         if (found.kind !== 'row') return found;
-        return (await this.update(found.task.id, updates)) ? { kind: 'written', task: found.task } : { kind: 'not-written' };
+        const answer = await this.update(found.task.id, updates, opts);
+        return answer.written ? { kind: 'written', task: found.task } : { kind: 'not-written', refused: answer.refused };
     }
 
     /** {@link updateTask} and {@link updateByAnchor}: `updates`, or what they make of the copy planned from. */
-    private async update(taskId: string, updates: RowUpdates): Promise<boolean> {
-        if (this.refuseAfterDispose('updateTask')) return false;
+    private async update(taskId: string, updates: RowUpdates, opts: WriteTelling): Promise<WriteAnswer> {
+        if (this.refuseAfterDispose('updateTask')) return notWritten();
         if (typeof updates !== 'function') logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
         const known = this.index.getTask(taskId);
-        return this.onRow(taskId, () => this.writeUpdate(taskId, updates, known));
+        return this.onRow(taskId, () => this.writeUpdate(taskId, updates, known, this.hearer(opts)));
     }
 
     /** {@link update}, once every write already asked of the row has finished. */
-    private async writeUpdate(taskId: string, asked: RowUpdates, known: Task | undefined): Promise<boolean> {
-        const task = await this.copyToPlan(taskId, known, { write: true });
-        if (!task) return false;
+    private async writeUpdate(taskId: string, asked: RowUpdates, known: Task | undefined, hear: Hear): Promise<WriteAnswer> {
+        const planned = await this.planCopy(taskId, known, { write: true, hear });
+        if ('refused' in planned) return notWritten(planned.refused);
+        const { task } = planned;
         const updates = typeof asked === 'function' ? asked(task) : asked;
         if (typeof asked === 'function') logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
@@ -239,13 +246,13 @@ export class Operations {
         // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
         const text = formatRow({ ...task, ...updates });
         const target = plannedOn(task, { subtree: propertyOps.length > 0 });
-        const written = await this.writeCompleting(
+        const answer = await this.writeCompleting(
             completes(task.originalText, text, this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, childOps: propertyOps }], { fire }));
+            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, childOps: propertyOps }], { fire, refused: heard(hear) }));
 
-        // Not written: the write layer has told the user why (see reportRefusal).
-        if (!written) logWarn(`[Operations] update was not written: id=${taskId} fields=[${Object.keys(updates)}]`);
-        return written;
+        // Not written: why has been told once (see reportRefusal), or is the caller's to tell.
+        if (!answer.written) logWarn(`[Operations] update was not written: id=${taskId} fields=[${Object.keys(updates)}]`);
+        return answer;
     }
 
     /**
@@ -257,10 +264,21 @@ export class Operations {
     private async writeCompleting(
         completingIn: string | null,
         write: (fire?: FireOp) => Promise<FiringOutcome<FireOp>>,
-    ): Promise<boolean> {
+    ): Promise<WriteAnswer> {
         const outcome = await write(completingIn === null ? undefined : this.commandExecutor.fireOp(completingIn));
         this.notices.firing(outcome);
-        return outcome.written;
+        return outcome.written ? WRITTEN : notWritten(outcome.refused);
+    }
+
+    /**
+     * Where a refusal goes: told the user and learnt from (`reportRefusal`),
+     * or, for a caller that tells it in its own place (`tellRefusal: false`),
+     * only learnt from (`learnFrom`).
+     */
+    private hearer(opts: WriteTelling): Hear {
+        return opts.tellRefusal === false
+            ? (refusal) => this.index.learnFrom(refusal)
+            : (refusal) => this.reportRefusal(refusal);
     }
 
     /**
@@ -290,20 +308,18 @@ export class Operations {
         taskId: string,
         base: readonly string[],
         replacement: SubtreeReplacement,
-        opts: { tellRefusal?: boolean } = {},
-    ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
-        if (this.refuseAfterDispose('replaceSubtree')) return { written: false, refused: null };
+        opts: WriteTelling = {},
+    ): Promise<WriteAnswer> {
+        if (this.refuseAfterDispose('replaceSubtree')) return notWritten();
         const known = this.index.getTask(taskId);
-        const hear = opts.tellRefusal === false
-            ? (refusal: IndexRefusal) => this.index.learnFrom(refusal)
-            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
+        const hear = this.hearer(opts);
         return this.onRow(taskId, async () => {
             const planned = await this.planCopy(taskId, known, { write: true, hear });
-            if ('refused' in planned) return { written: false, refused: planned.refused };
+            if ('refused' in planned) return notWritten(planned.refused);
             const { task } = planned;
             if (base.length === 0) {
                 logWarn(`[Operations] replaceSubtree: not a row to write: id=${taskId}`);
-                return { written: false, refused: null };
+                return notWritten();
             }
             logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
             const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
@@ -311,9 +327,9 @@ export class Operations {
             const outcome = await this.repository.replaceSubtree(task.file, target, replacement, {
                 completes: (was, now) => completes(was, now, defs),
                 fire: () => this.commandExecutor.fireOp(task.file),
-            }, { refused: (refusal) => { void hear(refusal); } });
+            }, { refused: heard(hear) });
             this.notices.firing(outcome);
-            return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
+            return outcome.written ? WRITTEN : notWritten(outcome.refused);
         });
     }
 
@@ -349,11 +365,9 @@ export class Operations {
      * handed each note the rows came from whose write landed, as it lands
      * (`SendHearing.landed`).
      */
-    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
+    async send(rows: readonly SendRow[], to: SendTo, opts: WriteTelling & { landed?: (path: string) => void } = {}): Promise<SendWrite> {
         if (this.refuseAfterDispose('send')) return { kind: 'not-done', refused: null };
-        const hear = opts.tellRefusal === false
-            ? (refusal: IndexRefusal) => this.index.learnFrom(refusal)
-            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
+        const hear = this.hearer(opts);
         const asked = new Map<string, SendRow>();
         for (const row of rows) if (!asked.has(row.taskId)) asked.set(row.taskId, row);
         const known = new Map([...asked.keys()].map(id => [id, this.index.getTask(id)]));
@@ -393,7 +407,7 @@ export class Operations {
             })), to, {
                 completes: (was, now) => completes(was, now, defs),
                 fire: (path) => this.commandExecutor.fireOp(path),
-            }, { refused: (refusal) => { void hear(refusal); }, landed: opts.landed });
+            }, { refused: heard(hear), landed: opts.landed });
             if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
             for (const write of outcome.writes) this.notices.firing(write);
             for (const refusal of outcome.refused) await this.index.learnFrom(refusal);
@@ -443,7 +457,7 @@ export class Operations {
     private async planCopy(
         taskId: string,
         known: Task | undefined,
-        opts: { write?: boolean; hear?: (refusal: IndexRefusal) => Promise<void> } = {},
+        opts: { write?: boolean; hear?: Hear } = {},
     ): Promise<{ task: ReadCopy; disk: OnDisk } | { refused: IndexRefusal | null }> {
         const hear = opts.hear ?? ((refusal: IndexRefusal) => this.reportRefusal(refusal));
         const task = this.index.getTask(taskId);
@@ -748,19 +762,22 @@ export class Operations {
      * takes it off (the last session's, once the next one is beside it). Both
      * land or neither does.
      *
-     * @returns whether the line was written.
+     * @returns whether the line was written, and when not, why not, told
+     * as {@link updateTask} tells it.
      */
-    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
-        if (this.refuseAfterDispose('insertLine')) return false;
+    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null, opts: WriteTelling = {}): Promise<WriteAnswer> {
+        if (this.refuseAfterDispose('insertLine')) return notWritten();
+        const hear = this.hearer(opts);
         return this.onRow(taskId, async () => {
-            const task = await this.copyToPlan(taskId, undefined, { write: true });
-            if (!task) return false;
+            const planned = await this.planCopy(taskId, undefined, { write: true, hear });
+            if ('refused' in planned) return notWritten(planned.refused);
+            const { task } = planned;
             logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
             const ops: TaskOp[] = [];
             if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
             ops.push({ kind: 'insert', place, text: line });
-            const { written } = await this.repository.write(task.file, plannedOn(task), ops);
-            return written;
+            const outcome = await this.repository.write(task.file, plannedOn(task), ops, { refused: heard(hear) });
+            return outcome.written ? WRITTEN : notWritten(outcome.refused);
         });
     }
 
@@ -778,9 +795,10 @@ export class Operations {
         if (this.refuseAfterDispose('writeLine')) return false;
         const defs = this.settings.statusDefinitions;
         const completing = ops.some(op => op.kind === 'update' && completes(at.basis.text, op.text, defs));
-        return this.writeCompleting(
+        const answer = await this.writeCompleting(
             completing ? filePath : null,
             (fire) => this.repository.write(filePath, at, ops, { fire }));
+        return answer.written;
     }
 
     /**
@@ -848,12 +866,13 @@ export class Operations {
      * the line in it when it is not there, in one write (`putInPeriodicNote`):
      * a task a view's create dialog makes, a timer's first record.
      *
-     * @returns the path of the note written, or null when it was not, the
-     * reason told the user once.
+     * @returns whether the line was written, with the path of the note when
+     * it was; when not, why not, told as {@link updateTask} tells it.
      */
-    async putInDailyNote(date: string, line: string): Promise<string | null> {
-        if (this.refuseAfterDispose('putInDailyNote')) return null;
-        return putInPeriodicNote(this.app, dailyNotes(this.app), date, line, Destination.taskSection(this.settings), this.channels);
+    async putInDailyNote(date: string, line: string, opts: WriteTelling = {}): Promise<WriteAnswer & { path?: string }> {
+        if (this.refuseAfterDispose('putInDailyNote')) return notWritten();
+        const outcome = await putInPeriodicNote(this.app, dailyNotes(this.app), date, line, Destination.taskSection(this.settings), this.channelsTelling(opts));
+        return outcome.written ? { written: true, path: outcome.file.path } : notWritten(outcome.refused);
     }
 
     /**
@@ -873,12 +892,13 @@ export class Operations {
      * timer's. A whole note, not a row: it plans from no copy. `name` is what
      * the note is about, for a refusal.
      *
-     * @returns the note, or null when it was not written, the reason told the
-     * user once.
+     * @returns whether the note was written, with the note when it was;
+     * when not, why not, told as {@link updateTask} tells it.
      */
-    async saveTemplateNote(path: string, name: string, content: string): Promise<TFile | null> {
-        if (this.refuseAfterDispose('saveTemplateNote')) return null;
-        return saveTemplateNote(this.app, path, this.channels(path), name, content);
+    async saveTemplateNote(path: string, name: string, content: string, opts: WriteTelling = {}): Promise<WriteAnswer & { file?: TFile }> {
+        if (this.refuseAfterDispose('saveTemplateNote')) return notWritten();
+        const outcome = await saveTemplateNote(this.app, path, this.channelsTelling(opts)(path), name, content);
+        return outcome.written ? { written: true, file: outcome.file } : notWritten(outcome.refused);
     }
 
     /**
@@ -887,4 +907,18 @@ export class Operations {
      * down. It does not leave the operations: a consumer asks for the write.
      */
     private readonly channels: WriteChannels = (filePath) => this.repository.channelOf(filePath);
+
+    /** {@link channels}, a refusal only learnt from when the caller tells it (`tellRefusal: false`). */
+    private channelsTelling(opts: WriteTelling): WriteChannels {
+        if (opts.tellRefusal !== false) return this.channels;
+        return (filePath) => withRefused(this.channels(filePath), (refusal) => { void this.index.learnFrom(refusal); });
+    }
+}
+
+/** What a refusal is handed to: told and learnt from, or learnt from only (`Operations.hearer`). */
+type Hear = (refusal: IndexRefusal) => Promise<void>;
+
+/** A write's `refused` callback that hands the refusal to `hear`. */
+function heard(hear: Hear): (refusal: Refusal) => void {
+    return (refusal) => { void hear(refusal); };
 }

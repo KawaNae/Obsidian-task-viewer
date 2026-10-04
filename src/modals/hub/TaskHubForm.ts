@@ -381,7 +381,7 @@ export class TaskHubForm {
         this.task = { ...this.task, ...updates };
         const id = this.task.id;
         const write = this.deps.operations.updateTask(id, updates)
-            .then((written) => {
+            .then(({ written }) => {
                 if (written) return;
                 const fresh = this.deps.index.getTask(id);
                 if (fresh) this.refresh(fresh);
