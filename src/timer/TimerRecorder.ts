@@ -20,6 +20,7 @@ import type { IndexRefusal } from '../services/core/RefusalClause';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
+import { spanDates } from '../utils/TaskDates';
 import { generateTimerTargetId } from './TimerTargetIdUtils';
 import { anchorsOf } from './TimerSendCheck';
 import { logInfo, logWarn } from '../log/log';
@@ -292,6 +293,11 @@ export class TimerRecorder {
 
         const display = this.plugin.getTaskReadService().getDisplayTask(target.id);
         if (!display?.span) return undefined;
+        // A row with only a due is drawn with the span read from the due; an
+        // end written on it would stand with no start (rule 4). The running
+        // row has its start written when the timer starts, so this is a row
+        // whose start was taken off by hand while it ran.
+        if (spanDates(display.stated) !== display.stated) return undefined;
 
         const decision = decideLazyEnd(Date.now(), display.span.endMs);
         if (decision.kind === 'hold') return decision.floorMs;
