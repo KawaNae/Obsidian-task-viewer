@@ -265,7 +265,7 @@ export const FILTER_VALUE_DOC = {
     tag: '"value": ["work"] — includes and excludes take sub-tags too (work matches work/x); equals is the exact tag; only = the task\'s tags are this set and no other',
     status: '"value": [" ", "x"] — status characters',
     content: '"value": "text" — contained, any case',
-    startDate: '"value": "YYYY-MM-DD" or { "preset": "<preset>", "n"?: number } — the visual days the value names; the task\'s moment is compared with them (an end or a due right at a day\'s start is the day before\'s)',
+    startDate: '"value": "YYYY-MM-DD", "YYYY-MM-DDTHH:mm", { "preset": "<preset>", "n"?: number }, or with equals only a range { "from"?, "to"? } — a date or a preset is the visual days it names, and the task\'s moment is compared with them (an end or a due right at a day\'s start is the day before\'s); a date and a time is a moment, compared as a number',
     endDate: '(as startDate)',
     due: '(as startDate)',
     period: '"value": a date, a date and a time, a preset or a range — the span from start to end against the window the value names: overlaps, within (both ends in it), and their negations; the due is not read, and a task with no span matches none',
@@ -331,13 +331,17 @@ function inCliSpelling(text: string, schema: Record<string, ParamSpec> | undefin
     return out;
 }
 
+/** What a range is, beside its shape. */
+const RANGE_WORDS = 'from the start of from\'s day to the end of to\'s, both days included; an end may be a date, a date and a time or a preset, and one left out opens that side. {} and a from after its to are errors.';
+
 function propertiesSection(): string {
     const properties = Object.keys(PROPERTY_OPERATORS) as FilterProperty[];
     const width = Math.max(...properties.map(p => p.length)) + 1;
     const rows = properties.map(p =>
         `  ${p.padEnd(width)}: ${PROPERTY_OPERATORS[p].join(', ')}\n${indent(wrapWords(FILTER_VALUE_DOC[p], 74 - width), width + 4)}`);
     const presets = RELATIVE_DATE_PRESETS.map(p => (p === 'nextNDays' ? `${p} (with "n")` : p)).join(', ');
-    return `${heading('Properties & Operators')}\n${rows.join('\n')}\n\n  Date presets in a FilterState:\n${indent(wrapWords(presets, 70), 4)}`;
+    return `${heading('Properties & Operators')}\n${rows.join('\n')}\n\n  Date presets in a FilterState:\n${indent(wrapWords(presets, 70), 4)}` +
+        `\n\n  A range in a FilterState:\n    { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }\n${indent(wrapWords(RANGE_WORDS, 70), 4)}`;
 }
 
 function filterSection(): string {
@@ -353,7 +357,8 @@ ${heading('FilterState (JSON)')}
     { "logic": "and", "filters": [ { "property": "tag", "operator": "equals", "value": ["work"] } ] }
 
   Negative operators (excludes, notContains, isNotSet) pass a task when the
-  positive one does not.
+  positive one does not. A period's (notOverlaps, notWithin) do not pass a
+  task with no span, and a period condition takes no target.
 
   A condition whose value is not chosen yet (an empty list, no date, no
   number, no key) passes every task.
@@ -382,6 +387,8 @@ ${heading('Dates, Times and Numbers')}
   Datetime:  YYYY-MM-DD HH:mm or YYYY-MM-DDTHH:mm (e.g. 2026-03-15 14:00);
              9:40 is read as 09:40
   Time only: HH:mm (e.g. 14:00), for start and end; a due needs a date
+  A datetime in date, from, to, due and a FilterState's values is that
+  moment, not the day's window, and is saved as YYYY-MM-DDTHH:mm.
   Full-width digits and hyphen-like characters (ー, −) are read as ASCII,
   and spaces around a value are dropped.
   Presets (date, from, to, due; any case):

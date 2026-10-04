@@ -20,14 +20,14 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 ### 日付と時刻
 
-`start`、`end`、`due` と、`date`、`from`、`to`、単純フィルタの `due` は、次のように読みます。
+`start`、`end`、`due` と、`date`、`from`、`to`、単純フィルタの `due`、FilterState の日付の値は、次のように読みます。
 
 | 形 | 例 | 使える所 |
 |----|----|----------|
 | `YYYY-MM-DD` | `2026-03-15` | すべて |
-| `YYYY-MM-DD HH:mm`、`YYYY-MM-DDTHH:mm` | `2026-03-15 14:00` | `start`、`end`、`due` |
+| `YYYY-MM-DD HH:mm`、`YYYY-MM-DDTHH:mm` | `2026-03-15 14:00` | すべて。`date`、`from`、`to`、単純フィルタの `due`、FilterState では日の窓でなく、その瞬間を指します |
 | `HH:mm` | `14:00` | `start`、`end`。`due` は日付が要ります |
-| プリセット | `today`、`thisWeek`、`next7days` | `date`、`from`、`to`、単純フィルタの `due` |
+| プリセット | `today`、`thisWeek`、`next7days` | `date`、`from`、`to`、単純フィルタの `due`、FilterState（`{ preset, n? }`） |
 
 - 日付は実在する日でなければなりません。`2026-02-30` や `2026-13-01` はエラーです（`start must be a day that exists, got: "2026-02-30"`）
 - 時刻は `9:40` を `09:40` と読みます。`25:00` はエラーです
@@ -434,9 +434,9 @@ console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
 | `tag` | `includes`, `excludes`, `equals`, `only` | `string[]`。`includes` と `excludes` は下位のタグも含む（`work` は `work/x` にも当たる）。`equals` はそのタグちょうど、`only` はタスクのタグがこの集合だけ |
 | `status` | `includes`, `excludes` | `string[]`。ステータス文字 |
 | `content` | `contains`, `notContains` | `string`。大文字小文字を問わない部分一致 |
-| `startDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | `'YYYY-MM-DD'` か `{ preset, n? }`。実効の日付で比べ、時刻は見ない |
-| `endDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ |
-| `due` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ。受け継いだ締切（`effectiveDue`）で比べる |
+| `startDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | 日付 `'YYYY-MM-DD'`、日時 `'YYYY-MM-DDTHH:mm'`、`{ preset, n? }`、範囲 `{ from?, to? }`（`equals` だけ）。タスクの開始の瞬間を、値の視覚日の窓と比べる（下の「日付の値の比べ方」） |
+| `endDate` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ。終了の瞬間を区間の終わりとして比べる |
+| `due` | `isSet`, `isNotSet`, `equals`, `before`, `after`, `onOrBefore`, `onOrAfter` | startDate と同じ。締切の瞬間（受け継いだ締切を含む）を区間の終わりとして比べる |
 | `period` | `overlaps`, `within`, `notOverlaps`, `notWithin` | 日付、日時、プリセット、範囲。開始から終了までの期間が、値の窓と重なるか、窓に含まれるか（とその否定）。期限は見ない。期間の無いタスクはどれにも当たらない。`target: parent` は受けない |
 | `anyDate` | `isSet`, `isNotSet` | なし。開始、終了、締切のどれかがあれば set |
 | `color` | `includes`, `excludes` | `string[]` |
@@ -449,15 +449,25 @@ console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
 
 日付のプリセットは `today`、`thisWeek`、`nextWeek`、`pastWeek`、`nextNDays`（`n` で日数）、`thisMonth`、`thisYear` です。
 
+### 日付の値の比べ方
+
+- 日付とプリセットは視覚日（設定の startHour で始まる日）の窓です。`2026-10-04` は `[10/04 05:00, 10/05 05:00)`（startHour 5）
+- 範囲 `{ "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }` は、`from` の日の始まりから `to` の日の終わりまでの窓で、両端の日を含みます。端は日付、日時、プリセットのどれでもよく、片方を省くとその側は開いた窓になります。`{}` と、`from` が `to` より後の範囲はエラーです。開始、終了、締切の条件では `equals` だけが範囲を受けます（`'due' takes a range only with equals`）
+- 開始は窓の中にあれば窓に属し、終了と締切は窓を閉じる側として比べます。`@2026-10-04` は「開始 = 10/04」「終了 = 10/04」に当たり、ちょうど `2026-10-05T05:00` の締切は 10/04 に属します
+- 日時 `2026-10-04T10:00` は瞬間で、開始か終了かを問わず数で比べます。`@2026-10-04T09:00>10:00` は「終了 `before` 10:00」に当たらず、「`onOrBefore`」と「`equals`」に当たります。`@2026-10-04` は「開始 `before` `2026-10-04T10:00`」に当たります
+- `period` に日時を1つ書くと、その瞬間に期間がかかっているタスク（開始 ≤ 瞬間 < 終了）に当たります
+- 読み込んだ `YYYY-MM-DD HH:mm` は `YYYY-MM-DDTHH:mm` に直して保存します
+
 ### 否定と `target: parent`
 
-- 否定の演算子（`excludes`、`notContains`、`isNotSet`）は、肯定の演算子（`includes`、`contains`、`isSet`）が当たらないタスクを通します
+- 否定の演算子（`excludes`、`notContains`、`isNotSet`）は、肯定の演算子（`includes`、`contains`、`isSet`）が当たらないタスクを通します。`period` の否定（`notOverlaps`、`notWithin`）は例外で、期間の無いタスクを通しません
+- `period` の条件は `target` を受けません（`'period' asks about the task itself: it takes no target parent`）
 - `"target": "parent"` は、条件をタスクの祖先（親、その親、…）に問います。肯定の演算子は、祖先のどれかが当たれば通ります。否定の演算子は、どの祖先も肯定に当たらないときに通ります。したがって、親の無いタスクは否定の条件を通り、肯定の条件を通りません
 - 例: `{ property: 'tag', operator: 'excludes', value: ['archive'], target: 'parent' }` は、親か祖父のどちらかが `#archive` を持つタスクを外します
 
 ### 値を選んでいない条件
 
-値を選んでいない条件（空の配列、日付の無い日付の条件、数の無い `length`、`key` の無い `property`）は、すべてのタスクを通します。フィルタメニューで行を足したばかりの状態です。
+値を選んでいない条件（空の配列、日付の無い日付の条件、両端とも選んでいない範囲、数の無い `length`、`key` の無い `property`）は、すべてのタスクを通します。フィルタメニューで行を足したばかりの状態です。
 
 ### 読めない条件
 
