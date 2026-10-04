@@ -10,10 +10,13 @@ import * as FrontmatterTab from './FrontmatterTab';
 import * as ParsersTab from './ParsersTab';
 import * as LogTab from './LogTab';
 import * as AboutTab from './AboutTab';
+import { SettingFields } from './SettingFields';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
     plugin: PluginContext;
     private activeTabId = 'basic';
+    /** The text fields of the tab as drawn now: what is typed in them is committed as it is hidden or drawn again. */
+    private fields: SettingFields | null = null;
 
     // `PluginSettingTab` hands its own constructor argument to Obsidian, which
     // wants the real Plugin. The tab itself only ever reads PluginContext, so
@@ -25,6 +28,9 @@ export class TaskViewerSettingTab extends PluginSettingTab {
 
     display(): void {
         const { containerEl } = this;
+        this.fields?.commitAll();
+        const fields = new SettingFields(this.plugin);
+        this.fields = fields;
         containerEl.empty();
         containerEl.addClass('tv-settings');
 
@@ -45,14 +51,14 @@ export class TaskViewerSettingTab extends PluginSettingTab {
         const content = wrapper.createDiv('tv-settings__content');
 
         const tabs = [
-            { id: 'basic',        label: t('settings.tabs.basic'),        render: (el: HTMLElement) => BasicTab.render(el, this.plugin) },
+            { id: 'basic',        label: t('settings.tabs.basic'),        render: (el: HTMLElement) => BasicTab.render(el, this.plugin, fields) },
             { id: 'general',      label: t('settings.tabs.general'),      render: (el: HTMLElement) => GeneralTab.render(el, this.plugin) },
-            { id: 'views',        label: t('settings.tabs.views'),        render: (el: HTMLElement) => ViewsTab.render(el, this.plugin) },
-            { id: 'viewDetails',  label: t('settings.tabs.viewDetails'),  render: (el: HTMLElement) => ViewDetailsTab.render(el, this.plugin) },
-            { id: 'notes',        label: t('settings.tabs.notes'),        render: (el: HTMLElement) => NotesTab.render(el, this.plugin) },
-            { id: 'frontmatter',  label: t('settings.tabs.frontmatter'),  render: (el: HTMLElement) => FrontmatterTab.render(el, this.plugin) },
+            { id: 'views',        label: t('settings.tabs.views'),        render: (el: HTMLElement) => ViewsTab.render(el, this.plugin, fields) },
+            { id: 'viewDetails',  label: t('settings.tabs.viewDetails'),  render: (el: HTMLElement) => ViewDetailsTab.render(el, this.plugin, fields) },
+            { id: 'notes',        label: t('settings.tabs.notes'),        render: (el: HTMLElement) => NotesTab.render(el, this.plugin, fields) },
+            { id: 'frontmatter',  label: t('settings.tabs.frontmatter'),  render: (el: HTMLElement) => FrontmatterTab.render(el, this.plugin, fields) },
             { id: 'parsers',      label: t('settings.tabs.parsers'),      render: (el: HTMLElement) => ParsersTab.render(el, this.plugin, () => this.display()) },
-            { id: 'log',          label: t('settings.tabs.log'),          render: (el: HTMLElement) => LogTab.render(el, this.plugin) },
+            { id: 'log',          label: t('settings.tabs.log'),          render: (el: HTMLElement) => LogTab.render(el, this.plugin, fields) },
             { id: 'about',        label: t('settings.tabs.about'),        render: (el: HTMLElement) => AboutTab.render(el, this.plugin) },
         ];
 
@@ -78,6 +84,13 @@ export class TaskViewerSettingTab extends PluginSettingTab {
                 this.activateTab(wrapper, btn.dataset.tabId);
             }
         });
+    }
+
+    /** The tab is closed: what is typed in a field is committed, as a blur would, without waiting for one. */
+    hide(): void {
+        this.fields?.commitAll();
+        this.fields = null;
+        super.hide();
     }
 
     private activateTab(wrapper: HTMLElement, tabId: string): void {
