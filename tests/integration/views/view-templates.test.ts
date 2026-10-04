@@ -76,10 +76,13 @@ function op(name: string, body = ''): Drawn {
     })()`);
 }
 
+/** The open question dialog (`askText`, on OverlayShell), as a selector. */
+const ASK = '.tv-overlay:not(.is-closing) .tv-overlay__panel.tv-ask';
+
 /**
  * Save the view `name` from its settings menu, as `as`, through the name
- * dialog, and wait until the vault has read the note's frontmatter.
- * Returns the name the dialog offered.
+ * dialog, and wait until the vault has read the note's frontmatter and the
+ * dialog has closed. Returns the name the dialog offered.
  */
 function saveView(name: string, as: string): string {
     return ev<string>(`(async () => {
@@ -88,19 +91,23 @@ function saveView(name: string, as: string): string {
         await wait(100);
         menuItem(i => i.titleEl?.textContent === ${JSON.stringify(tr('toolbar.saveView'))});
         await wait(200);
-        const input = [...document.querySelectorAll('.input-modal input')].pop();
+        const panel = document.querySelector(${JSON.stringify(ASK)});
+        const input = panel?.querySelector('input');
         if (!input) throw new Error('no name dialog');
+        const title = panel.querySelector('.tv-form__title')?.textContent;
+        if (title !== ${JSON.stringify(tr('toolbar.saveViewTitle'))}) throw new Error('another dialog: ' + title);
         const offered = input.value;
         input.value = ${JSON.stringify(as)};
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         key(input, 'Enter');
         const path = ${JSON.stringify(NOTE)};
         for (let i = 0; i < 30; i++) {
             await wait(100);
             const f = app.vault.getAbstractFileByPath(path);
-            if (f && app.metadataCache.getFileCache(f)?.frontmatter?.['_tv-view']) break;
+            if (f && app.metadataCache.getFileCache(f)?.frontmatter?.['_tv-view'] && !document.querySelector(${JSON.stringify(ASK)})) break;
         }
         await wait(300);
-        if (document.querySelector('.input-modal')) throw new Error('the name dialog stayed open');
+        if (document.querySelector(${JSON.stringify(ASK)})) throw new Error('the name dialog stayed open');
         return JSON.stringify(offered);
     })()`);
 }
@@ -166,6 +173,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+    // A dialog a failed save left open would take the next file's clicks.
+    ev(`(() => { document.querySelectorAll('.tv-overlay__panel.tv-ask .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`);
     await closeViews();
     removeFolder();
     held?.restore();
