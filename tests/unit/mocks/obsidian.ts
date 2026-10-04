@@ -59,8 +59,14 @@ export class Plugin {
 }
 
 export class Scope {
+    /** What was registered, in order, as Obsidian's Scope keeps it. */
+    keys: { modifiers: unknown; key: string | null; func: (evt: unknown, ctx: unknown) => unknown }[] = [];
     constructor(public parent?: Scope) {}
-    register(): unknown { return {}; }
+    register(modifiers: unknown, key: string | null, func: (evt: unknown, ctx: unknown) => unknown): unknown {
+        const handler = { modifiers, key, func };
+        this.keys.push(handler);
+        return handler;
+    }
     unregister(): void {}
 }
 
@@ -137,10 +143,19 @@ export class PopoverSuggest {
     }
 }
 
-export class AbstractInputSuggest {
-    app: App;
+export class AbstractInputSuggest extends PopoverSuggest {
     inputEl: any;
-    constructor(app: App, inputEl: any) { this.app = app; this.inputEl = inputEl; }
+    limit = 100;
+    constructor(app: App, inputEl: any) {
+        super(app);
+        this.inputEl = inputEl;
+        // Obsidian's: a scope whose parent is the app's, holding the list's keys.
+        this.scope = new Scope((app as { scope?: Scope } | undefined)?.scope);
+        (this.scope as Scope).register([], 'Escape', () => false);
+        (this.scope as Scope).register([], 'Enter', () => false);
+    }
+    setValue(value: string): void { this.inputEl.value = value; }
+    getValue(): string { return this.inputEl.value; }
 }
 
 export class Setting {

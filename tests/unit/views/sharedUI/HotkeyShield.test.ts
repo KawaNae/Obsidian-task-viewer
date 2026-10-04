@@ -12,7 +12,9 @@ import { HotkeyShield } from '../../../../src/views/sharedUI/HotkeyShield';
 class FakeDoc {
     activeElement: object | null = null;
     private listeners: ((e: { target: object | null }) => void)[] = [];
-    addEventListener(_type: string, fn: (e: { target: object | null }) => void): void { this.listeners.push(fn); }
+    /** How each listener was put on: its event and whether in the capture phase. */
+    ways: string[] = [];
+    addEventListener(type: string, fn: (e: { target: object | null }) => void, capture?: boolean): void { this.listeners.push(fn); this.ways.push(`${type} ${capture ? 'capture' : 'bubble'}`); }
     removeEventListener(_type: string, fn: (e: { target: object | null }) => void): void { this.listeners = this.listeners.filter(l => l !== fn); }
     focus(target: object): void { this.activeElement = target; this.listeners.forEach(l => l({ target })); }
     get listening(): number { return this.listeners.length; }
@@ -43,6 +45,10 @@ describe('HotkeyShield', () => {
         expect(h.stack).toHaveLength(1);
         h.doc.focus(h.outside);
         expect(h.stack).toHaveLength(0);
+    });
+
+    it('follows the focus in the capture phase of focus: before a field\'s own focus listeners, where an input suggest opens its list and pushes its scope above this one', () => {
+        expect(setUp().doc.ways).toEqual(['focus capture']);
     });
 
     it('pushes at once when the focus is in the surface already', () => {

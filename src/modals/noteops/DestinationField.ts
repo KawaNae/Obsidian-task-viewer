@@ -97,7 +97,7 @@ class HeadingSuggest extends ShownSuggest<string> {
         el.setText(name);
     }
 
-    selectSuggestion(name: string): void {
+    protected pick(name: string): void {
         this.field.value = name;
         this.field.trigger('input');
         this.close();
