@@ -486,6 +486,12 @@
     },
     "sourceChildren": "子の行",
     "hub": {
+      "unsavedAsk": "保存できない値があります（{{fields}}）",
+      "unsavedDiscard": "捨てて閉じる",
+      "unsavedFix": "直す",
+      "fieldJoin": "、",
+      "dateField": "{{group}}の{{part}}",
+      "propertyKeyField": "プロパティのキー",
       "status": "ステータス",
       "readOnlyNotice": "このタスクは読み取り専用です（外部プラグイン記法）— 編集はできません。",
       "taskMissing": "このタスクは存在しません。",

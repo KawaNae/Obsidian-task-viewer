@@ -305,6 +305,46 @@ describe('shifting the start of a running count-up', () => {
         expect(readTestFile(FILE).split('\n')[1]).toContain(`T${expected}`);
     });
 
+    it('"Set the shift...": a shift the disk refuses keeps the dialog open with why above its buttons, and no notice', async () => {
+        await writeIndexedTestFile(FILE, ['- [ ] 拒む', ''].join('\n'));
+        open = startTimer('拒む', 'child');
+        pressElapsed(open, '...');
+        const before = readTestFile(FILE);
+        const seen = evalOrThrow<Record<string, unknown>>(`(async () => {
+            const dialog = document.querySelector('.tv-timer-offset');
+            const notices = () => document.querySelectorAll('.notice').length;
+            const was = notices();
+            const input = dialog.querySelector('.tv-form__row input[type="text"]');
+            input.value = '20';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            const real = app.vault.process;
+            app.vault.process = async function () { app.vault.process = real; throw new Error('e2e: the disk refused'); };
+            try {
+                dialog.querySelector('.tv-form__buttons .mod-cta').click();
+                await new Promise(r => setTimeout(r, 800));
+            } finally {
+                app.vault.process = real;
+            }
+            const formSays = dialog.querySelector('.tv-form__says--form');
+            const seen = {
+                open: !!document.querySelector('.tv-overlay:not(.is-closing) .tv-timer-offset'),
+                says: [...formSays.children].map(c => c.className + ': ' + c.textContent),
+                notices: notices() - was,
+                typed: input.value,
+            };
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            await new Promise(r => setTimeout(r, 300));
+            return JSON.stringify(seen);
+        })()`);
+        expect(seen).toEqual({
+            open: true,
+            says: [`tv-form__error: ${tr('notice.notWritten', { reason: tr('notice.refusedFailed'), subject: FILE })}`],
+            notices: 0,
+            typed: '20',
+        });
+        expect(readTestFile(FILE)).toBe(before);
+    });
+
     it('"Set the shift...": a time later than now is foreseen as the day before, and shifts to it', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 時刻で', ''].join('\n'));
         open = startTimer('時刻で', 'child');

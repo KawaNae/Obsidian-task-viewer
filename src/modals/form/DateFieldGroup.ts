@@ -46,9 +46,10 @@ export interface DateFieldGroupOptions {
     /**
      * A group's fields were committed (a blur, the form's Enter, a pick, a
      * clear), every field reading and the rules holding: `f` is the six as
-     * read. Not called while one does not read or a rule is broken.
+     * read. Not called while one does not read or a rule is broken. Whether
+     * the write took it, when a write decides (`bindField`'s commit).
      */
-    onCommit?: (group: DateGroupKey, f: DateTimeFields) => void;
+    onCommit?: (group: DateGroupKey, f: DateTimeFields) => void | Promise<boolean>;
     /** The form's Enter in a field, after the field's commit: the create dialog's submit. */
     onEnter?: () => void;
     /** A field's text changed, by typing, a pick or a clear. */
@@ -168,12 +169,49 @@ export class DateFieldGroup {
     }
 
     /** Commit `group` as its fields read, unless a field does not read or a rule is broken. */
-    private commitGroup(group: DateGroupKey): boolean {
+    private commitGroup(group: DateGroupKey): boolean | Promise<boolean> {
         const fields = this.readAll();
         this.tell();
         if (!fields || dateRuleIssues(fields, this.opts.getValidationCtx()).length > 0) return false;
-        this.opts.onCommit?.(group, fields);
-        return true;
+        return this.opts.onCommit?.(group, fields) ?? true;
+    }
+
+    /**
+     * The fields whose text cannot be saved now, as a close finds them: the
+     * fields typed in that do not read, or, all reading, the field a rule
+     * across them is broken at. None while no field holds a text not saved.
+     */
+    unsaved(): DateKey[] {
+        const pending = KEYS.filter(key => this.bound.get(key)!.pending() !== null);
+        if (pending.length === 0) return [];
+        const unread = pending.filter(key => !this.bound.get(key)!.pending()!.ok);
+        if (unread.length > 0) return unread;
+        const fields = this.readAll();
+        if (!fields) return [];
+        const broken = dateRuleIssues(fields, this.opts.getValidationCtx()).flatMap(issue => (issue.at === 'form' ? [] : [issue.at]));
+        return [...new Set(broken)];
+    }
+
+    /**
+     * Throw away what cannot be saved (`unsaved`): a field that does not
+     * read shows its value again, and, while a rule is still broken, so does
+     * every field typed in. What is left is saved by {@link save}.
+     */
+    discardUnsaved(): void {
+        for (const key of KEYS) if (this.bound.get(key)!.pending()?.ok === false) this.bound.get(key)!.discard();
+        if (this.unsaved().length > 0) for (const key of KEYS) this.bound.get(key)!.discard();
+        this.updatePlaceholders();
+        this.tell();
+    }
+
+    /** Commit every field typed in that reads, as a blur would: what a close saves. */
+    save(): void {
+        for (const key of KEYS) if (this.bound.get(key)!.pending()?.ok) this.bound.get(key)!.commit();
+    }
+
+    /** The name of the field `key` as a question lists it: its group and its part (開始の日付). */
+    labelOf(key: DateKey): string {
+        return t('modal.hub.dateField', { group: this.opts.labels[groupOf(key)], part: key.endsWith('Date') ? t('modal.date') : t('modal.time') });
     }
 
     /** Where the field `key` says its issues: its input and the line under its row. */

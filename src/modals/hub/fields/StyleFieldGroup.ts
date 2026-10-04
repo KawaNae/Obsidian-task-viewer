@@ -13,9 +13,11 @@ import { bindField, type BoundField } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { PickerTextField } from '../../form/PickerTextField';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
-import type { FieldGroupContext } from './FieldGroupContext';
+import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
 
 type StyleField = 'color' | 'linestyle' | 'mask';
+const FIELDS: readonly StyleField[] = ['color', 'linestyle', 'mask'];
+const LABEL_KEYS: Record<StyleField, string> = { color: 'modal.hub.color', linestyle: 'modal.hub.linestyle', mask: 'modal.hub.mask' };
 
 /**
  * How each field reads: a color (a hex value or a CSS name), one of the line
@@ -35,7 +37,7 @@ const CODECS: Record<StyleField, FieldCodec<string | undefined>> = {
  * 各欄は `bindField` で値に結ぶ。読めない値（`zigzag` の線種、色でない色）は
  * 欄の下に理由を出して保存しない。
  */
-export class StyleFieldGroup {
+export class StyleFieldGroup implements ClosingPart {
     private colorField!: PickerTextField;
     private colorSwatch!: HTMLElement;
     private nativeColorInput!: HTMLInputElement;
@@ -45,9 +47,7 @@ export class StyleFieldGroup {
     private sourceEls: Partial<Record<StyleField, HTMLElement>> = {};
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
-        this.renderRow(container, 'color', 'modal.hub.color');
-        this.renderRow(container, 'linestyle', 'modal.hub.linestyle');
-        this.renderRow(container, 'mask', 'modal.hub.mask');
+        for (const field of FIELDS) this.renderRow(container, field, LABEL_KEYS[field]);
     }
 
     private renderRow(container: HTMLElement, field: StyleField, labelKey: string): void {
@@ -129,9 +129,22 @@ export class StyleFieldGroup {
         this.updateDecoration(field);
     }
 
-    private commit(field: StyleField, value: string | undefined): void {
+    private commit(field: StyleField, value: string | undefined): Promise<boolean> | void {
         if (this.ctx.isShut()) return;
-        this.ctx.queue(TaskUpdateBuilder.styleField(this.ctx.getTask(), field, value ?? ''));
+        return this.ctx.queue(TaskUpdateBuilder.styleField(this.ctx.getTask(), field, value ?? ''));
+    }
+
+    unsaved(): UnsavedField[] {
+        return FIELDS.filter(field => this.bound[field].pending()?.ok === false)
+            .map(field => ({ label: t(LABEL_KEYS[field]), input: this.inputs[field] }));
+    }
+
+    discardUnsaved(): void {
+        for (const field of FIELDS) if (this.bound[field].pending()?.ok === false) this.bound[field].discard();
+    }
+
+    save(): void {
+        for (const field of FIELDS) if (this.bound[field].pending()?.ok) this.bound[field].commit();
     }
 
     /** cascade placeholder + 出所ラベル + swatch の同期 */
@@ -186,7 +199,7 @@ export class StyleFieldGroup {
     /** 外部変更（echo）の取り込み。打ちかけの欄は `BoundField.set` が守る。 */
     refresh(): void {
         const task = this.ctx.getTask();
-        for (const field of ['color', 'linestyle', 'mask'] as const) {
+        for (const field of FIELDS) {
             this.bound[field].set(task[field]);
             this.updateDecoration(field);
         }

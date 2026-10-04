@@ -1,5 +1,5 @@
 import { DateUtils } from '../../utils/DateUtils';
-import { type App } from 'obsidian';
+import { Notice, type App } from 'obsidian';
 import { t } from '../../i18n';
 import { type Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
@@ -23,7 +23,12 @@ import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
 import type { DateTimeFields } from '../TaskDateValidator';
 import { logError } from '../../log/log';
-import type { FieldGroupContext, HubField } from './fields/FieldGroupContext';
+import { refusalNotice } from '../../services/core/RefusalClause';
+import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
+import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
+import { DraftGuard, type Loss } from '../form/DraftGuard';
+import { FormActions } from '../form/FormActions';
+import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './fields/FieldGroupContext';
 import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
@@ -42,6 +47,8 @@ export interface TaskHubFormDeps {
     stack: PopoverStack;
     /** 継承ラベルクリック等でファイルへ遷移した後に呼ぶ（パネルを閉じる） */
     onNavigate?: () => void;
+    /** Ask the hub to close, as the user would (`OverlayShell.requestClose`): what a close the user said to go on with does. */
+    requestClose?: () => void;
 }
 
 /**
@@ -58,8 +65,20 @@ export interface TaskHubFormDeps {
  * 最後に入れた値の字と違うかで見分ける。フラグや世代カウンタは持たない。
  *
  * 誤りと注意は `IssueBoard` が持ち、出どころ（欄の名前、日付の規則、
- * フォームが閉じている理由）ごとに置き換える。出す場所は欄の行の下と
- * フォームの末尾である。
+ * フォームが閉じている理由、書き込みの拒否）ごとに置き換える。出す場所は
+ * 欄の行の下とフォームの末尾である。
+ *
+ * 書き込みの拒否（I#9、論点3）: 書き込みは通知を出さない書き方で頼み
+ * （`tellRefusal: false`）、拒まれた理由をフォームの末尾に1回だけ出す。拒まれた
+ * 欄は打った値のまま残り（`bindField`）、もう一度確定すれば新しい版へ書く。
+ * ハブが閉じた後に届いた拒否は通知で言う。
+ *
+ * 閉じる手順（{@link beforeClose}、ハブを閉じるときの保存の決定）: ×、Escape、
+ * 外側、下へ払う、戻るのどれも、blur を待たずに打ちかけの欄を明示して保存する。
+ * 保存できない値（読めない値、日付の規則に反する値）が残れば閉じずに問い
+ * （`DraftGuard`、論点G）、[直す] にフォーカスを置く。[捨てて閉じる] はその値を
+ * 元に戻し、ほかの欄を保存して閉じる。書き込みが途中なら答えを待ち、拒まれたら
+ * 開いたまま理由を出す。
  *
  * DOM 構築とコミット/echo ロジックは 3 つのフィールドグループ（tags/style/
  * properties、`fields/` 配下）に分割済み。name/status/date は分割するには
@@ -69,8 +88,13 @@ export interface TaskHubFormDeps {
  */
 export class TaskHubForm {
     private task: Task;
-    /** The writes asked and not yet answered, for {@link drained}. */
-    private writing = new Set<Promise<void>>();
+    /** The writes asked and not yet answered, each to whether it was written, for {@link drained} and the close. */
+    private writing = new Set<Promise<boolean>>();
+    /** The hub closed: a refusal that comes after is told by a notice. */
+    private closed = false;
+    /** Whether to throw away the values a close cannot save, asked before it closes. */
+    private readonly guard: DraftGuard<'close'>;
+    private actions!: FormActions;
     /** The row is gone from the index: nothing to write to. */
     private missing = false;
     /** The source mode holds the row: its draft is the one way to write it until it closes. */
@@ -99,6 +123,15 @@ export class TaskHubForm {
         this.issues = new IssueBoard<HubField>({
             field: (at) => this.slotOf(at),
             form: this.formSays,
+        });
+        this.guard = new DraftGuard<'close'>({
+            loss: () => this.loss(),
+            render: () => this.renderAsk(),
+            asked: () => this.actions.focusKeep(),
+            goOn: () => {
+                this.discardUnsaved();
+                this.deps.requestClose?.();
+            },
         });
         this.fieldCtx = {
             getTask: () => this.task,
@@ -231,8 +264,19 @@ export class TaskHubForm {
         const propsGroup = c.createDiv({ cls: 'tv-form__group' });
         this.propsField = new PropertiesFieldGroup(propsGroup, this.fieldCtx);
 
-        // What is of the form as a whole is said at its end.
+        // What is of the form as a whole is said at its end, and the question a close puts under it.
         c.appendChild(this.formSays);
+        this.actions = new FormActions(c, {
+            actions: [],
+            ask: {
+                discardLabel: t('modal.hub.unsavedDiscard'),
+                keepLabel: t('modal.hub.unsavedFix'),
+                discard: () => this.guard.discard(),
+                keep: () => this.fix(),
+            },
+        });
+        // Typing in a field while asked is fixing it: the question is withdrawn.
+        c.addEventListener('input', () => { this.guard.withdraw(); });
 
         this.dateGroup.updatePlaceholders();
     }
@@ -343,24 +387,24 @@ export class TaskHubForm {
 
     // ==================== コミット ====================
 
-    private commitContent(content: string): void {
+    private commitContent(content: string): Promise<boolean> | void {
         if (this.shut) return;
-        this.queue(TaskUpdateBuilder.content(this.task, content));
+        return this.queue(TaskUpdateBuilder.content(this.task, content));
     }
 
     private commitStatus(value: string): void {
         if (this.shut) return;
-        this.queue(TaskUpdateBuilder.status(this.task, value));
+        void this.queue(TaskUpdateBuilder.status(this.task, value));
         this.renderStatusPill(); // 打った値の model から pill を即時更新
     }
 
-    private commitDates(group: DateGroupKey, f: DateTimeFields): void {
+    private commitDates(group: DateGroupKey, f: DateTimeFields): Promise<boolean> | void {
         if (this.shut) return;
         const updates =
             group === 'start' ? TaskUpdateBuilder.dateGroup(this.task, 'start', f.startDate, f.startTime)
             : group === 'end' ? TaskUpdateBuilder.dateGroup(this.task, 'end', f.endDate, f.endTime)
             : TaskUpdateBuilder.due(this.task, f.dueDate, f.dueTime);
-        this.queue(updates);
+        return this.queue(updates);
     }
 
     /**
@@ -373,22 +417,129 @@ export class TaskHubForm {
      *
      * 続けて出した書き込みの順は操作の層が守る: 同じ行の書き込みは頼んだ
      * 順に並び、2本目は1本目が残した読みから計画される（`onRow`）。
-     * 書けなかったときの通知は書き込みの層が1回出す。model には打った値が
-     * 残るので、ここで写しを読み直す。
+     * 書けなかったときは {@link answered} が理由を言い、model を写しに戻す。
+     *
+     * @returns 書けたか（拒まれた欄は打った値を残す: `bindField`）
      */
-    protected queue(updates: Partial<Task> | null): void {
-        if (!updates) return;
+    protected queue(updates: Partial<Task> | null): Promise<boolean> {
+        if (!updates) return Promise.resolve(true);
         this.task = { ...this.task, ...updates };
         const id = this.task.id;
-        const write = this.deps.operations.updateTask(id, updates)
-            .then(({ written }) => {
-                if (written) return;
-                const fresh = this.deps.index.getTask(id);
-                if (fresh) this.refresh(fresh);
+        const write: Promise<boolean> = this.deps.operations.updateTask(id, updates, { tellRefusal: false })
+            .then((answer) => {
+                this.answered(id, answer);
+                return answer.written;
             })
-            .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`))
+            .catch((e) => {
+                logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`);
+                return false;
+            })
             .finally(() => { this.writing.delete(write); });
         this.writing.add(write);
+        return write;
+    }
+
+    /**
+     * A write's answer. Written, the last refusal said is taken back. Refused,
+     * why is said at the form's end once (no notice: the write was asked with
+     * `tellRefusal: false`), and the model goes back to the index's copy: the
+     * fields refused keep what was typed, and are written again from the new
+     * reading when committed again. Once the hub has closed, a refusal is told
+     * by a notice, as any write's is.
+     */
+    private answered(id: string, answer: WriteAnswer): void {
+        if (this.closed) {
+            if (!answer.written && answer.refused) new Notice(refusalNotice(answer.refused));
+            return;
+        }
+        if (answer.written) {
+            this.issues.set('write', []);
+            return;
+        }
+        this.issues.set('write', [{ at: 'form', tone: 'error', text: refusalText(answer.refused) }]);
+        const fresh = this.deps.index.getTask(id);
+        if (fresh) this.refresh(fresh);
+    }
+
+    // ==================== 閉じる手順 ====================
+
+    /**
+     * Whether the hub may close now (the panel asks it after the source mode):
+     * every field typed in and not committed is saved, as a blur would, with no
+     * blur waited for. A value that cannot be saved keeps the hub open and asks
+     * whether to throw it away (`'stay'`). A write under way is waited for: all
+     * written, the hub closes; one refused, it stays open with why at the
+     * form's end. Nothing is saved while the form is shut (the source holds
+     * the row, or the row is gone).
+     */
+    beforeClose(): CloseAnswer {
+        if (this.shut) return 'close';
+        if (!this.guard.request('close')) return 'stay';
+        for (const part of this.parts()) part.save();
+        if (this.writing.size === 0) return 'close';
+        return this.settled().then(written => (written ? 'close' : 'stay'));
+    }
+
+    /** Resolves once every write asked so far is answered: whether all of them were written. */
+    private async settled(): Promise<boolean> {
+        let written = true;
+        while (this.writing.size > 0) {
+            const answers = await Promise.all(this.writing);
+            if (answers.includes(false)) written = false;
+        }
+        return written;
+    }
+
+    /** The parts of the form a close asks: the name, the dates, the style, the tags and the properties. */
+    private parts(): ClosingPart[] {
+        const name: ClosingPart = {
+            unsaved: () => (this.nameField.pending()?.ok === false ? [{ label: t('modal.taskName'), input: this.nameInput }] : []),
+            discardUnsaved: () => { if (this.nameField.pending()?.ok === false) this.nameField.discard(); },
+            save: () => { if (this.nameField.pending()?.ok) this.nameField.commit(); },
+        };
+        const dates: ClosingPart = {
+            unsaved: () => this.dateGroup.unsaved().map(key => ({ label: this.dateGroup.labelOf(key), input: this.dateGroup.getInput(key) })),
+            discardUnsaved: () => this.dateGroup.discardUnsaved(),
+            save: () => this.dateGroup.save(),
+        };
+        return [name, dates, this.styleField, this.tagsField, this.propsField];
+    }
+
+    private unsaved(): UnsavedField[] {
+        return this.parts().flatMap(part => part.unsaved());
+    }
+
+    /** What a close would lose: the values that cannot be saved, by their fields' names. */
+    private loss(): Loss | null {
+        if (this.shut) return null;
+        const fields = this.unsaved();
+        return fields.length === 0 ? null : { kind: 'unsaved', fields: fields.map(one => one.label) };
+    }
+
+    /** Throw away what cannot be saved, as the close said to: those fields show their values again. */
+    private discardUnsaved(): void {
+        for (const part of this.parts()) part.discardUnsaved();
+    }
+
+    /** Fix, as asked: the question is withdrawn, and the first field that cannot be saved takes the focus. */
+    private fix(): void {
+        const first = this.unsaved()[0];
+        this.guard.keep();
+        first?.input.focus();
+    }
+
+    /** The question a close puts, drawn at the form's end. */
+    private renderAsk(): void {
+        const loss = this.guard.asking;
+        const ask = loss?.kind === 'unsaved'
+            ? t('modal.hub.unsavedAsk', { fields: loss.fields.join(t('modal.hub.fieldJoin')) })
+            : null;
+        this.actions.render({ busy: false, ask });
+    }
+
+    /** The hub closed: a refusal that comes after is told by a notice. */
+    dispose(): void {
+        this.closed = true;
     }
 
     // ==================== 外部変更の取り込み ====================

@@ -486,6 +486,12 @@
     },
     "sourceChildren": "Child lines",
     "hub": {
+      "unsavedAsk": "Some values cannot be saved ({{fields}})",
+      "unsavedDiscard": "Discard and close",
+      "unsavedFix": "Fix",
+      "fieldJoin": ", ",
+      "dateField": "{{group}} {{part}}",
+      "propertyKeyField": "Property key",
       "status": "Status",
       "readOnlyNotice": "This task is read-only (external plugin format) — editing is disabled.",
       "taskMissing": "This task no longer exists.",

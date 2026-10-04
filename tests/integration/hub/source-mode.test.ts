@@ -184,7 +184,7 @@ describe('the hub\'s source mode', () => {
         expect(asked).toMatchObject({ hub: true, source: true, asking: true });
         // One row asks: the question and discard beside it at its start, back (where cancel was, with the focus) and apply at its end.
         const row = run<Record<string, unknown>>(`
-            const actions = document.querySelector('.task-hub__source-actions');
+            const actions = document.querySelector('.task-hub__source-actions .tv-form__buttons');
             const items = [...actions.children].filter(el => getComputedStyle(el).display !== 'none');
             const rects = items.map(el => el.getBoundingClientRect());
             const box = actions.getBoundingClientRect();
@@ -194,7 +194,7 @@ describe('the hub\'s source mode', () => {
                 askAtStart: Math.abs(rects[0].left - box.left) < 2,
                 applyAtEnd: Math.abs(rects[3].right - box.right) < 2,
                 apart: rects[2].left - rects[1].right > 16,
-                focused: document.activeElement === actions.querySelector('.task-hub__source-actions .tv-form__cancel'),
+                focused: document.activeElement === actions.querySelector('.tv-form__cancel'),
             });
         `);
         expect(row).toEqual({ items: ['下書きを捨てますか', '捨てる', '戻る', '適用'], oneLine: true, askAtStart: true, applyAtEnd: true, apart: true, focused: true });
