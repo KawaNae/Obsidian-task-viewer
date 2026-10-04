@@ -19,6 +19,10 @@ describe('issueText', () => {
         [{ code: 'notation', kind: 'blockId' }, 'start must not hold a block ID (^id) at its end'],
         [{ code: 'chars', chars: ': [' }, 'start must not hold: : ['],
         [{ code: 'reserved' }, 'start is reserved'],
+        [{ code: 'duplicate' }, 'start is already used'],
+        [{ code: 'shape', kind: 'statusChar' }, 'start must be one character that is not a line break'],
+        [{ code: 'shape', kind: 'text' }, 'start must be text'],
+        [{ code: 'notation', kind: 'headingMark' }, 'start must not hold the heading mark (#) at its start'],
     ] as const)('tells %j', (issue, text) => {
         expect(issueText(issue, 'start')).toBe(text);
     });

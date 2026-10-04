@@ -8,6 +8,12 @@ import type { ScopeKeys } from '../../../types';
 const LEGACY_FILE_TASK_KEYS: ReadonlyArray<string> = ['tv-status', 'tv-content', 'tv-timer-target-id'];
 
 /**
+ * The reserved keys that are not scope keys: the file task's legacy keys,
+ * `tags` and `position`. A scope key cannot be one of them either.
+ */
+export const KEYS_NOT_SCOPE: ReadonlySet<string> = new Set<string>([...LEGACY_FILE_TASK_KEYS, 'tags', 'position']);
+
+/**
  * Keys that cannot be a custom property, whatever layer they arrive on.
  *
  * Every configured scope key, the file task's legacy keys, `tags` (its own
@@ -17,5 +23,5 @@ const LEGACY_FILE_TASK_KEYS: ReadonlyArray<string> = ['tv-status', 'tv-content',
  * child-line extractor listed only the keys it happened to handle.
  */
 export function reservedPropertyKeys(fmKeys: ScopeKeys): ReadonlySet<string> {
-    return new Set<string>([...Object.values(fmKeys), ...LEGACY_FILE_TASK_KEYS, 'tags', 'position']);
+    return new Set<string>([...Object.values(fmKeys), ...KEYS_NOT_SCOPE]);
 }

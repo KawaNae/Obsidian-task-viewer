@@ -131,6 +131,11 @@ const EXEMPTIONS: Exemption[] = [
         why: 'Example path showing the expected shape of the setting.',
     },
     {
+        file: 'utils/values/IssueText.ts',
+        text: 'text',
+        why: 'The English table of the API\'s and the CLI\'s errors (the shape `text`), English on purpose; a form says the same issue through i18n (issueWords).',
+    },
+    {
         file: 'views/customMenus/IntervalTemplateCreator.ts',
         text: 'rotate-cw',
         why: 'An Obsidian icon id, shown as an example of what to type. Ids are not localized.',

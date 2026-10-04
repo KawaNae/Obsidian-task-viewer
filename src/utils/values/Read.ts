@@ -10,16 +10,20 @@
 /**
  * The kinds of value whose shape a reading can miss. `dateTime` is a date
  * with or without a time; `dateTimeOrTime` also takes a time alone. `color`
- * is a hex color or a CSS color name.
+ * is a hex color or a CSS color name. `statusChar` is one character a
+ * checkbox can hold (`TaskLineClassifier.isStatusChar`). `text` is any
+ * text: what a stored setting of text that is not one misses.
  */
-export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' | 'number' | 'bool' | 'color';
+export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' | 'number' | 'bool' | 'color' | 'statusChar' | 'text';
 
 /**
- * Notation of a task's line that a task's name cannot hold, because the
- * line reads it as something else: a date block (`@2026-10-05`, `@10:00`),
- * the command (`==>` and what follows), a trailing block ID (`^id`).
+ * Notation a value cannot hold, because what it is written into reads it as
+ * something else. Of a task's name, in its line: a date block
+ * (`@2026-10-05`, `@10:00`), the command (`==>` and what follows), a
+ * trailing block ID (`^id`). Of a heading's name: the heading's own mark
+ * (`#`) before it, which the line writes itself.
  */
-export type NotationKind = 'dateBlock' | 'command' | 'blockId';
+export type NotationKind = 'dateBlock' | 'command' | 'blockId' | 'headingMark';
 
 export type Issue =
     /** Nothing was given (only space, once normalized). */
@@ -39,7 +43,9 @@ export type Issue =
     /** Characters the value cannot hold, each once, in the order they come. */
     | { readonly code: 'chars'; readonly chars: string }
     /** A name the plugin keeps for itself (a property key that is a scope key, `tags`). */
-    | { readonly code: 'reserved' };
+    | { readonly code: 'reserved' }
+    /** A value that must differ from the others of its set and is one of them (a scope key, a status's character). */
+    | { readonly code: 'duplicate' };
 
 export type Read<T> =
     | { readonly ok: true; readonly value: T }

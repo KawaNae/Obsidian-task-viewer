@@ -21,6 +21,7 @@ export function issueWords(issue: Issue): string {
         case 'notation': return notationWords(issue.kind);
         case 'chars': return t('issue.chars', { chars: issue.chars });
         case 'reserved': return t('issue.reserved');
+        case 'duplicate': return t('issue.duplicate');
     }
 }
 
@@ -29,6 +30,7 @@ function notationWords(kind: NotationKind): string {
         case 'dateBlock': return t('issue.notation.dateBlock');
         case 'command': return t('issue.notation.command');
         case 'blockId': return t('issue.notation.blockId');
+        case 'headingMark': return t('issue.notation.headingMark');
     }
 }
 
@@ -42,5 +44,7 @@ function shapeWords(kind: ShapeKind): string {
         case 'number': return t('issue.shape.number');
         case 'bool': return t('issue.shape.bool');
         case 'color': return t('issue.shape.color');
+        case 'statusChar': return t('issue.shape.statusChar');
+        case 'text': return t('issue.shape.text');
     }
 }

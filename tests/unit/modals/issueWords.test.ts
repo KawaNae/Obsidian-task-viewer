@@ -7,16 +7,17 @@ import type { Issue } from '../../../src/utils/values/Read';
 describe('issueWords', () => {
     const issues: Issue[] = [
         { code: 'empty' },
-        ...(['date', 'time', 'dateTime', 'dateTimeOrTime', 'int', 'number', 'bool', 'color'] as const).map(kind => ({ code: 'shape', kind }) as const),
+        ...(['date', 'time', 'dateTime', 'dateTimeOrTime', 'int', 'number', 'bool', 'color', 'statusChar', 'text'] as const).map(kind => ({ code: 'shape', kind }) as const),
         { code: 'noSuchDay' },
         { code: 'range', min: 1, max: 120 },
         { code: 'range', min: 1 },
         { code: 'range', max: 60 },
         { code: 'oneOf', allowed: ['solid', 'dashed'] },
         { code: 'dateRequired' },
-        ...(['dateBlock', 'command', 'blockId'] as const).map(kind => ({ code: 'notation', kind }) as const),
+        ...(['dateBlock', 'command', 'blockId', 'headingMark'] as const).map(kind => ({ code: 'notation', kind }) as const),
         { code: 'chars', chars: ': [' },
         { code: 'reserved' },
+        { code: 'duplicate' },
     ];
 
     for (const issue of issues) {
