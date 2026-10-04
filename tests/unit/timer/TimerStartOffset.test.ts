@@ -4,7 +4,17 @@ import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
 import type { TimerWidget } from '../../../src/timer/TimerWidget';
 import { readSeconds } from '../../../src/timer/TimerClock';
 import { progressOf } from '../../../src/timer/TimerProgress';
-import { agoLabel, canOffsetStart, readOffsetInput, rememberedStart, startLabel } from '../../../src/timer/TimerStartOffset';
+import { agoLabel, canOffsetStart, OFFSET_FIELDS, offsetStart, rememberedStart, startLabel, type OffsetInputKind } from '../../../src/timer/TimerStartOffset';
+
+/** Where a shift typed in the dialog's field goes: read as the field reads it, then placed; null when it does not read. */
+function readOffsetInput(kind: OffsetInputKind, text: string, nowMs: number): number | null {
+    if (kind === 'minutes') {
+        const read = OFFSET_FIELDS.minutes.read(text);
+        return read.ok ? offsetStart({ kind, minutes: read.value }, nowMs) : null;
+    }
+    const read = OFFSET_FIELDS.time.read(text);
+    return read.ok ? offsetStart({ kind, time: read.value }, nowMs) : null;
+}
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { widgetOver } from '../helpers/timerRig';
 

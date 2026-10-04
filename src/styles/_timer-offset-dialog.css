@@ -10,8 +10,3 @@
 .tv-overlay__panel--dialog.tv-timer-offset {
     width: min(24em, calc(100vw - 32px));
 }
-
-/* Where the start goes, or what keeps it from going, under the field. */
-.tv-timer-offset .tv-timer-offset__says {
-    margin: 8px 0 0;
-}

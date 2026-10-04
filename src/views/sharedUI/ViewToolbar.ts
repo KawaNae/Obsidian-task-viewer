@@ -5,7 +5,7 @@ import { ViewUriBuilder, type ViewUriOptions } from '../sharedLogic/ViewUriBuild
 import type { LeafPosition } from '../../services/viewConfig/LeafOpener';
 import { shortNameFor } from '../../services/viewConfig';
 import { askText } from '../../modals/ask/askText';
-import { readFail, readOk } from '../../utils/values/Read';
+import { TextInput } from '../../utils/values/TextValues';
 import type { Task, ViewTemplate } from '../../types';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
@@ -686,10 +686,7 @@ export class ViewSettingsMenu {
                         label: t('toolbar.saveViewLabel'),
                         initial: defaultName,
                         // A name, as typed: not normalized, only the space around it taken off.
-                        read: (text) => {
-                            const name = text.trim();
-                            return name ? readOk(name) : readFail({ code: 'empty' });
-                        },
+                        codec: TextInput,
                         submitLabel: t('modal.save'),
                         submit: async (name) => {
                             const template = templates.getViewTemplate();
@@ -697,7 +694,7 @@ export class ViewSettingsMenu {
                             const writer = new ViewTemplateWriter(templates.notes);
                             const saved = await writer.saveTemplate(folder, template);
                             // The write layer has told why; the dialog stays with the name typed.
-                            if (!saved) return t('toolbar.saveViewFailed');
+                            if (!saved) return { at: 'form', tone: 'error', text: t('toolbar.saveViewFailed') };
                             options.onRename(name);
                             new Notice(t('notice.viewSaved', { name }));
                             return null;

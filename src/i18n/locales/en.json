@@ -733,8 +733,6 @@
     "offsetPreviousDay": "yesterday {{time}}",
     "offsetAgoMinutes": "{{minutes}} min ago",
     "offsetAgoHours": "{{hours}} h {{minutes}} min ago",
-    "offsetMinutesUnreadable": "Enter the minutes as a whole number, 1 or more.",
-    "offsetTimeUnreadable": "Enter the time as HH:MM (e.g. 9:40).",
     "offsetApply": "Shift",
     "template": {
       "namePlaceholder": "Template name",
