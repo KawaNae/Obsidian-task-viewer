@@ -230,7 +230,7 @@ export class LogManager {
 
     private async cleanup(): Promise<{ removedByAge: number; removedBySize: number }> {
         const settings = this.getSettings();
-        const retentionDays = Math.max(1, settings.logRetentionDays | 0);
+        const retentionDays = settings.logRetentionDays;
         const cutoff = this.now() - retentionDays * 24 * 60 * 60 * 1000;
         const removedByAge = await this.storage.deleteBefore(cutoff);
 

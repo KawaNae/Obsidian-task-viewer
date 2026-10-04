@@ -6,15 +6,11 @@ import { CalendarView, MiniCalendarView } from './views/calendar';
 import { KanbanView } from './views/kanban';
 import { TimerView } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
-import {
-    type TaskViewerSettings,
-    DEFAULT_SETTINGS,
-    DEFAULT_SCOPE_KEYS,
-    normalizeScopeKeys,
-    validateScopeKeys,
-} from './types';
+import type { TaskViewerSettings } from './types';
 import type { Task } from './types';
 import { TaskViewerSettingTab } from './settings';
+import { readSettings } from './settings/SettingsSchema';
+import { issueText } from './utils/values/IssueText';
 import { FrontmatterValueSuggest } from './suggest/FrontmatterValueSuggest';
 import { COLOR_VALUES, LINE_STYLE_VALUES } from './suggest/ScopeValues';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
@@ -52,7 +48,7 @@ import { NoteOps } from './services/data/NoteOps';
 import { CreatePlaces } from './services/data/CreatePlaces';
 import { initI18n, t } from './i18n';
 import { enabledLineParserIds } from './services/parsing/TaskParser';
-import { initLog, logInfo } from './log/log';
+import { initLog, logInfo, logWarn } from './log/log';
 import { LogStorage } from './log/log-storage';
 import { LogManager } from './log/log-manager';
 import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
@@ -304,20 +300,18 @@ export default class TaskViewerPlugin extends Plugin {
         });
     }
 
+    /**
+     * Read the stored settings by the settings' table (`readSettings`): each
+     * key, and each key of a group (`defaultViewPositions`), read on its own;
+     * a missing one takes its default, and so does one that does not read,
+     * logged.
+     */
     async loadSettings() {
-        const raw = await this.loadData();
-        const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
-
-        const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
-        const normalizedKeys = normalizeScopeKeys(merged.scopeKeys);
-        const keysValidationError = validateScopeKeys(normalizedKeys);
-
-        this.settings = {
-            ...merged,
-            scopeKeys: keysValidationError
-                ? { ...DEFAULT_SCOPE_KEYS }
-                : normalizedKeys,
-        };
+        const { settings, fixes } = readSettings(await this.loadData());
+        for (const fix of fixes) {
+            logWarn(`[loadSettings] ${issueText(fix.issue, fix.path)}; the default is used`);
+        }
+        this.settings = settings;
     }
 
     async saveSettings() {
