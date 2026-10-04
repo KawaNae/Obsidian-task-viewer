@@ -4,7 +4,7 @@ import type {
     DateFilterValue,
 } from '../../services/filter/FilterTypes';
 import {
-    DEFAULT_NEXT_N_DAYS, RELATIVE_DATE_PRESETS, getRelativeDateLabel,
+    DEFAULT_NEXT_N_DAYS, LENGTH_RANGE, NEXT_N_DAYS_RANGE, RELATIVE_DATE_PRESETS, getRelativeDateLabel,
 } from '../../services/filter/FilterTypes';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterDropdownMenus } from './FilterDropdownMenus';
@@ -14,6 +14,10 @@ import { FilterValueCollector } from '../../services/filter/FilterValueCollector
 import { t } from '../../i18n';
 import { ValueSuggest, type ValueSuggestOptions } from '../../suggest/ValueSuggest';
 import { onFormEnter } from '../../modals/form/formEnter';
+import { bindField } from '../../modals/form/bindField';
+import { IssueBoard, readIssue } from '../../modals/form/FormIssue';
+import { FloatInput, IntInput } from '../../utils/values/NumberValues';
+import { optional, type FieldCodec } from '../../utils/values/Read';
 
 type ListCondition = TextListCondition | TagCondition;
 
@@ -297,19 +301,17 @@ export class FilterConditionRenderer {
                 this.showRelativeDateMenu(presetBtn, edit);
             });
 
-            // Number input for nextNDays
+            // N of nextNDays: a whole number, one or more
             if (relVal.preset === 'nextNDays') {
-                const nInput = container.createEl('input', {
-                    cls: 'tv-ctrl__text-input',
-                    type: 'number',
-                });
-                nInput.style.width = '52px';
-                nInput.value = String(relVal.n ?? DEFAULT_NEXT_N_DAYS);
-                nInput.min = '1';
-                nInput.placeholder = 'N';
-                nInput.addEventListener('change', () => {
-                    const n = parseInt(nInput.value, 10);
-                    if (n > 0) edit.update(c => ({ ...c, value: { preset: 'nextNDays', n } }), 'keep');
+                this.renderNumberField(container, row, {
+                    codec: IntInput.codec(NEXT_N_DAYS_RANGE),
+                    current: () => {
+                        const value = edit.current().value;
+                        return (typeof value === 'object' ? value.n : undefined) ?? DEFAULT_NEXT_N_DAYS;
+                    },
+                    commit: (n) => edit.update(c => ({ ...c, value: { preset: 'nextNDays', n } }), 'keep'),
+                    placeholder: 'N',
+                    inputMode: 'numeric',
                 });
             }
         } else {
@@ -359,18 +361,46 @@ export class FilterConditionRenderer {
             edit.update(c => ({ ...c, unit: (c.unit ?? 'hours') === 'hours' ? 'minutes' : 'hours' }), 'redraw');
         });
 
-        // Number input
-        const input = container.createEl('input', {
-            cls: 'tv-ctrl__text-input',
-            type: 'number',
+        // The length: a number, 0 or more; an empty field is no number chosen
+        this.renderNumberField(container, row, {
+            codec: optional(FloatInput.codec(LENGTH_RANGE)),
+            current: () => edit.current().value,
+            commit: (value) => edit.update(c => ({ ...c, value }), 'keep'),
+            inputMode: 'decimal',
         });
-        input.style.width = '52px';
-        input.value = condition.value === undefined ? '' : String(condition.value);
-        input.min = '0';
-        input.step = unit === 'hours' ? '0.5' : '1';
-        input.addEventListener('change', () => {
-            const n = parseFloat(input.value);
-            if (Number.isFinite(n) && n >= 0) edit.update(c => ({ ...c, value: n }), 'keep');
+    }
+
+    /**
+     * A number field of a row (`bindField`): read as typed by `codec`, and
+     * what does not read said under the row's value line, the field marked;
+     * a blur or the form's Enter commits once a value that reads, and one
+     * that does not is kept as typed and not committed (入力の論点 E).
+     */
+    private renderNumberField<T>(
+        container: HTMLElement,
+        line: HTMLElement,
+        opts: {
+            codec: FieldCodec<T>;
+            current(): T;
+            commit(value: T): void;
+            placeholder?: string;
+            inputMode: 'numeric' | 'decimal';
+        },
+    ): void {
+        const input = container.createEl('input', {
+            cls: 'tv-ctrl__text-input filter-popover__number-input',
+            type: 'text',
+        });
+        input.inputMode = opts.inputMode;
+        if (opts.placeholder) input.placeholder = opts.placeholder;
+        input.value = opts.codec.show(opts.current());
+        const says = line.createDiv({ cls: 'tv-form__says filter-popover__says' });
+        const issues = new IssueBoard<'value'>({ field: () => ({ input, message: says }), form: says });
+        bindField(input, {
+            codec: opts.codec,
+            current: opts.current,
+            commit: (value) => opts.commit(value),
+            issues: (issue) => issues.set('read', readIssue('value', issue)),
         });
     }
 }

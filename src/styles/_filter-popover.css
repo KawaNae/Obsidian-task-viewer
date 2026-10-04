@@ -402,3 +402,14 @@ body:not(.theme-dark) .filter-popover__group-body[data-depth]:not([data-depth="0
 .filter-child-popover__item--danger .filter-child-popover__icon {
     color: var(--tv-text-danger);
 }
+
+/* A number of a row (N of nextNDays, a length): read as typed; what does
+   not read is said under the row's value line (FilterConditionRenderer). */
+.filter-popover .tv-ctrl__text-input.filter-popover__number-input {
+    width: 52px;
+    flex-shrink: 0;
+}
+
+.filter-popover .filter-popover__says > .tv-form__error {
+    margin: 4px 0 0;
+}

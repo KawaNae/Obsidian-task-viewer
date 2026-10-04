@@ -30,6 +30,10 @@ describe('parseDatePreset', () => {
         expect(parseDatePreset('next30days')).toEqual(ok({ preset: 'nextNDays', n: 30 }));
     });
 
+    it('refuses next0days: N is one or more, as the menu\'s field takes it', () => {
+        expect(parseDatePreset('next0days')).toEqual({ ok: false, issue: { code: 'range', min: 1 } });
+    });
+
     it('rejects anything else as not a date', () => {
         const notADate = { ok: false, issue: { code: 'shape', kind: 'date' } };
         expect(parseDatePreset('nextndays')).toEqual(notADate);
