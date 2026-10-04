@@ -1,7 +1,8 @@
 import { Notice, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
-import { SourceEditor, type DraftEditor } from '../form/source/SourceEditor';
+import { editorOn, type DraftEditor } from '../form/source/SourceEditor';
+import { FormActions } from '../form/FormActions';
 import { IssueBoard } from '../form/FormIssue';
 import type { SourceSurface, SourceViewState } from './TaskHubSource';
 
@@ -23,11 +24,8 @@ export interface SourceViewActions {
  * is lost. It draws what the mode's state says (`SourceViewState`) and does
  * nothing of its own.
  *
- * The row of controls is cancel and apply at its end. Asked whether to throw
- * the draft away, the same row asks: the question comes in at its start,
- * discard beside it, and cancel reads back, which keeps the draft. Discard
- * stands apart from the buttons a hand goes to, so a slip of the hand keeps
- * the draft; apply stays offered, since applying withdraws the question.
+ * The row of controls is cancel and apply at its end (`FormActions`), which
+ * asks whether to throw the draft away as every form's row does.
  */
 export class TaskHubSourceView implements SourceSurface {
     private readonly viewBtn: HTMLButtonElement;
@@ -39,13 +37,9 @@ export class TaskHubSourceView implements SourceSurface {
     /** Why the last apply wrote nothing, said under the editor. */
     private readonly issues: IssueBoard<never>;
     private readonly lostEl: HTMLElement;
-    private readonly actionsEl: HTMLElement;
-    private readonly discardBtn: HTMLButtonElement;
-    private readonly askEl: HTMLElement;
-    private readonly cancelBtn: HTMLButtonElement;
-    private readonly applyBtn: HTMLButtonElement;
-    /** Asked as last drawn: the cancel button is back then. */
-    private asking = false;
+    /** Where the row of controls stands, under the editor: out of the pane while the card shows. */
+    private readonly actionsHost: HTMLElement;
+    private readonly actions: FormActions;
 
     /**
      * @param bar where the switch goes, above the card
@@ -84,28 +78,19 @@ export class TaskHubSourceView implements SourceSurface {
                 () => new Notice(t('modal.hub.source.copyFailed')),
             );
         });
-        const lostDiscardBtn = this.lostEl.createEl('button', { cls: 'mod-warning', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
+        const lostDiscardBtn = this.lostEl.createEl('button', { cls: 'mod-warning', text: t('modal.draft.discard'), attr: { type: 'button' } });
         lostDiscardBtn.addEventListener('click', () => actions.discard());
 
-        this.actionsEl = this.pane.createDiv({ cls: 'task-hub__source-actions tv-form__buttons' });
-        this.askEl = this.actionsEl.createSpan({ cls: 'task-hub__source-ask tv-form__ask', text: t('modal.hub.source.discardAsk') });
-        this.discardBtn = this.actionsEl.createEl('button', { cls: 'mod-warning task-hub__source-discard tv-form__discard', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
-        this.discardBtn.addEventListener('click', () => actions.discard());
-        this.cancelBtn = this.actionsEl.createEl('button', { cls: 'task-hub__source-cancel', attr: { type: 'button' } });
-        this.cancelBtn.addEventListener('click', () => (this.asking ? actions.keep() : actions.cancel()));
-        this.applyBtn = this.actionsEl.createEl('button', { cls: 'mod-cta', text: t('modal.hub.source.apply'), attr: { type: 'button' } });
-        this.applyBtn.addEventListener('click', () => actions.apply());
+        this.actionsHost = this.pane.createDiv({ cls: 'task-hub__source-actions' });
+        this.actions = new FormActions(this.actionsHost, {
+            cancel: { run: () => actions.cancel() },
+            actions: [{ label: t('modal.hub.source.apply'), busyLabel: t('modal.hub.source.applying'), tone: 'cta', run: () => actions.apply() }],
+            ask: { discardLabel: t('modal.draft.discard'), keepLabel: t('modal.draft.keep'), discard: () => actions.discard(), keep: () => actions.keep() },
+        });
     }
 
     openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor {
-        return new SourceEditor(this.editorHost, {
-            parent: frame.parent,
-            children: frame.children,
-            indentUnit: frame.unit,
-            app: this.app,
-            onSubmit: hooks.submit,
-            onChange: hooks.edited,
-        });
+        return editorOn(this.editorHost, frame, this.app, hooks);
     }
 
     render(state: SourceViewState): void {
@@ -126,20 +111,19 @@ export class TaskHubSourceView implements SourceSurface {
         this.pane.toggleClass('tv-source-drafts--asking', asking);
         this.lostEl.toggle(open && state.lost && !asking);
         // A lost row has its own way out; asked there, the row asks as anywhere.
-        this.actionsEl.toggle(open && (!state.lost || asking));
-        this.discardBtn.toggle(asking);
-        this.askEl.toggle(asking);
-        this.cancelBtn.setText(asking ? t('modal.hub.source.keep') : t('modal.cancel'));
-        this.cancelBtn.disabled = !asking && state.phase !== 'source';
+        this.actions.render({
+            busy: state.phase === 'applying',
+            ctaEnabled: state.phase === 'source',
+            ask: asking ? t('modal.draft.discardAsk') : null,
+        });
+        this.actions.cancelButton.disabled = !asking && state.phase !== 'source';
         // Asked, the apply stays offered: applying withdraws the question.
-        this.applyBtn.toggle(!state.lost);
-        this.applyBtn.disabled = state.phase !== 'source';
-        this.applyBtn.setText(state.phase === 'applying' ? t('modal.hub.source.applying') : t('modal.hub.source.apply'));
-        this.asking = asking;
+        this.actions.showAct(!state.lost);
+        this.actionsHost.toggle(open && (!state.lost || asking));
     }
 
     /** Asked, first or again: back takes the focus, where cancel was. */
     asked(): void {
-        this.cancelBtn.focus();
+        this.actions.focusKeep();
     }
 }

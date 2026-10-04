@@ -32,7 +32,6 @@ class FakeEditor implements DraftEditor {
         this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
     }
     draft(): SourceDraft { return { parent: this.parent, children: this.children.map(line => ({ ...line })) }; }
-    isDirty(): boolean { return this.parent !== this.frame.parent; }
     isCompleting(): boolean { return this.completing; }
     closeCompletion(): boolean {
         const was = this.completing;

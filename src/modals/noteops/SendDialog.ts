@@ -13,6 +13,7 @@ import { Outline } from '../../services/parsing/utils/Outline';
 import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor } from '../form/source/SourceEditor';
 import type { FormIssue, Tone } from '../form/FormIssue';
+import { DraftGuard } from '../form/DraftGuard';
 
 /**
  * The send dialog: rows and their subtrees sent to a section of a note
@@ -51,9 +52,9 @@ import type { FormIssue, Tone } from '../form/FormIssue';
  *   offers no send again: the rows that went are no longer where the
  *   dialog opened them.
  * - A draft is never lost to a close the user asks for: the dialog asks
- *   first (`beforeClose`), as the hub's source mode does. A draft is a row
- *   whose editor holds other lines than it opened on (`SubtreeFrame.check`
- *   is not `same`); the fields are not asked about.
+ *   first (`beforeClose`), as the hub's source mode does (`DraftGuard`). A
+ *   draft is a row whose editor holds other lines than it opened on
+ *   (`SubtreeFrame.check` is not `same`); the fields are not asked about.
  */
 
 /** Where the dialog is: open to a send, sending, or past a send made for some rows only. */
@@ -138,7 +139,13 @@ export class SendDialog {
     /** The checks the user changed, by key. */
     private readonly checks = new Map<string, boolean>();
     private message: string | null = null;
-    private asking = false;
+    /** Whether to throw the drafts away, asked before a close that would lose them. */
+    private readonly guard: DraftGuard<'close'> = new DraftGuard<'close'>({
+        loss: () => (this.hasDraft() ? { kind: 'draft' } : null),
+        render: () => this.render(),
+        asked: () => this.surface.asked(),
+        goOn: () => this.host.close(),
+    });
     private disposed = false;
 
     constructor(
@@ -204,7 +211,7 @@ export class SendDialog {
             candidates: this.candidatesOf(facts),
             issues: this.message === null ? held : [...held, { at: 'form', tone: 'error', text: this.message }],
             canSend,
-            asking: this.asking,
+            asking: this.guard.asking !== null,
         };
     }
 
@@ -212,7 +219,7 @@ export class SendDialog {
     async send(): Promise<void> {
         const req = this.request();
         if (!req || !this.state().canSend) return;
-        this.asking = false;
+        this.guard.withdraw();
         this.phase = 'sending';
         this.message = null;
         this.render();
@@ -266,26 +273,17 @@ export class SendDialog {
      * Asked again while it asks, the question is put again.
      */
     beforeClose(): boolean {
-        if (!this.asking && !this.hasDraft()) return true;
-        const drawn = this.asking;
-        this.asking = true;
-        if (!drawn) this.render();
-        this.surface.asked();
-        return false;
+        return this.guard.request('close');
     }
 
     /** Throw the draft away, as asked, and close. */
     discard(): void {
-        this.asking = false;
-        this.host.close();
+        this.guard.discard();
     }
 
-    /** Keep the draft: the question is withdrawn. */
+    /** Keep the draft: the question is withdrawn, and the first editor takes the focus. */
     keep(): void {
-        if (!this.asking) return;
-        this.asking = false;
-        this.render();
-        this.firstEditor()?.focus();
+        if (this.guard.keep()) this.firstEditor()?.focus();
     }
 
     /** Whether an Escape is an editor's own (a completion list to close), not the dialog's. */
@@ -329,10 +327,9 @@ export class SendDialog {
         return this.answer !== null && this.answer.seq === this.asked;
     }
 
-    /** A draft's text changed: asked whether to throw it away, the question is withdrawn. */
+    /** A draft's text changed: what it says is drawn again, and, asked whether to throw it away, the question is withdrawn. */
     private edited(): void {
-        this.asking = false;
-        this.render();
+        if (!this.guard.withdraw()) this.render();
     }
 
     private editors(): DraftEditor[] {
