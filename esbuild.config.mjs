@@ -109,7 +109,7 @@ const copyStaticFiles = {
           '_timer-view.css',
           '_template-creator.css',
           '_timer-widget.css',
-          '_modal.css',
+          '_ask-dialog.css',
           '_overlay.css',
           '_task-hub.css',
           '_source-editor.css',

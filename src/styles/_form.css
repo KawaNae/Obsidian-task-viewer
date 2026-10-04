@@ -1,7 +1,7 @@
 /* ======================================================
    Shared form widgets (tv-form__*)
    TaskHubForm、CreateTaskModal（+ PickerTextField）、SendModal が共有する
-   フォーム部品。モーダル chrome は _modal.css、コントロール原子は
+   フォーム部品。問いのダイアログは _ask-dialog.css、コントロール原子は
    _controls.css（tv-ctrl__*）。
    ====================================================== */
 

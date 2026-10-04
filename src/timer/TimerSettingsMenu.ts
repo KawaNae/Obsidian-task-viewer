@@ -8,8 +8,9 @@
  */
 
 import type { App, Menu } from 'obsidian';
-import { InputModal } from '../modals/InputModal';
+import { askText } from '../modals/ask/askText';
 import { t } from '../i18n';
+import { IntInput } from '../utils/values/NumberValues';
 
 /** 分数を 1 つ選ばせる項目。プリセットと Custom… を並べる。 */
 export interface DurationField {
@@ -104,17 +105,20 @@ export class TimerSettingsMenu {
             const suffix = isCustom ? ` (${current} ${t('timer.minSuffix')})${CHECK}` : '';
             item.setTitle(`  ${t('timer.custom')}${suffix}`)
                 .onClick(() => {
-                    new InputModal(
-                        app,
-                        field.title,
-                        t('timer.minutesRange', { min: 1, max: field.maxMinutes }),
-                        current.toString(),
-                        async (value) => {
-                            const minutes = parseInt(value, 10);
-                            if (isNaN(minutes) || minutes <= 0 || minutes > field.maxMinutes) return;
+                    // What does not read as a whole number in range is said
+                    // under the field, and the dialog stays.
+                    void askText(app, {
+                        title: field.title,
+                        label: t('timer.minutesRange', { min: 1, max: field.maxMinutes }),
+                        initial: current.toString(),
+                        read: (text) => IntInput.read(text, { min: 1, max: field.maxMinutes }),
+                        numeric: true,
+                        submitLabel: t('modal.ok'),
+                        submit: async (minutes) => {
                             await field.set(minutes);
+                            return null;
                         },
-                    ).open();
+                    });
                 });
         });
     }

@@ -5,8 +5,8 @@ import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
 import { CreateTaskModal } from '../../../modals/CreateTaskModal';
 import { formatTaskLine } from '../../../services/parsing/TaskLineFormat';
-import { ConfirmModal } from '../../../modals/ConfirmModal';
-import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
+import { confirm } from '../../../modals/ask/askChoice';
+import { askFlowDelete } from '../../../modals/ask/flowDeleteChoice';
 import { SendModal } from '../../../modals/noteops/SendModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
@@ -242,23 +242,21 @@ export class TaskActionsMenuBuilder {
                 subMenu.addItem((sub) => {
                     sub.setTitle(t('menu.undated'))
                         .setIcon('calendar-x')
-                        .onClick(() => {
+                        .onClick(async () => {
                             menu.close();
-                            new ConfirmModal(
-                                this.app,
-                                t('menu.switchToUndated'),
-                                t('menu.switchToUndatedMessage'),
-                                async () => {
-                                    await this.operations.updateTask(task.id, {
-                                        startDate: undefined,
-                                        startTime: undefined,
-                                        endDate: undefined,
-                                        endTime: undefined,
-                                        due: undefined,
-                                    });
-                                },
-                                { confirmLabel: t('modal.convert') }
-                            ).open();
+                            const confirmed = await confirm(this.app, {
+                                title: t('menu.switchToUndated'),
+                                body: [t('menu.switchToUndatedMessage')],
+                                confirmLabel: t('modal.convert'),
+                            });
+                            if (!confirmed) return;
+                            await this.operations.updateTask(task.id, {
+                                startDate: undefined,
+                                startTime: undefined,
+                                endDate: undefined,
+                                endTime: undefined,
+                                due: undefined,
+                            });
                         });
                 });
             }
@@ -304,24 +302,19 @@ export class TaskActionsMenuBuilder {
                     };
 
                     if (outlook.kind === 'creates') {
-                        new FlowDeleteChoiceModal(
-                            this.app,
-                            { previewLine: outlook.previewLine, descendantFlows },
-                            (choice) => {
-                                if (choice === 'cancel') return;
-                                void remove(choice === 'fireAndDelete');
-                            }
-                        ).open();
+                        const choice = await askFlowDelete(this.app, { previewLine: outlook.previewLine, descendantFlows });
+                        if (choice === 'cancel') return;
+                        await remove(choice === 'fireAndDelete');
                         return;
                     }
 
-                    new ConfirmModal(
-                        this.app,
-                        t('menu.deleteTaskTitle'),
-                        this.deleteMessage(outlook, descendantFlows),
-                        () => void remove(false),
-                        { confirmLabel: t('modal.delete'), warning: true }
-                    ).open();
+                    const confirmed = await confirm(this.app, {
+                        title: t('menu.deleteTaskTitle'),
+                        body: this.deleteMessage(outlook, descendantFlows),
+                        confirmLabel: t('modal.delete'),
+                        warning: true,
+                    });
+                    if (confirmed) await remove(false);
                 });
         });
     }

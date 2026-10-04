@@ -284,6 +284,7 @@
     "saveView": "Save view...",
     "saveViewTitle": "Save View",
     "saveViewLabel": "View name",
+    "saveViewFailed": "The view was not saved.",
     "loadView": "Load view...",
     "resetView": "Reset view",
     "copyUri": "Copy URI",
@@ -567,6 +568,24 @@
       "discard": "Discard",
       "keep": "Back"
     }
+  },
+  "issue": {
+    "empty": "Enter a value.",
+    "shape": {
+      "date": "Enter a date (YYYY-MM-DD).",
+      "time": "Enter a time (HH:mm).",
+      "dateTime": "Enter a date (YYYY-MM-DD), or a date and a time (YYYY-MM-DD HH:mm).",
+      "dateTimeOrTime": "Enter a date (YYYY-MM-DD), a date and a time (YYYY-MM-DD HH:mm), or a time (HH:mm).",
+      "int": "Enter a whole number.",
+      "number": "Enter a number.",
+      "bool": "Enter true or false."
+    },
+    "noSuchDay": "That day does not exist.",
+    "rangeBetween": "Enter a number from {{min}} to {{max}}.",
+    "rangeAtLeast": "Enter a number of {{min}} or more.",
+    "rangeAtMost": "Enter a number of {{max}} or less.",
+    "oneOf": "Enter one of: {{allowed}}.",
+    "dateRequired": "A time needs a date with it."
   },
   "validation": {
     "crossMidnight": "End time ({{endTime}}) is before start time ({{startTime}}).",
