@@ -15,7 +15,8 @@ import { DateUtils } from '../utils/DateUtils';
 import { type TaskLineFields, formatTaskLine } from '../services/parsing/TaskLineFormat';
 import type { Task } from '../types';
 import type { AnchoredRow } from '../services/operations/Operations';
-import type { WriteAnswer } from '../services/operations/WriteAnswer';
+import { notWritten, WRITTEN, type WriteAnswer, type WriteTelling } from '../services/operations/WriteAnswer';
+import type { IndexRefusal } from '../services/core/RefusalClause';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
@@ -322,10 +323,10 @@ export class TimerRecorder {
      * 尻尾を引けなければ書く行が無い。止めたときの予備の記録（{@link addRecord}）は
      * start を経過から逆算するので、タイマーだけが動けば記録は合う。
      *
-     * @returns 書けたか（書く行が無いときは書けたと答える）。書けなかったときは、
-     * 理由を1回だけ通知済み。
+     * @returns 書けたか（書く行が無いときは書けたと答える）と、書けなかった理由。
+     * 理由は1回だけ言う: 通知か、`opts.tellRefusal` が false なら呼び手が。
      */
-    async moveRunningStart(timer: TimerState, startMs: number): Promise<boolean> {
+    async moveRunningStart(timer: TimerState, startMs: number, opts: WriteTelling = {}): Promise<WriteAnswer> {
         if (!timer.tail) return this.noRunningLine(timer);
         const start = new Date(startMs);
         const moved = await this.plugin.getOperations().updateByAnchor(timer.file, timer.tail, (row) => {
@@ -337,20 +338,25 @@ export class TimerRecorder {
             // ずらしても end が動かないよう、今の日付を書き出しておく。
             if (row.endTime && !row.endDate && row.startDate) updates.endDate = row.startDate;
             return updates;
-        });
+        }, opts);
         switch (moved.kind) {
-            case 'unreadable': return this.noticeUnreadable(timer, 'moveRunningStart (not moved)');
+            case 'unreadable': {
+                const refused: IndexRefusal = { file: timer.file, reason: { kind: 'unreadable' }, subject: timer.name };
+                if (opts.tellRefusal === false) logWarn(`[TimerRecorder] moveRunningStart (not moved): ${timer.file} could not be read (${describeTimerAnchor(timer)})`);
+                else this.noticeUnreadable(timer, 'moveRunningStart (not moved)');
+                return notWritten(refused);
+            }
             case 'none': return this.noRunningLine(timer);
-            // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
-            case 'not-written': return false;
+            // 書けなかった理由は、書き込みの層が1回だけ通知済みか、呼び手が言う。
+            case 'not-written': return notWritten(moved.refused);
         }
-        return true;
+        return WRITTEN;
     }
 
     /** 開始をずらす走行の行が無い: タイマーだけが動く。 */
-    private noRunningLine(timer: TimerState): boolean {
+    private noRunningLine(timer: TimerState): WriteAnswer {
         logInfo(`[TimerRecorder] moveRunningStart: no running line, only the timer moves (${describeTimerAnchor(timer)})`);
-        return true;
+        return WRITTEN;
     }
 
     /**

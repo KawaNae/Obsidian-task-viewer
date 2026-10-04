@@ -489,7 +489,8 @@ export class TimerRenderer {
             menu.addSeparator();
             menu.addItem((item) => {
                 item.setTitle(t('timer.offsetCustom'))
-                    .onClick(() => new TimerStartOffsetModal(this.deps.app, offset).open());
+                    // The dialog waits for the write and says a refusal inside it.
+                    .onClick(() => new TimerStartOffsetModal(this.deps.app, (startMs) => lifecycle.offsetStart(timer, startMs, { tellRefusal: false })).open());
             });
         }, { kind: 'mouseEvent', event: e });
     }
