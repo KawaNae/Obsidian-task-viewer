@@ -4,6 +4,15 @@ import type { PluginContext } from '../../../PluginContext';
 import type { IndexReads } from '../../../services/core/TaskIndex';
 import type { PopoverStack } from '../../../views/sharedUI/PopoverStack';
 import type { CascadeSourceKind } from '../CascadeSource';
+import type { DateKey } from '../../form/DateFieldGroup';
+import type { IssueBoard } from '../../form/FormIssue';
+
+/**
+ * The hub's fields, by the names its issues are said of (`FormIssue.at`):
+ * the name, the six date fields, the tag to add, the style's three, the key
+ * of the property to add, and each property's value (`prop:<key>`).
+ */
+export type HubField = 'name' | DateKey | 'tags' | 'color' | 'linestyle' | 'mask' | 'propKey' | `prop:${string}`;
 
 /**
  * TaskHubForm の各フィールドグループ（Tags/Style/Properties）が共有する
@@ -31,5 +40,10 @@ export interface FieldGroupContext {
     ) => void;
     sourceLabel: (source: CascadeSourceKind) => string;
     jumpToFile: () => void;
-    showFormError: (message: string) => void;
+    /**
+     * Where the form's issues are said. A group says its fields' under the
+     * source of the field's name, and draws them again once it has built its
+     * rows anew (`IssueBoard.redraw`).
+     */
+    issues: IssueBoard<HubField>;
 }

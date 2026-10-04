@@ -4,6 +4,7 @@ import { refusalNotice, type IndexRefusal } from '../../services/core/RefusalCla
 import type { SubtreeReplacement } from '../../services/persistence/TaskOps';
 import { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor } from '../form/source/SourceEditor';
+import type { FormIssue } from '../form/FormIssue';
 
 /**
  * The hub's source mode: the row and its subtree as text, written from a
@@ -44,8 +45,8 @@ export interface SourceViewState {
     phase: SourcePhase;
     /** In view: why the switch to the source is not offered; null when it is. */
     shut: string | null;
-    /** Under the editor: why the last apply wrote nothing. */
-    message: string | null;
+    /** Under the editor: why the last apply wrote nothing, as an error of the source (`'form'`); none after one that wrote, or before any. */
+    issues: readonly FormIssue<never>[];
     /** Asking whether to throw the draft away. */
     asking: boolean;
     /** The hub lost the row: the draft cannot be written. */
@@ -118,7 +119,7 @@ export class TaskHubSource {
         return {
             phase: this.phase,
             shut: this.phase === 'view' ? this.shutReason() : null,
-            message: this.message,
+            issues: this.message === null ? [] : [{ at: 'form', tone: 'error', text: this.message }],
             asking: this.asking !== null,
             lost: this.current === undefined,
         };

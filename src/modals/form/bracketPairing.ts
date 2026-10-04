@@ -1,10 +1,5 @@
 import { BRACKET_CLOSERS, BRACKET_PAIRS, shouldAutoClose } from '../../utils/BracketRules';
 
-export interface BracketPairingHandle {
-    /** IME composition 中か（外からの値の取り込みを打ちかけの間は控える判定に使う。Enter の判定は onFormEnter が欄ごとに持つ） */
-    isComposing(): boolean;
-}
-
 /**
  * IME 対応の括弧オートペアリングを text input に取り付ける共有 widget。
  * CreateTaskModal と TaskHubForm が共用する。
@@ -17,7 +12,7 @@ export interface BracketPairingHandle {
  * `onInput` は input イベント（composition 中含む）と compositionend の
  * 都度呼ばれる。呼び出し側はここで値の取り込み・バリデーションを行う。
  */
-export function attachBracketPairing(input: HTMLInputElement, onInput: () => void): BracketPairingHandle {
+export function attachBracketPairing(input: HTMLInputElement, onInput: () => void): void {
     let composing = false;
     let lastValueBeforeInput = '';
     let lastSelectionBeforeInput = 0;
@@ -89,6 +84,4 @@ export function attachBracketPairing(input: HTMLInputElement, onInput: () => voi
         }
         onInput();
     });
-
-    return { isComposing: () => composing };
 }

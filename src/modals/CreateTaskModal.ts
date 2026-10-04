@@ -6,8 +6,13 @@ import { createTempTask } from '../services/data/createTempTask';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 import { attachBracketPairing } from './form/bracketPairing';
 import { onFormEnter } from './form/formEnter';
-import { DateFieldGroup } from './form/DateFieldGroup';
+import { DateFieldGroup, type DateKey } from './form/DateFieldGroup';
+import { IssueBoard, readIssue } from './form/FormIssue';
+import { TaskContentInput } from '../services/parsing/tv-inline/TaskContentInput';
 import { OverlayShell } from '../views/sharedUI/OverlayShell';
+
+/** The dialog's fields, by the names its issues are said of. */
+type CreateField = 'name' | DateKey;
 
 /**
  * What the dialog asks for: the fields of a new task line, less its status
@@ -46,6 +51,9 @@ export interface CreateTaskModalOptions {
  *
  * 初めのフォーカスは名前の欄（殻の initialFocus）。名前が空のうちは作らず、
  * 欄の下に理由を出す。開いた直後の Enter で何も書かれないように。
+ *
+ * 名前は `TaskContentInput` で読み、日付ブロックや `==>` を含む名前は理由を
+ * 出して作らない。誤りと注意は `IssueBoard` が欄の下とボタン行の上に出す。
  */
 export class CreateTaskModal {
     private overlay = new OverlayShell();
@@ -54,9 +62,8 @@ export class CreateTaskModal {
     private options: CreateTaskModalOptions;
 
     private nameInput: HTMLInputElement;
-    private nameErrorEl: HTMLElement;
     private dateGroup: DateFieldGroup;
-    private warningEl: HTMLElement;
+    private issues: IssueBoard<CreateField>;
 
     constructor(private app: App, onSubmit: (result: CreateTaskResult) => void, initialValues: Partial<CreateTaskResult> = {}, options: CreateTaskModalOptions = {}) {
         this.onSubmit = onSubmit;
@@ -94,16 +101,19 @@ export class CreateTaskModal {
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
         });
         this.nameInput.value = this.result.content ?? '';
+        const nameSays = nameSection.createDiv({ cls: 'tv-form__says' });
+        const formSays = bodyEl.createDiv({ cls: 'tv-form__says tv-form__says--form' });
+        this.issues = new IssueBoard<CreateField>({
+            field: (at) => (at === 'name' ? { input: this.nameInput, message: nameSays } : this.dateGroup?.slot(at) ?? null),
+            form: formSays,
+        });
         const nameSuggest = new TaskNameSuggest(this.app, this.nameInput);
         attachBracketPairing(this.nameInput, () => {
-            this.result.content = this.nameInput.value;
-            if (this.result.content.trim()) this.showNameRequired(false);
+            this.readName(false);
             this.checkWarning();
         });
         // An Enter that picks from the name's list is the list's.
         onFormEnter(this.nameInput, () => this.submit(), { takesEnter: () => nameSuggest.listShown });
-        this.nameErrorEl = nameSection.createDiv({ cls: 'tv-form__error' });
-        this.showNameRequired(false);
 
         // --- Start / End / Due ---
         const dlParts = DateUtils.splitDateTime(this.result.due ?? '');
@@ -131,29 +141,15 @@ export class CreateTaskModal {
                 implicitStartDate: this.options.dailyNoteDate,
             }),
             getFallbackDatePlaceholder: () => this.options.dailyNoteDate,
-            onInput: (_group, f) => {
-                const d = f.startDate || undefined;
-                const st = f.startTime || undefined;
-                const ed = f.endDate || undefined;
-                const et = f.endTime || undefined;
-                this.result.startDate = d;
-                this.result.startTime = st;
-                this.result.endDate = ed;
-                this.result.endTime = et;
-                this.result.due = DateUtils.joinDateTime(f.dueDate, f.dueTime);
-                this.checkWarning();
-            },
+            onChange: () => this.checkWarning(),
             onEnter: () => this.submit(),
+            issues: (issues) => this.issues.set('dates', issues),
         });
 
         this.dateGroup.updatePlaceholders();
 
-        // --- Error / Warning ---
-        const errorEl = bodyEl.createDiv({ cls: 'tv-form__error' });
-        errorEl.style.display = 'none';
-        this.dateGroup.bindErrorEl(errorEl);
-        this.warningEl = bodyEl.createDiv({ cls: 'tv-form__warning' });
-        this.warningEl.style.display = 'none';
+        // What is of the form as a whole is said above its buttons.
+        bodyEl.appendChild(formSays);
 
         // --- Create button ---
         new Setting(bodyEl)
@@ -168,31 +164,42 @@ export class CreateTaskModal {
     private checkWarning(): void {
         if (!this.options.warnOnEmptyTask) return;
         const f = this.dateGroup.collect();
-        const empty = !this.result.content.trim()
+        const empty = !this.nameInput.value.trim()
             && !f.startDate && !f.startTime && !f.endDate && !f.endTime && !f.dueDate && !f.dueTime;
-        if (empty) {
-            this.warningEl.setText(t('modal.emptyTaskWarning'));
-            this.warningEl.style.display = 'block';
-        } else {
-            this.warningEl.style.display = 'none';
-        }
+        this.issues.set('empty', empty ? [{ at: 'form', tone: 'warning', text: t('modal.emptyTaskWarning') }] : []);
     }
 
-    /** Say under the name field that a name is needed, or take it back. */
-    private showNameRequired(shown: boolean): void {
-        this.nameInput.toggleClass('tv-ctrl__text-input--invalid', shown);
-        this.nameErrorEl.setText(shown ? t('modal.nameRequired') : '');
-        this.nameErrorEl.style.display = shown ? 'block' : 'none';
+    /**
+     * The name as read, said wrong under its field when it does not read;
+     * null then. An empty name is wrong only when `required` (a submit): it
+     * is not said while the name is being typed.
+     */
+    private readName(required: boolean): string | null {
+        const text = this.nameInput.value;
+        if (!text.trim()) {
+            this.issues.set('name', required ? [{ at: 'name', tone: 'error', text: t('modal.nameRequired') }] : []);
+            return null;
+        }
+        const read = TaskContentInput.read(text);
+        this.issues.set('name', readIssue('name', read.ok ? null : read.issue));
+        return read.ok ? read.value : null;
     }
 
     submit() {
-        if (!this.result.content.trim()) {
-            this.showNameRequired(true);
+        const content = this.readName(true);
+        const dates = this.dateGroup.read();
+        if (content === null) {
             this.nameInput.focus();
             return;
         }
-        if (!this.dateGroup.validate()) return;
+        if (!dates) return;
 
+        this.result.content = content;
+        this.result.startDate = dates.startDate || undefined;
+        this.result.startTime = dates.startTime || undefined;
+        this.result.endDate = dates.endDate || undefined;
+        this.result.endTime = dates.endTime || undefined;
+        this.result.due = DateUtils.joinDateTime(dates.dueDate, dates.dueTime);
         this.close();
         this.onSubmit(this.result);
     }

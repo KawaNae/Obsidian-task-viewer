@@ -10,16 +10,20 @@ import { buildStatusOptions, getStatusLabel } from '../../constants/statusOption
 import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
 import { createFormRow } from '../form/formRow';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
-import { attachBracketPairing, type BracketPairingHandle } from '../form/bracketPairing';
+import { attachBracketPairing } from '../form/bracketPairing';
 import { onFormEnter } from '../form/formEnter';
+import { bindField, type BoundField } from '../form/bindField';
+import { IssueBoard, readIssue, type IssueSlot } from '../form/FormIssue';
+import { TaskContentInput } from '../../services/parsing/tv-inline/TaskContentInput';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import { openFile } from '../../utils/NavigationUtils';
 import { SuggestController } from '../../views/customMenus/SuggestController';
 import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
-import type { DateGroupKey } from '../form/DateFieldGroup';
+import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
+import type { DateTimeFields } from '../TaskDateValidator';
 import { logError } from '../../log/log';
-import type { FieldGroupContext } from './fields/FieldGroupContext';
+import type { FieldGroupContext, HubField } from './fields/FieldGroupContext';
 import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
@@ -47,10 +51,15 @@ export interface TaskHubFormDeps {
  * 差分だけを updateTask する即時コミット。Save ボタンは持たない。
  * コミットは promise チェーンで直列化し、vault.process の競合を防ぐ。
  *
- * echo 防御: 外部変更（自分の書き込みの echo を含む）は refresh(fresh) で
- * 取り込むが、「focus 中の入力」と「IME composition 中」のフィールドは
- * スキップする。フラグや世代カウンタは持たない — focus 状態だけで
- * 自書き込み echo と外部編集の合流が同じ規則で正しく処理される。
+ * 欄は `bindField` で値に結ぶ。打った値は欄の codec で読み、読めない値は
+ * 欄の下に理由を出して保存しない。外部変更（自分の書き込みの echo を含む）
+ * は refresh(fresh) で `BoundField.set` を通して取り込み、イベントを投げない。
+ * 打ちかけの字がある欄と IME の変換中の欄は取り込まない — 欄の字が、欄に
+ * 最後に入れた値の字と違うかで見分ける。フラグや世代カウンタは持たない。
+ *
+ * 誤りと注意は `IssueBoard` が持ち、出どころ（欄の名前、日付の規則、
+ * フォームが閉じている理由）ごとに置き換える。出す場所は欄の行の下と
+ * フォームの末尾である。
  *
  * DOM 構築とコミット/echo ロジックは 3 つのフィールドグループ（tags/style/
  * properties、`fields/` 配下）に分割済み。name/status/date は分割するには
@@ -66,18 +75,19 @@ export class TaskHubForm {
     private missing = false;
     /** The source mode holds the row: its draft is the one way to write it until it closes. */
     private sourceOpen = false;
-    private refreshing = false;
     private fieldCtx: FieldGroupContext;
+    private readonly issues: IssueBoard<HubField>;
+    /** Where the form says what is of it as a whole: at its end. */
+    private readonly formSays: HTMLElement;
 
     private nameInput: HTMLInputElement;
-    private pairing: BracketPairingHandle;
+    private nameSays: HTMLElement;
+    private nameField: BoundField<string>;
     private statusPill: HTMLButtonElement;
     private dateGroup: DateFieldGroup;
     private tagsField: TagsFieldGroup;
     private styleField: StyleFieldGroup;
     private propsField: PropertiesFieldGroup;
-    private errorEl: HTMLElement;
-    private noticeEl: HTMLElement;
 
     constructor(
         private container: HTMLElement,
@@ -85,6 +95,11 @@ export class TaskHubForm {
         private deps: TaskHubFormDeps,
     ) {
         this.task = task;
+        this.formSays = container.createDiv({ cls: 'tv-form__says tv-form__says--form' });
+        this.issues = new IssueBoard<HubField>({
+            field: (at) => this.slotOf(at),
+            form: this.formSays,
+        });
         this.fieldCtx = {
             getTask: () => this.task,
             isShut: () => this.shut,
@@ -96,7 +111,7 @@ export class TaskHubForm {
             attachSuggest: (input, anchorEl, opts) => this.attachSuggest(input, anchorEl, opts),
             sourceLabel: (source) => this.sourceLabel(source),
             jumpToFile: () => this.jumpToFile(),
-            showFormError: (message) => this.showFormError(message),
+            issues: this.issues,
         };
         this.render();
     }
@@ -117,11 +132,17 @@ export class TaskHubForm {
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
         });
         this.nameInput.value = this.task.content ?? '';
+        this.nameSays = nameSection.createDiv({ cls: 'tv-form__says' });
         const nameSuggest = new TaskNameSuggest(this.deps.app, this.nameInput);
-        this.pairing = attachBracketPairing(this.nameInput, () => { /* 値取り込みは commit 時 */ });
-        this.nameInput.addEventListener('blur', () => this.commitContent());
-        // An Enter that picks from the name's list is the list's.
-        onFormEnter(this.nameInput, () => this.commitContent(), { takesEnter: () => nameSuggest.listShown });
+        attachBracketPairing(this.nameInput, () => { /* 値取り込みは commit 時 */ });
+        this.nameField = bindField(this.nameInput, {
+            codec: TaskContentInput,
+            current: () => this.task.content ?? '',
+            commit: (content) => this.commitContent(content),
+            issues: (issue) => this.issues.set('name', readIssue('name', issue)),
+            // An Enter that picks from the name's list is the list's.
+            takesEnter: () => nameSuggest.listShown,
+        });
 
         // --- Status + Dates ---
         const scheduleGroup = c.createDiv({ cls: 'tv-form__group' });
@@ -174,18 +195,11 @@ export class TaskHubForm {
         });
 
         // --- Start / End / Due ---
-        const dl = DateUtils.splitDateTime(this.task.due ?? '');
         this.dateGroup = new DateFieldGroup(scheduleGroup, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
             icons: { start: PROPERTY_ICONS.start, end: PROPERTY_ICONS.end, due: PROPERTY_ICONS.due },
-            initial: {
-                startDate: this.task.startDate || '',
-                startTime: this.task.startTime || '',
-                endDate: this.task.endDate || '',
-                endTime: this.task.endTime || '',
-                dueDate: dl.date || '',
-                dueTime: dl.time || '',
-            },
+            initial: dateFieldsOf(this.task),
+            current: () => dateFieldsOf(this.task),
             buildOverlayTask: (f) => ({
                 ...this.task,
                 startDate: f.startDate || undefined,
@@ -200,8 +214,8 @@ export class TaskHubForm {
                 hasImplicitStartDate: !!this.task.cascadeContext?.startDate,
                 implicitStartDate: this.task.cascadeContext?.startDate,
             }),
-            isSuspended: () => this.refreshing,
-            onCommit: (group) => this.commitDates(group),
+            onCommit: (group, f) => this.commitDates(group, f),
+            issues: (issues) => this.issues.set('dates', issues),
         });
 
         // --- Tags ---
@@ -217,14 +231,19 @@ export class TaskHubForm {
         const propsGroup = c.createDiv({ cls: 'tv-form__group' });
         this.propsField = new PropertiesFieldGroup(propsGroup, this.fieldCtx);
 
-        // --- Error / notice ---
-        this.errorEl = c.createDiv({ cls: 'tv-form__error' });
-        this.errorEl.style.display = 'none';
-        this.dateGroup.bindErrorEl(this.errorEl);
-        this.noticeEl = c.createDiv({ cls: 'tv-form__warning' });
-        this.noticeEl.style.display = 'none';
+        // What is of the form as a whole is said at its end.
+        c.appendChild(this.formSays);
 
         this.dateGroup.updatePlaceholders();
+    }
+
+    /** Where the field `at` says its issues now; null for a row that is not there. */
+    private slotOf(at: HubField): IssueSlot | null {
+        if (at === 'name') return { input: this.nameInput, message: this.nameSays };
+        if (at === 'tags') return this.tagsField?.slot() ?? null;
+        if (at === 'color' || at === 'linestyle' || at === 'mask') return this.styleField?.slot(at) ?? null;
+        if (at === 'propKey' || at.startsWith('prop:')) return this.propsField?.slot(at) ?? null;
+        return this.dateGroup?.slot(at as DateKey) ?? null;
     }
 
     // ==================== suggest 共通（filter-popover と同機構） ====================
@@ -282,7 +301,7 @@ export class TaskHubForm {
             });
         };
         input.addEventListener('input', (e: Event) => {
-            if (!(e as InputEvent).isComposing && !this.refreshing) show(false);
+            if (!(e as InputEvent).isComposing) show(false);
         });
         // IME 確定後に候補を絞り直す唯一の契機。Chromium では確定の 'input'
         // が isComposing=true で飛ぶので（bracketPairing.ts の同じ箇所を
@@ -291,9 +310,7 @@ export class TaskHubForm {
         // 来るため、そちらではこの listener が確定前の値で走り、後続の
         // 'input' が確定後の値で絞り直す。どちらの順序でも 1 回は確定後の
         // 値で走り、二重に走っても候補の再描画が 1 回増えるだけである。
-        input.addEventListener('compositionend', () => {
-            if (!this.refreshing) show(false);
-        });
+        input.addEventListener('compositionend', () => show(false));
         input.addEventListener('focus', () => show(!input.value));
         input.addEventListener('blur', () => suggest.close());
         input.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -324,17 +341,11 @@ export class TaskHubForm {
         this.deps.onNavigate?.();
     }
 
-    private showFormError(message: string): void {
-        this.errorEl.empty();
-        this.errorEl.setText(message);
-        this.errorEl.style.display = 'block';
-    }
-
     // ==================== コミット ====================
 
-    private commitContent(): void {
+    private commitContent(content: string): void {
         if (this.shut) return;
-        this.queue(TaskUpdateBuilder.content(this.task, this.nameInput.value));
+        this.queue(TaskUpdateBuilder.content(this.task, content));
     }
 
     private commitStatus(value: string): void {
@@ -343,10 +354,8 @@ export class TaskHubForm {
         this.renderStatusPill(); // 打った値の model から pill を即時更新
     }
 
-    private commitDates(group: DateGroupKey): void {
+    private commitDates(group: DateGroupKey, f: DateTimeFields): void {
         if (this.shut) return;
-        if (!this.dateGroup.validate()) return;
-        const f = this.dateGroup.collect();
         const updates =
             group === 'start' ? TaskUpdateBuilder.dateGroup(this.task, 'start', f.startDate, f.startTime)
             : group === 'end' ? TaskUpdateBuilder.dateGroup(this.task, 'end', f.endDate, f.endTime)
@@ -398,33 +407,12 @@ export class TaskHubForm {
             this.showShut();
         }
 
-        this.refreshing = true;
-        try {
-            this.setInputValue(this.nameInput, fresh.content ?? '', this.pairing.isComposing());
-            this.renderStatusPill();
-            const dl = DateUtils.splitDateTime(fresh.due ?? '');
-            this.dateGroup.setInputValue(this.dateGroup.getInput('startDate'), fresh.startDate ?? '');
-            this.dateGroup.setInputValue(this.dateGroup.getInput('startTime'), fresh.startTime ?? '');
-            this.dateGroup.setInputValue(this.dateGroup.getInput('endDate'), fresh.endDate ?? '');
-            this.dateGroup.setInputValue(this.dateGroup.getInput('endTime'), fresh.endTime ?? '');
-            this.dateGroup.setInputValue(this.dateGroup.getInput('dueDate'), dl.date ?? '');
-            this.dateGroup.setInputValue(this.dateGroup.getInput('dueTime'), dl.time ?? '');
-            this.dateGroup.updatePlaceholders();
-            this.styleField.refresh(fresh, (input, value) => this.setInputValue(input, value));
-            this.tagsField.refresh();
-            this.propsField.refresh();
-        } finally {
-            this.refreshing = false;
-        }
-    }
-
-    private setInputValue(input: HTMLInputElement, value: string, composing = false): void {
-        if (document.activeElement === input || composing) return;
-        if (input.value === value) return;
-        input.value = value;
-        // clear ボタン表示等の widget 内部状態を同期させる
-        // （refreshing ガードによりコミットは発火しない）
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        this.nameField.set(fresh.content ?? '');
+        this.renderStatusPill();
+        this.dateGroup.set(dateFieldsOf(fresh));
+        this.styleField.refresh();
+        this.tagsField.refresh();
+        this.propsField.refresh();
     }
 
     /** タスクが index から消えた（削除 / id 変化）ときの縮退表示 */
@@ -459,8 +447,7 @@ export class TaskHubForm {
     private showShut(): void {
         this.setEnabled(!this.shut);
         const notice = this.sourceOpen ? t('modal.hub.source.formShut') : this.missing ? t('modal.hub.taskMissing') : null;
-        this.noticeEl.setText(notice ?? '');
-        this.noticeEl.style.display = notice ? 'block' : 'none';
+        this.issues.set('shut', notice ? [{ at: 'form', tone: 'warning', text: notice }] : []);
     }
 
     private setEnabled(enabled: boolean): void {
@@ -506,4 +493,17 @@ export class TaskHubForm {
         }
     }
 
+}
+
+/** A row's dates as the six fields hold them, `''` for none; the due's date and time apart. */
+function dateFieldsOf(task: Task): DateTimeFields {
+    const due = DateUtils.splitDateTime(task.due ?? '');
+    return {
+        startDate: task.startDate || '',
+        startTime: task.startTime || '',
+        endDate: task.endDate || '',
+        endTime: task.endTime || '',
+        dueDate: due.date || '',
+        dueTime: due.time || '',
+    };
 }
