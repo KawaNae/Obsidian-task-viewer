@@ -9,9 +9,17 @@
 
 /**
  * The kinds of value whose shape a reading can miss. `dateTime` is a date
- * with or without a time; `dateTimeOrTime` also takes a time alone.
+ * with or without a time; `dateTimeOrTime` also takes a time alone. `color`
+ * is a hex color or a CSS color name.
  */
-export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' | 'number' | 'bool';
+export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' | 'number' | 'bool' | 'color';
+
+/**
+ * Notation of a task's line that a task's name cannot hold, because the
+ * line reads it as something else: a date block (`@2026-10-05`, `@10:00`),
+ * the command (`==>` and what follows), a trailing block ID (`^id`).
+ */
+export type NotationKind = 'dateBlock' | 'command' | 'blockId';
 
 export type Issue =
     /** Nothing was given (only space, once normalized). */
@@ -25,7 +33,13 @@ export type Issue =
     /** A word that is none of the ones accepted. */
     | { readonly code: 'oneOf'; readonly allowed: readonly string[] }
     /** A time given where a date must come with it. */
-    | { readonly code: 'dateRequired' };
+    | { readonly code: 'dateRequired' }
+    /** Text that holds notation the line would read as something else (a task's name). */
+    | { readonly code: 'notation'; readonly kind: NotationKind }
+    /** Characters the value cannot hold, each once, in the order they come. */
+    | { readonly code: 'chars'; readonly chars: string }
+    /** A name the plugin keeps for itself (a property key that is a scope key, `tags`). */
+    | { readonly code: 'reserved' };
 
 export type Read<T> =
     | { readonly ok: true; readonly value: T }
@@ -37,6 +51,29 @@ export function readOk<T>(value: T): Read<T> {
 
 export function readFail<T = never>(issue: Issue): Read<T> {
     return { ok: false, issue };
+}
+
+/**
+ * How a field's text reads, and how a value is shown back in it: a reading
+ * of this folder with the form it writes once read. A field shows a value
+ * it read in this form (`２０２６ー１０ー０５` becomes `2026-10-05`), so what
+ * is shown is what is written.
+ */
+export interface FieldCodec<T> {
+    read(text: string): Read<T>;
+    show(value: T): string;
+}
+
+/**
+ * `codec`, with an empty field (nothing but space) read as no value: a
+ * field where leaving it empty takes the value away (a task's date, its
+ * color), rather than one a value must be given in.
+ */
+export function optional<T>(codec: FieldCodec<T>): FieldCodec<T | undefined> {
+    return {
+        read: (text) => (text.trim() === '' ? readOk(undefined) : codec.read(text)),
+        show: (value) => (value === undefined ? '' : codec.show(value)),
+    };
 }
 
 /** The value of a reading, or undefined when there is none. */

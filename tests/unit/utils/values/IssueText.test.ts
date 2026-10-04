@@ -13,6 +13,12 @@ describe('issueText', () => {
         [{ code: 'range', min: 1, max: 9 }, 'start must be from 1 to 9'],
         [{ code: 'oneOf', allowed: ['a', 'b'] }, 'start must be one of: a, b'],
         [{ code: 'dateRequired' }, 'start must include a date'],
+        [{ code: 'shape', kind: 'color' }, 'start must be a hex color (ff0000) or a color name (red)'],
+        [{ code: 'notation', kind: 'dateBlock' }, 'start must not hold a date block (@…); dates go in their own fields'],
+        [{ code: 'notation', kind: 'command' }, 'start must not hold a command (==>)'],
+        [{ code: 'notation', kind: 'blockId' }, 'start must not hold a block ID (^id) at its end'],
+        [{ code: 'chars', chars: ': [' }, 'start must not hold: : ['],
+        [{ code: 'reserved' }, 'start is reserved'],
     ] as const)('tells %j', (issue, text) => {
         expect(issueText(issue, 'start')).toBe(text);
     });

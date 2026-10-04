@@ -329,6 +329,34 @@
     text-align: center;
 }
 
+/* What a form says, of a field or of itself (IssueBoard): a line each, in
+   its tone's class below. A field's lines stand under its row, from where
+   its controls begin; the form's above its buttons, or at its end. Empty,
+   the place takes no room. */
+.tv-form__says:empty {
+    display: none;
+}
+
+.tv-form__says--row {
+    margin-inline-start: calc(var(--tv-form-label-width, 7em) + 8px);
+}
+
+/* phone: the dates' label stands above its fields, and so do their lines */
+.is-phone .tv-form__row--dates + .tv-form__says--row {
+    margin-inline-start: 0;
+}
+
+.tv-form__says--form {
+    margin-top: 12px;
+}
+
+.tv-form__says > .tv-form__error,
+.tv-form__says > .tv-form__warning,
+.tv-form__says > .tv-form__info {
+    margin: 4px 0 0;
+    white-space: pre-line;
+}
+
 /* Error message */
 .tv-form__error {
     color: var(--tv-text-danger);

@@ -42,6 +42,15 @@ function compositionOf(field: HTMLElement): { composing: boolean } {
 }
 
 /**
+ * Whether the IME is composing in `field` now (between `compositionstart`
+ * and `compositionend`): a value from outside is not put in then, or it
+ * would replace what is being converted (`bindField`).
+ */
+export function composingIn(field: HTMLElement): boolean {
+    return compositionOf(field).composing;
+}
+
+/**
  * Call `run` on the field's Enters that are the form's, and on no other key.
  * The Enter's default (a newline in a textarea, a click on a button) is
  * prevented then, as the form takes the key; an Enter that is not the

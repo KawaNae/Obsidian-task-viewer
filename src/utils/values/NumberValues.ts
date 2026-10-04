@@ -1,5 +1,5 @@
 import { typed } from './Normalize';
-import { readFail, readOk, type Read } from './Read';
+import { readFail, readOk, type FieldCodec, type Read } from './Read';
 
 /**
  * Numbers typed as text, and numbers handed over by a script.
@@ -49,6 +49,10 @@ export const IntInput = {
         if (t === '') return readFail({ code: 'empty' });
         if (!DECIMAL_INT.test(t)) return readFail({ code: 'shape', kind: 'int' });
         return IntValue.check(Number(t), range);
+    },
+    /** The reading of a field that takes a whole number in `range`, shown as its digits. */
+    codec(range: NumberRange = {}): FieldCodec<number> {
+        return { read: (text) => IntInput.read(text, range), show: (n) => String(n) };
     },
 };
 

@@ -578,14 +578,22 @@
       "dateTimeOrTime": "Enter a date (YYYY-MM-DD), a date and a time (YYYY-MM-DD HH:mm), or a time (HH:mm).",
       "int": "Enter a whole number.",
       "number": "Enter a number.",
-      "bool": "Enter true or false."
+      "bool": "Enter true or false.",
+      "color": "Enter a hex color (ff0000) or a color name (red)."
     },
     "noSuchDay": "That day does not exist.",
     "rangeBetween": "Enter a number from {{min}} to {{max}}.",
     "rangeAtLeast": "Enter a number of {{min}} or more.",
     "rangeAtMost": "Enter a number of {{max}} or less.",
     "oneOf": "Enter one of: {{allowed}}.",
-    "dateRequired": "A time needs a date with it."
+    "dateRequired": "A time needs a date with it.",
+    "notation": {
+      "dateBlock": "A name cannot hold a date block (@…). Enter dates in their own fields.",
+      "command": "A name cannot hold a command (==>).",
+      "blockId": "A name cannot end with a block ID (^id)."
+    },
+    "chars": "These characters cannot be used: {{chars}}",
+    "reserved": "This key is reserved."
   },
   "validation": {
     "crossMidnight": "End time ({{endTime}}) is before start time ({{startTime}}).",

@@ -578,14 +578,22 @@
       "dateTimeOrTime": "日付（YYYY-MM-DD）、日付と時刻（YYYY-MM-DD HH:mm）、時刻（HH:mm）のどれかを入れてください。",
       "int": "整数を入れてください。",
       "number": "数を入れてください。",
-      "bool": "true か false を入れてください。"
+      "bool": "true か false を入れてください。",
+      "color": "16進の色（ff0000）か色の名前（red）を入れてください。"
     },
     "noSuchDay": "実在しない日付です。",
     "rangeBetween": "{{min}}〜{{max}} の数を入れてください。",
     "rangeAtLeast": "{{min}} 以上の数を入れてください。",
     "rangeAtMost": "{{max}} 以下の数を入れてください。",
     "oneOf": "次のどれかを入れてください: {{allowed}}",
-    "dateRequired": "時刻には日付が要ります。"
+    "dateRequired": "時刻には日付が要ります。",
+    "notation": {
+      "dateBlock": "名前に日付ブロック（@…）は書けません。日付はそれぞれの欄に入れてください。",
+      "command": "名前にコマンド（==>）は書けません。",
+      "blockId": "名前の末尾にブロック ID（^id）は書けません。"
+    },
+    "chars": "使えない文字があります: {{chars}}",
+    "reserved": "予約されたキーです。"
   },
   "validation": {
     "crossMidnight": "終了時刻（{{endTime}}）が開始時刻（{{startTime}}）より前です。",

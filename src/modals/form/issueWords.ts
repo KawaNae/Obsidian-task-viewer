@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import type { Issue, ShapeKind } from '../../utils/values/Read';
+import type { Issue, NotationKind, ShapeKind } from '../../utils/values/Read';
 
 /**
  * An issue of a reading (`utils/values`) as a sentence in the user's
@@ -18,6 +18,17 @@ export function issueWords(issue: Issue): string {
             return t('issue.rangeAtMost', { max: issue.max ?? '' });
         case 'oneOf': return t('issue.oneOf', { allowed: issue.allowed.join(', ') });
         case 'dateRequired': return t('issue.dateRequired');
+        case 'notation': return notationWords(issue.kind);
+        case 'chars': return t('issue.chars', { chars: issue.chars });
+        case 'reserved': return t('issue.reserved');
+    }
+}
+
+function notationWords(kind: NotationKind): string {
+    switch (kind) {
+        case 'dateBlock': return t('issue.notation.dateBlock');
+        case 'command': return t('issue.notation.command');
+        case 'blockId': return t('issue.notation.blockId');
     }
 }
 
@@ -30,5 +41,6 @@ function shapeWords(kind: ShapeKind): string {
         case 'int': return t('issue.shape.int');
         case 'number': return t('issue.shape.number');
         case 'bool': return t('issue.shape.bool');
+        case 'color': return t('issue.shape.color');
     }
 }
