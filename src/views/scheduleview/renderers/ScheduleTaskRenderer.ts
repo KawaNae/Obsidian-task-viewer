@@ -1,4 +1,5 @@
 import type { App } from 'obsidian';
+import { instantText } from '../../../utils/DayWindow';
 import type { TaskViewerSettings } from '../../../types';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
@@ -77,7 +78,7 @@ export class ScheduleTaskRenderer {
 
                 placements.push({
                     task,
-                    startTime: task.startTime ?? this.gridCalculator.visualMinuteToTime(task.visualStartMinute),
+                    startTime: task.drawn ? instantText(task.drawn.startMs).time : this.gridCalculator.visualMinuteToTime(task.visualStartMinute),
                     top,
                     height,
                     column: assignment.column,

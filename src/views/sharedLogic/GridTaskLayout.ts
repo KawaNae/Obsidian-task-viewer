@@ -3,18 +3,19 @@ import { DateUtils } from '../../utils/DateUtils';
 import { makeSegmentId } from '../../services/display/SegmentIds';
 
 /**
- * Effective date range for a task, provided by the consumer.
+ * The first and the last visual day a task is drawn over, provided by the
+ * consumer (`visualDaysOf`).
  */
 export interface TaskDateRange {
-    effectiveStart: string;  // YYYY-MM-DD
-    effectiveEnd: string;    // YYYY-MM-DD
+    first: string;  // YYYY-MM-DD
+    last: string;   // YYYY-MM-DD
 }
 
 /**
  * A task placed on the grid with all positional metadata computed.
  *
  * Flag semantics (重要 — 過去のバグ温床なので明確に分離している):
- *   - `isMultiDay`     : 幾何的事実。`effectiveEnd > effectiveStart` のとき true。
+ *   - `isMultiDay`     : 幾何的事実。`last > first` のとき true。
  *   - `continuesBefore`: この segment より前に同 task の連続部分がある（pre-split flag
  *                        または internal clip 由来）。
  *   - `continuesAfter` : 同上、後ろ側。
@@ -117,12 +118,12 @@ export function computeGridLayout(
         const range = config.getDateRange(task);
         if (!range) continue;
 
-        const { effectiveStart, effectiveEnd } = range;
-        if (effectiveStart > rangeEnd || effectiveEnd < rangeStart) continue;
+        const { first, last } = range;
+        if (first > rangeEnd || last < rangeStart) continue;
 
         // Clip to visible range
-        const clippedStart = effectiveStart < rangeStart ? rangeStart : effectiveStart;
-        const clippedEnd = effectiveEnd > rangeEnd ? rangeEnd : effectiveEnd;
+        const clippedStart = first < rangeStart ? rangeStart : first;
+        const clippedEnd = last > rangeEnd ? rangeEnd : last;
 
         const startIdx = dateIndex.get(clippedStart);
         const endIdx = dateIndex.get(clippedEnd);
@@ -132,23 +133,23 @@ export function computeGridLayout(
         const span = endIdx - startIdx + 1;
         if (span < 1) continue;
 
-        const isMultiDay = effectiveEnd > effectiveStart;
+        const isMultiDay = last > first;
         const dt = task as DisplayTask;
         // Combine DisplayTask flags (from pre-split) with internal detection (for non-pre-split)
-        const continuesBefore = (dt.splitContinuesBefore ?? false) || (isMultiDay && effectiveStart < rangeStart);
-        const continuesAfter = (dt.splitContinuesAfter ?? false) || (isMultiDay && effectiveEnd > rangeEnd);
+        const continuesBefore = (dt.splitContinuesBefore ?? false) || (isMultiDay && first < rangeStart);
+        const continuesAfter = (dt.splitContinuesAfter ?? false) || (isMultiDay && last > rangeEnd);
 
         // Pre-split tasks already have segment IDs; generate only for non-pre-split clipping
-        const needsInternalSegmentId = !dt.isSplit && isMultiDay && (effectiveStart < rangeStart || effectiveEnd > rangeEnd);
+        const needsInternalSegmentId = !dt.isSplit && isMultiDay && (first < rangeStart || last > rangeEnd);
         const segmentId = needsInternalSegmentId
             ? makeSegmentId(task.id, clippedStart)
             : task.id;
 
         // 2. Compute due arrow
         let dueArrow: DueArrowInfo | null = null;
-        const effectiveDueStr = task.effectiveDue;
-        if (computeDueArrows && effectiveDueStr && DateUtils.isDateShape(DateUtils.splitDateTime(effectiveDueStr).date)) {
-            const dueDateStr = DateUtils.dueDatePart(effectiveDueStr)!;
+        const statedDue = task.stated.due;
+        if (computeDueArrows && statedDue && DateUtils.isDateShape(DateUtils.splitDateTime(statedDue).date)) {
+            const dueDateStr = DateUtils.dueDatePart(statedDue)!;
             const dueDiff = DateUtils.getDiffDays(rangeStart, dueDateStr);
             const maxCol = dates.length;
             let dlCol = dueDiff + 1; // 1-based
@@ -165,7 +166,7 @@ export function computeGridLayout(
                     arrowStartCol: taskEndCol,
                     arrowEndCol: dlCol,
                     isClipped,
-                    dueStr: effectiveDueStr,
+                    dueStr: statedDue,
                 };
             }
         }

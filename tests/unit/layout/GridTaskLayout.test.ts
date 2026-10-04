@@ -16,17 +16,15 @@ function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
         originalText: '',
         tags: [],
         parserId: 'tv-inline',
-        effectiveStartDate: '',
-        startDateImplicit: false,
-        startTimeImplicit: false,
-        endDateImplicit: false,
-        endTimeImplicit: false,
+        span: null,
+        dueMs: null,
+        drawn: null,
         originalTaskId: overrides.id ?? 'test-1',
         isSplit: false,
         ...overrides,
     } as DisplayTask;
-    if (result.due && !('effectiveDue' in overrides)) {
-        (result as any).effectiveDue = result.due;
+    if (!('stated' in overrides)) {
+        result.stated = result.due ? { due: result.due } : {};
     }
     return result;
 }
@@ -46,7 +44,7 @@ describe('computeGridLayout', () => {
 
     it('single task, single day', () => {
         const task = makeDT({ id: 'a' });
-        const ranges = new Map([['a', { effectiveStart: '2026-03-11', effectiveEnd: '2026-03-11' }]]);
+        const ranges = new Map([['a', { first: '2026-03-11', last: '2026-03-11' }]]);
         const config = makeConfig(['2026-03-11'], ranges);
         const result = computeGridLayout([task], config);
 
@@ -60,7 +58,7 @@ describe('computeGridLayout', () => {
     it('multi-day task spans columns', () => {
         const task = makeDT({ id: 'a' });
         const dates = ['2026-03-10', '2026-03-11', '2026-03-12'];
-        const ranges = new Map([['a', { effectiveStart: '2026-03-10', effectiveEnd: '2026-03-12' }]]);
+        const ranges = new Map([['a', { first: '2026-03-10', last: '2026-03-12' }]]);
         const result = computeGridLayout([task], makeConfig(dates, ranges));
 
         expect(result).toHaveLength(1);
@@ -72,7 +70,7 @@ describe('computeGridLayout', () => {
     it('task outside range is excluded', () => {
         const task = makeDT({ id: 'a' });
         const dates = ['2026-03-10', '2026-03-11'];
-        const ranges = new Map([['a', { effectiveStart: '2026-03-20', effectiveEnd: '2026-03-20' }]]);
+        const ranges = new Map([['a', { first: '2026-03-20', last: '2026-03-20' }]]);
         const result = computeGridLayout([task], makeConfig(dates, ranges));
 
         expect(result).toHaveLength(0);
@@ -85,8 +83,8 @@ describe('computeGridLayout', () => {
         ];
         const dates = ['2026-03-10', '2026-03-11'];
         const ranges = new Map([
-            ['a', { effectiveStart: '2026-03-10', effectiveEnd: '2026-03-11' }],
-            ['b', { effectiveStart: '2026-03-10', effectiveEnd: '2026-03-11' }],
+            ['a', { first: '2026-03-10', last: '2026-03-11' }],
+            ['b', { first: '2026-03-10', last: '2026-03-11' }],
         ]);
         const result = computeGridLayout(tasks, makeConfig(dates, ranges));
 
@@ -99,7 +97,7 @@ describe('computeGridLayout', () => {
     it('due arrow when due is after task end', () => {
         const task = makeDT({ id: 'a', due: '2026-03-14' });
         const dates = ['2026-03-10', '2026-03-11', '2026-03-12', '2026-03-13', '2026-03-14'];
-        const ranges = new Map([['a', { effectiveStart: '2026-03-10', effectiveEnd: '2026-03-11' }]]);
+        const ranges = new Map([['a', { first: '2026-03-10', last: '2026-03-11' }]]);
         const result = computeGridLayout([task], makeConfig(dates, ranges));
 
         expect(result).toHaveLength(1);
@@ -112,7 +110,7 @@ describe('computeGridLayout', () => {
     it('due arrow clipped when beyond range', () => {
         const task = makeDT({ id: 'a', due: '2026-03-20' });
         const dates = ['2026-03-10', '2026-03-11'];
-        const ranges = new Map([['a', { effectiveStart: '2026-03-10', effectiveEnd: '2026-03-10' }]]);
+        const ranges = new Map([['a', { first: '2026-03-10', last: '2026-03-10' }]]);
         const result = computeGridLayout([task], makeConfig(dates, ranges));
 
         expect(result[0].dueArrow).not.toBeNull();
@@ -122,7 +120,7 @@ describe('computeGridLayout', () => {
     it('no due arrow when due is within task span', () => {
         const task = makeDT({ id: 'a', due: '2026-03-10' });
         const dates = ['2026-03-10', '2026-03-11'];
-        const ranges = new Map([['a', { effectiveStart: '2026-03-10', effectiveEnd: '2026-03-11' }]]);
+        const ranges = new Map([['a', { first: '2026-03-10', last: '2026-03-11' }]]);
         const result = computeGridLayout([task], makeConfig(dates, ranges));
 
         expect(result[0].dueArrow).toBeNull();
@@ -131,7 +129,7 @@ describe('computeGridLayout', () => {
     it('continuesBefore/After for clipped multi-day task', () => {
         const task = makeDT({ id: 'a' });
         const dates = ['2026-03-11', '2026-03-12'];
-        const ranges = new Map([['a', { effectiveStart: '2026-03-10', effectiveEnd: '2026-03-14' }]]);
+        const ranges = new Map([['a', { first: '2026-03-10', last: '2026-03-14' }]]);
         const result = computeGridLayout([task], makeConfig(dates, ranges));
 
         expect(result).toHaveLength(1);
@@ -154,11 +152,11 @@ describe('computeGridLayout', () => {
         ];
         const dates = ['1', '2', '3', '4', '5', '6'];
         const ranges = new Map<string, TaskDateRange>([
-            ['A_seg1', { effectiveStart: '2', effectiveEnd: '5' }], // cs=2, sp=4
-            ['B_seg1', { effectiveStart: '2', effectiveEnd: '4' }], // cs=2, sp=3
-            ['C_seg1', { effectiveStart: '3', effectiveEnd: '5' }], // cs=3, sp=3
-            ['A_seg2', { effectiveStart: '6', effectiveEnd: '6' }], // cs=6, sp=1
-            ['C_seg2', { effectiveStart: '6', effectiveEnd: '6' }], // cs=6, sp=1
+            ['A_seg1', { first: '2', last: '5' }], // cs=2, sp=4
+            ['B_seg1', { first: '2', last: '4' }], // cs=2, sp=3
+            ['C_seg1', { first: '3', last: '5' }], // cs=3, sp=3
+            ['A_seg2', { first: '6', last: '6' }], // cs=6, sp=1
+            ['C_seg2', { first: '6', last: '6' }], // cs=6, sp=1
         ]);
         const result = computeGridLayout(tasks, makeConfig(dates, ranges));
 
@@ -182,10 +180,10 @@ describe('computeGridLayout', () => {
         ];
         const dates = ['1', '2', '3', '4', '5'];
         const ranges = new Map<string, TaskDateRange>([
-            ['A_seg1', { effectiveStart: '1', effectiveEnd: '1' }], // cs=1, sp=1, fp=1
+            ['A_seg1', { first: '1', last: '1' }], // cs=1, sp=1, fp=1
             // X covers track 0 from col 2 to col 5, blocking A_seg2 from reusing track 0
-            ['X', { effectiveStart: '2', effectiveEnd: '5' }],     // cs=2, sp=4, fp=5
-            ['A_seg2', { effectiveStart: '4', effectiveEnd: '4' }], // cs=4, sp=1
+            ['X', { first: '2', last: '5' }],     // cs=2, sp=4, fp=5
+            ['A_seg2', { first: '4', last: '4' }], // cs=4, sp=1
         ]);
         const result = computeGridLayout(tasks, makeConfig(dates, ranges));
 

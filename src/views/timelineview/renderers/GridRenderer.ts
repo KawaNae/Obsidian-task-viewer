@@ -100,7 +100,7 @@ export class GridRenderer {
         // Timeline draws two of the three sections: the all-day lane and the
         // time grid. A task with only a due is in neither (`dueOnly`): it has
         // no span to draw, and Timeline does not draw it (Schedule does).
-        const { allDay, timed } = bucketBySection(filteredTasks, startHour);
+        const { allDay, timed } = bucketBySection(filteredTasks);
 
         // 5.1. All-Day Row
         if (showAllDay) {

@@ -1,5 +1,5 @@
 import type { DisplayTask } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
+import { minutesOfSpan } from '../../utils/DayWindow';
 import { buildOverlapClusters } from '../sharedLogic/OverlapClusters';
 
 export class TaskLayout {
@@ -7,10 +7,10 @@ export class TaskLayout {
         const layout = new Map<string, { width: number, left: number, zIndex: number }>();
         if (tasks.length === 0) return layout;
 
-        // 1. Each task's span in its visual day.
-        const preparedTasks = tasks.map(task => ({
+        // 1. What each task is drawn over, in minutes of its visual day.
+        const preparedTasks = tasks.filter(task => task.drawn).map(task => ({
             task,
-            ...DateUtils.timedSpanMinutes(task.effectiveStartTime!, task.effectiveEndTime, startHour),
+            ...minutesOfSpan(task.drawn!, startHour),
         }));
 
         // 2-3. Sort by start time (longer first on tie) and group into overlap clusters.

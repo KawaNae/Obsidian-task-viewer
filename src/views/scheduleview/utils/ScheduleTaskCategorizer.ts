@@ -1,5 +1,6 @@
 import type { DisplayTask } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
+import { minutesOfSpan } from '../../../utils/DayWindow';
 import type { CategorizedTasks as BaseCategorizedTasks } from '../../../services/display/TaskDateCategorizer';
 import type { CategorizedTasks, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';
@@ -45,15 +46,15 @@ export class ScheduleTaskCategorizer {
     }
 
     private toTimedDisplayTask(dt: DisplayTask): TimedDisplayTask | null {
-        if (!dt.effectiveStartTime) {
-            return null;
-        }
+        if (!dt.drawn) return null;
 
+        // What the card is drawn over, in minutes from midnight of its visual day.
         const dayStart = this.gridCalculator.getDayStartMinute();
         const dayEnd = this.gridCalculator.getDayEndMinute();
-        const durationMinutes = this.calculateDurationMinutes(dt);
-        const rawStart = this.gridCalculator.timeToVisualMinute(dt.effectiveStartTime);
-        const rawEnd = rawStart + durationMinutes;
+        const minutes = minutesOfSpan(dt.drawn, this.getStartHour());
+        const rawStart = dayStart + minutes.start;
+        // A point is drawn with the default length, as before.
+        const rawEnd = dayStart + (minutes.end > minutes.start ? minutes.end : minutes.start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES);
 
         const visualStartMinute = Math.max(dayStart, Math.min(dayEnd - 1, rawStart));
         const visualEndMinute = Math.max(visualStartMinute + 1, Math.min(dayEnd, rawEnd));
@@ -63,14 +64,5 @@ export class ScheduleTaskCategorizer {
             visualStartMinute,
             visualEndMinute,
         };
-    }
-
-    private calculateDurationMinutes(dt: DisplayTask): number {
-        const durationMs = dt.effectiveStartTime ? DateUtils.getDisplayTaskDurationMs(dt, this.getStartHour()) : null;
-        if (durationMs === null || durationMs <= 0) {
-            return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-        }
-
-        return Math.max(1, Math.round(durationMs / (1000 * 60)));
     }
 }

@@ -1,6 +1,7 @@
 import type { Task, DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { dayBoundaryAt } from './DayBoundary';
+import { dayStart, visualDaysOf } from '../../utils/DayWindow';
+import { isAllDay } from './SectionClassifier';
 import { makeSegmentId } from './SegmentIds';
 import { buildChildEntries } from '../data/ChildEntryBuilder';
 import { resolveEffectiveDates } from '../../utils/EffectiveDates';
@@ -140,83 +141,43 @@ export function materializeRawDates(
 }
 
 /**
- * Returns true when a DisplayTask crosses the visual day boundary and should be split.
- * Uses effective values so E/ED types can also be split.
+ * Returns true when a timed DisplayTask is drawn over two visual days and
+ * should be split at the boundary between them. An all-day task spans its
+ * days by design and is never split.
  */
 export function shouldSplitDisplayTask(dt: DisplayTask, startHour: number): boolean {
-    if (!dt.effectiveStartDate || !dt.effectiveEndDate || !dt.effectiveStartTime || !dt.effectiveEndTime) {
-        return false;
-    }
-
-    // AllDay tasks (duration >= 23.5h) span multiple visual days by design — never split
-    if (DateUtils.isAllDayTask(dt.effectiveStartDate, dt.effectiveStartTime, dt.effectiveEndDate, dt.effectiveEndTime, startHour)) {
-        return false;
-    }
-
-    // Timed tasks: check if they cross a visual-date boundary
-    const visualStartDay = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-
-    let visualEndDay = dt.effectiveEndDate;
-    const [endH, endM] = dt.effectiveEndTime.split(':').map(Number);
-    if (endH < startHour || (endH === startHour && endM === 0)) {
-        visualEndDay = DateUtils.addDays(dt.effectiveEndDate, -1);
-    }
-
-    return visualStartDay !== visualEndDay;
+    if (!dt.drawn || isAllDay(dt)) return false;
+    const { first, last } = visualDaysOf(dt.drawn, startHour);
+    return first !== last;
 }
 
 /**
- * Splits a DisplayTask into two segments at the visual day boundary.
- * Overrides both raw and effective start/end fields for each segment.
+ * Splits a DisplayTask into two segments at the start of the visual day
+ * after the one it starts on. Each segment is drawn over its part
+ * (`drawn`); its line's values, `stated` and `span` are the whole task's.
  */
 export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): [DisplayTask, DisplayTask] {
-    if (!dt.effectiveStartDate || !dt.effectiveEndDate || !dt.effectiveStartTime || !dt.effectiveEndTime) {
-        throw new Error('DisplayTask must have effective start and end date/time to split');
-    }
-
-    let boundaryCalendarDate: string;
-    if (dt.effectiveStartDate === dt.effectiveEndDate) {
-        boundaryCalendarDate = dt.effectiveStartDate;
-    } else {
-        boundaryCalendarDate = DateUtils.addDays(dt.effectiveStartDate, 1);
-    }
-
-    // head の effective end は boundary の 1 分前。これにより `toVisualDate` が
-    // head を前日に置き、tail の visual start day と重ならない。boundary 時刻
-    // ちょうど ('05:00') を head end にすると toVisualDate (`h < startHour`) が
-    // 当日扱いとなり tail と同日に重複し、GridTaskLayout の greedy track 割り当てで
-    // 別 track に飛ぶバグを生む。日付と時刻を対で受け取るのは、両者がずれると
-    // head が 1 日長くなり、23.5h 閾値を越えて allDay に誤分類されるため
-    // (startHour=0 で実際に起きていた。dayBoundaryAt の doc を参照)。
-    const boundary = dayBoundaryAt(boundaryCalendarDate, startHour);
-
-    const beforeSegmentDate = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-    const afterSegmentDate = DateUtils.toVisualDate(boundary.date, boundary.time, startHour);
+    if (!dt.drawn) throw new Error('DisplayTask must have a span to split');
+    const first = visualDaysOf(dt.drawn, startHour).first;
+    const next = DateUtils.addDays(first, 1);
+    const boundaryMs = dayStart(next, startHour);
 
     const headSegment: DisplayTask = {
         ...dt,
-        id: makeSegmentId(dt.originalTaskId, beforeSegmentDate),
+        id: makeSegmentId(dt.originalTaskId, first),
         isSplit: true,
         splitContinuesBefore: dt.splitContinuesBefore ?? false,
         splitContinuesAfter: true,
-        // Override both raw and effective end to boundary - 1min (前日 inclusive)
-        endDate: boundary.beforeDate,
-        endTime: boundary.beforeTime,
-        effectiveEndDate: boundary.beforeDate,
-        effectiveEndTime: boundary.beforeTime,
+        drawn: { startMs: dt.drawn.startMs, endMs: boundaryMs },
     };
 
     const tailSegment: DisplayTask = {
         ...dt,
-        id: makeSegmentId(dt.originalTaskId, afterSegmentDate),
+        id: makeSegmentId(dt.originalTaskId, next),
         isSplit: true,
         splitContinuesBefore: true,
         splitContinuesAfter: dt.splitContinuesAfter ?? false,
-        // Override both raw and effective start to boundary
-        startDate: boundary.date,
-        startTime: boundary.time,
-        effectiveStartDate: boundary.date,
-        effectiveStartTime: boundary.time,
+        drawn: { startMs: boundaryMs, endMs: dt.drawn.endMs },
     };
 
     return [headSegment, tailSegment];

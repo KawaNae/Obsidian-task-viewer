@@ -1,13 +1,12 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { dayBoundaryAt } from './DayBoundary';
+import { dayStart, visualDaysOf } from '../../utils/DayWindow';
 import {
     getOriginalTaskId,
     shouldSplitDisplayTask,
     splitDisplayTaskAtBoundary,
 } from './DisplayTaskConverter';
 import { makeSegmentId } from './SegmentIds';
-import { getTaskDateRange } from './VisualDateRange';
 
 export type SplitBoundary =
     | { type: 'visual-date'; startHour: number }
@@ -43,28 +42,19 @@ export function splitTasks(tasks: DisplayTask[], boundary: SplitBoundary): Displ
 function splitAtDateRange(
     dt: DisplayTask, rangeStart: string, rangeEnd: string, result: DisplayTask[], startHour: number
 ): void {
-    const taskStart = dt.effectiveStartDate;
-    const taskEnd = dt.effectiveEndDate || dt.effectiveStartDate;
-
-    if (!taskStart) {
+    if (!dt.drawn) {
         result.push(dt);
         return;
     }
+    const { first, last } = visualDaysOf(dt.drawn, startHour);
 
-    // Use visual dates for comparison (day boundary = startHour)
-    const range = getTaskDateRange(dt, startHour);
-    const compareStart = range.effectiveStart || taskStart;
-    const compareEnd = range.effectiveEnd || compareStart;
-
-    // Task entirely outside range — pass through without splitting
-    if (compareEnd < rangeStart || compareStart > rangeEnd) {
+    // Task entirely outside range, or entirely inside — pass through without splitting
+    if (last < rangeStart || first > rangeEnd) {
         result.push(dt);
         return;
     }
-
-    const extendsBeforeRange = compareStart < rangeStart;
-    const extendsAfterRange = compareEnd > rangeEnd;
-
+    const extendsBeforeRange = first < rangeStart;
+    const extendsAfterRange = last > rangeEnd;
     if (!extendsBeforeRange && !extendsAfterRange) {
         result.push(dt);
         return;
@@ -87,25 +77,20 @@ function splitAtDateRange(
 }
 
 /**
- * Splits a DisplayTask at a visual-day boundary (boundaryDate's startHour).
- * Head segment covers [taskStart, the minute before the boundary].
- * Tail segment covers [boundaryDate startHour:00, taskEnd].
- * Continuation flags accumulate (OR) across multiple splits.
+ * Splits a DisplayTask at the start of `boundaryDate`'s visual day. The head
+ * is drawn up to the boundary, the tail from it; a segment's line values,
+ * `stated` and `span` are the whole task's. Continuation flags accumulate
+ * (OR) across multiple splits.
  */
 function splitAtDateBoundary(dt: DisplayTask, boundaryDate: string, startHour: number): [DisplayTask, DisplayTask] {
     const originalId = getOriginalTaskId(dt);
-
-    // 日付と時刻を対で受け取る。時刻だけを boundary の 1 分前にして日付を
-    // 据え置くと、startHour=0 で head が 1 日長くなり、ビュー端のクリップが
-    // 1 日ずれる（dayBoundaryAt の doc を参照）。
-    const boundary = dayBoundaryAt(boundaryDate, startHour);
+    const drawn = dt.drawn!;
+    const boundaryMs = dayStart(boundaryDate, startHour);
 
     const head: DisplayTask = {
         ...dt,
-        id: makeSegmentId(originalId, dt.effectiveStartDate),
-        effectiveEndDate: boundary.beforeDate,
-        effectiveEndTime: boundary.beforeTime,
-        endDate: boundary.beforeDate,
+        id: makeSegmentId(originalId, visualDaysOf(drawn, startHour).first),
+        drawn: { startMs: drawn.startMs, endMs: boundaryMs },
         isSplit: true,
         splitContinuesBefore: dt.splitContinuesBefore ?? false,
         splitContinuesAfter: true,
@@ -114,10 +99,8 @@ function splitAtDateBoundary(dt: DisplayTask, boundaryDate: string, startHour: n
 
     const tail: DisplayTask = {
         ...dt,
-        id: makeSegmentId(originalId, boundary.date),
-        effectiveStartDate: boundary.date,
-        effectiveStartTime: boundary.time,
-        startDate: boundary.date,
+        id: makeSegmentId(originalId, boundaryDate),
+        drawn: { startMs: boundaryMs, endMs: drawn.endMs },
         isSplit: true,
         splitContinuesBefore: true,
         splitContinuesAfter: dt.splitContinuesAfter ?? false,

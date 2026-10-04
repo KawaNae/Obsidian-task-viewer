@@ -1,7 +1,7 @@
 import type { DisplayTask, StatusDefinition } from '../../types';
 import type { TaskReadService } from '../data/TaskReadService';
 import { getOverdueLevel } from './TaskStatusQuery';
-import { getTaskDateRange } from './VisualDateRange';
+import { visualDaysOf } from '../../utils/DayWindow';
 
 export function findOldestOverdueDate(
     displayTasks: DisplayTask[],
@@ -14,11 +14,11 @@ export function findOldestOverdueDate(
         // Visual start date, so the returned date matches the column the
         // task is actually rendered on (an early-morning task belongs to
         // the previous visual day).
-        const { effectiveStart } = getTaskDateRange(dt, startHour);
-        if (!effectiveStart) continue;
+        if (!dt.span) continue;
+        const first = visualDaysOf(dt.span, startHour).first;
         if (getOverdueLevel(dt, startHour, statusDefinitions, readService) === 'none') continue;
-        if (!oldest || effectiveStart < oldest) {
-            oldest = effectiveStart;
+        if (!oldest || first < oldest) {
+            oldest = first;
         }
     }
     return oldest;

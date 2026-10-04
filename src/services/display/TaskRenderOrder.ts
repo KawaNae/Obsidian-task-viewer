@@ -1,5 +1,5 @@
 import type { DisplayTask } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
+import { minutesOfSpan } from '../../utils/DayWindow';
 
 /**
  * The canonical order of each section's bucket (`TaskDateCategorizer`), in
@@ -7,10 +7,9 @@ import { DateUtils } from '../../utils/DateUtils';
  * ({@link compareWritten}).
  */
 
-// The same span TaskLayout stacks by, so timedTasks index order matches level order (shadow stacking integrity).
-function durationMinutes(task: DisplayTask, startHour: number): number {
-    const { start, end } = DateUtils.timedSpanMinutes(task.effectiveStartTime ?? '', task.effectiveEndTime, startHour);
-    return end - start;
+// The same minutes TaskLayout stacks by, so timedTasks index order matches level order (shadow stacking integrity).
+function minutesOf(task: DisplayTask, startHour: number): { start: number; end: number } {
+    return task.drawn ? minutesOfSpan(task.drawn, startHour) : { start: 0, end: 0 };
 }
 
 /**
@@ -29,23 +28,19 @@ function compareWritten(a: DisplayTask, b: DisplayTask): number {
 
 /** timed バケツ: visual position（startHour 起点の分数）昇順、同位置は duration 降順（長い→DOM早い→背面）、最後に書かれた場所の順 */
 export function compareTimedForRender(a: DisplayTask, b: DisplayTask, startHour: number): number {
-    const at = a.effectiveStartTime ?? '';
-    const bt = b.effectiveStartTime ?? '';
-    if (at !== bt) {
-        const am = DateUtils.visualDayMinutes(at, startHour);
-        const bm = DateUtils.visualDayMinutes(bt, startHour);
-        if (am !== bm) return am - bm;
-    }
-    const aDur = durationMinutes(a, startHour);
-    const bDur = durationMinutes(b, startHour);
+    const am = minutesOf(a, startHour);
+    const bm = minutesOf(b, startHour);
+    if (am.start !== bm.start) return am.start - bm.start;
+    const aDur = am.end - am.start;
+    const bDur = bm.end - bm.start;
     if (aDur !== bDur) return bDur - aDur;
     return compareWritten(a, b);
 }
 
-/** allDay バケツ: 開始日 (YYYY-MM-DD) 昇順、同日は書かれた場所の順 */
+/** allDay バケツ: 描く範囲の開始の瞬間の昇順、同時は書かれた場所の順 */
 export function compareAllDayForRender(a: DisplayTask, b: DisplayTask): number {
-    const ad = a.effectiveStartDate ?? '';
-    const bd = b.effectiveStartDate ?? '';
+    const ad = a.drawn?.startMs ?? -Infinity;
+    const bd = b.drawn?.startMs ?? -Infinity;
     if (ad !== bd) return ad < bd ? -1 : 1;
     return compareWritten(a, b);
 }
