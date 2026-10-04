@@ -6,12 +6,12 @@ import { FilterValueCollector } from '../../../services/filter/FilterValueCollec
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
-import { bindField } from '../../form/bindField';
+import { bindField, type BoundField } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { TagInput } from '../../../services/parsing/utils/TagInput';
 import { optional } from '../../../utils/values/Read';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
-import type { FieldGroupContext } from './FieldGroupContext';
+import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
 
 const ADD_TAGS = optional(TagInput);
 
@@ -23,13 +23,14 @@ const ADD_TAGS = optional(TagInput);
  *
  * 追加の欄は `TagInput` で読み（空白で区切った語、`#` は有っても無くても
  * よい）、1つのタグに読めない語は欄の下に理由を出して足さない。chip の増減で
- * 組み直しても、打ちかけの字は残す。
+ * 組み直しても、打ちかけの字は残す。足す書き込みが拒まれたら、打った字を欄に戻す。
  */
-export class TagsFieldGroup {
+export class TagsFieldGroup implements ClosingPart {
     private sectionEl: HTMLElement;
     private addInput: HTMLInputElement | null = null;
     private addWrap: HTMLElement | null = null;
     private says: HTMLElement | null = null;
+    private addBound: BoundField<string[] | undefined> | null = null;
     /** What is typed in the add field and not yet added: kept across a rebuild. */
     private draft = '';
 
@@ -88,10 +89,17 @@ export class TagsFieldGroup {
         input.value = this.draft;
         input.addEventListener('input', () => { this.draft = input.value; });
 
-        const addTags = (added: readonly string[]) => {
+        const addTags = (added: readonly string[]): void => {
+            const typed = input.value;
             this.draft = '';
             input.value = '';
-            this.commit([...this.ctx.getTask().tags, ...added]);
+            const write = this.commit([...this.ctx.getTask().tags, ...added]);
+            // Refused: what was typed is the field's again, unless something was typed since.
+            void write?.then((written) => {
+                if (written || this.draft !== '') return;
+                this.draft = typed;
+                if (this.addInput && this.addInput.value === '') this.addInput.value = typed;
+            });
         };
 
         this.ctx.attachSuggest(input, inputWrap, {
@@ -106,7 +114,7 @@ export class TagsFieldGroup {
             onPick: (val) => addTags([val]),
         });
         // The field stands for nothing: what it reads is added, and it empties.
-        bindField(input, {
+        this.addBound = bindField(input, {
             codec: ADD_TAGS,
             current: () => undefined,
             commit: (added) => { if (added) addTags(added); },
@@ -125,15 +133,32 @@ export class TagsFieldGroup {
         this.ctx.issues.redraw();
     }
 
-    private commit(tags: string[]): void {
-        if (this.ctx.isShut()) return;
-        this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
+    private commit(tags: string[]): Promise<boolean> | undefined {
+        if (this.ctx.isShut()) return undefined;
+        const write = this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。
         const restoreFocus = !!this.addInput && this.addInput.ownerDocument.activeElement === this.addInput;
         this.ctx.stack.closeAll();
         this.render(true);
         if (restoreFocus) this.addInput?.focus();
+        return write;
+    }
+
+    unsaved(): UnsavedField[] {
+        return this.addBound?.pending()?.ok === false && this.addInput
+            ? [{ label: t('modal.hub.tags'), input: this.addInput }]
+            : [];
+    }
+
+    discardUnsaved(): void {
+        if (this.addBound?.pending()?.ok !== false) return;
+        this.draft = '';
+        this.addBound.discard();
+    }
+
+    save(): void {
+        if (this.addBound?.pending()?.ok) this.addBound.commit();
     }
 
     /** 外部変更（echo）の取り込み。focus 中はスキップする既存の render ガードに乗る。 */

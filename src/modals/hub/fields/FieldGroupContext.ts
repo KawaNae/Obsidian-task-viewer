@@ -14,6 +14,23 @@ import type { IssueBoard } from '../../form/FormIssue';
  */
 export type HubField = 'name' | DateKey | 'tags' | 'color' | 'linestyle' | 'mask' | 'propKey' | `prop:${string}`;
 
+/** A field whose text a close cannot save, by the name the question lists it by, and the control to fix it in. */
+export interface UnsavedField {
+    label: string;
+    input: HTMLElement;
+}
+
+/**
+ * What the hub's close asks of a part of its form (`TaskHubForm.beforeClose`):
+ * the fields whose text cannot be saved, throwing that text away, and saving
+ * what is typed and reads, as a blur would.
+ */
+export interface ClosingPart {
+    unsaved(): UnsavedField[];
+    discardUnsaved(): void;
+    save(): void;
+}
+
 /**
  * TaskHubForm の各フィールドグループ（Tags/Style/Properties）が共有する
  * ホスト依存。フィールドグループは自前の task コピーを持たず、常に
@@ -24,7 +41,8 @@ export type HubField = 'name' | DateKey | 'tags' | 'color' | 'linestyle' | 'mask
 export interface FieldGroupContext {
     getTask: () => Task;
     isShut: () => boolean;
-    queue: (updates: Partial<Task> | null) => void;
+    /** Write `updates`: whether the write took them (a refusal is said by the form). */
+    queue: (updates: Partial<Task> | null) => Promise<boolean>;
     app: App;
     plugin: PluginContext;
     index: IndexReads;

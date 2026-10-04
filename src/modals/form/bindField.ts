@@ -6,22 +6,27 @@ export interface BoundField<T> {
     /**
      * What the field holds that is not its value: the reading of the text
      * typed, when it is not the value shown; null when the field shows its
-     * value. What a close asks of a form (10d).
+     * value. What a close asks of a form: saved when it reads, asked about
+     * when it does not.
      */
     pending(): Read<T> | null;
     /**
      * Put a value from outside in the field (the index's echo of a write, an
      * edit made elsewhere), with no event. Text typed and not yet committed
-     * is kept, and nothing is put while the IME is composing: the value
-     * reaches the field once its text is the value's again.
+     * is kept, and so is text committed while its write is under way; nothing
+     * is put while the IME is composing: the value reaches the field once its
+     * text is the value's again.
      */
     set(value: T): void;
     /**
      * Commit what the field holds now, as a blur or the form's Enter does:
      * for a value put in by a control beside the text (a picker, a clear
-     * button, a list's item).
+     * button, a list's item), and for a form that saves what is typed as it
+     * closes.
      */
     commit(): void;
+    /** Throw away what is typed: the field shows its value again, and says nothing. */
+    discard(): void;
 }
 
 export interface BindFieldOptions<T> {
@@ -32,9 +37,11 @@ export interface BindFieldOptions<T> {
      * Called once a commit reads a value that is not the current one, with
      * that value. False when the form does not take it (a rule across its
      * fields refuses it, said by the form): the text stays as typed, as one
-     * not yet committed.
+     * not yet committed. A promise when a write decides it: answered false
+     * (the write refused), the text stays as typed, as one not yet committed,
+     * and a value from outside does not take its place.
      */
-    commit(value: T): boolean | void;
+    commit(value: T): boolean | void | Promise<boolean>;
     /** What the field's text reads as wrong now, or null when nothing is. */
     issues(issue: Issue | null): void;
     /** Whether a list open on the field takes an Enter (`onFormEnter`). */
@@ -67,6 +74,8 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     const put = (text: string) => (opts.put ? opts.put(text) : (input.value = text));
     /** The text the field was last given (from outside, or by a commit): what it holds when nothing is typed over it. */
     let given = input.value;
+    /** The write a commit is waiting for: what it decides, the field holds as typed till then. */
+    let writing: Promise<boolean> | null = null;
     // The field's composition is followed from now on.
     composingIn(input);
 
@@ -80,13 +89,32 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
 
     const commit = () => {
         const read = pending();
-        if (read === null) return opts.issues(null);
+        if (read === null) {
+            // The field shows its value: nothing typed over it.
+            given = input.value;
+            return opts.issues(null);
+        }
         if (!read.ok) return opts.issues(read.issue);
         opts.issues(null);
         const text = codec.show(read.value);
         if (input.value !== text) put(text);
-        if (text !== shownValue() && opts.commit(read.value) === false) return;
+        if (text === shownValue()) {
+            given = text;
+            return;
+        }
+        const taken = opts.commit(read.value);
+        if (taken === false) return;
+        const before = given;
         given = text;
+        if (taken instanceof Promise) {
+            writing = taken;
+            void taken.then((written) => {
+                if (writing !== taken) return;
+                writing = null;
+                // Refused: the text is typed again, unless something came in meanwhile.
+                if (!written && given === text) given = before;
+            });
+        }
     };
 
     input.addEventListener('input', (e) => {
@@ -100,12 +128,19 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
         pending,
         set(value: T): void {
             const typed = input.value !== given;
-            if (typed || composingIn(input)) return;
+            if (typed || writing !== null || composingIn(input)) return;
             const text = codec.show(value);
             if (input.value !== text) put(text);
             given = text;
             opts.issues(null);
         },
         commit,
+        discard(): void {
+            writing = null;
+            const text = shownValue();
+            if (input.value !== text) put(text);
+            given = text;
+            opts.issues(null);
+        },
     };
 }

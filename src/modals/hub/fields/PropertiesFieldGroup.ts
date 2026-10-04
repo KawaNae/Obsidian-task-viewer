@@ -6,13 +6,14 @@ import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
 import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
 import { FreeText } from '../../../utils/values/TextValues';
+import type { Read } from '../../../utils/values/Read';
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
 import { onFormEnter } from '../../form/formEnter';
-import { bindField } from '../../form/bindField';
+import { bindField, type BoundField } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
-import type { FieldGroupContext, HubField } from './FieldGroupContext';
+import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
 
 /**
  * カスタムプロパティ行。
@@ -22,15 +23,19 @@ import type { FieldGroupContext, HubField } from './FieldGroupContext';
  * 追加行のキーは `PropertyKeyInput` で読み（`:`、`[`、`]` と予約されたキーを
  * 拒む）、読めないキーは欄の下に理由を出して足さない。理由は打ち直すと
  * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
- * 打ちかけの字は残す。
+ * 打ちかけの字は残す。足す書き込みが拒まれたら、打った字を追加行に戻す。
  */
-export class PropertiesFieldGroup {
+export class PropertiesFieldGroup implements ClosingPart {
     private sectionEl: HTMLElement;
     private addKeyInput: HTMLInputElement | null = null;
     private addSays: HTMLElement | null = null;
     /** custom プロパティ行の value input（focus('<key>') 用）と、その行の文の枠 */
     private valueInputs = new Map<string, HTMLInputElement>();
     private valueSays = new Map<string, HTMLElement>();
+    /** Each property's value field, bound: what a close saves. */
+    private valueBound = new Map<string, BoundField<string>>();
+    /** The add row as last built: its fields, what its key reads, and its commit. */
+    private addRow: { keyInput: HTMLInputElement; valueInput: HTMLInputElement; readKey(): Read<string> | null; commit(): void } | null = null;
     /** What is typed in the add row and not yet added: kept across a rebuild. */
     private draft = { key: '', value: '' };
 
@@ -44,6 +49,7 @@ export class PropertiesFieldGroup {
         this.sectionEl.empty();
         this.valueInputs.clear();
         this.valueSays.clear();
+        this.valueBound.clear();
 
         const task = this.ctx.getTask();
         const shut = this.ctx.isShut();
@@ -81,6 +87,7 @@ export class PropertiesFieldGroup {
                 commit: (raw) => this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: PropertyValues.fromText(raw) }),
                 issues: () => { /* any text is a value */ },
             });
+            this.valueBound.set(key, value);
 
             if (isOwn) {
                 const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
@@ -159,11 +166,23 @@ export class PropertiesFieldGroup {
             const key = readKey();
             if (!key?.ok) return;
             const raw = valueInput.value;
-            this.commit({ ...(this.ctx.getTask().properties ?? {}), [key.value]: PropertyValues.fromText(raw) });
+            const typed = { key: keyInput.value, value: raw };
+            const write = this.commit({ ...(this.ctx.getTask().properties ?? {}), [key.value]: PropertyValues.fromText(raw) });
             this.draft = { key: '', value: '' };
             this.ctx.stack.closeAll();
             this.render(true);
+            // Refused: what was typed is the add row's again, unless something was typed since.
+            void write?.then((written) => {
+                if (written || this.draft.key !== '' || this.draft.value !== '') return;
+                this.draft = typed;
+                const row = this.addRow;
+                if (row && row.keyInput.value === '' && row.valueInput.value === '') {
+                    row.keyInput.value = typed.key;
+                    row.valueInput.value = typed.value;
+                }
+            });
         };
+        this.addRow = { keyInput, valueInput, readKey, commit: commitAdd };
         for (const input of [keyInput, valueInput]) {
             onFormEnter(input, commitAdd);
         }
@@ -181,9 +200,38 @@ export class PropertiesFieldGroup {
         this.ctx.issues.redraw();
     }
 
-    private commit(props: Record<string, PropertyValue>): void {
-        if (this.ctx.isShut()) return;
-        this.ctx.queue(TaskUpdateBuilder.customProperties(this.ctx.getTask(), props));
+    private commit(props: Record<string, PropertyValue>): Promise<boolean> | undefined {
+        if (this.ctx.isShut()) return undefined;
+        return this.ctx.queue(TaskUpdateBuilder.customProperties(this.ctx.getTask(), props));
+    }
+
+    /**
+     * The add row, when what is typed in it cannot be added: a key that does
+     * not read, or a value with no key to write it under. A property's value
+     * is any text, so it is always saved.
+     */
+    unsaved(): UnsavedField[] {
+        const row = this.addRow;
+        if (!row) return [];
+        const typedKey = row.keyInput.value.trim() !== '';
+        const unsaved = typedKey ? row.readKey()?.ok === false : row.valueInput.value.trim() !== '';
+        return unsaved ? [{ label: t('modal.hub.propertyKeyField'), input: row.keyInput }] : [];
+    }
+
+    discardUnsaved(): void {
+        if (this.unsaved().length === 0) return;
+        this.draft = { key: '', value: '' };
+        if (this.addRow) {
+            this.addRow.keyInput.value = '';
+            this.addRow.valueInput.value = '';
+        }
+        this.ctx.issues.set('propKey', []);
+    }
+
+    save(): void {
+        for (const bound of this.valueBound.values()) if (bound.pending()?.ok) bound.commit();
+        const row = this.addRow;
+        if (row && row.keyInput.value.trim() !== '' && row.readKey()?.ok) row.commit();
     }
 
     /** 外部変更（echo）の取り込み。focus 中はスキップする既存の render ガードに乗る。 */

@@ -41,7 +41,8 @@ export class FormActions {
     private readonly askEl: HTMLElement | null;
     private readonly discardButton: HTMLButtonElement | null;
     private readonly buttons: readonly { el: HTMLButtonElement; spec: FormAction }[];
-    private asking = false;
+    /** Whether cancel reads back, as the question last drawn says: what a press of it does. */
+    private readsBack = false;
 
     constructor(container: HTMLElement, private readonly spec: {
         cancel?: { label?: string; run(): void };
@@ -54,7 +55,7 @@ export class FormActions {
         this.discardButton = ask ? button(this.row, ask.discardLabel, 'warning', () => ask.discard()) : null;
         this.discardButton?.addClass('tv-form__discard');
         this.cancelButton = button(this.row, this.cancelLabel(), undefined, () => {
-            if (this.asking) ask?.keep();
+            if (this.readsBack) ask?.keep();
             else spec.cancel?.run();
         });
         this.cancelButton.addClass('tv-form__cancel');
@@ -71,17 +72,17 @@ export class FormActions {
      */
     render(state: { busy: boolean; ctaEnabled?: boolean; ask?: string | null }): void {
         const question = this.spec.ask ? state.ask ?? null : null;
-        this.asking = question !== null;
+        this.readsBack = question !== null;
         this.askEl?.setText(question ?? '');
-        this.askEl?.toggle(this.asking);
-        this.discardButton?.toggle(this.asking);
+        this.askEl?.toggle(this.readsBack);
+        this.discardButton?.toggle(this.readsBack);
         this.cancelButton.setText(this.cancelLabel());
-        this.cancelButton.toggle(this.asking || this.spec.cancel !== undefined);
+        this.cancelButton.toggle(this.readsBack || this.spec.cancel !== undefined);
         for (const { el, spec } of this.buttons) {
             el.disabled = state.busy || (spec.tone === 'cta' && state.ctaEnabled === false);
             el.setText(state.busy && spec.busyLabel ? spec.busyLabel : spec.label);
         }
-        this.row.toggle(this.asking || this.spec.cancel !== undefined || this.buttons.length > 0);
+        this.row.toggle(this.readsBack || this.spec.cancel !== undefined || this.buttons.length > 0);
     }
 
     /** The question was put, first or again: the answer that keeps takes the focus. */
@@ -95,7 +96,7 @@ export class FormActions {
     }
 
     private cancelLabel(): string {
-        return this.asking && this.spec.ask ? this.spec.ask.keepLabel : this.spec.cancel?.label ?? t('modal.cancel');
+        return this.readsBack && this.spec.ask ? this.spec.ask.keepLabel : this.spec.cancel?.label ?? t('modal.cancel');
     }
 }
 

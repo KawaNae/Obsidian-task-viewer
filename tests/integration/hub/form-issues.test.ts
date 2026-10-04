@@ -70,9 +70,12 @@ function openHub(name: string): void {
     `);
 }
 
+/** Close the hub, throwing away a value it asks about (a test leaves one that does not read). */
 function closeHub(): void {
     run(`
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
+        await sleep(100);
+        hub()?.querySelector('.task-hub__form .tv-form__discard')?.click();
         await until(() => !hub());
         return 'ok';
     `);

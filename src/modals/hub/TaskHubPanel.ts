@@ -30,10 +30,12 @@ export interface TaskHubPanelOptions {
  * 上部にカードプレビュー（index.onChange でライブ再描画）、下部に
  * プロパティ編集フォーム（フィールド確定で即保存）。read-only タスクは
  * プレビューのみに縮退。プレビューの上の切り替えで、カードの代わりに
- * 行と部分木のソースを編集できる（TaskHubSource）。ソースに下書きがある間、
- * 利用者が閉じる経路は下書きを捨てるかを確かめる（OverlayShell.beforeClose）。
- * 別のハブを開こうとしたときも同じく確かめ（答えを待つ）、閉じなかったなら
- * 開こうとした操作は忘れる。
+ * 行と部分木のソースを編集できる（TaskHubSource）。
+ * 利用者が閉じる経路（×、Escape、外側、下へ払う、戻る、別のハブを開く）は
+ * どれも OverlayShell.beforeClose を通る。ソースに下書きがあれば捨てるかを
+ * 確かめ、無ければフォームが打ちかけの欄を保存し、保存できない値があれば
+ * 問い、書き込みを待つ（TaskHubForm.beforeClose）。閉じなかったなら、別の
+ * ハブを開こうとした操作は忘れる。
  * パネルにフォーカスがある間は Obsidian のホットキーを止める（OverlayShell の
  * keymap）。フォームの欄やソースのエディタのキーが背後のノートに効かないように。
  * 初めのフォーカスは focusField の欄、無ければパネル自身（OverlayShell の
@@ -100,7 +102,8 @@ export class TaskHubPanel {
             initialFocus: () => (focusField ? this.form?.fieldElement(focusField) ?? null : null),
             build: (bodyEl) => this.buildContent(bodyEl),
             onClose: () => this.teardown(),
-            beforeClose: () => ((this.source?.beforeClose() ?? true) ? 'close' : 'stay'),
+            // The source's draft first: while the source is open the form is shut.
+            beforeClose: () => ((this.source?.beforeClose() ?? true) ? this.form?.beforeClose() ?? 'close' : 'stay'),
             yieldsEscape: () => this.source?.yieldsEscape() ?? false,
             takesBack: () => this.source?.takesBack() ?? false,
         });
@@ -129,6 +132,7 @@ export class TaskHubPanel {
                 operations: this.deps.operations,
                 stack: this.stack,
                 onNavigate: () => this.close(),
+                requestClose: () => { void this.overlay.requestClose(); },
             });
         }
 
@@ -207,6 +211,7 @@ export class TaskHubPanel {
         this.source = null;
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
+        this.form?.dispose();
         this.form = null;
     }
 
