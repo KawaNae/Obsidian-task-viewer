@@ -2,6 +2,7 @@ import type { DisplayTask, TaskViewerSettings } from '../../types';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { TIME_TOP_RIGHT } from '../taskcard/TopRightFieldResolver';
 import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
 import { markHandleSurface } from './handles/HandleSurface';
@@ -102,7 +103,9 @@ function drawCard(
 
     deps.taskRenderer.render(card, entry.task, deps.settings, {
         key,
-        topRight: { mode: options.timeOnSingleDay && !entry.useBarVariant ? 'time' : 'none' },
+        topRight: options.timeOnSingleDay && !entry.useBarVariant
+            ? { mode: 'fields', config: TIME_TOP_RIGHT }
+            : { mode: 'none' },
         compact: true,
     });
 }

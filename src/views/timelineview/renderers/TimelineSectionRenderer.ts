@@ -7,6 +7,7 @@ import { DateUtils } from '../../../utils/DateUtils';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
+import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import {
@@ -54,7 +55,7 @@ export class TimelineSectionRenderer {
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
                 key,
-                topRight: { mode: 'time' },
+                topRight: { mode: 'fields', config: TIME_TOP_RIGHT },
             });
         });
 

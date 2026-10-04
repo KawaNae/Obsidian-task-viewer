@@ -8,6 +8,20 @@ import type { ChildEntry, Task } from './TaskModel';
 export type TimeOfDay = `${number}:${number}`;
 
 /**
+ * The dates a task's note states for it, in the form they are written: the
+ * line's values, and its section's and frontmatter's where the line has none
+ * (`statedDates`). Nothing is filled in by the rules.
+ */
+export interface StatedDates {
+    startDate?: string;
+    startTime?: TimeOfDay;
+    endDate?: string;
+    endTime?: TimeOfDay;
+    /** `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`, as written. */
+    due?: string;
+}
+
+/**
  * The dates a task covers once its implicit values are resolved
  * (`resolveEffectiveDates`).
  */
@@ -39,6 +53,12 @@ export interface EffectiveDates {
  * 編集パスは raw フィールド (startDate 等) のみを参照する。
  */
 export interface DisplayTask extends Task, EffectiveDates {
+    /**
+     * The dates the note states for the task (`statedDates`), made before
+     * the task is split: a segment states the dates of the whole line. What
+     * a card's top right shows.
+     */
+    stated: StatedDates;
     /** Split 情報（境界分割） */
     originalTaskId: string;
     isSplit: boolean;

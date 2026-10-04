@@ -1,5 +1,6 @@
 import type { EffectiveDates, Task } from '../types';
 import { DateUtils } from './DateUtils';
+import { statedDates } from './TaskDates';
 
 /**
  * The dates a task covers once its implicit values are resolved: what the
@@ -10,11 +11,13 @@ import { DateUtils } from './DateUtils';
  * duplicate moved on the clock) asks it here.
  */
 export function resolveEffectiveDates(task: Task, startHour: number): EffectiveDates {
-    let effectiveStartDate = task.startDate || task.cascadeContext?.startDate || '';
-    let effectiveStartTime = DateUtils.timeOfDay(task.startTime || task.cascadeContext?.startTime);
-    let effectiveEndDate = task.endDate || task.cascadeContext?.endDate;
-    let effectiveEndTime = DateUtils.timeOfDay(task.endTime || task.cascadeContext?.endTime);
-    const effectiveDue = task.due || task.cascadeContext?.due;
+    // What the line and its scope state; the rules below fill in the rest.
+    const stated = statedDates(task);
+    let effectiveStartDate = stated.startDate ?? '';
+    let effectiveStartTime = stated.startTime;
+    let effectiveEndDate = stated.endDate;
+    let effectiveEndTime = stated.endTime;
+    const effectiveDue = stated.due;
 
     // Which fields the 3 layers actually produced. Every implicit-resolution
     // branch below asks THESE, not the raw fields: a time inherited from the

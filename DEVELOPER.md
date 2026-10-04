@@ -15,6 +15,7 @@ src/views/taskcard/
   NotationUtils.ts                 # @notation label formatting helpers
   TaskLinkInteractionManager.ts    # Internal link click/hover handling
   TaskViewHoverParent.ts           # HoverParent decoupling Page Preview popovers from the WorkspaceLeaf
+  TopRightFieldResolver.ts         # What a card's top right says (fields of the stated dates, tags, properties)
   types.ts                         # ChildRenderItem / CheckboxHandler (taskcard-local types)
   index.ts                         # Barrel exports
 ```
@@ -27,7 +28,8 @@ src/views/taskcard/
 4. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
 5. A card is drawn whole when `TaskCardRenderer.render` returns: it is synchronous, and lays the body, the children, their notation, the links and the mask in one go. No view waits on a card. `renderCardMarkdown` is the one call of `MarkdownRenderer.render`; that the body is in the element when the call returns is how Obsidian's renderer behaves, not what its API promises, so an empty element right after the call is logged once a session. The promise the call returns tells only when truly asynchronous content (images, embeds, math, code, mermaid, other plugins' post-processors) is in; the mask is laid again then, if the card still shows that draw.
 6. How a card is drawn is said by `RenderOptions`, one field per policy: `expandChildren` (no collapsed section), `alwaysLinks` (links live whatever `enableCardFileLink` says), `doubleTap`, `mask`. The renderer has no branch for any caller; the hub's preview passes its set and puts its own `task-card--in-hub-preview` class on the card.
-7. The renderer gives the card all of its look and its menu, on every draw before the signature is compared: the content, the color, the line style and the read-only mark (`TaskStyling`, which takes a value off when the task has none, so a kept card loses a color its task lost), and the context menu (`CardActions.bindMenu`). A view places the card and marks its split; it decorates nothing else. What a card does when used (details, menu, a child's menu, open in the editor, the double-tap action) is given once, as `CardActions`, when the renderer is made. Every view, and the plugin for a hub opened outside the views, makes its renderer, its `MenuHandler` and the hub they open together with `createCardRendering` (`views/sharedUI/CardRendering.ts`).
+7. A card's top right is made in one place, `TopRightFieldResolver`, for every view. It shows the dates the note states (`DisplayTask.stated`, made by `statedDates` in `utils/TaskDates.ts`): the line's values, and its section's and frontmatter's where the line has none, in the form they are written. A value the rules fill in (`05:00` for a bare date's start, the end of `@2026-10-04`, the default hour's end of `@2026-10-04T10:00`) is not written, so it is not shown. `stated` is made before a task is split, so both segments of `@2026-10-04T22:00>2026-10-05T08:00` show `22:00>08:00`. What a card shows is a `TopRightSpec`: `none`, or the fields of a `TopRightConfig` (fields, separator, prefix, suffix). A saved list passes its own config; Timeline, Calendar's cards of a day and Schedule pass `TIME_TOP_RIGHT`, the one field `times` (`10:00`, or `10:00>11:00`; empty with no start time). `composeTopRight` gives the pieces, each with a role (`start`, `end`, `sep`, `seg`); the card draws them with the class of their role (`renderTopRight`, `task-card__time-<role>`; a narrow card hides `-end`), and its signature holds their text.
+8. The renderer gives the card all of its look and its menu, on every draw before the signature is compared: the content, the color, the line style and the read-only mark (`TaskStyling`, which takes a value off when the task has none, so a kept card loses a color its task lost), and the context menu (`CardActions.bindMenu`). A view places the card and marks its split; it decorates nothing else. What a card does when used (details, menu, a child's menu, open in the editor, the double-tap action) is given once, as `CardActions`, when the renderer is made. Every view, and the plugin for a hub opened outside the views, makes its renderer, its `MenuHandler` and the hub they open together with `createCardRendering` (`views/sharedUI/CardRendering.ts`).
 
 ### Child rendering rule
 
@@ -464,7 +466,7 @@ A tie goes by where the task is written: the file (`localeCompare`), then the li
 
 ### Implicit value resolution rules (`resolveEffectiveDates()`)
 
-All implicit resolution is centralised in `resolveEffectiveDates()` (in `utils/EffectiveDates.ts`), which `toDisplayTask()` calls.
+All implicit resolution is centralised in `resolveEffectiveDates()` (in `utils/EffectiveDates.ts`), which `toDisplayTask()` calls. It starts from the dates the note states (`statedDates`, the line's value or else the inherited one, field by field), the same values a card's top right shows.
 Written dates are **calendarDates**. Complement uses `startHour` where possible,
 falling back to `00:00`/`23:59` when same-day end < start occurs.
 

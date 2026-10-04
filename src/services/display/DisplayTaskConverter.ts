@@ -4,6 +4,7 @@ import { dayBoundaryAt } from './DayBoundary';
 import { makeSegmentId } from './SegmentIds';
 import { buildChildEntries } from '../data/ChildEntryBuilder';
 import { resolveEffectiveDates } from '../../utils/EffectiveDates';
+import { statedDates } from '../../utils/TaskDates';
 
 /** Lookup signature for resolving sibling tasks during ChildEntry materialization. */
 export type TaskLookup = (id: string) => Task | undefined;
@@ -24,8 +25,9 @@ export function getOriginalTaskId(task: { id: string; originalTaskId?: string })
 }
 
 /**
- * Converts raw Task objects into DisplayTask with resolved effective fields
- * (`resolveEffectiveDates`) and materialized {@link ChildEntry} list.
+ * Converts raw Task objects into DisplayTask with the dates the note states
+ * (`statedDates`), resolved effective fields (`resolveEffectiveDates`) and
+ * materialized {@link ChildEntry} list.
  *
  * `getTask` resolves sibling tasks for child-entry partitioning. Pass
  * {@link NO_TASK_LOOKUP} for synthetic temp tasks that have no children
@@ -35,6 +37,7 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
     return {
         ...task,
         ...resolveEffectiveDates(task, startHour),
+        stated: statedDates(task),
         originalTaskId: task.id,
         isSplit: false,
         childEntries: buildChildEntries(task, getTask),

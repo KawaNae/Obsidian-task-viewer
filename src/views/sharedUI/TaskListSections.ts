@@ -169,7 +169,7 @@ export class TaskListSections {
     ): void {
         const settings = this.deps.plugin.settings;
         const topRight = list.topRight
-            ? { mode: 'template' as const, config: list.topRight }
+            ? { mode: 'fields' as const, config: list.topRight }
             : { mode: 'none' as const };
         // Each list is its own place, so a task in several lists, or in a
         // list and on the view's grid, is opened apart in each.
