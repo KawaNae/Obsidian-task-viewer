@@ -43,6 +43,9 @@ export interface CreateTaskModalOptions {
  * desktop は中央ダイアログ、phone は bottom-sheet（swipe dismiss・
  * keyboard awareness・close animation 込み）。パネル寸法は共通の
  * tv-overlay__panel--dialog（_overlay.css）。
+ *
+ * 初めのフォーカスは名前の欄（殻の initialFocus）。名前が空のうちは作らず、
+ * 欄の下に理由を出す。開いた直後の Enter で何も書かれないように。
  */
 export class CreateTaskModal {
     private overlay = new OverlayShell();
@@ -51,6 +54,7 @@ export class CreateTaskModal {
     private options: CreateTaskModalOptions;
 
     private nameInput: HTMLInputElement;
+    private nameErrorEl: HTMLElement;
     private dateGroup: DateFieldGroup;
     private warningEl: HTMLElement;
 
@@ -93,10 +97,13 @@ export class CreateTaskModal {
         const nameSuggest = new TaskNameSuggest(this.app, this.nameInput);
         attachBracketPairing(this.nameInput, () => {
             this.result.content = this.nameInput.value;
+            if (this.result.content.trim()) this.showNameRequired(false);
             this.checkWarning();
         });
         // An Enter that picks from the name's list is the list's.
         onFormEnter(this.nameInput, () => this.submit(), { takesEnter: () => nameSuggest.listShown });
+        this.nameErrorEl = nameSection.createDiv({ cls: 'tv-form__error' });
+        this.showNameRequired(false);
 
         // --- Start / End / Due ---
         const dlParts = DateUtils.splitDateTime(this.result.due ?? '');
@@ -171,7 +178,19 @@ export class CreateTaskModal {
         }
     }
 
+    /** Say under the name field that a name is needed, or take it back. */
+    private showNameRequired(shown: boolean): void {
+        this.nameInput.toggleClass('tv-ctrl__text-input--invalid', shown);
+        this.nameErrorEl.setText(shown ? t('modal.nameRequired') : '');
+        this.nameErrorEl.style.display = shown ? 'block' : 'none';
+    }
+
     submit() {
+        if (!this.result.content.trim()) {
+            this.showNameRequired(true);
+            this.nameInput.focus();
+            return;
+        }
         if (!this.dateGroup.validate()) return;
 
         this.close();
