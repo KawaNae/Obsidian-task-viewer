@@ -14,6 +14,7 @@ import { FilterValueCollector } from '../../services/filter/FilterValueCollector
 import { t } from '../../i18n';
 import type { PopoverStack } from '../sharedUI/PopoverStack';
 import { SuggestController } from './SuggestController';
+import { onFormEnter } from '../../modals/form/formEnter';
 
 type ListCondition = TextListCondition | TagCondition;
 
@@ -41,11 +42,9 @@ export class FilterConditionRenderer {
             edit.update(c => ({ ...c, value: input.value }), 'keep');
         };
         input.addEventListener('change', applyValue);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                applyValue();
-                (e.target as HTMLElement).blur();
-            }
+        onFormEnter(input, () => {
+            applyValue();
+            input.blur();
         });
     }
 
@@ -154,16 +153,16 @@ export class FilterConditionRenderer {
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 suggest.moveHighlight(-1);
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                const picked = suggest.highlightedValue ?? input.value;
-                input.value = picked;
-                suggest.close();
-                opts.onCommit(picked);
-                input.blur();
             } else if (e.key === 'Escape') {
                 suggest.close();
             }
+        });
+        onFormEnter(input, () => {
+            const picked = suggest.highlightedValue ?? input.value;
+            input.value = picked;
+            suggest.close();
+            opts.onCommit(picked);
+            input.blur();
         });
         input.addEventListener('focus', () => {
             showSuggest(input.value, !input.value);
@@ -253,19 +252,19 @@ export class FilterConditionRenderer {
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 suggest.moveHighlight(-1);
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                const hl = suggest.highlightedValue;
-                if (hl !== null) {
-                    addValue(hl);
-                } else if (input.value.trim()) {
-                    addValue(input.value);
-                }
             } else if (e.key === 'Escape') {
                 suggest.close();
             } else if (e.key === 'Backspace' && !input.value && valuesOf(edit.current()).length > 0) {
                 // Remove last pill on backspace in empty input
                 edit.update(c => ({ ...c, value: valuesOf(c).slice(0, -1) }), 'redraw');
+            }
+        });
+        onFormEnter(input, () => {
+            const hl = suggest.highlightedValue;
+            if (hl !== null) {
+                addValue(hl);
+            } else if (input.value.trim()) {
+                addValue(input.value);
             }
         });
 

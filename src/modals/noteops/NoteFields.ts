@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import { FileSuggest } from '../../suggest/FileSuggest';
 import { FolderSuggest } from '../../suggest/FolderSuggest';
 import type { ShownSuggest } from '../../suggest/ShownSuggest';
+import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
 
 /** What {@link NoteFields} are opened with, and whom they tell. */
@@ -53,12 +54,7 @@ export class NoteFields {
             [this.nameInput, this.fileSuggest],
         ];
         for (const [input, suggest] of lists) {
-            input.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key !== 'Enter' || e.isComposing) return;
-                if (suggest.listShown) return;
-                e.preventDefault();
-                opts.onEnter();
-            });
+            onFormEnter(input, () => opts.onEnter(), { takesEnter: () => suggest.listShown });
         }
     }
 

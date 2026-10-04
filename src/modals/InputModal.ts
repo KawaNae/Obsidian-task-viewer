@@ -1,5 +1,6 @@
 import { type App, Modal, Setting } from 'obsidian';
 import { t } from '../i18n';
+import { onFormEnter } from './form/formEnter';
 
 export class InputModal extends Modal {
     private title: string;
@@ -43,11 +44,7 @@ export class InputModal extends Modal {
         });
         this.inputEl.focus();
         this.inputEl.select();
-        this.inputEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                this.submit();
-            }
-        });
+        onFormEnter(this.inputEl, () => this.submit());
 
         new Setting(contentEl)
             .addButton(btn => btn

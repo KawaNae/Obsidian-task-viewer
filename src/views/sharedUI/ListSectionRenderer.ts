@@ -17,6 +17,7 @@
 import { setIcon } from 'obsidian';
 import { hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { hasSortRules, type SortState } from '../../services/sort/SortTypes';
+import { onFormEnter } from '../../modals/form/formEnter';
 
 /** DOM class names for one variant of the section. */
 export interface ListSectionClasses {
@@ -161,8 +162,8 @@ export function startListSectionRename(
     };
 
     input.addEventListener('blur', () => commit(input.value.trim() || currentName));
+    onFormEnter(input, () => input.blur());
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
         if (e.key === 'Escape') { e.preventDefault(); commit(currentName); }
     });
     // Keep the header's collapse handler out of it.

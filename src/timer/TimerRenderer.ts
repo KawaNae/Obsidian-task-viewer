@@ -30,6 +30,7 @@ import { TimerProgressUI, type RingOptions, type RingState } from './TimerProgre
 import { TimerSettingsMenu } from './TimerSettingsMenu';
 import { OFFSET_PRESET_MINUTES, canOffsetStart, rememberedStart, startLabel } from './TimerStartOffset';
 import { TimerStartOffsetModal } from '../modals/TimerStartOffsetModal';
+import { onFormEnter } from '../modals/form/formEnter';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
 import { getEffectiveColor } from '../services/data/EffectiveProperties';
@@ -574,22 +575,13 @@ export class TimerRenderer {
     // ─── 名前の入力欄 ────────────────────────────────────────
 
     /**
-     * Enter で改行せず確定させる。IME 確定の Enter は isComposing 判定が
-     * ブラウザ間で揺れるので、compositionstart/end の自前フラグも併用する
-     * （`bracketPairing.ts` と同じイディオム）。改行はスペースに畳んで記録
-     * するので textarea に残っても実害は無いが、Enter 経由では最初から
+     * フォームの Enter（`onFormEnter`）で改行せず確定させる。IME の確定の
+     * Enter は確定だけで、次の Enter が確定させる。改行はスペースに畳んで
+     * 記録するので textarea に残っても実害は無いが、Enter 経由では最初から
      * 入れさせない。
      */
     private bindTitleInputConfirmKey(el: HTMLTextAreaElement): void {
-        let composing = false;
-        el.addEventListener('compositionstart', () => { composing = true; });
-        el.addEventListener('compositionend', () => { composing = false; });
-        el.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.isComposing && !composing) {
-                e.preventDefault();
-                el.blur();
-            }
-        });
+        onFormEnter(el, () => el.blur());
     }
 
     /**
