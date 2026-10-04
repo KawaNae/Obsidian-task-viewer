@@ -13,11 +13,18 @@ import { Scope, type Keymap } from 'obsidian';
  * pushes the scope, one that moves to an element outside it pops the scope.
  * A focus that goes to no element (a click on the surface's blank space,
  * the window left) moves nothing, so the scope stays as it was.
+ *
+ * The focus is followed in the capture phase of `focus`, which reaches the
+ * document before the element's own `focus` listeners, and before `focusin`
+ * fires at all: an input suggest that opens its list as its field takes
+ * the focus (`ShownSuggest`) pushes its scope there, and that scope has to
+ * be above this one, or the list's keys (the arrows, Enter, Escape) would
+ * stop here.
  */
 export class HotkeyShield {
     private readonly scope = new Scope();
     private pushed = false;
-    private readonly onFocusIn = (e: FocusEvent) => this.keepOut(this.holds(e.target as Node | null));
+    private readonly onFocus = (e: FocusEvent) => this.keepOut(this.holds(e.target as Node | null));
 
     /**
      * @param keymap Obsidian's keymap (`app.keymap`)
@@ -29,13 +36,13 @@ export class HotkeyShield {
         private readonly doc: Document,
         private readonly holds: (node: Node | null) => boolean,
     ) {
-        doc.addEventListener('focusin', this.onFocusIn, true);
+        doc.addEventListener('focus', this.onFocus, true);
         this.keepOut(holds(doc.activeElement));
     }
 
     /** Pop the scope, if pushed, and stop following the focus. */
     detach(): void {
-        this.doc.removeEventListener('focusin', this.onFocusIn, true);
+        this.doc.removeEventListener('focus', this.onFocus, true);
         this.keepOut(false);
     }
 

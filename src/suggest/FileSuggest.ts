@@ -26,7 +26,7 @@ export class FileSuggest extends ShownSuggest<TFile> {
         el.setText(file.path);
     }
 
-    selectSuggestion(file: TFile): void {
+    protected pick(file: TFile): void {
         if (this.onPick) {
             this.onPick(file);
         } else {

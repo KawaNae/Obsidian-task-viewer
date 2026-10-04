@@ -42,7 +42,7 @@ export class TaskNameSuggest extends ShownSuggest<LinkTagCandidate> {
         }
     }
 
-    selectSuggestion(item: LinkTagCandidate, evt: MouseEvent | KeyboardEvent): void {
+    protected pick(item: LinkTagCandidate, evt: MouseEvent | KeyboardEvent): void {
         const value = this.inputEl.value;
         const pos = this.inputEl.selectionStart ?? value.length;
         const trigger = linkTagTrigger(value.substring(0, pos));

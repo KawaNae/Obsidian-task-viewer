@@ -20,7 +20,7 @@ export class FolderSuggest extends ShownSuggest<TFolder> {
         el.setText(folder.path);
     }
 
-    selectSuggestion(folder: TFolder, _evt: MouseEvent | KeyboardEvent): void {
+    protected pick(folder: TFolder, _evt: MouseEvent | KeyboardEvent): void {
         const inputEl = this.textInputEl;
         inputEl.value = folder.path;
         inputEl.trigger('input');
