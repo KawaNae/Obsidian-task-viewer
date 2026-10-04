@@ -239,8 +239,8 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order |
 | **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion (stated dates, span, drawn), the split at a day boundary |
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
-| **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed / dueOnly kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
-| **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Per-date bucketing: delegates kind to `classifyForSection`, owns date membership (allDay/timed = visual span, dueOnly = calendar due) and sort via TaskRenderOrder |
+| **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
+| **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Per-date bucketing: delegates kind to `classifyForSection`, owns date membership (the visual days a task is drawn over) and sort via TaskRenderOrder |
 | **TaskRenderOrder** | `services/display/TaskRenderOrder.ts` | The canonical order of each section's bucket, which every view draws in; a tie goes by where the task is written (file, then line as a number, then ID). See "Canonical order within a section" |
 | **ViewExporter** | `services/export/ViewExporter.ts` | Clones a view's container, grows what scrolls (each view's `ExportTargetSpec` in `ExportRegistry`) and captures it as a PNG |
 | **ExportSave** | `services/export/ExportSave.ts` | Where an export is saved and saving it, for the view menu and the CLI alike: `exportFolderOf(settings, override?)` (the folder asked for, else the setting, else `DEFAULT_SETTINGS.exportFolder`), `saveExportImage` (a vault-relative folder through the vault, an absolute one through Node's `fs`, desktop only) |
@@ -432,8 +432,8 @@ Only one side specified, no time on that side.
 Both start and end are specified, neither has a time.
 
 - **Display**: Calendar (all-day) lane, spanning the specified days
-- **Inference**: from the start of the first day (see the span below)
-- Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>due`
+- **Inference**: from the start of the first day to the end of the last: a bare end date is included (see the span below)
+- Examples: `@2026-03-09>2026-03-11` (03/09 to 03/11), `@2026-03-09>2026-03-11>due`
 
 #### 4. SE / SED Timed (at least one side has time)
 
@@ -447,9 +447,10 @@ Both start and end are specified, at least one has an explicit time.
 
 Only a due is specified, no start or end.
 
-- **Display**: Schedule's due section, on the visual day the due closes (`endDayOf(dueMs)`, where the window queries find it). Timeline does not draw it: `classifyForSection` gives it the `dueOnly` section and Timeline's `GridRenderer` draws only `allDay` and `timed`
-- **Inference**: none — D does not affect display position or duration inference
-- The section is decided by the row's own `due`: a task whose due is only inherited (from a heading or the note) is in no section
+- **Display**: read as if the due were the end (`spanDates`: `@>>D` as `@>D`, `@>>DT17:00` as `@>DT17:00`). A due date is drawn all day on that day, a timed due on the time grid in the hour before it, in every view, and the window queries find it there
+- **Inference**: the span the due gives; the due itself is unchanged
+- A due inherited from a heading or the note gives a span too, as an inherited start date does
+- A drag writes the span it is drawn with as the line's dates and leaves the due (`dueSpanWritten`, `dragBase`)
 - Example: `@>>2026-03-13`
 
 #### Canonical order within a section
@@ -460,31 +461,31 @@ Only a due is specified, no start or end.
 |---|---|
 | timed | visual start (minutes from startHour), then the longer first |
 | allDay | the start of what is drawn (`drawn.startMs`) |
-| dueOnly | the row's `due`, with its time |
 
 A tie goes by where the task is written: the file (`localeCompare`), then the line as a number, then the ID (only the segments of one row share a file and a line). The ID does not order tasks by itself: it is a name for one reading of the note, and compared as text it put line 10 before line 9.
 
 ### The span (`resolveSpan()`)
 
-`resolveSpan(stated, startHour)` fills in what the note does not state and gives moments (local epoch ms). `dayStart(D)` is D at `startHour:00` (`utils/DayWindow.ts`). A time inherited from the section or the note is a written time.
+`resolveSpan(stated, startHour)` fills in what the note does not state and gives moments (local epoch ms). `dayStart(D)` is D at `startHour:00` (`utils/DayWindow.ts`). A bare date D is the whole visual day D: written as a start it is D's start, written as an end D's end. A time inherited from the section or the note is a written time. A task with only a due is read as if the due were its end (`spanDates`).
 
 | Written | Start | End |
 |---|---|---|
 | `@D` | `dayStart(D)` | `dayStart(D+1)` |
-| `@D>E` | `dayStart(D)` | `dayStart(E)` (a date-only end is its implicit `(startHour−1):59` and the minute after it; at `startHour` 0, `dayStart(E+1)`) |
-| `@>E` | the start of the visual day that end is in | as `@D>E` |
+| `@D>E`, `@D>D` | `dayStart(D)` | `dayStart(E+1)` (`@D>D` is `@D`) |
+| `@>E` | `dayStart(E)` | `dayStart(E+1)` |
 | `@DT10:00` | D 10:00 | an hour later |
 | `@DT10:00>11:00` | D 10:00 | D 11:00, the next day's when before the start |
-| `@>ET11:00` | an hour before the end | E 11:00 |
-| `@DT10:00>D` (the implicit end before the start) | D 10:00 | D 23:59 |
-| `@>>D` | no span | due `dayStart(D+1)` |
-| `@>>DT17:00` | no span | due D 17:00 |
+| `@DT10:00>D`, `@DT22:00>E` | the written start | `dayStart(E+1)` |
+| `@>ET11:00` (rule 4's error), `@>>DT11:00` | an hour before the end | the written end |
+| `@>>D` | `dayStart(D)` | `dayStart(D+1)` |
 
-The rows rule 4 calls errors (an end time on a line with no start time) are not drawn; they are resolved the same way for the API's `includeInvalid`.
+The due is `dayStart(D+1)` for a due date D and the written moment for a timed one. The rows rule 4 calls errors (an end time on a line with no start time) are not drawn; they are read by the same rules and not mended (`@D>DT02:00` ends before it starts), for the API's `includeInvalid`.
 
 A segment of a split task holds its line's values, `stated` and `span`; what it is drawn over is `drawn`, cut at `dayStart` of the boundary. The visual days a span is drawn over are `visualDaysOf` (the last is the day of the moment before the end, so `[D 05:00, D+1 05:00)` is D only); the place on the time grid is `minutesOfSpan`. Windows of days (`daysWindow`, a filter's value by `ofValue`) and how a span or a moment stands to them (`utils/SpanRelation.ts`: `overlaps`, `within`, `startIn`, `endIn`) answer the views, the window queries (`TaskReadService.tasksInWindow`), the API's `today`, Timeline's overdue heading, the filter and the sort alike. A start belongs to the window it is in; an end and a due to the window they close.
 
-The hub's faint values and the menu's dates are `sideValues`: the line's value, else the inherited one, else what the rules make, at the precision it is written with (a bare date gets no faint time).
+The hub's faint values and the menu's dates are `sideValues`: the line's value, else the inherited one, else what the rules make, at the precision it is written with (a bare date gets no faint time; `@D`'s end is D, `@>>D`'s start and end are D, `@>>DT17:00`'s 16:00 and 17:00).
+
+A task is late when it is past its due (`dueMs <= now`, 🚨 `past-due`) or past its end (`span.endMs <= now`, ⚠️ `past-end`): `getOverdueLevel`, which the overdue counts read (Timeline's heading, Schedule, the oldest overdue, the watcher). A card also shows 🚨 when its span runs past its due (`exceedsDue`: `span.endMs > dueMs`, without the clock), before the due too: `cardOverdueLevel` in `TaskCardRenderer` is the one place that reads it.
 
 ### All-day boundary
 
@@ -1184,26 +1185,19 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 
 `DateUtils` is the one date module. Converting between `YYYY-MM-DD` text and `Date` (`parseDate`, `readDate`, `toDateTime`, `getLocalDateString`), the date shape (`DATE_PATTERN`, `isDateShape`), the visual today at a given moment (`visualDateAt(now, startHour)`), the week start, shifting by days (`shiftDateString`), and splitting and joining a due (`splitDateTime`, `joinDateTime`) are answered there. A day as a stretch of time, the day a moment is in and the days a span is drawn over are `utils/DayWindow.ts`'s. Other code does not split date strings, build `new Date('...')` from them, or write the date regex; a grammar that embeds a date builds its pattern from `DATE_PATTERN`. Years are four digits (`0026` is the year 26).
 
-### @notation endDate semantics — **dual semantic at raw layer**
+### @notation endDate semantics
 
-`task.endDate` is a **calendarDate** with a **dual semantic** that depends on whether `endTime` is present:
-
-| `endTime` | `endDate` semantic | Why |
-|-----------|--------------------|-----|
-| **absent** (pure all-day) | **exclusive** (one day past last covered day) | Matches `@2026-03-24>2026-03-29` notation: 5 visual days, 03-24 ~ 03-28 inclusive. |
-| **present** | **inclusive** (the day on which `endTime` occurs) | Matches `@2026-05-13T07:30>2026-05-19T09:45` notation: the task literally ends on 05-19 at 09:45. |
-
-This duality is preserved at the raw layer for round-trip with the external @notation. The display layer **collapses the duality** into moments (`resolveSpan`): the span `[startMs, endMs)`, and the visual days it is drawn over read from it (`visualDaysOf`, whose last day is the day of the moment before the end):
+`task.endDate` is a calendar date. With `endTime`, it is the date the end time is on. Without it, it is a bare date, and a bare date ends at the end of that visual day: the last day the task covers is the date written.
 
 ```
-@2026-03-24>2026-03-29  (endTime absent → exclusive raw)
+@2026-03-24>2026-03-28  (a bare end date: 03-28 is included)
 span: [03-24 05:00, 03-29 05:00)  → visual days 03-24 … 03-28
 
-@2026-05-13T07:30>2026-05-19T09:45  (endTime present → inclusive raw)
+@2026-05-13T07:30>2026-05-19T09:45  (an end time: the task ends on 05-19 at 09:45)
 span: [05-13 07:30, 05-19 09:45)  → visual days 05-13 … 05-19
 ```
 
-**Drag write-back rule**: never write `Task.endDate` directly with `addDays(visualEnd, 1)` — that pattern is correct only for the all-day branch and silently corrupts timed tasks. Funnel updates through `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`), the single boundary that converts inclusive visual edits to raw based on `baseTask.endTime`.
+**Drag write-back**: a drag's edits are in visual days (`visualDaysOf`), and `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`) is the single place they become the line's dates. It writes the last visual day as it is; a time before `startHour` goes on the next calendar date.
 
 ### Visual date pipeline
 
@@ -1292,7 +1286,7 @@ Each Gesture (`GridMoveGesture` / `GridResizeGesture`) caches the inclusive visu
 |-------|----------|----------|
 | `initialVisualStart` / `initialVisualEnd` | Inclusive visualDates (from `getVisualDateRange`) | Ghost rendering (`GhostRenderer.render`), span calculation, resize bounds |
 
-Raw calendarDates (`baseTask.startDate` / `baseTask.endDate`, endDate exclusive) are read from `baseTask` directly for write-back; there is no separate cached `initialCalendarDate` field.
+`baseTask` is the line's task as the drag starts from it (`dragBase`: a task with only a due has the span it is drawn with written out as its dates, `dueSpanWritten`). `commitPlan` writes `planUpdates`: the edits materialized on `baseTask`, compared with the line's own task from the index, so the written-out dates are written; there is no separate cached `initialCalendarDate` field.
 
 ---
 
@@ -1475,7 +1469,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
 | `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
 | `tasksForDateRange({ from, to, ... })` | async | `TaskListResult` |
-| `categorizedTasksForDateRange({ from, to, ... })` | async | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed, dueOnly }>`) |
+| `categorizedTasksForDateRange({ from, to, ... })` | async | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed }>`) |
 | `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
 | `getStartHour()` | sync | `StartHourResult { startHour }` |
 | `onChange(callback)` | sync | `() => void` (unsubscribe) |

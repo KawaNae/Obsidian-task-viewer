@@ -134,18 +134,14 @@ export interface Task {
     startDate?: string;
     startTime?: string;
     /**
-     * Raw end date as written in @notation / frontmatter. **Dual semantic**:
-     * - When `endTime` is present → `endDate` is **inclusive** (the calendar
-     *   date on which `endTime` occurs).
-     * - When `endTime` is absent (pure all-day) → `endDate` is **exclusive**
-     *   (one day past the last day the task covers).
+     * Raw end date as written in @notation / frontmatter. With `endTime`, the
+     * date the end time is on; without it, a bare date, which ends at the end
+     * of that (visual) day: the last day the task covers.
      *
-     * This duality is preserved at the raw layer for parser/writer round-trip
-     * with the external @notation. Display code should not read `endDate`
-     * directly; it reads the span (`DisplayTask.span`, `drawn`) and the
-     * visual days it is drawn over (`visualDaysOf`). Drag write-back must funnel updates through
-     * `materializeRawDates()` which collapses the duality based on
-     * `baseTask.endTime`.
+     * Display code should not read `endDate` directly; it reads the span
+     * (`DisplayTask.span`, `drawn`) and the visual days it is drawn over
+     * (`visualDaysOf`). Drag write-back goes through `materializeRawDates()`,
+     * which writes the last visual day as it is.
      */
     endDate?: string;
     endTime?: string;
@@ -166,8 +162,9 @@ export interface Task {
      * serialized — formatTaskLine and all writers read only raw fields for
      * round-trip fidelity.
      *
-     * Dates are merged into `DisplayTask.effective*` by DisplayTaskConverter
-     * (needs display context: startHour). Properties/tags/style close over
+     * Dates are merged with the line's into `DisplayTask.stated`
+     * (`statedDates`), which the span is read from with startHour
+     * (`resolveSpan`). Properties/tags/style close over
      * the Task alone, so they merge via the `getEffective*` derived helpers
      * (`services/data/EffectiveProperties.ts`).
      */
