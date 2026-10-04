@@ -12,6 +12,7 @@ import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { Outline } from '../../services/parsing/utils/Outline';
 import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor } from '../form/source/SourceEditor';
+import type { FormIssue, Tone } from '../form/FormIssue';
 
 /**
  * The send dialog: rows and their subtrees sent to a section of a note
@@ -38,6 +39,13 @@ import type { DraftEditor } from '../form/source/SourceEditor';
  *   offered, and why is said. A timer that changes by itself while the
  *   dialog is open (an interval's record) is seen at the next showing; the
  *   send asks again as it is made.
+ * - What the dialog says is of a field, a row or the form (`FormIssue`):
+ *   why the note's name is no name, under the name; what the send does or
+ *   why the heading names no one place, under the heading; why a row's
+ *   draft cannot be written, under that row; the rest (the timers, what a
+ *   send is asked in spite of, the last send's answer) of the form. A send
+ *   is asked only while no error is said of what the dialog holds; the
+ *   answer to the last send keeps none from being asked again.
  * - A send not made keeps the draft and says why under it; a send made
  *   closes the dialog. A send made for some rows only says why too, and
  *   offers no send again: the rows that went are no longer where the
@@ -63,26 +71,23 @@ export interface CandidateView {
     shut: string | null;
 }
 
-/** A sentence the dialog says, with how it says it (`tv-form__info`, `__warning`, `__error`). */
-export type Tone = 'info' | 'warning' | 'error';
+/** What the dialog's issues are said of: the note's name, the heading, a row's draft (`row:<i>`, in the order of the rows). */
+export type SendField = 'name' | 'heading' | `row:${number}`;
 
 /** What the surface shows. */
 export interface SendViewState {
     phase: SendPhase;
-    /** What the send does, in one sentence; null until the fields name a note the send can go to. */
-    destination: { text: string; tone: Tone } | null;
     /** The headings of the note the fields name, for the heading field to offer. */
     headings: readonly string[];
     /** The values offered for the frontmatter; null when none is offered. */
     candidates: readonly CandidateView[] | null;
-    /** Why a send cannot be asked. */
-    errors: readonly string[];
-    /** What a send can be asked in spite of. */
-    warnings: readonly string[];
-    /** The fields said wrong by an error. */
-    invalid: { name: boolean; heading: boolean };
-    /** Under the fields: why the last send was not made, or made for some rows only. */
-    message: string | null;
+    /**
+     * What the dialog says: why a send cannot be asked (errors), what it can
+     * be asked in spite of (warnings), what it does (the heading's info or
+     * warning), and why the last send was not made, or made for some rows
+     * only (an error of the form).
+     */
+    issues: readonly FormIssue<SendField>[];
     canSend: boolean;
     /** Asking whether to throw the draft away. */
     asking: boolean;
@@ -173,34 +178,32 @@ export class SendDialog {
 
     state(): SendViewState {
         const facts = this.answer?.facts ?? null;
-        const errors: string[] = [];
-        const warnings: string[] = [];
-        const invalid = { name: false, heading: false };
+        const held: FormIssue<SendField>[] = [];
+        const error = (at: SendField | 'form', text: string) => held.push({ at, tone: 'error', text });
 
         if (facts?.kind === 'unnamed') {
-            invalid.name = true;
-            errors.push(nameError(facts.why));
+            error('name', nameError(facts.why));
         } else if (facts && facts.heading.kind === 'many') {
-            invalid.heading = true;
-            errors.push(t('modal.send.headings', { note: facts.path, heading: facts.to.section.heading, count: String(facts.heading.count) }));
+            error('heading', t('modal.send.headings', { note: facts.path, heading: facts.to.section.heading, count: String(facts.heading.count) }));
         }
-        for (const why of new Set(this.drafts().flatMap(({ check }) => (check?.kind === 'refused' ? [draftError(check.reason)] : [])))) {
-            errors.push(why);
-        }
+        this.drafts().forEach(({ check }, i) => {
+            if (check?.kind === 'refused') error(`row:${i}`, draftError(check.reason));
+        });
         const timers = this.timersRefuse(facts);
-        if (timers !== null) errors.push(timers);
-        if (facts && facts.kind !== 'unnamed') warnings.push(...this.warningsOf(facts));
+        if (timers !== null) error('form', timers);
+        if (facts && facts.kind !== 'unnamed') {
+            const says = destinationText(facts);
+            if (says) held.push({ at: 'heading', ...says });
+            held.push(...this.warningsOf(facts));
+        }
+        const canSend = this.phase === 'open' && this.caughtUp() && !held.some(issue => issue.tone === 'error');
 
         return {
             phase: this.phase,
-            destination: facts && facts.kind !== 'unnamed' ? destinationText(facts) : null,
             headings: facts && facts.kind !== 'unnamed' ? facts.headings : [],
             candidates: this.candidatesOf(facts),
-            errors,
-            warnings,
-            invalid,
-            message: this.message,
-            canSend: this.phase === 'open' && this.caughtUp() && errors.length === 0,
+            issues: this.message === null ? held : [...held, { at: 'form', tone: 'error', text: this.message }],
+            canSend,
             asking: this.asking,
         };
     }
@@ -378,16 +381,19 @@ export class SendDialog {
         return this.host.timers(sendingOf(rows, facts.path, facts.anchors));
     }
 
-    private warningsOf(facts: NoteFacts): string[] {
-        const out: string[] = facts.unresolved.map(one => unresolvedText(one, facts.path));
+    /** What a send to `facts` can be asked in spite of: of the form, but the namesakes, which are of the name. */
+    private warningsOf(facts: NoteFacts): FormIssue<SendField>[] {
+        const out: FormIssue<SendField>[] = [];
+        const warn = (at: SendField | 'form', text: string) => out.push({ at, tone: 'warning', text });
+        for (const one of facts.unresolved) warn('form', unresolvedText(one, facts.path));
         if (facts.kind !== 'same') {
             for (const [anchor, notes] of linksByAnchor(this.preview.links)) {
-                out.push(t('modal.send.links', { anchor, count: String(notes.length), notes: notes.join(', ') }));
+                warn('form', t('modal.send.links', { anchor, count: String(notes.length), notes: notes.join(', ') }));
             }
         }
-        for (const anchor of facts.shared) out.push(t('modal.send.shared', { anchor, note: facts.path }));
-        if (facts.ignored) out.push(t('modal.send.ignored', { note: facts.path }));
-        if (facts.namesakes.length > 0) out.push(t('modal.send.namesakes', { notes: facts.namesakes.map(file => file.path).join(', ') }));
+        for (const anchor of facts.shared) warn('form', t('modal.send.shared', { anchor, note: facts.path }));
+        if (facts.ignored) warn('form', t('modal.send.ignored', { note: facts.path }));
+        if (facts.namesakes.length > 0) warn('name', t('modal.send.namesakes', { notes: facts.namesakes.map(file => file.path).join(', ') }));
         return out;
     }
 
