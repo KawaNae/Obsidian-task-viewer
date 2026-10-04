@@ -49,6 +49,12 @@ describe('FloatInput', () => {
     it('checks the range', () => {
         expect(FloatInput.read('0.1', { min: 0.25, max: 10 })).toEqual({ ok: false, issue: { code: 'range', min: 0.25, max: 10 } });
     });
+    it('is a field\'s codec: read in range, shown as JS writes the number', () => {
+        const codec = FloatInput.codec({ min: 0 });
+        expect(codec.read('１．５０')).toEqual({ ok: true, value: 1.5 });
+        expect(codec.read('-1')).toEqual({ ok: false, issue: { code: 'range', min: 0 } });
+        expect(codec.show(1.5)).toBe('1.5');
+    });
 });
 
 describe('FloatValue', () => {

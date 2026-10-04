@@ -64,4 +64,8 @@ export const FloatInput = {
         if (!DECIMAL.test(t)) return readFail({ code: 'shape', kind: 'number' });
         return FloatValue.check(Number(t), range);
     },
+    /** The reading of a field that takes a decimal number in `range`, shown as JS writes it. */
+    codec(range: NumberRange = {}): FieldCodec<number> {
+        return { read: (text) => FloatInput.read(text, range), show: (n) => String(n) };
+    },
 };

@@ -17,12 +17,15 @@ const SHAPE: Record<ShapeKind, string> = {
     number: 'a number',
     bool: 'true or false',
     color: 'a hex color (ff0000) or a color name (red)',
+    statusChar: 'one character that is not a line break',
+    text: 'text',
 };
 
 const NOTATION: Record<NotationKind, string> = {
     dateBlock: 'a date block (@…); dates go in their own fields',
     command: 'a command (==>)',
     blockId: 'a block ID (^id) at its end',
+    headingMark: 'the heading mark (#) at its start',
 };
 
 function sentence(issue: Issue, label: string): string {
@@ -39,6 +42,7 @@ function sentence(issue: Issue, label: string): string {
         case 'notation': return `${label} must not hold ${NOTATION[issue.kind]}`;
         case 'chars': return `${label} must not hold: ${issue.chars}`;
         case 'reserved': return `${label} is reserved`;
+        case 'duplicate': return `${label} is already used`;
     }
 }
 

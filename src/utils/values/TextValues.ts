@@ -15,6 +15,12 @@ export const TextInput: FieldCodec<string> = {
     show: (text) => text,
 };
 
+/** Text with the space around it taken off, empty or not: a folder's or a note's path. */
+export const TrimmedText: FieldCodec<string> = {
+    read: (text) => readOk(text.trim()),
+    show: (text) => text,
+};
+
 /** Text as typed, empty or not: what a free field holds (a property's value, a mask). */
 export const FreeText: FieldCodec<string> = {
     read: (text) => readOk(text),

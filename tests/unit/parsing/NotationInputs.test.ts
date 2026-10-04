@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { notationInName, TaskContentInput } from '../../../src/services/parsing/tv-inline/TaskContentInput';
 import { TagInput } from '../../../src/services/parsing/utils/TagInput';
-import { PropertyKeyInput } from '../../../src/services/parsing/utils/PropertyKeyInput';
+import { PropertyKeyInput, ScopeKeyInput } from '../../../src/services/parsing/utils/PropertyKeyInput';
+import { StatusCharInput } from '../../../src/services/parsing/utils/StatusCharInput';
+import { HeadingInput } from '../../../src/services/parsing/utils/HeadingInput';
 import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 
 describe('a task name typed in a field (入力の論点 A)', () => {
@@ -50,5 +52,57 @@ describe('a property key typed to add', () => {
     it('refuses a key the plugin keeps for itself', () => {
         expect(keys.read('tv-start')).toEqual({ ok: false, issue: { code: 'reserved' } });
         expect(keys.read('tags')).toEqual({ ok: false, issue: { code: 'reserved' } });
+    });
+});
+
+describe('a scope key typed in the settings', () => {
+    const others = ['tv-end', 'tv-due'];
+
+    it('reads a key with the space around it taken off', () => {
+        expect(ScopeKeyInput.read('  my-start ', others)).toEqual({ ok: true, value: 'my-start' });
+    });
+
+    it('refuses an empty key, and one the property line would not read as the key', () => {
+        expect(ScopeKeyInput.read('  ', others)).toEqual({ ok: false, issue: { code: 'empty' } });
+        expect(ScopeKeyInput.read('tv:start', others)).toEqual({ ok: false, issue: { code: 'chars', chars: ':' } });
+    });
+
+    it('refuses a key reserved apart from the scope keys, and another scope key', () => {
+        expect(ScopeKeyInput.read('tags', others)).toEqual({ ok: false, issue: { code: 'reserved' } });
+        expect(ScopeKeyInput.read('tv-status', others)).toEqual({ ok: false, issue: { code: 'reserved' } });
+        expect(ScopeKeyInput.read('tv-end', others)).toEqual({ ok: false, issue: { code: 'duplicate' } });
+    });
+
+    it('reads the others as they are when it reads', () => {
+        let keys = ['tv-end'];
+        const codec = ScopeKeyInput.codec(() => keys);
+        expect(codec.read('tv-end').ok).toBe(false);
+        keys = ['tv-finish'];
+        expect(codec.read('tv-end')).toEqual({ ok: true, value: 'tv-end' });
+    });
+});
+
+describe('a status character typed in the settings', () => {
+    it.each([' ', 'x', '/', '！', ']'])('takes %j as typed', (c) => {
+        expect(StatusCharInput.read(c, ['-'])).toEqual({ ok: true, value: c });
+    });
+
+    it('refuses none, more than one, a line break, and another status\'s', () => {
+        expect(StatusCharInput.read('', [])).toEqual({ ok: false, issue: { code: 'empty' } });
+        expect(StatusCharInput.read('ab', [])).toEqual({ ok: false, issue: { code: 'shape', kind: 'statusChar' } });
+        expect(StatusCharInput.read('\u2028', [])).toEqual({ ok: false, issue: { code: 'shape', kind: 'statusChar' } });
+        expect(StatusCharInput.read('x', [' ', 'x'])).toEqual({ ok: false, issue: { code: 'duplicate' } });
+    });
+});
+
+describe('a heading typed in the settings', () => {
+    it('reads the name with the space around it taken off', () => {
+        expect(HeadingInput.read('  Tasks ')).toEqual({ ok: true, value: 'Tasks' });
+        expect(HeadingInput.read('Tasks #today')).toEqual({ ok: true, value: 'Tasks #today' });
+    });
+
+    it('refuses none, and the heading mark before the name', () => {
+        expect(HeadingInput.read(' ')).toEqual({ ok: false, issue: { code: 'empty' } });
+        expect(HeadingInput.read('## Tasks')).toEqual({ ok: false, issue: { code: 'notation', kind: 'headingMark' } });
     });
 });

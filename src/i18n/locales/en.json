@@ -590,7 +590,9 @@
       "int": "Enter a whole number.",
       "number": "Enter a number.",
       "bool": "Enter true or false.",
-      "color": "Enter a hex color (ff0000) or a color name (red)."
+      "color": "Enter a hex color (ff0000) or a color name (red).",
+      "statusChar": "Enter one character that is not a line break.",
+      "text": "Enter text."
     },
     "noSuchDay": "That day does not exist.",
     "rangeBetween": "Enter a number from {{min}} to {{max}}.",
@@ -601,10 +603,12 @@
     "notation": {
       "dateBlock": "A name cannot hold a date block (@…). Enter dates in their own fields.",
       "command": "A name cannot hold a command (==>).",
-      "blockId": "A name cannot end with a block ID (^id)."
+      "blockId": "A name cannot end with a block ID (^id).",
+      "headingMark": "Leave out the heading mark (#). Enter the heading's name alone."
     },
     "chars": "These characters cannot be used: {{chars}}",
-    "reserved": "This key is reserved."
+    "reserved": "This key is reserved.",
+    "duplicate": "This value is already used."
   },
   "validation": {
     "crossMidnight": "End time ({{endTime}}) is before start time ({{startTime}}).",
