@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { statedDates } from '../../../src/utils/TaskDates';
 import { DateUtils } from '../../../src/utils/DateUtils';
 import { Notice } from 'obsidian';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
@@ -65,7 +66,7 @@ function withReadService(s: VaultSession) {
     s.plugin.getTaskReadService = () => ({
         getDisplayTask: (id: string) => {
             const t = s.index.getTask(id);
-            return t && { ...t, span: { startMs: 0, endMs: DateUtils.toDateTime(t.endDate ?? t.startDate!, t.endTime ?? t.startTime!).getTime() } };
+            return t && { ...t, stated: statedDates(t), span: { startMs: 0, endMs: DateUtils.toDateTime(t.endDate ?? t.startDate!, t.endTime ?? t.startTime!).getTime() } };
         },
     });
 }

@@ -18,7 +18,7 @@ const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', content: 'parent', 
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-function makeHarness(effectiveEnd: Date, written = true) {
+function makeHarness(effectiveEnd: Date, written = true, stated: Record<string, string> = { startDate: '2026-10-04', startTime: '10:00' }) {
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
 
     const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', content: 'parent', blockId: 'tv-timer-1', anchor: 'tv-timer-1' });
@@ -38,6 +38,7 @@ function makeHarness(effectiveEnd: Date, written = true) {
             getDisplayTask: (id: string) => (id === CHILD_ID
                 ? {
                     ...child,
+                    stated,
                     span: { startMs: 0, endMs: effectiveEnd.getTime() },
                 }
                 : undefined),
@@ -73,6 +74,14 @@ describe('extendRunningSession', () => {
         expect(h.updates[0].updates).toHaveProperty('endDate');
         expect(h.updates[0].updates).toHaveProperty('endTime');
         expect(floor).toBeGreaterThan(Date.now());
+    });
+
+    it('期限だけの行（開始を手で消した行）には書き足さない: 規則4の誤りの行を作らない', async () => {
+        const h = makeHarness(new Date(Date.now() - 60_000), true, { due: '2026-10-04' });
+        const floor = await h.recorder.extendRunningSession(runningTimer());
+
+        expect(h.updates).toHaveLength(0);
+        expect(floor).toBeUndefined();
     });
 
     it('書き足しが書けなくても次の見直しの時刻を返す（門は予定で、end はファイルから読み直す）', async () => {
