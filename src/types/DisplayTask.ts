@@ -22,6 +22,17 @@ export interface StatedDates {
 }
 
 /**
+ * A span of time, `[startMs, endMs)`, in local epoch milliseconds. A span
+ * with `endMs === startMs` is a point. What a task occupies
+ * (`DisplayTask.span`, made by `resolveSpan` in `utils/TaskDates.ts`) and
+ * what a segment of it is drawn over (`DisplayTask.drawn`).
+ */
+export interface TaskSpan {
+    startMs: number;
+    endMs: number;
+}
+
+/**
  * The dates a task covers once its implicit values are resolved
  * (`resolveEffectiveDates`).
  */
@@ -59,6 +70,19 @@ export interface DisplayTask extends Task, EffectiveDates {
      * a card's top right shows.
      */
     stated: StatedDates;
+    /**
+     * The time the whole task occupies (`resolveSpan`): a segment of a split
+     * task holds its line's span. null for a task with no date and for a
+     * task with a due only.
+     */
+    span: TaskSpan | null;
+    /** The moment of the due (`resolveSpan`): a bare date's is the end of its visual day. */
+    dueMs: number | null;
+    /**
+     * What this card is drawn over: the span, or for a segment of a split
+     * task the part of it between the boundaries it was cut at.
+     */
+    drawn: TaskSpan | null;
     /** Split 情報（境界分割） */
     originalTaskId: string;
     isSplit: boolean;
