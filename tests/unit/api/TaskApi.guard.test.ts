@@ -25,7 +25,7 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
         getTasks: vi.fn().mockReturnValue(task ? [task] : []),
         getAllDisplayTasks: vi.fn().mockReturnValue([]),
         getFilteredTasks: vi.fn().mockReturnValue([]),
-        getTasksForDateRange: vi.fn().mockReturnValue([]),
+        tasksInWindow: vi.fn().mockReturnValue([]),
     };
     // 変更系は「書けた」を返す。API は書けなかった write をエラーにするので、
     // 既定の undefined のままだとパラメータ検証のケースが書き込み失敗で落ちる。

@@ -3,6 +3,8 @@ import { TaskApi } from '../../../src/api/TaskApi';
 import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { DateUtils } from '../../../src/utils/DateUtils';
 import type { Task } from '../../../src/types';
+import type { TimeWindow } from '../../../src/utils/DayWindow';
+import { overlaps } from '../../../src/utils/SpanRelation';
 
 function makeTask(id: string, overrides: Partial<Task> = {}): Task {
     return {
@@ -29,6 +31,7 @@ function apiOver(tasks: Task[]) {
     const readService = {
         getTask: vi.fn(lookup),
         getAllDisplayTasks: vi.fn().mockReturnValue(displayTasks),
+        tasksInWindow: vi.fn((w: TimeWindow) => displayTasks.filter(t => t.span && overlaps(t.span, w))),
     };
     const plugin = {
         app: {},

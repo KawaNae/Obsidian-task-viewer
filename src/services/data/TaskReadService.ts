@@ -8,8 +8,8 @@ import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { compileFilter, ALWAYS } from '../filter/FilterExpr';
 import { TaskSorter } from '../sort/TaskSorter';
-import { getTaskDateRange } from '../display/VisualDateRange';
-import { DateUtils } from '../../utils/DateUtils';
+import type { TimeWindow } from '../../utils/DayWindow';
+import { endIn, overlaps } from '../../utils/SpanRelation';
 import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
@@ -95,12 +95,13 @@ export class TaskReadService {
     // ===== Date-based queries =====
 
     /**
-     * Tasks in a date range, using visual dates (startHour-aware) for timed tasks.
-     * Returns flat DisplayTask[] (no split, no categorization).
+     * The tasks whose span overlaps the window (`daysWindow` for visual
+     * days), filtered. A task with a due only is in the window its due
+     * closes in (`endIn`). Returns flat DisplayTask[] (no split, no
+     * categorization).
      */
-    getTasksForDateRange(
-        startDate: string,
-        endDate: string,
+    tasksInWindow(
+        window: TimeWindow,
         filter?: FilterState,
         options?: { includeInvalid?: boolean }
     ): DisplayTask[] {
@@ -108,37 +109,14 @@ export class TaskReadService {
         const all = options?.includeInvalid ? raw : raw.filter(TaskReadService.isVisible);
         const context = this.createFilterContext();
         const expr = filter ? compileFilter(filter) : ALWAYS;
-        const startHour = this.startHour;
+        return all.filter(dt => TaskReadService.inWindow(dt, window)
+            && TaskFilterEngine.evaluate(dt, expr, context));
+    }
 
-        const result: DisplayTask[] = [];
-        for (const dt of all) {
-            if (!TaskFilterEngine.evaluate(dt, expr, context)) continue;
-            if (!dt.effectiveStartDate) {
-                // D type (due-only): include if due is in range
-                const duePart = DateUtils.dueDatePart(dt.effectiveDue);
-                if (duePart && duePart >= startDate && duePart <= endDate) {
-                    result.push(dt);
-                }
-                continue;
-            }
-
-            if (dt.effectiveStartTime) {
-                // Timed task: use visual dates for overlap check
-                const range = getTaskDateRange(dt, startHour);
-                const visualStart = range.effectiveStart || dt.effectiveStartDate;
-                const visualEnd = range.effectiveEnd || visualStart;
-                if (visualStart <= endDate && visualEnd >= startDate) {
-                    result.push(dt);
-                }
-            } else {
-                // allDay task: use effectiveStartDate/effectiveEndDate overlap
-                const taskEnd = dt.effectiveEndDate || dt.effectiveStartDate;
-                if (dt.effectiveStartDate <= endDate && taskEnd >= startDate) {
-                    result.push(dt);
-                }
-            }
-        }
-        return result;
+    /** Whether a task is in the window: its span overlaps it, or, with no span, its due closes in it. */
+    private static inWindow(dt: DisplayTask, window: TimeWindow): boolean {
+        if (dt.span) return overlaps(dt.span, window);
+        return dt.dueMs !== null && endIn(dt.dueMs, window);
     }
 
     // ===== Filter + Sort =====

@@ -6,7 +6,14 @@ import {
     splitDisplayTaskAtBoundary,
     toDisplayTask,
 } from '../../../src/services/display/DisplayTaskConverter';
-import { getTaskDateRange } from '../../../src/services/display/VisualDateRange';
+import { visualDaysOf } from '../../../src/utils/DayWindow';
+import type { DisplayTask } from '../../../src/types';
+
+/** The visual days a display copy is drawn over, in the shape the old reader gave. */
+function getTaskDateRange(dt: DisplayTask, startHour: number) {
+    const days = visualDaysOf(dt.drawn!, startHour);
+    return { effectiveStart: days.first, effectiveEnd: days.last };
+}
 import { classifyForSection } from '../../../src/services/display/SectionClassifier';
 import type { Task } from '../../../src/types';
 

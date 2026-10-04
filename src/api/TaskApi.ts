@@ -15,7 +15,7 @@ import { TaskValues } from '../services/filter/TaskValues';
 import type { SortState } from '../services/sort/SortTypes';
 import { SortSerializer, sortIssueText } from '../services/sort/SortSerializer';
 import { DateUtils } from '../utils/DateUtils';
-import { DateResolver } from '../services/filter/DateResolver';
+import { daysWindow, endDayOf, ofValue, visualDayOf, type TimeWindow } from '../utils/DayWindow';
 import { resolveQuery, readDateParam } from './FilterParamsBuilder';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
 import { IntValue } from '../utils/values/NumberValues';
@@ -228,19 +228,8 @@ export class TaskApi {
         const { startHour } = this.plugin.settings;
         const today = DateUtils.getVisualDateOfNow(startHour);
 
-        const displayTasks = readService.getAllDisplayTasks();
-
-        let filtered = displayTasks.filter(t => {
-            const start = t.effectiveStartDate;
-            const end = t.effectiveEndDate;
-            const duePart = DateUtils.dueDatePart(t.effectiveDue);
-            if (!start && !duePart) return false;
-            if (!start && duePart) return duePart === today;
-            if (start && start > today) return false;
-            if (end && end < today) return false;
-            if (!end && start && start < today) return false;
-            return true;
-        });
+        // The window of today, as the views and tasksForDateRange answer it.
+        let filtered = readService.tasksInWindow(daysWindow(today, today, startHour), undefined, { includeInvalid: true });
 
         if (p.leaf) {
             // What `list`'s leaf (`children isNotSet`) means.
@@ -427,9 +416,8 @@ export class TaskApi {
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
         const query = await resolveQuery(this.plugin.app, params);
-        const from = this.resolveWindowBound(params.from, 'from');
-        const to = this.resolveWindowBound(params.to, 'to');
-        let tasks = this.readService.getTasksForDateRange(from, to, query.filter ?? undefined, { includeInvalid: query.includeInvalid });
+        const window = this.resolveWindow(params.from, params.to);
+        let tasks = this.readService.tasksInWindow(window, query.filter ?? undefined, { includeInvalid: query.includeInvalid });
         const sortState = buildSortState(params.sort) ?? query.sort;
         tasks = [...tasks];
         TaskSorter.sort(tasks, sortState);
@@ -450,11 +438,10 @@ export class TaskApi {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
         const query = await resolveQuery(this.plugin.app, params);
         const startHour = this.plugin.settings.startHour;
-        const from = this.resolveWindowBound(params.from, 'from');
-        const to = this.resolveWindowBound(params.to, 'to');
-        const tasks = this.readService.getTasksForDateRange(from, to, query.filter ?? undefined, { includeInvalid: query.includeInvalid });
+        const window = this.resolveWindow(params.from, params.to);
+        const tasks = this.readService.tasksInWindow(window, query.filter ?? undefined, { includeInvalid: query.includeInvalid });
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
-        const dates = DateUtils.getDateRange(from, to);
+        const dates = DateUtils.getDateRange(visualDayOf(window.startMs, startHour), endDayOf(window.endMs, startHour));
         const map = categorizeTasksByDate(split, dates, startHour);
         const result: CategorizedTasksForDateRangeResult = {};
         for (const [date, cats] of map) {
@@ -481,15 +468,17 @@ export class TaskApi {
     }
 
     /**
-     * Resolve a window-bound value (YYYY-MM-DD or date preset) to a concrete
-     * date: `from` takes the start of the preset's window, `to` its end, so
+     * The window `from` to `to` (YYYY-MM-DD or a date preset each) names:
+     * from the start of `from`'s window to the end of `to`'s, so
      * `from=thisweek to=thisweek` covers the whole week.
      */
-    private resolveWindowBound(value: string, side: 'from' | 'to'): string {
-        const parsed = readDateParam(value, side);
+    private resolveWindow(from: string, to: string): TimeWindow {
         const { weekStartDay, startHour } = this.plugin.settings;
-        const window = DateResolver.resolve(parsed, weekStartDay, startHour, new Date());
-        return side === 'from' ? window.start : window.end;
+        const ctx = { weekStartDay, startHour, now: new Date() };
+        return {
+            startMs: ofValue(readDateParam(from, 'from'), ctx).startMs,
+            endMs: ofValue(readDateParam(to, 'to'), ctx).endMs,
+        };
     }
 
     /**

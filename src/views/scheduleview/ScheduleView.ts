@@ -1,4 +1,5 @@
 import type { WorkspaceLeaf } from 'obsidian';
+import { daysWindow } from '../../utils/DayWindow';
 import { t } from '../../i18n';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
@@ -252,7 +253,7 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         this.toolbar.mount(toolbarHost);
 
         const startHour = this.plugin.settings.startHour;
-        const rangeTasks = this.readService.getTasksForDateRange(day, day, this.state.filterState);
+        const rangeTasks = this.readService.tasksInWindow(daysWindow(day, day, startHour), this.state.filterState);
         const splitResult = splitTasks(rangeTasks, { type: 'visual-date', startHour });
         const baseCategorized = categorizeTasksForDate(splitResult, day, startHour);
         this.menuHandler.setViewStartDate(day);
@@ -369,7 +370,8 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         const todayVisualDate = this.visualToday();
         const isOverdue = (d: string): boolean => {
             if (d >= todayVisualDate) return false;
-            const tasksOnDate = this.readService.getTasksForDateRange(d, d, this.state.filterState);
+            const tasksOnDate = this.readService.tasksInWindow(
+                daysWindow(d, d, this.plugin.settings.startHour), this.state.filterState);
             return tasksOnDate.some(dt =>
                 getOverdueLevel(dt, this.plugin.settings.startHour, this.plugin.settings.statusDefinitions, this.readService) !== 'none'
             );

@@ -1,4 +1,5 @@
 import type { WorkspaceLeaf } from 'obsidian';
+import { daysWindow } from '../../utils/DayWindow';
 import { t } from '../../i18n';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -415,7 +416,8 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
     }
 
     private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
-        return this.readService.getTasksForDateRange(rangeStart, rangeEnd, this.state.filterState);
+        const window = daysWindow(rangeStart, rangeEnd, this.plugin.settings.startHour);
+        return this.readService.tasksInWindow(window, this.state.filterState);
     }
 
     /**
