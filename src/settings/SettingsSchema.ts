@@ -142,7 +142,7 @@ export const SETTINGS_SCHEMA = {
     // 論点6: the work and the break take any length of a minute or more.
     pomodoroWorkMinutes: int({ min: 1 }),
     pomodoroBreakMinutes: int({ min: 1 }),
-    countdownMinutes: int({ min: 1, max: 120 }),
+    countdownMinutes: int({ min: 1 }),
     pastDaysToShow: int({ min: 0 }),
     startFromOldestOverdue: bool,
     doubleTapAction: oneOf(['detail', 'open', 'menu']),
