@@ -188,9 +188,7 @@
       "colorSuggest": "カラーサジェスト",
       "colorSuggestDesc": "カラープロパティのカスタムカラーサジェストを有効にします。",
       "lineStyleSuggest": "線種サジェスト",
-      "lineStyleSuggestDesc": "線種プロパティのカスタムサジェストを有効にします。",
-      "scopeKeyEmpty": "スコープキーは空にできません。",
-      "scopeKeyDuplicate": "スコープキーは重複できません。重複: 「{{key}}」"
+      "lineStyleSuggestDesc": "線種プロパティのカスタムサジェストを有効にします。"
     },
     "parsers": {
       "heading": "外部パーサー対応",

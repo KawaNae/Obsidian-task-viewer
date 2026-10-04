@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_SCOPE_KEYS, normalizeScopeKeys, validateScopeKeys } from '../../../src/types';
+import { DEFAULT_SCOPE_KEYS, normalizeScopeKeys } from '../../../src/types';
 
 describe('normalizeScopeKeys', () => {
     // A settings file saved by the file-task era carries status / content /
@@ -16,15 +16,5 @@ describe('normalizeScopeKeys', () => {
         expect(normalized.end).toBe(DEFAULT_SCOPE_KEYS.end);
         expect(normalized.color).toBe(DEFAULT_SCOPE_KEYS.color);
         expect(normalized.ignore).toBe(DEFAULT_SCOPE_KEYS.ignore);
-    });
-});
-
-describe('validateScopeKeys', () => {
-    it('accepts the defaults', () => {
-        expect(validateScopeKeys(DEFAULT_SCOPE_KEYS)).toBeNull();
-    });
-
-    it('rejects a duplicate name', () => {
-        expect(validateScopeKeys({ ...DEFAULT_SCOPE_KEYS, end: 'tv-start' })).toEqual({ kind: 'duplicate', key: 'tv-start' });
     });
 });

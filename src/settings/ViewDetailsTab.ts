@@ -1,27 +1,28 @@
 import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
+import type { TaskViewerSettings } from '../types';
+import { SETTINGS_SCHEMA } from './SettingsSchema';
+import type { SettingFields } from './SettingFields';
 
-export function render(el: HTMLElement, plugin: PluginContext): void {
+type CountKey = 'pastDaysToShow' | 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes' | 'pinnedListPageSize';
+
+export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
+    /** A whole number of the settings, read by its range in the settings' table. */
+    const count = (setting: Setting, key: CountKey, placeholder: string) => fields.text(setting, {
+        codec: SETTINGS_SCHEMA[key].codec,
+        get: () => plugin.settings[key],
+        put: (n: TaskViewerSettings[CountKey]) => { plugin.settings[key] = n; },
+        placeholder,
+        inputMode: 'numeric',
+    });
+
     // Timeline
     el.createEl('h3', { text: t('settings.views.timeline'), cls: 'setting-section-header' });
 
-    new Setting(el)
+    count(new Setting(el)
         .setName(t('settings.views.pastDaysToShow'))
-        .setDesc(t('settings.views.pastDaysToShowDesc'))
-        .addText(text => {
-            text.inputEl.type = 'number';
-            text.inputEl.min = '0';
-            text
-                .setPlaceholder('0')
-                .setValue(plugin.settings.pastDaysToShow.toString())
-                .onChange(async (value) => {
-                    let days = parseInt(value);
-                    if (isNaN(days) || days < 0) days = 0;
-                    plugin.settings.pastDaysToShow = days;
-                    await plugin.saveSettings();
-                });
-        });
+        .setDesc(t('settings.views.pastDaysToShowDesc')), 'pastDaysToShow', '0');
 
     new Setting(el)
         .setName(t('settings.views.startFromOldestOverdue'))
@@ -91,57 +92,18 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
     // Timer
     el.createEl('h3', { text: t('settings.views.timer'), cls: 'setting-section-header' });
 
-    new Setting(el)
+    count(new Setting(el)
         .setName(t('settings.views.customWorkMinutes'))
-        .setDesc(t('settings.views.customWorkMinutesDesc'))
-        .addText(text => {
-            text.inputEl.type = 'number';
-            text.inputEl.min = '1';
-            text
-                .setPlaceholder('25')
-                .setValue(plugin.settings.pomodoroWorkMinutes.toString())
-                .onChange(async (value) => {
-                    let mins = parseInt(value);
-                    if (isNaN(mins) || mins < 1) mins = 1;
-                    plugin.settings.pomodoroWorkMinutes = mins;
-                    await plugin.saveSettings();
-                });
-        });
+        .setDesc(t('settings.views.customWorkMinutesDesc')), 'pomodoroWorkMinutes', '25');
 
-    new Setting(el)
+    count(new Setting(el)
         .setName(t('settings.views.customBreakMinutes'))
-        .setDesc(t('settings.views.customBreakMinutesDesc'))
-        .addText(text => {
-            text.inputEl.type = 'number';
-            text.inputEl.min = '1';
-            text
-                .setPlaceholder('5')
-                .setValue(plugin.settings.pomodoroBreakMinutes.toString())
-                .onChange(async (value) => {
-                    let mins = parseInt(value);
-                    if (isNaN(mins) || mins < 1) mins = 1;
-                    plugin.settings.pomodoroBreakMinutes = mins;
-                    await plugin.saveSettings();
-                });
-        });
+        .setDesc(t('settings.views.customBreakMinutesDesc')), 'pomodoroBreakMinutes', '5');
 
     // Pinned Lists
     el.createEl('h3', { text: t('settings.views.pinnedLists'), cls: 'setting-section-header' });
 
-    new Setting(el)
+    count(new Setting(el)
         .setName(t('settings.views.tasksPerPage'))
-        .setDesc(t('settings.views.tasksPerPageDesc'))
-        .addText(text => {
-            text.inputEl.type = 'number';
-            text.inputEl.min = '1';
-            text
-                .setPlaceholder('10')
-                .setValue(plugin.settings.pinnedListPageSize.toString())
-                .onChange(async (value) => {
-                    let n = parseInt(value);
-                    if (isNaN(n) || n < 1) n = 10;
-                    plugin.settings.pinnedListPageSize = n;
-                    await plugin.saveSettings();
-                });
-        });
+        .setDesc(t('settings.views.tasksPerPageDesc')), 'pinnedListPageSize', '10');
 }
