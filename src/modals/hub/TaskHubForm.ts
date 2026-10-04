@@ -62,7 +62,8 @@ export interface TaskHubFormDeps {
  *
  * 誤りと注意は `IssueBoard` が持ち、出どころ（欄の名前、日付の規則、
  * フォームが閉じている理由、書き込みの拒否）ごとに置き換える。出す場所は
- * 欄の行の下とフォームの末尾である。
+ * 欄の行の下とフォームの末尾である。行が日付の規則を破っていれば（規則4
+ * など）、開いたときから破れた欄の下に出す。
  *
  * 書き込みの拒否（I#9、論点3）: 書き込みは通知を出さない書き方で頼み
  * （`tellRefusal: false`）、拒まれた理由をフォームの末尾に1回だけ出す。拒まれた
@@ -249,7 +250,10 @@ export class TaskHubForm {
         // Typing in a field while asked is fixing it: the question is withdrawn.
         c.addEventListener('input', () => { this.guard.withdraw(); });
 
-        this.dateGroup.updatePlaceholders();
+        // The row's dates as it opens: their placeholders, and a rule the line
+        // breaks (rule 4) said under the field it is of, as the editor's menu
+        // says it — a row that breaks one is drawn in no view.
+        this.dateGroup.refresh();
     }
 
     /** Where the field `at` says its issues now; null for a row that is not there. */

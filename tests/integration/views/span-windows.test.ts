@@ -290,8 +290,8 @@ describe("the hub's faint values", () => {
         expect(placeholders('sw-due', 'modal.end')).toEqual({ date: day(2), time: 'HH:mm' });
     });
 
-    it("@D>DT02:00's end says rule 4's reason and how to write the line with a start time", () => {
-        // The line's issue is said once the end's time is typed in (the hub reads what is typed).
+    it("@D>DT02:00's end says rule 4's reason and how to write the line with a start time as the hub opens", () => {
+        // Nothing is typed: the row's issue is said from the start, the end's time marked.
         const said = obsidianEval(`(async () => {
             const sleep = ms => new Promise(r => setTimeout(r, ms));
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
@@ -301,22 +301,20 @@ describe("the hub's faint values", () => {
             if (!task) throw new Error('no row sw-rule4');
             plugin.openTaskHub(task.id);
             await until(() => hub() && hub().querySelector('.tv-form__row'));
-            await sleep(200);
             const row = [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === ${JSON.stringify(tr('modal.end'))});
             const input = row.querySelector('.tv-form__field--time input.tv-ctrl__text-input');
-            input.focus();
-            input.value = '02:00';
-            input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-            await sleep(300);
-            const out = [...row.nextElementSibling.children].map(c => c.textContent);
+            const out = { says: [...row.nextElementSibling.children].map(c => c.textContent), invalid: input.getAttribute('aria-invalid'), value: input.value };
             document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
-            await sleep(100);
-            hub()?.querySelector('.task-hub__form .tv-form__discard')?.click();
             await until(() => !hub());
+            out.closed = !hub();
             return JSON.stringify(out);
-        })()`);
+        })()`) as { says: string[]; invalid: string | null; value: string; closed: boolean };
         const D10 = day(10);
-        expect(said).toEqual([
+        expect(said.value).toBe('02:00');
+        expect(said.invalid).toBe('true');
+        // Nothing typed, a close asks nothing.
+        expect(said.closed).toBe(true);
+        expect(said.says).toEqual([
             tr('validation.endTimeWithoutStart') + '\n' + tr('validationHint.endTimeWithoutStartExample', {
                 time: '02:00',
                 endDate: day(11),
