@@ -56,10 +56,12 @@ describe('Schedule keeps the canonical order', () => {
         expect(contents(schedule([short, long]).timed)).toEqual(['long', 'short']);
     });
 
-    it('due only: by due, then file and line', () => {
+    it('due only: a due date is all day, a timed due on the grid in the hour before it', () => {
         const evening = dt('a.md', 1, 'evening', { due: '2026-10-02T18:00' });
         const morning = dt('b.md', 1, 'morning', { due: '2026-10-02T09:00' });
         const bare = dt('c.md', 1, 'bare', { due: '2026-10-02' });
-        expect(contents(schedule([evening, morning, bare]).dueOnly)).toEqual(['bare', 'morning', 'evening']);
+        const s = schedule([evening, morning, bare]);
+        expect(contents(s.allDay)).toEqual(['bare']);
+        expect(contents(s.timed)).toEqual(['morning', 'evening']);
     });
 });

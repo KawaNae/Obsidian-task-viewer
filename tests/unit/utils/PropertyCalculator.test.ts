@@ -31,13 +31,19 @@ describe('PropertyCalculator', () => {
                 .toEqual({ date: '2026-03-11', time: '06:00', dateImplicit: false, timeImplicit: true });
         });
 
-        it('@>E: the start date the rules give, faint, with no time', () => {
+        it('@>E: the start date the rules give (E itself), faint, with no time', () => {
             expect(start({ endDate: '2026-03-12' }))
+                .toEqual({ date: '2026-03-12', dateImplicit: true, timeImplicit: true });
+        });
+
+        it('@>>D starts on D, faint, with no time', () => {
+            expect(start({ due: '2026-03-11' }))
                 .toEqual({ date: '2026-03-11', dateImplicit: true, timeImplicit: true });
         });
 
-        it('a due-only task has no start', () => {
-            expect(start({ due: '2026-03-11' }).isUnset).toBe(true);
+        it('@>>DT17:00 starts at 16:00, faint', () => {
+            expect(start({ due: '2026-03-11T17:00' }))
+                .toEqual({ date: '2026-03-11', time: '16:00', dateImplicit: true, timeImplicit: true });
         });
     });
 
@@ -52,9 +58,9 @@ describe('PropertyCalculator', () => {
                 .toEqual({ date: '2026-03-12', time: '00:30', dateImplicit: true, timeImplicit: true });
         });
 
-        it('@D ends with the date written to end it (the rule until 11c), and no time', () => {
+        it('@D ends on D, with no time', () => {
             expect(end({ startDate: '2026-03-11' }))
-                .toEqual({ date: '2026-03-12', dateImplicit: true, timeImplicit: true });
+                .toEqual({ date: '2026-03-11', dateImplicit: true, timeImplicit: true });
         });
 
         it('a written bare end date gets no time', () => {
@@ -67,8 +73,14 @@ describe('PropertyCalculator', () => {
                 .toEqual({ date: '2026-03-12', time: '18:00', dateImplicit: false, timeImplicit: false });
         });
 
-        it('a due-only task has no end', () => {
-            expect(end({ due: '2026-03-11' }).isUnset).toBe(true);
+        it('@>>D ends on D, faint, with no time', () => {
+            expect(end({ due: '2026-03-11' }))
+                .toEqual({ date: '2026-03-11', dateImplicit: true, timeImplicit: true });
+        });
+
+        it('@>>DT17:00 ends at 17:00, faint', () => {
+            expect(end({ due: '2026-03-11T17:00' }))
+                .toEqual({ date: '2026-03-11', time: '17:00', dateImplicit: true, timeImplicit: true });
         });
     });
 

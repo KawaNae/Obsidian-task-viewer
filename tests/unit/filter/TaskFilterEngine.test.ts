@@ -911,10 +911,11 @@ describe('TaskFilterEngine', () => {
                 expect(evaluateFilter(kid, state, ctxOf(par, kid))).toBe(true);
             });
 
-            // startHour shifts an all-day parent's visual start day; passing 0
-            // regardless would put this task on the 22nd instead of the 21st.
+            // startHour shifts a parent's late-night start to the visual day
+            // before; passing 0 regardless would put this task on the 22nd
+            // instead of the 21st.
             it('honours startHour when resolving the parent visual date', () => {
-                const par = makeTask({ id: 'p2', endDate: '2026-08-22' });
+                const par = makeTask({ id: 'p2', startDate: '2026-08-22', startTime: '02:00' });
                 const kid = makeTask({ id: 'c2', parentId: 'p2' });
                 const map = new Map<string, Task>([['p2', par], ['c2', kid]]);
                 const ctx = { startHour: 4, taskLookup: (id: string) => map.get(id) };

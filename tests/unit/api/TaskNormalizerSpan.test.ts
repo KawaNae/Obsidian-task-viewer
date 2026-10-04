@@ -21,9 +21,9 @@ describe('normalizeTask: the span', () => {
         expect([t.effectiveEndDate, t.effectiveEndTime]).toEqual(['2026-10-05', '02:00']);
     });
 
-    it('a due-only task has no span, and its due as stated', () => {
+    it('a due-only task has the hour before its due as its span, and its due as stated', () => {
         const t = out({ due: '2026-10-04T17:00' });
-        expect([t.effectiveStartDate, t.effectiveEndDate, t.effectiveDue, t.durationMinutes])
-            .toEqual([null, null, '2026-10-04T17:00', null]);
+        expect([t.effectiveStartDate, t.effectiveStartTime, t.effectiveEndDate, t.effectiveEndTime, t.effectiveDue, t.durationMinutes])
+            .toEqual(['2026-10-04', '16:00', '2026-10-04', '17:00', '2026-10-04T17:00', 60]);
     });
 });

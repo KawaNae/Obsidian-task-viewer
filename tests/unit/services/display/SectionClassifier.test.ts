@@ -31,8 +31,13 @@ function dt(overrides: Partial<Task> = {}, hour = startHour): DisplayTask {
 /** Hand-built DisplayTask for defensive branches the converter cannot produce. */
 
 describe('classifyForSection', () => {
-    it('due のみ → dueOnly', () => {
-        expect(classifyForSection(dt({ due: '2026-01-15T10:00' }), startHour)).toBe('dueOnly');
+    it('期限だけ: 日付の期限は allDay、時刻つきの期限は timed（期限を終了に読む）', () => {
+        expect(classifyForSection(dt({ due: '2026-01-15' }), startHour)).toBe('allDay');
+        expect(classifyForSection(dt({ due: '2026-01-15T10:00' }), startHour)).toBe('timed');
+    });
+
+    it('継承した期限だけのタスクも期限から期間を持つ', () => {
+        expect(classifyForSection(dt({ cascadeContext: { due: '2026-01-15' } }), startHour)).toBe('allDay');
     });
 
     it('日付も due もなし → null', () => {
@@ -74,11 +79,11 @@ describe('classifyForSection', () => {
         expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '06:00', endTime: '05:30' }), startHour)).toBe('allDay');
     });
 
-    it('時刻の無い endDate は endDate の startHour:00 まで', () => {
+    it('時刻の無い endDate はその日の終わり（翌日の startHour:00）まで', () => {
         // Jan15 06:00 → Jan16 05:00 = 23h
-        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '06:00', endDate: '2026-01-16' }), startHour)).toBe('timed');
+        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '06:00', endDate: '2026-01-15' }), startHour)).toBe('timed');
         // Jan15 05:00 → Jan16 05:00 = 24h
-        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '05:00', endDate: '2026-01-16' }), startHour)).toBe('allDay');
+        expect(classifyForSection(dt({ startDate: '2026-01-15', startTime: '05:00', endDate: '2026-01-15' }), startHour)).toBe('allDay');
     });
 
     it('E-Timed（endDate + endTime のみ） → timed', () => {
@@ -109,7 +114,7 @@ describe('classifyForSection', () => {
 });
 
 describe('bucketBySection', () => {
-    it('混合配列を重複なく 3 バケツに分配する', () => {
+    it('混合配列を重複なくバケツに分配する（期限だけのタスクは終日）', () => {
         const dueOnly = dt({ due: '2026-01-20' });
         const allday = dt({ startDate: '2026-01-15' });
         const timed = dt({ startDate: '2026-01-15', startTime: '09:00' });
@@ -121,11 +126,10 @@ describe('bucketBySection', () => {
 
         const buckets = bucketBySection([dueOnly, allday, timed, boundary, none], startHour);
 
-        expect(buckets.allDay).toEqual([allday, boundary]);
+        expect(buckets.allDay).toEqual([dueOnly, allday, boundary]);
         expect(buckets.timed).toEqual([timed]);
-        expect(buckets.dueOnly).toEqual([dueOnly]);
         // none はどのバケツにも入らない
-        const total = buckets.allDay.length + buckets.timed.length + buckets.dueOnly.length;
+        const total = buckets.allDay.length + buckets.timed.length;
         expect(total).toBe(4);
     });
 });

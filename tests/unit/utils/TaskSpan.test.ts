@@ -18,13 +18,17 @@ describe('resolveSpan (startHour 5)', () => {
         expect(span({ startDate: '2026-10-04' })).toEqual(range('2026-10-04 05:00', '2026-10-05 05:00'));
     });
 
-    it('@D>E ends where E starts (the rule until 11c)', () => {
+    it('@D>E ends at the end of E', () => {
         expect(span({ startDate: '2026-10-01', endDate: '2026-10-04' }))
-            .toEqual(range('2026-10-01 05:00', '2026-10-04 05:00'));
+            .toEqual(range('2026-10-01 05:00', '2026-10-05 05:00'));
     });
 
-    it('@>E is the visual day before E', () => {
-        expect(span({ endDate: '2026-10-04' })).toEqual(range('2026-10-03 05:00', '2026-10-04 05:00'));
+    it('@D>D is @D', () => {
+        expect(span({ startDate: '2026-10-04', endDate: '2026-10-04' })).toEqual(span({ startDate: '2026-10-04' }));
+    });
+
+    it('@>E is the visual day E', () => {
+        expect(span({ endDate: '2026-10-04' })).toEqual(range('2026-10-04 05:00', '2026-10-05 05:00'));
     });
 
     it('@DT10:00 lasts an hour', () => {
@@ -44,14 +48,14 @@ describe('resolveSpan (startHour 5)', () => {
             .toEqual(range('2026-10-04 22:00', '2026-10-05 02:00'));
     });
 
-    it('@DT22:00>E ends where E starts', () => {
+    it('@DT22:00>E ends at the end of E', () => {
         expect(span({ startDate: '2026-10-04', startTime: '22:00', endDate: '2026-10-06' }))
-            .toEqual(range('2026-10-04 22:00', '2026-10-06 05:00'));
+            .toEqual(range('2026-10-04 22:00', '2026-10-07 05:00'));
     });
 
-    it('@DT10:00>D, the implicit end before the start, ends at 23:59', () => {
+    it('@DT10:00>D ends at the end of D', () => {
         expect(span({ startDate: '2026-10-04', startTime: '10:00', endDate: '2026-10-04' }))
-            .toEqual(range('2026-10-04 10:00', '2026-10-04 23:59'));
+            .toEqual(range('2026-10-04 10:00', '2026-10-05 05:00'));
     });
 
     it('@DT09:00>ET02:00 ends at the written moment', () => {
@@ -59,16 +63,16 @@ describe('resolveSpan (startHour 5)', () => {
             .toEqual(range('2026-10-01 09:00', '2026-10-05 02:00'));
     });
 
-    it('resolves the rows rule 4 calls errors as before', () => {
-        // @D>ET10:00: the implicit start, the written end.
+    it('reads the rows rule 4 calls errors by the same rules, not mended', () => {
+        // @D>ET10:00: the bare start, the written end.
         expect(span({ startDate: '2026-10-04', endDate: '2026-10-06', endTime: '10:00' }))
             .toEqual(range('2026-10-04 05:00', '2026-10-06 10:00'));
         // @>ET17:00: an hour before the end.
         expect(span({ endDate: '2026-10-04', endTime: '17:00' }))
             .toEqual(range('2026-10-04 16:00', '2026-10-04 17:00'));
-        // @D>DT02:00: the implicit start gives way to 00:00.
+        // @D>DT02:00: ends before it starts.
         expect(span({ startDate: '2026-10-04', endDate: '2026-10-04', endTime: '02:00' }))
-            .toEqual(range('2026-10-04 00:00', '2026-10-04 02:00'));
+            .toEqual(range('2026-10-04 05:00', '2026-10-04 02:00'));
     });
 
     it('takes an inherited time as a written one', () => {
@@ -76,9 +80,19 @@ describe('resolveSpan (startHour 5)', () => {
             .toEqual(range('2026-10-04 06:00', '2026-10-04 07:00'));
     });
 
-    it('a due only has no span; its due is the end of its day, or the written moment', () => {
-        expect(resolveSpan({ due: '2026-10-04' }, 5)).toEqual({ span: null, dueMs: at('2026-10-05 05:00') });
-        expect(resolveSpan({ due: '2026-10-04T17:00' }, 5)).toEqual({ span: null, dueMs: at('2026-10-04 17:00') });
+    it('@>>D is read as @>D: its visual day, due at its end', () => {
+        expect(resolveSpan({ due: '2026-10-04' }, 5))
+            .toEqual({ span: range('2026-10-04 05:00', '2026-10-05 05:00'), dueMs: at('2026-10-05 05:00') });
+    });
+
+    it('@>>DT17:00 is read as @>DT17:00: the hour before the due', () => {
+        expect(resolveSpan({ due: '2026-10-04T17:00' }, 5))
+            .toEqual({ span: range('2026-10-04 16:00', '2026-10-04 17:00'), dueMs: at('2026-10-04 17:00') });
+    });
+
+    it('a due beside a start or an end does not change the span', () => {
+        expect(span({ startDate: '2026-10-12', due: '2026-10-10' })).toEqual(range('2026-10-12 05:00', '2026-10-13 05:00'));
+        expect(span({ endDate: '2026-10-12', due: '2026-10-10' })).toEqual(range('2026-10-12 05:00', '2026-10-13 05:00'));
     });
 
     it('a row with no date has no span', () => {
@@ -92,7 +106,7 @@ describe('resolveSpan (startHour 0)', () => {
         expect(span({ startDate: '2026-10-04' }, 0)).toEqual(range('2026-10-04 00:00', '2026-10-05 00:00'));
     });
 
-    it('a date-only end is the end of its implicit 23:59, as before', () => {
+    it('a date-only end is the end of that day', () => {
         expect(span({ startDate: '2026-10-01', endDate: '2026-10-04' }, 0))
             .toEqual(range('2026-10-01 00:00', '2026-10-05 00:00'));
         expect(span({ endDate: '2026-10-04' }, 0)).toEqual(range('2026-10-04 00:00', '2026-10-05 00:00'));

@@ -4,17 +4,17 @@ import type { DisplayDateEdits } from '../../services/display/DisplayTaskConvert
 /**
  * 1 回の drag 完了で発生する write-back の意味的単位。
  *
- * `edits` は **inclusive visual** 座標で表現された差分（DisplayTask の
- * `effective*` と同じ世界）。`baseTask` は元タスク（split segment ではなく
- * 集約後の original task）で、`materializeRawDates` が visual → raw 変換時の
- * endDate dual semantic を判定するのに使う。
+ * `edits` は視覚日で表した差分（`visualDaysOf` が返す最初と最後の日と、
+ * その日の時刻）。`baseTask` は元タスク（split segment ではなく集約後の
+ * original task）で、`materializeRawDates` が edit の無い側の時刻を引くのに
+ * 使う。
  *
  * `null` を返す finish は「変更なし、書き戻し不要」を意味する。
  *
  * BaseDragStrategy.commitPlan が `materializeRawDates → diffUpdates →
  * operations.updateTask + restoreSelection` を 1 箇所で行うため、各 finish
- * は raw `Partial<Task>` を組み立てない。これにより `endDate +1day` 系の
- * dual-semantic ミスを構造的に防ぐ。
+ * は raw `Partial<Task>` を組み立てない。視覚日から行の日付への変換は
+ * `materializeRawDates` の 1 か所だけが持つ。
  */
 export interface DragPlan {
     edits: DisplayDateEdits;
