@@ -60,6 +60,28 @@ export function spanDates(stated: StatedDates): StatedDates {
 }
 
 /**
+ * The span a task with only a due is read with (`spanDates`), written out as
+ * the line's own dates, so a drag that moves or stretches the card starts
+ * from what is drawn: a due date D as the start D (`@D`, the same day), a
+ * timed due as the hour before it, `{ startDate, startTime, endDate?,
+ * endTime }`, with the end date only when it is not the start's (the form
+ * rule 4 allows). Empty for any other task, and the due is never touched.
+ */
+export function dueSpanWritten(task: Task, startHour: number): Partial<Task> {
+    const stated = statedDates(task);
+    const dates = spanDates(stated);
+    if (dates === stated) return {};
+    if (!dates.endTime) return { startDate: dates.endDate };
+    const span = spanOf(dates, startHour);
+    if (!span) return {};
+    const start = instantText(span.startMs);
+    const end = instantText(span.endMs);
+    const written: Partial<Task> = { startDate: start.date, startTime: start.time, endTime: end.time };
+    if (end.date !== start.date) written.endDate = end.date;
+    return written;
+}
+
+/**
  * The time a task occupies, `[startMs, endMs)`, and the moment it is due,
  * from the dates its note states: the one place the rules fill in what is
  * not written. `toDisplayTask` puts the answer on the display copy, and a

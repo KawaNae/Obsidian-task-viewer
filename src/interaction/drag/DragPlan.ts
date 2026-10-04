@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
-import type { DisplayDateEdits } from '../../services/display/DisplayTaskConverter';
+import { materializeRawDates, type DisplayDateEdits } from '../../services/display/DisplayTaskConverter';
+import { dueSpanWritten } from '../../utils/TaskDates';
 
 /**
  * 1 回の drag 完了で発生する write-back の意味的単位。
@@ -19,4 +20,36 @@ import type { DisplayDateEdits } from '../../services/display/DisplayTaskConvert
 export interface DragPlan {
     edits: DisplayDateEdits;
     baseTask: Task;
+}
+
+/**
+ * The task a drag starts from: the line's task, with the span a task with
+ * only a due is read with written out as its dates (`dueSpanWritten`), so
+ * the gesture moves and stretches what is drawn. Every gesture takes its
+ * base from here.
+ */
+export function dragBase(raw: Task, startHour: number): Task {
+    return { ...raw, ...dueSpanWritten(raw, startHour) };
+}
+
+/**
+ * What a drag writes to the line: the edits materialized on the base, over
+ * the dates a due-only task's span is written out with, less what the line
+ * already holds. Compared with the line's own task (`raw`), not the base, so
+ * the written-out dates are not dropped as unchanged.
+ */
+export function planUpdates(plan: DragPlan, raw: Task, startHour: number): Partial<Task> {
+    const updates: Partial<Task> = {
+        ...dueSpanWritten(raw, startHour),
+        ...materializeRawDates(plan.edits, plan.baseTask, startHour),
+    };
+    const result: Partial<Task> = {};
+    const u = updates as unknown as Record<string, unknown>;
+    const r = raw as unknown as Record<string, unknown>;
+    for (const key of Object.keys(u)) {
+        if (u[key] !== r[key]) {
+            (result as unknown as Record<string, unknown>)[key] = u[key];
+        }
+    }
+    return result;
 }

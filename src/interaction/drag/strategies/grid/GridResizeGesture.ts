@@ -2,7 +2,7 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
-import type { DragPlan } from '../../DragPlan';
+import { dragBase, type DragPlan } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';
@@ -77,9 +77,8 @@ export class GridResizeGesture extends BaseDragStrategy {
 
         // baseTask: split segment safety
         const originalId = getOriginalTaskId(task);
-        this.baseTask = context.index.getTask(originalId) ?? task;
-
         const startHour = context.plugin.settings.startHour;
+        this.baseTask = dragBase(context.index.getTask(originalId) ?? task, startHour);
         const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialVisualStart = visual.start;
         this.initialVisualEnd = visual.end;
@@ -251,18 +250,32 @@ export class GridResizeGesture extends BaseDragStrategy {
      */
     private buildResizePlan(targetDate: string): DragPlan | null {
         if (!this.baseTask) return null;
-        let edits: DisplayDateEdits | null = null;
-        if (this.resizeDirection === 'right') {
-            const newEnd = targetDate < this.initialVisualStart ? this.initialVisualStart : targetDate;
-            edits = { endDay: newEnd };
-        } else {
-            const newStart = targetDate > this.initialVisualEnd ? this.initialVisualEnd : targetDate;
-            edits = { startDay: newStart };
-            if (!this.baseTask.endDate) {
-                edits.endDay = this.initialVisualEnd;
-            }
+        const edits = GridResizeGesture.buildResizeEdits(
+            this.resizeDirection, targetDate, this.initialVisualStart, this.initialVisualEnd, this.baseTask,
+        );
+        return { edits, baseTask: this.baseTask };
+    }
+
+    /**
+     * Resize の edits ビルダ。右端は終了の日を、左端は開始の日を絶対値で
+     * 書く。左端を動かすとき終了の日を持たないタスクは、今の最後の日を終了と
+     * して書いて右端を留める。
+     *
+     * pure: 引数のみで結果が決まる。
+     */
+    static buildResizeEdits(
+        direction: 'left' | 'right',
+        targetDate: string,
+        initialVisualStart: string,
+        initialVisualEnd: string,
+        baseTask: Task,
+    ): DisplayDateEdits {
+        if (direction === 'right') {
+            return { endDay: targetDate < initialVisualStart ? initialVisualStart : targetDate };
         }
-        return edits ? { edits, baseTask: this.baseTask } : null;
+        const edits: DisplayDateEdits = { startDay: targetDate > initialVisualEnd ? initialVisualEnd : targetDate };
+        if (!baseTask.endDate) edits.endDay = initialVisualEnd;
+        return edits;
     }
 
     private clearCrossWeekPreview(): void {

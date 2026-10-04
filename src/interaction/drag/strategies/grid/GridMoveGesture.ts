@@ -5,6 +5,7 @@ import { DateUtils } from '../../../../utils/DateUtils';
 import { GhostRenderer } from '../../ghost/GhostRenderer';
 import type { GhostPlan } from '../../ghost/GhostPlan';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
+import { dragBase } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';
@@ -106,9 +107,8 @@ export class GridMoveGesture extends BaseDragStrategy {
         }
 
         const originalId = getOriginalTaskId(task);
-        this.baseTask = context.index.getTask(originalId) ?? task;
-
         const startHour = context.plugin.settings.startHour;
+        this.baseTask = dragBase(context.index.getTask(originalId) ?? task, startHour);
         const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialVisualStart = visual.start;
         this.initialVisualEnd = visual.end;
