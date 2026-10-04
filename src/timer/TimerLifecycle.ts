@@ -15,6 +15,7 @@ import { holdsRun, type PendingRecord, type TimerState } from './TimerState';
 import { tickOf } from './TimerProgress';
 import { canOffsetStart } from './TimerStartOffset';
 import type { Task } from '../types';
+import { notWritten, type WriteAnswer, type WriteTelling } from '../services/operations/WriteAnswer';
 
 /** 名前の入力欄の書き出し（`TimerContentBinding`）。 */
 export interface ContentOutlet {
@@ -144,15 +145,23 @@ export class TimerLifecycle {
      * 止めた所から続く countdown の時計は、区間の開始より区間の始めの読みだけ前から
      * 数える（`TimerTransitions` の `shifted`）。
      * ずらせるのは countup と countdown の走っている区間だけで、未来へはずらせない。
+     *
+     * @returns 書けたか（走行の行が無く時計だけが動いたときも書けたと答える）と、
+     * 書けなかった理由（`WriteAnswer`）。ずらせない区間、未来、別の操作の途中は、
+     * 理由の無い「書けなかった」。理由は `opts.tellRefusal` が false なら呼び手が
+     * 言い（開始をずらすダイアログ）、そうでなければ通知になる。
      */
-    offsetStart(timer: TimerState, startMs: number): Promise<void> {
-        return this.exclusive(timer, async () => {
+    async offsetStart(timer: TimerState, startMs: number, opts: WriteTelling = {}): Promise<WriteAnswer> {
+        let answer = notWritten();
+        await this.exclusive(timer, async () => {
             if (!canOffsetStart(timer) || startMs > Date.now()) return;
-            if (!(await this.recorder.moveRunningStart(timer, startMs))) return;
+            answer = await this.recorder.moveRunningStart(timer, startMs, opts);
+            if (!answer.written) return;
             this.board.dispatch(timer, { type: 'shifted', startMs });
             // end の無い行の実効 end は start から決まる。書き足しの門を引き直す。
             this.runtime.lazyEndFloorMs.delete(timer.id);
         });
+        return answer;
     }
 
     // ─── 閉じる ───────────────────────────────────────────────

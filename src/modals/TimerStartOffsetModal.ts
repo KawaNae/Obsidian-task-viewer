@@ -4,6 +4,7 @@ import { agoLabel, OFFSET_FIELDS, offsetStart, startLabel, type OffsetInput, typ
 import { hostWindow } from '../utils/HostWindow';
 import type { Read } from '../utils/values/Read';
 import { OverlayShell } from '../views/sharedUI/OverlayShell';
+import { refusalText, type WriteAnswer } from '../services/operations/WriteAnswer';
 import { FormActions } from './form/FormActions';
 import { onFormEnter } from './form/formEnter';
 import { createFormRow } from './form/formRow';
@@ -23,6 +24,8 @@ import { createPickerTextField, type PickerTextField } from './form/PickerTextFi
  *   空の欄は何も言わず、押せなくするだけ
  * - 「何分前」と量の行き先は今から数えるので、開いている間は毎秒描き直す。決定は
  *   押した時点の今で読み直す
+ * - 決定は書き込みの答えを待つ（I#9）。書けたら閉じ、書けなければ開いたまま、理由を
+ *   ボタンの上に1回だけ出す（通知は出ない）。待つ間は決定を押せない
  *
  * 送るダイアログ（`SendModal`）と同じく、フォームの共通の部品（`_form.css`、
  * `FormActions`）で組み、OverlayShell の上に立つ。
@@ -37,11 +40,16 @@ export class TimerStartOffsetModal {
     private issues!: IssueBoard<OffsetInputKind>;
     private actions!: FormActions;
     private stopTick: (() => void) | null = null;
+    /** The shift asked, its write not yet answered. */
+    private busy = false;
 
-    /** @param apply ずらし先の時刻（ミリ秒）。決定で呼び、ダイアログは閉じる。 */
+    /**
+     * @param apply ずらし先の時刻（ミリ秒）。決定で呼び、書き込みの答えを待つ。
+     * 書けなかった理由はダイアログが言うので、通知を出さない書き方で書く。
+     */
     constructor(
         private readonly app: App,
-        private readonly apply: (startMs: number) => void,
+        private readonly apply: (startMs: number) => Promise<WriteAnswer>,
     ) { }
 
     open(): void {
@@ -89,7 +97,7 @@ export class TimerStartOffsetModal {
 
         for (const input of [this.minutesInput, this.timeField.input]) {
             input.addEventListener('input', () => this.render());
-            onFormEnter(input, () => this.submit());
+            onFormEnter(input, () => { void this.submit(); });
         }
 
         const formSays = bodyEl.createDiv({ cls: 'tv-form__says tv-form__says--form' });
@@ -99,7 +107,7 @@ export class TimerStartOffsetModal {
         });
         this.actions = new FormActions(bodyEl, {
             cancel: { run: () => { void this.overlay.requestClose(); } },
-            actions: [{ label: t('timer.offsetApply'), tone: 'cta', run: () => this.submit() }],
+            actions: [{ label: t('timer.offsetApply'), tone: 'cta', run: () => { void this.submit(); } }],
         });
 
         this.render();
@@ -149,13 +157,21 @@ export class TimerStartOffsetModal {
         } else {
             this.issues.set('read', readIssue(this.kind, read ? read.issue : null));
         }
-        this.actions.render({ busy: false, ctaEnabled: read?.ok ?? false });
+        this.actions.render({ busy: this.busy, ctaEnabled: read?.ok ?? false });
     }
 
-    private submit(): void {
+    /** Shift as the field reads now, and close once it is written; a refusal is said above the buttons. */
+    private async submit(): Promise<void> {
         const read = this.read();
-        if (!read?.ok) return;
-        this.overlay.close();
-        this.apply(offsetStart(read.value, Date.now()));
+        if (!read?.ok || this.busy) return;
+        this.busy = true;
+        this.issues.set('write', []);
+        this.render();
+        const answer = await this.apply(offsetStart(read.value, Date.now()));
+        this.busy = false;
+        if (!this.overlay.isOpen()) return;
+        if (answer.written) return this.overlay.close();
+        this.issues.set('write', [{ at: 'form', tone: 'error', text: refusalText(answer.refused) }]);
+        this.render();
     }
 }

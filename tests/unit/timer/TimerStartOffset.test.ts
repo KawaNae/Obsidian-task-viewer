@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { Notice } from 'obsidian';
 import { TimerPersistence } from '../../../src/timer/TimerPersistence';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
 import type { TimerWidget } from '../../../src/timer/TimerWidget';
@@ -240,11 +241,33 @@ describe('shifting the start of a running timer writes the running line, then mo
         const clock = timer.clock;
 
         vi.setSystemTime(at(10, 25));
+        Notice.messages.length = 0;
         failNextWrite(s);
-        await widget.lifecycle.offsetStart(timer, at(10, 0).getTime());
+        const answer = await widget.lifecycle.offsetStart(timer, at(10, 0).getTime());
         await settleAll(s);
+        expect(answer).toMatchObject({ written: false, refused: { reason: { kind: 'failed' } } });
+        expect(Notice.messages).toHaveLength(1);
         expect(contents.get(FILE)).toBe(before);
         expect(timer.clock).toEqual(clock);
+        s.dispose();
+    });
+
+    it('a shift asked with its refusal for the caller to tell (the dialog) answers why, with no notice', async () => {
+        const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
+        const before = contents.get(FILE);
+
+        vi.setSystemTime(at(10, 25));
+        Notice.messages.length = 0;
+        failNextWrite(s);
+        const answer = await widget.lifecycle.offsetStart(timer, at(10, 0).getTime(), { tellRefusal: false });
+        await settleAll(s);
+        expect(answer).toMatchObject({ written: false, refused: { reason: { kind: 'failed' } } });
+        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(before);
+
+        // Asked again, it is written, and the clock moves.
+        expect(await widget.lifecycle.offsetStart(timer, at(10, 0).getTime(), { tellRefusal: false })).toEqual({ written: true });
+        expect(timer.clock).toEqual({ kind: 'running', startMs: at(10, 0).getTime() });
         s.dispose();
     });
 
