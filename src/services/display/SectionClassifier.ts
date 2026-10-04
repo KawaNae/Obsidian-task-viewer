@@ -17,9 +17,9 @@ export function isAllDay(dt: Pick<DisplayTask, 'stated' | 'span'>): boolean {
     return !!dt.span && dt.span.endMs - dt.span.startMs >= ALL_DAY_MS;
 }
 
-export type SectionKind = 'allDay' | 'timed' | 'dueOnly' | null;
+export type SectionKind = 'allDay' | 'timed' | null;
 
-/** バケツを持つ 3 セクション（null を除いた SectionKind）。バケツキーと kind の一致を型で保証する。 */
+/** バケツを持つ 2 セクション（null を除いた SectionKind）。バケツキーと kind の一致を型で保証する。 */
 export type Section = Exclude<SectionKind, null>;
 
 /**
@@ -37,24 +37,22 @@ export type Section = Exclude<SectionKind, null>;
  * 戻り値:
  *   - 'allDay':  {@link isAllDay}（開始が日付だけ、または長さ ≥ 23.5h）
  *   - 'timed':   開始時刻あり、長さ < 23.5h
- *   - 'dueOnly': 期間が無く、その行に due がある
- *   - null:      どのセクションにも属さない
+ *   - null:      期間が無い（日付も期限も無い）
+ *
+ * 期限だけのタスクは期限から補った期間（`spanDates`）を持つので、日付の
+ * 期限は allDay、時刻つきの期限は timed になる。
  */
 export function classifyForSection(dt: DisplayTask): SectionKind {
-    if (!dt.span) return dt.due ? 'dueOnly' : null;
+    if (!dt.span) return null;
     return isAllDay(dt) ? 'allDay' : 'timed';
 }
 
 /**
  * filteredTasks をセクション別に振り分ける。同一 task が 'allDay' と 'timed' の両方に
  * 入ることは起こり得ない（render burst 修正の主目的）。
- *
- * どのセクションを描くかは消費者が決める。Timeline（GridRenderer）は allDay と
- * timed だけを描き、dueOnly は描かない。Schedule は TaskDateCategorizer 経由で
- * 3 つとも描く。
  */
 export function bucketBySection(tasks: DisplayTask[]): Record<Section, DisplayTask[]> {
-    const buckets: Record<Section, DisplayTask[]> = { allDay: [], timed: [], dueOnly: [] };
+    const buckets: Record<Section, DisplayTask[]> = { allDay: [], timed: [] };
     for (const dt of tasks) {
         const kind = classifyForSection(dt);
         if (kind !== null) buckets[kind].push(dt);

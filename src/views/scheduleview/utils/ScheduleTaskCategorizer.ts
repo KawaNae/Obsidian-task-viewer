@@ -29,7 +29,6 @@ export class ScheduleTaskCategorizer {
         const categorized: CategorizedTasks = {
             allDay: [...base.allDay],
             timed: [],
-            dueOnly: [...base.dueOnly],
         };
 
         for (const dt of base.timed) {

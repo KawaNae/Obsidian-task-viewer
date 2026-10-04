@@ -241,7 +241,6 @@
   },
   "aria": {
     "taskMenu": "Task menu",
-    "toggleSection": "Toggle {{title}} section",
     "openDailyNote": "Open daily note: {{label}}",
     "openWeeklyNote": "Open weekly note: {{label}}",
     "due": "Due: {{date}}"
@@ -833,8 +832,7 @@
     "weekdaysShort": "Sun,Mon,Tue,Wed,Thu,Fri,Sat",
     "weekdaysNarrow": "Su,Mo,Tu,We,Th,Fr,Sa",
     "wk": "Wk",
-    "w": "W",
-    "due": "Due"
+    "w": "W"
   },
   "astronomy": {
     "sunrise": "Sunrise",

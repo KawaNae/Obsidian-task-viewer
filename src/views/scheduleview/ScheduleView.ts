@@ -16,7 +16,7 @@ import { attachSunIndicators, attachSunAxisArrows } from '../sharedUI/AstronomyC
 import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
-import type { CollapsibleSectionKey, GridRow, TimedDisplayTask } from './ScheduleTypes';
+import type { GridRow, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';
 import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
@@ -73,10 +73,6 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
     private readonly scrollRestorer = new PixelScrollRestorer(
         () => this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null,
     );
-    private collapsedSections: Record<CollapsibleSectionKey, boolean> = {
-        allDay: false,
-        dueOnly: false,
-    };
 
     private readonly hoverParent = new TaskViewHoverParent();
 
@@ -133,7 +129,6 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         });
         this.sectionRenderer = new ScheduleSectionRenderer({
             taskRenderer: this.scheduleTaskRenderer,
-            collapsedSections: this.collapsedSections,
             currentVisualDateProvider: () => this.viewedDay(),
         });
 
@@ -301,17 +296,6 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         this.sectionRenderer.renderAllDaySection(bodyContainer, categorized.allDay, reconciler);
 
         this.renderTimelineMain(bodyContainer, date, categorized.timed, reconciler);
-
-        if (categorized.dueOnly.length > 0) {
-            this.sectionRenderer.renderCollapsibleTaskSection(
-                bodyContainer,
-                'schedule-due-section',
-                t('calendar.due'),
-                categorized.dueOnly,
-                'dueOnly',
-                reconciler,
-            );
-        }
     }
 
     private renderTimelineMain(container: HTMLElement, date: string, tasks: TimedDisplayTask[], reconciler: CardReconciler): void {

@@ -221,7 +221,6 @@ export interface CategorizedTasksForDateRangeParams extends SimpleFilterParams, 
 export interface CategorizedTasksResult {
     allDay: NormalizedTask[];
     timed: NormalizedTask[];
-    dueOnly: NormalizedTask[];
 }
 
 export type CategorizedTasksForDateRangeResult = Record<string, CategorizedTasksResult>;

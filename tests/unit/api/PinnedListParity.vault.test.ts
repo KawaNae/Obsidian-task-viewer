@@ -181,7 +181,7 @@ describe('a pinned list shows the same tasks in its view as the API lists for it
         expect(ranged.tasks.map(t => t.content)).toEqual(['Report #work']);
 
         const categorized = await api.categorizedTasksForDateRange({ from: '2026-10-01', to: '2026-10-05', filterFile: 'templates/t.md', list: 'everything-by-content' });
-        const ids = Object.values(categorized).flatMap(day => [...day.allDay, ...day.timed, ...day.dueOnly]).map(t => t.id);
+        const ids = Object.values(categorized).flatMap(day => [...day.allDay, ...day.timed]).map(t => t.id);
         expect(ids.some(id => invalid.has(id))).toBe(false);
 
         // Without the file, the range query lists it.

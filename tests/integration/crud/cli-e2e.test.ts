@@ -428,18 +428,17 @@ describe('tasks-for-date-range', () => {
 // 13. categorized-tasks-for-date-range
 // ────────────────────────────────────────────
 describe('categorized-tasks-for-date-range', () => {
-    it('returns categorized result keyed by date with allDay/timed/dueOnly', () => {
+    it('returns categorized result keyed by date with allDay/timed, and no due-only bucket', () => {
         // 2026-03-16 has multiple tasks in TEST_FILE
         const r = cliCategorizedTasksForDateRange('2026-03-16', '2026-03-16');
         expect(r).toHaveProperty('2026-03-16');
         const day = r['2026-03-16'];
         expect(day).toHaveProperty('allDay');
         expect(day).toHaveProperty('timed');
-        expect(day).toHaveProperty('dueOnly');
+        expect(Object.keys(day).sort()).toEqual(['allDay', 'timed']);
         expect(Array.isArray(day.allDay)).toBe(true);
         expect(Array.isArray(day.timed)).toBe(true);
-        expect(Array.isArray(day.dueOnly)).toBe(true);
-        const total = day.allDay.length + day.timed.length + day.dueOnly.length;
+        const total = day.allDay.length + day.timed.length;
         expect(total).toBeGreaterThan(0);
     });
 

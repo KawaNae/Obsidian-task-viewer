@@ -98,9 +98,9 @@ export class GridRenderer {
 
         // 5. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
-        // Timeline draws two of the three sections: the all-day lane and the
-        // time grid. A task with only a due is in neither (`dueOnly`): it has
-        // no span to draw, and Timeline does not draw it (Schedule does).
+        // The all-day lane and the time grid. A task with only a due is drawn
+        // with the span read from its due: a due date in the lane, a timed due
+        // on the grid.
         const { allDay, timed } = bucketBySection(filteredTasks);
 
         // 5.1. All-Day Row

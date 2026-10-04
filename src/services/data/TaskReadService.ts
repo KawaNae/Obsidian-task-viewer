@@ -9,7 +9,7 @@ import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { compileFilter, ALWAYS } from '../filter/FilterExpr';
 import { TaskSorter } from '../sort/TaskSorter';
 import type { TimeWindow } from '../../utils/DayWindow';
-import { endIn, overlaps } from '../../utils/SpanRelation';
+import { overlaps } from '../../utils/SpanRelation';
 import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
@@ -96,9 +96,9 @@ export class TaskReadService {
 
     /**
      * The tasks whose span overlaps the window (`daysWindow` for visual
-     * days), filtered. A task with a due only is in the window its due
-     * closes in (`endIn`). Returns flat DisplayTask[] (no split, no
-     * categorization).
+     * days), filtered. A task with only a due has the span read from it, so
+     * it is found on the day it is drawn. Returns flat DisplayTask[] (no
+     * split, no categorization).
      */
     tasksInWindow(
         window: TimeWindow,
@@ -113,10 +113,9 @@ export class TaskReadService {
             && TaskFilterEngine.evaluate(dt, expr, context));
     }
 
-    /** Whether a task is in the window: its span overlaps it, or, with no span, its due closes in it. */
+    /** Whether a task is in the window: its span overlaps it (a task with only a due has the span read from it). */
     private static inWindow(dt: DisplayTask, window: TimeWindow): boolean {
-        if (dt.span) return overlaps(dt.span, window);
-        return dt.dueMs !== null && endIn(dt.dueMs, window);
+        return !!dt.span && overlaps(dt.span, window);
     }
 
     // ===== Filter + Sort =====

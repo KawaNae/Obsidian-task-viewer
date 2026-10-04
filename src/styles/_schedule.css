@@ -85,45 +85,6 @@
 
 /* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */
 
-.schedule-section {
-    padding: 12px;
-    border-radius: 8px;
-    background-color: var(--tv-bg-muted);
-}
-
-.schedule-section__header {
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--tv-text-muted);
-    font-size: 0.92em;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    user-select: none;
-}
-
-.schedule-section__header:hover {
-    color: var(--tv-text);
-}
-
-.schedule-section__header .tv-section-toggle--header {
-    flex-shrink: 0;
-}
-
-.schedule-section--collapsed > *:not(.schedule-section__header) {
-    display: none;
-}
-
-.schedule-section__tasks {
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
 .schedule-section__task-wrap,
 .schedule-tasks__card-wrap {
     position: relative;
