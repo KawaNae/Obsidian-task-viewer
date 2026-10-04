@@ -1,6 +1,6 @@
 import type { ParserId, Task, ScopeKeys } from '../../../types';
 import { isTvInline } from '../../../types';
-import type { SectionNode } from './Sections';
+import { SCALAR_FIELDS, type ScalarField, type SectionNode } from './Sections';
 import { NoteSections } from './NoteSections';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
@@ -129,18 +129,36 @@ export class NoteTasks {
         // where the row says none (they override); tags and properties go
         // through in part (a union; child-wins per key), so they are kept
         // whole.
+        const cc = this.inheritance(section);
+        for (const field of SCALAR_FIELDS) if (task[field]) delete cc[field];
+        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+    }
+
+    /**
+     * What a row standing in `section` inherits of it, the row saying
+     * nothing itself: every value the section resolves to. A row that says
+     * a date or a style itself keeps its own (`fill`); a row not yet
+     * written (the create dialog's) is shown what it would inherit.
+     */
+    static inheritance(section: SectionNode): NonNullable<Task['cascadeContext']> {
         const cc: NonNullable<Task['cascadeContext']> = {};
-        if (!task.startDate && section.resolvedStartDate) cc.startDate = section.resolvedStartDate;
-        if (!task.startTime && section.resolvedStartTime) cc.startTime = section.resolvedStartTime;
-        if (!task.endDate && section.resolvedEndDate) cc.endDate = section.resolvedEndDate;
-        if (!task.endTime && section.resolvedEndTime) cc.endTime = section.resolvedEndTime;
-        if (!task.due && section.resolvedDue) cc.due = section.resolvedDue;
-        if (!task.color && section.resolvedColor) cc.color = section.resolvedColor;
-        if (!task.linestyle && section.resolvedLinestyle) cc.linestyle = section.resolvedLinestyle;
-        if (!task.mask && section.resolvedMask) cc.mask = section.resolvedMask;
+        const given: Record<ScalarField, string | undefined> = {
+            startDate: section.resolvedStartDate,
+            startTime: section.resolvedStartTime,
+            endDate: section.resolvedEndDate,
+            endTime: section.resolvedEndTime,
+            due: section.resolvedDue,
+            color: section.resolvedColor,
+            linestyle: section.resolvedLinestyle,
+            mask: section.resolvedMask,
+        };
+        for (const field of SCALAR_FIELDS) {
+            const value = given[field];
+            if (value) cc[field] = value;
+        }
         if (section.resolvedTags && section.resolvedTags.length > 0) cc.tags = section.resolvedTags;
         if (Object.keys(section.resolvedProperties).length > 0) cc.properties = section.resolvedProperties;
-        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+        return cc;
     }
 
     /**

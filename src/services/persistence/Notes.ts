@@ -184,7 +184,7 @@ export function openPeriodicNote(app: App, desc: PeriodicNote, date: string, cha
     return inCreationLineOf(path, async () => {
         const file = app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile) return file;
-        const made = await makeNote(app, path, channelFor(path), path, () => templateOf(app, desc, date));
+        const made = await makeNote(app, path, channelFor(path), path, () => periodicNoteSeed(app, desc, date));
         return made.written ? made.file : null;
     });
 }
@@ -209,7 +209,7 @@ export async function putInPeriodicNote(
 ): Promise<NotePut> {
     const path = notePath(desc, date);
     return putInNote(app, path, channelFor(path), {
-        where: to, block: Block.line(line), create: () => templateOf(app, desc, date),
+        where: to, block: Block.line(line), create: () => periodicNoteSeed(app, desc, date),
     });
 }
 
@@ -217,9 +217,10 @@ export async function putInPeriodicNote(
  * What a new periodic note of `date` holds: its template (the path, or the
  * path with `.md`) expanded for the date, ending with a terminator; '' with
  * no template, or one that cannot be found, which is logged — a note is made
- * all the same.
+ * all the same. What a write makes the note of, and what the create dialog
+ * reads a note not there yet as (`CreatePlaces.facts`).
  */
-async function templateOf(app: App, desc: PeriodicNote, date: string): Promise<string> {
+export async function periodicNoteSeed(app: App, desc: PeriodicNote, date: string): Promise<string> {
     if (!desc.template) return '';
     const file = app.vault.getAbstractFileByPath(desc.template) ?? app.vault.getAbstractFileByPath(`${desc.template}.md`);
     if (!(file instanceof TFile)) {
