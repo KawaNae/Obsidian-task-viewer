@@ -26,6 +26,8 @@ export interface NoteFieldsOptions {
 export class NoteFields {
     readonly nameInput: HTMLInputElement;
     readonly folderInput: HTMLInputElement;
+    /** The line under the name's row, where what is said of the name goes. */
+    readonly nameSays: HTMLElement;
     private readonly fileSuggest: FileSuggest;
     private readonly folderSuggest: FolderSuggest;
 
@@ -40,7 +42,8 @@ export class NoteFields {
         this.folderSuggest = new FolderSuggest(app, this.folderInput);
         this.folderInput.addEventListener('input', () => opts.onChange());
 
-        const { row: nameRow } = createFormRow(container, t('modal.noteFields.name'), { icon: 'file-text' });
+        const { row: nameRow, says: nameSays } = createFormRow(container, t('modal.noteFields.name'), { icon: 'file-text' });
+        this.nameSays = nameSays;
         this.nameInput = nameRow.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         this.nameInput.value = opts.name;
         this.nameInput.addEventListener('input', () => opts.onChange());

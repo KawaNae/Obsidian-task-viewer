@@ -23,11 +23,6 @@
     margin: 0;
 }
 
-/* What the send does, under the destination's fields. */
-.tv-send .tv-send__says {
-    margin: 8px 0 0;
-}
-
 /* A value offered for the frontmatter: the box, the value, and where it
  * comes from as the hub says where a value is inherited from
  * (task-hub__source). */

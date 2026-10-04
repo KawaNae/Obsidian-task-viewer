@@ -5,15 +5,18 @@ import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame
 import { indentUnit } from '../../utils/ObsidianConfig';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { createFormRow } from '../form/formRow';
+import { IssueBoard } from '../form/FormIssue';
 import { SourceEditor, type DraftEditor } from '../form/source/SourceEditor';
 import { DestinationField } from './DestinationField';
-import { SendDialog, initialAsk, type SendSurface, type SendViewState } from './SendDialog';
+import { SendDialog, initialAsk, type SendField, type SendSurface, type SendViewState } from './SendDialog';
 
 /**
  * The send dialog as it looks (`archive/2026-09-send.md`, ダイアログ, 骨組みと並び): the rows to send
  * in the source editor, the destination's fields, what the send does, the
  * values offered for the note's frontmatter, what keeps a send from being
- * asked and what it is asked in spite of, and cancel and send. It draws
+ * asked and what it is asked in spite of, each said next to what it is of
+ * (`IssueBoard`: under the name, the heading or a row, or above the
+ * buttons), and cancel and send. It draws
  * what the dialog's state says (`SendViewState`) and does nothing of its
  * own; the dialog's logic is `SendDialog`.
  *
@@ -36,12 +39,12 @@ export class SendModal implements SendSurface {
     private dialog: SendDialog | null = null;
     private field!: DestinationField;
     private rowsEl!: HTMLElement;
-    private destinationEl!: HTMLElement;
+    /** The line under each row, in the order of the rows. */
+    private readonly rowSays: HTMLElement[] = [];
     private candidatesLabel!: HTMLElement;
     private candidatesEl!: HTMLElement;
-    private errorEl!: HTMLElement;
-    private warningEl!: HTMLElement;
-    private messageEl!: HTMLElement;
+    private formSays!: HTMLElement;
+    private issues!: IssueBoard<SendField>;
     private askEl!: HTMLElement;
     private discardBtn!: HTMLButtonElement;
     private cancelBtn!: HTMLButtonElement;
@@ -94,16 +97,17 @@ export class SendModal implements SendSurface {
             onChange: () => this.dialog?.fieldsChanged(this.field.ask()),
             onEnter: () => { void this.dialog?.send(); },
         });
-        this.destinationEl = destination.createDiv({ cls: 'tv-send__says' });
 
         // Put in and taken out rather than hidden (renderCandidates): the
         // last group in the form draws no divider under it.
         this.candidatesLabel = bodyEl.createEl('h4', { cls: 'tv-form__section-label', text: t('modal.send.frontmatter') });
         this.candidatesEl = bodyEl.createDiv({ cls: 'tv-form__group tv-send__candidates' });
 
-        this.errorEl = bodyEl.createDiv({ cls: 'tv-form__error' });
-        this.warningEl = bodyEl.createDiv({ cls: 'tv-form__warning' });
-        this.messageEl = bodyEl.createDiv({ cls: 'tv-form__error' });
+        this.formSays = bodyEl.createDiv({ cls: 'tv-form__says tv-form__says--form' });
+        this.issues = new IssueBoard<SendField>({
+            field: (at) => (at === 'name' || at === 'heading' ? this.field.slot(at) : this.rowSlot(at)),
+            form: this.formSays,
+        });
 
         const actions = bodyEl.createDiv({ cls: 'tv-form__buttons' });
         this.askEl = actions.createSpan({ cls: 'tv-form__ask', text: t('modal.send.discardAsk') });
@@ -129,7 +133,7 @@ export class SendModal implements SendSurface {
     }
 
     openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor {
-        return new SourceEditor(this.rowsEl, {
+        const editor = new SourceEditor(this.rowsEl, {
             parent: frame.parent,
             children: frame.children,
             indentUnit: frame.unit,
@@ -137,32 +141,29 @@ export class SendModal implements SendSurface {
             onSubmit: hooks.submit,
             onChange: hooks.edited,
         });
+        this.rowSays.push(this.rowsEl.createDiv({ cls: 'tv-form__says tv-send__row-says' }));
+        return editor;
     }
 
     showFixed(lines: readonly string[], why: string): void {
         const fixed = this.rowsEl.createDiv({ cls: 'tv-send__fixed' });
         fixed.createEl('pre', { cls: 'tv-form__line-preview', text: lines.join('\n') });
         fixed.createDiv({ cls: 'tv-form__info', text: why });
+        this.rowSays.push(this.rowsEl.createDiv({ cls: 'tv-form__says tv-send__row-says' }));
+    }
+
+    /** Where what is said of a row's draft goes: the line under it. */
+    private rowSlot(at: `row:${number}`): { input: null; message: HTMLElement } | null {
+        const message = this.rowSays[Number(at.slice('row:'.length))];
+        return message ? { input: null, message } : null;
     }
 
     render(state: SendViewState): void {
         this.rowsEl.toggleClass('tv-source-drafts--asking', state.asking);
 
-        this.destinationEl.empty();
-        this.destinationEl.removeClass('tv-form__info', 'tv-form__warning');
-        if (state.destination) {
-            this.destinationEl.setText(state.destination.text);
-            this.destinationEl.addClass(state.destination.tone === 'info' ? 'tv-form__info' : 'tv-form__warning');
-        }
-        this.destinationEl.toggle(state.destination !== null);
         this.field.offerHeadings(state.headings);
-        this.field.markInvalid(state.invalid);
-
         this.renderCandidates(state.candidates);
-
-        lines(this.errorEl, state.errors);
-        lines(this.warningEl, state.warnings);
-        lines(this.messageEl, state.message === null ? [] : [state.message]);
+        this.issues.set('dialog', state.issues);
 
         this.askEl.toggle(state.asking);
         this.discardBtn.toggle(state.asking);
@@ -186,7 +187,7 @@ export class SendModal implements SendSurface {
             this.candidatesEl.detach();
             return;
         }
-        if (!this.candidatesEl.isConnected) this.errorEl.before(this.candidatesLabel, this.candidatesEl);
+        if (!this.candidatesEl.isConnected) this.formSays.before(this.candidatesLabel, this.candidatesEl);
         for (const one of candidates) {
             const { row } = createFormRow(this.candidatesEl, one.key, { alignStart: true });
             const label = row.createEl('label', { cls: 'tv-send__candidate' });
@@ -206,12 +207,3 @@ export class SendModal implements SendSurface {
     }
 }
 
-/** Show `texts` in `el`, a line each, and `el` only when there are any. */
-function lines(el: HTMLElement, texts: readonly string[]): void {
-    el.empty();
-    texts.forEach((text, i) => {
-        if (i > 0) el.createEl('br');
-        el.appendText(text);
-    });
-    el.toggle(texts.length > 0);
-}

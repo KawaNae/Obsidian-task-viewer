@@ -129,13 +129,26 @@ async function answered(f: DestinationFacts = facts(), opts: Parameters<typeof s
     return h;
 }
 
+/** The texts the dialog says of `at` (any place when none is named), of `tone` (any when none is named). */
+function said(state: SendViewState, opts: { at?: string; tone?: 'error' | 'warning' | 'info' } = {}): string[] {
+    return state.issues.filter(one => (opts.at === undefined || one.at === opts.at) && (opts.tone === undefined || one.tone === opts.tone)).map(one => one.text);
+}
+const errors = (state: SendViewState) => said(state, { tone: 'error' });
+const warnings = (state: SendViewState) => said(state, { tone: 'warning', at: 'form' }).concat(said(state, { tone: 'warning', at: 'name' }));
+/** What the send does: what is said under the heading that is no error. */
+function destination(state: SendViewState): { text: string; tone: string } | null {
+    const one = state.issues.find(issue => issue.at === 'heading' && issue.tone !== 'error');
+    return one ? { text: one.text, tone: one.tone } : null;
+}
+
 describe('opening', () => {
     it('opens the row in the editor, asks the default note with the heading field empty, and offers no send until answered', async () => {
         const h = setUp();
 
         expect(h.editor().draft()).toEqual({ parent: '- [ ] A', children: [{ text: '- [ ] a', was: 1 }] });
         expect(h.asks.map(one => one.ask)).toEqual([{ folder: 'Inbox', name: 'A', heading: '' }]);
-        expect(h.state()).toMatchObject({ canSend: false, destination: null });
+        expect(h.state().canSend).toBe(false);
+        expect(destination(h.state())).toBeNull();
 
         await h.answer(facts());
         expect(h.state().canSend).toBe(true);
@@ -161,7 +174,7 @@ describe('opening', () => {
 });
 
 describe('what the send does', () => {
-    const says = async (f: NoteFacts) => (await answered(f)).state().destination;
+    const says = async (f: NoteFacts) => destination((await answered(f)).state());
     const vars = (path: string) => ({ note: path, heading: 'Tasks' });
 
     it('a new note', async () => {
@@ -188,7 +201,7 @@ describe('what the send does', () => {
 
         expect(h.asks[1].ask).toEqual({ folder: '', name: 'note', heading: 'Done' });
         await h.answer(facts({ kind: 'same', path: 'note.md' }));
-        expect(h.state().destination?.text).toBe(t('modal.send.withinHead', vars('note.md')));
+        expect(destination(h.state())?.text).toBe(t('modal.send.withinHead', vars('note.md')));
     });
 });
 
@@ -273,36 +286,47 @@ describe('what keeps a send from being asked', () => {
     it('a name no note can have: said, the name field wrong', async () => {
         const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|' } });
 
-        expect(h.state()).toMatchObject({
-            canSend: false,
-            destination: null,
-            errors: [t('modal.send.nameChars', { chars: '|' })],
-            invalid: { name: true, heading: false },
-        });
+        expect(h.state().canSend).toBe(false);
+        expect(h.state().issues).toEqual([{ at: 'name', tone: 'error', text: t('modal.send.nameChars', { chars: '|' }) }]);
         expect(h.dialog.request()).toBeNull();
     });
 
     it('two headings of the name in the note: said, the heading field wrong', async () => {
         const h = await answered(facts({ kind: 'existing', path: 'Plan.md', heading: { kind: 'many', count: 2 } }));
 
-        expect(h.state()).toMatchObject({
-            canSend: false,
-            errors: [t('modal.send.headings', { note: 'Plan.md', heading: 'Tasks', count: '2' })],
-            invalid: { name: false, heading: true },
-        });
+        expect(h.state().canSend).toBe(false);
+        expect(h.state().issues).toEqual([{ at: 'heading', tone: 'error', text: t('modal.send.headings', { note: 'Plan.md', heading: 'Tasks', count: '2' }) }]);
     });
 
     it('a draft that cannot be written: said as it is edited', async () => {
         const h = await answered();
         h.editor().type('- [ ] A\nB');
 
-        expect(h.state()).toMatchObject({ canSend: false, errors: [t('modal.send.parentBreak')] });
+        expect(h.state().canSend).toBe(false);
+        expect(said(h.state(), { tone: 'error' })).toEqual([t('modal.send.parentBreak')]);
+        expect(said(h.state(), { at: 'row:0' })).toEqual([t('modal.send.parentBreak')]);
         expect(h.dialog.request()).toBeNull();
 
         h.editor().type('plain');
-        expect(h.state().errors).toEqual([t('modal.send.notTask')]);
+        expect(errors(h.state())).toEqual([t('modal.send.notTask')]);
         h.editor().type('- [ ] A!');
-        expect(h.state()).toMatchObject({ canSend: true, errors: [] });
+        expect(h.state().canSend).toBe(true);
+        expect(errors(h.state())).toEqual([]);
+    });
+
+    it('drafts of two rows that cannot be written for the same reason: said under each row', async () => {
+        const two = previewOf();
+        const second = makeTask({ id: 'row-2', file: 'note.md', line: 2, content: 'B', subtreeLines: ['- [ ] B'] });
+        const preview = { ...two, rows: [...two.rows, { task: second, lines: ['- [ ] B', ''] }] };
+        const h = await answered(facts(), { preview });
+        h.editors[0].type('plain');
+        h.editors[1].type('also plain');
+
+        expect(h.state().issues.filter(one => one.tone === 'error')).toEqual([
+            { at: 'row:0', tone: 'error', text: t('modal.send.notTask') },
+            { at: 'row:1', tone: 'error', text: t('modal.send.notTask') },
+        ]);
+        expect(h.state().canSend).toBe(false);
     });
 
     it('a timer the send would leave without its lines: said, asked with the draft as it is and the note\'s ^ids', async () => {
@@ -314,7 +338,8 @@ describe('what keeps a send from being asked', () => {
                 return sending.from[0].sent.some(line => line.endsWith('^r')) ? null : 'lost';
             },
         });
-        expect(h.state()).toMatchObject({ canSend: true, errors: [] });
+        expect(h.state().canSend).toBe(true);
+        expect(errors(h.state())).toEqual([]);
         expect(asked[asked.length - 1]).toEqual({
             to: 'Plan.md',
             inNote: new Map([['x', 1]]),
@@ -323,7 +348,8 @@ describe('what keeps a send from being asked', () => {
 
         h.editor().children = [{ text: '- [ ] a', was: 1 }];
         h.editor().type('- [ ] A ^t');
-        expect(h.state()).toMatchObject({ canSend: false, errors: ['lost'] });
+        expect(h.state().canSend).toBe(false);
+        expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['lost']);
         await h.dialog.send();
         expect(h.send).not.toHaveBeenCalled();
     });
@@ -334,9 +360,9 @@ describe('what keeps a send from being asked', () => {
         expect(timers).not.toHaveBeenCalled();
         await h.dialog.fieldsChanged({ folder: '', name: 'Plan', heading: '' });
         await h.answer(facts());
-        expect(h.state().errors).toEqual(['kept']);
+        expect(errors(h.state())).toEqual(['kept']);
         h.editor().type('plain');
-        expect(h.state().errors).toEqual([t('modal.send.notTask')]);
+        expect(errors(h.state())).toEqual([t('modal.send.notTask')]);
     });
 
     it('an answer for fields that changed since: not taken, and no send until the last is answered', async () => {
@@ -348,7 +374,8 @@ describe('what keeps a send from being asked', () => {
         await h.asks[2].answer({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|' } });
         await h.asks[1].answer(facts({ kind: 'existing', path: 'Plan.md' }));
 
-        expect(h.state()).toMatchObject({ canSend: false, invalid: { name: true, heading: false } });
+        expect(h.state().canSend).toBe(false);
+        expect(said(h.state(), { at: 'name', tone: 'error' })).toEqual([t('modal.send.nameChars', { chars: '|' })]);
         await h.dialog.send();
         expect(h.send).not.toHaveBeenCalled();
     });
@@ -362,16 +389,17 @@ describe('what the send tells', () => {
         const namesake = Object.assign(new TFile(), { path: 'Old/A.md' });
         const h = await answered(facts({ shared: ['y'], ignored: true, namesakes: [namesake] }), { preview: previewOf({ links }) });
 
-        expect(h.state().warnings).toEqual([
+        expect(said(h.state(), { at: 'form', tone: 'warning' })).toEqual([
             t('modal.send.links', { anchor: 'x', count: '2', notes: 'a.md, b.md' }),
             t('modal.send.shared', { anchor: 'y', note: 'Inbox/A.md' }),
             t('modal.send.ignored', { note: 'Inbox/A.md' }),
-            t('modal.send.namesakes', { notes: 'Old/A.md' }),
         ]);
+        // Of the name: other notes have it.
+        expect(said(h.state(), { at: 'name', tone: 'warning' })).toEqual([t('modal.send.namesakes', { notes: 'Old/A.md' })]);
         expect(h.state().canSend).toBe(true);
 
         const within = await answered(facts({ kind: 'same', path: 'note.md' }), { preview: previewOf({ links }) });
-        expect(within.state().warnings).toEqual([]);
+        expect(warnings(within.state())).toEqual([]);
     });
 
     it('the commands the note does not resolve', async () => {
@@ -382,7 +410,7 @@ describe('what the send tells', () => {
             { kind: 'block', task, name: '週報' },
         ] }));
 
-        expect(h.state().warnings).toEqual([
+        expect(warnings(h.state())).toEqual([
             t('modal.send.unresolvedHeading', { name: 'Done', note: 'Inbox/A.md' }),
             t('modal.send.unresolvedHeadings', { name: 'Log', note: 'Inbox/A.md' }),
             t('modal.send.unresolvedBlock', { name: '週報', note: 'Inbox/A.md' }),
@@ -432,10 +460,13 @@ describe('a send', () => {
 
         expect(h.sent).not.toHaveBeenCalled();
         expect(h.close).not.toHaveBeenCalled();
-        expect(h.state()).toMatchObject({ phase: 'open', message: 'Not sent: changed', canSend: false });
+        expect(h.state()).toMatchObject({ phase: 'open', canSend: false });
+        expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Not sent: changed']);
         expect(h.asks).toHaveLength(2);
         await h.answer(facts());
+        // The last send's answer is still said, and keeps no send from being asked again.
         expect(h.state().canSend).toBe(true);
+        expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Not sent: changed']);
         expect(h.editor().destroyed).toBe(false);
 
         await h.dialog.send();
@@ -450,7 +481,8 @@ describe('a send', () => {
 
         expect(h.sent).toHaveBeenCalledTimes(1);
         expect(h.close).not.toHaveBeenCalled();
-        expect(h.state()).toMatchObject({ phase: 'spent', message: 'Sent some', canSend: false });
+        expect(h.state()).toMatchObject({ phase: 'spent', canSend: false });
+        expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Sent some']);
     });
 
     it('Mod+Enter in the editor sends', async () => {
