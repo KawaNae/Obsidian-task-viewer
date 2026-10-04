@@ -157,7 +157,7 @@ export function createTaskMenuExtension(
                     deleteLine: () => write(editorRow(lineNumber, lineText, key, subtree), [{ kind: 'remove' }]),
                 };
 
-                checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);
+                checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops);
             }
         }, { kind: 'belowRect', rect });
     };

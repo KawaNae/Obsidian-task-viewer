@@ -10,8 +10,7 @@ import type { Menu } from 'obsidian';
 import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { CreateTaskModal } from '../../modals/CreateTaskModal';
-import { formatTaskLine } from '../../services/parsing/TaskLineFormat';
+import { CreateModal } from '../../modals/create/CreateModal';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
 
@@ -29,28 +28,26 @@ export function startDailyNoteTimer(
 }
 
 /**
- * Open the create-task modal seeded for `date`, and append the resulting line
- * to that day's daily note.
+ * Open the create dialog on the daily note of `date`: the line it makes goes
+ * under the task section of that day's note (`CreatePlace` `dailyNote`).
  *
- * `startTime` is what separates the two callers: clicking the timed lane knows
- * the hour under the cursor, clicking the all-day lane does not.
+ * `date` is the file's day (the visual column), which is not always the
+ * task's own start date — a click past midnight seeds the next day while
+ * still belonging to this column's note. `startTime` is what separates the
+ * two callers: clicking the timed lane knows the hour under the cursor,
+ * clicking the all-day lane does not.
  */
 export function openCreateTaskForDailyNote(
     plugin: PluginContext,
     date: string,
     seed: { startDate: string; startTime?: string },
 ): void {
-    new CreateTaskModal(
+    new CreateModal(
         plugin.app,
-        async (result) => {
-            const taskLine = formatTaskLine({ statusChar: ' ', ...result });
-            // `date` is the file's day (the visual column), which is not always
-            // the task's own start date — a click past midnight seeds the next
-            // day while still belonging to this column's note.
-            await plugin.getOperations().putInDailyNote(date, taskLine);
-        },
+        plugin.getCreatePlaces(),
+        () => plugin.settings.startHour,
+        { kind: 'dailyNote', date },
         seed,
-        { warnOnEmptyTask: true, dailyNoteDate: date, startHour: plugin.settings.startHour },
     ).open();
 }
 

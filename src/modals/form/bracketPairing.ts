@@ -2,7 +2,7 @@ import { BRACKET_CLOSERS, BRACKET_PAIRS, shouldAutoClose } from '../../utils/Bra
 
 /**
  * IME 対応の括弧オートペアリングを text input に取り付ける共有 widget。
- * CreateTaskModal と TaskHubForm が共用する。
+ * CreateModal と TaskHubForm が共用する。
  *
  * Post-insertion reactive pairing: ブラウザ（または IME）が編集を適用した
  * **後**に、'beforeinput' で取ったスナップショットとの diff で反応する。

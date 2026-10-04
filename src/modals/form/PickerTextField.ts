@@ -114,7 +114,7 @@ export class PickerTextField {
 
 /**
  * 日付、時刻の欄。テキストは YYYY-MM-DD、HH:mm の自由入力で、ピッカーで選んだ値は
- * テキストに入る。CreateTaskModal と TaskHubForm が DateFieldGroup を通して使う。
+ * テキストに入る。CreateModal と TaskHubForm が DateFieldGroup を通して使う。
  */
 export function createPickerTextField(
     container: HTMLElement,

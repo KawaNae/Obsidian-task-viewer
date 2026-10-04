@@ -36,7 +36,6 @@ export interface DateFieldGroupOptions {
     getStartHour: () => number;
     taskLookup: (id: string) => Task | undefined;
     getValidationCtx: () => ValidationContext;
-    getFallbackDatePlaceholder?: () => string | undefined;
     /**
      * The values the fields stand for now (the hub's row, `''` for none);
      * absent for a task not yet written (the create dialog), whose fields
@@ -60,7 +59,7 @@ export interface DateFieldGroupOptions {
 
 /**
  * 6 つの日付/時刻入力（開始/終了/期限 × 日付/時刻）をまとめて所有する
- * フォーム部品。CreateTaskModal と TaskHubForm が共用する。
+ * フォーム部品。CreateModal と TaskHubForm が共用する。
  *
  * 行文法: ラベル左置き + date:time = 2:1 flex 配分（_form.css）。
  *
@@ -257,20 +256,28 @@ export class DateFieldGroup {
         const fields = this.collect();
         const overlay = this.opts.buildOverlayTask(fields);
         const dt = toDisplayTask(overlay, this.opts.getStartHour(), this.opts.taskLookup);
-        const fallback = this.opts.getFallbackDatePlaceholder?.() || 'YYYY-MM-DD';
         const input = (key: DateKey) => this.inputs.get(key)!;
 
-        input('startDate').placeholder = (dt.startDateImplicit && dt.effectiveStartDate) || fallback;
+        input('startDate').placeholder = (dt.startDateImplicit && dt.effectiveStartDate) || 'YYYY-MM-DD';
         input('startTime').placeholder = (dt.startTimeImplicit && dt.effectiveStartDate && dt.effectiveStartTime) || 'HH:mm';
-        input('endDate').placeholder = (dt.endDateImplicit && dt.effectiveEndDate) || fallback;
+        input('endDate').placeholder = (dt.endDateImplicit && dt.effectiveEndDate) || 'YYYY-MM-DD';
         input('endTime').placeholder = (dt.endTimeImplicit && dt.effectiveEndDate && dt.effectiveEndTime) || 'HH:mm';
 
         // due の implicit は cascade 継承のみ (raw due なし && effectiveDue あり)。
-        // 開始/終了と同じく placeholder として注入する。fallback (dailyNoteDate)
-        // は開始日の既定値であって due の既定値ではないため、due には使わない。
+        // 開始/終了と同じく placeholder として注入する。
         const dueInherited: { date?: string; time?: string } = !dt.due && dt.effectiveDue ? DateUtils.splitDateTime(dt.effectiveDue) : {};
         input('dueDate').placeholder = dueInherited.date || 'YYYY-MM-DD';
         input('dueTime').placeholder = dueInherited.time || 'HH:mm';
+    }
+
+    /**
+     * What the fields imply, or what their rules allow, changed from outside
+     * (the create dialog's place answered): the placeholders and what the
+     * fields say are drawn again.
+     */
+    refresh(): void {
+        this.updatePlaceholders();
+        this.tell();
     }
 
     getInput(key: DateKey): HTMLInputElement {

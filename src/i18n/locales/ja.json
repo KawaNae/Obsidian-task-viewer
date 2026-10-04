@@ -475,7 +475,6 @@
     "due": "期限",
     "date": "日付",
     "time": "時刻",
-    "emptyTaskWarning": "タスク名と日付が両方空です — このタスクはビューアーに表示されません。",
     "nameRequired": "タスク名が必要です。",
     "openDatePicker": "日付ピッカーを開く",
     "openTimePicker": "時刻ピッカーを開く",
@@ -525,6 +524,17 @@
         "copied": "下書きをコピーしました",
         "copyFailed": "下書きをコピーできませんでした"
       }
+    },
+    "newTask": {
+      "creating": "作成しています…",
+      "toHead": "{{note}} の見出し {{heading}} の先頭に置きます",
+      "toEnd": "{{note}} の見出し {{heading}} の末尾に置きます",
+      "toMade": "{{note}} の末尾に見出し {{heading}} を作り、その下に置きます",
+      "toNew": "デイリーノート {{note}} を作り、見出し {{heading}} の下に置きます",
+      "headings": "{{note}} に見出し {{heading}} が {{count}} つあるため、置く場所が決まりません。",
+      "ignored": "{{note}} はビューに出ないノートです。作ったタスクはビューに出ません",
+      "toChild": "{{parent}} の子の先頭に置きます",
+      "gone": "親のタスクが見つかりません。"
     },
     "draft": {
       "discardAsk": "下書きを捨てますか",
@@ -638,7 +648,6 @@
     "asNext": "続きで",
     "forTomorrow": "明日用",
     "forWeek": "1週間用（7日間）",
-    "convertToInline": "インラインに変換",
     "switchTo": "日時切り替え",
     "allDay": "終日",
     "allDayKeepDate": "終日（日付維持）",
