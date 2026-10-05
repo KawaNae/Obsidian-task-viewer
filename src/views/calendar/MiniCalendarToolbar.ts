@@ -45,8 +45,9 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
     }
 
     /** Close the popovers the toolbar opened. */
-    close(): void {
+    override close(): void {
         this.filterMenu.close();
+        super.close();
     }
 
     protected override buildDom(toolbar: HTMLElement): void {

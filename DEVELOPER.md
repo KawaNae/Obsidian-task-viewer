@@ -529,6 +529,8 @@ The base answers every patch in one place:
 
 The toolbars and the pinned lists subscribe to the store and mend themselves; they hold no copy of the state. A toolbar is handed the store and, apart from it, the few commands that are not a change of state (move by days, Now, Go to date). The filter menu edits a value it is handed and gives back a new one (`editViewFilter`).
 
+Timeline's, Calendar's and Schedule's toolbars put their actions in an action zone (`ViewToolbarBase.createActionZone`), which folds into ⋮ (`is-compact` on the toolbar) when the row does not fit (`sharedUI/ToolbarFold.ts`). The width the row needs open is measured on each change of the toolbar's DOM (the month's name, a label, a button), with the zone shown whether or not it is folded, so folding never unfolds it; the width the toolbar has is read on each resize. A toolbar out of sight (no width) keeps its fold, and is measured again once seen. The view's `toolbar.close()` stops the watching.
+
 The settings (gear) menu is built once for every view, by `buildViewSettingsOptions` (`ViewSettings.ts`), from the descriptor and the store: Save and Load view (when the view keeps templates; saving names the view after the template), Copy URI and Copy as link (the config through `codec.toUriParams`), Reset (the config back to the defaults, the transient fields cleared except where the view is: the date looked at and Calendar's week offset), Export (when it exports). The view's own items go above them.
 
 ### The plugin's events

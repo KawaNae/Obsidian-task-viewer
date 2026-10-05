@@ -12,7 +12,6 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
     border-bottom: 1px solid var(--tv-border);
-    container-type: inline-size;
 }
 
 .view-toolbar::-webkit-scrollbar {
@@ -154,14 +153,14 @@
     display: none;
 }
 
-/* Compact mode: hide inline action buttons, show ⋮ */
-@container (max-width: 500px) {
-    .view-toolbar__action-zone {
-        display: none;
-    }
-    .view-toolbar__btn--more {
-        display: inline-flex;
-    }
+/* Compact mode: the row does not fit open, so the action zone folds into ⋮.
+   ToolbarFold (sharedUI/ToolbarFold.ts) sets is-compact from the width the
+   row needs open and the width the toolbar has. */
+.view-toolbar.is-compact .view-toolbar__action-zone {
+    display: none;
+}
+.view-toolbar.is-compact .view-toolbar__btn--more {
+    display: inline-flex;
 }
 
 /* -----------------------------------------------------------------------------
