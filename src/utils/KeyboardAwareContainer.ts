@@ -19,6 +19,19 @@ import { trackKeyboard, nativeKeyboardHeight, keyboardTop } from './KeyboardStat
  * the DOM fires for any editable element, CodeMirror's own selection
  * among them), so no editor has to tell of its caret.
  *
+ * Where the field stands is read once the container has settled: an
+ * animation running in it as the measure is asked for (the sheet sliding
+ * up, the box popping in) moves the field it holds, and a position read
+ * midway is not where the field comes to rest (on iPad the sheet's 150 ms
+ * slide was read with the field still below the window, and the panel
+ * scrolled 565 px where 67 would do). Every measure (the keyboard opening
+ * or moving, a field focused, the caret moving) goes through
+ * `measureWhenSettled`, which waits for those animations to end, then
+ * measures the field focused at that moment, if the keyboard is still open
+ * and the container still attached. Animations that start later are not
+ * waited for: a container closing detaches before its close animation.
+ * Where the DOM cannot list them (`getAnimations`), it measures at once.
+ *
  * Keyboard detection is dual-source (state は KeyboardState に集約):
  * - visualViewport resize — Windows / Safari 系。`innerHeight - vv.height`
  *   が縮む環境
@@ -44,6 +57,10 @@ export class KeyboardAwareContainer {
     /** cumulative injected scroll room (px) */
     private extraPad = 0;
     private keyboardOpen = false;
+    /** A measure waits for the container's animations to end (`measureWhenSettled`). */
+    private settling = false;
+    /** Counted up on each detach, so a wait begun before it measures nothing. */
+    private attachment = 0;
     scrollTarget: HTMLElement | null = null;
 
     constructor(
@@ -79,9 +96,7 @@ export class KeyboardAwareContainer {
             if (this.focusTimer) clearTimeout(this.focusTimer);
             this.focusTimer = setTimeout(() => {
                 this.focusTimer = null;
-                if (this.keyboardOpen && this.activeInput() === target) {
-                    this.ensureAboveKeyboard(target);
-                }
+                this.measureWhenSettled();
             }, 50);
         };
         this.container.addEventListener('focusin', this.focusHandler);
@@ -100,8 +115,7 @@ export class KeyboardAwareContainer {
             if (!this.keyboardOpen || this.selectionFrame !== null) return;
             const follow = () => {
                 this.selectionFrame = null;
-                const active = this.activeInput();
-                if (this.keyboardOpen && active?.isContentEditable) this.ensureAboveKeyboard(active);
+                this.measureWhenSettled();
             };
             if (typeof this.win.requestAnimationFrame === 'function') {
                 this.selectionFrame = this.win.requestAnimationFrame(follow);
@@ -128,11 +142,52 @@ export class KeyboardAwareContainer {
         }
 
         if (this.keyboardOpen) {
-            const active = this.activeInput();
-            if (active) this.ensureAboveKeyboard(active);
+            this.measureWhenSettled();
         } else if (wasOpen) {
             this.restore();
         }
+    }
+
+    /**
+     * Measure the focused field once the animations running in the container
+     * now have ended, at once when none runs. A measure asked for while one
+     * waits joins it: the wait measures what is current when it ends.
+     */
+    private measureWhenSettled(): void {
+        if (this.settling) return;
+        const moving = this.runningAnimations();
+        if (moving.length === 0) {
+            this.measure();
+            return;
+        }
+        this.settling = true;
+        const attachment = this.attachment;
+        // A cancelled animation (the sheet dragged by its handle) rejects
+        // `finished`: it has stopped moving all the same.
+        void Promise.allSettled(moving.map((a) => a.finished)).then(() => {
+            if (attachment !== this.attachment) return;
+            this.settling = false;
+            this.measure();
+        });
+    }
+
+    /**
+     * The animations running in the container and what is in it that will
+     * end (an endless one, a spinner, would keep the field from ever being
+     * measured). None where the DOM cannot list them.
+     */
+    private runningAnimations(): Animation[] {
+        if (typeof this.container.getAnimations !== 'function') return [];
+        return this.container.getAnimations({ subtree: true }).filter((a) =>
+            a.playState === 'running'
+            && Number.isFinite(Number(a.effect?.getComputedTiming().endTime ?? Infinity)));
+    }
+
+    /** Keep the field focused in the container above the keyboard, while it is open. */
+    private measure(): void {
+        if (!this.keyboardOpen) return;
+        const active = this.activeInput();
+        if (active) this.ensureAboveKeyboard(active);
     }
 
     /** container 内のフォーカス中の欄（なければ null） */
@@ -228,6 +283,8 @@ export class KeyboardAwareContainer {
         this.selectionHandler = null;
         this.selectionFrame = null;
         this.keyboardOpen = false;
+        this.settling = false;
+        this.attachment++;
         this.scrollTarget = null;
     }
 }
