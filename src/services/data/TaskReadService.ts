@@ -13,6 +13,17 @@ import { overlaps } from '../../utils/SpanRelation';
 import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
+ * How a question is answered besides its filter: whether the tasks with a
+ * validation error are among the answers, and the start hour the copies are
+ * drawn with and the filter's days are placed by (the setting's when absent;
+ * the API's `startHour` names another for one call).
+ */
+export interface QueryOptions {
+    includeInvalid?: boolean;
+    startHour?: number;
+}
+
+/**
  * The display side of the read: the index's copies as a view draws them.
  *
  * Provides cached DisplayTask conversion, date-based filtering/splitting,
@@ -60,17 +71,28 @@ export class TaskReadService {
     }
 
     /**
-     * All DisplayTasks, revision-cached.
+     * All DisplayTasks, as drawn with the setting's startHour; revision-cached.
      * Recomputed when the index's revision or the startHour changes.
      */
     getAllDisplayTasks(): DisplayTask[] {
+        return this.displayTasksAt(this.startHour);
+    }
+
+    /**
+     * All DisplayTasks, as drawn with `startHour`. The setting's are the
+     * cached ones; another start hour (a call's own, `QueryOptions`) draws
+     * them anew and keeps nothing, so a call never makes the views' next
+     * question draw them again.
+     */
+    displayTasksAt(startHour: number): DisplayTask[] {
+        if (startHour !== this.startHour) {
+            return toDisplayTasks(this.taskIndex.getTasks(), startHour, this.taskLookup);
+        }
         const currentRevision = this.taskIndex.getRevision();
-        const startHour = this.startHour;
         if (this.cachedDisplayTasks && this.cacheRevision === currentRevision && this.cacheStartHour === startHour) {
             return this.cachedDisplayTasks;
         }
-        const lookup = this.taskLookup;
-        this.cachedDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour, lookup);
+        this.cachedDisplayTasks = toDisplayTasks(this.taskIndex.getTasks(), startHour, this.taskLookup);
         this.cacheRevision = currentRevision;
         this.cacheStartHour = startHour;
         return this.cachedDisplayTasks;
@@ -81,13 +103,14 @@ export class TaskReadService {
     }
 
     /**
-     * Single task → DisplayTask conversion (for partial updates).
+     * Single task → DisplayTask conversion (for partial updates), drawn
+     * with `startHour` (the setting's when absent).
      * Does NOT use the batch cache.
      */
-    getDisplayTask(taskId: string): DisplayTask | undefined {
+    getDisplayTask(taskId: string, startHour: number = this.startHour): DisplayTask | undefined {
         const task = this.taskIndex.getTask(taskId);
         if (!task) return undefined;
-        return toDisplayTask(task, this.startHour, this.taskLookup);
+        return toDisplayTask(task, startHour, this.taskLookup);
     }
 
     private readonly taskLookup = (id: string): Task | undefined => this.taskIndex.getTask(id);
@@ -103,11 +126,12 @@ export class TaskReadService {
     tasksInWindow(
         window: TimeWindow,
         filter?: FilterState,
-        options?: { includeInvalid?: boolean }
+        options?: QueryOptions
     ): DisplayTask[] {
-        const raw = this.getAllDisplayTasks();
+        const startHour = options?.startHour ?? this.startHour;
+        const raw = this.displayTasksAt(startHour);
         const all = options?.includeInvalid ? raw : raw.filter(TaskReadService.isVisible);
-        const context = this.createFilterContext();
+        const context = this.windowContext(startHour);
         const expr = filter ? compileFilter(filter) : ALWAYS;
         return all.filter(dt => TaskReadService.inWindow(dt, window)
             && TaskFilterEngine.evaluate(dt, expr, context));
@@ -124,25 +148,30 @@ export class TaskReadService {
      * Filtered (and optionally sorted) tasks.
      * Primary API for views needing filtered results.
      */
-    getFilteredTasks(filter: FilterState, sort?: SortState, options?: { includeInvalid?: boolean }): DisplayTask[] {
-        const raw = this.getAllDisplayTasks();
+    getFilteredTasks(filter: FilterState, sort?: SortState, options?: QueryOptions): DisplayTask[] {
+        const startHour = options?.startHour ?? this.startHour;
+        const raw = this.displayTasksAt(startHour);
         const all = options?.includeInvalid ? raw : raw.filter(TaskReadService.isVisible);
         if (!hasConditions(filter)) {
             const result = [...all];
             TaskSorter.sort(result, sort);
             return result;
         }
-        const context = this.createFilterContext();
+        const context = this.windowContext(startHour);
         const expr = compileFilter(filter);
         const result = all.filter(t => TaskFilterEngine.evaluate(t, expr, context));
         TaskSorter.sort(result, sort);
         return result;
     }
 
-    /** The context the plugin evaluates filters in: its settings, its index, and now. */
-    private createFilterContext(): FilterContext {
+    /**
+     * The context the plugin evaluates filters in: the start hour (the
+     * setting's when absent), the week's first day, its index, and now. A
+     * window a value names is placed by it, wherever it is placed.
+     */
+    windowContext(startHour: number = this.startHour): FilterContext {
         return {
-            startHour: this.startHour,
+            startHour,
             weekStartDay: this.settings().weekStartDay,
             taskLookup: (id: string) => this.taskIndex.getTask(id),
             now: new Date(),
