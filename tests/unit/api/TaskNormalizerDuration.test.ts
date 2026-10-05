@@ -15,7 +15,7 @@ const START_HOUR = 5;
 
 function minutesOf(overrides: Parameters<typeof makeTask>[0]) {
     const dt = toDisplayTask(makeTask(overrides), START_HOUR);
-    return { dt, minutes: normalizeTask(dt, noRow, START_HOUR).durationMinutes };
+    return { dt, minutes: normalizeTask(dt, noRow).durationMinutes };
 }
 
 describe('durationMinutes counts the days between start and end', () => {

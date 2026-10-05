@@ -1,6 +1,7 @@
 import { TaskApiError } from './TaskApiTypes';
 import { exportableShortNames } from '../views/ViewDescriptors';
 import type { NumberRange } from '../utils/values/NumberValues';
+import { SETTINGS_SCHEMA } from '../settings/SettingsSchema';
 import type {
     ListParams, TodayParams, GetParams, CreateParams, UpdateParams, DeleteParams,
     DuplicateParams, TasksForDateRangeParams,
@@ -64,6 +65,16 @@ export const LIMIT_PARAM = {
     },
 } as const satisfies ParamSpec;
 
+/**
+ * The visual day boundary of one query, in the range the setting takes
+ * (`SETTINGS_SCHEMA.startHour`): the setting's when absent.
+ */
+export const START_HOUR_PARAM = {
+    value: '<0-23>',
+    int: SETTINGS_SCHEMA.startHour.range,
+    description: 'Visual day boundary for this call (default: the setting)',
+} as const satisfies ParamSpec;
+
 /** How a listing is sorted. */
 export const SORT_PARAM = {
     value: '<prop[:dir],..>',
@@ -97,6 +108,7 @@ export const LIST_SCHEMA = {
     from:     { value: '<date|preset>',   description: 'Query window start: tasks ending on or after (inclusive overlap)' },
     to:       { value: '<date|preset>',   description: 'Query window end: tasks starting on or before (inclusive overlap)' },
     ...FILTER_SOURCE_SCHEMA,
+    startHour: START_HOUR_PARAM,
     sort:     SORT_PARAM,
     limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<ListParams>;
@@ -106,6 +118,7 @@ export const TODAY_SCHEMA = (({ date: _date, from: _from, to: _to, ...rest }) =>
 
 export const GET_SCHEMA = {
     id: { value: '<taskId>', description: 'Task ID', required: true },
+    startHour: START_HOUR_PARAM,
 } as const satisfies ParamMap<GetParams>;
 
 export const CREATE_SCHEMA = {
@@ -142,6 +155,7 @@ export const TASKS_FOR_DATE_RANGE_SCHEMA = {
     to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
     ...SIMPLE_FILTER_SCHEMA,
     ...FILTER_SOURCE_SCHEMA,
+    startHour: START_HOUR_PARAM,
     sort:     SORT_PARAM,
     limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<TasksForDateRangeParams>;
@@ -151,6 +165,7 @@ export const CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA = {
     to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
     ...SIMPLE_FILTER_SCHEMA,
     ...FILTER_SOURCE_SCHEMA,
+    startHour: START_HOUR_PARAM,
 } as const satisfies ParamMap<CategorizedTasksForDateRangeParams>;
 
 export const INSERT_CHILD_TASK_SCHEMA = {

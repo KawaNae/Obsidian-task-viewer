@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { registerCliHandlers } from '../../../src/cli/CliRegistrar';
-import { createGetHandler } from '../../../src/cli/handlers/TaskQueryHandlers';
+import { createGetHandler, createListHandler, createTodayHandler } from '../../../src/cli/handlers/TaskQueryHandlers';
 import {
     createDuplicateHandler, createInsertChildTaskHandler, createTasksForDateRangeHandler,
 } from '../../../src/cli/handlers/TaskActionHandlers';
@@ -58,6 +58,43 @@ describe('the API checks, the CLI tells in its flags', () => {
 
     it('the API itself names its keys', async () => {
         await expect(realApi().api.insertChildTask({ content: 'x' } as never)).rejects.toThrow('Missing required parameter: parentId');
+    });
+});
+
+describe('start-hour', () => {
+    const commands: [string, (p: Record<string, string>) => Promise<string>][] = [
+        ['list', p => createListHandler(realApi() as never)(p)],
+        ['today', p => createTodayHandler(realApi() as never)(p)],
+        ['get', p => createGetHandler(realApi() as never)({ id: 'a.md#^x', ...p })],
+        ['tasks-for-date-range', p => createTasksForDateRangeHandler(realApi() as never)({ from: 'today', to: 'today', ...p })],
+    ];
+
+    it.each(commands)('%s: a start hour out of range is the API\'s error, in the flag\'s name', async (_name, run) => {
+        expect(errorOf(await run({ 'start-hour': '24' }))).toBe('start-hour must be from 0 to 23, got: "24"');
+    });
+
+    it.each(commands)('%s: a start hour that is no whole number is read as the flag', async (_name, run) => {
+        expect(errorOf(await run({ 'start-hour': 'abc' }))).toBe('start-hour must be a whole number, got: "abc"');
+    });
+});
+
+describe('today takes list\'s flags but the window', () => {
+    it('hands tag, filter-file and start-hour over to the API', async () => {
+        const today = vi.fn().mockResolvedValue({ total: 0, count: 0, truncated: false, limit: 100, tasks: [] });
+        await createTodayHandler({ api: { today } } as never)({ tag: 'work', 'filter-file': 'f.json', 'start-hour': '0' });
+        expect(today).toHaveBeenCalledWith({ tag: ['work'], filterFile: 'f.json', startHour: 0, limit: 100 });
+    });
+
+    it('refuses a window flag for what it is, before the API is asked', async () => {
+        const today = vi.fn();
+        const out = await createTodayHandler({ api: { today } } as never)({ date: '2026-10-10' });
+        expect(errorOf(out)).toBe("Cannot use 'date' with today, which is date=today; use list date=2026-10-10");
+        expect(today).not.toHaveBeenCalled();
+    });
+
+    it('refuses an unknown flag as every command does', async () => {
+        const out = await createTodayHandler({ api: { today: vi.fn() } } as never)({ tagg: 'work' });
+        expect(errorOf(out)).toBe('Unknown flag: tagg. Did you mean: tag?');
     });
 });
 

@@ -75,6 +75,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | `root` | 親タスクを持たないタスクのみ | `root` |
 | `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) | `filter-file=filters/tag.json` |
 | `list` | ピン留めリスト名（`.md` テンプレート用）。ビューのフィルタは、リストの「ビューフィルターを適用」がオンのときだけ重ねる（ビューの表示と同じ） | `list=urgent` |
+| `start-hour` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） | `start-hour=0` |
 
 > `from`/`to` は inclusive なクエリ窓です。窓と期間が重なるタスクが対象になります（例: 6/28〜7/2 のタスクは `from=2026-07-01` に含まれます）。`date` と `from`/`to` の同時指定はエラーです。
 >
@@ -116,6 +117,7 @@ obsidian obsidian-task-viewer:today tag=work
 | `root` | 親タスクを持たないタスクのみ |
 | `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) |
 | `list` | ピン留めリスト名（`.md` テンプレート用） |
+| `start-hour` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | ソートルール |
 | `limit` | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） |
 
@@ -128,6 +130,7 @@ obsidian obsidian-task-viewer:get id=abc123 output-fields=content,status,startDa
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
+| `start-hour` | | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 
 ### create — タスク作成
 
@@ -233,6 +236,7 @@ obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31
 | `root` | | 親タスクを持たないタスクのみ |
 | `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
 | `list` | | ピン留めリスト名（`.md` テンプレート用） |
+| `start-hour` | | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | | ソートルール |
 | `limit` | | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） |
 
@@ -260,6 +264,7 @@ obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 t
 | `root` | | 親タスクを持たないタスクのみ |
 | `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
 | `list` | | ピン留めリスト名（`.md` テンプレート用） |
+| `start-hour` | | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 
 **戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...] }, ... }`
 

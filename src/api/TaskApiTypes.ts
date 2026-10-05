@@ -130,9 +130,18 @@ export interface WindowParams {
     to?: string;
 }
 
+/**
+ * The visual day boundary of one query, a whole number from 0 to 23: the
+ * copies' spans, the windows and the order are read with it. The setting's
+ * when absent; 0 asks by calendar days.
+ */
+export interface StartHourParams {
+    startHour?: number;
+}
+
 // ── list ──
 
-export interface ListParams extends PaginationParams, SimpleFilterParams, FilterSourceParams, WindowParams {
+export interface ListParams extends PaginationParams, SimpleFilterParams, FilterSourceParams, WindowParams, StartHourParams {
     sort?: ApiSortRule[];
 }
 
@@ -143,7 +152,7 @@ export type TodayParams = Omit<ListParams, keyof WindowParams>;
 
 // ── get ──
 
-export interface GetParams {
+export interface GetParams extends StartHourParams {
     id: string;
 }
 
@@ -204,7 +213,7 @@ export interface DuplicateResult {
     duplicated: string;
 }
 
-export interface TasksForDateRangeParams extends PaginationParams, SimpleFilterParams, FilterSourceParams {
+export interface TasksForDateRangeParams extends PaginationParams, SimpleFilterParams, FilterSourceParams, StartHourParams {
     /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
     from: string;
     /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
@@ -214,7 +223,7 @@ export interface TasksForDateRangeParams extends PaginationParams, SimpleFilterP
 
 // ── categorizedTasksForDateRange ──
 
-export interface CategorizedTasksForDateRangeParams extends SimpleFilterParams, FilterSourceParams {
+export interface CategorizedTasksForDateRangeParams extends SimpleFilterParams, FilterSourceParams, StartHourParams {
     /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
     from: string;
     /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
