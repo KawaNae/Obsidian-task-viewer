@@ -4,6 +4,9 @@ import type { ApiHost } from '../../api/TaskApi';
 import type { SimpleFilterParams } from '../../api/TaskApiTypes';
 import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
+import { refuseWindowOnToday } from '../../api/QueryShorthand';
+import { TODAY_SCHEMA, toCliFlags } from '../../api/OperationSchemas';
+import { validateCliParams } from '../CliParamValidator';
 import {
     formatOutput, formatSingleTask, resolveFields, cliError, wrapCliResult,
     validateFormat, readLimitFlag,
@@ -13,11 +16,9 @@ import {
 // ── CliData → typed params converters ──
 
 /**
- * Maps the simple per-field filter flags shared by `list` and the
- * date-range family. Deliberately excludes `date`/`from`/`to`/`filter`/
- * `filter-file`/`list` — those have per-command handling (list's own query
- * window vs. a range command's required window bound, and the filter/
- * filter-file override order), so they're read by each caller directly.
+ * Maps the simple per-field filter flags every query takes. The window
+ * (`date`, `from`, `to`) and the filter file are read by each command, as
+ * each takes them.
  */
 export function cliDataToSimpleFilterParams(params: CliData): SimpleFilterParams {
     const result: SimpleFilterParams = {};
@@ -35,29 +36,26 @@ export function cliDataToSimpleFilterParams(params: CliData): SimpleFilterParams
 }
 
 /**
- * `list`'s flags as the API's params. A filter file and the list in it go to
- * the API as they are: the API reads the file, and decides what else it
- * reads beside one, as it does for any caller.
+ * The flags of a query but its window, as the API's params: the simple
+ * fields, the filter file and the list in it, sort and limit. A filter file
+ * goes to the API as it is: the API reads it, and takes it together with
+ * the rest, as it does for any caller.
  */
-function cliDataToListParams(params: CliData, format: OutputFormat): ListParams {
-    const result: ListParams = cliDataToSimpleFilterParams(params);
-    if (params.date) result.date = params.date;
-    if (params.from) result.from = params.from;
-    if (params.to) result.to = params.to;
+function cliDataToQueryParams(params: CliData, format: OutputFormat): TodayParams {
+    const result: TodayParams = cliDataToSimpleFilterParams(params);
     if (params['filter-file']) result.filterFile = params['filter-file'];
     if (params.list) result.list = params.list;
-
     if (params.sort) result.sort = parseSortFlag(params.sort);
     result.limit = readLimitFlag(params, format);
-
     return result;
 }
 
-function cliDataToTodayParams(params: CliData, format: OutputFormat): TodayParams {
-    const result: TodayParams = {};
-    if (params.leaf === 'true') result.leaf = true;
-    if (params.sort) result.sort = parseSortFlag(params.sort);
-    result.limit = readLimitFlag(params, format);
+/** `list`'s flags as the API's params: a query's, and its window. */
+function cliDataToListParams(params: CliData, format: OutputFormat): ListParams {
+    const result: ListParams = cliDataToQueryParams(params, format);
+    if (params.date) result.date = params.date;
+    if (params.from) result.from = params.from;
+    if (params.to) result.to = params.to;
     return result;
 }
 
@@ -80,15 +78,23 @@ export function createListHandler(plugin: PluginContext & ApiHost) {
     };
 }
 
+/**
+ * `today` takes `list`'s flags but the window, and checks its flags itself
+ * (`FlagCheck` 'handler'): a window flag is refused for what it is — today
+ * is `date=today` — before it would be an unknown flag.
+ */
 export function createTodayHandler(plugin: PluginContext & ApiHost) {
+    const flags = toCliFlags(TODAY_SCHEMA, { output: true });
     return async (params: CliData): Promise<string> => {
-        const formatErr = validateFormat(params.format);
-        if (formatErr) return cliError(formatErr);
+        return wrapCliResult("list today's tasks", async () => {
+            refuseWindowOnToday(params);
+            const flagErr = validateCliParams(params, flags, 'today');
+            if (flagErr) return flagErr;
+            const formatErr = validateFormat(params.format);
+            if (formatErr) return cliError(formatErr);
 
-        return wrapCliResult("list today's tasks", () => {
             const format = (params.format as OutputFormat) || 'json';
-            const apiParams = cliDataToTodayParams(params, format);
-            const result = plugin.api.today(apiParams);
+            const result = await plugin.api.today(cliDataToQueryParams(params, format));
             const fields = resolveFields(params['output-fields']);
             const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
             return formatOutput(result.tasks, format, fields, meta);

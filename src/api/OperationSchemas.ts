@@ -101,11 +101,8 @@ export const LIST_SCHEMA = {
     limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<ListParams>;
 
-export const TODAY_SCHEMA = {
-    leaf:   SIMPLE_FILTER_SCHEMA.leaf,
-    sort:   SORT_PARAM,
-    limit:  LIMIT_PARAM,
-} as const satisfies ParamMap<TodayParams>;
+/** `list`'s params but the window: `today` is `date=today`. */
+export const TODAY_SCHEMA = (({ date: _date, from: _from, to: _to, ...rest }) => rest)(LIST_SCHEMA) satisfies ParamMap<TodayParams>;
 
 export const GET_SCHEMA = {
     id: { value: '<taskId>', description: 'Task ID', required: true },

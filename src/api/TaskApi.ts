@@ -10,15 +10,13 @@ import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
 import { API_REFERENCE } from './Reference';
 import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
-import { TaskSorter } from '../services/sort/TaskSorter';
-import { TaskValues } from '../services/filter/TaskValues';
 import type { SortState } from '../services/sort/SortTypes';
 import { createEmptyFilterState } from '../services/filter/FilterTypes';
 import { SortSerializer, sortIssueText } from '../services/sort/SortSerializer';
 import { DateUtils } from '../utils/DateUtils';
-import { daysWindow, endDayOf, ofValue, visualDayOf, type TimeWindow } from '../utils/DayWindow';
+import { endDayOf, ofValue, visualDayOf } from '../utils/DayWindow';
 import { resolveQuery } from './FilterParamsBuilder';
-import { readDateParam } from './QueryShorthand';
+import { refuseWindowOnToday, windowValue } from './QueryShorthand';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
 import { IntValue } from '../utils/values/NumberValues';
 import { holdsLineBreak } from '../utils/LineBreak';
@@ -54,6 +52,9 @@ import {
     type InsertChildTaskParams,
     type InsertChildTaskResult,
     type StartHourResult,
+    type SimpleFilterParams,
+    type FilterSourceParams,
+    type WindowParams,
 } from './TaskApiTypes';
 
 /*
@@ -84,6 +85,9 @@ function buildSortState(rules?: ApiSortRule[]): SortState | undefined {
     }
     return state;
 }
+
+/** What every query takes: the params `resolveQuery` reads, and a sort. */
+type QueryParams = SimpleFilterParams & FilterSourceParams & WindowParams & { sort?: ApiSortRule[] };
 
 interface PaginateResult {
     paged: DisplayTask[];
@@ -192,18 +196,19 @@ export class TaskApi {
     }
 
     /**
-     * List tasks with optional filters, sort, and pagination.
+     * The tasks a query names (`resolveQuery`: its params taken together),
+     * in its order. `list`, `today` and the date-range family all answer
+     * through it, so one FilterState answers each the same way.
      */
-    async list(params?: ListParams): Promise<TaskListResult> {
-        assertParams(params ?? {}, LIST_SCHEMA, 'list');
-        const p = params ?? {};
-        const readService = this.readService;
+    private async queryTasks(params: QueryParams): Promise<DisplayTask[]> {
+        const query = await resolveQuery(this.plugin.app, params);
+        const sortState = buildSortState(params.sort) ?? query.sort;
+        return this.readService.getFilteredTasks(query.filter ?? createEmptyFilterState(), sortState, { includeInvalid: query.includeInvalid });
+    }
 
-        const query = await resolveQuery(this.plugin.app, p);
-        const sortState = buildSortState(p.sort) ?? query.sort;
-        const filtered = readService.getFilteredTasks(query.filter ?? createEmptyFilterState(), sortState, { includeInvalid: query.includeInvalid });
-
-        const { paged, total, resolvedLimit } = paginate(filtered, p);
+    /** A page of tasks as a listing hands it out. */
+    private listResult(tasks: DisplayTask[], params: PaginationParams): TaskListResult {
+        const { paged, total, resolvedLimit } = paginate(tasks, params);
         return {
             total,
             count: paged.length,
@@ -214,34 +219,23 @@ export class TaskApi {
     }
 
     /**
-     * List tasks active today.
+     * List tasks with optional filters, sort, and pagination.
      */
-    today(params?: TodayParams): TaskListResult {
-        assertParams(params ?? {}, TODAY_SCHEMA, 'today');
+    async list(params?: ListParams): Promise<TaskListResult> {
+        assertParams(params ?? {}, LIST_SCHEMA, 'list');
         const p = params ?? {};
-        const readService = this.readService;
-        const { startHour } = this.plugin.settings;
-        const today = DateUtils.getVisualDateOfNow(startHour);
+        return this.listResult(await this.queryTasks(p), p);
+    }
 
-        // The window of today, as the views and tasksForDateRange answer it.
-        let filtered = readService.tasksInWindow(daysWindow(today, today, startHour), undefined, { includeInvalid: true });
-
-        if (p.leaf) {
-            // What `list`'s leaf (`children isNotSet`) means.
-            filtered = filtered.filter(t => !TaskValues.of(t, 'children').set);
-        }
-
-        const sortState = buildSortState(p.sort);
-        TaskSorter.sort(filtered, sortState);
-
-        const { paged, total, resolvedLimit } = paginate(filtered, p);
-        return {
-            total,
-            count: paged.length,
-            truncated: paged.length < total,
-            limit: resolvedLimit,
-            tasks: paged.map(this.out),
-        };
+    /**
+     * List tasks active today: `list` with `date=today`, which takes every
+     * param of `list` but another window.
+     */
+    async today(params?: TodayParams): Promise<TaskListResult> {
+        const p = params ?? {};
+        refuseWindowOnToday(p);
+        assertParams(p, TODAY_SCHEMA, 'today');
+        return this.listResult(await this.queryTasks({ ...p, date: 'today' }), p);
     }
 
     /**
@@ -406,35 +400,24 @@ export class TaskApi {
     }
 
     /**
-     * List tasks in a date range with optional filter, sort, and pagination.
+     * List tasks in a date range with optional filter, sort, and pagination:
+     * `list` with `from` and `to`, both required.
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
-        const query = await resolveQuery(this.plugin.app, { ...params, from: undefined, to: undefined });
-        const window = this.resolveWindow(params.from, params.to);
-        let tasks = this.readService.tasksInWindow(window, query.filter ?? undefined, { includeInvalid: query.includeInvalid });
-        const sortState = buildSortState(params.sort) ?? query.sort;
-        tasks = [...tasks];
-        TaskSorter.sort(tasks, sortState);
-        const { paged, total, resolvedLimit } = paginate(tasks, params);
-        return {
-            total,
-            count: paged.length,
-            truncated: paged.length < total,
-            limit: resolvedLimit,
-            tasks: paged.map(this.out),
-        };
+        return this.listResult(await this.queryTasks(params), params);
     }
 
     /**
-     * Get tasks in a date range, categorized into allDay/timed per date.
+     * Get tasks in a date range, categorized into allDay/timed per date: the
+     * tasks `list` with `from` and `to` answers, on each visual day of the
+     * window the range names.
      */
     async categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult> {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
-        const query = await resolveQuery(this.plugin.app, { ...params, from: undefined, to: undefined });
+        const tasks = await this.queryTasks(params);
         const startHour = this.plugin.settings.startHour;
-        const window = this.resolveWindow(params.from, params.to);
-        const tasks = this.readService.tasksInWindow(window, query.filter ?? undefined, { includeInvalid: query.includeInvalid });
+        const window = ofValue(windowValue(params)!, this.readService.windowContext(startHour));
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
         const dates = DateUtils.getDateRange(visualDayOf(window.startMs, startHour), endDayOf(window.endMs, startHour));
         const map = categorizeTasksByDate(split, dates, startHour);
@@ -459,20 +442,6 @@ export class TaskApi {
         const { written } = await this.operations.insertLine(task.id, formatTaskLine({ statusChar: ' ', content: params.content }), 'firstChild');
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
-    }
-
-    /**
-     * The window `from` to `to` (YYYY-MM-DD or a date preset each) names:
-     * from the start of `from`'s window to the end of `to`'s, so
-     * `from=thisweek to=thisweek` covers the whole week.
-     */
-    private resolveWindow(from: string, to: string): TimeWindow {
-        const { weekStartDay, startHour } = this.plugin.settings;
-        const ctx = { weekStartDay, startHour, now: new Date() };
-        return {
-            startMs: ofValue(readDateParam(from, 'from'), ctx).startMs,
-            endMs: ofValue(readDateParam(to, 'to'), ctx).endMs,
-        };
     }
 
     /**
