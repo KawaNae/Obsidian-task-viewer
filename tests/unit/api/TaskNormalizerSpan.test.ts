@@ -6,7 +6,7 @@ import { makeTask } from '../helpers/makeTask';
 
 /** The API's effective* are the span's moments on the calendar and the clock (startHour 5). */
 const out = (task: Partial<Task>) =>
-    normalizeTask(toDisplayTask(makeTask(task), 5, NO_TASK_LOOKUP), NO_TASK_LOOKUP, 5);
+    normalizeTask(toDisplayTask(makeTask(task), 5, NO_TASK_LOOKUP), NO_TASK_LOOKUP);
 
 describe('normalizeTask: the span', () => {
     it('@2026-10-04 runs from 05:00 to 05:00 the next day, 1440 minutes', () => {

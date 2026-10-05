@@ -14,7 +14,6 @@ import { apiIdOf, type TaskLookup } from './TaskIds';
 /** What an extractor may read besides the task. */
 interface RecordEnv {
     lookup: TaskLookup;
-    startHour: number;
 }
 
 // Every ID goes out through `apiIdOf`: the row's own, its parent's and its
@@ -89,9 +88,9 @@ function computeDurationMinutes(task: DisplayTask): number | null {
 
 // ── Record extraction (for CLI field selection) ──
 
-export function taskToRecord(task: DisplayTask, fields: readonly string[], lookup: TaskLookup, startHour: number): Record<string, unknown> {
+export function taskToRecord(task: DisplayTask, fields: readonly string[], lookup: TaskLookup): Record<string, unknown> {
     const record: Record<string, unknown> = {};
-    const env: RecordEnv = { lookup, startHour };
+    const env: RecordEnv = { lookup };
     for (const field of fields) {
         const extractor = (FIELD_EXTRACTORS as Record<string, ((task: DisplayTask, env: RecordEnv) => unknown) | undefined>)[field];
         record[field] = extractor ? extractor(task, env) : null;
@@ -102,10 +101,10 @@ export function taskToRecord(task: DisplayTask, fields: readonly string[], looku
 // ── Full normalization (for API) ──
 
 /**
- * `lookup` finds a row by its name, to give its ID (`apiIdOf`). `startHour`
- * is the visual day boundary the duration is measured with, as the filter's
- * `length` measures it.
+ * `lookup` finds a row by its name, to give its ID (`apiIdOf`). The times
+ * are the copy's own: a copy drawn with another start hour (a call's
+ * `startHour`) gives that start hour's span.
  */
-export function normalizeTask(task: DisplayTask, lookup: TaskLookup, startHour: number): NormalizedTask {
-    return taskToRecord(task, ALL_FIELD_NAMES, lookup, startHour) as unknown as NormalizedTask;
+export function normalizeTask(task: DisplayTask, lookup: TaskLookup): NormalizedTask {
+    return taskToRecord(task, ALL_FIELD_NAMES, lookup) as unknown as NormalizedTask;
 }

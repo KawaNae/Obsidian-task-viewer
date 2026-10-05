@@ -25,6 +25,7 @@ export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext 
                 ...cliDataToSimpleFilterParams(params),
                 filterFile: params['filter-file'],
                 list: params.list,
+                startHour: readIntFlag(params, 'startHour'),
             });
             return cliOk(result);
         });
@@ -66,6 +67,7 @@ export function createTasksForDateRangeHandler(plugin: PluginContext & ApiHost) 
                 ...cliDataToSimpleFilterParams(params),
                 filterFile: params['filter-file'],
                 list: params.list,
+                startHour: readIntFlag(params, 'startHour'),
                 sort,
                 limit,
             });

@@ -116,6 +116,16 @@ describe.each(FILTERS)('%s', (_title, filter) => {
     });
 });
 
+describe('a query\'s startHour', () => {
+    it.each(FILTERS)('list with startHour 0 is the view of a vault set to 0 (%s)', async (_title, filter) => {
+        const { api } = await open(5);
+        const listed = names((await api.list({ date: D, startHour: 0, filter, limit: Infinity })).tasks);
+        live?.dispose();
+        const { read: atZero } = await open(0);
+        expect(listed).toEqual(inWindow(atZero, daysWindow(D, D, 0), filter));
+    });
+});
+
 describe('the parity reaches the cases the window used to answer otherwise', () => {
     it('a point right at the window\'s start is in list date=D, as in the view', async () => {
         const { api } = await open();

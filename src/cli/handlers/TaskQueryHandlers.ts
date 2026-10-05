@@ -9,7 +9,7 @@ import { TODAY_SCHEMA, toCliFlags } from '../../api/OperationSchemas';
 import { validateCliParams } from '../CliParamValidator';
 import {
     formatOutput, formatSingleTask, resolveFields, cliError, wrapCliResult,
-    validateFormat, readLimitFlag,
+    validateFormat, readLimitFlag, readIntFlag,
     type OutputFormat,
 } from '../CliOutputFormatter';
 
@@ -37,7 +37,7 @@ export function cliDataToSimpleFilterParams(params: CliData): SimpleFilterParams
 
 /**
  * The flags of a query but its window, as the API's params: the simple
- * fields, the filter file and the list in it, sort and limit. A filter file
+ * fields, the filter file and the list in it, start-hour, sort and limit. A filter file
  * goes to the API as it is: the API reads it, and takes it together with
  * the rest, as it does for any caller.
  */
@@ -47,6 +47,8 @@ function cliDataToQueryParams(params: CliData, format: OutputFormat): TodayParam
     if (params.list) result.list = params.list;
     if (params.sort) result.sort = parseSortFlag(params.sort);
     result.limit = readLimitFlag(params, format);
+    const startHour = readIntFlag(params, 'startHour');
+    if (startHour !== undefined) result.startHour = startHour;
     return result;
 }
 
@@ -108,7 +110,7 @@ export function createGetHandler(plugin: PluginContext & ApiHost) {
         if (formatErr) return cliError(formatErr);
 
         return wrapCliResult('get task', () => {
-            const displayTask = plugin.api.get({ id: params.id });
+            const displayTask = plugin.api.get({ id: params.id, startHour: readIntFlag(params, 'startHour') });
             const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params['output-fields']);
             return formatSingleTask(displayTask, format, fields);

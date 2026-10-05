@@ -23,7 +23,7 @@ import { holdsLineBreak } from '../utils/LineBreak';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { formatTaskLine } from '../services/parsing/TaskLineFormat';
 import {
-    assertParams, LIMIT_PARAM, type ParamSpec,
+    assertParams, LIMIT_PARAM, START_HOUR_PARAM, type ParamSpec,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
     DELETE_SCHEMA, DUPLICATE_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
@@ -55,6 +55,7 @@ import {
     type SimpleFilterParams,
     type FilterSourceParams,
     type WindowParams,
+    type StartHourParams,
 } from './TaskApiTypes';
 
 /*
@@ -152,7 +153,7 @@ export class TaskApi {
     private readonly lookup: TaskLookup = (name) => this.index.getTask(name);
 
     /** A task as the API hands it out, its IDs included (`apiIdOf`). */
-    private readonly out = (task: DisplayTask): NormalizedTask => normalizeTask(task, this.lookup, this.plugin.settings.startHour);
+    private readonly out = (task: DisplayTask): NormalizedTask => normalizeTask(task, this.lookup);
 
     /**
      * The index's copy of the row an ID the API took names (`readApiId`),
@@ -200,10 +201,15 @@ export class TaskApi {
      * in its order. `list`, `today` and the date-range family all answer
      * through it, so one FilterState answers each the same way.
      */
-    private async queryTasks(params: QueryParams): Promise<DisplayTask[]> {
+    private async queryTasks(params: QueryParams, startHour: number): Promise<DisplayTask[]> {
         const query = await resolveQuery(this.plugin.app, params);
         const sortState = buildSortState(params.sort) ?? query.sort;
-        return this.readService.getFilteredTasks(query.filter ?? createEmptyFilterState(), sortState, { includeInvalid: query.includeInvalid });
+        return this.readService.getFilteredTasks(query.filter ?? createEmptyFilterState(), sortState, { includeInvalid: query.includeInvalid, startHour });
+    }
+
+    /** The start hour a call asks with: its `startHour`, else the setting's. */
+    private startHourOf(params: StartHourParams): number {
+        return intParam(params.startHour, 'startHour', START_HOUR_PARAM) ?? this.plugin.settings.startHour;
     }
 
     /** A page of tasks as a listing hands it out. */
@@ -224,7 +230,7 @@ export class TaskApi {
     async list(params?: ListParams): Promise<TaskListResult> {
         assertParams(params ?? {}, LIST_SCHEMA, 'list');
         const p = params ?? {};
-        return this.listResult(await this.queryTasks(p), p);
+        return this.listResult(await this.queryTasks(p, this.startHourOf(p)), p);
     }
 
     /**
@@ -235,7 +241,7 @@ export class TaskApi {
         const p = params ?? {};
         refuseWindowOnToday(p);
         assertParams(p, TODAY_SCHEMA, 'today');
-        return this.listResult(await this.queryTasks({ ...p, date: 'today' }), p);
+        return this.listResult(await this.queryTasks({ ...p, date: 'today' }, this.startHourOf(p)), p);
     }
 
     /**
@@ -244,7 +250,8 @@ export class TaskApi {
     get(params: GetParams): NormalizedTask {
         assertParams(params, GET_SCHEMA, 'get');
 
-        const dt = this.readService.getDisplayTask(this.rowOf(params.id).id);
+        const startHour = this.startHourOf(params);
+        const dt = this.readService.getDisplayTask(this.rowOf(params.id).id, startHour);
         if (!dt) throw new TaskApiError(`Task not found: ${params.id}`);
         return this.out(dt);
     }
@@ -405,7 +412,7 @@ export class TaskApi {
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
-        return this.listResult(await this.queryTasks(params), params);
+        return this.listResult(await this.queryTasks(params, this.startHourOf(params)), params);
     }
 
     /**
@@ -415,8 +422,8 @@ export class TaskApi {
      */
     async categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult> {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
-        const tasks = await this.queryTasks(params);
-        const startHour = this.plugin.settings.startHour;
+        const startHour = this.startHourOf(params);
+        const tasks = await this.queryTasks(params, startHour);
         const window = ofValue(windowValue(params)!, this.readService.windowContext(startHour));
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
         const dates = DateUtils.getDateRange(visualDayOf(window.startMs, startHour), endDayOf(window.endMs, startHour));

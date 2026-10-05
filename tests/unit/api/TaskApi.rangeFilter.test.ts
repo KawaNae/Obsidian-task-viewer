@@ -34,7 +34,7 @@ describe.each([
         expect(mockReadService.getFilteredTasks).toHaveBeenCalledTimes(1);
         const [filterState, , options] = mockReadService.getFilteredTasks.mock.calls[0];
         expect(filterState).toEqual({ logic: 'and', filters: [{ property: 'status', operator: 'includes', value: ['x'] }, MARCH] });
-        expect(options).toEqual({ includeInvalid: true });
+        expect(options).toEqual({ includeInvalid: true, startHour: 5 });
     });
 
     it('takes filter together with the window', async () => {

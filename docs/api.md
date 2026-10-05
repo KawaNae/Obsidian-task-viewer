@@ -138,6 +138,7 @@ const result = api.today({
 | `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
 | `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート。`filter` より優先） |
 | `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合）。テンプレートのビューのフィルタは、そのリストの「ビューフィルターを適用」がオンのときだけ重ねる（ビューの表示と同じ） |
+| `startHour` | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
@@ -158,6 +159,7 @@ const result = api.today({
 | `filter` | `FilterState` | 完全なフィルタ定義 |
 | `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
 | `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
+| `startHour` | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
@@ -199,6 +201,7 @@ const task = api.get({ id: 'abc123' });
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
 | `id` | ○ | `string` | タスクID |
+| `startHour` | | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 
 ID が見つからない場合は `TaskApiError` をスローします。
 
@@ -328,6 +331,7 @@ visual な期間が窓 [from, to] と重なるタスクを返します。締切�
 | `filter` | | `FilterState` | フィルタ定義（単純フィルタより優先） |
 | `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。`filter` より優先） |
 | `list` | | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
+| `startHour` | | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | | `ApiSortRule[]` | ソートルール |
 | `limit` | | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
@@ -364,6 +368,7 @@ const result = await api.categorizedTasksForDateRange({
 | `filter` | | `FilterState` | フィルタ定義（単純フィルタより優先） |
 | `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。`filter` より優先） |
 | `list` | | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
+| `startHour` | | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 
 ## insertChildTask
 
