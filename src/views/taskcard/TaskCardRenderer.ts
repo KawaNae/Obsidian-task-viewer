@@ -124,15 +124,45 @@ import { renderCardMarkdown, type LateContent } from './CardMarkdown';
 
 /**
  * Draws a card's top right (`composeTopRight`), each piece with the class of
- * its role: `task-card__time-start`, `-end` (which a narrow card hides),
- * `-sep` and `-seg`. Nothing when there are no pieces.
+ * its role (`task-card__time-start`, `-end`, `-sep`, `-seg`), in units
+ * (`topRightUnits`, each a `task-card__time-unit`). Nothing when there are
+ * no pieces.
+ *
+ * The box is one line high and wraps between units (`_task-card.css`): a unit
+ * after the first that does not fit on the line goes whole to the next, out
+ * of sight, with what follows it. So the end shows whenever it fits, and
+ * never cut.
  */
 export function renderTopRight(container: HTMLElement, pieces: readonly TopRightPiece[]): void {
     if (pieces.length === 0) return;
     const el = container.createDiv('task-card__time');
-    for (const piece of pieces) {
-        el.createSpan(`task-card__time-${piece.role}`).textContent = piece.text;
+    for (const unit of topRightUnits(pieces)) {
+        const unitEl = el.createSpan('task-card__time-unit');
+        for (const piece of unit) {
+            unitEl.createSpan(`task-card__time-${piece.role}`).textContent = piece.text;
+        }
     }
+}
+
+/**
+ * The pieces in the units a narrow card drops whole: the end (`>11:00`, its
+ * separator in it) on its own, after what comes before it and before what
+ * follows it. One unit when there is no end.
+ */
+export function topRightUnits(pieces: readonly TopRightPiece[]): TopRightPiece[][] {
+    const units: TopRightPiece[][] = [];
+    let current: TopRightPiece[] = [];
+    for (const piece of pieces) {
+        if (piece.role === 'end') {
+            if (current.length > 0) units.push(current);
+            units.push([piece]);
+            current = [];
+        } else {
+            current.push(piece);
+        }
+    }
+    if (current.length > 0) units.push(current);
+    return units;
 }
 
 /**

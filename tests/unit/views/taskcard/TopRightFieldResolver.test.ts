@@ -5,7 +5,8 @@ import {
     TIME_TOP_RIGHT,
     topRightText,
 } from '../../../../src/views/taskcard/TopRightFieldResolver';
-import { renderTopRight } from '../../../../src/views/taskcard/TaskCardRenderer';
+import { renderTopRight, topRightUnits } from '../../../../src/views/taskcard/TaskCardRenderer';
+import type { TopRightPiece } from '../../../../src/views/taskcard/TopRightFieldResolver';
 import { toDisplayTask, NO_TASK_LOOKUP } from '../../../../src/services/display/DisplayTaskConverter';
 import { splitTasks } from '../../../../src/services/display/TaskSplitter';
 import { statedDates } from '../../../../src/utils/TaskDates';
@@ -169,14 +170,14 @@ describe('renderTopRight', () => {
         createSpan(cls: string): El { return this.createDiv(cls); }
     }
 
-    it('draws each piece with the class of its role', () => {
+    it('draws each piece with the class of its role, the end in a unit of its own', () => {
         const card = new El();
         renderTopRight(card as unknown as HTMLElement,
             composeTopRight(lineTask('@2026-10-04T10:00>11:00'), TIME_TOP_RIGHT, settings));
         expect(card.children.map(c => c.cls)).toEqual(['task-card__time']);
-        expect(card.children[0].children.map(c => [c.cls, c.textContent])).toEqual([
-            ['task-card__time-start', '10:00'],
-            ['task-card__time-end', '>11:00'],
+        expect(card.children[0].children.map(u => [u.cls, u.children.map(c => [c.cls, c.textContent])])).toEqual([
+            ['task-card__time-unit', [['task-card__time-start', '10:00']]],
+            ['task-card__time-unit', [['task-card__time-end', '>11:00']]],
         ]);
     });
 
@@ -185,5 +186,28 @@ describe('renderTopRight', () => {
         renderTopRight(card as unknown as HTMLElement,
             composeTopRight(lineTask('@2026-10-04'), TIME_TOP_RIGHT, settings));
         expect(card.children).toEqual([]);
+    });
+});
+
+describe('topRightUnits', () => {
+    const p = (text: string, role: TopRightPiece['role']): TopRightPiece => ({ text, role });
+
+    it('is one unit with no end', () => {
+        expect(topRightUnits([p('[', 'seg'), p('10:00', 'start'), p(' ', 'sep'), p('#a', 'seg')]))
+            .toEqual([[p('[', 'seg'), p('10:00', 'start'), p(' ', 'sep'), p('#a', 'seg')]]);
+    });
+
+    it('puts the end on its own, between what comes before and after it', () => {
+        expect(topRightUnits([p('Mon', 'seg'), p(' ', 'sep'), p('10:00', 'start'), p('>11:00', 'end'), p(' ', 'sep'), p('#a', 'seg')]))
+            .toEqual([
+                [p('Mon', 'seg'), p(' ', 'sep'), p('10:00', 'start')],
+                [p('>11:00', 'end')],
+                [p(' ', 'sep'), p('#a', 'seg')],
+            ]);
+    });
+
+    it('makes no empty unit around an end at either side', () => {
+        expect(topRightUnits([p('10:00', 'start'), p('>11:00', 'end')])).toEqual([[p('10:00', 'start')], [p('>11:00', 'end')]]);
+        expect(topRightUnits([p('>11:00', 'end')])).toEqual([[p('>11:00', 'end')]]);
     });
 });
