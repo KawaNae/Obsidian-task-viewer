@@ -112,7 +112,7 @@ src/
 ├── settings/                  # Settings UI (9 tabs: Basic, Behavior, Views, View Details, Notes, Note scope, Parsers, Log, About)
 ├── constants/                 # Constants (layout, hover, styles, status options)
 ├── i18n/                      # Internationalization (locale files)
-├── api/                       # Public API (TaskApi, TaskApiTypes, TaskIds, TaskNormalizer, OperationSchemas: the parameters; Reference: the help texts; FilterParamsBuilder, FilterFileLoader)
+├── api/                       # Public API (TaskApi, TaskApiTypes, TaskIds, TaskNormalizer, OperationSchemas: the parameters; Reference: the help texts; QueryShorthand: the params as conditions; FilterParamsBuilder, FilterFileLoader)
 ├── cli/                       # CLI handlers (CliRegistrar: registers Reference's CLI_COMMANDS; CliParamValidator, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
 │   ├── core/                  # The index (TaskIndex, IndexReads, TaskStore, TaskScanner, NotifyCoalescer, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
@@ -236,7 +236,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **FilterEdit** | `services/filter/FilterEdit.ts` | The filter menu's edits as functions that return a new tree (`updateConditionAt`, `replaceAt`, `appendTo`, `toggleLogic`, `withOperator`, ...), a node addressed by its path from the root (`NodePath`). `FilterState` and `SortState` are `readonly` values: no holder changes one in place, so none copies one to protect itself |
 | **PinnedListQuery** | `services/filter/PinnedListQuery.ts` | Which tasks a pinned list shows: `resolve(list, viewFilter)` (the list's filter, and the view's when `applyViewFilter`) for the views' lists and Kanban's cells; `fromTemplate(template, listName?)` for a filter file, the template read by its view's schema and its lists by the schema's `listsOf` |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
-| **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order |
+| **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order. A question's `QueryOptions` name whether the invalid tasks are in and the start hour: the setting's copies are cached, another start hour's drawn anew and not kept (`displayTasksAt`). `windowContext(startHour)` is the one context a window is placed by |
 | **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion (stated dates, span, drawn), the split at a day boundary |
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
 | **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
@@ -252,7 +252,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **FlowLineScanner** | `services/parsing/utils/FlowLineScanner.ts` | `readFlow(outline, taskLine)`: the one place a flow program is read from a note (the task line's tail and its own `- ==>` lines); the extraction and the editor diagnostics both use it |
 | **DayPlannerParser** | `services/parsing/tv-inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
 | **TasksPluginParser** | `services/parsing/tv-inline/TasksPluginParser.ts` | Tasks plugin compatible parser (read-only) |
-| **TaskApi** | `api/TaskApi.ts` | Public API (13 methods). Checks every parameter once (required, whole numbers, dates); the CLI passes its flags on unchecked |
+| **TaskApi** | `api/TaskApi.ts` | Public API (13 methods). Checks every parameter once (required, whole numbers, dates); the CLI passes its flags on unchecked. `list`, `today` (`list` with `date=today`) and the two range operations answer through one path (`resolveQuery`, then `TaskReadService.getFilteredTasks`), and a query's `startHour` draws the copies and places the windows of that call |
 | **OperationSchemas** | `api/OperationSchemas.ts` | The parameters of each operation (`ParamSpec`: key, required, a whole number's range, description), bound to the param types by `satisfies`; the shared blocks `SIMPLE_FILTER_SCHEMA`, `FILTER_SOURCE_SCHEMA`, `SORT_PARAM`, `LIMIT_PARAM` |
 | **Reference** | `api/Reference.ts` | `api.help()` and the CLI's `help`, made from the tables: the operations (`OPERATIONS`, whose CLI side `CLI_COMMANDS` the registrar registers), `ALL_FIELD_NAMES`, `PROPERTY_OPERATORS` with `FILTER_VALUE_DOC`, and the sort properties with `TaskValues.words` |
 | **Input codecs** | `utils/values/` | How a value typed by a person or a script is read: `Read<T>` (a value, or an `Issue`), `typed` (NFKC, trimmed) and `dashed` (hyphen-like characters as `-`, dates only), `DateInput` (a day that exists), `TimeInput` (`9:40` as `09:40`), `DateTimeInput`, `IntInput` / `IntValue` (whole numbers, a range), `FloatInput`, `BoolInput`, `ChoiceInput`, and `issueText` (the English sentence of an issue). The API, the CLI, the URI and saved view state (`FieldCodecs`' `F.*`) read through them; the note's notation does not |
@@ -481,7 +481,7 @@ A tie goes by where the task is written: the file (`localeCompare`), then the li
 
 The due is `dayStart(D+1)` for a due date D and the written moment for a timed one. The rows rule 4 calls errors (an end time on a line with no start time) are not drawn; they are read by the same rules and not mended (`@D>DT02:00` ends before it starts), for the API's `includeInvalid`.
 
-A segment of a split task holds its line's values, `stated` and `span`; what it is drawn over is `drawn`, cut at `dayStart` of the boundary. The visual days a span is drawn over are `visualDaysOf` (the last is the day of the moment before the end, so `[D 05:00, D+1 05:00)` is D only); the place on the time grid is `minutesOfSpan`. Windows of days (`daysWindow`, a filter's value by `ofValue`) and how a span or a moment stands to them (`utils/SpanRelation.ts`: `overlaps`, `within`, `startIn`, `endIn`) answer the views, the window queries (`TaskReadService.tasksInWindow`), the API's `today`, Timeline's overdue heading, the filter and the sort alike. A start belongs to the window it is in; an end and a due to the window they close.
+A segment of a split task holds its line's values, `stated` and `span`; what it is drawn over is `drawn`, cut at `dayStart` of the boundary. The visual days a span is drawn over are `visualDaysOf` (the last is the day of the moment before the end, so `[D 05:00, D+1 05:00)` is D only); the place on the time grid is `minutesOfSpan`. Windows of days (`daysWindow`, a filter's value by `ofValue`) and how a span or a moment stands to them (`utils/SpanRelation.ts`: `overlaps`, `within`, `startIn`, `endIn`) answer the views, the window queries (`TaskReadService.tasksInWindow`), the API's shorthand (`QueryShorthand`: `today`, `date`, `from`/`to` as `period overlaps`), Timeline's overdue heading, the filter and the sort alike. A start belongs to the window it is in; an end and a due to the window they close.
 
 A filter's date value (`DateFilterValue` in `services/filter/FilterTypes.ts`) is a date, a date and a time (`YYYY-MM-DDTHH:mm`), a preset, or a range `{ from?, to? }` of these; `isDateRange`, `isPresetValue` and `isDateTimeText` there are the only places its kind is told. `ofValue` makes every value a window: a date and a preset their visual days, a range from the start of its `from` to the end of its `to` (open on a side with no end), a date and a time a point (`startMs === endMs`). The start, end and due conditions compare a moment with a window by the table of the start and the closing side, and with a point as numbers. The period condition (`overlaps`, `within`, their negations) reads `SpanRelation.overlaps` and `within` on the span alone, the due unread; a point M is overlapped by `start <= M < end`. A task with no span matches no period row, a negative one too (`FilterExpr` compiles a negation as `all(has(period), not(atom))`), and a period row takes no `target`. A range is taken by the period condition and by the `equals` of the others only (`takesRange`); the reader (`FilterSerializer`) refuses the rest with a reason.
 
@@ -1423,10 +1423,12 @@ src/api/
   Reference.ts           # api.help() and the CLI's help, made from the tables; OPERATIONS and
                          #   CLI_COMMANDS (the commands the registrar registers)
   TaskNormalizer.ts      # Task → NormalizedTask conversion (ALL_FIELD_NAMES)
-  FilterParamsBuilder.ts # The query a call's params name (resolveQuery: filter file, else filter,
-                         #   else the simple fields and list's window). A filter file is answered
-                         #   as the views answer it: no task with a validation error, the pinned
-                         #   list's order unless sort is given
+  QueryShorthand.ts      # The params as conditions: date and from/to as period overlaps, the
+                         #   simple fields as their own; the one place a param becomes a condition
+  FilterParamsBuilder.ts # The query a call's params name (resolveQuery: the filter file, filter
+                         #   and the shorthand, ANDed). With a filter file it is answered as the
+                         #   views answer it: no task with a validation error, the pinned list's
+                         #   order unless sort is given
   FilterFileLoader.ts    # Vault filter file (.json FilterState, .md view template via PinnedListQuery)
 
 src/cli/
@@ -1464,8 +1466,8 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | Method | Sync/Async | Returns |
 |--------|-----------|---------|
 | `list(params?)` | async | `TaskListResult { total, count, truncated, limit, tasks: NormalizedTask[] }` |
-| `today(params?)` | sync | `TaskListResult` |
-| `get({ id })` | sync | `NormalizedTask` |
+| `today(params?)` | async | `TaskListResult` (`list` with `date=today`) |
+| `get({ id, startHour? })` | sync | `NormalizedTask` |
 | `create({ file, content, ... })` | async | `MutationResult { task: NormalizedTask }` |
 | `update({ id, ... })` | async | `MutationResult` |
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
@@ -1481,15 +1483,15 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 | Command | Description | Key flags |
 |---------|-------------|-----------|
-| `list` | List tasks with filters | file, status, tag, content, date, from, to, due, leaf, root, property, color, type, filter-file, list, sort, limit |
-| `today` | Today's active tasks | leaf, sort, limit |
-| `get` | Single task by ID | id (required) |
+| `list` | List tasks with filters | file, status, tag, content, date, from, to, due, leaf, root, property, color, type, filter-file, list, start-hour, sort, limit |
+| `today` | Today's active tasks (`list date=today`) | list's flags but date, from and to |
+| `get` | Single task by ID | id (required), start-hour |
 | `create` | Create inline task | file (req), content (req), start, end, due, status, heading |
 | `update` | Update task fields | id (req), content, start, end, due, status (use `none` to clear) |
 | `delete` | Delete task | id (required) |
 | `duplicate` | Duplicate task | id (req), day-offset, count |
-| `tasks-for-date-range` | Tasks in date range | from (req), to (req), the simple filter flags (file, status, tag, content, due, leaf, root, property, color, type), filter-file, list, sort, limit |
-| `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req), the simple filter flags, filter-file, list |
+| `tasks-for-date-range` | Tasks in date range | from (req), to (req), the simple filter flags (file, status, tag, content, due, leaf, root, property, color, type), filter-file, list, start-hour, sort, limit |
+| `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req), the simple filter flags, filter-file, list, start-hour |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
 | `get-start-hour` | Get startHour setting | *(none)* |
 | `export-image` | Export a view as a PNG image | view, template, name, anchor-date, width, output-folder, filename, wait, keep-open, and the view's config flags |

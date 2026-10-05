@@ -13,7 +13,8 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 ## パラメータの規則
 
-- `from`/`to` はクエリ窓（inclusive、窓と期間が重なるタスクが対象）、`date` は単日窓の糖衣、`start`/`end`/`due` はタスク自身のフィールドです
+- 問い合わせの引数は、どれも FilterState の条件を1つ足す略記です。`date` は `period overlaps <date>`、`from`/`to` は `period overlaps { from, to }`、単純フィルタ（`tag`、`status` ほか）はそれぞれの条件です。`filter`、`filterFile` とあわせて全て「かつ」で重なり、全てを満たすタスクを返します
+- `start`/`end`/`due` は作成と更新ではタスク自身のフィールドです。問い合わせの `due` は `due equals <date>` で、窓ではありません
 - 未知のパラメータキーはエラーになります（近いキー名の候補を提示します）。サイレントに無視されることはありません
 - 必須のパラメータが無いか空文字列なら、`Missing required parameter: id` のエラーになります
 - `filter` / `filterFile` で渡す FilterState も境界で検証されます（[FilterState](#filterstate) の「読めない条件」）
@@ -69,7 +70,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | メソッド | 説明 | 同期/非同期 |
 |---------|------|-----------|
 | `api.list(params?)` | タスク一覧 | async |
-| `api.today(params?)` | 本日のタスク | sync |
+| `api.today(params?)` | 本日のタスク（`list` に `date: 'today'`） | async |
 | `api.get({ id })` | 単一タスク取得 | sync |
 | `api.create({ file, content, ... })` | インラインタスク作成 | async |
 | `api.update({ id, ... })` | タスク更新 | async |
@@ -78,7 +79,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `api.tasksForDateRange({ from, to, ... })` | 日付範囲のタスク取得 | async |
 | `api.categorizedTasksForDateRange({ from, to, ... })` | 日付範囲のタスク（分類済み） | async |
 | `api.insertChildTask({ parentId, content })` | 子タスク挿入 | async |
-| `api.getStartHour()` | startHour設定値取得 | sync |
+| `api.getStartHour()` | startHour設定値取得（問い合わせの `startHour` で変わらない） | sync |
 | `api.onChange(callback)` | タスク変更の購読 | sync |
 | `api.help()` | API リファレンス表示 | sync |
 
@@ -104,15 +105,29 @@ const result = await api.list({ filterFile: 'filters/exact-tag.json' });
 const result = await api.list({ filterFile: 'templates/work.md', list: 'urgent' });
 
 // 本日のタスク
-const result = api.today({
+const result = await api.today({
   leaf: true,
   sort: [{ property: 'startDate' }],
 });
+
+// 本日の work のタスク
+const result = await api.today({ tag: 'work' });
+
+// FilterState と窓を重ねる（今週の work のタスク）
+const result = await api.list({
+  filter: { logic: 'and', filters: [{ property: 'tag', operator: 'includes', value: ['work'] }] },
+  date: 'thisWeek',
+});
+
+// 暦日で問う（この呼び出しだけ日の境目を 0 時に）
+const result = await api.list({ date: '2026-03-15', startHour: 0 });
 ```
 
-フィルタの元は、`filterFile`、`filter`、単純フィルタと窓（`date`、`from`、`to`）の順に1つだけ使います。上のものがあれば下は読みません（検査もしません）。`list` は `filterFile`（`.md` のテンプレート）と一緒でなければならず、`filterFile` なしで渡すと `'list' requires 'filterFile' (a .md view template)` のエラーです。テンプレートは、そのビューが読むのと同じ形で読みます。ピン留めリストは、`sort` が無ければリストに保存された並べ替えで並びます（ビューと同じ並び）。
+`filterFile`、`filter`、単純フィルタ、窓（`date`、`from`、`to`）は全て「かつ」で重なります。どれも読んで検査するので、読めない値は、ほかに何を渡してもエラーです。`list` は `filterFile`（`.md` のテンプレート）と一緒でなければならず、`filterFile` なしで渡すと `'list' requires 'filterFile' (a .md view template)` のエラーです。テンプレートは、そのビューが読むのと同じ形で読みます。ピン留めリストは、`sort` が無ければリストに保存された並べ替えで並びます（ビューと同じ並び）。ほかの引数を重ねても同じです。
 
-`list` の窓も `tasksForDateRange` 系の窓も、タスクの期間が startHour を考慮した visual な日（ビューと同じ基準）と重なるかで判定します。時刻の無い終了日はその日を含みます（`@2026-10-01>2026-10-04` は 10/04 に当たる）。締切だけのタスクは締切を終了とみなした期間（締切の日、時刻付きの締切なら締切の前の1時間）で当たります。
+`date` は期間の条件 `period overlaps <date>`、`from` と `to` は `period overlaps { from, to }` の略記です。片方だけなら、その側だけの開いた範囲です。`date` と `from`/`to` を一緒に渡すとエラーで、`from` が `to` より後の範囲もエラーです（`from 2026-10-10 is after to 2026-10-01`）。日時の値（`2026-10-04 10:00`）は、その瞬間に期間がかかるタスクに当たります。
+
+`list`、`today`、`tasksForDateRange` 系の窓は、タスクの期間が startHour を考慮した visual な日（ビューと同じ基準）と重なるかで判定します。時刻の無い終了日はその日を含みます（`@2026-10-01>2026-10-04` は 10/04 に当たる）。締切だけのタスクは締切を終了とみなした期間（締切の日、時刻付きの締切なら締切の前の1時間）で当たります。
 
 `leaf` は子タスクを持たないタスクです。チェックボックスの無い子の行やリンクは子タスクに数えません。`today` の `leaf` も同じです。
 
@@ -126,17 +141,17 @@ const result = api.today({
 | `status` | `string \| string[]` | ステータス文字 |
 | `tag` | `string \| string[]` | タグ名（カンマ区切り文字列も可。下位のタグも含む） |
 | `content` | `string` | コンテンツ部分一致 |
-| `date` | `string` | 単日のクエリ窓（`from=X to=X` と同じ） |
-| `from` | `string` | クエリ窓の開始（この日以降に終わるタスク、inclusive overlap） |
-| `to` | `string` | クエリ窓の終了（この日以前に始まるタスク、inclusive overlap） |
+| `date` | `string` | 期間がこの日と重なるタスク（`period overlaps`） |
+| `from` | `string` | 窓の始めの日。期間がこの日以降と重なるタスク |
+| `to` | `string` | 窓の終わりの日。期間がこの日以前と重なるタスク |
 | `due` | `string` | 締切日 = 指定値 |
 | `leaf` | `boolean` | 子なしタスクのみ |
 | `property` | `string` | カスタムプロパティ（`key:value`） |
 | `color` | `string \| string[]` | カード色 |
 | `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
-| `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
-| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート。`filter` より優先） |
+| `filter` | `FilterState` | 完全なフィルタ定義（ほかの引数と「かつ」） |
+| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート。ほかの引数と「かつ」） |
 | `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合）。テンプレートのビューのフィルタは、そのリストの「ビューフィルターを適用」がオンのときだけ重ねる（ビューの表示と同じ） |
 | `startHour` | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | `ApiSortRule[]` | ソートルール |
@@ -156,8 +171,8 @@ const result = api.today({
 | `color` | `string \| string[]` | カード色 |
 | `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
-| `filter` | `FilterState` | 完全なフィルタ定義 |
-| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
+| `filter` | `FilterState` | 完全なフィルタ定義（ほかの引数と「かつ」） |
+| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート。ほかの引数と「かつ」） |
 | `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 | `startHour` | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | `ApiSortRule[]` | ソートルール |
@@ -203,7 +218,7 @@ const task = api.get({ id: 'abc123' });
 | `id` | ○ | `string` | タスクID |
 | `startHour` | | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 
-ID が見つからない場合は `TaskApiError` をスローします。
+ID が見つからない場合は `TaskApiError` をスローします。`startHour` を渡すと、その日の境目で `effective*` と `durationMinutes` を読みます。`@2026-10-04` は `startHour: 0` で `effectiveStartTime` `00:00`、`effectiveEndDate` `2026-10-05`、`effectiveEndTime` `00:00` です。
 
 ## create
 
@@ -310,14 +325,14 @@ const result = await api.tasksForDateRange({
 // => TaskListResult（list と同じ { total, count, truncated, limit, tasks }）
 ```
 
-visual な期間が窓 [from, to] と重なるタスクを返します。締切だけのタスクは、締切を終了とみなした期間で当たります。プリセットは期間の全体をとります（`from: 'thisWeek', to: 'thisWeek'` はその週）。単純フィルタ、`filter`、`filterFile` と `list` は窓の中のタスクを絞るだけで、窓は動かしません。フィルタの元の選び方は list と同じです。
+`list` に `from` と `to` を渡すのと同じで、`from` と `to` が必須なことだけが違います。visual な期間が窓と重なるタスクを返します。締切だけのタスクは、締切を終了とみなした期間で当たります。プリセットは期間の全体をとります（`from: 'thisWeek', to: 'thisWeek'` はその週）。単純フィルタ、`filter`、`filterFile` は窓と「かつ」で重なります。
 
 **TasksForDateRangeParams:**
 
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
-| `from` | ○ | `string` | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
-| `to` | ○ | `string` | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `from` | ○ | `string` | 窓の始めの日（`list` の `from` と同じ） |
+| `to` | ○ | `string` | 窓の終わりの日（`list` の `to` と同じ） |
 | `file` | | `string` | ファイルパス（`.md` は補われる） |
 | `status` | | `string \| string[]` | ステータス文字 |
 | `tag` | | `string \| string[]` | タグ名（下位のタグも含む） |
@@ -328,8 +343,8 @@ visual な期間が窓 [from, to] と重なるタスクを返します。締切�
 | `color` | | `string \| string[]` | カード色 |
 | `type` | | `string \| string[]` | タスク notation |
 | `root` | | `boolean` | 親タスクを持たないタスクのみ |
-| `filter` | | `FilterState` | フィルタ定義（単純フィルタより優先） |
-| `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。`filter` より優先） |
+| `filter` | | `FilterState` | フィルタ定義（ほかの引数と「かつ」） |
+| `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。ほかの引数と「かつ」） |
 | `list` | | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 | `startHour` | | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | | `ApiSortRule[]` | ソートルール |
@@ -347,14 +362,14 @@ const result = await api.categorizedTasksForDateRange({
 
 日付範囲のタスクを日付ごとに allDay（終日）/ timed（時刻あり）に分類して返します。
 
-日付への所属は、startHour を考慮した visual な日付（タイムラインのカード表示と同じ基準）で判定されます。締切だけのタスクは締切を終了とみなした期間を持ち、日付の締切は allDay、時刻付きの締切は timed に入ります。絞り込みのパラメータは tasksForDateRange と同じで、窓の中のタスクを絞るだけです。
+日付への所属は、startHour を考慮した visual な日付（タイムラインのカード表示と同じ基準）で判定されます。締切だけのタスクは締切を終了とみなした期間を持ち、日付の締切は allDay、時刻付きの締切は timed に入ります。タスクは tasksForDateRange と同じ条件で集め、窓の visual な日ごとに並べます。`startHour` を渡すと、日の境目もその値で分けます。
 
 **CategorizedTasksForDateRangeParams:**
 
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
-| `from` | ○ | `string` | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
-| `to` | ○ | `string` | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `from` | ○ | `string` | 窓の始めの日（`list` の `from` と同じ） |
+| `to` | ○ | `string` | 窓の終わりの日（`list` の `to` と同じ） |
 | `file` | | `string` | ファイルパス（`.md` は補われる） |
 | `status` | | `string \| string[]` | ステータス文字 |
 | `tag` | | `string \| string[]` | タグ名（下位のタグも含む） |
@@ -365,8 +380,8 @@ const result = await api.categorizedTasksForDateRange({
 | `color` | | `string \| string[]` | カード色 |
 | `type` | | `string \| string[]` | タスク notation |
 | `root` | | `boolean` | 親タスクを持たないタスクのみ |
-| `filter` | | `FilterState` | フィルタ定義（単純フィルタより優先） |
-| `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。`filter` より優先） |
+| `filter` | | `FilterState` | フィルタ定義（ほかの引数と「かつ」） |
+| `filterFile` | | `string` | フィルタファイル（`.json` / `.md` テンプレート。ほかの引数と「かつ」） |
 | `list` | | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 | `startHour` | | `number` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 
@@ -395,6 +410,8 @@ const result = await api.insertChildTask({
 const result = api.getStartHour();
 // => { startHour: 5 }
 ```
+
+設定の値を返します。問い合わせごとの上書きは、各メソッドの `startHour` で行い、この値は変わりません。
 
 ## onChange
 
@@ -530,7 +547,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 // 本日のタスクをテーブル表示
-const result = api.today({ sort: [{ property: 'startDate' }] });
+const result = await api.today({ sort: [{ property: 'startDate' }] });
 dv.table(
   ['Status', 'Time', 'Content'],
   result.tasks.map(t => [

@@ -61,24 +61,31 @@ interface Operation {
 }
 
 const WINDOW_NOTE = `\
-The window (date, or from and to) is visual (startHour-adjusted) days: it
-matches a task whose span ends after the window starts and starts before it
-ends, as the views draw it. A task with only a due has the span read from
-its due (the due's day, or the hour before a timed due), and matches by it.
-The date-range operations match the same span.`;
+date is shorthand for the condition period overlaps <date>, and from and to
+for period overlaps { from, to }; one of them alone is a range open on the
+other side. A task matches when its span overlaps the window, as the views
+draw it: visual days, placed by the start hour setting or by startHour. A
+task with only a due has the span read from its due (the due's day, or the
+hour before a timed due), and matches by it. date beside from or to is an
+error, and so is a from after its to.`;
 
 const SOURCE_NOTE = `\
-Where the filter comes from: filterFile, else filter (API only), else the
-simple fields. What is overridden is not read. A pinned list (list) needs
-filterFile, a .md view template. A filter file is answered as the views
-answer it: without the tasks that have a validation error, and in the
-pinned list's own order unless sort is given. Without a filter file, the
-tasks with a validation error are listed too.`;
+filterFile, filter (API only) and every other param are taken together
+(AND): a task is listed when it passes all of them. A pinned list (list)
+needs filterFile, a .md view template. A query with a filter file is
+answered as the views answer it: without the tasks that have a validation
+error, and in the pinned list's own order unless sort is given. Without a
+filter file, the tasks with a validation error are listed too.`;
+
+const START_HOUR_NOTE = `\
+startHour sets the visual day boundary of this call alone (0 asks by
+calendar days); the spans, the windows, the order and the effective* times
+are read with it. Without it, the start hour setting.`;
 
 const RANGE_NOTE = `\
-from and to are required; a preset takes its whole span (from=thisWeek
-to=thisWeek is the week). The filter narrows the tasks in the window; it
-does not move the window.`;
+from and to are required, and are the same condition as list's from and to;
+a preset takes its whole span (from=thisWeek to=thisWeek is the week).
+${SOURCE_NOTE}`;
 
 const EXPORT_NOTE = `\
 Exports a view as a PNG image at 2× pixel ratio.
@@ -115,7 +122,7 @@ export const OPERATIONS = {
     list: {
         summary: 'List tasks with filters, sort, and pagination',
         schema: LIST_SCHEMA,
-        notes: `${WINDOW_NOTE}\n\n${SOURCE_NOTE}`,
+        notes: `${WINDOW_NOTE}\n\n${SOURCE_NOTE}\n\n${START_HOUR_NOTE}`,
         api: { signature: 'list(params?: ListParams): Promise<TaskListResult>', returns: 'TaskListResult' },
         cli: { output: true },
     },
@@ -123,15 +130,19 @@ export const OPERATIONS = {
         summary: 'List tasks active today (visual-date aware)',
         schema: TODAY_SCHEMA,
         notes: `\
-Today is the visual date of now. A task is active when its span overlaps
-today's visual day, as the views draw it. A task with only a due has the
-span read from its due, and matches by it.`,
+Shorthand for list date=today: it takes every param of list but date, from
+and to (a second window is an error). Today is the visual day of now. A
+task is active when its span overlaps it, as the views draw it; a task with
+only a due has the span read from its due, and matches by it.
+
+${START_HOUR_NOTE}`,
         api: { signature: 'today(params?: TodayParams): Promise<TaskListResult>', returns: 'TaskListResult' },
         cli: { output: true, flagCheck: 'handler' },
     },
     get: {
         summary: 'Get a single task by ID',
         schema: GET_SCHEMA,
+        notes: 'startHour sets the visual day boundary the effective* times are read with (default: the start hour setting).',
         api: { signature: 'get(params: GetParams): NormalizedTask' },
         cli: { output: true },
     },
@@ -168,14 +179,14 @@ the same days as its start and end; a copy on the clock keeps the due.`,
     tasksForDateRange: {
         summary: 'List tasks whose visual span overlaps a date range',
         schema: TASKS_FOR_DATE_RANGE_SCHEMA,
-        notes: `${RANGE_NOTE}\nA task with only a due matches by the span read from its due.`,
+        notes: `${RANGE_NOTE}\n\n${START_HOUR_NOTE}`,
         api: { signature: 'tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>', returns: 'TaskListResult' },
         cli: { output: true },
     },
     categorizedTasksForDateRange: {
         summary: 'Get tasks in a date range, categorized into allDay/timed per date',
         schema: CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-        notes: `${RANGE_NOTE}\nallDay and timed follow the visual span; a task with only a due is in one of them by the span read from its due.`,
+        notes: `${RANGE_NOTE}\n\nallDay and timed follow the visual span; a task with only a due is in one of them by the span read from its due.\n\n${START_HOUR_NOTE}`,
         api: {
             signature: 'categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult>',
             returns: 'Record<date, { allDay: NormalizedTask[], timed: NormalizedTask[] }>',
@@ -191,6 +202,7 @@ the same days as its start and end; a copy on the clock keeps the due.`,
     },
     getStartHour: {
         summary: 'Get the current startHour setting (visual day boundary)',
+        notes: 'The setting itself: a query\'s own startHour does not change it.',
         api: { signature: 'getStartHour(): StartHourResult', returns: '{ startHour: number }' },
         cli: { returns: '{ "startHour": 5 }' },
     },
@@ -429,10 +441,14 @@ ${heading('Task IDs')}
 
 const VOCABULARY = `\
 ${heading('Vocabulary')}
-  from / to         = query window of visual days (overlap). A task matches
-                      when its span overlaps [from, to].
-  date              = single-day window, sugar for from=X to=X (list only)
-  start / end / due = the task's own fields (create / update)`;
+  from / to         = shorthand for the condition period overlaps
+                      { from, to }: a task matches when its span overlaps
+                      the days from from to to (list and the range
+                      operations)
+  date              = shorthand for period overlaps <date> (list; today is
+                      date=today)
+  start / end / due = the task's own fields (create / update); due in a
+                      query is due equals <date>`;
 
 // ── API reference ──
 
@@ -465,8 +481,18 @@ ${heading('Examples')}
   await api.list({ filterFile: 'filters/exact-tag.json' });
   await api.list({ filterFile: 'templates/work.md', list: 'urgent' });
 
-  // Today's tasks, by start date
-  api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
+  // Today's tasks, by start date; today's work tasks
+  await api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
+  await api.today({ tag: 'work' });
+
+  // A FilterState and a window together: tasks tagged work this week
+  await api.list({
+    filter: { logic: 'and', filters: [{ property: 'tag', operator: 'includes', value: ['work'] }] },
+    date: 'thisWeek',
+  });
+
+  // By calendar days: the visual day boundary at 0 for this call
+  await api.list({ date: '2026-03-15', startHour: 0 });
 
   // One task
   api.get({ id: 'daily/2026-03-15.md#^review' });
