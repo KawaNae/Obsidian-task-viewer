@@ -14,12 +14,16 @@
  *   - Obsidian is running with the Dev vault open, with the current build
  *     loaded (`npm run build`, then reload the plugin)
  *
+ * The fold of the action zone into ⋮ is read by narrowing the view's own
+ * content to a width (its leaf is the test's, so no pane of the vault is
+ * resized) and putting it back.
+ *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/toolbar-state.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import {
-    act, closeViews, copyUri, ev, openView, overrideSettings, readView, restartView, type HeldSettings,
+    act, closeViews, copyUri, ev, openView, overrideSettings, PRELUDE, readView, restartView, type HeldSettings,
 } from '../helpers/view-helper';
 
 let held: HeldSettings<'viewTemplateFolder'>;
@@ -122,6 +126,129 @@ describe("Timeline's toolbar", () => {
         expect(uri).toContain('zoomLevel=1');
         expect(uri).not.toContain('template=');
         expect(uri).not.toContain('date=');
+    });
+});
+
+/** How a toolbar lies at a width. */
+interface ToolbarFit {
+    /** The width the toolbar has. */
+    has: number;
+    /** The width its row takes open (action zone shown, ⋮ hidden). */
+    needed: number;
+    compact: boolean;
+    /** Whether the action zone and ⋮ show. */
+    zone: boolean;
+    more: boolean;
+    /** How far the row runs past the toolbar. */
+    overflow: number;
+}
+
+/**
+ * Narrow `name`'s content to `width` px (null: back to the pane's), wait for
+ * the toolbar to answer, and read how it lies. `hidden` puts the content out
+ * of sight (no width) instead.
+ */
+function fitAt(name: string, width: number | null, opts: { hidden?: boolean } = {}): ToolbarFit {
+    return ev<ToolbarFit>(`(async () => {
+        ${PRELUDE}
+        const el = V(${JSON.stringify(name)}).contentEl;
+        el.style.width = ${width === null ? "''" : `'${width}px'`};
+        el.style.display = ${opts.hidden ? "'none'" : "''"};
+        await wait(150);
+        const tb = el.querySelector('.view-toolbar');
+        const compact = tb.classList.contains('is-compact');
+        const shown = (sel) => getComputedStyle(tb.querySelector(sel)).display !== 'none';
+        const zone = shown('.view-toolbar__action-zone');
+        const more = shown('.view-toolbar__btn--more');
+        const has = tb.getBoundingClientRect().width;
+        const overflow = tb.scrollWidth - tb.clientWidth;
+        el.style.display = '';
+        tb.classList.remove('is-compact');
+        tb.style.width = 'max-content';
+        const needed = tb.getBoundingClientRect().width;
+        tb.style.width = '';
+        if (compact) tb.classList.add('is-compact');
+        return JSON.stringify({ has, needed, compact, zone, more, overflow });
+    })()`);
+}
+
+describe('The toolbar folds its actions into ⋮ when its row does not fit', () => {
+    afterAll(() => {
+        for (const name of ['tl-fold', 'cal-fold', 'sch-fold']) {
+            try { fitAt(name, null); } catch { /* not opened */ }
+        }
+    });
+
+    /** At `width`, folded exactly when the open row is wider, and never overflowing. */
+    function expectFits(fit: ToolbarFit, width: number): void {
+        expect(fit.has).toBe(width);
+        expect(fit.compact).toBe(fit.needed > width);
+        expect(fit.zone).toBe(!fit.compact);
+        expect(fit.more).toBe(fit.compact);
+        expect(fit.overflow).toBe(0);
+    }
+
+    it("Timeline's, at 700, 560 and 400 px, and back", () => {
+        openView('tl-fold', 'timeline-view', { daysToShow: 3, zoomLevel: 1 });
+        const wide = fitAt('tl-fold', 700);
+        // Wider than the fixed 500 px the fold used to be at.
+        expect(wide.needed).toBeGreaterThan(500);
+        expect(wide.needed).toBeLessThan(700);
+        expectFits(wide, 700);
+        expect(wide.compact).toBe(false);
+
+        const between = fitAt('tl-fold', 560);
+        expectFits(between, 560);
+        expect(between.compact).toBe(true);
+
+        const narrow = fitAt('tl-fold', 400);
+        expectFits(narrow, 400);
+        expect(narrow.compact).toBe(true);
+
+        const again = fitAt('tl-fold', 700);
+        expectFits(again, 700);
+        expect(again.compact).toBe(false);
+    });
+
+    it('folds or unfolds as the row it holds grows or shrinks, at the same width', () => {
+        const open = fitAt('tl-fold', 700);
+        // A width the row fits with the zoom label's room to spare, by less than a button.
+        const width = Math.ceil(open.needed) + 4;
+        expectFits(fitAt('tl-fold', width), width);
+        expect(fitAt('tl-fold', width).compact).toBe(false);
+        // The days label "3 days" gives way to a longer one.
+        act('tl-fold', `V('tl-fold').store.update({ daysToShow: 12 });`);
+        const grown = fitAt('tl-fold', width);
+        expect(grown.needed).toBeGreaterThan(open.needed);
+        expectFits(grown, width);
+        expect(grown.compact).toBe(true);
+        act('tl-fold', `V('tl-fold').store.update({ daysToShow: 3 });`);
+        const back = fitAt('tl-fold', width);
+        expectFits(back, width);
+        expect(back.compact).toBe(false);
+    });
+
+    it('keeps its fold out of sight', () => {
+        const folded = fitAt('tl-fold', 400);
+        expect(folded.compact).toBe(true);
+        const hidden = fitAt('tl-fold', 700, { hidden: true });
+        expect(hidden.has).toBe(0);
+        expect(hidden.compact).toBe(true);
+        const seen = fitAt('tl-fold', 700);
+        expectFits(seen, 700);
+        expect(seen.compact).toBe(false);
+    });
+
+    it("Calendar's and Schedule's, around the width each needs", () => {
+        // One at a time: a tab behind another has no width.
+        for (const [name, type] of [['cal-fold', 'calendar-view'], ['sch-fold', 'schedule-view']]) {
+            openView(name, type);
+            const needed = Math.ceil(fitAt(name, 700).needed);
+            expectFits(fitAt(name, needed + 10), needed + 10);
+            expect(fitAt(name, needed + 10).compact).toBe(false);
+            expectFits(fitAt(name, needed - 10), needed - 10);
+            expect(fitAt(name, needed - 10).compact).toBe(true);
+        }
     });
 });
 
