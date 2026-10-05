@@ -13,10 +13,12 @@ import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import { TaskValues } from '../services/filter/TaskValues';
 import type { SortState } from '../services/sort/SortTypes';
+import { createEmptyFilterState } from '../services/filter/FilterTypes';
 import { SortSerializer, sortIssueText } from '../services/sort/SortSerializer';
 import { DateUtils } from '../utils/DateUtils';
 import { daysWindow, endDayOf, ofValue, visualDayOf, type TimeWindow } from '../utils/DayWindow';
-import { resolveQuery, readDateParam } from './FilterParamsBuilder';
+import { resolveQuery } from './FilterParamsBuilder';
+import { readDateParam } from './QueryShorthand';
 import { DateTimeInput, type DateTimeValue } from '../utils/values/DateValues';
 import { IntValue } from '../utils/values/NumberValues';
 import { holdsLineBreak } from '../utils/LineBreak';
@@ -197,16 +199,9 @@ export class TaskApi {
         const p = params ?? {};
         const readService = this.readService;
 
-        const query = await resolveQuery(this.plugin.app, p, p);
+        const query = await resolveQuery(this.plugin.app, p);
         const sortState = buildSortState(p.sort) ?? query.sort;
-
-        let filtered: DisplayTask[];
-        if (query.filter) {
-            filtered = readService.getFilteredTasks(query.filter, sortState, { includeInvalid: query.includeInvalid });
-        } else {
-            filtered = [...readService.getAllDisplayTasks()];
-            TaskSorter.sort(filtered, sortState);
-        }
+        const filtered = readService.getFilteredTasks(query.filter ?? createEmptyFilterState(), sortState, { includeInvalid: query.includeInvalid });
 
         const { paged, total, resolvedLimit } = paginate(filtered, p);
         return {
@@ -415,7 +410,7 @@ export class TaskApi {
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
-        const query = await resolveQuery(this.plugin.app, params);
+        const query = await resolveQuery(this.plugin.app, { ...params, from: undefined, to: undefined });
         const window = this.resolveWindow(params.from, params.to);
         let tasks = this.readService.tasksInWindow(window, query.filter ?? undefined, { includeInvalid: query.includeInvalid });
         const sortState = buildSortState(params.sort) ?? query.sort;
@@ -436,7 +431,7 @@ export class TaskApi {
      */
     async categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult> {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
-        const query = await resolveQuery(this.plugin.app, params);
+        const query = await resolveQuery(this.plugin.app, { ...params, from: undefined, to: undefined });
         const startHour = this.plugin.settings.startHour;
         const window = this.resolveWindow(params.from, params.to);
         const tasks = this.readService.tasksInWindow(window, query.filter ?? undefined, { includeInvalid: query.includeInvalid });

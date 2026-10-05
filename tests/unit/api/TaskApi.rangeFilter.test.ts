@@ -49,13 +49,13 @@ describe('tasksForDateRange: simple filters never touch the date window', () => 
         expect(filterState).toBeUndefined();
     });
 
-    it('params.filter overrides simple fields, same precedence as list', async () => {
+    it('params.filter and the simple fields are taken together, as in list', async () => {
         const { api, mockReadService } = createMockApi();
         const explicit = { filters: [{ property: 'status' as const, operator: 'includes' as const, value: ['x'] }], logic: 'and' as const };
         await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31', status: 'zzz', filter: explicit });
 
         const [, filterState] = mockReadService.tasksInWindow.mock.calls[0];
-        expect(filterState).toEqual(explicit);
+        expect(filterState).toEqual({ logic: 'and', filters: [explicit, { property: 'status', operator: 'includes', value: ['zzz'] }] });
     });
 
     it('list= without filterFile throws, same as list', async () => {
