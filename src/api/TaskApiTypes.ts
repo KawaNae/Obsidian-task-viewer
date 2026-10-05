@@ -214,9 +214,9 @@ export interface DuplicateResult {
 }
 
 export interface TasksForDateRangeParams extends PaginationParams, SimpleFilterParams, FilterSourceParams, StartHourParams {
-    /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
+    /** The window's first day, as list's `from`: a date, a date and a time, or a preset. */
     from: string;
-    /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
+    /** The window's last day, as list's `to`: a date, a date and a time, or a preset. */
     to: string;
     sort?: ApiSortRule[];
 }
@@ -224,9 +224,9 @@ export interface TasksForDateRangeParams extends PaginationParams, SimpleFilterP
 // ── categorizedTasksForDateRange ──
 
 export interface CategorizedTasksForDateRangeParams extends SimpleFilterParams, FilterSourceParams, StartHourParams {
-    /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
+    /** The window's first day, as list's `from`: a date, a date and a time, or a preset. */
     from: string;
-    /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
+    /** The window's last day, as list's `to`: a date, a date and a time, or a preset. */
     to: string;
 }
 

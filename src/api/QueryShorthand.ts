@@ -37,7 +37,7 @@ export function readDateParam(value: string, name: string): SingleDateValue {
  * after; none when they name none. A value that cannot be read is an error.
  */
 export function shorthandConditions(params: SimpleFilterParams & WindowParams): FilterCondition[] {
-    return [...simpleConditions(params), ...windowConditions(params)];
+    return [...simpleConditions(params), ...periodConditions(params)];
 }
 
 /**
@@ -74,7 +74,7 @@ export function windowValue(params: WindowParams): DateFilterValue | undefined {
     return range;
 }
 
-function windowConditions(params: WindowParams): FilterCondition[] {
+function periodConditions(params: WindowParams): FilterCondition[] {
     const value = windowValue(params);
     return value === undefined ? [] : [{ property: 'period', operator: 'overlaps', value }];
 }

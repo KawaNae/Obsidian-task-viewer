@@ -95,18 +95,18 @@ export const SIMPLE_FILTER_SCHEMA = {
     root:     { boolean: true,            description: 'Only root tasks (no parent)' },
 } as const satisfies ParamMap<SimpleFilterParams>;
 
-/** Where a query's filter comes from instead of the simple fields (`FilterSourceParams`). */
+/** A query's FilterStates (`FilterSourceParams`), taken together with the rest. */
 export const FILTER_SOURCE_SCHEMA = {
-    filter:     { cli: 'hidden',     description: 'FilterState object (API only). Overrides simple filter params' },
-    filterFile: { value: '<path>',   description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
+    filter:     { cli: 'hidden',     description: 'FilterState object (API only), ANDed with the other params' },
+    filterFile: { value: '<path>',   description: 'FilterState JSON (.json) or view template (.md), ANDed with the other flags' },
     list:       { value: '<name>',   description: 'Pinned list name (for .md templates with pinnedLists)' },
 } as const satisfies ParamMap<FilterSourceParams>;
 
 export const LIST_SCHEMA = {
     ...SIMPLE_FILTER_SCHEMA,
-    date:     { value: '<date|preset>',   description: 'Single-day query window (= from=X to=X)' },
-    from:     { value: '<date|preset>',   description: 'Query window start: tasks ending on or after (inclusive overlap)' },
-    to:       { value: '<date|preset>',   description: 'Query window end: tasks starting on or before (inclusive overlap)' },
+    date:     { value: '<date|preset>',   description: 'Tasks whose span overlaps this day (period overlaps)' },
+    from:     { value: '<date|preset>',   description: 'Window start: tasks whose span overlaps from this day on' },
+    to:       { value: '<date|preset>',   description: 'Window end: tasks whose span overlaps up to this day' },
     ...FILTER_SOURCE_SCHEMA,
     startHour: START_HOUR_PARAM,
     sort:     SORT_PARAM,
@@ -151,8 +151,8 @@ export const DUPLICATE_SCHEMA = {
 } as const satisfies ParamMap<DuplicateParams>;
 
 export const TASKS_FOR_DATE_RANGE_SCHEMA = {
-    from:     { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
-    to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
+    from:     { value: '<date|preset>',   description: 'Window start, as list\'s from', required: true },
+    to:       { value: '<date|preset>',   description: 'Window end, as list\'s to', required: true },
     ...SIMPLE_FILTER_SCHEMA,
     ...FILTER_SOURCE_SCHEMA,
     startHour: START_HOUR_PARAM,
@@ -161,8 +161,8 @@ export const TASKS_FOR_DATE_RANGE_SCHEMA = {
 } as const satisfies ParamMap<TasksForDateRangeParams>;
 
 export const CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA = {
-    from:     { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
-    to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
+    from:     { value: '<date|preset>',   description: 'Window start, as list\'s from', required: true },
+    to:       { value: '<date|preset>',   description: 'Window end, as list\'s to', required: true },
     ...SIMPLE_FILTER_SCHEMA,
     ...FILTER_SOURCE_SCHEMA,
     startHour: START_HOUR_PARAM,
