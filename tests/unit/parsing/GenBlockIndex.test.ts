@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { TaskStore } from '../../../src/services/core/TaskStore';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 const parse = (lines: string[]) =>
-    FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS);
+    FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
 
 describe('FileParsePipeline — generation blocks', () => {
     it('carries the blocks of the file', () => {
@@ -46,33 +47,33 @@ describe('TaskStore — generation blocks', () => {
     const block = (name: string) => ({ name, body: ['- [ ] a'], openLine: 0, closeLine: 2 });
 
     it('resolves a block by file and name', () => {
-        const store = new TaskStore(DEFAULT_SETTINGS);
+        const store = new TaskStore();
         store.setGenBlocks('a.md', new Map([['手順', block('手順')]]));
         expect(store.getGenBlock('a.md', '手順')!.body).toEqual(['- [ ] a']);
     });
 
     it('keeps resolution file-local', () => {
-        const store = new TaskStore(DEFAULT_SETTINGS);
+        const store = new TaskStore();
         store.setGenBlocks('a.md', new Map([['手順', block('手順')]]));
         expect(store.getGenBlock('b.md', '手順')).toBeUndefined();
     });
 
     it('replaces a file’s blocks rather than merging them', () => {
-        const store = new TaskStore(DEFAULT_SETTINGS);
+        const store = new TaskStore();
         store.setGenBlocks('a.md', new Map([['古い', block('古い')]]));
         store.setGenBlocks('a.md', new Map([['新しい', block('新しい')]]));
         expect([...store.getGenBlocks('a.md').keys()]).toEqual(['新しい']);
     });
 
     it('forgets the blocks of a removed file, even when it had no tasks', () => {
-        const store = new TaskStore(DEFAULT_SETTINGS);
+        const store = new TaskStore();
         store.setGenBlocks('a.md', new Map([['手順', block('手順')]]));
         store.removeTasksByFile('a.md');
         expect(store.getGenBlocks('a.md').size).toBe(0);
     });
 
     it('bumps the revision when only blocks were dropped', () => {
-        const store = new TaskStore(DEFAULT_SETTINGS);
+        const store = new TaskStore();
         store.setGenBlocks('a.md', new Map([['手順', block('手順')]]));
         const before = store.getRevision();
         store.removeTasksByFile('a.md');

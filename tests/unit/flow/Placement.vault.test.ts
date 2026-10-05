@@ -45,7 +45,7 @@ function tasksWorded(session: VaultSession, content: string) {
 
 async function fire(session: VaultSession): Promise<void> {
     const [row] = tasksWorded(session, '対象');
-    expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+    expect((await session.ops.updateTask(row.id, { statusChar: 'x' })).written).toBe(true);
     await session.flowSettled(FILE);
 }
 
@@ -108,7 +108,7 @@ describe('a next instance with nowhere in the body to go', () => {
         const before = contents.get(FILE);
         const [row] = tasksWorded(session, '対象');
 
-        expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(row.id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         const checked = before!.replace('  - [ ] 対象', '  - [x] 対象');
@@ -158,7 +158,7 @@ describe('a next instance with nowhere in the body to go', () => {
         async function duplicated(note: string[], options?: { dayOffset: number; count?: number }) {
             const { contents, session } = await open(note);
             const [row] = tasksWorded(session, note[1].slice(6).split(' @')[0]);
-            expect(await session.index.duplicateTask(row.id, options)).toBe(true);
+            expect(await session.ops.duplicateTask(row.id, options)).toBe(true);
             await session.settle(FILE);
             expect(Notice.messages).toEqual([]);
             const tasks = session.index.getTasks().filter(task => task.file === FILE);
@@ -262,13 +262,13 @@ describe('a line put past a fence in a list item that never closes', () => {
     const idOf = (session: VaultSession, content: string) => tasksWorded(session, content)[0].id;
 
     it('reads a sibling put past Q as a task', async () => {
-        const { lines, tasks } = await written(session => session.index.insertLine(idOf(session, 'Q'), '- [x] rec', 'afterSubtree'));
+        const { lines, tasks } = await written(session => session.ops.insertLine(idOf(session, 'Q'), '- [x] rec', 'afterSubtree'));
         expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '  - [x] rec', '']);
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'rec']]);
     });
 
     it('reads a task appended to the note as a task', async () => {
-        const { lines, tasks } = await written(session => session.index.createTask(FILE, '- [ ] new'));
+        const { lines, tasks } = await written(session => session.ops.createTask(FILE, '- [ ] new'));
         expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '- [ ] new', '']);
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'new']]);
     });
@@ -280,7 +280,7 @@ describe('a line put past a fence in a list item that never closes', () => {
         const { contents, session } = await open(['# note', '- [ ] T', '    ```', '    code', '- [ ] U', '']);
         const before = contents.get(FILE)!;
 
-        await session.index.insertLine(tasksWorded(session, 'T')[0].id, '- [ ] c', 'firstChild');
+        await session.ops.insertLine(tasksWorded(session, 'T')[0].id, '- [ ] c', 'firstChild');
         await session.settle(FILE);
 
         // Either the child is a task, or nothing is written and the user hears why.
@@ -294,7 +294,7 @@ describe('a line put past a fence in a list item that never closes', () => {
     });
 
     it('reads a task written under a heading made at the end as a task', async () => {
-        const { lines, tasks } = await written(session => session.index.createTask(FILE, '- [ ] new', 'H'));
+        const { lines, tasks } = await written(session => session.ops.createTask(FILE, '- [ ] new', 'H'));
         expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '', '## H', '- [ ] new', '']);
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [7, 'new']]);
     });

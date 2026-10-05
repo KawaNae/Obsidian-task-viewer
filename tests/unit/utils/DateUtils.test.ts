@@ -147,56 +147,6 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('toVisualDate', () => {
-        it('returns date when no time', () => {
-            expect(DateUtils.toVisualDate('2026-03-11', undefined, 5)).toBe('2026-03-11');
-        });
-
-        it('returns date when time >= startHour', () => {
-            expect(DateUtils.toVisualDate('2026-03-11', '09:00', 5)).toBe('2026-03-11');
-        });
-
-        it('returns previous day when time < startHour', () => {
-            expect(DateUtils.toVisualDate('2026-03-11', '03:00', 5)).toBe('2026-03-10');
-        });
-    });
-
-    describe('getTaskDurationMs', () => {
-        it('same day with start and end time → exact diff', () => {
-            const ms = DateUtils.getTaskDurationMs('2026-03-10', '09:00', '2026-03-10', '11:00', 0);
-            expect(ms).toBe(2 * 60 * 60 * 1000);
-        });
-
-        it('timed task without end → default 60 min', () => {
-            const ms = DateUtils.getTaskDurationMs('2026-03-10', '09:00', undefined, undefined, 0);
-            expect(ms).toBe(60 * 60 * 1000);
-        });
-
-        it('all-day task without time → ~24h', () => {
-            const ms = DateUtils.getTaskDurationMs('2026-03-10', undefined, undefined, undefined, 0);
-            // endDate at next day 23:59 (startHour=0 → endHour=23)
-            expect(ms).toBeGreaterThan(23 * 60 * 60 * 1000);
-        });
-    });
-
-    describe('formatDateTimeForStorage', () => {
-        it('date + time → combined', () => {
-            expect(DateUtils.formatDateTimeForStorage('2026-03-11', '09:00')).toBe('2026-03-11T09:00');
-        });
-
-        it('date only → date', () => {
-            expect(DateUtils.formatDateTimeForStorage('2026-03-11')).toBe('2026-03-11');
-        });
-
-        it('no date, no time → null', () => {
-            expect(DateUtils.formatDateTimeForStorage()).toBeNull();
-        });
-
-        it('uses fallbackDate when date missing', () => {
-            expect(DateUtils.formatDateTimeForStorage(undefined, '09:00', '2026-03-11')).toBe('2026-03-11T09:00');
-        });
-    });
-
     describe('getVisualWeekKey', () => {
         // 2026-05-13 is Wednesday. Week containing it:
         // - weekStartDay=1 (Monday): starts 2026-05-11
@@ -250,39 +200,82 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('isAllDayTask', () => {
-        const startHour = 5;
-
-        it('startTime なしは常に all-day', () => {
-            expect(DateUtils.isAllDayTask('2026-01-15', undefined, undefined, undefined, startHour)).toBe(true);
-            expect(DateUtils.isAllDayTask('2026-01-15', undefined, '2026-01-15', '10:00', startHour)).toBe(true);
+    describe('dateAt / parseDate / readDate', () => {
+        it('keeps a two-digit year as written', () => {
+            expect(DateUtils.dateAt(26, 0, 1).getFullYear()).toBe(26);
+            expect(DateUtils.parseDate('0026-01-01').getFullYear()).toBe(26);
         });
 
-        it('ちょうど 23h30m は all-day（閾値は ≥）', () => {
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', '05:30', startHour)).toBe(true);
+        it('parses as local midnight', () => {
+            const d = DateUtils.parseDate('2026-03-14');
+            expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 2, 14, 0]);
         });
 
-        it('23h29m は all-day ではない', () => {
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', '05:29', startHour)).toBe(false);
-        });
-
-        it('endDate なしで end < start は翌日繰上げで duration 計算する', () => {
-            // 22:00 → 01:00 = 3h → not all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '22:00', undefined, '01:00', startHour)).toBe(false);
-            // 06:00 → 05:30 = 23h30m → all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', undefined, '05:30', startHour)).toBe(true);
-        });
-
-        it('endTime がフル ISO のときはそのまま解釈する', () => {
-            expect(DateUtils.isAllDayTask('2026-01-15', '10:00', undefined, '2026-01-16T10:00', startHour)).toBe(true);
-            expect(DateUtils.isAllDayTask('2026-01-15', '10:00', undefined, '2026-01-15T12:00', startHour)).toBe(false);
-        });
-
-        it('endDate 違い + endTime なしは endDate の startHour-1:59 まで', () => {
-            // Jan15 06:00 → Jan16 04:59 = 22h59m → not all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '06:00', '2026-01-16', undefined, startHour)).toBe(false);
-            // Jan15 05:00 → Jan16 04:59 = 23h59m → all-day
-            expect(DateUtils.isAllDayTask('2026-01-15', '05:00', '2026-01-16', undefined, startHour)).toBe(true);
+        it('readDate rejects a wrong shape and a day that does not exist', () => {
+            expect(DateUtils.readDate('2026-3-14')).toBeNull();
+            expect(DateUtils.readDate('2026-02-30')).toBeNull();
+            expect(DateUtils.readDate('2026-03-14T10:00')).toBeNull();
+            expect(DateUtils.readDate('2024-02-29')?.getDate()).toBe(29);
         });
     });
+
+    describe('getLocalDateString', () => {
+        it('prints the year with four digits', () => {
+            expect(DateUtils.getLocalDateString(DateUtils.dateAt(26, 0, 1))).toBe('0026-01-01');
+            expect(DateUtils.getLocalDateString(DateUtils.dateAt(999, 11, 31))).toBe('0999-12-31');
+        });
+    });
+
+    describe('isDateShape / isValidDateString', () => {
+        it('shape only vs a day that exists', () => {
+            expect(DateUtils.isDateShape('2026-02-30')).toBe(true);
+            expect(DateUtils.isValidDateString('2026-02-30')).toBe(false);
+        });
+
+        it('accepts a year below 100, which the notation and the lexer read as written', () => {
+            expect(DateUtils.isValidDateString('0026-01-01')).toBe(true);
+        });
+    });
+
+    describe('toDateTime / weekdayOf', () => {
+        it('builds a local moment', () => {
+            const d = DateUtils.toDateTime('2026-03-14', '09:05');
+            expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()]).toEqual([2026, 2, 14, 9, 5]);
+        });
+
+        it('weekday of a date string', () => {
+            expect(DateUtils.weekdayOf('2026-03-15')).toBe(0); // Sunday
+            expect(DateUtils.weekdayOf('2026-03-16')).toBe(1);
+        });
+    });
+
+    describe('splitDateTime / joinDateTime', () => {
+        it('splits a date and a date-time', () => {
+            expect(DateUtils.splitDateTime('2026-03-14')).toEqual({ date: '2026-03-14' });
+            expect(DateUtils.splitDateTime('2026-03-14T10:00')).toEqual({ date: '2026-03-14', time: '10:00' });
+        });
+
+        it('joins, dropping a time without a date', () => {
+            expect(DateUtils.joinDateTime('2026-03-14', '10:00')).toBe('2026-03-14T10:00');
+            expect(DateUtils.joinDateTime('2026-03-14', '')).toBe('2026-03-14');
+            expect(DateUtils.joinDateTime('', '10:00')).toBeUndefined();
+            expect(DateUtils.joinDateTime(undefined, undefined)).toBeUndefined();
+        });
+
+        it('round-trips', () => {
+            for (const v of ['2026-03-14', '2026-03-14T23:59']) {
+                const { date, time } = DateUtils.splitDateTime(v);
+                expect(DateUtils.joinDateTime(date, time)).toBe(v);
+            }
+        });
+    });
+
+    describe('visualDateAt', () => {
+        it('takes the clock as an argument', () => {
+            expect(DateUtils.visualDateAt(new Date(2026, 0, 1, 4, 59), 5)).toBe('2025-12-31');
+            expect(DateUtils.visualDateAt(new Date(2026, 0, 1, 5, 0), 5)).toBe('2026-01-01');
+            expect(DateUtils.visualDateAt(new Date(2026, 0, 1, 0, 0), 0)).toBe('2026-01-01');
+        });
+    });
+
 });

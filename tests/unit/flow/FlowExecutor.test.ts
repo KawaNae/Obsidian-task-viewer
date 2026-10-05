@@ -1,33 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Notice, setMockLocale } from 'obsidian';
-import { initI18n } from '../../../src/i18n';
-import { FlowExecutor, type FirePlan, notRunOf } from '../../../src/services/flow/FlowExecutor';
-import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
-import { TaskIndex } from '../../../src/services/core/TaskIndex';
-import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { FlowExecutor, type FirePlan } from '../../../src/services/flow/FlowExecutor';
+import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import { plannedOn } from '../../../src/services/persistence/TaskRefs';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import { DEFAULT_SETTINGS, Task } from '../../../src/types';
-import type { WriteOutcome } from '../../../src/services/persistence/FileLines';
 import { makeTask } from '../helpers/makeTask';
 
-function makeRepository() {
-    return {
-        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
-    };
-}
-
-const app = { vault: { getAbstractFileByPath: () => null } };
-
-function makeExecutor(repository: ReturnType<typeof makeRepository> = makeRepository()) {
-    const taskIndex = { getTask: vi.fn(() => undefined), getGenBlock: vi.fn(() => undefined) };
-    return new FlowExecutor(
-        repository as unknown as TaskRepository,
-        taskIndex as unknown as TaskIndex,
-        app as never,
-        () => DEFAULT_SETTINGS
-    );
+function makeExecutor() {
+    return new FlowExecutor({ getTask: vi.fn(() => undefined), getGenBlock: vi.fn(() => undefined) }, () => DEFAULT_SETTINGS);
 }
 
 function flowTask(src: string, overrides: Partial<Task> = {}): Task {
@@ -51,11 +32,11 @@ function opsOf(plan: FirePlan): TaskOp[] {
     return plan.ops;
 }
 
-/** The recurrence a plan inserts (fails the test if it inserts none). */
-function recurrenceOf(ops: readonly TaskOp[]): { content: string; flowLines: string[] } {
+/** The next instance a plan inserts (fails the test if it inserts none). */
+function instanceOf(ops: readonly TaskOp[]): FlowInstance {
     const op = ops.find(o => o.kind === 'insert-instance');
-    if (op?.kind !== 'insert-instance' || op.insert.kind !== 'recurrence') throw new Error('no recurrence');
-    return op.insert;
+    if (op?.kind !== 'insert-instance') throw new Error('no next instance');
+    return op.instance;
 }
 
 describe('FlowExecutor.planTask: what a completion fires', () => {
@@ -65,11 +46,11 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
 
         // Order: insert BEFORE strip, as the ops of the one write.
         expect(ops.map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
-        const { content, flowLines } = recurrenceOf(ops);
-        expect(content).toContain('==> every mon');
+        const { head, flowLines } = instanceOf(ops);
+        expect(head).toContain('==> every mon');
         expect(flowLines).toEqual([]);
         // The strip rewrites the fired row to itself without its command.
-        expect(ops[1]).toEqual({ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() });
+        expect(ops[1]).toEqual({ kind: 'strip-flow', text: formatRow({ ...task, flow: undefined }).trim() });
     });
 
     it('fires a multi-line flow: child segments travel as flowLines, telomere decremented', () => {
@@ -80,7 +61,7 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
         });
         const ops = opsOf(planOf(task));
 
-        const { content: line, flowLines } = recurrenceOf(ops);
+        const { head: line, flowLines } = instanceOf(ops);
         expect(line).toContain('==> every mon');
         expect(line).not.toContain('setDue');
         expect(flowLines).toEqual(['setDue(start + 3d)', 'x2']);
@@ -95,26 +76,15 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
         expect(ops[1]).toEqual({ kind: 'move', text: '- [x] Test task @2026-06-29', to: { heading: 'Done', side: 'head' } });
 
         const atEnd = new FlowExecutor(
-            makeRepository() as unknown as TaskRepository,
-            { getTask: vi.fn(), getGenBlock: vi.fn() } as unknown as TaskIndex,
-            app as never,
+            { getTask: vi.fn(), getGenBlock: vi.fn() },
             () => ({ ...DEFAULT_SETTINGS, sectionSide: 'end' }),
         );
         expect(opsOf(atEnd.planTask(task, () => undefined, ['## Done']))[1]).toMatchObject({ to: { heading: 'Done', side: 'end' } });
     });
 
-    it('fires without a move that names another note: the move is dropped, the rest runs, the command is consumed', () => {
-        const plan = planOf(flowTask('every mon move([[Archive]])'));
-
-        expect(opsOf(plan).map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
-        expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
-    });
-
-    it('consumes a command that is a retired move alone: nothing moves, the command goes', () => {
-        for (const command of ['move([[Other]])', 'move()']) {
-            const plan = planOf(flowTask(command));
-            expect(opsOf(plan).map(o => o.kind)).toEqual(['strip-flow']);
-            expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
+    it('fires nothing for a command whose move names no heading of the note: the command does not read', () => {
+        for (const command of ['every mon move([[Archive]])', 'move([[Other]])', 'move()', 'every mon nochildren']) {
+            expect(planOf(flowTask(command)).kind, command).toBe('none');
         }
     });
 
@@ -134,193 +104,90 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
     });
 
     it('decrements the telomere in the generated line', () => {
-        expect(recurrenceOf(opsOf(planOf(flowTask('at(today + 1d) x3')))).content).toContain('==> at(today + 1d) x2');
+        expect(instanceOf(opsOf(planOf(flowTask('at(today + 1d) x3')))).head).toContain('==> at(today + 1d) x2');
     });
 
     it('x1: generated line carries no command', () => {
-        expect(recurrenceOf(opsOf(planOf(flowTask('at(today + 1d) x1')))).content).not.toContain('==>');
+        expect(instanceOf(opsOf(planOf(flowTask('at(today + 1d) x1')))).head).not.toContain('==>');
     });
 });
 
-describe('a fire that does not happen says so', () => {
-    // 非発火・非消費は設計どおりだが、外から見えるのは「チェックしても何も
-    // 起きないチェックボックス」。ログしか残らないと、タスクを触っている人
-    // には何も届かない。
-    beforeEach(() => {
-        Notice.messages.length = 0;
-    });
+describe('FlowExecutor: today is the visual day of the fire', () => {
+    afterEach(() => { vi.useRealTimers(); });
 
-    /**
-     * Complete a row whose command fails, as a write does: the fire planned
-     * inside the write, and what it owes once the write landed.
-     */
-    async function complete(executor: FlowExecutor, command: string, file = 'notes/週報.md'): Promise<void> {
-        const fire = executor.fireOp(file);
-        fire.op.plan([`- [x] Test task @2026-06-29 ==> ${command}`], 0);
-        const notRun = notRunOf(fire.planned());
-        if (notRun) executor.reportNotRun(notRun);
+    /** The next instance's head when `at(today + 1d)` fires at 2026-10-05 02:00 under `startHour`. */
+    function headAt0200(startHour: number): string {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 9, 5, 2, 0));
+        const executor = new FlowExecutor(
+            { getTask: vi.fn(() => undefined), getGenBlock: vi.fn(() => undefined) },
+            () => ({ ...DEFAULT_SETTINGS, startHour }),
+        );
+        return instanceOf(opsOf(executor.planTask(flowTask('at(today + 1d)'), () => undefined, []))).head;
     }
 
-    it('shows what stopped it, and which task it was', async () => {
-        await complete(makeExecutor(), 'at(end + 1d)');
-
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain("Property 'end' is not set on this task");
-        expect(Notice.messages[0]).toContain('(Test task)');
+    it('at 02:00 with startHour 5, today is the day before: today + 1d is the calendar date of now', () => {
+        expect(headAt0200(5)).toContain('@2026-10-05');
     });
 
-    it('says it once while the same task keeps failing the same way', async () => {
-        // 直すために付けたり外したりする間、同じ文言が積み上がるとファイル
-        // 自体が見えなくなる。
-        const executor = makeExecutor();
-
-        await complete(executor, 'at(end + 1d)');
-        await complete(executor, 'at(end + 1d)');
-
-        expect(Notice.messages).toHaveLength(1);
-    });
-
-    it('says the next failure, since it is a different thing to fix', async () => {
-        const executor = makeExecutor();
-
-        await complete(executor, 'at(end + 1d)');
-        // 同じタスクの別の失敗。窓は「同じ失敗」に効くのであって、
-        // 「そのタスクを黙らせる」ためのものではない。
-        await complete(executor, 'at(due + 1d)');
-
-        expect(Notice.messages).toHaveLength(2);
-        expect(Notice.messages[1]).toContain("Property 'due' is not set on this task");
-    });
-
-    it('says it in the reader language', async () => {
-        // 理由の英文はエンジンが投げた場所で書かれている。通知はそれをそのまま
-        // 出すのではなく code で引き直すので、日本語の vault では日本語になる。
-        setMockLocale('ja');
-        initI18n();
-        try {
-            await complete(makeExecutor(), 'at(end + 1d)');
-        } finally {
-            setMockLocale('en');
-            initI18n();
-        }
-
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain("このタスクにプロパティ 'end' は設定されていません");
-    });
-
-    it('says the move was dropped when the rest of the fire ran without it', async () => {
-        // move() はノートの見出しを指していない。次回分は生まれ、コマンドは
-        // 消費されるので、「実行しませんでした」ではなく移動だけを落とした旨を出す。
-        await complete(makeExecutor(), 'every mon move()');
-
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('its flow was run, but it was not moved');
-        expect(Notice.messages[0]).toContain('names no heading of the note');
-    });
-
-    it('stays quiet when the fire went through', async () => {
-        await complete(makeExecutor(), 'at(today + 1d)');
-
-        expect(Notice.messages).toEqual([]);
+    it('with startHour 0, today is the calendar date: today + 1d is the next date', () => {
+        expect(headAt0200(0)).toContain('@2026-10-06');
     });
 });
 
-describe('fireAndDelete', () => {
+describe('planDeletion: what a delete with its fire writes', () => {
     // 削除は「コマンドを消費するもう一つの道」。行ごと消えるので strip の
-    // 出番はなく、生成だけを先に済ませてから消す。
-    beforeEach(() => {
-        Notice.messages.length = 0;
-    });
+    // 出番はなく、生成だけを先に済ませてから消す。書くのは操作の層
+    // （Operations.deleteTask、DeleteWithFire.vault.test）。
 
-    /** The ops of each one-write call that takes the row away: the deletion fires. */
-    function deletionsOf(repository: ReturnType<typeof makeRepository>): TaskOp[][] {
-        return repository.applyToTask.mock.calls
-            .map(c => c[1] as TaskOp[])
-            .filter(ops => ops.some(o => o.kind === 'remove'));
+    /** The ops of a plan that deletes (fails the test otherwise). */
+    function deletes(task: Task): TaskOp[] {
+        const plan = makeExecutor().planDeletion(task);
+        if (plan.kind !== 'deletes') throw new Error(`the plan is ${plan.kind}`);
+        return plan.ops;
     }
 
-    it('writes the next instance and takes the original away in one write', async () => {
-        const repository = makeRepository();
-        const task = flowTask('every mon', { statusChar: ' ' });
-
-        await makeExecutor(repository).fireAndDelete(task);
-
+    it('writes the next instance and takes the original away, as the ops of one write', () => {
         // 挿入と削除を分けると、2本目が originalText で行を探し直すことになる。
         // 次回分は元の行と同じ本文になりうるので、その探索は当てにできない。
-        expect(repository.applyToTask).toHaveBeenCalledTimes(1);
-        expect(repository.applyToTask).toHaveBeenCalledWith(plannedOn(task, { commands: true, subtree: true }), [
-            { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
+        expect(deletes(flowTask('every mon', { statusChar: ' ' }))).toEqual([
+            { kind: 'insert-instance', instance: expect.objectContaining({ children: [] }) },
             { kind: 'remove' },
         ]);
     });
 
-    it('fires an unchecked task: deletion is not a completion', async () => {
-        const repository = makeRepository();
-
-        await makeExecutor(repository).fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
-
-        expect(deletionsOf(repository).map(ops => ops.map(o => o.kind))).toEqual([['insert-instance', 'remove']]);
+    it('fires an unchecked task: deletion is not a completion', () => {
+        expect(deletes(flowTask('every mon', { statusChar: ' ' })).map(o => o.kind)).toEqual(['insert-instance', 'remove']);
     });
 
-    it('does not move, whatever the move names: a delete was not a request to keep a copy', async () => {
-        for (const move of ['move([[#Nope]])', 'move([[Archive]])']) {
-            const repository = makeRepository();
-
-            expect(await makeExecutor(repository).fireAndDelete(flowTask(`every mon ${move}`, { statusChar: ' ' }))).toBe(true);
-
-            expect(deletionsOf(repository).map(ops => ops.map(o => o.kind))).toEqual([['insert-instance', 'remove']]);
+    it('does not move, whatever the move names: a delete was not a request to keep a copy', () => {
+        for (const move of ['move([[#Nope]])', 'move([[#Done]])']) {
+            expect(deletes(flowTask(`every mon ${move}`, { statusChar: ' ' })).map(o => o.kind)).toEqual(['insert-instance', 'remove']);
         }
     });
 
-    it('deletes without generating when until has expired', async () => {
-        const repository = makeRepository();
-
-        await makeExecutor(repository).fireAndDelete(flowTask('every mon until(2026-06-30)', { statusChar: ' ' }));
-
-        // 書くものが無いだけで、消す1本は同じ呼び出しで出る。
-        expect(deletionsOf(repository)).toEqual([[{ kind: 'remove' }]]);
+    it('deletes without generating when until has expired', () => {
+        // 書くものが無いだけで、消す1本は同じ書き込みで出る。
+        expect(deletes(flowTask('every mon until(2026-06-30)', { statusChar: ' ' }))).toEqual([{ kind: 'remove' }]);
     });
 
-    it('keeps the task when the fire fails, and says why', async () => {
+    it('names the blocks it read, for the write to find still reading so', () => {
+        const body = ['- [ ] 週報 @${start}'];
+        const executor = new FlowExecutor(
+            { getTask: vi.fn(), getGenBlock: vi.fn((_file: string, name: string) => ({ name, body, openLine: 5, closeLine: 7 })) },
+            () => DEFAULT_SETTINGS,
+        );
+
+        const plan = executor.planDeletion(flowTask('every mon use("w")', { statusChar: ' ' }));
+
+        expect(plan).toMatchObject({ kind: 'deletes', blocks: [{ name: 'w', body }] });
+    });
+
+    it('fails when the fire cannot be planned, which stops the delete', () => {
         // 発火できないコマンドは行の上に残っており、その行が消える寸前だった。
         // ここで消すと、残そうとしたものをちょうど失う。
-        const repository = makeRepository();
+        const plan = makeExecutor().planDeletion(flowTask('every mon setDue(end + 1d)', { statusChar: ' ' }));
 
-        const removed = await makeExecutor(repository).fireAndDelete(flowTask('every mon setDue(end + 1d)', { statusChar: ' ' }));
-
-        expect(removed).toBe(false);
-        expect(repository.applyToTask).not.toHaveBeenCalled();
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('the task was not deleted');
-    });
-
-    it('reports the task gone when it deleted it', async () => {
-        // 呼んだ側はこの答えでパネルを閉じるかを決める。書き込んだかどうかでは
-        // なく、タスクが消えたかどうかを聞いている。
-        const executor = makeExecutor();
-
-        expect(await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }))).toBe(true);
-        expect(await executor.fireAndDelete(flowTask('every mon until(2026-06-30)', { statusChar: ' ' }))).toBe(true);
-    });
-
-    it('reports the task still there when the write found no line', async () => {
-        // 行が解決できなければ次回分も書かれていない。タスクは消えていないので
-        // 答えは no。ユーザーへの通知は書き込みを拒否した側（TaskIndex.reportRefusal）
-        // が一度だけ出すので、ここでは出さない。
-        const repository = makeRepository();
-        repository.applyToTask.mockResolvedValue({
-            written: false, refused: { file: 'note.md', reason: { kind: 'gone' }, subject: 'Test task' }, made: [],
-        });
-
-        expect(await makeExecutor(repository).fireAndDelete(flowTask('every mon', { statusChar: ' ' }))).toBe(false);
-        expect(Notice.messages).toHaveLength(0);
-    });
-
-    it('answers, rather than throws, when a write throws', async () => {
-        // 待ち手を残したまま返らないと、呼んだメニューがそのまま固まる。
-        const repository = makeRepository();
-        repository.applyToTask.mockRejectedValueOnce(new Error('disk on fire'));
-
-        expect(await makeExecutor(repository).fireAndDelete(flowTask('every mon', { statusChar: ' ' }))).toBe(false);
+        expect(plan.kind).toBe('failed');
     });
 });

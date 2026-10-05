@@ -195,20 +195,8 @@
 .timer-widget .timer-widget__settings-btn {
     width: 24px;
     height: 24px;
-    appearance: none;
-    -webkit-appearance: none;
     background: var(--tv-bg-widget-header);
-    border: 1px solid transparent;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    /* remove padding for ipad */
-    padding: 0 !important;
-    border-radius: var(--tv-radius-s);
-    box-shadow: none;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
@@ -220,7 +208,6 @@
 .timer-widget .timer-widget__settings-btn:hover {
     background: var(--tv-bg-hover);
     border-color: var(--tv-border);
-    color: var(--tv-text);
 }
 
 .timer-widget .timer-widget__close-btn:hover {
@@ -324,47 +311,66 @@
     margin-bottom: 12px;
 }
 
+/*
+ * 進捗の輪（TimerProgressUI）。ウィジェットと独立ビュー（_timer-view.css）が同じ
+ * 部品を描き、クラスはブロック名から作る。共有の宣言はここに両方のブロックを
+ * 並べ、輪と文字の大きさはブロックごとに持つ。
+ */
 .timer-widget__progress-ring {
     width: 140px;
     height: 140px;
 }
 
-.timer-widget__progress-ring-bg {
+.timer-widget__progress-ring-bg,
+.timer-view__progress-ring-bg {
     fill: none;
     stroke: var(--tv-border);
 }
 
-.timer-widget__progress-ring-progress {
+.timer-widget__progress-ring-progress,
+.timer-view__progress-ring-progress {
     fill: none;
     stroke-linecap: round;
     transition: stroke-dashoffset 0.3s ease;
 }
 
-.timer-widget__progress-ring-progress--work {
+.timer-widget__progress-ring-progress--work,
+.timer-view__progress-ring-progress--work {
     stroke: var(--tv-timer-work);
 }
 
-.timer-widget__progress-ring-progress--break {
+.timer-widget__progress-ring-progress--break,
+.timer-view__progress-ring-progress--break {
     stroke: var(--tv-timer-break);
 }
 
-.timer-widget__progress-ring-progress--idle {
-    stroke: var(--tv-timer-idle);
-}
-
-.timer-widget__progress-ring-progress--prepare {
+.timer-widget__progress-ring-progress--prepare,
+.timer-view__progress-ring-progress--prepare {
     stroke: var(--tv-timer-prepare);
 }
 
-.timer-widget__time-display {
+/* 中断中（ウィジェット）、countdown の超過、色の無い表示（開始前など）。 */
+.timer-widget__progress-ring-progress--suspended,
+.timer-widget__progress-ring-progress--overtime,
+.timer-widget__progress-ring-progress--plain,
+.timer-view__progress-ring-progress--overtime,
+.timer-view__progress-ring-progress--plain {
+    stroke: var(--tv-timer-idle);
+}
+
+.timer-widget__time-display,
+.timer-view__time-display {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 1.5rem;
     font-weight: 700;
     color: var(--tv-text);
     font-variant-numeric: tabular-nums;
+}
+
+.timer-widget__time-display {
+    font-size: 1.5rem;
 }
 
 .timer-widget__time-display--countup {
@@ -376,20 +382,24 @@
     cursor: pointer;
 }
 
-.timer-widget__repeat-info {
+.timer-widget__repeat-info,
+.timer-view__repeat-info {
     position: absolute;
     left: 50%;
     bottom: 12%;
     transform: translateX(-50%);
-    font-size: 0.75em;
     color: var(--tv-text-muted);
     text-align: center;
     white-space: normal;
-    max-width: 70%;
     overflow: hidden;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
+}
+
+.timer-widget__repeat-info {
+    font-size: 0.75em;
+    max-width: 70%;
 }
 
 /* Controls */
@@ -435,26 +445,6 @@
 .timer-widget .timer-widget__settings-btn:focus-visible {
     outline: 2px solid rgba(var(--tv-accent-rgb), 0.35);
     outline-offset: 1px;
-}
-
-.timer-widget .timer-widget__btn--primary {
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text);
-}
-
-.timer-widget .timer-widget__btn--secondary {
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text);
-}
-
-.timer-widget .timer-widget__btn--danger {
-    background: var(--tv-bg-secondary);
-    color: var(--tv-text-danger);
-}
-
-.timer-widget .timer-widget__btn--danger:hover {
-    background: var(--tv-bg-hover);
-    border-color: var(--tv-border);
 }
 
 /* Next-task suggestion (idle item) */

@@ -1,320 +1,163 @@
-import { ItemView, type TFile, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
-import { logDebug } from '../../log/log';
+import type { WorkspaceLeaf } from 'obsidian';
+import { daysWindow } from '../../utils/DayWindow';
 import { t } from '../../i18n';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import type { Task, DisplayTask, PinnedListDefinition, AstronomyDisplay } from '../../types';
+import type { MenuHandler } from '../../interaction/menu/MenuHandler';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { createCardRendering } from '../sharedUI/CardRendering';
+import type { DisplayTask } from '../../types';
 import { attachMoonPhase } from '../sharedUI/AstronomyCellAdorner';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import { DateUtils } from '../../utils/DateUtils';
-import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import type { IndexReads } from '../../services/core/TaskIndex';
+import type { Operations } from '../../services/operations/Operations';
+import { dailyNotes } from '../../utils/PeriodicNotes';
+import { periodicNoteLink, type PeriodicLinkContext } from '../sharedUI/PeriodicNoteLink';
+import { renderWeekNumberCell } from './WeekNumberCell';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
-import {
-    getTaskDateRange,
-    parseLocalDateString,
-    getCalendarDateRange,
-    getWeekStart,
-    getNormalizedWindowStart,
-    getReferenceMonth,
-    getColumnOffset,
-    getGridColumnForDay,
-    openOrCreateDailyNote,
-} from './CalendarDateUtils';
+import { getColumnOffset, getGridColumnForDay } from './CalendarDateUtils';
+import { gridAt, gridFollowingToday, gridRange, gridShifted, referenceMonth } from './CalendarGrid';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { TaskStyling } from '../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { createDefaultListFilterState, createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { CalendarToolbar } from './CalendarToolbar';
-import { createEmptySortState } from '../../services/sort/SortTypes';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
+import { CalendarCodec, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
 import { HandleManager } from '../sharedUI/handles/HandleManager';
-import { markHandleSurface } from '../sharedUI/handles/HandleSurface';
 import { SelectionController } from '../../interaction/selection/SelectionController';
-import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { parseSegmentId } from '../../services/display/SegmentIds';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
-import { RenderScheduler } from '../sharedUI/RenderScheduler';
-import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
+import { PinnedListPanel } from '../sharedUI/PinnedListPanel';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
-import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
-import { renderDueArrow } from '../sharedUI/DueArrowRenderer';
-import { splitTasks } from '../../services/display/TaskSplitter';
-import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
-import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
-import { openTaskInEditor } from '../../utils/NavigationUtils';
-import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
-import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
+import { drawDateGridLane } from '../sharedUI/DateGridLane';
+import { TaskViewerView } from '../base/TaskViewerView';
+import { viewedDay } from '../base/ViewedDay';
 
-export const VIEW_TYPE_CALENDAR = VIEW_META_CALENDAR.type;
+
+
 
 /**
- * View id used as a namespace prefix for shared viewState fields whose keys
- * collide between views (e.g. pinnedListCollapsed). Lets timeline and calendar
- * own independent collapse state for the same listId.
+ * Calendar View - six weeks of tasks on a month grid.
+ *
+ * Its state is CalendarSchema's config and transient fields, held in the
+ * base's store. The weeks it draws are read from where it is (`date`,
+ * absent while it follows today, and `weekOffset`) by `CalendarGrid`.
  */
-const VIEW_ID = 'calendar';
-const COLLAPSE_KEY_PREFIX = `${VIEW_ID}::`;
-
-interface CalendarViewState {
-    windowStart?: string;
-    filterState?: FilterState;
-    showSidebar?: boolean;
-    pinnedListCollapsed?: Record<string, boolean>;
-    pinnedLists?: PinnedListDefinition[];
-    customName?: string;
-    maskMode?: boolean;
-    astronomyDisplay?: Partial<AstronomyDisplay>;
-}
-
-export class CalendarView extends ItemView {
-    private readonly plugin: PluginContext & TimerHost;
+export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransient> {
     private readonly readService: TaskReadService;
-    private readonly writeService: TaskWriteService;
+    /** The index's copies and changes (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
+    private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly filterMenu = new FilterMenuComponent();
-    private readonly sidebarSortMenu = new SortMenuComponent();
 
     private menuHandler: MenuHandler;
     private dragHandler: DragHandler | null = null;
     private handleManager: HandleManager | null = null;
     private selectionController: SelectionController | null = null;
     private sidebarManager: SidebarManager;
-    private pinnedListRenderer: PinnedListRenderer;
-    /**
-     * Stable host for PinnedListRenderer that survives container.empty() —
-     * detached before each empty() and re-appended into sidebarBody after the
-     * sidebar layout is rebuilt. This preserves PinnedList's DOM (paging
-     * pages, expanded body content) and its onChange subscription across
-     * full view renders.
-     */
-    private pinnedHost: HTMLElement;
-    private sidebarFilterMenu = new FilterMenuComponent();
-    private topRightEditor = new TopRightConfigEditor();
-    private toolbar: CalendarToolbar;
+    /** The sidebar's pinned lists; they draw themselves, and outlive the view's draws. */
+    private readonly pinnedLists: PinnedListPanel;
+    private readonly toolbar: CalendarToolbar;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
-    private windowStart: string;
-    private showSidebar = true;
-    private pinnedListCollapsed: Record<string, boolean> = {};
-    private pinnedLists: PinnedListDefinition[] = [];
-    private customName: string | undefined;
-    private maskMode: boolean = false;
-    private astronomyDisplay: Partial<AstronomyDisplay> | undefined = undefined;
     private readonly scrollRestorer = new PixelScrollRestorer(
         () => this.container?.querySelector('.cal-grid__body') as HTMLElement | null,
     );
+    /**
+     * At narrow width the sidebar starts closed whatever the state says, and
+     * only the toggle button opens it. `showSidebar` states the desktop-width
+     * position; applying a config never marks the sidebar as user-opened.
+     */
     private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
-    private renderScheduler: RenderScheduler;
+
+    getViewType(): string {
+        return CalendarCodec.schema.viewType;
+    }
 
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
-        super(leaf);
-        this.plugin = plugin;
+        super(leaf, plugin, CalendarCodec);
         this.readService = plugin.getTaskReadService();
-        this.writeService = plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+        this.index = plugin.getIndex();
+        this.operations = plugin.getOperations();
+        const cards = createCardRendering({
+            app: this.app,
+            plugin: this.plugin,
             getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings, () => this.maskMode);
+            getMaskMode: () => this.state.maskMode ?? false,
+            // The selection is let go once the gesture that opened the hub is
+            // over (see TimelineView's constructor).
+            afterHubOpen: () => setTimeout(() => this.handleManager?.selectTask(null), 0),
+        });
+        this.taskRenderer = cards.taskRenderer;
+        this.menuHandler = cards.menuHandler;
         this.addChild(this.taskRenderer);
-        this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarManager = new SidebarManager({
             mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
             onPersist: () => this.app.workspace.requestSaveLayout(),
             onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
-            onRequestClose: () => {
-                this.showSidebar = false;
-                this.sidebarManager.applyOpen(false, { animate: true, persist: true });
-            },
-            getIsOpen: () => this.showSidebar,
+            onRequestClose: () => this.setSidebarOpen(false),
+            getIsOpen: () => this.isSidebarOpen(),
         });
-        this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
-        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
-        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
-        this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
-        this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.toolbar = new CalendarToolbar({
-            app: this.app,
-            leaf: this.leaf,
-            plugin: this.plugin,
-            readService: this.readService,
-            filterMenu: this.filterMenu,
-            container: this.containerEl,
-            onNavigateWeek: (days) => this.navigateWeek(days),
-            onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
-            onJumpToDate: (date) => {
-                const parsed = this.parseLocalDateString(date);
-                if (parsed) this.showMonthOf(parsed);
-            },
-            onFilterChange: () => {
-                void this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-            getCustomName: () => this.customName,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            getPinnedLists: () => this.pinnedLists,
-            setPinnedLists: (lists) => { this.pinnedLists = lists; },
-            getShowSidebar: () => this.showSidebar,
-            setShowSidebar: (open, opts) => {
-                if (open) this.sidebarOpenedThisSession = true;
-                this.showSidebar = open;
-                this.sidebarManager.applyOpen(open, opts);
-            },
-            getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg) => this.applyConfig(cfg),
-            onConfigApplied: () => {
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.pinnedListRenderer?.refresh();
-            },
-            getMaskMode: () => this.maskMode,
-            setMaskMode: (next) => {
-                this.maskMode = next;
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-                this.pinnedListRenderer?.refresh();
-            },
-            getAstronomyDisplay: () => this.astronomyDisplay,
-            setAstronomyDisplay: (next) => {
-                this.astronomyDisplay = next;
-                this.app.workspace.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-            },
-            getReferenceMonth: () => this.getReferenceMonth(),
-            getCurrentDate: () => {
-                const { year, month } = this.getReferenceMonth();
-                return DateUtils.getLocalDateString(new Date(year, month, 1));
+            host: this.toolbarHost(),
+            commands: {
+                navigateWeeks: (n) => this.navigateWeeks(n),
+                today: () => this.update(gridFollowingToday()),
+                goTo: (date) => this.update(gridAt(date)),
+                viewedDay: () => viewedDay(this.state.date, this.visualToday()),
+                referenceMonth: () => referenceMonth(this.gridRange().start),
+                isSidebarOpen: () => this.isSidebarOpen(),
+                toggleSidebar: (open) => {
+                    if (open) this.sidebarOpenedThisSession = true;
+                    this.setSidebarOpen(open);
+                },
             },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
         });
+
+        this.pinnedLists = new PinnedListPanel({
+            plugin: this.plugin,
+            readService: this.readService,
+            index: this.index,
+            taskRenderer: this.taskRenderer,
+        }, {
+            state: () => this.state,
+            subscribe: (listener) => this.store.subscribe(listener),
+            write: (patch) => this.update(patch, { draw: false }),
+        });
     }
 
-    getViewType(): string {
-        return VIEW_TYPE_CALENDAR;
+    /** The days the grid draws, read from where the view is and the week start of the settings. */
+    private gridRange(): { start: string; end: string } {
+        return gridRange(this.state, this.visualToday(), this.plugin.settings.weekStartDay);
     }
 
-    getDisplayText(): string {
-        return this.customName || VIEW_META_CALENDAR.displayText;
+    /** Move the grid by `weeks` weeks: the offset moves, and a view following today fixes it. */
+    private navigateWeeks(weeks: number): void {
+        this.update(gridShifted(this.state, this.visualToday(), weeks));
     }
 
-    getIcon(): string {
-        return VIEW_META_CALENDAR.icon;
+    /** Whether the sidebar shows: closed at narrow width until the toggle opens it this session. */
+    private isSidebarOpen(): boolean {
+        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) return false;
+        return this.state.showSidebar ?? true;
     }
 
-    private get codec(): ViewConfigCodec<CalendarConfig, CalendarTransient> {
-        return codecFor(VIEW_TYPE_CALENDAR) as ViewConfigCodec<CalendarConfig, CalendarTransient>;
+    /** Open or close the sidebar, sliding; the draw does not rebuild it. */
+    private setSidebarOpen(open: boolean): void {
+        this.update({ showSidebar: open }, { draw: false });
+        this.sidebarManager.applyOpen(open, { animate: true });
     }
 
-    /**
-     * Apply a parsed config with REPLACE semantics over schema defaults.
-     * Single entry point used by setState AND by toolbar's template apply,
-     * so reset/load/restore all go through one path.
-     *
-     * `showSidebar` states the desktop-width starting position only. At mobile
-     * width the sidebar always starts closed whatever the config says, and
-     * only the toggle button opens it (see `sidebarOpenedThisSession`), so
-     * applying a config never marks the sidebar as user-opened.
-     */
-    applyConfig(cfg: Partial<CalendarConfig>): void {
-        const next = this.codec.withDefaults(cfg);
-
-        // FilterMenu owns the in-memory FilterState — keep it in sync.
-        this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
-
-        const sidebarOpen = next.showSidebar ?? true;
-        this.showSidebar = sidebarOpen;
-        this.sidebarManager.applyOpen(sidebarOpen, { animate: false });
-
-        this.pinnedLists = next.pinnedLists ?? [];
-        this.customName = next.customName;
-        this.maskMode = next.maskMode === true;
-        this.astronomyDisplay = next.astronomyDisplay
-            ? { ...next.astronomyDisplay }
-            : undefined;
-    }
-
-    /** Snapshot for template save / URI build. */
-    getCurrentConfig(): Partial<CalendarConfig> {
-        const filterState = this.filterMenu.getFilterState();
-        return {
-            customName: this.customName,
-            filterState: hasConditions(filterState) ? filterState : undefined,
-            maskMode: this.maskMode,
-            astronomyDisplay: this.astronomyDisplay,
-            showSidebar: this.showSidebar,
-            pinnedLists: this.pinnedLists.length > 0 ? this.pinnedLists : undefined,
-        };
-    }
-
-    async setState(state: CalendarViewState, result: ViewStateResult): Promise<void> {
-        const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = this.codec.parseConfig(stateDict);
-        const transient = this.codec.parseTransient(stateDict);
-
-        this.applyConfig(config);
-
-        // Transient: windowStart needs week alignment, so it's handled here
-        // rather than letting applyConfig blanket-overwrite.
-        if (transient.windowStart) {
-            const parsedWindowStart = this.parseLocalDateString(transient.windowStart);
-            if (parsedWindowStart) {
-                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
-                this.windowStart = DateUtils.getLocalDateString(weekStart);
-            }
-        }
-        if (transient.pinnedListCollapsed) {
-            this.pinnedListCollapsed = transient.pinnedListCollapsed;
-        }
-
-        await super.setState(state, result);
-        await this.renderSerializer.request();
-        // setState may have changed filterState / pinnedLists / collapse — none
-        // of these go through readService.onChange, so PinnedList wouldn't
-        // otherwise refresh. (Safe to call even before attach: refresh() no-ops
-        // when not attached.)
-        this.pinnedListRenderer?.refresh();
-    }
-
-    getState(): Record<string, unknown> {
-        return {
-            ...this.codec.serializeConfig(this.getCurrentConfig()),
-            ...this.codec.serializeTransient({
-                windowStart: this.windowStart,
-                pinnedListCollapsed: this.pinnedListCollapsed,
-            }),
-        };
-    }
-
-    async onOpen(): Promise<void> {
-        logDebug(`[${this.getViewType()}] opened`);
+    protected openView(): void {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('calendar-view');
@@ -322,80 +165,43 @@ export class CalendarView extends ItemView {
             this.registerDomEvent(el, ev, handler),
         );
 
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
-        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
-        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
-        this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.readService.getTask(taskId);
-            if (task) this.openTaskHub(task, opts);
-        });
-        this.pinnedListRenderer = new PinnedListRenderer(
-            this.taskRenderer, this.plugin, this.menuHandler, this.readService,
-        );
-        // Persistent host for pinned lists. Lives outside the empty() target —
-        // detached before container.empty() in performRender and reparented
-        // into the freshly-built sidebarBody after.
-        this.pinnedHost = document.createElement('div');
-        this.pinnedListRenderer.attach({
-            host: this.pinnedHost,
-            getLists: () => this.pinnedLists,
-            getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.filterMenu.getFilterState(),
-            callbacks: this.getPinnedListCallbacks(),
-            viewId: VIEW_ID,
-        });
+        this.pinnedLists.open();
         this.handleManager = new HandleManager(this.container, {
-            getTask: (id) => this.readService.getTask(id),
+            getTask: (id) => this.index.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
         this.selectionController = new SelectionController(this.handleManager);
         this.dragHandler = new DragHandler(
             this.container,
-            this.readService,
-            this.writeService,
+            this.operations,
             this.plugin,
             this.selectionController,
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
-                const baseId = TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
+                const baseId = parseSegmentId(taskId)?.baseId ?? taskId;
                 this.handleManager?.selectTask(baseId);
             },
-            () => { /* no-op: handles are inside task cards */ },
-            () => this.getViewStartDateString(),
-            () => this.getViewEndDateString(),
+            () => this.gridRange().start,
+            () => this.gridRange().end,
             () => this.plugin.settings.zoomLevel
         );
 
         this.selectionController.attachBackgroundClick(this.container);
 
-        await this.renderSerializer.request();
-
         // Clear selection when the selected task is deleted via the UI.
-        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
 
-        // Initialize render dispatch controller (rAF coalesce only).
-        // Calendar still always full-renders today; reconciliation arrives in
-        // a follow-up phase.
-        this.renderScheduler = new RenderScheduler({
-            performFull: () => this.render(),
-            getHost: () => this.container,
-        });
-
-        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+        this.unsubscribe = this.index.onChange((taskId, changes) => {
             this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
-    async onClose(): Promise<void> {
-        logDebug(`[${this.getViewType()}] closed`);
+    protected closeView(): void {
         this.hoverParent.dispose();
-        this.filterMenu.close();
-        this.sidebarFilterMenu.close();
+        this.toolbar.close();
         this.sidebarManager.detach();
-        this.pinnedListRenderer?.detach();
+        this.pinnedLists.close();
 
         this.dragHandler?.destroy();
         this.dragHandler = null;
@@ -409,68 +215,27 @@ export class CalendarView extends ItemView {
             this.unsubscribeDelete();
             this.unsubscribeDelete = null;
         }
-        this.renderScheduler?.dispose();
         this.scrollRestorer.dispose();
     }
 
-    public refresh(): void {
-        this.render();
-    }
-
-    private openTaskHub(task: Task, options?: TaskHubPanelOptions): void {
-        createTaskHubOpener(this.app, {
-            taskRenderer: this.taskRenderer,
-            menuHandler: this.menuHandler,
-            readService: this.readService,
-            writeService: this.writeService,
-            plugin: this.plugin,
-        }, () => setTimeout(() => this.handleManager?.selectTask(null), 0))(task, options);
-    }
-
-    /**
-     * Single serialization gate for every async render entry point
-     * (render / setState / onOpen), keeping the reconciler's
-     * detach→build→dispose cycle atomic against interleaving.
-     */
-    private readonly renderSerializer = new AsyncRenderSerializer(() => this.performRender());
-
-    private render(): void {
+    /** Draw the grid, keeping the scroll. */
+    protected draw(): void {
         this.scrollRestorer.save();
-        void this.renderSerializer.request();
+        this.performRender();
     }
 
-    private async performRender(): Promise<void> {
-        if (!this.container) {
-            return;
-        }
-
-        const normalizedWindowStart = this.getNormalizedWindowStart(this.windowStart);
-        if (normalizedWindowStart !== this.windowStart) {
-            this.windowStart = normalizedWindowStart;
-        }
-
-        // On narrow/mobile, force sidebar closed unless user explicitly opened it this session
-        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) {
-            this.showSidebar = false;
-        }
-        this.sidebarManager.syncPresentation(this.showSidebar, { animate: false });
+    private performRender(): void {
+        this.sidebarManager.syncPresentation(this.isSidebarOpen(), { animate: false });
 
         this.toolbar.detach();
-        // Detach the persistent pinnedHost so its DOM (and PinnedListRenderer's
-        // internal subscription / paging / collapse state) survives the empty().
-        // Re-appended into the freshly-built sidebarBody by renderSidebarContent.
-        // IMPORTANT: must run before our `reconciler.detach(this.container)` —
-        // otherwise the calendar reconciler scoops up the pinned-list cards
-        // (they live inside `this.container` until detached here), classifies
-        // them as stale, and disposes them while PinnedListRenderer is none the
-        // wiser.
-        if (this.pinnedHost?.parentElement) {
-            this.pinnedHost.parentElement.removeChild(this.pinnedHost);
-        }
+        // The pinned lists come out before the grid's cards are gathered, so
+        // their cards are neither taken for the grid's nor lost; they go back
+        // into the sidebar built below.
+        this.pinnedLists.lift();
 
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the month grid. Survivors are re-parented and
-        // re-decorated when their cardInstanceId turns up in the new render;
+        // re-decorated when their key turns up in the new render;
         // unmatched ones are disposed at the end. Cards keep their inner DOM
         // (markdown, focus, expand state) intact across renders.
         const reconciler = new CardReconciler();
@@ -482,22 +247,22 @@ export class CalendarView extends ItemView {
         this.toolbar.mount(toolbarHost);
         const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
-        this.renderSidebarContent(sidebarHeader, sidebarBody);
+        this.pinnedLists.mount(sidebarHeader, sidebarBody);
 
         const calendarHost = main.createDiv('cal-grid');
 
-        const { startDate, endDate } = this.getCalendarDateRange();
-        const rangeStartStr = DateUtils.getLocalDateString(startDate);
-        const rangeEndStr = DateUtils.getLocalDateString(endDate);
+        const { start: rangeStartStr, end: rangeEndStr } = this.gridRange();
         this.menuHandler.setViewStartDate(rangeStartStr);
 
         const allVisibleTasks = this.getVisibleTasksInRange(rangeStartStr, rangeEndStr);
         const body = calendarHost.createDiv('cal-grid__body');
         this.renderWeekdayHeader(body);
-        const referenceMonth = this.getReferenceMonth();
+        const month = referenceMonth(rangeStartStr);
         const showWeekNumbers = this.shouldShowWeekNumbers();
+        const today = this.visualToday();
 
-        let cursor = new Date(startDate);
+        const cursor = DateUtils.parseDate(rangeStartStr);
+        const endDate = DateUtils.parseDate(rangeEndStr);
         while (cursor <= endDate) {
             const weekRow = body.createDiv('cal-week-row');
             if (showWeekNumbers) {
@@ -510,14 +275,14 @@ export class CalendarView extends ItemView {
             const weekDates: string[] = [];
 
             if (showWeekNumbers) {
-                this.renderWeekNumberCell(weekRow, weekStartDate);
+                renderWeekNumberCell(weekRow, weekStartDate, today, this.plugin.settings, this.periodicLinks(), { mini: false });
             }
 
             for (let i = 0; i < 7; i++) {
                 const cellDate = new Date(cursor);
                 const dateKey = DateUtils.getLocalDateString(cellDate);
                 weekDates.push(dateKey);
-                this.renderDateHeader(weekRow, cellDate, i + 1, referenceMonth);
+                this.renderDateHeader(weekRow, cellDate, i + 1, month, today);
                 cursor.setDate(cursor.getDate() + 1);
             }
 
@@ -537,7 +302,7 @@ export class CalendarView extends ItemView {
                 }
             }
 
-            await this.renderWeekTasks(weekRow, weekDates, allVisibleTasks, reconciler);
+            this.renderWeekTasks(weekRow, weekDates, allVisibleTasks, reconciler);
         }
 
         // Dispose any cards that did not turn up in the new render (filter
@@ -550,149 +315,13 @@ export class CalendarView extends ItemView {
             toolbarRootEl.dataset.range = `${rangeStartStr}:${rangeEndStr}`;
         }
 
-        // Attach handles to the selected card. Section renderers already
-        // tagged cards with `.is-selected` during render; reapplySelectionClass is
-        // idempotent and ensures handles are attached on the fresh DOM.
-        if (this.handleManager?.getSelectedTaskId()) {
-            this.handleManager.reapplySelectionClass();
-        }
+        // The selection is shown by HandleManager alone: `.is-selected` and the
+        // handles on the selected task's cards, taken off every other card. It
+        // runs on every draw, a selection or none, since a kept card may carry
+        // the class from the draw before.
+        this.handleManager?.reapplySelectionClass();
 
         this.scrollRestorer.restore();
-    }
-
-    private renderSidebarContent(header: HTMLElement, body: HTMLElement): void {
-        header.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
-
-        const addBtn = header.createEl('button', { cls: 'tv-sidebar__panel-add-btn' });
-        setIcon(addBtn, 'plus');
-        addBtn.appendText(t('pinnedList.addList'));
-        addBtn.addEventListener('click', () => {
-            const newId = 'pl-' + Date.now();
-            this.pinnedLists.push({
-                id: newId,
-                name: t('pinnedList.newList'),
-                filterState: createDefaultListFilterState(),
-            });
-            this.app.workspace.requestSaveLayout();
-            this.pinnedListRenderer.scheduleRename(newId);
-            this.pinnedListRenderer.refresh();
-        });
-
-        // Re-attach the persistent pinned host into the freshly-built sidebar body.
-        // PinnedListRenderer manages its own contents via its onChange subscription
-        // and explicit refresh() calls — we only relocate the host here.
-        body.appendChild(this.pinnedHost);
-    }
-
-    private getPinnedListCallbacks() {
-        return {
-            onCollapsedChange: (id: string, collapsed: boolean) => {
-                this.pinnedListCollapsed[`${COLLAPSE_KEY_PREFIX}${id}`] = collapsed;
-                this.app.workspace.requestSaveLayout();
-            },
-            onSortEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => this.openPinnedListSort(listDef, anchorEl),
-            onFilterEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => this.openPinnedListFilter(listDef, anchorEl),
-            onDuplicate: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                this.pinnedLists.splice(idx + 1, 0, {
-                    ...listDef,
-                    id: 'pl-' + Date.now(),
-                    name: listDef.name + ' (copy)',
-                    filterState: structuredClone(listDef.filterState),
-                    sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
-                });
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
-            },
-            onRemove: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                if (idx >= 0) this.pinnedLists.splice(idx, 1);
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
-            },
-            onMoveUp: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                if (idx > 0) {
-                    [this.pinnedLists[idx - 1], this.pinnedLists[idx]] = [this.pinnedLists[idx], this.pinnedLists[idx - 1]];
-                    this.app.workspace.requestSaveLayout();
-                    this.pinnedListRenderer.refresh();
-                }
-            },
-            onMoveDown: (listDef: PinnedListDefinition) => {
-                const idx = this.pinnedLists.indexOf(listDef);
-                if (idx >= 0 && idx < this.pinnedLists.length - 1) {
-                    [this.pinnedLists[idx], this.pinnedLists[idx + 1]] = [this.pinnedLists[idx + 1], this.pinnedLists[idx]];
-                    this.app.workspace.requestSaveLayout();
-                    this.pinnedListRenderer.refresh();
-                }
-            },
-            onToggleApplyViewFilter: (listDef: PinnedListDefinition) => {
-                listDef.applyViewFilter = !listDef.applyViewFilter;
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
-            },
-            onRename: () => {
-                this.app.workspace.requestSaveLayout();
-            },
-            onTopRightEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => {
-                const tasks = this.readService.getTasks();
-                const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
-                this.topRightEditor.open(anchorEl, {
-                    config: listDef.topRight,
-                    propertyKeys,
-                    onChange: (config) => {
-                        listDef.topRight = config;
-                        this.app.workspace.requestSaveLayout();
-                        this.pinnedListRenderer.refresh();
-                    },
-                });
-            },
-        };
-    }
-
-    /**
-     * Strip the `${viewId}::` prefix so PinnedListRenderer receives a plain
-     * Record<listId, boolean>. The view-side store keeps the prefix to avoid
-     * timeline/calendar collapse-state collisions when both views persist into
-     * the same workspace layout.
-     */
-    private buildCollapsedStateForRenderer(): Record<string, boolean> {
-        const out: Record<string, boolean> = {};
-        for (const [key, val] of Object.entries(this.pinnedListCollapsed)) {
-            if (key.startsWith(COLLAPSE_KEY_PREFIX)) {
-                out[key.slice(COLLAPSE_KEY_PREFIX.length)] = val;
-            }
-        }
-        return out;
-    }
-
-    /**
-     * One-shot migration: any key without `::` is assumed to be a legacy
-     * listId-only entry from before viewId-namespacing was introduced.
-     * Prefix it with `${viewId}::` so calendar owns it.
-     */
-    private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
-        this.sidebarSortMenu.showMenuAtElement(anchorEl, {
-            onSortChange: () => {
-                listDef.sortState = this.sidebarSortMenu.getSortState();
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
-            },
-        });
-    }
-
-    private openPinnedListFilter(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
-        this.sidebarFilterMenu.setFilterState(listDef.filterState);
-        this.sidebarFilterMenu.showMenuAtElement(anchorEl, {
-            onFilterChange: () => {
-                listDef.filterState = this.sidebarFilterMenu.getFilterState();
-                this.app.workspace.requestSaveLayout();
-                this.pinnedListRenderer.refresh();
-            },
-            getTasks: () => this.readService.getTasks(),
-            getStartHour: () => this.plugin.settings.startHour,
-        });
     }
 
     private renderWeekdayHeader(container: HTMLElement): void {
@@ -725,16 +354,21 @@ export class CalendarView extends ItemView {
         }
     }
 
-    private renderDateHeader(weekRow: HTMLElement, date: Date, colIndex: number, referenceMonth: { year: number; month: number }): void {
+    private renderDateHeader(
+        weekRow: HTMLElement,
+        date: Date,
+        colIndex: number,
+        referenceMonth: { year: number; month: number },
+        todayKey: string,
+    ): void {
         const cell = weekRow.createDiv('cal-day-cell');
         const dateKey = DateUtils.getLocalDateString(date);
-        const todayKey = DateUtils.getLocalDateString(new Date());
         const isFirstOfMonth = date.getDate() === 1;
         const dateLabel = isFirstOfMonth
             ? dateKey
             : `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-        cell.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
+        cell.style.gridColumn = `${getGridColumnForDay(colIndex, this.shouldShowWeekNumbers())}`;
         cell.style.gridRow = '1';
         if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
             cell.addClass('is-outside-month');
@@ -746,182 +380,54 @@ export class CalendarView extends ItemView {
         const headerRow = cell.createDiv('cal-day-cell__header');
 
         const astronomyDisplay = getEffectiveAstronomyDisplay(
-            this.astronomyDisplay,
+            this.state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
         if (astronomyDisplay.moonPhase) {
             attachMoonPhase(headerRow, dateKey, { size: 14, modifier: 'moon-phase-inline--cal' });
         }
 
-        const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, date);
-        const dateLink = headerRow.createEl('a', { cls: 'internal-link' });
-        dateLink.createSpan({ cls: 'cal-day-cell__date-label', text: dateLabel });
-        dateLink.dataset.href = linkTarget;
-        dateLink.setAttribute('href', linkTarget);
-        dateLink.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-            void this.openOrCreateDailyNote(date);
-        });
-
-        this.linkInteractionManager.bind(cell, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.hoverParent,
-        }, { bindClick: false });
+        periodicNoteLink(headerRow, this.periodicLinks(), dailyNotes(this.app), dateKey)
+            .createSpan({ cls: 'cal-day-cell__date-label', text: dateLabel });
     }
 
-    private async renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[], reconciler: CardReconciler): Promise<void> {
-        const startHour = this.plugin.settings.startHour;
-        // Calendar 月セルは calendar day ベースで 1 セル = 1 日。startHour 境界
-        // (visual-date split) を視覚化する意味はなく、入れると view 内部に
-        // 不要な dashed boundary が現れる。週行が物理的に分かれることによる
-        // per-week split (date-range) のみ適用する。
-        const weekSplit = splitTasks(allTasks, { type: 'date-range', start: weekDates[0], end: weekDates[weekDates.length - 1], startHour });
-        const entries = computeGridLayout(weekSplit, {
-            dates: weekDates,
-            getDateRange: (task) => {
-                const range = getTaskDateRange(task as DisplayTask, startHour);
-                if (!range.effectiveStart) return null;
-                return { effectiveStart: range.effectiveStart, effectiveEnd: range.effectiveEnd || range.effectiveStart };
-            },
-            computeDueArrows: true,
-        });
-
-        // Set grid-template-rows based on track count
-        let maxTrackIndex = -1;
-        for (const entry of entries) {
-            if (entry.trackIndex > maxTrackIndex) maxTrackIndex = entry.trackIndex;
-        }
-        if (maxTrackIndex >= 0) {
-            const trackCount = maxTrackIndex + 1;
-            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${trackCount}, minmax(var(--calendar-track-height), auto))`;
-        }
-
-        const colOffset = getColumnOffset(this.shouldShowWeekNumbers());
-
-        await Promise.all(entries.map(async (entry) => {
-            await this.renderGridTask(weekRow, entry, colOffset, reconciler);
-
-            if (entry.dueArrow) {
-                renderDueArrow(weekRow, entry, {
-                    gridRowOffset: 2,
-                    gridColOffset: colOffset,
-                });
-            }
-        }));
-    }
-
-    private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
-        const filterState = this.filterMenu.getFilterState();
-        return this.readService.getTasksForDateRange(rangeStart, rangeEnd, filterState);
-    }
-
-    private async renderGridTask(
-        weekRow: HTMLElement,
-        entry: GridTaskEntry,
-        colOffset: number,
-        reconciler: CardReconciler,
-    ): Promise<void> {
-        if (entry.useBarVariant) {
-            const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
-            const reused = reconciler.acquire(cardInstanceId, entry.task);
-            const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
-            markHandleSurface(barEl, 'grid');
-            if (reused) weekRow.appendChild(reused);
-
-            this.decorateCalendarBar(barEl, entry, colOffset);
-            await this.taskRenderer.render(barEl, entry.task as DisplayTask, this.plugin.settings, {
-                cardInstanceId,
-                topRight: { mode: 'none' },
-                compact: true,
-            });
-            if (!reused) this.menuHandler.addTaskContextMenu(barEl);
-            return;
-        }
-
-        const cardInstanceId = `${VIEW_ID}::lane::${entry.task.id}`;
-        const reused = reconciler.acquire(cardInstanceId, entry.task);
-        const card = reused ?? weekRow.createDiv('task-card');
-        markHandleSurface(card, 'grid');
-        if (reused) weekRow.appendChild(reused);
-
-        this.decorateCalendarCell(card, entry, colOffset);
-        await this.taskRenderer.render(card, entry.task as DisplayTask, this.plugin.settings, {
-            cardInstanceId,
-            topRight: { mode: 'time' },
-            compact: true,
-        });
-        if (!reused) this.menuHandler.addTaskContextMenu(card);
-    }
-
-    /**
-     * Idempotent decoration for calendar multi-day bar cards. Variant classes
-     * are reset before applying the current entry's split state.
-     */
-    private decorateCalendarBar(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        // task-card--multi-day is the bar's defining class and stays.
-        el.removeClass('task-card--split-continues-before');
-        el.removeClass('task-card--split-continues-after');
-        if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
-        if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
-
-        this.applyCalendarGridPosition(el, entry, colOffset);
-
-        TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
-        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(entry.task) ?? null);
-        TaskStyling.applyReadOnly(el, entry.task);
-    }
-
-    /**
-     * Idempotent decoration for single-cell calendar cards (no multi-day span).
-     */
-    private decorateCalendarCell(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        this.applyCalendarGridPosition(el, entry, colOffset);
-
-        TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
-        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(entry.task) ?? null);
-        TaskStyling.applyReadOnly(el, entry.task);
-    }
-
-    private applyCalendarGridPosition(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        el.style.gridColumn = `${entry.colStart + colOffset} / span ${entry.span}`;
-        el.style.gridRow = `${entry.trackIndex + 2}`;
-        el.dataset.colStart = `${entry.colStart}`;
-        el.dataset.span = `${entry.span}`;
-        el.dataset.trackIndex = `${entry.trackIndex}`;
-    }
-
-    private getViewStartDateString(): string {
-        const { startDate } = this.getCalendarDateRange();
-        return DateUtils.getLocalDateString(startDate);
-    }
-
-    private getViewEndDateString(): string {
-        const { endDate } = this.getCalendarDateRange();
-        return DateUtils.getLocalDateString(endDate);
-    }
-
-    private getCalendarDateRange(): { startDate: Date; endDate: Date } {
-        return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
-    }
-
-    /**
-     * The date range currently drawn, for image export. Calls the same
-     * `getCalendarDateRange()` the grid renders from (line ~492) — the
-     * week-aligned 42-day window, not the calendar month — so this can't
-     * drift from what's actually on screen.
-     */
-    getExportedDateRange(): { anchor: string; from: string; to: string } | null {
-        const { startDate, endDate } = this.getCalendarDateRange();
+    /** What the grid's links to the daily and weekly notes open and preview with. */
+    private periodicLinks(): PeriodicLinkContext {
         return {
-            anchor: this.windowStart,
-            from: DateUtils.getLocalDateString(startDate),
-            to: DateUtils.getLocalDateString(endDate),
+            app: this.app,
+            notes: this.operations,
+            links: this.linkInteractionManager,
+            hoverParent: this.hoverParent,
         };
     }
 
-    private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
-        return getWeekStart(date, weekStartDay);
+    /** The week's tasks on the row, under the day headers: the lane Timeline's all-day row draws too. */
+    private renderWeekTasks(weekRow: HTMLElement, weekDates: string[], allTasks: DisplayTask[], reconciler: CardReconciler): void {
+        const tracks = drawDateGridLane(weekRow, allTasks, {
+            dates: weekDates,
+            colOffset: getColumnOffset(this.shouldShowWeekNumbers()),
+            firstRow: 2,
+            scope: 'lane',
+            timeOnSingleDay: true,
+        }, { taskRenderer: this.taskRenderer, settings: this.plugin.settings, reconciler });
+        if (tracks > 0) {
+            weekRow.style.gridTemplateRows = `var(--calendar-header-height) repeat(${tracks}, minmax(var(--calendar-track-height), auto))`;
+        }
+    }
+
+    private getVisibleTasksInRange(rangeStart: string, rangeEnd: string): DisplayTask[] {
+        const window = daysWindow(rangeStart, rangeEnd, this.plugin.settings.startHour);
+        return this.readService.tasksInWindow(window, this.state.filterState);
+    }
+
+    /**
+     * The days drawn, for image export: the six weeks the grid draws (not the
+     * calendar month), read from the same range as the draw. The anchor is
+     * the day looked at (today while the view follows it), as in Timeline.
+     */
+    getExportedDateRange(): { anchor: string; from: string; to: string } | null {
+        const { start, end } = this.gridRange();
+        return { anchor: viewedDay(this.state.date, this.visualToday()), from: start, to: end };
     }
 
     private getWeekdayNames(): string[] {
@@ -934,87 +440,5 @@ export class CalendarView extends ItemView {
 
     private shouldShowWeekNumbers(): boolean {
         return this.plugin.settings.calendarShowWeekNumbers;
-    }
-
-    private getColumnOffset(): number {
-        return getColumnOffset(this.shouldShowWeekNumbers());
-    }
-
-    private getGridColumnForDay(dayColumn: number): number {
-        return getGridColumnForDay(dayColumn, this.shouldShowWeekNumbers());
-    }
-
-    private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
-        const weekNumberEl = weekRow.createDiv('cal-week-number');
-        const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
-
-        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
-        if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
-            weekNumberEl.addClass('is-current-week');
-        }
-
-        const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);
-        const weekLink = weekNumberEl.createEl('a', { cls: 'internal-link' });
-        weekLink.createSpan({
-            cls: 'cal-week-number__label',
-            text: `W${String(weekNumber).padStart(2, '0')}`,
-        });
-        weekLink.dataset.href = weekLinkTarget;
-        weekLink.setAttribute('href', weekLinkTarget);
-        weekLink.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-        });
-        this.linkInteractionManager.bind(weekNumberEl, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.hoverParent,
-        }, { bindClick: false });
-        weekNumberEl.addEventListener('click', () => {
-            void this.openOrCreatePeriodicNote(weekStartDate);
-        });
-    }
-
-    private getReferenceMonth(): { year: number; month: number } {
-        return getReferenceMonth(this.windowStart);
-    }
-
-    private navigateWeek(offset: number): void {
-        this.windowStart = DateUtils.addDays(this.windowStart, offset * 7);
-        void this.app.workspace.requestSaveLayout();
-        this.render();
-    }
-
-    /**
-     * Show the month that contains `date`, laid out from the week of its 1st.
-     * The Today button and "Go to date" both land here, so a
-     * picked date and "today" line up the same way.
-     */
-    private showMonthOf(date: Date): void {
-        this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);
-        void this.app.workspace.requestSaveLayout();
-        this.render();
-    }
-
-    private parseLocalDateString(value: string): Date | null {
-        return parseLocalDateString(value);
-    }
-
-    private getNormalizedWindowStart(value: string): string {
-        return getNormalizedWindowStart(value, this.plugin.settings.weekStartDay);
-    }
-
-    private async openOrCreateDailyNote(date: Date): Promise<void> {
-        return openOrCreateDailyNote(this.app, date);
-    }
-
-    private async openOrCreatePeriodicNote(date: Date): Promise<void> {
-        const settings = this.plugin.settings;
-        let file: TFile | null = DailyNoteUtils.getWeeklyNote(this.app, settings, date);
-        if (!file) {
-            file = await DailyNoteUtils.createWeeklyNote(this.app, settings, date);
-        }
-        if (file) {
-            await this.app.workspace.getLeaf(false).openFile(file);
-        }
     }
 }

@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import type { App } from 'obsidian';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { DocumentTreeBuilder } from '../../../src/services/parsing/tree/DocumentTreeBuilder';
-import type { SectionNode, TaskBlock } from '../../../src/services/parsing/tree/DocumentTree';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 describe('Outline.depthOf', () => {
@@ -33,20 +30,12 @@ describe('Outline.depthOf', () => {
     });
 });
 
-/** Every task block of the note, nested ones included. */
-function blocksOf(lines: string[]): TaskBlock[] {
-    const doc = DocumentTreeBuilder.build('note.md', lines, Outline.bodyStart(lines));
-    const out: TaskBlock[] = [];
-    const walkBlock = (block: TaskBlock) => {
-        out.push(block);
-        block.childTaskBlocks.forEach(walkBlock);
-    };
-    const walkSection = (section: SectionNode) => {
-        for (const block of section.blocks) if (block.type === 'task-block') walkBlock(block);
-        section.children.forEach(walkSection);
-    };
-    doc.sections.forEach(walkSection);
-    return out;
+/** Every row of the note, nested ones included, with the lines of its subtree below it as the parse reads them. */
+function rowsOf(lines: string[]): { line: number; childLineNumbers: number[] }[] {
+    return FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('note.md')).tasks.map(task => ({
+        line: task.line,
+        childLineNumbers: (task.subtreeLines ?? []).slice(1).map((_, i) => task.line + 1 + i),
+    }));
 }
 
 /**
@@ -66,7 +55,7 @@ const MIXED = [
 
 describe('a note that mixes tabs and spaces', () => {
     it('is read with the parent and children it shows', () => {
-        const parsed = FileParsePipeline.parse('note.md', [...MIXED], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...MIXED], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const byContent = new Map(parsed.tasks.map(task => [task.content, task]));
         const parentOf = (content: string) => {
@@ -81,9 +70,8 @@ describe('a note that mixes tabs and spaces', () => {
     });
 
     it('has the subtree a write carries where the parser reads it', () => {
-        const ops = new FileOperations({} as App);
-        expect(ops.collectChildrenFromLines(Outline.read([...MIXED]), 1).childrenLines).toEqual([]);
-        expect(ops.collectChildrenFromLines(Outline.read([...MIXED]), 2).childrenLines).toEqual([MIXED[3], MIXED[4]]);
+        expect(Outline.read([...MIXED]).subtreeEnd(1)).toBe(2);
+        expect(Outline.read([...MIXED]).subtreeEnd(2)).toBe(5);
     });
 });
 
@@ -117,7 +105,7 @@ describe('OutlineReading.subtreeEnd', () => {
 describe('a child below a blank line', () => {
     it('is read as the child of the task above the blank line', () => {
         const lines = ['- [ ] p', '\t- [ ] a', '', '\t- [ ] b', '\t- key:: value', '', '- [ ] q', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         const b = parsed.tasks.find(task => task.content === 'b')!;
@@ -129,7 +117,7 @@ describe('a child below a blank line', () => {
 
     it('of a child task stays the child\'s, not the parent\'s child line', () => {
         const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '', '\tmemo of p', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         // The blank line after c's subtree is not c's; it stands in p.
@@ -140,7 +128,7 @@ describe('a child below a blank line', () => {
     // paragraph `memo of c` opened (a lazy continuation), so it is c's.
     it('takes a shallower line right below it as its paragraph going on (Obsidian, measurement.md q5)', () => {
         const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '\tmemo of p', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         const c = parsed.tasks.find(task => task.content === 'c')!;
@@ -189,12 +177,11 @@ describe('the write and the parser agree on every subtree', () => {
 
     for (const [name, lines] of SHAPES) {
         it(name, () => {
-            const ops = new FileOperations({} as App);
-            const blocks = blocksOf([...lines]);
+            const blocks = rowsOf([...lines]);
             expect(blocks.length).toBeGreaterThan(0);
             for (const block of blocks) {
-                const { childrenLines } = ops.collectChildrenFromLines(Outline.read([...lines]), block.line);
-                const written = childrenLines.map((_, i) => block.line + 1 + i);
+                const end = Outline.read([...lines]).subtreeEnd(block.line);
+                const written = Array.from({ length: end - block.line - 1 }, (_, i) => block.line + 1 + i);
                 expect(written, `subtree of line ${block.line}`).toEqual(block.childLineNumbers);
             }
         });
@@ -222,5 +209,28 @@ describe('Outline.readSubtree: a row and its subtree, read away from the note', 
 
     it('reads no frontmatter', () => {
         expect(Outline.readSubtree(['- [ ] T', '  ---']).bodyStart).toBe(0);
+    });
+});
+
+describe('OutlineReading.directItems', () => {
+    it('answers the items whose parent is the line, top to bottom, code left out', () => {
+        const outline = Outline.read([
+            '- [ ] T',          // 0
+            '\t- a',            // 1
+            '\t\t- deep',       // 2
+            '',                 // 3
+            '\t- ```',          // 4: an item a fence opens on is code
+            '\t\t- in fence',   // 5
+            '\t  ```',          // 6
+            '\t- b',            // 7
+            '- next',           // 8
+        ]);
+        expect(outline.directItems(0)).toEqual([1, 7]);
+        expect(outline.directItems(1)).toEqual([2]);
+        expect(outline.directItems(8)).toEqual([]);
+    });
+
+    it('answers none for a line that opens no item', () => {
+        expect(Outline.read(['text', '  - a']).directItems(0)).toEqual([]);
     });
 });

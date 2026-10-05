@@ -1,17 +1,16 @@
 import { type App, TFile } from 'obsidian';
-import { HeadingInserter } from '../../../utils/HeadingInserter';
 import { indentUnit } from '../../../utils/ObsidianConfig';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { carryTo, putNumbered, subtreeBlock } from '../Carry';
 import type { Section } from '../Destination';
 import {
-    createFile, editLines, fileGone, readInLine, splitLines, takeBack,
-    type LineDraft, type MarkedLine, type Refusal, type RowTarget, type TakeBack, type WriteChannel, type WriteChannels, type WriteSession,
+    editLines, fileGone, readInLine, splitLines, takeBack, withRefused,
+    type LineDraft, type MarkedLine, type Refusal, type RowRef, type RowTarget, type TakeBack, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
+import { createNote, sectionSpot } from '../Notes';
 import { replaceSubtree } from '../ReplaceSubtree';
-import type { PlannedTarget } from '../TaskRefs';
-import type { CompletionFire, FiringOutcome, SubtreeReplacement } from '../TaskOps';
-import type { FileOperations } from '../utils/FileOperations';
+import { firingTrials, type CompletionFire, type FiringOutcome } from '../FiringTrials';
+import type { SubtreeReplacement } from '../TaskOps';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { ListNumber } from '../utils/ListNumber';
 import { noteLink } from '../utils/NoteLink';
@@ -24,7 +23,7 @@ import type { InlineTaskWriter } from './InlineTaskWriter';
  * wrote before sending it, if any (`SubtreeReplacement`).
  */
 export interface SentRow {
-    target: PlannedTarget;
+    target: RowRef;
     draft?: SubtreeReplacement;
 }
 
@@ -102,14 +101,13 @@ type Rehearsed = ReadonlyArray<{ lines: readonly string[]; block: readonly Place
 
 /**
  * The writes of a send: rows and their subtrees taken to a section of a note
- * (`v0.58-features.md`, 送る操作への一般化; the order and what is taken back,
- * `note-ops-plan.md` 3).
+ * (`archive/2026-09-send.md`, 仕様の決定, 移す操作から送る操作へ; the order and
+ * what is taken back, 書き込みの順序と補償).
  */
 export class SendWriter {
     constructor(
         private app: App,
         private inline: InlineTaskWriter,
-        private fileOps: FileOperations,
         private channelOf: WriteChannels,
     ) { }
 
@@ -125,7 +123,7 @@ export class SendWriter {
      * subtree is what is sent, `==>` lines and all, to fire at its next
      * completion where it lands. The note gets the rows in their order: the
      * first where `Placement.into` puts lines in the section, the heading
-     * made when the note has none (`HeadingInserter.sectionSpot`), each after
+     * made when the note has none (`Notes.sectionSpot`), each after
      * it just past the one before, as its sibling. A note with more than one
      * heading by the name takes none of them (`headings`).
      *
@@ -144,7 +142,7 @@ export class SendWriter {
      *    what goes to the note. Refused, nothing is written, and the refusal
      *    is told.
      * 2. The note is written: made of those rows, the frontmatter keys and
-     *    its heading (`editLines`, `createFile`), or written in one write,
+     *    its heading (`Notes.createNote`), or written in one write,
      *    with the keys it has none of and its own rows carried. Refused,
      *    nothing is written anywhere, and the refusal is told.
      *
@@ -171,7 +169,7 @@ export class SendWriter {
         completing: SendCompleting<F>,
         opts: SendHearing = {},
     ): Promise<SendOutcome<F>> {
-        const hearing = (path: string) => hearingChannel(this.channelOf(path), opts.refused);
+        const hearing = (path: string) => withRefused(this.channelOf(path), opts.refused);
         const own = rows.filter(one => one.file === to.path).map(one => one.row);
         const others: { path: string; rows: SentRow[] }[] = [];
         for (const { file, row } of rows) {
@@ -236,7 +234,7 @@ export class SendWriter {
     /**
      * Try the write of the note at `path` that sends `rows` on its lines as
      * the disk holds them, writing nothing ({@link leaveLinks}'s drafts and
-     * fires, `InlineTaskWriter.firingTrials`), and answer what it leaves of
+     * fires, `firingTrials`), and answer what it leaves of
      * each row, in their order; or why it is refused, the refusal told
      * through `channel`.
      */
@@ -250,7 +248,8 @@ export class SendWriter {
         if (!(file instanceof TFile)) return fileGone(channel, path, rows[0]?.target.subject ?? path);
         const { lines, eol } = splitLines(await readInLine(this.app, file));
         let sent: RowTarget[] = [];
-        const firing = this.inline.firingTrials(
+        const firing = firingTrials(
+            (draft, session, target, ops) => this.inline.applyOps(draft, session, target, ops),
             (draft, session) => {
                 const drafted = writeDrafts(draft, session, rows, completing);
                 if (drafted === false) return false;
@@ -280,11 +279,9 @@ export class SendWriter {
     }
 
     /**
-     * Make the note `to` of the rows `items` sends and the frontmatter keys:
-     * the lines are put together as a write to an empty note, held to the
-     * same check (`editLines`), and the note is made of them whole
-     * (`createFile`), in the folders its path names. Or why it is not, told
-     * through `channel`.
+     * Make the note `to` of the rows `items` sends and the frontmatter keys,
+     * put in an empty note (`createNote`). Or why it is not, told through
+     * `channel`.
      */
     private async makeNote(
         to: SendTo,
@@ -293,18 +290,9 @@ export class SendWriter {
         channel: WriteChannel | undefined,
     ): Promise<{ note: TFile; placed: Placed; before: readonly string[]; outcome: null } | { refused: Refusal }> {
         let placed: Placed | null = null;
-        // The lines of an empty note: the one a file with no terminator splits into.
-        const edited = editLines(to.path, [''], '\n', (draft, _eol, session) => {
+        const created = await createNote(this.app, to.path, channel, subject, () => '', (draft, _eol, session) => {
             placed = this.placeInNote(draft, session, items, to);
             return placed !== null;
-        }, { about: subject });
-        if (!edited.written) {
-            channel?.refused(edited.refused);
-            return { refused: edited.refused };
-        }
-        const created = await createFile(this.app, to.path, channel, subject, async () => {
-            await this.fileOps.ensureDirectoryExists(to.path);
-            return edited.lines.join('\n');
         });
         if (!created.written) return { refused: created.refused };
         return { note: created.file, placed: placed!, before: [], outcome: null };
@@ -371,7 +359,7 @@ export class SendWriter {
             }
             let spot: Spot;
             if (k === 0) {
-                const inSection = HeadingInserter.sectionSpot(draft, to.section, head);
+                const inSection = sectionSpot(draft, to.section, head);
                 if ('kind' in inSection) {
                     session.refuse({ kind: 'headings', name: to.section.heading, count: inSection.count });
                     return null;
@@ -421,7 +409,7 @@ export class SendWriter {
         completing: SendCompleting<F>,
     ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(path);
-        const channel = quiet(this.channelOf(path));
+        const channel = withRefused(this.channelOf(path), 'quiet');
         if (!(file instanceof TFile)) return fileGone(channel, path, rows[0]?.target.subject ?? path);
         const link = noteLink(this.app.fileManager, note, path);
         let sent: RowTarget[] = [];
@@ -475,14 +463,4 @@ function writeDrafts<F extends CompletionFire>(
         }
     }
     return { sent, completed };
-}
-
-/** `channel`, with a refusal handed to `refused` instead when the caller gives one (see {@link SendWriter.send}). */
-function hearingChannel(channel: WriteChannel | undefined, refused: ((refusal: Refusal) => void) | undefined): WriteChannel | undefined {
-    return channel && refused ? { ...channel, refused } : channel;
-}
-
-/** `channel`, with a refusal told to nobody: a write whose caller says what came of it. */
-function quiet(channel: WriteChannel | undefined): WriteChannel | undefined {
-    return channel ? { ...channel, refused: () => { } } : undefined;
 }

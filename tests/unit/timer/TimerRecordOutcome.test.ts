@@ -1,22 +1,28 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { Notice, type App } from 'obsidian';
+import { Notice } from 'obsidian';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
+import type { PendingRecord, TimerState } from '../../../src/timer/TimerState';
+import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
 import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
 import en from '../../../src/i18n/locales/en.json';
-import { heldByAnchor } from '../helpers/anchoredRow';
+import { opsOver, answerOf } from '../helpers/anchoredRow';
+import { timerOn, type MeasureKind } from '../helpers/timerRig';
 
 /**
- * 記録の成否と通知。記録を書けたときだけ成功の通知を1回出し、書けなかったときは
- * 成功の通知を出さずに偽を返す（理由は書き込みの層が1回だけ出す。ここの偽の
- * 書き込みは通知を出さないので、recorder 自身が出した数だけが数えられる）。
+ * 記録の成否と通知。記録を書けたときだけ記録の通知（`notice.timerRecorded`）を
+ * 1回出す。経路（走行中の行を閉じる、予備の記録を足す、self の対象の行）と
+ * 測り方で文言は変わらず、種類（Timer、Countdown、Pomodoro）だけを言う。
+ * 書けなかったときは通知を出さずに偽を返す（理由は書き込みの層が1回だけ出す。
+ * ここの偽の書き込みは通知を出さないので、recorder 自身が出した数だけが数えられる）。
  * 対象を引けないときは recorder 自身が解決の失敗を1回だけ出す。
  */
 
+const FILE = 'notes/a.md';
 const CHILD_ID = 'tv-inline:notes/a.md:ln:5';
 const PARENT_ID = 'tv-inline:notes/a.md:ln:3';
+const TARGET = 'tv-timer-anchor';
+const RUNNING = 'tv-timer-1';
 
 type NoticeKey = keyof typeof en.notice;
 
@@ -37,28 +43,28 @@ interface Options {
     insertResult?: boolean;
 }
 
+const outlet = {
+    dispatch: (timer: TimerState, event: TimerEvent) => { Object.assign(timer, step(timer, event, Date.now())); },
+    timers: () => [],
+};
+
 function makeHarness(options: Options = {}) {
     const inserted: string[] = [];
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
     const childExists = options.childExists !== false;
     const resolvable = options.resolvable !== false;
 
-    const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', line: 2, content: 'parent', blockId: 'tv-timer-anchor', anchor: 'tv-timer-anchor' });
-    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', line: 3, content: '', blockId: 'tv-timer-1', anchor: 'tv-timer-1' });
+    const parent = makeTask({ id: PARENT_ID, file: FILE, line: 2, content: 'parent', blockId: TARGET, anchor: TARGET });
+    const child = makeTask({ id: CHILD_ID, file: FILE, line: 3, content: '', blockId: RUNNING, anchor: RUNNING });
     const visible = childExists ? [parent, child] : [parent];
 
     const taskIndex = {
-        getTask: (id: string) => {
-            if (id === CHILD_ID) return childExists ? child : undefined;
-            if (id === PARENT_ID) return resolvable ? parent : undefined;
-            return undefined;
-        },
+        getTask: (id: string) => visible.find(t => t.id === id),
         getTaskByAnchor: (file: string, anchor: string) => {
-            if (anchor === 'tv-timer-anchor' && !resolvable) return undefined;
+            if (anchor === TARGET && !resolvable) return undefined;
             return visible.find(t => t.file === file && t.anchor === anchor);
         },
         getTasks: () => visible,
-        getTaskByFileLine: () => parent,
         updateTask: async (id: string, u: Record<string, unknown>) => {
             updates.push({ id, updates: u });
             return options.updateResult ?? true;
@@ -67,119 +73,88 @@ function makeHarness(options: Options = {}) {
 
     const plugin = {
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
-        getTaskIndex: () => taskIndex,
-        getTaskWriteService: () => ({
-            freshByAnchor: heldByAnchor(taskIndex),
+        getIndex: () => taskIndex,
+        getOperations: () => ({
+            ...opsOver(taskIndex),
             insertLine: async (_parentId: string, line: string, _place: string) => {
                 inserted.push(line);
-                return options.insertResult ?? true;
+                return answerOf(options.insertResult ?? true);
             },
         }),
     } as unknown as TaskViewerPlugin;
 
-    const storageUtils = { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils;
-    const recorder = new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []);
-
-    return { recorder, inserted, updates };
+    const recorder = new TimerRecorder(plugin, outlet, () => 'tv-timer-2');
+    return { recorder, inserted, updates, parent };
 }
 
-function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
-    return {
-        id: 'timer-1',
-        taskId: PARENT_ID,
-        taskName: 'parent',
-        taskOriginalText: '- [ ] parent',
-        taskFile: 'notes/a.md',
-        timerTargetId: 'tv-timer-anchor',
-        startTimeMs: 0,
-        pausedElapsedTime: 600,
-        phase: 'work',
-        isRunning: false,
-        runState: 'running',
-        sessionCount: 0,
-        recordedElapsedTime: 0,
-        isExpanded: true,
-        intervalId: null,
-        recordMode: 'child',
-        parserId: 'tv-inline',
-        taskColor: '',
-        pendingRecord: null,
-        opening: null,
-        priorStartMs: null,
-        ownedAnchors: [],
-        timerType: 'countup',
-        elapsedTime: 600,
-        ...overrides,
-    } as TimerInstance;
+type Harness = ReturnType<typeof makeHarness>;
+
+interface Shape { kind?: MeasureKind; self?: boolean; tail?: string | null }
+
+/** `parent` に始めた child のタイマー。尻尾は `shape.tail`（無ければ走行中の行を書いていない）。 */
+function makeTimer(h: Harness, shape: Shape = {}): TimerState {
+    return { ...timerOn(h.parent, shape.self ? 'self' : 'child', shape.kind ?? 'countup'), tail: shape.tail ?? null };
 }
 
-/** 止めた時点で固定する記録: 経過は timer の値をそのまま使う。 */
-function recordFor(timer: TimerInstance, then: PendingRecord['then'] = 'close'): PendingRecord {
-    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then };
+/** 止めた時点で固定する記録: 10 分。 */
+function recordFor(then: PendingRecord['then'] = 'close'): PendingRecord {
+    return { endMs: Date.now(), seconds: 600, then };
 }
 
-const INTERVAL: Partial<TimerInstance> = {
-    timerType: 'interval',
-    intervalSource: 'pomodoro',
-    groups: [],
-    currentGroupIndex: 0,
-    currentSegmentIndex: 0,
-    currentRepeatIndex: 0,
-    segmentTimeRemaining: 0,
-    totalElapsedTime: 600,
-    totalDuration: 600,
-} as Partial<TimerInstance>;
-
-const COUNTDOWN: Partial<TimerInstance> = { timerType: 'countdown', timeRemaining: 0, totalTime: 600 } as Partial<TimerInstance>;
-
-/** 各経路: どの書き込みが結果を持つか、成功で出る通知の鍵。 */
-const paths: {
-    name: string;
-    timer: Partial<TimerInstance>;
-    write: 'insert' | 'update';
-    success: NoticeKey;
-}[] = [
-    { name: 'countup child record', timer: {}, write: 'insert', success: 'timerRecorded' },
-    { name: 'countdown record', timer: COUNTDOWN, write: 'insert', success: 'countdownRecorded' },
-    { name: 'interval record', timer: INTERVAL, write: 'insert', success: 'kindRecorded' },
-    { name: 'the running line (updateChildAtEnd)', timer: { tailRecordBlockId: 'tv-timer-1' }, write: 'update', success: 'kindRecorded' },
+/** 各経路: どの書き込みが結果を持つか、記録の通知が言う種類。 */
+const paths: { name: string; shape: Shape; write: 'insert' | 'update'; kind: string }[] = [
+    { name: 'countup, an added record', shape: {}, write: 'insert', kind: 'Timer' },
+    { name: 'countdown, an added record', shape: { kind: { countdown: 600 } }, write: 'insert', kind: 'Countdown' },
+    { name: 'pomodoro, an added record', shape: { kind: 'pomodoro' }, write: 'insert', kind: 'Pomodoro' },
+    { name: 'the running line closed', shape: { tail: RUNNING }, write: 'update', kind: 'Timer' },
+    { name: 'pomodoro, the running line closed', shape: { kind: 'pomodoro', tail: RUNNING }, write: 'update', kind: 'Pomodoro' },
     // self の 1 本目: 開始の書き込みで尻尾を対象の錨に置いている。
-    { name: 'self (updateTaskDirectly)', timer: { recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' }, write: 'update', success: 'taskUpdated' },
+    { name: 'self, the target row', shape: { self: true, tail: TARGET }, write: 'update', kind: 'Timer' },
 ];
 
 describe('recordSessionEnd answers whether the record was written', () => {
     beforeEach(() => { Notice.messages.length = 0; });
 
-    it.each(paths)('$name: not written → false, no success notice', async ({ timer, write }) => {
+    it.each(paths)('$name: not written → false, no notice', async ({ shape, write }) => {
         const h = makeHarness(write === 'insert' ? { insertResult: false } : { updateResult: false });
-        const built = makeTimer(timer);
 
-        const recorded = await h.recorder.recordSessionEnd(built, recordFor(built));
+        const recorded = await h.recorder.recordSessionEnd(makeTimer(h, shape), recordFor());
 
         expect(recorded).toBe(false);
         expect(write === 'insert' ? h.inserted : h.updates).toHaveLength(1);
         expect(Notice.messages).toHaveLength(0);
     });
 
-    it.each(paths)('$name: written → true, one success notice', async ({ timer, write, success }) => {
+    it.each(paths)('$name: written → true, one notice that says recorded and its kind', async ({ shape, write, kind }) => {
         const h = makeHarness();
-        const built = makeTimer(timer);
 
-        const recorded = await h.recorder.recordSessionEnd(built, recordFor(built));
+        const recorded = await h.recorder.recordSessionEnd(makeTimer(h, shape), recordFor());
 
         expect(recorded).toBe(true);
         expect(write === 'insert' ? h.inserted : h.updates).toHaveLength(1);
         expect(Notice.messages).toHaveLength(1);
-        expect(isNotice(Notice.messages[0], success)).toBe(true);
+        expect(isNotice(Notice.messages[0], 'timerRecorded')).toBe(true);
+        expect(Notice.messages[0]).toContain(` ${kind} `);
     });
 
     it('self: a refused write leaves the tail on the target row', async () => {
         const h = makeHarness({ updateResult: false });
-        const timer = makeTimer({ recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' });
+        const timer = makeTimer(h, { self: true, tail: TARGET });
 
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
+        await h.recorder.recordSessionEnd(timer, recordFor());
 
-        expect(timer.tailRecordBlockId).toBe('tv-timer-anchor');
+        expect(timer.tail).toBe(TARGET);
+    });
+
+    it('an added record not written: the tail and the opening are as they were', async () => {
+        const h = makeHarness({ insertResult: false });
+        const timer = makeTimer(h);
+
+        await h.recorder.recordSessionEnd(timer, recordFor());
+
+        expect(timer.tail).toBeNull();
+        expect(timer.opening).toBeNull();
+        expect(timer.owned).toEqual([]);
     });
 });
 
@@ -188,9 +163,8 @@ describe('the running line was lost: a record is added instead', () => {
 
     it('says only that it was recorded, once', async () => {
         const h = makeHarness({ childExists: false });
-        const timer = makeTimer({ tailRecordBlockId: 'tv-timer-1' });
 
-        const recorded = await h.recorder.recordSessionEnd(timer, recordFor(timer));
+        const recorded = await h.recorder.recordSessionEnd(makeTimer(h, { tail: RUNNING }), recordFor());
 
         expect(recorded).toBe(true);
         expect(h.inserted).toHaveLength(1);
@@ -198,11 +172,10 @@ describe('the running line was lost: a record is added instead', () => {
         expect(isNotice(Notice.messages[0], 'timerRecorded')).toBe(true);
     });
 
-    it('says nothing of success when the added record was not written', async () => {
+    it('says nothing when the added record was not written', async () => {
         const h = makeHarness({ childExists: false, insertResult: false });
-        const timer = makeTimer({ tailRecordBlockId: 'tv-timer-1' });
 
-        const recorded = await h.recorder.recordSessionEnd(timer, recordFor(timer));
+        const recorded = await h.recorder.recordSessionEnd(makeTimer(h, { tail: RUNNING }), recordFor());
 
         expect(recorded).toBe(false);
         expect(h.inserted).toHaveLength(1);
@@ -213,14 +186,13 @@ describe('the running line was lost: a record is added instead', () => {
 describe('the target cannot be resolved', () => {
     beforeEach(() => { Notice.messages.length = 0; });
 
-    it.each([
-        { name: 'child record', timer: {} },
-        { name: 'self', timer: { recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' } as Partial<TimerInstance> },
-    ])('$name: says the target was not found, once, and answers false', async ({ timer }) => {
+    it.each<{ name: string; shape: Shape }>([
+        { name: 'child, an added record', shape: {} },
+        { name: 'self', shape: { self: true, tail: TARGET } },
+    ])('$name: says the target was not found, once, and answers false', async ({ shape }) => {
         const h = makeHarness({ resolvable: false });
-        const built = makeTimer(timer);
 
-        const recorded = await h.recorder.recordSessionEnd(built, recordFor(built));
+        const recorded = await h.recorder.recordSessionEnd(makeTimer(h, shape), recordFor());
 
         expect(recorded).toBe(false);
         expect(h.inserted).toHaveLength(0);

@@ -1,8 +1,12 @@
 import { TaskApiError } from './TaskApiTypes';
+import { exportableShortNames } from '../views/ViewDescriptors';
+import type { NumberRange } from '../utils/values/NumberValues';
+import { SETTINGS_SCHEMA } from '../settings/SettingsSchema';
 import type {
     ListParams, TodayParams, GetParams, CreateParams, UpdateParams, DeleteParams,
     DuplicateParams, TasksForDateRangeParams,
     CategorizedTasksForDateRangeParams, InsertChildTaskParams,
+    SimpleFilterParams, FilterSourceParams,
 } from './TaskApiTypes';
 
 /**
@@ -10,12 +14,11 @@ import type {
  * flags, CLI exposure). Consumed by:
  *   - assertParams() — strict unknown-key / required validation on the API
  *   - the CLI registrar — flag declarations and unknown-flag validation
- *   - help output — generated flag tables
+ *   - the references (`api/Reference`) — generated parameter and flag tables
  *
- * Deliberately NOT a conversion or help framework: handlers keep their
- * hand-written CliData → params parsing, and the prose parts of help /
- * docs stay hand-written. Only keys, required-ness, and one-line
- * descriptions live here.
+ * Deliberately NOT a conversion framework: handlers keep their hand-written
+ * CliData → params parsing. Only keys, required-ness, a whole number's
+ * range, and one-line descriptions live here.
  *
  * The `satisfies ParamMap<XxxParams>` bindings tie each schema to its API
  * param type at compile time: a key added to or removed from the type
@@ -24,12 +27,22 @@ import type {
 
 export interface ParamSpec {
     required?: true;
-    /** 'hidden' = API-only parameter (not exposed as a CLI flag). */
-    cli?: 'hidden';
+    /**
+     * 'hidden' = API-only parameter (not exposed as a CLI flag). An object
+     * = the flag's placeholder or description where the CLI writes or
+     * defaults it otherwise than the API (`limit`'s `all`).
+     */
+    cli?: 'hidden' | { readonly value?: string; readonly description?: string };
     /** CLI help placeholder, e.g. '<date|preset>'. Omit for boolean/hidden params. */
     value?: string;
     /** Boolean flag: no value on the CLI, boolean in the API. */
     boolean?: true;
+    /**
+     * A whole number, within this range. The API checks its number against
+     * it (`IntValue.check`) and the CLI reads its flag's text against it
+     * (`IntInput.read`), so both take the same numbers.
+     */
+    int?: NumberRange;
     description: string;
 }
 
@@ -37,35 +50,75 @@ type ParamMap<P> = { [K in keyof Required<P>]: ParamSpec };
 
 // ── Operation schemas ──
 
-export const LIST_SCHEMA = {
+/**
+ * The page size every listing takes: a whole number of 0 or more (0 counts
+ * only), or no limit — `Infinity` in the API, `all` on the CLI, whose
+ * default also hangs on the output format.
+ */
+export const LIMIT_PARAM = {
+    value: '<number>',
+    int: { min: 0 },
+    description: 'Max results (default: 100; 0=count only; Infinity=no limit)',
+    cli: {
+        value: '<number|all>',
+        description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only; all=no limit)',
+    },
+} as const satisfies ParamSpec;
+
+/**
+ * The visual day boundary of one query, in the range the setting takes
+ * (`SETTINGS_SCHEMA.startHour`): the setting's when absent.
+ */
+export const START_HOUR_PARAM = {
+    value: '<0-23>',
+    int: SETTINGS_SCHEMA.startHour.range,
+    description: 'Visual day boundary for this call (default: the setting)',
+} as const satisfies ParamSpec;
+
+/** How a listing is sorted. */
+export const SORT_PARAM = {
+    value: '<prop[:dir],..>',
+    description: 'Sort (e.g. startDate:asc,due:desc)',
+} as const satisfies ParamSpec;
+
+/** The simple per-field filters `list` and the date-range family share (`SimpleFilterParams`). */
+export const SIMPLE_FILTER_SCHEMA = {
     file:     { value: '<path>',          description: 'Filter by file path' },
     status:   { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
     tag:      { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
     content:  { value: '<text>',          description: 'Filter by content (contains)' },
-    date:     { value: '<date|preset>',   description: 'Single-day query window (= from=X to=X)' },
-    from:     { value: '<date|preset>',   description: 'Query window start: tasks ending on or after (inclusive overlap)' },
-    to:       { value: '<date|preset>',   description: 'Query window end: tasks starting on or before (inclusive overlap)' },
     due:      { value: '<date|preset>',   description: 'Due date equals' },
     leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
     property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
     color:    { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
     type:     { value: '<types>',         description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
     root:     { boolean: true,            description: 'Only root tasks (no parent)' },
-    filter:   { cli: 'hidden',            description: 'FilterState object (API only). Overrides simple filter params' },
-    filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
-    list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
-    sort:     { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-    limit:    { value: '<number|all>',     description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)' },
+} as const satisfies ParamMap<SimpleFilterParams>;
+
+/** A query's FilterStates (`FilterSourceParams`), taken together with the rest. */
+export const FILTER_SOURCE_SCHEMA = {
+    filter:     { cli: 'hidden',     description: 'FilterState object (API only), ANDed with the other params' },
+    filterFile: { value: '<path>',   description: 'FilterState JSON (.json) or view template (.md), ANDed with the other flags' },
+    list:       { value: '<name>',   description: 'Pinned list name (for .md templates with pinnedLists)' },
+} as const satisfies ParamMap<FilterSourceParams>;
+
+export const LIST_SCHEMA = {
+    ...SIMPLE_FILTER_SCHEMA,
+    date:     { value: '<date|preset>',   description: 'Tasks whose span overlaps this day (period overlaps)' },
+    from:     { value: '<date|preset>',   description: 'Window start: tasks whose span overlaps from this day on' },
+    to:       { value: '<date|preset>',   description: 'Window end: tasks whose span overlaps up to this day' },
+    ...FILTER_SOURCE_SCHEMA,
+    startHour: START_HOUR_PARAM,
+    sort:     SORT_PARAM,
+    limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<ListParams>;
 
-export const TODAY_SCHEMA = {
-    leaf:   { boolean: true,            description: 'Only leaf tasks (no children)' },
-    sort:   { value: '<prop[:dir],..>', description: 'Sort' },
-    limit:  { value: '<number|all>',    description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)' },
-} as const satisfies ParamMap<TodayParams>;
+/** `list`'s params but the window: `today` is `date=today`. */
+export const TODAY_SCHEMA = (({ date: _date, from: _from, to: _to, ...rest }) => rest)(LIST_SCHEMA) satisfies ParamMap<TodayParams>;
 
 export const GET_SCHEMA = {
     id: { value: '<taskId>', description: 'Task ID', required: true },
+    startHour: START_HOUR_PARAM,
 } as const satisfies ParamMap<GetParams>;
 
 export const CREATE_SCHEMA = {
@@ -73,7 +126,7 @@ export const CREATE_SCHEMA = {
     content: { value: '<text>',          description: 'Task content', required: true },
     start:   { value: '<date|datetime>', description: 'Start date (YYYY-MM-DD or YYYY-MM-DD HH:mm)' },
     end:     { value: '<date|datetime>', description: 'End date/datetime' },
-    due:     { value: '<YYYY-MM-DD>',    description: 'Due date' },
+    due:     { value: '<date|datetime>', description: 'Due date, with a time only after it' },
     status:  { value: '<char>',          description: 'Status character (default: space)' },
     heading: { value: '<heading>',       description: 'Insert under heading (default: end of file)' },
 } as const satisfies ParamMap<CreateParams>;
@@ -83,7 +136,7 @@ export const UPDATE_SCHEMA = {
     content: { value: '<text>',               description: 'New content' },
     start:   { value: '<date|datetime|none>', description: 'New start date/datetime ("none" to clear)' },
     end:     { value: '<date|datetime|none>', description: 'New end date/datetime ("none" to clear)' },
-    due:     { value: '<YYYY-MM-DD|none>',    description: 'New due date ("none" to clear)' },
+    due:     { value: '<date|datetime|none>', description: 'New due date, with a time only after it ("none" to clear)' },
     status:  { value: '<char|none>',          description: 'New status character ("none" to uncheck)' },
 } as const satisfies ParamMap<UpdateParams>;
 
@@ -93,46 +146,26 @@ export const DELETE_SCHEMA = {
 
 export const DUPLICATE_SCHEMA = {
     id:        { value: '<taskId>', description: 'Task ID', required: true },
-    dayOffset: { value: '<number>', description: 'Axis the copies run along: 0 (default) chains them on the clock from the task\'s end, above 0 shifts them that many days' },
-    count:     { value: '<number>', description: 'Number of copies (default: 1)' },
+    dayOffset: { value: '<number>', int: {}, description: 'Axis the copies run along: 0 (default) chains them on the clock from the task\'s end; any other whole number shifts the first copy that many days (negative: earlier) and each next one a day later' },
+    count:     { value: '<number>', int: { min: 1 }, description: 'Number of copies (default: 1)' },
 } as const satisfies ParamMap<DuplicateParams>;
 
 export const TASKS_FOR_DATE_RANGE_SCHEMA = {
-    from:     { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
-    to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
-    file:     { value: '<path>',          description: 'Filter by file path' },
-    status:   { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
-    tag:      { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
-    content:  { value: '<text>',          description: 'Filter by content (contains)' },
-    due:      { value: '<date|preset>',   description: 'Due date equals' },
-    leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
-    property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
-    color:    { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
-    type:     { value: '<types>',         description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
-    root:     { boolean: true,            description: 'Only root tasks (no parent)' },
-    filter:   { cli: 'hidden',            description: 'FilterState object (API only). Overrides simple filter params' },
-    filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
-    list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
-    sort:     { value: '<prop[:dir],..>', description: 'Sort (e.g. startDate:asc,due:desc)' },
-    limit:    { value: '<number|all>',    description: 'Max results (default: 100 for json, all for tsv/jsonl; 0=count only)' },
+    from:     { value: '<date|preset>',   description: 'Window start, as list\'s from', required: true },
+    to:       { value: '<date|preset>',   description: 'Window end, as list\'s to', required: true },
+    ...SIMPLE_FILTER_SCHEMA,
+    ...FILTER_SOURCE_SCHEMA,
+    startHour: START_HOUR_PARAM,
+    sort:     SORT_PARAM,
+    limit:    LIMIT_PARAM,
 } as const satisfies ParamMap<TasksForDateRangeParams>;
 
 export const CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA = {
-    from:     { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
-    to:       { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
-    file:     { value: '<path>',          description: 'Filter by file path' },
-    status:   { value: '<chars>',         description: 'Filter by status char(s), comma-separated' },
-    tag:      { value: '<tags>',          description: 'Filter by tag(s), comma-separated' },
-    content:  { value: '<text>',          description: 'Filter by content (contains)' },
-    due:      { value: '<date|preset>',   description: 'Due date equals' },
-    leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
-    property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
-    color:    { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
-    type:     { value: '<types>',         description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
-    root:     { boolean: true,            description: 'Only root tasks (no parent)' },
-    filter:   { cli: 'hidden',            description: 'FilterState object (API only). Overrides simple filter params' },
-    filterFile: { value: '<path>',        description: 'FilterState JSON (.json) or view template (.md). Overrides simple filter flags' },
-    list:     { value: '<name>',          description: 'Pinned list name (for .md templates with pinnedLists)' },
+    from:     { value: '<date|preset>',   description: 'Window start, as list\'s from', required: true },
+    to:       { value: '<date|preset>',   description: 'Window end, as list\'s to', required: true },
+    ...SIMPLE_FILTER_SCHEMA,
+    ...FILTER_SOURCE_SCHEMA,
+    startHour: START_HOUR_PARAM,
 } as const satisfies ParamMap<CategorizedTasksForDateRangeParams>;
 
 export const INSERT_CHILD_TASK_SCHEMA = {
@@ -152,10 +185,10 @@ export const CLI_OUTPUT_SCHEMA: Record<string, ParamSpec> = {
 };
 
 export const EXPORT_IMAGE_SCHEMA: Record<string, ParamSpec> = {
-    view:         { value: '<timeline|calendar|schedule|kanban>', description: 'View type to export' },
+    view:         { value: `<${exportableShortNames().join('|')}>`, description: 'View type to export' },
     template:     { value: '<name>',           description: 'View template name (infers view type if omitted)' },
     name:         { value: '<text>',           description: 'Custom name for the exported view' },
-    anchorDate:   { value: '<YYYY-MM-DD>',     description: 'Date anchor — same as the "Today" button but for any date. Resolved to the view-specific field via schema' },
+    anchorDate:   { value: '<YYYY-MM-DD>',     description: 'The day the view looks at, as on opening it on that day in place of today (timeline puts its past days before it; calendar draws its month grid, as Go to date does). Resolved to the view-specific field via schema' },
     width:        { value: '<px>',             description: 'Render width in pixels (default: 1200)' },
     outputFolder: { value: '<path>',           description: 'Output folder (vault-relative or absolute path)' },
     filename:     { value: '<name.png>',       description: 'Output filename (default: {type}_{date}.png)' },
@@ -187,8 +220,9 @@ export function toCliFlags(
     const add = (source: Record<string, ParamSpec>) => {
         for (const [key, spec] of Object.entries(source)) {
             if (spec.cli === 'hidden') continue;
-            const decl: CliFlagDecl = { description: spec.description };
-            if (!spec.boolean && spec.value) decl.value = spec.value;
+            const decl: CliFlagDecl = { description: spec.cli?.description ?? spec.description };
+            const value = spec.cli?.value ?? spec.value;
+            if (!spec.boolean && value) decl.value = value;
             if (spec.required) decl.required = true;
             flags[toCliName(key)] = decl;
         }
@@ -299,7 +333,7 @@ export function assertParams(
         if (spec.required) {
             const v = values[key];
             if (v === undefined || v === null || v === '') {
-                throw new TaskApiError(`Missing required parameter: ${key}`);
+                throw new TaskApiError(name => `Missing required parameter: ${name(key)}`, key);
             }
         }
     }

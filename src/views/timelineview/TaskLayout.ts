@@ -1,45 +1,17 @@
 import type { DisplayTask } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
+import { minutesOfSpan } from '../../utils/DayWindow';
 import { buildOverlapClusters } from '../sharedLogic/OverlapClusters';
 
 export class TaskLayout {
-    static calculateTaskLayout(tasks: DisplayTask[], date: string, startHour: number): Map<string, { width: number, left: number, zIndex: number }> {
+    static calculateTaskLayout(tasks: DisplayTask[], startHour: number): Map<string, { width: number, left: number, zIndex: number }> {
         const layout = new Map<string, { width: number, left: number, zIndex: number }>();
         if (tasks.length === 0) return layout;
 
-        const startHourMinutes = startHour * 60;
-
-        // Helper to get adjusted minutes (minutes from visual start)
-        const getAdjustedMinutes = (task: DisplayTask, timeStr: string, isEnd: boolean) => {
-            let m: number;
-
-            if (timeStr.includes('T')) {
-                const startDate = new Date(`${date}T00:00:00`);
-                const endDate = new Date(timeStr);
-                const diffMs = endDate.getTime() - startDate.getTime();
-                m = Math.floor(diffMs / 60000);
-            } else {
-                m = DateUtils.timeToMinutes(timeStr);
-            }
-
-            // Adjust for visual day
-            // If it's simple time and < startHour, it's next day (add 24h)
-            if (!timeStr.includes('T') && m < startHourMinutes) {
-                m += 24 * 60;
-            }
-
-            return m;
-        };
-
-        // 1. Prepare tasks with calculated start/end for sorting
-        const preparedTasks = tasks.map(task => {
-            const start = getAdjustedMinutes(task, task.effectiveStartTime!, false);
-            let end = task.effectiveEndTime ? getAdjustedMinutes(task, task.effectiveEndTime, true) : start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-            // Fix simple wrap for end time if needed
-            if (!task.effectiveEndTime?.includes('T') && end < start) end += 24 * 60;
-
-            return { task, start, end };
-        });
+        // 1. What each task is drawn over, in minutes of its visual day.
+        const preparedTasks = tasks.filter(task => task.drawn).map(task => ({
+            task,
+            ...minutesOfSpan(task.drawn!, startHour),
+        }));
 
         // 2-3. Sort by start time (longer first on tie) and group into overlap clusters.
         const clusters = buildOverlapClusters(

@@ -35,11 +35,10 @@ export const DEFAULT_STATUS_DEFINITIONS: StatusDefinition[] = [
  * calls through, so fixing it here closes both the settings-screen toggle
  * and a pre-existing `data.json` value at once. The reason it matters: a
  * flow's next instance is always written as `[ ]` (`FlowEffects.ts`), and
- * if blank could read as complete, that instance would complete itself the
- * moment it lands. The only thing standing between that and a fire loop is
- * that the write which lands it never sets the flag firing reads (a flow's
- * own writes are not marked as a local edit), so this is a second, cheaper
- * line of defense against the same runaway rather than the only one.
+ * if blank could read as complete, that instance would read as done the
+ * moment it lands. It would not fire again — firing happens only in the
+ * operation that turns a line from incomplete to complete, and the write
+ * that lands an instance turns no line — but every view would show it done.
  */
 export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[]): boolean {
     if (statusChar === ' ') return false;
@@ -48,19 +47,23 @@ export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[
 
 export type NoteType = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
-export type PropertyType = 'string' | 'number' | 'boolean' | 'array';
+/**
+ * A property's value (`- key:: value` or frontmatter), read once by
+ * `PropertyValues`: `value` is the text as written, which a write-back writes
+ * again; the type's own field is the value it means. A reader asks the type
+ * (`boolean`, `number`, `items`) and never reads truth or numbers off `value`.
+ */
+export type PropertyValue =
+    | { type: 'string'; value: string }
+    | { type: 'number'; value: string; number: number }
+    | { type: 'boolean'; value: string; boolean: boolean }
+    | { type: 'array'; value: string; items: string[] };
 
-export interface PropertyValue {
-    value: string;
-    type: PropertyType;
-}
+export type PropertyType = PropertyValue['type'];
 
 export interface ChildLine {
     text: string;
-    /**
-     * Absolute 0-indexed file line this child line lives on
-     * (same convention as `Task.line`; `-1` = no valid body line).
-     */
+    /** Absolute 0-indexed file line this child line lives on (same convention as `Task.line`). */
     bodyLine: number;
     indent: string;
     /** `- [[target]]` link lines: the target, kept for masking. */
@@ -75,8 +78,7 @@ export interface ChildLine {
  *
  * - `task`: line is occupied by an independent child task (resolved via TaskIndex)
  * - `line`: raw property / text / link line under this task — never a checkbox,
- *   which is always a task of its own (unrelated to the legacy `'plain'`
- *   parserId migration alias in TimerPersistence)
+ *   which is always a task of its own
  *
  * Render layer walks `task.children` directly without re-classifying.
  * Write layer uses `bodyLine` as the absolute file line for surgical edits.
@@ -94,7 +96,15 @@ export type ParserId = 'tv-inline' | 'tasks-plugin' | 'day-planner';
 
 export interface Task {
     // Identity and source location.
+    /** The row's name: which reading, and which line of it (`RowNames`). */
     id: string;
+    /**
+     * The reading of the note this is a copy of (a `ReadingId`), given with
+     * the name by the index's scan (`namesOfReading`). Absent on a row read
+     * outside the index and on a task no reading made (`createTempTask`):
+     * neither is written.
+     */
+    reading?: string;
     file: string;
     /** 0-indexed line number in the source file. Every task has one. */
     line: number;
@@ -112,9 +122,11 @@ export interface Task {
      */
     childIds: string[];
     /**
-     * @internal Parser-emitted raw body lines (each carries its absolute
-     * file line in `ChildLine.bodyLine`). Substrate for `buildChildEntries`;
-     * render/write consume via `DisplayTask.childEntries`.
+     * @internal The lines of the task's subtree that are its own: less its
+     * child tasks' subtrees and its own `- ==>` lines (`NoteTasks`), in the
+     * note's order, each with its absolute file line in `ChildLine.bodyLine`.
+     * Every line of a note is one task's at most. Substrate for
+     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
      */
     childLines: ChildLine[];
 
@@ -122,31 +134,37 @@ export interface Task {
     startDate?: string;
     startTime?: string;
     /**
-     * Raw end date as written in @notation / frontmatter. **Dual semantic**:
-     * - When `endTime` is present → `endDate` is **inclusive** (the calendar
-     *   date on which `endTime` occurs).
-     * - When `endTime` is absent (pure all-day) → `endDate` is **exclusive**
-     *   (one day past the last day the task covers).
+     * Raw end date as written in @notation / frontmatter. With `endTime`, the
+     * date the end time is on; without it, a bare date, which ends at the end
+     * of that (visual) day: the last day the task covers.
      *
-     * This duality is preserved at the raw layer for parser/writer round-trip
-     * with the external @notation. Display code should not read `endDate`
-     * directly; use `DisplayTask.effectiveEndDate` (always inclusive visual
-     * end) instead. Drag write-back must funnel updates through
-     * `materializeRawDates()` which collapses the duality based on
-     * `baseTask.endTime`.
+     * Display code should not read `endDate` directly; it reads the span
+     * (`DisplayTask.span`, `drawn`) and the visual days it is drawn over
+     * (`visualDaysOf`). Drag write-back goes through `materializeRawDates()`,
+     * which writes the last visual day as it is.
      */
     endDate?: string;
     endTime?: string;
     due?: string;
+    /**
+     * The `@` blocks of a `tv-inline` line the dates are not read from,
+     * verbatim and in order (`readDateBlock`): the blocks after the first,
+     * and before them the first itself when it names a day or a time that
+     * does not exist. They are text the notation does not read, kept so that
+     * writing the row back does not lose them: `formatTaskLine` writes them
+     * right after the dates' block.
+     */
+    unreadDateBlocks?: string[];
 
     /**
      * Values inherited from the File → Section cascade rather than from the
-     * task's own lines / frontmatter.  Set by TreeTaskExtractor; never
-     * serialized — format() and all writers read only raw fields for
+     * task's own lines / frontmatter.  Set by NoteTasks; never
+     * serialized — formatTaskLine and all writers read only raw fields for
      * round-trip fidelity.
      *
-     * Dates are merged into `DisplayTask.effective*` by DisplayTaskConverter
-     * (needs display context: startHour). Properties/tags/style close over
+     * Dates are merged with the line's into `DisplayTask.stated`
+     * (`statedDates`), which the span is read from with startHour
+     * (`resolveSpan`). Properties/tags/style close over
      * the Task alone, so they merge via the `getEffective*` derived helpers
      * (`services/data/EffectiveProperties.ts`).
      */
@@ -192,7 +210,7 @@ export interface Task {
 
     /**
      * Flow command (`==> ...`), parsed by the flow language core.
-     * format() always re-emits `raw` verbatim; canonical re-serialization
+     * formatTaskLine always re-emits `raw` verbatim; canonical re-serialization
      * happens only when a fire generates the next instance.
      */
     flow?: TaskFlow;
@@ -248,12 +266,6 @@ export function isTpInline(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tasks-plugin';
 }
 
-/** True when the task has any date/time scheduling field. */
-export function hasScheduling(
-    task: Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
-): boolean {
-    return !!(task.startDate || task.startTime || task.endDate || task.endTime || task.due);
-}
 /**
  * Options for duplicating tasks.
  * dayOffset: number of days to shift dates (default: 0 = in-place copy)

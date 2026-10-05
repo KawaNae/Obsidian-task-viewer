@@ -1,27 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { flowGroupOf, flowOwnerOf } from '../../../src/editor/FlowGroup';
+import { flowOwnerOf } from '../../../src/editor/FlowGroup';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { isFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
-import { DocumentTreeBuilder } from '../../../src/services/parsing/tree/DocumentTreeBuilder';
-import type { SectionNode, TaskBlock } from '../../../src/services/parsing/tree/DocumentTree';
+import { isFlowLine, readFlow } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
-
-/** Every task block of the note, nested ones included. */
-function blocksOf(lines: string[]): TaskBlock[] {
-    const doc = DocumentTreeBuilder.build('note.md', lines, Outline.bodyStart(lines));
-    const out: TaskBlock[] = [];
-    const walkBlock = (block: TaskBlock) => {
-        out.push(block);
-        block.childTaskBlocks.forEach(walkBlock);
-    };
-    const walkSection = (section: SectionNode) => {
-        section.blocks.forEach(walkBlock);
-        section.children.forEach(walkSection);
-    };
-    doc.sections.forEach(walkSection);
-    return out;
-}
 
 const D = '@2026-09-24';
 const SHAPES: Array<[string, string[]]> = [
@@ -52,22 +35,16 @@ const SHAPES: Array<[string, string[]]> = [
     ]],
 ];
 
-describe('the editor diagnostics read the subtree and the flow lines the parser reads', () => {
+describe('the editor diagnostics read the flow lines the parser reads', () => {
     for (const [name, lines] of SHAPES) {
         it(name, () => {
             const outline = Outline.read(lines);
-            const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+            const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
             if (parsed.ignored) throw new Error('ignored');
-            const blocks = blocksOf([...lines]);
-            expect(blocks.length).toBeGreaterThan(0);
+            expect(parsed.tasks.length).toBeGreaterThan(0);
 
-            for (const block of blocks) {
-                const group = flowGroupOf(outline, block.line);
-                expect(group.childLines, `children of line ${block.line}`).toEqual(block.childRawLines);
-
-                const task = parsed.tasks.find(candidate => candidate.line === block.line)!;
-                const parserFlow = (task.flow?.childSegments ?? []).map(segment => segment.bodyLine);
-                expect(group.flowLines, `flow lines of line ${block.line}`).toEqual(parserFlow);
+            for (const task of parsed.tasks) {
+                expect(readFlow(outline, task.line), `flow of line ${task.line}`).toEqual(task.flow);
             }
 
             // Every flow line the editor gives an owner is one that owner's

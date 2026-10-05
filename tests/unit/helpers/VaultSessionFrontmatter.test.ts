@@ -2,14 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { vaultSession } from './vaultSession';
 
 /**
- * The frontmatter-reading gap `structure.md` names as a scaffold limit
+ * The frontmatter-reading gap once named a scaffold limit (`structure/changelog.md`, 2026-09-21 F0)
  * (`vaultSession` used to answer `metadataCache.getCache` with `null` always).
  *
- * `tv-color` is the cascade this exercises: `FilePropertyResolver.extract`
- * reads it from frontmatter, `SectionPropertyResolver` carries it down with
- * nothing to override it, and `TreeTaskExtractor` puts it on
- * `Task.cascadeContext.color` because the task's own lines declare none
- * (`TreeTaskExtractor.ts:184-195`). A task with its own `tv-color` line
+ * `tv-color` is the cascade this exercises: `PropertyValues.fromFrontmatter`
+ * and `BuiltinPropertyExtractor` read it from frontmatter, `SectionPropertyResolver` carries it down with
+ * nothing to override it, and `NoteTasks` puts it on
+ * `Task.cascadeContext.color` because the task's own lines declare none. A task with its own `tv-color` line
  * would win instead — this scenario is about the frontmatter path reaching
  * a task at all, not about the merge order.
  */

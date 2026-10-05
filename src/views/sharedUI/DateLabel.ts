@@ -1,13 +1,22 @@
 import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { periodicNotes } from '../../utils/PeriodicNotes';
+import { pointPeriodicLink } from './PeriodicNoteLink';
+import { openPeriodicNoteInLeaf, type PeriodicNoteOpener } from '../sharedLogic/OpenPeriodicNote';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 
+/** The first day of `month` (0-based) of `year`, as `YYYY-MM-DD`. */
+function firstOf(year: number, month: number): string {
+    return `${String(year).padStart(4, '0')}-${String(month + 1).padStart(2, '0')}-01`;
+}
+
 export interface DateLabelDeps {
     app: App;
     getSettings: () => TaskViewerSettings;
+    /** What opens, or makes, a year's or month's note (`Operations.openPeriodicNote`). */
+    notes: PeriodicNoteOpener;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
 }
@@ -34,20 +43,12 @@ export class DateLabel {
         const monthWrapper = labelGroup.createSpan({ cls: 'view-toolbar__date-label-month' });
         const monthLink = monthWrapper.createEl('a', { cls: 'internal-link' });
 
-        yearWrapper.addEventListener('click', async () => {
-            const date = new Date(currentYear, 0, 1);
-            const settings = deps.getSettings();
-            let file = DailyNoteUtils.getYearlyNote(deps.app, settings, date);
-            if (!file) file = await DailyNoteUtils.createYearlyNote(deps.app, settings, date);
-            if (file) await deps.app.workspace.getLeaf(false).openFile(file);
+        yearWrapper.addEventListener('click', () => {
+            void openPeriodicNoteInLeaf(deps.app, deps.notes, periodicNotes(deps.getSettings(), 'yearly'), firstOf(currentYear, 0));
         });
 
-        monthWrapper.addEventListener('click', async () => {
-            const date = new Date(currentYear, currentMonth, 1);
-            const settings = deps.getSettings();
-            let file = DailyNoteUtils.getMonthlyNote(deps.app, settings, date);
-            if (!file) file = await DailyNoteUtils.createMonthlyNote(deps.app, settings, date);
-            if (file) await deps.app.workspace.getLeaf(false).openFile(file);
+        monthWrapper.addEventListener('click', () => {
+            void openPeriodicNoteInLeaf(deps.app, deps.notes, periodicNotes(deps.getSettings(), 'monthly'), firstOf(currentYear, currentMonth));
         });
 
         const update = (year: number, month: number) => {
@@ -61,17 +62,11 @@ export class DateLabel {
             const settings = deps.getSettings();
 
             yearLink.textContent = `${year}`;
-            const yearDate = new Date(year, 0, 1);
-            const yearTarget = DailyNoteUtils.getYearlyNoteLinkTarget(settings, yearDate);
-            yearLink.dataset.href = yearTarget;
-            yearLink.setAttribute('href', yearTarget);
+            pointPeriodicLink(yearLink, periodicNotes(settings, 'yearly'), firstOf(year, 0));
             yearWrapper.toggleClass('is-current', isCurrentYear);
 
             monthLink.textContent = String(month + 1).padStart(2, '0');
-            const monthDate = new Date(year, month, 1);
-            const monthTarget = DailyNoteUtils.getMonthlyNoteLinkTarget(settings, monthDate);
-            monthLink.dataset.href = monthTarget;
-            monthLink.setAttribute('href', monthTarget);
+            pointPeriodicLink(monthLink, periodicNotes(settings, 'monthly'), firstOf(year, month));
             monthWrapper.toggleClass('is-current', isCurrentMonth);
         };
 

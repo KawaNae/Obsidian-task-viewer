@@ -2,7 +2,7 @@ import type { EditorState, TransactionSpec } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import type { TaskOp } from '../services/persistence/TaskOps';
-import { editLines, type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteOutcome, type WriteSession } from '../services/persistence/FileLines';
+import { editLines, type LineDraft, type Refusal, type RowRef, type WriteOutcome, type WriteSession } from '../services/persistence/FileLines';
 import { lineChanges } from './LineChanges';
 import { linesOf } from './EditorDoc';
 import { logError } from '../log/log';
@@ -21,21 +21,21 @@ export interface EditorHandle {
  * of a line the editor pointed at, the menu's (`writeEditorLine`): in the
  * editor while it shows the note, to the file once it does not (closed, or
  * showing another note). Either way the
- * line holds only in the content it was taken in (`EditorLine.key`).
+ * line holds only in the content it was taken in (`RowRef.in`).
  */
 export function shows(editor: EditorHandle, path: string): boolean {
     return editor.dom.isConnected && editor.state.field(editorInfoField, false)?.file?.path === path;
 }
 
 /** The one loop that applies ops to a row inside a write (`InlineTaskWriter.applyOps`). */
-export type ApplyOps = (draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]) => boolean;
+export type ApplyOps = (draft: LineDraft, session: WriteSession, target: RowRef, ops: readonly TaskOp[]) => boolean;
 
 /**
  * Write `ops` to the row at a line the editor pointed at, in the editor's
  * document: the one core every write of lines runs (`editLines`, with the
  * same ops and the same check as a write to the file), turned into changes to
  * the document (`lineChanges`) and dispatched as one transaction. The line is taken only in the content it was taken in
- * (`EditorLine.key`): the editor has to read as it did.
+ * (`RowRef.in`, `editorRow`): the editor has to read as it did.
  *
  * The transaction is a step of its own to undo (`isolateHistory`), whatever
  * was typed just before or after it. It is an operation in the editor, marked
@@ -48,7 +48,7 @@ export type ApplyOps = (draft: LineDraft, session: WriteSession, target: NamedRo
 export function writeInEditor(
     editor: EditorHandle,
     path: string,
-    at: EditorLine,
+    at: RowRef,
     ops: readonly TaskOp[],
     applyOps: ApplyOps,
 ): WriteOutcome {
@@ -58,7 +58,7 @@ export function writeInEditor(
     const changes = lineChanges(edited.before, edited.lines, edited.edits);
     if (changes === null) {
         logError(`[EditorWrite] ${path}: a write's report does not follow; nothing written`);
-        return { written: false, refused: { file: path, reason: { kind: 'failed' }, subject: at.text.trim() } };
+        return { written: false, refused: { file: path, reason: { kind: 'failed' }, subject: at.subject } };
     }
     editor.dispatch({ changes, annotations: isolateHistory.of('full') });
     return { written: true, refused: null };
@@ -69,15 +69,15 @@ export interface EditorLineHost {
     applyOps: ApplyOps;
     /** Tell the user a write was not made, and why (the index's `reportRefusal`). */
     refused(refusal: Refusal): void;
-    /** The write to the file, for an editor that no longer shows it (`TaskIndex.writeLine`). */
-    writeLine(path: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean>;
+    /** The write to the file, for an editor that no longer shows it (`Operations.writeLine`). */
+    writeLine(path: string, at: RowRef, ops: readonly TaskOp[]): Promise<boolean>;
 }
 
 /**
  * The editor menu's write of `ops` to the line it was opened on: in the
  * editor, while the editor still shows the note, and to the file once it
  * does not. Either way the line holds only in the content the menu was opened
- * in (`EditorLine.key`), the editor's or the file's; in any other, nothing is
+ * in (`RowRef.in`), the editor's or the file's; in any other, nothing is
  * written, and the user is told.
  *
  * Written in the editor, it reaches the file as the user's typing does, when
@@ -88,7 +88,7 @@ export interface EditorLineHost {
 export async function writeEditorLine(
     editor: EditorHandle,
     path: string,
-    at: EditorLine,
+    at: RowRef,
     ops: readonly TaskOp[],
     host: EditorLineHost,
 ): Promise<boolean> {

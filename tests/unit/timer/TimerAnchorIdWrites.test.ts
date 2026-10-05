@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { App } from 'obsidian';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
+import type { TimerState } from '../../../src/timer/TimerState';
+import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
 import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
-import { heldByAnchor } from '../helpers/anchoredRow';
+import { opsOver } from '../helpers/anchoredRow';
+import { timerOn } from '../helpers/timerRig';
 
 /**
- * A timer takes a `^id` off only when its own write put it on
- * (`ownedAnchors`), and only when no open timer holds it as its target or its
- * tail (`TimerRecorder.mayTakeOff`). The id's shape says nothing: a `tv-t-` id
- * the timer did not put on stays. A row is found by its anchor
- * (`getTaskByAnchor`); a row the user deleted is found by nothing.
+ * A timer takes a `^id` off only when its own write put it on (`owned`), and
+ * only when no other open timer in the note looks a row up by it — as its
+ * target, its tail, or the line it is in the middle of writing
+ * (`opening.tail`; `TimerRecorder.mayTakeOff`, `anchorsOf`). The id's shape
+ * says nothing: a `tv-t-` id the timer did not put on stays. A row is found
+ * by its anchor (`getTaskByAnchor`); a row the user deleted is found by nothing.
  */
 
 const FILE = 'notes/a.md';
@@ -21,39 +22,15 @@ const TAIL_ID = 'tv-inline:notes/a.md:ln:5';
 const ANCHOR = 'tv-t-anchor';
 const TAIL_BLOCK_ID = 'tv-t-tail';
 
-function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
-    return {
-        id: 'timer-1',
-        taskId: TARGET_ID,
-        taskName: 'target',
-        taskOriginalText: '- [ ] target',
-        taskFile: FILE,
-        startTimeMs: 0,
-        pausedElapsedTime: 0,
-        phase: 'work',
-        isRunning: true,
-        runState: 'running',
-        sessionCount: 0,
-        recordedElapsedTime: 0,
-        isExpanded: true,
-        intervalId: null,
-        recordMode: 'child',
-        parserId: 'tv-inline',
-        taskColor: '',
-        timerType: 'countup',
-        elapsedTime: 0,
-        pendingRecord: null,
-        opening: null,
-        priorStartMs: null,
-        ownedAnchors: [],
-        ...overrides,
-    } as TimerInstance;
+/** An open timer on a row of `file` anchored `subject`, with `over` on top. */
+function openTimer(subject: string, over: Partial<TimerState> = {}, file = FILE): TimerState {
+    return { ...timerOn(makeTask({ file, content: 'target', anchor: subject }), 'child'), ...over };
 }
 
-// `tailIsTarget`: the tail line carries the target's own anchor (self mode,
-// first session). `found`: whether `getTaskByAnchor` finds the rows.
+// `tailIsTarget`: the tail line carries the target's own anchor (self, the
+// first run). `found`: whether `getTaskByAnchor` finds the rows.
 // `owned`: the anchors the timer's writes put on. `others`: the other open timers.
-function harness(opts: { tailIsTarget: boolean; found: boolean; owned: string[]; others?: Partial<TimerInstance>[] }) {
+function harness(opts: { tailIsTarget: boolean; found: boolean; owned: string[]; others?: TimerState[] }) {
     const tailBlockId = opts.tailIsTarget ? ANCHOR : TAIL_BLOCK_ID;
     const target = makeTask({ id: TARGET_ID, file: FILE, line: 3, content: 'target', blockId: ANCHOR });
     const tail = opts.tailIsTarget
@@ -72,12 +49,15 @@ function harness(opts: { tailIsTarget: boolean; found: boolean; owned: string[];
     };
     const plugin = {
         settings: {},
-        getTaskIndex: () => taskIndex,
-        getTaskWriteService: () => ({ freshByAnchor: heldByAnchor(taskIndex) }),
+        getIndex: () => taskIndex,
+        getOperations: () => ({ ...opsOver(taskIndex) }),
     } as unknown as TaskViewerPlugin;
-    const timer = makeTimer({ tailRecordBlockId: tailBlockId, timerTargetId: ANCHOR, ownedAnchors: opts.owned });
-    const others = (opts.others ?? []).map((o, i) => makeTimer({ id: `other-${i}`, ...o }));
-    const recorder = new TimerRecorder({} as App, plugin, {} as TimerStorageUtils, () => { /* unused */ }, () => [timer, ...others]);
+    const timer = openTimer(ANCHOR, { mode: opts.tailIsTarget ? 'self' : 'child', tail: tailBlockId, owned: opts.owned });
+    const others = opts.others ?? [];
+    const recorder = new TimerRecorder(plugin, {
+        dispatch: (t: TimerState, event: TimerEvent) => { Object.assign(t, step(t, event, Date.now())); },
+        timers: () => [timer, ...others],
+    }, () => 'tv-t-new');
     return { recorder, timer, updateTask, getTaskByAnchor };
 }
 
@@ -111,7 +91,18 @@ describe('✕ on a running timer: the tail line is taken away by the one rule', 
     it('a tail another open timer runs on as its target is not touched', async () => {
         const h = harness({
             tailIsTarget: false, found: true, owned: [ANCHOR, TAIL_BLOCK_ID],
-            others: [{ taskFile: FILE, timerTargetId: TAIL_BLOCK_ID }],
+            others: [openTimer(TAIL_BLOCK_ID)],
+        });
+
+        await h.recorder.discardRunningPlaceholder(h.timer);
+
+        expect(h.updateTask).not.toHaveBeenCalled();
+    });
+
+    it('a tail another open timer is writing as its next line is not touched', async () => {
+        const h = harness({
+            tailIsTarget: false, found: true, owned: [ANCHOR, TAIL_BLOCK_ID],
+            others: [openTimer('tv-t-other', { opening: { tail: TAIL_BLOCK_ID, owned: [TAIL_BLOCK_ID] } })],
         });
 
         await h.recorder.discardRunningPlaceholder(h.timer);
@@ -151,12 +142,37 @@ describe('close: the timer takes off what it put on, and nothing else', () => {
     it('an anchor another open timer holds as its target or its tail stays', async () => {
         const h = harness({
             tailIsTarget: false, found: true, owned: [ANCHOR, TAIL_BLOCK_ID],
-            others: [{ taskFile: FILE, timerTargetId: TAIL_BLOCK_ID }, { taskFile: FILE, tailRecordBlockId: ANCHOR }],
+            others: [openTimer(TAIL_BLOCK_ID), openTimer('tv-t-other', { tail: ANCHOR })],
         });
 
         await h.recorder.releaseAnchors(h.timer);
 
         expect(h.updateTask).not.toHaveBeenCalled();
+    });
+
+    it('an anchor another open timer is in the middle of a write on (its opening\'s tail) stays', async () => {
+        // The other timer's write lands with that anchor as its tail: taken off
+        // now, the timer could not find its line once its write is back.
+        const h = harness({
+            tailIsTarget: false, found: true, owned: [ANCHOR, TAIL_BLOCK_ID],
+            others: [openTimer('tv-t-other', { opening: { tail: TAIL_BLOCK_ID, owned: [TAIL_BLOCK_ID] } })],
+        });
+
+        await h.recorder.releaseAnchors(h.timer);
+
+        expect(h.updateTask).toHaveBeenCalledTimes(1);
+        expect(h.updateTask).toHaveBeenCalledWith(TARGET_ID, { blockId: undefined });
+    });
+
+    it('a timer in another note does not hold an anchor of this one', async () => {
+        const h = harness({
+            tailIsTarget: false, found: true, owned: [ANCHOR, TAIL_BLOCK_ID],
+            others: [openTimer(TAIL_BLOCK_ID, { opening: { tail: ANCHOR, owned: [] } }, 'notes/b.md')],
+        });
+
+        await h.recorder.releaseAnchors(h.timer);
+
+        expect(h.updateTask).toHaveBeenCalledTimes(2);
     });
 
     it('a row not found by its anchor is not touched', async () => {

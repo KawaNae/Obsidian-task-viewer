@@ -2,87 +2,86 @@ import { describe, it, expect, vi } from 'vitest';
 import { TaskApi } from '../../../src/api/TaskApi';
 
 /**
- * Pins the guarantee at the API layer (not just the CLI handler): a caller
- * of tasksForDateRange/categorizedTasksForDateRange can pass simple filter
- * fields alongside the required from/to without those ever turning into an
- * extra startDate/endDate condition on top of the range's own window. The
- * CLI handler tests alone wouldn't catch a regression from someone calling
- * plugin.api.tasksForDateRange(...) directly.
+ * The range operations are list with from and to, both required: their
+ * window is a period overlaps condition taken together with the rest of
+ * the query, the one FilterState handed to getFilteredTasks. Pinned at the
+ * API (not just the CLI handler), as a script calls it.
  */
 function createMockApi() {
     const mockReadService = {
-        getTask: vi.fn(),
-        getTasks: vi.fn().mockReturnValue([]),
-        getAllDisplayTasks: vi.fn().mockReturnValue([]),
         getFilteredTasks: vi.fn().mockReturnValue([]),
-        getTasksForDateRange: vi.fn().mockReturnValue([]),
-        getStartHour: vi.fn().mockReturnValue(5),
+        windowContext: vi.fn((startHour: number) => ({ startHour, weekStartDay: 1, taskLookup: () => undefined, now: new Date() })),
     };
     const mockPlugin = {
         app: { vault: { getAbstractFileByPath: vi.fn() } },
         settings: { startHour: 5, weekStartDay: 1 as const },
         getTaskReadService: () => mockReadService,
-        getTaskWriteService: () => ({}),
+        getIndex: () => ({ getTask: () => undefined }),
+        getOperations: () => ({}),
     };
     return { api: new TaskApi(mockPlugin as any), mockReadService };
 }
 
-describe('tasksForDateRange: simple filters never touch the date window', () => {
-    it('passes a FilterState built from the simple fields, with no startDate/endDate condition', async () => {
-        const { api, mockReadService } = createMockApi();
-        await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31', status: 'x' });
+const MARCH = { property: 'period', operator: 'overlaps', value: { from: '2026-03-01', to: '2026-03-31' } };
 
-        expect(mockReadService.getTasksForDateRange).toHaveBeenCalledTimes(1);
-        const [from, to, filterState] = mockReadService.getTasksForDateRange.mock.calls[0];
-        expect(from).toBe('2026-03-01');
-        expect(to).toBe('2026-03-31');
-        const properties = filterState.filters.map((f: { property: string }) => f.property);
-        expect(properties).toEqual(['status']);
+describe.each([
+    ['tasksForDateRange', (api: TaskApi, p: any) => api.tasksForDateRange(p)],
+    ['categorizedTasksForDateRange', (api: TaskApi, p: any) => api.categorizedTasksForDateRange(p)],
+] as const)('%s: the window is list\'s from and to', (_name, call) => {
+    it('hands the window and the simple fields over as one FilterState', async () => {
+        const { api, mockReadService } = createMockApi();
+        await call(api, { from: '2026-03-01', to: '2026-03-31', status: 'x' });
+        expect(mockReadService.getFilteredTasks).toHaveBeenCalledTimes(1);
+        const [filterState, , options] = mockReadService.getFilteredTasks.mock.calls[0];
+        expect(filterState).toEqual({ logic: 'and', filters: [{ property: 'status', operator: 'includes', value: ['x'] }, MARCH] });
+        expect(options).toEqual({ includeInvalid: true, startHour: 5 });
     });
 
-    it('no simple fields → the filter argument is undefined, from/to still the caller\'s own', async () => {
-        const { api, mockReadService } = createMockApi();
-        await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31' });
-
-        const [from, to, filterState] = mockReadService.getTasksForDateRange.mock.calls[0];
-        expect(from).toBe('2026-03-01');
-        expect(to).toBe('2026-03-31');
-        expect(filterState).toBeUndefined();
-    });
-
-    it('params.filter overrides simple fields, same precedence as list', async () => {
+    it('takes filter together with the window', async () => {
         const { api, mockReadService } = createMockApi();
         const explicit = { filters: [{ property: 'status' as const, operator: 'includes' as const, value: ['x'] }], logic: 'and' as const };
-        await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31', status: 'zzz', filter: explicit });
-
-        const [, , filterState] = mockReadService.getTasksForDateRange.mock.calls[0];
-        expect(filterState).toBe(explicit);
+        await call(api, { from: '2026-03-01', to: '2026-03-31', status: 'zzz', filter: explicit });
+        const [filterState] = mockReadService.getFilteredTasks.mock.calls[0];
+        expect(filterState).toEqual({ logic: 'and', filters: [explicit, { property: 'status', operator: 'includes', value: ['zzz'] }, MARCH] });
     });
 
     it('list= without filterFile throws, same as list', async () => {
         const { api } = createMockApi();
-        await expect(api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31', list: 'urgent' }))
+        await expect(call(api, { from: '2026-03-01', to: '2026-03-31', list: 'urgent' }))
             .rejects.toThrow(/requires 'filterFile'/);
+    });
+
+    it('refuses a from after its to', async () => {
+        const { api } = createMockApi();
+        await expect(call(api, { from: '2026-03-31', to: '2026-03-01' }))
+            .rejects.toThrow('from 2026-03-31 is after to 2026-03-01');
     });
 });
 
-describe('categorizedTasksForDateRange: simple filters never touch the date window', () => {
-    it('passes a FilterState built from the simple fields, with no startDate/endDate condition', async () => {
+/**
+ * The range's own bounds are read as the filter's dates are (stage 7,
+ * input decision B): a day that exists, typed text normalized.
+ */
+describe('the range bounds', () => {
+    it('refuses a bound that names no day', async () => {
         const { api, mockReadService } = createMockApi();
-        await api.categorizedTasksForDateRange({ from: '2026-03-01', to: '2026-03-31', tag: 'work' });
-
-        const [from, to, filterState] = mockReadService.getTasksForDateRange.mock.calls[0];
-        expect(from).toBe('2026-03-01');
-        expect(to).toBe('2026-03-31');
-        const properties = filterState.filters.map((f: { property: string }) => f.property);
-        expect(properties).toEqual(['tag']);
+        await expect(api.tasksForDateRange({ from: '2026-02-30', to: '2026-03-31' }))
+            .rejects.toThrow(/from must be a day that exists, got: "2026-02-30"/);
+        await expect(api.categorizedTasksForDateRange({ from: '2026-03-01', to: '2026-04-31' }))
+            .rejects.toThrow(/to must be a day that exists/);
+        expect(mockReadService.getFilteredTasks).not.toHaveBeenCalled();
     });
 
-    it('no simple fields → the filter argument is undefined', async () => {
+    it('reads a full-width bound', async () => {
         const { api, mockReadService } = createMockApi();
-        await api.categorizedTasksForDateRange({ from: '2026-03-01', to: '2026-03-31' });
+        await api.tasksForDateRange({ from: '２０２６－０３－０１', to: '2026ー03ー31' });
+        const [filterState] = mockReadService.getFilteredTasks.mock.calls[0];
+        expect(filterState.filters).toEqual([MARCH]);
+    });
 
-        const [, , filterState] = mockReadService.getTasksForDateRange.mock.calls[0];
-        expect(filterState).toBeUndefined();
+    it('lays out every visual day of the window, a preset\'s whole span', async () => {
+        const { api } = createMockApi();
+        const result = await api.categorizedTasksForDateRange({ from: '2026-03-01', to: '2026-03-03' });
+        expect(Object.keys(result)).toEqual(['2026-03-01', '2026-03-02', '2026-03-03']);
     });
 });

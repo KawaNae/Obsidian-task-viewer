@@ -2,17 +2,16 @@
  * TimerSchema — declarative persistence schema for the timer view.
  *
  * タイマービューはタスクに紐付かないので、他ビューが持つフィルタや日付アンカーは
- * 無い。往復するのはモードと、interval モードで選んだテンプレート名だけ。
+ * 無い。往復するのは名前とモードと、interval モードで選んだテンプレート名だけ。
  *
- * URI の `mode` / `intervalTemplate` は今も `ViewUriBuilder` が手書きで組み立てて
- * おり、この schema の語彙とは別系統。読み側（`main.ts` の `openTimerFromUri`）も
- * 同じく手書きで、どちらもここには通っていない。統合は C6 の担当。
+ * ワークスペースの保存も URI も、他のビューと同じくこの schema を通る。Copy URI
+ * は `codec.toUriParams` で正の鍵（`timerViewMode`）を書き、`obsidian://` の読み
+ * 側は `buildViewStateFromParams` で読む。ビューのテンプレートは持たない。
  */
 
 import { F } from '../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../services/viewConfig/ViewConfigSchema';
-import { VIEW_META_TIMER } from '../constants/viewRegistry';
 
 /** モードの正。UI のメニューも setState の検証もここを見る。 */
 export const TIMER_VIEW_MODES = ['countup', 'countdown', 'pomodoro', 'interval'] as const;
@@ -24,8 +23,11 @@ export interface TimerConfig {
     intervalTemplate?: string;
 }
 
+/** The view's state: its config as one value (`ViewStore`); the timer has no transient field. */
+export type TimerState = Partial<TimerConfig>;
+
 export const TimerSchema: ViewSchema<TimerConfig> = {
-    viewType: VIEW_META_TIMER.type,
+    viewType: 'timer-view',
     shortName: 'timer',
     defaults: { timerViewMode: 'pomodoro' },
     config: {
@@ -37,4 +39,5 @@ export const TimerSchema: ViewSchema<TimerConfig> = {
     transient: {},
 };
 
-registerSchema(TimerSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const TimerCodec = new ViewConfigCodec(TimerSchema);

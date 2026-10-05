@@ -7,11 +7,10 @@
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { PinnedListDefinition } from '../../types';
-import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 
 export interface KanbanConfig {
     customName?: string;
@@ -24,8 +23,11 @@ export interface KanbanTransient {
     gridCollapsed?: Record<string, boolean>;
 }
 
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type KanbanState = Partial<KanbanConfig> & Partial<KanbanTransient>;
+
 export const KanbanSchema: ViewSchema<KanbanConfig, KanbanTransient> = {
-    viewType: VIEW_META_KANBAN.type,
+    viewType: 'kanban-view',
     shortName: 'kanban',
     defaults: {
         maskMode: false,
@@ -36,9 +38,12 @@ export const KanbanSchema: ViewSchema<KanbanConfig, KanbanTransient> = {
         maskMode:    F.boolean('maskMode'),
         grid:        F.grid('grid'),
     },
+    // Row by row, left to right: the order the board is read in.
+    listsOf: (config) => (config.grid ?? []).flat(),
     transient: {
         gridCollapsed: T.collapsedKeys('gridCollapsed'),
     },
 };
 
-registerSchema(KanbanSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const KanbanCodec = new ViewConfigCodec(KanbanSchema);

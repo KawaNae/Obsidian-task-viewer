@@ -1,8 +1,15 @@
 import { Notice, Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
+import { SETTINGS_SCHEMA } from './SettingsSchema';
+import type { SettingFields } from './SettingFields';
 
-export function render(el: HTMLElement, plugin: PluginContext): void {
+// The number fields read a whole decimal number in the range of the
+// settings' table. What is not one (empty, `3days`, out of range) is said
+// under the field and not saved: the setting keeps its value rather than
+// taking a default or the range's end, so an emptied storage limit does not
+// save 0, which is no limit.
+export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
     new Setting(el)
         .setName(t('settings.log.verboseNotice'))
         .setDesc(t('settings.log.verboseNoticeDesc'))
@@ -13,31 +20,25 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
                 await plugin.saveSettings();
             }));
 
-    new Setting(el)
+    fields.text(new Setting(el)
         .setName(t('settings.log.logRetention'))
-        .setDesc(t('settings.log.logRetentionDesc'))
-        .addText(text => text
-            .setPlaceholder('7')
-            .setValue(plugin.settings.logRetentionDays.toString())
-            .onChange(async (value) => {
-                let days = parseInt(value);
-                if (isNaN(days) || days < 1) days = 1;
-                plugin.settings.logRetentionDays = days;
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.log.logRetentionDesc')), {
+        codec: SETTINGS_SCHEMA.logRetentionDays.codec,
+        get: () => plugin.settings.logRetentionDays,
+        put: (days) => { plugin.settings.logRetentionDays = days; },
+        placeholder: '7',
+        inputMode: 'numeric',
+    });
 
-    new Setting(el)
+    fields.text(new Setting(el)
         .setName(t('settings.log.maxStorage'))
-        .setDesc(t('settings.log.maxStorageDesc'))
-        .addText(text => text
-            .setPlaceholder('50')
-            .setValue(plugin.settings.logMaxStorageMB.toString())
-            .onChange(async (value) => {
-                let mb = parseInt(value);
-                if (isNaN(mb) || mb < 0) mb = 0;
-                plugin.settings.logMaxStorageMB = mb;
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.log.maxStorageDesc')), {
+        codec: SETTINGS_SCHEMA.logMaxStorageMB.codec,
+        get: () => plugin.settings.logMaxStorageMB,
+        put: (mb) => { plugin.settings.logMaxStorageMB = mb; },
+        placeholder: '50',
+        inputMode: 'numeric',
+    });
 
     // Buffer stats
     el.createEl('h3', { text: t('settings.log.logBuffer'), cls: 'setting-section-header' });

@@ -79,10 +79,9 @@ export class GhostRenderer {
     private createGhost(): HTMLElement {
         const ghost = this.sourceEl.cloneNode(true) as HTMLElement;
         ghost.classList.remove(...TRANSIENT_DRAG_CLASSES);
-        // cloneNode copies the source card's inline z-index (decorateLane's
-        // lane z / allday's 10), which would silently override the CSS ghost
-        // z. Clear it so `.task-card--ghost-*` own the z as documented.
-        ghost.style.zIndex = '';
+        // The clone keeps the source's lane rank (`--lane-z`); the
+        // `.task-card--ghost-*` rules set the z-index outright, so the rank
+        // does not reach it.
         return ghost;
     }
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { PickerTextField, createPickerTextField } from '../../../src/modals/form/PickerTextField';
 import { DateFieldGroup } from '../../../src/modals/form/DateFieldGroup';
 import { makeTask } from '../helpers/makeTask';
+import { t } from '../../../src/i18n';
 
 /**
  * A picker field takes input or not as one state: disabled, its text, its
@@ -133,11 +134,35 @@ describe('PickerTextField', () => {
         expect(f.picker.tabIndex).toBe(-1);
     });
 
-    it('takes a picked value into the text', () => {
-        const f = dateField('');
-        f.picker.value = '2026-10-01';
-        f.picker.dispatchEvent(new Event('change'));
-        expect(f.field.input.value).toBe('2026-10-01');
+    it('takes a picked value into the text, and tells the pick with no event of the text', () => {
+        const root = new FakeEl('div');
+        const picked: string[] = [];
+        let inputs = 0;
+        const field = createPickerTextField(root as unknown as HTMLElement, 'date', 'YYYY-MM-DD', '', { onPick: (value) => picked.push(value) });
+        field.input.addEventListener('input', () => { inputs++; });
+        const p = parts(root);
+        p.picker.value = '2026-10-01';
+        p.picker.dispatchEvent(new Event('change'));
+        expect(field.input.value).toBe('2026-10-01');
+        expect(picked).toEqual(['2026-10-01']);
+        expect(inputs).toBe(0);
+        expect(p.clear!.style.display).toBe('');
+    });
+
+    it('tells a clear with no event of the text, and keeps its clear button and picker in step with a text set from outside', () => {
+        const root = new FakeEl('div');
+        let cleared = 0;
+        let inputs = 0;
+        const field = createPickerTextField(root as unknown as HTMLElement, 'date', 'YYYY-MM-DD', '2026-09-29', { onClear: () => { cleared++; } });
+        field.input.addEventListener('input', () => { inputs++; });
+        const p = parts(root);
+        expect(p.picker.value).toBe('2026-09-29');
+
+        p.clear!.click();
+        expect([field.input.value, cleared, inputs, p.clear!.style.display, p.picker.value]).toEqual(['', 1, 0, 'none', '']);
+
+        field.setText('2026-10-05');
+        expect([inputs, p.clear!.style.display, p.picker.value]).toEqual([0, '', '2026-10-05']);
     });
 
     it('disables a color field, which has no clear button, its picker with it', () => {
@@ -167,8 +192,9 @@ describe('DateFieldGroup.setEnabled', () => {
             getStartHour: () => 0,
             taskLookup: () => undefined,
             getValidationCtx: () => ({ hasImplicitStartDate: false }),
-            onInput: (group) => inputs.push(group),
+            onChange: () => inputs.push('change'),
             onCommit: (group) => inputs.push(`commit:${group}`),
+            issues: () => { /* none said */ },
         });
         group.setEnabled(false);
 
@@ -184,5 +210,40 @@ describe('DateFieldGroup.setEnabled', () => {
         expect(group.collect()).toMatchObject({ startDate: '2026-09-29', startTime: '10:00', dueDate: '2026-10-01' });
         expect(root.findAll('tv-form__native-picker-input').every(p => p.shown === 0)).toBe(true);
         expect(inputs).toEqual([]);
+    });
+});
+
+describe('DateFieldGroup.refresh', () => {
+    function group(initial: Record<string, string>) {
+        const said: { at: string; text: string }[][] = [];
+        const g = new DateFieldGroup(new FakeEl('div') as unknown as HTMLElement, {
+            labels: { start: 'start', end: 'end', due: 'due' },
+            initial,
+            buildOverlayTask: () => makeTask({ id: 'overlay' }),
+            getStartHour: () => 0,
+            taskLookup: () => undefined,
+            getValidationCtx: () => ({ hasImplicitStartDate: false }),
+            issues: (issues) => said.push(issues.map(({ at, text }) => ({ at, text }))),
+        });
+        return { g, said };
+    }
+
+    it('says a rule the values it was made with break, under the field it is of, with nothing typed (the hub as it opens)', () => {
+        // @2026-10-14>2026-10-14T02:00: an end time with no start time (rule 4).
+        const { g, said } = group({ startDate: '2026-10-14', endDate: '2026-10-14', endTime: '02:00' });
+        // Made, it says nothing: the form's slots for its fields are not there yet.
+        expect(said).toEqual([]);
+
+        g.refresh();
+        expect(said).toHaveLength(1);
+        expect(said[0]).toHaveLength(1);
+        expect(said[0][0].at).toBe('endTime');
+        expect(said[0][0].text.split('\n')[0]).toBe(t('validation.endTimeWithoutStart'));
+    });
+
+    it('says nothing of values that keep the rules', () => {
+        const { g, said } = group({ startDate: '2026-10-14', startTime: '09:00', endTime: '10:00' });
+        g.refresh();
+        expect(said).toEqual([[]]);
     });
 });

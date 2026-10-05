@@ -1,7 +1,6 @@
 import type { ParserId, Task } from '../../../types';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
-import { createBaseTask } from '../TaskFactory';
-import { TaskIdGenerator } from '../../display/TaskIdGenerator';
+import { createBaseTask, type UnnamedTask } from '../TaskFactory';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
@@ -17,27 +16,22 @@ export interface ReadOnlyTaskParams {
     endTime?: string;
     due?: string;
     blockId?: string;
+    validation?: Task['validation'];
 }
 
 /**
  * Abstract base class for read-only parsers.
- * Read-only parsers parse external task formats for display only — no writeback.
+ * Read-only parsers parse external task formats for display only — no writeback
+ * (`formatRow` returns such a row's line as it was read).
  */
 export abstract class ReadOnlyParserBase implements LeafParserStrategy {
     abstract readonly id: ParserId;
-    readonly isReadOnly = true;
 
-    abstract parse(line: string, filePath: string, lineNumber: number): Task | null;
+    abstract parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null;
 
-    /** Read-only: return the original text unchanged. */
-    format(task: Task): string {
-        return task.originalText;
-    }
-
-    /** Build a Task from parsed fields. Sets isReadOnly: true. */
-    protected buildTask(params: ReadOnlyTaskParams): Task {
+    /** Build a task from parsed fields. Sets isReadOnly: true. */
+    protected buildTask(params: ReadOnlyTaskParams): UnnamedTask {
         return createBaseTask({
-            id: TaskIdGenerator.provisionalId(this.id, params.filePath, params.lineNumber),
             file: params.filePath,
             line: params.lineNumber,
             content: params.content,
@@ -52,6 +46,7 @@ export abstract class ReadOnlyParserBase implements LeafParserStrategy {
             due: params.due,
             tags: TagExtractor.fromContent(params.content),
             blockId: params.blockId,
+            validation: params.validation,
             isReadOnly: true,
         });
     }

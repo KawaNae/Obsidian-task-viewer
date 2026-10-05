@@ -27,6 +27,11 @@ describe('ChildLineClassifier', () => {
             expect(result.wikilinkTarget).toBe('path/to/note');
         });
 
+        it('reads no wikilink child from an empty link or one holding a bracket', () => {
+            expect(ChildLineClassifier.classify('- [[]]', 0).wikilinkTarget).toBeNull();
+            expect(ChildLineClassifier.classify('- [[a[b]]', 0).wikilinkTarget).toBeNull();
+        });
+
         it('parses wikilink child with any list bullet', () => {
             expect(ChildLineClassifier.classify('  * [[Note A]]', 0).wikilinkTarget).toBe('Note A');
             expect(ChildLineClassifier.classify('  + [[Note B]]', 0).wikilinkTarget).toBe('Note B');
@@ -123,7 +128,7 @@ describe('ChildLineClassifier', () => {
             ], [1, 2, 3]);
             const props = ChildLineClassifier.collectProperties(lines);
             expect(props).toEqual({
-                '金額': { value: '2000', type: 'number' },
+                '金額': { value: '2000', type: 'number', number: 2000 },
                 '優先度': { value: '高', type: 'string' },
             });
         });
@@ -137,61 +142,6 @@ describe('ChildLineClassifier', () => {
         });
     });
 
-    describe('inferType', () => {
-        it('number: integer', () => {
-            expect(ChildLineClassifier.inferType('2000')).toBe('number');
-        });
-        it('number: decimal', () => {
-            expect(ChildLineClassifier.inferType('3.14')).toBe('number');
-        });
-        it('boolean: True', () => {
-            expect(ChildLineClassifier.inferType('True')).toBe('boolean');
-        });
-        it('boolean: False', () => {
-            expect(ChildLineClassifier.inferType('False')).toBe('boolean');
-        });
-        it('lowercase true is string', () => {
-            expect(ChildLineClassifier.inferType('true')).toBe('string');
-        });
-        it('lowercase false is string', () => {
-            expect(ChildLineClassifier.inferType('false')).toBe('string');
-        });
-        it('array: [a, b]', () => {
-            expect(ChildLineClassifier.inferType('[a, b]')).toBe('array');
-        });
-        it('array: [single]', () => {
-            expect(ChildLineClassifier.inferType('[single]')).toBe('array');
-        });
-        it('array: comma without brackets', () => {
-            expect(ChildLineClassifier.inferType('apple, banana')).toBe('array');
-        });
-        it('string: plain text', () => {
-            expect(ChildLineClassifier.inferType('高')).toBe('string');
-        });
-    });
-
-    describe('arrayItems', () => {
-        it('a list , separates', () => {
-            expect(ChildLineClassifier.arrayItems('lab, desk')).toEqual(['lab', 'desk']);
-            expect(ChildLineClassifier.arrayItems('a,b')).toEqual(['a', 'b']);
-        });
-        it('a list in brackets', () => {
-            expect(ChildLineClassifier.arrayItems('[lab, desk]')).toEqual(['lab', 'desk']);
-            expect(ChildLineClassifier.arrayItems('[one]')).toEqual(['one']);
-            expect(ChildLineClassifier.arrayItems('[]')).toEqual([]);
-        });
-        it('a wikilink is one item, its brackets and commas its own', () => {
-            expect(ChildLineClassifier.arrayItems('[[x]]')).toEqual(['[[x]]']);
-            expect(ChildLineClassifier.arrayItems('[[a]], [[b]]')).toEqual(['[[a]]', '[[b]]']);
-            expect(ChildLineClassifier.arrayItems('[[a|b, c]]')).toEqual(['[[a|b, c]]']);
-            expect(ChildLineClassifier.arrayItems('[[[a]], b]')).toEqual(['[[a]]', 'b']);
-            expect(ChildLineClassifier.arrayItems('![[p.png]], x')).toEqual(['![[p.png]]', 'x']);
-        });
-        it('an empty item is none', () => {
-            expect(ChildLineClassifier.arrayItems('a, , b,')).toEqual(['a', 'b']);
-            expect(ChildLineClassifier.arrayItems(',')).toEqual([]);
-        });
-    });
 
     describe('classifyLines', () => {
         it('classifies multiple lines and carries bodyLines', () => {

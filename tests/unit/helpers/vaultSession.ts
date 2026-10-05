@@ -1,18 +1,17 @@
 import { type App, parseYaml, TFile, TFolder } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
+import { Operations } from '../../../src/services/operations/Operations';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
+import { TimerBoard } from '../../../src/timer/TimerBoard';
+import type { TimerState } from '../../../src/timer/TimerState';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { splitLines } from '../../../src/services/persistence/FileLines';
 import type { Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
 import type { DiskProbe } from '../../../src/services/core/DiskProbe';
 import type { DiskReconciler } from '../../../src/services/core/DiskReconciler';
+import type { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { linkDouble } from './linkDouble';
 
 export function makeFile(path: string): TFile {
@@ -172,6 +171,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             ...(config ? { getConfig: (key: string) => config[key] } : {}),
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
             offref: () => { },
+            getName: () => 'test-vault',
             read: async (file: TFile) => contents.get(file.path) ?? '',
             process: async (file: TFile, fn: (data: string) => string) => {
                 const before = contents.get(file.path) ?? '';
@@ -255,52 +255,69 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
     // above call into. `onLayoutReady` never runs its callback here.
     void index.initialize();
 
+    const ops = new Operations(app as never, index);
     const internals = index as unknown as {
+        reconciler: DiskReconciler | null;
+        readVault(): Promise<void>;
+    };
+    const opsInternals = ops as unknown as {
         commandExecutor: FlowExecutorView;
         reportRefusal(refusal: Refusal): void;
-        reconciler: DiskReconciler | null;
+        repository: TaskRepository;
     };
-    const executor = internals.commandExecutor;
-    // The channel `TaskIndex` connected, taken before a test connects another.
-    const connected = (index.getRepository() as unknown as { channels: (file: string) => WriteChannel }).channels;
+    const executor = opsInternals.commandExecutor;
+    // The channel the operations connected, taken before a test connects another.
+    const connected = (opsInternals.repository as unknown as { channels: (file: string) => WriteChannel }).channels;
 
     let n = 0;
-    // What the recorder calls to save the timers before it writes a line.
-    let persist = (): void => { };
-    // The timers the recorder sees open, when it decides whether it may take an anchor off.
-    let openTimers = (): Iterable<TimerInstance> => [];
-    const storageUtils = {
-        generateTimerTargetId: () => `tv-t-test${++n}`,
-    } as unknown as TimerStorageUtils;
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => index,
-        getTaskWriteService: () => new TaskWriteService(index),
+        getIndex: () => index,
+        getOperations: () => ops,
+        /** Reads no display task: a test of the end extension gives its own. */
+        getTaskReadService: () => ({ getDisplayTask: (_id: string): unknown => undefined }),
     };
+    // The timers' board, as the widget's: what it saves is kept in `saved`, it draws nothing.
+    const saved: TimerState[][] = [];
+    const board: TimerBoard = new TimerBoard({
+        persist: () => { saved.push(board.values().map(timer => structuredClone(timer))); },
+        render: () => { },
+    });
+    const recorder = new TimerRecorder(plugin as never, {
+        dispatch: (timer, event) => board.dispatch(timer, event),
+        timers: () => board.values(),
+    }, () => `tv-t-test${++n}`);
 
     return {
         /** For a test that writes through `processLines` itself. */
         app: app as unknown as App,
         index,
+        /** The operations over `index`: the one way a test writes, as the plugin does. */
+        ops,
+        /** The repository the operations write through, for a test that connects its own channel or writes by hand. */
+        repository: opsInternals.repository,
         scanner,
         /** The flow executor, whose `planFire` plans every completion's fire. */
         executor,
         /** The scanner's private scan entry, which a test wraps to see its answers. */
         scannerPrivates: scanner as unknown as { queueScan: (file: TFile) => Promise<boolean> },
-        /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
+        /** The channel the operations gave a write to `file`, even after a test has connected another. */
         channelOf: (file: string): WriteChannel => connected(file),
         /** The index's reconciler, when the session was given a probe. */
         reconciler: internals.reconciler,
-        /** Tell `TaskIndex` a write was refused, as its own channel does. */
-        reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
-        recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist(), () => openTimers()),
-        /** Save the timers as the plugin does when the recorder asks, before it writes a line. */
-        onPersist: (fn: () => void): void => { persist = fn; },
-        /** The open timers the recorder sees, as the widget's own map. */
-        onOpenTimers: (fn: () => Iterable<TimerInstance>): void => { openTimers = fn; },
-        creator: new TimerCreator({} as TimerContext),
+        /** Tell the operations a write was refused, as their own channel does. */
+        reportRefusal: (refusal: Refusal): void => opsInternals.reportRefusal(refusal),
+        /** The plugin the timer's parts are given: its settings, the index and the operations. */
+        plugin,
+        /** The open timers, as the widget's board: the recorder writes through it and asks it which timers are open. */
+        board,
+        /** What the board saved, oldest first: a copy of its timers each time. */
+        saved,
+        /** The recorder over `board`; the anchors it puts are `tv-t-test1`, `tv-t-test2`, … */
+        recorder,
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
-        scanAll: () => scanner!.scanVault(),
+        /** Read the whole vault, and tell the listeners, as the index does once the layout is ready. */
+        scanAll: () => internals.readVault(),
         /**
          * Hold every write's change events until `release`, which sends them
          * in order: the moment between a write landing and the scan it starts.
@@ -324,7 +341,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         flowSettled: async (...paths: string[]): Promise<void> => {
             for (const path of paths) await scanner!.waitForScan(path);
         },
-        dispose: () => index.dispose(),
+        dispose: () => { ops.dispose(); index.dispose(); },
     };
 }
 

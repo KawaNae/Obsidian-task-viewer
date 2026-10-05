@@ -33,7 +33,7 @@
 .schedule-view__body-scroll > .allday-section {
     position: sticky;
     top: 0;
-    z-index: 30;
+    z-index: var(--z-schedule-allday);
 }
 
 /* Mobile: disable sticky so allday scrolls with timeline */
@@ -85,45 +85,6 @@
 
 /* Section toggle button styles moved to _section-toggle.css (tv-section-toggle). */
 
-.schedule-section {
-    padding: 12px;
-    border-radius: 8px;
-    background-color: var(--tv-bg-muted);
-}
-
-.schedule-section__header {
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--tv-text-muted);
-    font-size: 0.92em;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    user-select: none;
-}
-
-.schedule-section__header:hover {
-    color: var(--tv-text);
-}
-
-.schedule-section__header .tv-section-toggle--header {
-    flex-shrink: 0;
-}
-
-.schedule-section--collapsed > *:not(.schedule-section__header) {
-    display: none;
-}
-
-.schedule-section__tasks {
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
 .schedule-section__task-wrap,
 .schedule-tasks__card-wrap {
     position: relative;
@@ -155,7 +116,7 @@
     right: 0;
     top: 0;
     height: 100%;
-    z-index: 1;
+    z-index: var(--z-schedule-marker);
     pointer-events: none;
 }
 
@@ -239,7 +200,7 @@
     right: 12px;
     height: 2px;
     background-color: var(--tv-accent);
-    z-index: 10;
+    z-index: var(--z-schedule-now-line);
     pointer-events: none;
 }
 
@@ -263,6 +224,6 @@
     /* Same layer as .schedule-grid__now-line so the chip rides along with
        it above task cards; deliberately covers a fixed time label /
        task-boundary label sharing this time slot instead of hiding either. */
-    z-index: 10;
+    z-index: var(--z-schedule-now-line);
     pointer-events: none;
 }

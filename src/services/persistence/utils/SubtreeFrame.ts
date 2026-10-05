@@ -30,7 +30,7 @@ export interface SubtreeDraft {
 
 /**
  * What a draft comes to (`SubtreeFrame.check`): the replacement to write
- * (`TaskWriteService.replaceSubtree`), the subtree it was opened on unchanged,
+ * (`Operations.replaceSubtree`), the subtree it was opened on unchanged,
  * or why it cannot be written.
  *
  * - `parent-break`: the row's editor holds more than one line
@@ -50,7 +50,7 @@ export type DraftCheck =
  * taken off: a child of the row stands at its first column, and no line in
  * it can be written at the row's depth or shallower. B is the indentation a
  * new child of the row takes by the one rule of it
- * (`FileOperations.resolveChildIndent`): the row's first child's, or a level
+ * (`Placement.resolveChildIndent`): the row's first child's, or a level
  * as Obsidian's settings say (`unit`) when it has none.
  *
  * Every line the draft keeps as it opened is written back byte for byte,

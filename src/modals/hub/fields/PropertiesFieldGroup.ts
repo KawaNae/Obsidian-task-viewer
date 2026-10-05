@@ -2,24 +2,45 @@ import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
 import type { PropertyValue } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
-import { ChildLineClassifier } from '../../../services/parsing/utils/ChildLineClassifier';
+import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
-import { reservedPropertyKeys } from '../../../services/parsing/utils/FrontmatterPolicy';
+import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
+import { FreeText } from '../../../utils/values/TextValues';
+import type { Read } from '../../../utils/values/Read';
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
-import type { FieldGroupContext } from './FieldGroupContext';
+import { onFormEnter } from '../../form/formEnter';
+import { bindField, type BoundField } from '../../form/bindField';
+import { readIssue, type IssueSlot } from '../../form/FormIssue';
+import { ValueSuggest, type ValueSuggestOptions } from '../../../suggest/ValueSuggest';
+import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
 
 /**
  * カスタムプロパティ行。
  * - own キー: value 編集可 + 行削除ボタン
  * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格
+ *
+ * 追加行のキーは `PropertyKeyInput` で読み（`:`、`[`、`]` と予約されたキーを
+ * 拒む）、読めないキーは欄の下に理由を出して足さない。理由は打ち直すと
+ * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
+ * 打ちかけの字は残す。足す書き込みが拒まれたら、打った字を追加行に戻す。
  */
-export class PropertiesFieldGroup {
+export class PropertiesFieldGroup implements ClosingPart {
     private sectionEl: HTMLElement;
     private addKeyInput: HTMLInputElement | null = null;
-    /** custom プロパティ行の value input（focus('<key>') 用） */
+    private addSays: HTMLElement | null = null;
+    /** custom プロパティ行の value input（focus('<key>') 用）と、その行の文の枠 */
     private valueInputs = new Map<string, HTMLInputElement>();
+    private valueSays = new Map<string, HTMLElement>();
+    /** Each property's value field, bound: what a close saves. */
+    private valueBound = new Map<string, BoundField<string>>();
+    /** The add row as last built: its fields, what its key reads, and its commit. */
+    private addRow: { keyInput: HTMLInputElement; valueInput: HTMLInputElement; readKey(): Read<string> | null; commit(): void } | null = null;
+    /** What is typed in the add row and not yet added: kept across a rebuild. */
+    private draft = { key: '', value: '' };
+    /** The lists under the fields as last built: closed before the rows are built anew. */
+    private suggests: ValueSuggest[] = [];
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
         this.sectionEl = container.createDiv({ cls: 'task-hub__props' });
@@ -27,9 +48,13 @@ export class PropertiesFieldGroup {
     }
 
     render(force = false): void {
-        if (!force && this.sectionEl.contains(document.activeElement)) return;
+        if (!force && this.sectionEl.contains(this.sectionEl.ownerDocument.activeElement)) return;
+        for (const suggest of this.suggests) suggest.close();
+        this.suggests = [];
         this.sectionEl.empty();
         this.valueInputs.clear();
+        this.valueSays.clear();
+        this.valueBound.clear();
 
         const task = this.ctx.getTask();
         const shut = this.ctx.isShut();
@@ -45,34 +70,33 @@ export class PropertiesFieldGroup {
         for (const [key, pv] of Object.entries(effective)) {
             const isOwn = key in own;
 
-            const { row } = createFormRow(this.sectionEl, key);
+            const { row, says } = createFormRow(this.sectionEl, key);
             if (!isOwn) row.addClass('task-hub__row--cascade');
+            this.valueSays.set(key, says);
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
             valueInput.value = pv.value;
             valueInput.disabled = shut;
             this.valueInputs.set(key, valueInput);
 
-            const commitValue = () => {
-                const raw = valueInput.value;
-                const live = this.ctx.getTask().properties ?? {};
-                if (isOwn && raw === live[key]?.value) return;
-                if (!isOwn && raw === pv.value) return; // cascade 値のまま → 上書きを作らない
-                this.commit({ ...live, [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
-            };
-            this.ctx.attachSuggest(valueInput, valueInput, {
-                getCandidates: (q) => FilterValueCollector
-                    .collectPropertyValuesForKey(this.ctx.readService.getTasks(), key)
+            const suggest = this.offer(valueInput, {
+                candidates: (q) => FilterValueCollector
+                    .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
-                onPick: (val) => { valueInput.value = val; commitValue(); },
+                pick: (val) => { valueInput.value = val; value.commit(); },
             });
-            valueInput.addEventListener('blur', commitValue);
-            valueInput.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key === 'Enter' && !e.isComposing) commitValue();
+            // The value the row shows: its own, or the inherited one (left as it is, no own value is made).
+            const value = bindField(valueInput, {
+                codec: FreeText,
+                current: () => (isOwn ? this.ctx.getTask().properties?.[key]?.value ?? '' : pv.value),
+                commit: (raw) => this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: PropertyValues.fromText(raw) }),
+                issues: () => { /* any text is a value */ },
+                takesEnter: () => suggest.listShown,
             });
+            this.valueBound.set(key, value);
 
             if (isOwn) {
-                const removeBtn = row.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+                const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
                 removeBtn.disabled = shut;
@@ -81,7 +105,6 @@ export class PropertiesFieldGroup {
                     delete next[key];
                     this.commit(next);
                     // 構造コミット: 楽観 model から行を即時再構築
-                    this.ctx.stack.closeAll();
                     this.render(true);
                 });
             } else if (!isOwn) {
@@ -92,8 +115,9 @@ export class PropertiesFieldGroup {
         }
 
         // 追加行 — キーはラベル列に収め、値 input の左端を上の行と揃える
-        const { row: addRow, labelEl: addLabelEl } = createFormRow(this.sectionEl, '');
+        const { row: addRow, labelEl: addLabelEl, says: addSays } = createFormRow(this.sectionEl, '');
         addRow.addClass('task-hub__prop-add');
+        this.addSays = addSays;
         addLabelEl.addClass('tv-form__label--input');
         const keyInput = addLabelEl.createEl('input', {
             type: 'text', placeholder: t('modal.hub.propertyKey'),
@@ -106,49 +130,71 @@ export class PropertiesFieldGroup {
         keyInput.disabled = shut;
         valueInput.disabled = shut;
         this.addKeyInput = keyInput;
+        keyInput.value = this.draft.key;
+        valueInput.value = this.draft.value;
+        const keyCodec = PropertyKeyInput.of(this.ctx.plugin.settings.scopeKeys);
+        /** The key typed, read; null while none is typed. Its issue is said as it is typed. */
+        const readKey = () => {
+            const read = keyInput.value.trim() === '' ? null : keyCodec.read(keyInput.value);
+            this.ctx.issues.set('propKey', readIssue('propKey', read && !read.ok ? read.issue : null));
+            return read;
+        };
+        keyInput.addEventListener('input', (e) => {
+            this.draft.key = keyInput.value;
+            if (!(e as InputEvent).isComposing) readKey();
+        });
+        keyInput.addEventListener('compositionend', () => readKey());
+        valueInput.addEventListener('input', () => { this.draft.value = valueInput.value; });
 
-        // 候補: 既存キー（vault 全体）から未使用のもの / 値はキーに応じて
-        this.ctx.attachSuggest(keyInput, keyInput, {
-            getCandidates: (q) => {
+        // 候補: 既存キー（vault 全体）から未使用のもの / 値はキーに応じて。
+        // キーを選ぶと値の欄へ移り、値を選ぶと行を足す。
+        const keySuggest = this.offer(keyInput, {
+            candidates: (q) => {
                 const used = new Set(Object.keys(effective));
-                return FilterValueCollector.collectPropertyKeys(this.ctx.readService.getTasks())
+                return FilterValueCollector.collectPropertyKeys(this.ctx.index.getTasks())
                     .filter(k => !used.has(k))
                     .filter(k => !q || k.toLowerCase().includes(q.toLowerCase()));
             },
-            onPick: (val) => { keyInput.value = val; valueInput.focus(); },
+            pick: (val) => {
+                keyInput.value = val;
+                this.draft.key = val;
+                readKey();
+                valueInput.focus();
+            },
         });
-        this.ctx.attachSuggest(valueInput, valueInput, {
-            getCandidates: (q) => {
+        const valueSuggest = this.offer(valueInput, {
+            candidates: (q) => {
                 const key = keyInput.value.trim();
                 if (!key) return [];
                 return FilterValueCollector
-                    .collectPropertyValuesForKey(this.ctx.readService.getTasks(), key)
+                    .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
             },
-            onPick: (val) => { valueInput.value = val; commitAdd(); },
+            pick: (val) => { valueInput.value = val; commitAdd(); },
         });
 
         const commitAdd = () => {
-            const key = keyInput.value.trim();
-            if (!key) return;
-            const reserved = reservedPropertyKeys(this.ctx.plugin.settings.scopeKeys);
-            keyInput.classList.remove('tv-ctrl__text-input--invalid');
-            if (reserved.has(key)) {
-                keyInput.classList.add('tv-ctrl__text-input--invalid');
-                this.ctx.showFormError(t('modal.hub.reservedKey', { key }));
-                return;
-            }
+            const key = readKey();
+            if (!key?.ok) return;
             const raw = valueInput.value;
-            this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
-            keyInput.value = '';
-            valueInput.value = '';
-            this.ctx.stack.closeAll();
+            const typed = { key: keyInput.value, value: raw };
+            const write = this.commit({ ...(this.ctx.getTask().properties ?? {}), [key.value]: PropertyValues.fromText(raw) });
+            this.draft = { key: '', value: '' };
             this.render(true);
-        };
-        for (const input of [keyInput, valueInput]) {
-            input.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key === 'Enter' && !e.isComposing) commitAdd();
+            // Refused: what was typed is the add row's again, unless something was typed since.
+            void write?.then((written) => {
+                if (written || this.draft.key !== '' || this.draft.value !== '') return;
+                this.draft = typed;
+                const row = this.addRow;
+                if (row && row.keyInput.value === '' && row.valueInput.value === '') {
+                    row.keyInput.value = typed.key;
+                    row.valueInput.value = typed.value;
+                }
             });
+        };
+        this.addRow = { keyInput, valueInput, readKey, commit: commitAdd };
+        for (const [input, suggest] of [[keyInput, keySuggest], [valueInput, valueSuggest]] as const) {
+            onFormEnter(input, commitAdd, { takesEnter: () => suggest.listShown });
         }
         // blur 確定ルール: key があれば value 空でも確定（空値プロパティは有効）。
         // value だけでは書き込み先がないので確定しない。
@@ -160,11 +206,49 @@ export class PropertiesFieldGroup {
         };
         keyInput.addEventListener('blur', blurCommit);
         valueInput.addEventListener('blur', blurCommit);
+
+        this.ctx.issues.redraw();
     }
 
-    private commit(props: Record<string, PropertyValue>): void {
-        if (this.ctx.isShut()) return;
-        this.ctx.queue(TaskUpdateBuilder.customProperties(this.ctx.getTask(), props));
+    /** A list of values under `input`, closed when the rows are built anew. */
+    private offer(input: HTMLInputElement, opts: ValueSuggestOptions): ValueSuggest {
+        const suggest = new ValueSuggest(this.ctx.app, input, opts);
+        this.suggests.push(suggest);
+        return suggest;
+    }
+
+    private commit(props: Record<string, PropertyValue>): Promise<boolean> | undefined {
+        if (this.ctx.isShut()) return undefined;
+        return this.ctx.queue(TaskUpdateBuilder.customProperties(this.ctx.getTask(), props));
+    }
+
+    /**
+     * The add row, when what is typed in it cannot be added: a key that does
+     * not read, or a value with no key to write it under. A property's value
+     * is any text, so it is always saved.
+     */
+    unsaved(): UnsavedField[] {
+        const row = this.addRow;
+        if (!row) return [];
+        const typedKey = row.keyInput.value.trim() !== '';
+        const unsaved = typedKey ? row.readKey()?.ok === false : row.valueInput.value.trim() !== '';
+        return unsaved ? [{ label: t('modal.hub.propertyKeyField'), input: row.keyInput }] : [];
+    }
+
+    discardUnsaved(): void {
+        if (this.unsaved().length === 0) return;
+        this.draft = { key: '', value: '' };
+        if (this.addRow) {
+            this.addRow.keyInput.value = '';
+            this.addRow.valueInput.value = '';
+        }
+        this.ctx.issues.set('propKey', []);
+    }
+
+    save(): void {
+        for (const bound of this.valueBound.values()) if (bound.pending()?.ok) bound.commit();
+        const row = this.addRow;
+        if (row && row.keyInput.value.trim() !== '' && row.readKey()?.ok) row.commit();
     }
 
     /** 外部変更（echo）の取り込み。focus 中はスキップする既存の render ガードに乗る。 */
@@ -176,8 +260,17 @@ export class PropertiesFieldGroup {
         this.render(true);
     }
 
-    focus(key?: string): void {
-        const target = key ? (this.valueInputs.get(key) ?? this.addKeyInput) : this.addKeyInput;
-        target?.focus();
+    /** Where the add row's key (`propKey`) or a property's value (`prop:<key>`) says its issues. */
+    slot(at: HubField): IssueSlot | null {
+        if (at === 'propKey') return this.addKeyInput && this.addSays ? { input: this.addKeyInput, message: this.addSays } : null;
+        const key = at.slice('prop:'.length);
+        const input = this.valueInputs.get(key);
+        const message = this.valueSays.get(key);
+        return input && message ? { input, message } : null;
+    }
+
+    /** The value field of the property `key`; the new property's key field when there is none, or no key is named. */
+    fieldElement(key?: string): HTMLElement | null {
+        return (key ? this.valueInputs.get(key) : undefined) ?? this.addKeyInput ?? null;
     }
 }

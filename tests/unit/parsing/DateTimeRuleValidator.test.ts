@@ -60,49 +60,29 @@ describe('DateTimeRuleValidator', () => {
         });
     });
 
-    describe('frontmatter-time-only rule', () => {
-        it('returns warning when start has time but no date in frontmatter', () => {
-            const result = validateDateTimeRules({
-                startTime: '09:00',
-                endDateImplicit: false,
-                isFrontmatter: true,
-            });
-            expect(result).toBeDefined();
-            expect(result!.severity).toBe('warning');
-            expect(result!.rule).toBe('frontmatter-time-only');
+    describe("rule 4's hint writes the line's date and end time with a start time", () => {
+        it('@D>DT02:00: the same day before 02:00, or the next day', () => {
+            const r = validateDateTimeRules({ startDate: '2026-10-04', endDate: '2026-10-04', endTime: '02:00', endDateImplicit: false });
+            expect(r!.rule).toBe('end-time-without-start');
+            expect(r!.hint).toContain('`@2026-10-04T01:00>02:00`');
+            expect(r!.hint).toContain('`@2026-10-04T09:00>2026-10-05T02:00`');
         });
 
-        it('returns warning when end has time but no date in frontmatter', () => {
-            const result = validateDateTimeRules({
-                startDate: '2026-01-10',
-                startTime: '09:00',
-                endTime: '17:00',
-                endDateImplicit: false,
-                isFrontmatter: true,
-            });
-            expect(result).toBeDefined();
-            expect(result!.severity).toBe('warning');
-            expect(result!.rule).toBe('frontmatter-time-only');
+        it('@D>ET10:00: the end date the line writes', () => {
+            const r = validateDateTimeRules({ startDate: '2026-10-04', endDate: '2026-10-06', endTime: '10:00', endDateImplicit: false });
+            expect(r!.hint).toContain('`@2026-10-04T09:00>10:00`');
+            expect(r!.hint).toContain('`@2026-10-04T09:00>2026-10-06T10:00`');
         });
 
-        it('does not trigger for inline tasks', () => {
-            const result = validateDateTimeRules({
-                startTime: '09:00',
-                endDateImplicit: false,
-            });
-            expect(result?.rule).not.toBe('frontmatter-time-only');
+        it('@>ET17:00: the end date as the start date', () => {
+            const r = validateDateTimeRules({ endDate: '2026-10-04', endTime: '17:00', endDateImplicit: false });
+            expect(r!.hint).toContain('`@2026-10-04T09:00>17:00`');
+            expect(r!.hint).toContain('`@2026-10-04T09:00>2026-10-05T17:00`');
         });
 
-        it('does not trigger when dates are present', () => {
-            const result = validateDateTimeRules({
-                startDate: '2026-01-10',
-                startTime: '09:00',
-                endDate: '2026-01-10',
-                endTime: '17:00',
-                endDateImplicit: false,
-                isFrontmatter: true,
-            });
-            expect(result).toBeUndefined();
+        it('with no date, the bare request', () => {
+            const r = validateDateTimeRules({ endTime: '10:00', endDateImplicit: false });
+            expect(r!.hint).not.toContain('`@');
         });
     });
 });

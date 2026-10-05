@@ -1,9 +1,10 @@
+import { DateUtils } from '../../utils/DateUtils';
 import { type Diagnostic, type Span, error } from './Diagnostic';
 import type { Token, TokenKind } from './Token';
 import { DECIMAL_PLACES, DURATION_UNITS, type DurUnit, MAX_EXACT_FRACTION } from './Value';
 
-const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}/;
+const DATETIME_RE = new RegExp(`^${DateUtils.DATE_PATTERN}T${DateUtils.TIME_PATTERN}`);
+const DATE_RE = new RegExp(`^${DateUtils.DATE_PATTERN}`);
 const TIME_RE = /^\d{1,2}:\d{2}/;
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 
@@ -56,6 +57,23 @@ export function tokenize(src: string, base = 0): LexResult {
         const opener = CLOSES[kind];
         if (opener !== undefined && open[open.length - 1] === opener) open.pop();
         tokens.push({ kind, text, start: start + base, end: end + base });
+    };
+
+    // A literal of a date's or a time's shape naming none that exists is an
+    // error where it is written: the notation reads no such day or time
+    // (`DateUtils.readDate`, the inputs' predicate too). Each says whether
+    // the part was one that exists, so a datetime is told of once.
+    const checkDay = (date: string, text: string, start: number): boolean => {
+        if (DateUtils.readDate(date) !== null) return true;
+        rawDiagnostics.push(error('lex.no-such-day', `'${text}' names a day that does not exist`,
+            { start, end: start + text.length }, { text }));
+        return false;
+    };
+    const checkTime = (time: string, text: string, start: number): boolean => {
+        if (DateUtils.isValidTimeString(time.padStart(5, '0'))) return true;
+        rawDiagnostics.push(error('lex.no-such-time', `'${text}' names a time that does not exist`,
+            { start, end: start + text.length }, { text }));
+        return false;
     };
 
     while (i < src.length) {
@@ -191,18 +209,22 @@ export function tokenize(src: string, base = 0): LexResult {
             const rest = src.slice(i);
             const dt = rest.match(DATETIME_RE);
             if (dt) {
+                const [date, time] = dt[0].split('T');
+                checkDay(date, dt[0], i) && checkTime(time, dt[0], i);
                 push('datetime', dt[0], i, i + dt[0].length);
                 i += dt[0].length;
                 continue;
             }
             const d = rest.match(DATE_RE);
             if (d) {
+                checkDay(d[0], d[0], i);
                 push('date', d[0], i, i + d[0].length);
                 i += d[0].length;
                 continue;
             }
             const t = rest.match(TIME_RE);
             if (t) {
+                checkTime(t[0], t[0], i);
                 push('time', t[0], i, i + t[0].length);
                 i += t[0].length;
                 continue;
@@ -368,7 +390,7 @@ function shift(span: Span, base: number): Span {
  * Shared by the template-literal lexer and the interpolation of a generation
  * block's body — the two places where a `${` has to be closed correctly.
  */
-export function findInterpolationEnd(src: string, open: number): number {
+function findInterpolationEnd(src: string, open: number): number {
     /** Closers still owed, innermost last. Every bracket kind, not just the
      *  braces: keeping one list means a kind added later cannot be forgotten
      *  the way a hand-written brace count would forget it. */

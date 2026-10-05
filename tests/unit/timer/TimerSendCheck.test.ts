@@ -4,7 +4,7 @@ import { anchorsOf, checkTimerSend, timerSendText, type AnchoredTimer } from '..
 import type { SendingLines } from '../../../src/services/data/NoteOps';
 
 /**
- * Whether the open timers let rows go to a note (note-ops-plan.md 段 B4):
+ * Whether the open timers let rows go to a note (`archive/2026-09-send.md`, 開いているタイマー):
  * a timer whose `^id`s all go follows them; one whose `^id`s would go in
  * part, be lost to the draft, or be carried by two lines of the note it
  * finds its lines in keeps the send from being made.
@@ -45,6 +45,18 @@ describe('a timer whose ^ids all go: the send is made', () => {
     });
 });
 
+describe('the ^ids a timer finds its lines by (anchorsOf)', () => {
+    it('its target\'s and its tail\'s, once each', () => {
+        expect(anchorsOf({ subject: { kind: 'task', anchor: 'target' }, tail: 'tail', opening: null })).toEqual(['target', 'tail']);
+        expect(anchorsOf({ subject: { kind: 'task', anchor: 's' }, tail: 's', opening: null })).toEqual(['s']);
+    });
+
+    it('a daily note timer: its tail alone, and none before its first write is asked', () => {
+        expect(anchorsOf({ subject: { kind: 'daily', date: '2026-09-30' }, tail: 'tail', opening: null })).toEqual(['tail']);
+        expect(anchorsOf({ subject: { kind: 'daily', date: '2026-09-30' }, tail: null, opening: null })).toEqual([]);
+    });
+});
+
 describe('the timers the send does not touch', () => {
     it('one with no ^id, one of another note by the same ^id, and one none of whose ^ids go', () => {
         const timers = [timer('a.md', []), timer('b.md', ['tv-t-target', 'x']), timer('a.md', ['elsewhere', 'other'])];
@@ -69,7 +81,7 @@ describe('a timer some of whose ^ids go and some stay: refused', () => {
     });
 
     it('the line a write of the timer is putting in, not yet in the note, counted as staying', () => {
-        const anchors = anchorsOf({ timerTargetId: 's', tailRecordBlockId: 's', opening: { tail: 'next', target: 's', owned: [] } });
+        const anchors = anchorsOf({ subject: { kind: 'task', anchor: 's' }, tail: 's', opening: { tail: 'next', owned: [] } });
         expect(anchors).toEqual(['s', 'next']);
         expect(checkTimerSend([timer('a.md', anchors)], sending('X.md', { 'a.md': { base: ['- [ ] 行 ^s'] } })))
             .toMatchObject({ kind: 'split', sent: 's', kept: 'next' });

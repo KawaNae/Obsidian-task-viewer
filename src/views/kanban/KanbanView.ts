@@ -1,44 +1,20 @@
-import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
-import { logDebug } from '../../log/log';
+import type { Menu, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
+import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
+import { createCardRendering } from '../sharedUI/CardRendering';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
-import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { combineFilterStates, createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
-import type { FilterState } from '../../services/filter/FilterTypes';
-import { createEmptySortState } from '../../services/sort/SortTypes';
-import { TaskStyling } from '../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
-import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
-import {
-    renderListSection,
-    startListSectionRename,
-    type ListSectionClasses,
-} from '../sharedUI/ListSectionRenderer';
-
-import { openTaskInEditor } from '../../utils/NavigationUtils';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
+import type { ListSectionClasses } from '../sharedUI/ListSectionRenderer';
+import { TaskListSections, newList } from '../sharedUI/TaskListSections';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
-import type { PinnedListDefinition, DisplayTask, Task } from '../../types';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
-import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
+import type { PinnedListDefinition } from '../../types';
+import { KanbanCodec, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
+import type { IndexReads } from '../../services/core/TaskIndex';
+import { TaskViewerView } from '../base/TaskViewerView';
 
-export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
 
 /**
  * Grid variant of the shared list section: a card with its own background and
@@ -56,24 +32,23 @@ const KANBAN_CELL_CLASSES: ListSectionClasses = {
     nameInput: 'kanban-view__cell-name-input',
 };
 
-type KanbanViewState = Partial<KanbanConfig> & Partial<KanbanTransient>;
-
-export class KanbanView extends ItemView {
-    private readonly plugin: PluginContext & TimerHost;
-    private readonly readService: TaskReadService;
-    private readonly writeService: TaskWriteService;
+/**
+ * Kanban View - a grid of task lists.
+ *
+ * Its state is KanbanSchema's config and transient fields, held in the
+ * base's store. The grid always holds a cell: a state without one (a new
+ * view, a reset, a template without a grid) is given a default list.
+ */
+export class KanbanView extends TaskViewerView<KanbanConfig, KanbanTransient> {
+    /** The index's copies and changes (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
     private readonly taskRenderer: TaskCardRenderer;
-    private readonly linkInteractionManager: TaskLinkInteractionManager;
-    private readonly menuHandler: MenuHandler;
-    private readonly filterMenu = new FilterMenuComponent();
-    private readonly sortMenu = new SortMenuComponent();
-    private readonly viewFilterMenu = new FilterMenuComponent();
     private readonly toolbar: KanbanToolbar;
+    /** The board's lists: the grid is their placement. */
+    private readonly cells: TaskListSections;
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
-    /** rAF coalescing for data-change bursts. Created in onOpen. */
-    private renderScheduler: RenderScheduler | null = null;
     /**
      * Scroll position across full re-renders, on both axes. The element is
      * re-queried each time because `render()` builds a fresh grid host.
@@ -82,531 +57,189 @@ export class KanbanView extends ItemView {
         () => this.container?.querySelector('.kanban-view__grid-host') as HTMLElement | null,
         { axis: 'both' },
     );
-    private customName: string | undefined;
-    private viewFilterState: FilterState | undefined;
-    private grid: PinnedListDefinition[][] = [];
-    private gridCollapsed: Record<string, boolean> = {};
-    private maskMode: boolean = false;
     private readonly hoverParent = new TaskViewHoverParent();
-    private listDefMap = new Map<string, PinnedListDefinition>();
-    private topRightEditor = new TopRightConfigEditor();
-    private readonly paging: TaskPagingController;
-    /**
-     * Reconciler for the in-flight `render()` call. Set at the top of
-     * `render()` and consumed by `renderTaskCards` (which is called both
-     * directly and via `paging.render`'s callback). Null between renders.
-     */
-    private currentReconciler: CardReconciler | null = null;
-
-    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
-        super(leaf);
-        this.plugin = plugin;
-        this.readService = this.plugin.getTaskReadService();
-        this.writeService = this.plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            getHoverParent: () => this.hoverParent,
-        }, () => this.plugin.settings, () => this.maskMode);
-        this.addChild(this.taskRenderer);
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
-        this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const openTaskHub = createTaskHubOpener(this.app, {
-            taskRenderer: this.taskRenderer,
-            menuHandler: this.menuHandler,
-            readService: this.readService,
-            writeService: this.writeService,
-            plugin: this.plugin,
-        });
-        this.taskRenderer.setDetailCallback((task) => openTaskHub(task));
-        this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
-        this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
-        this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
-        this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.readService.getTask(taskId);
-            if (task) openTaskHub(task, opts);
-        });
-        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
-        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
-        this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.viewFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
-        this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
-        this.paging = new TaskPagingController(
-            () => this.plugin.settings.pinnedListPageSize,
-            (container, tasks, listId) => this.renderTaskCards(container, tasks, listId),
-        );
-
-        this.toolbar = new KanbanToolbar({
-            app: this.app,
-            leaf: this.leaf,
-            plugin: this.plugin,
-            readService: this.readService,
-            filterMenu: this.viewFilterMenu,
-            container: this.containerEl,
-            onFilterChange: () => {
-                this.persistViewFilterState();
-                this.render();
-            },
-            getCustomName: () => this.customName,
-            onRename: (newName) => {
-                this.customName = newName;
-                this.leaf.updateHeader();
-                this.app.workspace.requestSaveLayout();
-            },
-            getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg) => this.applyConfig(cfg),
-            onConfigApplied: () => {
-                this.leaf.updateHeader();
-                this.requestSaveLayout();
-                this.render();
-            },
-            getMaskMode: () => this.maskMode,
-            setMaskMode: (next) => {
-                this.maskMode = next;
-                this.requestSaveLayout();
-                this.render();
-                this.toolbar.update();
-            },
-        });
-    }
 
     getViewType(): string {
-        return VIEW_TYPE_KANBAN;
+        return KanbanCodec.schema.viewType;
     }
 
-    getDisplayText(): string {
-        return this.customName || VIEW_META_KANBAN.displayText;
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
+        super(leaf, plugin, KanbanCodec);
+        this.index = this.plugin.getIndex();
+        const cards = createCardRendering({
+            app: this.app,
+            plugin: this.plugin,
+            getHoverParent: () => this.hoverParent,
+            getMaskMode: () => this.state.maskMode ?? false,
+        });
+        this.taskRenderer = cards.taskRenderer;
+        this.addChild(this.taskRenderer);
+        this.cells = new TaskListSections({
+            plugin: this.plugin,
+            readService: this.plugin.getTaskReadService(),
+            index: this.index,
+            taskRenderer: this.taskRenderer,
+        }, {
+            classes: KANBAN_CELL_CLASSES,
+            scopePrefix: 'cell',
+            replaceList: (id, patch) => this.setGrid(this.grid.map(row => row.map(l => l.id === id ? { ...l, ...patch } : l))),
+            setCollapsed: (id, collapsed) => this.update({
+                gridCollapsed: { ...this.state.gridCollapsed, [id]: collapsed },
+            }, { draw: false }),
+            insertCopy: (list, copy) => this.insertCopy(list, copy),
+            appendMenuItems: (menu, list) => this.appendCellMenuItems(menu, list),
+        });
+
+        this.toolbar = new KanbanToolbar({ host: this.toolbarHost() });
+
+        // A grid without a cell is given the default list, in the same change.
+        this.store.subscribe((patch) => {
+            if ('grid' in patch && !hasCells(this.state.grid)) {
+                this.update({ grid: [[newList()]] });
+            }
+        });
     }
 
-    getIcon(): string {
-        return VIEW_META_KANBAN.icon;
+    /** The grid drawn. */
+    private get grid(): PinnedListDefinition[][] {
+        return this.state.grid ?? [];
     }
 
-    private get codec(): ViewConfigCodec<KanbanConfig, KanbanTransient> {
-        return codecFor(VIEW_TYPE_KANBAN) as ViewConfigCodec<KanbanConfig, KanbanTransient>;
+    /** Write the grid; the board is drawn again. */
+    private setGrid(grid: PinnedListDefinition[][]): void {
+        this.update({ grid });
     }
 
-    applyConfig(cfg: Partial<KanbanConfig>): void {
-        const next = this.codec.withDefaults(cfg);
-        if (next.grid && next.grid.length > 0) {
-            this.grid = next.grid;
-            this.gridCollapsed = {};
-        } else {
-            this.grid = [[this.createDefaultList()]];
-            this.gridCollapsed = {};
-        }
-        this.customName = next.customName;
-        this.maskMode = next.maskMode === true;
-        const fs = next.filterState;
-        this.viewFilterState = fs;
-        this.viewFilterMenu.setFilterState(fs ?? createEmptyFilterState());
-    }
-
-    getCurrentConfig(): Partial<KanbanConfig> {
-        return {
-            customName: this.customName,
-            filterState: this.viewFilterState && hasConditions(this.viewFilterState)
-                ? this.viewFilterState : undefined,
-            maskMode: this.maskMode,
-            grid: this.grid.length > 0 ? this.grid : undefined,
-        };
-    }
-
-    async setState(state: KanbanViewState, result: ViewStateResult): Promise<void> {
-        const stateDict = (state ?? {}) as Record<string, unknown>;
-        const config = this.codec.parseConfig(stateDict);
-        const transient = this.codec.parseTransient(stateDict);
-
-        this.applyConfig(config);
-
-        if (transient.gridCollapsed) {
-            this.gridCollapsed = transient.gridCollapsed;
-        }
-
-        await super.setState(state, result);
-
-        if (this.container) {
-            this.render();
-        }
-    }
-
-    getState(): Record<string, unknown> {
-        return {
-            ...this.codec.serializeConfig(this.getCurrentConfig()),
-            ...this.codec.serializeTransient({ gridCollapsed: this.gridCollapsed }),
-        };
-    }
-
-    async onOpen(): Promise<void> {
-        logDebug(`[${this.getViewType()}] opened`);
+    protected openView(): void {
         this.container = this.contentEl;
         this.container.addClass('kanban-view');
 
-        if (this.grid.length === 0) {
-            this.grid = [[this.createDefaultList()]];
-        }
-
-        this.render();
-
-        // Coalesce data-change bursts into one render per frame, as the other
-        // three card views do. Kanban's render is synchronous, so it needs no
-        // AsyncRenderSerializer on top (Calendar and Schedule await inside
-        // theirs and do).
-        this.renderScheduler = new RenderScheduler({
-            performFull: () => this.render(),
-            getHost: () => this.container,
-        });
-
-        this.unsubscribe = this.readService.onChange((taskId, changes) => {
-            this.renderScheduler?.handleChange(taskId, changes);
+        this.unsubscribe = this.index.onChange((taskId, changes) => {
+            this.renderScheduler.handleChange(taskId, changes);
         });
     }
 
-    async onClose(): Promise<void> {
-        logDebug(`[${this.getViewType()}] closed`);
+    protected closeView(): void {
         this.hoverParent.dispose();
-        this.filterMenu.close();
-        this.sortMenu.close();
-        this.viewFilterMenu.close();
+        this.cells.close();
+        this.toolbar.close();
         this.unsubscribe?.();
         this.unsubscribe = null;
-        this.renderScheduler?.dispose();
-        this.renderScheduler = null;
         this.scrollRestorer.dispose();
-    }
-
-    refresh(): void {
-        this.render();
     }
 
     // ─── Render ───────────────────────────────────────────────
 
-    private render(): void {
+    protected draw(): void {
         // The board is rebuilt from scratch below, so the scroll offsets of the
         // old grid host die with it. Both axes matter here: columns run
         // horizontally, so scrollLeft is the position a user notices most.
         this.scrollRestorer.save();
         this.toolbar.detach();
 
-        // Keyed reconciliation: lift surviving cards before tearing down the
-        // grid. They will be re-parented + re-decorated as their
-        // cardInstanceId turns up in the new render; unmatched ones (filter
-        // dropped, deleted, etc.) are disposed at the end.
+        // Keep the cards already shown: they are re-parented as their key
+        // turns up in the new board, and the rest are disposed at the end.
         const reconciler = new CardReconciler();
         reconciler.detach(this.container);
-        this.currentReconciler = reconciler;
-
         this.container.empty();
-        // paging.clear() is intentionally not called: page positions outlive
-        // a render now that cards are reconciled rather than reconstructed.
-        // pruneRemovedLists() handles list deletions further down.
 
-        // Toolbar
         const toolbarHost = this.container.createDiv('kanban-view__toolbar-host');
         this.toolbar.mount(toolbarHost);
 
-        // Grid host
+        // The cells fill the grid row by row: the columns are the grid's.
         const gridHost = this.container.createDiv('kanban-view__grid-host');
-        const cols = this.grid[0]?.length ?? 1;
         const gridEl = gridHost.createDiv('kanban-view__grid');
-        gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(250px, 1fr))`;
+        gridEl.style.gridTemplateColumns = `repeat(${this.grid[0]?.length ?? 1}, minmax(250px, 1fr))`;
+        this.cells.draw(gridEl, this.grid.flat(), {
+            reconciler,
+            collapsed: this.state.gridCollapsed ?? {},
+            viewFilter: this.state.filterState,
+        });
 
-        const currentListIds = new Set<string>();
-        this.listDefMap.clear();
-        for (let r = 0; r < this.grid.length; r++) {
-            for (let c = 0; c < this.grid[r].length; c++) {
-                const listDef = this.grid[r][c];
-                currentListIds.add(listDef.id);
-                this.listDefMap.set(listDef.id, listDef);
-                this.renderCell(gridEl, listDef, r, c);
-            }
-        }
-        this.paging.pruneRemovedLists(currentListIds);
-
-        // Dispose any cards that did not turn up in the new render.
         reconciler.forEachStale(card => this.taskRenderer.dispose(card));
-        this.currentReconciler = null;
-
         this.scrollRestorer.restore();
     }
 
-    private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
-        const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
+    // ─── Cell Menu ────────────────────────────────────────────
 
-        const combinedFilter = (this.viewFilterState && hasConditions(this.viewFilterState) && listDef.applyViewFilter)
-            ? combineFilterStates(listDef.filterState, this.viewFilterState)
-            : listDef.filterState;
-        const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
-
-        renderListSection(gridEl, {
-            classes: KANBAN_CELL_CLASSES,
-            name: listDef.name,
-            taskCount: tasks.length,
-            collapsed: isCollapsed,
-            sortState: listDef.sortState,
-            filterState: listDef.filterState,
-            onSortClick: (anchorEl) => {
-                this.sortMenu.setSortState(listDef.sortState ?? createEmptySortState());
-                this.sortMenu.showMenuAtElement(anchorEl, {
-                    onSortChange: () => {
-                        listDef.sortState = this.sortMenu.getSortState();
-                        this.requestSaveLayout();
-                        this.render();
-                    },
-                });
-            },
-            onFilterClick: (anchorEl) => {
-                this.filterMenu.setFilterState(listDef.filterState);
-                this.filterMenu.showMenuAtElement(anchorEl, {
-                    onFilterChange: () => {
-                        listDef.filterState = this.filterMenu.getFilterState();
-                        this.requestSaveLayout();
-                        this.render();
-                    },
-                    getTasks: () => this.readService.getTasks(),
-                    getStartHour: () => this.plugin.settings.startHour,
-                });
-            },
-            onMoreClick: (anchorEl, event) => {
-                const nameEl = anchorEl.parentElement
-                    ?.querySelector(`.${KANBAN_CELL_CLASSES.name}`) as HTMLElement | null;
-                if (nameEl) this.showCellMenu(event, listDef, nameEl, row, col);
-            },
-            onCollapsedChange: (collapsed) => {
-                this.gridCollapsed[listDef.id] = collapsed;
-                this.requestSaveLayout();
-            },
-            renderBody: (body, opts) => {
-                if (opts.resetPaging) this.paging.resetOne(listDef.id);
-                this.paging.render(body, tasks, listDef.id);
-            },
-        });
-    }
-
-    private renderTaskCards(body: HTMLElement, tasks: import('../../types').DisplayTask[], listId: string): void {
-        const settings = this.plugin.settings;
-        const reconciler = this.currentReconciler;
-        const listDef = this.listDefMap.get(listId);
-        const topRight = listDef?.topRight
-            ? { mode: 'template' as const, config: listDef.topRight }
-            : { mode: 'none' as const };
-        for (const task of tasks) {
-            const cardInstanceId = `kanban::cell-${listId}::${task.id}`;
-            const reused = reconciler?.acquire(cardInstanceId, task);
-            const card = reused ?? body.createDiv('task-card');
-            if (reused) body.appendChild(reused);
-
-            this.decorateKanbanCard(card, task);
-            this.taskRenderer.render(card, task, settings, {
-                cardInstanceId,
-                topRight,
-            });
-            if (!reused) this.menuHandler.addTaskContextMenu(card);
+    /** Where the list `id` is on the grid. */
+    private positionOf(id: string): { row: number; col: number } | null {
+        for (let row = 0; row < this.grid.length; row++) {
+            const col = this.grid[row].findIndex(l => l.id === id);
+            if (col >= 0) return { row, col };
         }
+        return null;
     }
 
-    /**
-     * Idempotent decoration for kanban cards (color / linestyle / readonly).
-     * Kanban tasks are never split in this path, so no split variants apply.
-     */
-    private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
-        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
-        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
-        TaskStyling.applyReadOnly(card, task);
-    }
-
-    // ─── Cell Context Menu ────────────────────────────────────
-
-    private showCellMenu(e: MouseEvent, listDef: PinnedListDefinition, nameEl: HTMLElement, row: number, col: number): void {
-        this.plugin.menuPresenter.present((menu) => {
-        menu.addItem(item => {
-            item.setTitle(t('menu.rename'))
-                .setIcon('pencil')
-                .onClick(() => this.startCellRename(nameEl, listDef));
-        });
-
-        menu.addItem(item => {
-            item.setTitle(t('menu.duplicate'))
-                .setIcon('copy')
-                .onClick(() => this.duplicateCell(listDef, row, col));
-        });
-
-        menu.addItem(item => {
-            item.setTitle(t('pinnedList.topRightLabel'))
-                .setIcon('tag')
-                .onClick(() => {
-                    const tasks = this.readService.getTasks();
-                    const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
-                    this.topRightEditor.open(nameEl, {
-                        config: listDef.topRight,
-                        propertyKeys,
-                        onChange: (config) => {
-                            listDef.topRight = config;
-                            this.requestSaveLayout();
-                            this.render();
-                        },
-                    });
-                });
-        });
-
-        menu.addItem(item => {
-            item
-                .setTitle(t('menu.applyViewFilter'))
-                .setIcon('filter')
-                .setChecked(!!listDef.applyViewFilter)
-                .onClick(() => {
-                    listDef.applyViewFilter = !listDef.applyViewFilter;
-                    this.requestSaveLayout();
-                    this.render();
-                });
-        });
+    /** Insert and remove rows and columns, around the cell. */
+    private appendCellMenuItems(menu: Menu, list: PinnedListDefinition): void {
+        const at = this.positionOf(list.id);
+        if (!at) return;
+        const { row, col } = at;
 
         menu.addSeparator();
-
-        menu.addItem(item => {
-            item.setTitle(t('menu.insertRowAbove'))
-                .setIcon('arrow-up')
-                .onClick(() => this.insertRow(row));
-        });
-
-        menu.addItem(item => {
-            item.setTitle(t('menu.insertRowBelow'))
-                .setIcon('arrow-down')
-                .onClick(() => this.insertRow(row + 1));
-        });
-
-        menu.addItem(item => {
-            item.setTitle(t('menu.insertColumnLeft'))
-                .setIcon('arrow-left')
-                .onClick(() => this.insertColumn(col));
-        });
-
-        menu.addItem(item => {
-            item.setTitle(t('menu.insertColumnRight'))
-                .setIcon('arrow-right')
-                .onClick(() => this.insertColumn(col + 1));
-        });
+        menu.addItem(item => item.setTitle(t('menu.insertRowAbove')).setIcon('arrow-up').onClick(() => this.insertRow(row)));
+        menu.addItem(item => item.setTitle(t('menu.insertRowBelow')).setIcon('arrow-down').onClick(() => this.insertRow(row + 1)));
+        menu.addItem(item => item.setTitle(t('menu.insertColumnLeft')).setIcon('arrow-left').onClick(() => this.insertColumn(col)));
+        menu.addItem(item => item.setTitle(t('menu.insertColumnRight')).setIcon('arrow-right').onClick(() => this.insertColumn(col + 1)));
 
         menu.addSeparator();
-
         if (this.grid.length > 1) {
-            menu.addItem(item => {
-                item.setTitle(t('menu.removeRow'))
-                    .setIcon('trash')
-                    .onClick(() => this.removeRow(row));
-            });
+            menu.addItem(item => item.setTitle(t('menu.removeRow')).setIcon('trash').onClick(() => this.removeRow(row)));
         }
-
-        const cols = this.grid[0]?.length ?? 1;
-        if (cols > 1) {
-            menu.addItem(item => {
-                item.setTitle(t('menu.removeColumn'))
-                    .setIcon('trash')
-                    .onClick(() => this.removeColumn(col));
-            });
+        if ((this.grid[0]?.length ?? 1) > 1) {
+            menu.addItem(item => item.setTitle(t('menu.removeColumn')).setIcon('trash').onClick(() => this.removeColumn(col)));
         }
-        }, { kind: 'mouseEvent', event: e });
-    }
-
-    private startCellRename(nameEl: HTMLElement, listDef: PinnedListDefinition): void {
-        startListSectionRename(nameEl, KANBAN_CELL_CLASSES, listDef.name, (newName) => {
-            listDef.name = newName;
-            this.requestSaveLayout();
-        });
     }
 
     // ─── Grid Operations ──────────────────────────────────────
-
-    private createDefaultList(): PinnedListDefinition {
-        return {
-            id: this.generateId(),
-            name: t('pinnedList.newList'),
-            filterState: createDefaultListFilterState(),
-        };
-    }
-
-    private generateId(): string {
-        return 'kb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
-    }
-
-    private addRow(): void {
-        const cols = this.grid[0]?.length ?? 1;
-        const newRow: PinnedListDefinition[] = [];
-        for (let c = 0; c < cols; c++) {
-            newRow.push(this.createDefaultList());
-        }
-        this.grid.push(newRow);
-        this.requestSaveLayout();
-        this.render();
-    }
 
     private insertRow(atIndex: number): void {
         const cols = this.grid[0]?.length ?? 1;
         const newRow: PinnedListDefinition[] = [];
         for (let c = 0; c < cols; c++) {
-            newRow.push(this.createDefaultList());
+            newRow.push(newList());
         }
-        this.grid.splice(atIndex, 0, newRow);
-        this.requestSaveLayout();
-        this.render();
+        const grid = [...this.grid];
+        grid.splice(atIndex, 0, newRow);
+        this.setGrid(grid);
     }
 
     private insertColumn(atIndex: number): void {
-        for (const row of this.grid) {
-            row.splice(atIndex, 0, this.createDefaultList());
-        }
-        this.requestSaveLayout();
-        this.render();
+        this.setGrid(this.grid.map(row => {
+            const next = [...row];
+            next.splice(atIndex, 0, newList());
+            return next;
+        }));
     }
 
     private removeRow(index: number): void {
         if (this.grid.length <= 1) return;
-        this.grid.splice(index, 1);
-        this.requestSaveLayout();
-        this.render();
+        this.setGrid(this.grid.filter((_, r) => r !== index));
     }
 
     private removeColumn(index: number): void {
         const cols = this.grid[0]?.length ?? 1;
         if (cols <= 1) return;
-        for (const row of this.grid) {
-            row.splice(index, 1);
-        }
-        this.requestSaveLayout();
-        this.render();
+        this.setGrid(this.grid.map(row => row.filter((_, c) => c !== index)));
     }
 
-    private duplicateCell(listDef: PinnedListDefinition, row: number, col: number): void {
-        const dup: PinnedListDefinition = {
-            ...listDef,
-            id: this.generateId(),
-            name: listDef.name + ' (copy)',
-            filterState: structuredClone(listDef.filterState),
-            sortState: listDef.sortState ? structuredClone(listDef.sortState) : undefined,
-        };
-
-        // Insert the duplicate to the right in its row; keep the grid
-        // rectangular by inserting a default cell at the same column in every
-        // other row. splice tolerates col+1 past a shorter row's length (it
-        // appends), so a non-rectangular grid no longer silently no-ops.
-        for (let r = 0; r < this.grid.length; r++) {
-            this.grid[r].splice(col + 1, 0, r === row ? dup : this.createDefaultList());
-        }
-
-        this.requestSaveLayout();
-        this.render();
+    /**
+     * Put `copy` right of `list` in its row; the other rows are given a new
+     * list in the same column, so the grid stays rectangular.
+     */
+    private insertCopy(list: PinnedListDefinition, copy: PinnedListDefinition): void {
+        const at = this.positionOf(list.id);
+        if (!at) return;
+        this.setGrid(this.grid.map((cells, r) => {
+            const next = [...cells];
+            next.splice(at.col + 1, 0, r === at.row ? copy : newList());
+            return next;
+        }));
     }
+}
 
-    private requestSaveLayout(): void {
-        this.app.workspace.requestSaveLayout();
-    }
-
-    private persistViewFilterState(): void {
-        const state = this.viewFilterMenu.getFilterState();
-        this.viewFilterState = hasConditions(state)
-            ? FilterSerializer.fromJSON(FilterSerializer.toJSON(state))
-            : undefined;
-        this.requestSaveLayout();
-    }
+/** Whether a grid holds a cell. */
+function hasCells(grid: PinnedListDefinition[][] | undefined): boolean {
+    return !!grid && grid.some(row => row.length > 0);
 }

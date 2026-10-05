@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
+import type { TimerState } from '../../../src/timer/TimerState';
 import type TaskViewerPlugin from '../../../src/main';
-import type { App } from 'obsidian';
 import { makeTask } from '../helpers/makeTask';
-import { heldByAnchor } from '../helpers/anchoredRow';
+import { opsOver } from '../helpers/anchoredRow';
+import { timerOn } from '../helpers/timerRig';
 
 /**
  * 書き足しの宛先は「今どの行に走っているか」で決まる。child モードなら
@@ -15,15 +14,13 @@ import { heldByAnchor } from '../helpers/anchoredRow';
 
 const PARENT_ID = 'tv-inline:notes/a.md:ln:3';
 const CHILD_ID = 'tv-inline:notes/a.md:blk:tv-timer-1';
+const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', content: 'parent', blockId: 'tv-timer-anchor', anchor: 'tv-timer-anchor' });
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const dateOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const timeOf = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-function makeHarness(effectiveEnd: Date, written = true) {
+function makeHarness(effectiveEnd: Date, written = true, stated: Record<string, string> = { startDate: '2026-10-04', startTime: '10:00' }) {
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
 
-    const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', content: 'parent' });
     const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', content: 'parent', blockId: 'tv-timer-1', anchor: 'tv-timer-1' });
 
     const taskIndex = {
@@ -35,51 +32,27 @@ function makeHarness(effectiveEnd: Date, written = true) {
 
     const plugin = {
         settings: {},
-        getTaskIndex: () => taskIndex,
-        getTaskWriteService: () => ({ freshByAnchor: heldByAnchor(taskIndex) }),
+        getIndex: () => taskIndex,
+        getOperations: () => ({ ...opsOver(taskIndex) }),
         getTaskReadService: () => ({
             getDisplayTask: (id: string) => (id === CHILD_ID
                 ? {
                     ...child,
-                    effectiveEndDate: dateOf(effectiveEnd),
-                    effectiveEndTime: timeOf(effectiveEnd),
+                    stated,
+                    span: { startMs: 0, endMs: effectiveEnd.getTime() },
                 }
                 : undefined),
         }),
     } as unknown as TaskViewerPlugin;
 
-    const recorder = new TimerRecorder(
-        {} as App, plugin,
-        { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils,
-        () => { /* unused */ }, () => [],
-    );
+    const recorder = new TimerRecorder(plugin, { dispatch: () => { }, timers: () => [] }, () => 'tv-timer-2');
 
     return { recorder, updates };
 }
 
-function runningTimer(): TimerInstance {
-    return {
-        id: 'timer-1',
-        taskId: PARENT_ID,
-        taskName: 'parent',
-        taskFile: 'notes/a.md',
-        taskOriginalText: '- [ ] parent',
-        tailRecordBlockId: 'tv-timer-1',
-        startTimeMs: Date.now(),
-        pausedElapsedTime: 0,
-        phase: 'work',
-        isRunning: true,
-        runState: 'running',
-        sessionCount: 0,
-        recordedElapsedTime: 0,
-        isExpanded: true,
-        intervalId: null,
-        recordMode: 'child',
-        parserId: 'tv-inline',
-        taskColor: '',
-        timerType: 'countup',
-        elapsedTime: 0,
-    } as TimerInstance;
+/** child のタイマーが、開始の書き込みで書いた走行中の行に走っている。 */
+function runningTimer(): TimerState {
+    return { ...timerOn(parent, 'child'), tail: 'tv-timer-1', owned: ['tv-timer-1'] };
 }
 
 describe('extendRunningSession', () => {
@@ -101,6 +74,14 @@ describe('extendRunningSession', () => {
         expect(h.updates[0].updates).toHaveProperty('endDate');
         expect(h.updates[0].updates).toHaveProperty('endTime');
         expect(floor).toBeGreaterThan(Date.now());
+    });
+
+    it('期限だけの行（開始を手で消した行）には書き足さない: 規則4の誤りの行を作らない', async () => {
+        const h = makeHarness(new Date(Date.now() - 60_000), true, { due: '2026-10-04' });
+        const floor = await h.recorder.extendRunningSession(runningTimer());
+
+        expect(h.updates).toHaveLength(0);
+        expect(floor).toBeUndefined();
     });
 
     it('書き足しが書けなくても次の見直しの時刻を返す（門は予定で、end はファイルから読み直す）', async () => {

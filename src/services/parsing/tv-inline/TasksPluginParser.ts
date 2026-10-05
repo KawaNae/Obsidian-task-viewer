@@ -1,4 +1,7 @@
-import type { Task, TasksPluginMapping, TaskFieldMapping } from '../../../types';
+import { DateUtils } from '../../../utils/DateUtils';
+import { t } from '../../../i18n';
+import type { TasksPluginMapping, TaskFieldMapping } from '../../../types';
+import type { UnnamedTask } from '../TaskFactory';
 import { ReadOnlyParserBase } from './ReadOnlyParserBase';
 
 /**
@@ -24,12 +27,18 @@ const EMOJI_DEFS: EmojiDef[] = [
     { emoji: '🔽', key: 'priority',   hasDate: false },
 ];
 
+/** A date an emoji writes, and whether it names a day that exists (`DateUtils.readDate`). */
+interface EmojiDate {
+    text: string;
+    exists: boolean;
+}
+
 /** Build a combined regex that matches any emoji + optional date. */
 const EMOJI_PATTERN = EMOJI_DEFS.map(d => d.emoji).join('|');
-const EMOJI_FIELD_REGEX = new RegExp(`(${EMOJI_PATTERN})\\s*(\\d{4}-\\d{2}-\\d{2})?`, 'gu');
+const EMOJI_FIELD_REGEX = new RegExp(`(${EMOJI_PATTERN})\\s*(${DateUtils.DATE_PATTERN})?`, 'gu');
 
 /** Quick check: line must contain at least one date-bearing emoji followed by a date. */
-const HAS_DATE_EMOJI_REGEX = new RegExp(`(?:📅|⏳|🛫|✅)\\s*\\d{4}-\\d{2}-\\d{2}`, 'u');
+const HAS_DATE_EMOJI_REGEX = new RegExp(`(?:📅|⏳|🛫|✅)\\s*${DateUtils.DATE_PATTERN}`, 'u');
 
 /**
  * Read-only parser for the Obsidian Tasks plugin emoji notation.
@@ -45,7 +54,7 @@ export class TasksPluginParser extends ReadOnlyParserBase {
         super();
     }
 
-    parse(line: string, filePath: string, lineNumber: number): Task | null {
+    parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null {
         const classified = this.classify(line);
         if (!classified) return null;
 
@@ -54,8 +63,10 @@ export class TasksPluginParser extends ReadOnlyParserBase {
 
         const { content: contentAfterBlockId, blockId } = this.extractBlockId(classified.rawContent);
 
-        // Extract all emoji fields and collect dates by key
-        const dates: Partial<Record<EmojiFieldKey, string>> = {};
+        // Extract all emoji fields and collect dates by key. A date naming a
+        // day that does not exist is collected too: it is not read, and no
+        // later date of the same emoji is read in its place.
+        const dates: Partial<Record<EmojiFieldKey, EmojiDate>> = {};
         let cleanContent = contentAfterBlockId;
 
         // Reset regex state
@@ -70,7 +81,7 @@ export class TasksPluginParser extends ReadOnlyParserBase {
             if (def && dateValue && def.hasDate) {
                 // First occurrence wins (🛫 appears before ⏳ if both present)
                 if (!dates[def.key]) {
-                    dates[def.key] = dateValue;
+                    dates[def.key] = { text: dateValue, exists: DateUtils.readDate(dateValue) !== null };
                 }
             }
             matchesToRemove.push(match[0]);
@@ -83,10 +94,12 @@ export class TasksPluginParser extends ReadOnlyParserBase {
         cleanContent = cleanContent.replace(/\s{2,}/g, ' ').trim();
 
         // Apply configurable mapping
-        const mapped = this.applyMapping(dates);
+        const { mapped, unread } = this.applyMapping(dates);
 
-        // Must have at least one mapped date field
-        if (!mapped.startDate && !mapped.endDate && !mapped.due) return null;
+        // Must have at least one mapped date field: the line is the Tasks
+        // plugin's by its shape, read or not, so a line whose only date does
+        // not exist stays one (as tv-inline's, it would be rewritten).
+        if (!mapped.startDate && !mapped.endDate && !mapped.due && unread.length === 0) return null;
 
         return this.buildTask({
             filePath,
@@ -98,6 +111,12 @@ export class TasksPluginParser extends ReadOnlyParserBase {
             endDate: mapped.endDate,
             due: mapped.due,
             blockId,
+            // The line is never written, so the text stays; and the editor has
+            // no diagnostic for this notation, so the task is not hidden as an
+            // error would hide it: a warning, which its menu reads out.
+            validation: unread.length > 0
+                ? { severity: 'warning', rule: 'parse-error', message: t('validation.noSuchDateOnLine', { values: unread.join(', ') }), hint: '' }
+                : undefined,
         });
     }
 
@@ -106,9 +125,11 @@ export class TasksPluginParser extends ReadOnlyParserBase {
      * When multiple emoji fields map to the same Task field, priority: start > scheduled > due.
      */
     private applyMapping(
-        dates: Partial<Record<EmojiFieldKey, string>>,
-    ): { startDate?: string; endDate?: string; due?: string } {
+        dates: Partial<Record<EmojiFieldKey, EmojiDate>>,
+    ): { mapped: { startDate?: string; endDate?: string; due?: string }; unread: string[] } {
         const result: { startDate?: string; endDate?: string; due?: string } = {};
+        const taken = new Set<TaskFieldMapping>();
+        const unread: string[] = [];
 
         // Process in priority order: start > scheduled > due
         const entries: { key: 'start' | 'scheduled' | 'due'; target: TaskFieldMapping }[] = [
@@ -120,13 +141,17 @@ export class TasksPluginParser extends ReadOnlyParserBase {
         for (const { key, target } of entries) {
             const date = dates[key];
             if (!date || target === 'ignore') continue;
+            // A date that does not exist is told, and takes its field with
+            // no value: a lower emoji does not give the field in its place.
+            if (!date.exists) unread.push(date.text);
 
             // First writer wins for each target field
-            if (!result[target]) {
-                result[target] = date;
+            if (!taken.has(target)) {
+                taken.add(target);
+                if (date.exists) result[target as 'startDate' | 'endDate' | 'due'] = date.text;
             }
         }
 
-        return result;
+        return { mapped: result, unread };
     }
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { editorRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
@@ -12,7 +13,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * Every write that adds lines, one row of the P1 table each
- * (`stages\p1-placement\design.md`): where the line goes (`Placement`), and
+ * (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 置き場所と書き込み, P1): where the line goes (`Placement`), and
  * the check the write is held to (`checkWrite`) — the line put in is a
  * task under the item meant, outside code, and every task already there
  * keeps its parent. Or nothing is written, and the user hears why.
@@ -66,11 +67,11 @@ function lines(contents: Map<string, string>): string[] {
     return contents.get(FILE)!.split('\n');
 }
 
-describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
+describe('the editor\'s duplicate (one line by the `copies` op, copyOf)', () => {
     it('is spelled as the row it copies, not as the sibling below it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [ ] V', '']);
 
-        expect(await session.index.writeLine(FILE, { line: 2, text: '\t- [ ] T', key: contentKeyOf(contents.get(FILE)!.split('\n')) }, [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
+        expect(await session.ops.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '\t- [ ] T', '    - [ ] V', '']);
@@ -81,7 +82,7 @@ describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
 
-        expect(await session.index.writeLine(FILE, { line: 2, text: '\t- [ ] T', key: contentKeyOf(contents.get(FILE)!.split('\n')) }, [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
+        expect(await session.ops.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '\t- [ ] T', '- [ ] U', '']);
@@ -91,12 +92,12 @@ describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
     });
 });
 
-describe('the day-shifted duplicate (duplicateInlineTask, copyOf)', () => {
+describe('the day-shifted duplicate (`copies` above, copyOf)', () => {
     it('goes above the row, a copy of its subtree, and the row keeps its children', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T @2026-09-21', '\t    - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
 
-        expect(await session.index.duplicateTask(only(session, 'T').id, { dayOffset: 1 })).toBe(true);
+        expect(await session.ops.duplicateTask(only(session, 'T').id, { dayOffset: 1 })).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual([
@@ -106,13 +107,13 @@ describe('the day-shifted duplicate (duplicateInlineTask, copyOf)', () => {
     });
 });
 
-describe('the in-place duplicate (duplicateInlineTaskInPlace, copyOf)', () => {
+describe('the in-place duplicate (`copies` below, copyOf)', () => {
     // The third run's a: spelled as U, the copy would lose its copied child.
     it('is spelled as the row it copies, so the copied child stays the copy\'s', async () => {
         const { contents, session } = await open(['# n', '-\t[ ] T', '\t- [ ] c', '   - [ ] U', '']);
         expect(parents(session)).toEqual([['T', null], ['c', 'T'], ['U', null]]);
 
-        expect(await session.index.duplicateTask(only(session, 'T').id)).toBe(true);
+        expect(await session.ops.duplicateTask(only(session, 'T').id)).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '-\t[ ] T', '\t- [ ] c', '-\t[ ] T', '\t- [ ] c', '   - [ ] U', '']);
@@ -122,7 +123,7 @@ describe('the in-place duplicate (duplicateInlineTaskInPlace, copyOf)', () => {
     it('goes past the subtree, before the sibling that ends the row\'s fence', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '  ```', '  code', '- [ ] U', '']);
 
-        expect(await session.index.duplicateTask(only(session, 'T').id)).toBe(true);
+        expect(await session.ops.duplicateTask(only(session, 'T').id)).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '  ```', '  code', '- [ ] T', '  ```', '  code', '- [ ] U', '']);
@@ -134,7 +135,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
     it('goes past the paragraph under the heading, which would otherwise go on the new task', async () => {
         const { contents, session } = await open(['## H', 'some words', '- [ ] A', '']);
 
-        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['## H', 'some words', '- [ ] N', '- [ ] A', '']);
@@ -150,7 +151,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open([...note, '']);
         const before = contents.get(FILE)!;
 
-        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).toBeNull();
+        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).toBeNull();
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -162,8 +163,8 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open(['### h', '- [ ] A', '#### Sub', '- [ ] S', '']);
         session.index.updateSettings({ ...DEFAULT_SETTINGS, sectionSide: 'end', taskHeadingLevel: 4 });
 
-        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
-        expect(await session.index.createTask(FILE, '- [ ] M', 'Made')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, '- [ ] M', 'Made')).not.toBeNull();
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['### h', '- [ ] A', '- [ ] N', '#### Sub', '- [ ] S', '', '#### Made', '- [ ] M', '']);
@@ -173,7 +174,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open(['## H', '- [ ] A', '### h', '']);
         const before = contents.get(FILE)!;
 
-        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).toBeNull();
+        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).toBeNull();
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -185,7 +186,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
             live?.dispose();
             const { contents, session } = await open(note);
 
-            expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+            expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
             await session.settle(FILE);
 
             expect(lines(contents).slice(-3)).toEqual(['## H', '- [ ] N', '']);
@@ -198,7 +199,7 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
     it('goes past the task\'s text that goes on, as its first child', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', 'lazy words', '- [ ] U', '']);
 
-        expect(await session.index.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).toBe(true);
+        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', 'lazy words', '    - memo:: x', '- [ ] U', '']);
@@ -208,7 +209,7 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
     it('goes past the last property\'s subtree, as its sibling, tab and spaces mixed', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '- [ ] U', '']);
 
-        expect(await session.index.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number' }, b: { value: '2', type: 'number' } } } as never)).toBe(true);
+        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number', number: 1 }, b: { value: '2', type: 'number', number: 2 } } } as never)).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '\t    - b:: 2', '- [ ] U', '']);
@@ -220,7 +221,7 @@ describe('the next instance (insert-instance, groupHead)', () => {
     it('writes the next instance spelled as the row, its command its child, so the series goes on (H2)', async () => {
         const { contents, session } = await open(['# n', '1.    [ ] 対象 @2026-09-21', '      - ==> every mon', '']);
 
-        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '1.    [ ] 対象 @2026-09-28', '      - ==> every mon', '1.    [x] 対象 @2026-09-21', '']);
@@ -232,7 +233,7 @@ describe('the next instance (insert-instance, groupHead)', () => {
     it('goes under the parent past its text that goes on', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '  words', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
 
-        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '  words', '  - [ ] 対象 @2026-09-28 ==> every mon', '  - [x] 対象 @2026-09-21', '']);
@@ -248,7 +249,7 @@ describe('a move within the note (a move to a heading)', () => {
         expect(parents(session)).toEqual([['a', null], ['X', null], ['u', null]]);
         const before = contents.get(FILE);
 
-        await session.index.updateTask(only(session, 'X').id, { statusChar: 'x' });
+        await session.ops.updateTask(only(session, 'X').id, { statusChar: 'x' });
         await session.flowSettled(FILE);
 
         // The completion is written; the fire's write is not.
@@ -264,7 +265,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
         const { contents, session } = await open(['# n', '1. [ ] T', '  - [ ] U', '']);
         expect(parents(session)).toEqual([['T', null], ['U', null]]);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '1. [ ] T', '  - [x] rec', '  - [ ] U', '']);
@@ -274,7 +275,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes past the completed run, at the indentation of the last of it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '- [ ] U', '']);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [x] r2', 'afterCompletedRun')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] r2', 'afterCompletedRun')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '    - [x] r2', '- [ ] U', '']);
@@ -284,7 +285,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes above a fence at the top that never closes, which ends the row', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '```', 'x', '']);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).written).toBe(true);
         await session.settle(FILE);
 
         // T's subtree is its own line (the fence at column 0 ends T): the
@@ -300,7 +301,7 @@ describe('siblings spelled at different columns (the P1 counterexample run\'s C)
         const { contents, session } = await open(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['U', 'P'], ['c', 'U']]);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [x] N', 'afterCompletedRun')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] N', 'afterCompletedRun')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '  - [x] N', '']);
@@ -311,7 +312,7 @@ describe('siblings spelled at different columns (the P1 counterexample run\'s C)
         const { contents, session } = await open(['# n', '- note', '1. [ ] A', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
         expect(parents(session)).toEqual([['A', null], ['対象', null]]);
 
-        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- note', '- [ ] 対象 @2026-09-28 ==> every mon', '1. [ ] A', '  - [x] 対象 @2026-09-21', '']);
@@ -323,7 +324,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
     it('puts a first child past the task\'s code below a blank line', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '', '\t\tcode', '- [ ] U', '']);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '', '\t\tcode', '    - [ ] c', '- [ ] U', '']);
@@ -333,7 +334,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
     it('puts a line under a heading past the code below a blank line', async () => {
         const { contents, session } = await open(['## H', '', '    code', '- [ ] A', '']);
 
-        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['## H', '', '    code', '- [ ] N', '- [ ] A', '']);
@@ -342,7 +343,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
     it('puts the next instance under its parent past the parent\'s second paragraph, so the series goes on', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '', '    desc', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
 
-        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
         await session.flowSettled(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '', '    desc', '  - [ ] 対象 @2026-09-28 ==> every mon', '  - [x] 対象 @2026-09-21', '']);
@@ -352,7 +353,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
     it('stops before a blank line past which the text is shallower than the line put', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '', '  para', '']);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         // The file's unit is four spaces (its first indented line).
@@ -364,7 +365,7 @@ describe('a first child (insertLine, firstChild)', () => {
     it('goes below the task, before its children, in an indented fence\'s item', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '  - [ ] T', '    ```', '    x', '    ```', '- [ ] U', '']);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         // No child item to copy: T's indentation and the file's unit (four
@@ -374,13 +375,13 @@ describe('a first child (insertLine, firstChild)', () => {
     });
 });
 
-describe('an append (appendTaskToFile, end)', () => {
+describe('an append (createTask without a heading, at the end)', () => {
     it('goes past the frontmatter of a note that is only frontmatter, and into an empty note', async () => {
         for (const note of [['---', 'a: 1', '---', ''], ['']]) {
             live?.dispose();
             const { contents, session } = await open(note);
 
-            expect(await session.index.createTask(FILE, '- [ ] N')).not.toBeNull();
+            expect(await session.ops.createTask(FILE, '- [ ] N')).not.toBeNull();
             await session.settle(FILE);
 
             expect(lines(contents).slice(-2)).toEqual(['- [ ] N', '']);
@@ -392,7 +393,7 @@ describe('an append (appendTaskToFile, end)', () => {
         const { contents, session } = await open(['- [ ] A', '```', 'code', '']);
         const before = contents.get(FILE);
 
-        expect(await session.index.createTask(FILE, '- [ ] N')).toBeNull();
+        expect(await session.ops.createTask(FILE, '- [ ] N')).toBeNull();
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -407,7 +408,7 @@ describe('a delete (deleteTask), held to the same check', () => {
         expect(parents(session)).toEqual([['a', null], ['t', null], ['u', null]]);
         const before = contents.get(FILE);
 
-        await session.index.deleteTask(only(session, 't').id);
+        await session.ops.deleteTask(only(session, 't').id);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -423,7 +424,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         const { contents, session } = await open(QUOTE);
         expect(parents(session)).toEqual([['T', null], ['c', null]]);
 
-        await session.index.deleteTask(only(session, 'T').id);
+        await session.ops.deleteTask(only(session, 'T').id);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '> quote', '  - [ ] c', '']);
@@ -433,7 +434,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('copies a task a quote ends without the quote, and puts the copy above it', async () => {
         const { contents, session } = await open(QUOTE);
 
-        expect(await session.index.duplicateTask(only(session, 'T').id)).toBe(true);
+        expect(await session.ops.duplicateTask(only(session, 'T').id)).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '- [ ] T', '> quote', '  - [ ] c', '']);
@@ -443,7 +444,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('puts a child of a task a quote ends above the quote', async () => {
         const { contents, session } = await open(QUOTE);
 
-        expect(await session.index.insertLine(only(session, 'T').id, '- [ ] n', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] n', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '    - [ ] n', '> quote', '  - [ ] c', '']);
@@ -454,7 +455,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
         expect(parents(session)).toEqual([['t2', null], ['t8', null]]);
 
-        expect(await session.index.duplicateTask(only(session, 't2').id)).toBe(true);
+        expect(await session.ops.duplicateTask(only(session, 't2').id)).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] t2', '  -', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
@@ -464,7 +465,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('puts a child of s3#18255\'s t2 past the empty item underlining it, above the quote', async () => {
         const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
 
-        expect(await session.index.insertLine(only(session, 't2').id, '- [ ] n', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 't2').id, '- [ ] n', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] t2', '  -', '    - [ ] n', '> text', '  -  [ ] t8', '']);
@@ -485,7 +486,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         // it, where P's text has ended.
         const { contents, session } = await open(ORDERED);
 
-        expect(await session.index.insertLine(only(session, 'P').id, '- [ ] f', 'firstChild')).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'P').id, '- [ ] f', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] f', '  - [ ] c', '']);
@@ -501,7 +502,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         it('puts a first child', async () => {
             const { contents, session } = await open(NOTE);
 
-            expect(await session.index.insertLine(only(session, 'T').id, '- [ ] f', 'firstChild')).toBe(true);
+            expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] f', 'firstChild')).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - [ ] f', '- [ ] V', '']);
@@ -511,7 +512,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         it('puts a property', async () => {
             const { contents, session } = await open(NOTE);
 
-            expect(await session.index.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).toBe(true);
+            expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - memo:: x', '- [ ] V', '']);
@@ -522,12 +523,12 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('deletes and copies the ordered line with the task whose text it is', async () => {
         const { contents, session } = await open(ORDERED);
 
-        expect(await session.index.duplicateTask(only(session, 'P').id)).toBe(true);
+        expect(await session.ops.duplicateTask(only(session, 'P').id)).toBe(true);
         await session.settle(FILE);
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', '- [ ] P', '  2. [ ] T', '  - [ ] c', '']);
 
         const [first] = session.index.getTasks().filter(task => task.content === 'P').sort((a, b) => a.line - b.line);
-        await session.index.deleteTask(first.id);
+        await session.ops.deleteTask(first.id);
         await session.settle(FILE);
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', '']);
         expect(parents(session)).toEqual([['P', null], ['c', 'P']]);

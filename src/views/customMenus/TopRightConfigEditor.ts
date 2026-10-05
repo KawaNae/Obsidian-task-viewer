@@ -1,10 +1,10 @@
-import { setIcon } from 'obsidian';
+import { setIcon, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { TopRightConfig } from '../../types';
-import { SuggestController } from './SuggestController';
+import { ValueSuggest } from '../../suggest/ValueSuggest';
 import { OverlayShell } from '../sharedUI/OverlayShell';
-import { PopoverStack } from '../sharedUI/PopoverStack';
 import { KNOWN_FIELDS } from '../taskcard/TopRightFieldResolver';
+import { onFormEnter } from '../../modals/form/formEnter';
 
 export interface TopRightConfigEditorOpts {
     config: TopRightConfig | undefined;
@@ -14,13 +14,17 @@ export interface TopRightConfigEditorOpts {
 
 export class TopRightConfigEditor {
     private overlay = new OverlayShell();
-    private stack = new PopoverStack();
     private bodyEl: HTMLElement | null = null;
     private opts: TopRightConfigEditorOpts | null = null;
     private fields: string[] = [];
     private separator: string = '';
     private prefix: string = '';
     private suffix: string = '';
+    /** The list under the fields' input as last drawn: closed before the content is drawn anew. */
+    private fieldList: ValueSuggest | null = null;
+
+    /** @param app the app: its keymap, whose hotkeys the editor keeps out while it has the focus, and the list under the fields' input. */
+    constructor(private readonly app: App) { }
 
     open(anchor: HTMLElement, opts: TopRightConfigEditorOpts): void {
         this.opts = opts;
@@ -33,13 +37,14 @@ export class TopRightConfigEditor {
             mode: 'anchored',
             anchor: { kind: 'element', element: anchor },
             panelClass: 'top-right-config-editor',
-            childStack: this.stack,
+            keymap: this.app.keymap,
             build: (bodyEl) => {
                 this.bodyEl = bodyEl;
                 this.renderContent();
             },
             onClose: () => {
-                this.stack.closeAll();
+                this.fieldList?.close();
+                this.fieldList = null;
                 this.bodyEl = null;
                 this.opts = null;
             },
@@ -48,6 +53,7 @@ export class TopRightConfigEditor {
 
     private renderContent(): void {
         if (!this.bodyEl) return;
+        this.fieldList?.close();
         this.bodyEl.empty();
         this.bodyEl.addClass('tv-ctrl');
 
@@ -103,7 +109,7 @@ export class TopRightConfigEditor {
         for (const field of this.fields) {
             const pill = pillsEl.createDiv('tv-ctrl__pill');
             pill.createSpan().setText(field);
-            const removeBtn = pill.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+            const removeBtn = pill.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
             setIcon(removeBtn.createSpan(), 'x');
             removeBtn.addEventListener('click', () => {
                 this.fields = this.fields.filter(f => f !== field);
@@ -120,8 +126,6 @@ export class TopRightConfigEditor {
             attr: { type: 'text', placeholder: t('pinnedList.topRightFieldPlaceholder') },
         });
 
-        const suggest = new SuggestController(this.stack, inputWrap, '', 'exact');
-
         const addField = (value: string) => {
             const v = value.trim();
             if (!v || this.fields.includes(v)) return;
@@ -130,37 +134,22 @@ export class TopRightConfigEditor {
             this.renderContent();
         };
 
-        const showSuggest = () => {
-            const candidates = this.getSuggestCandidates(input.value);
-            if (candidates.length === 0) {
-                suggest.close();
-                return;
-            }
-            suggest.show(
-                candidates,
-                (el, value) => el.setText(value),
-                (value) => addField(value),
-            );
-        };
-
-        input.addEventListener('focus', () => showSuggest());
-        input.addEventListener('input', () => showSuggest());
+        const list = new ValueSuggest(this.app, input, {
+            candidates: (query) => this.getSuggestCandidates(query),
+            pick: (value) => addField(value),
+        });
+        this.fieldList = list;
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                e.preventDefault();
-                suggest.moveHighlight(e.key === 'ArrowDown' ? 1 : -1);
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                const val = suggest.highlightedValue ?? input.value;
-                if (val) addField(val);
-            } else if (e.key === 'Escape') {
-                suggest.close();
-            } else if (e.key === 'Backspace' && !input.value && this.fields.length > 0) {
+            if (e.key === 'Backspace' && !input.value && this.fields.length > 0) {
                 this.fields.pop();
                 this.emitChange();
                 this.renderContent();
             }
         });
+        // An Enter with no list open adds what is typed.
+        onFormEnter(input, () => {
+            if (input.value) addField(input.value);
+        }, { takesEnter: () => list.listShown });
     }
 
     private getSuggestCandidates(query: string): string[] {

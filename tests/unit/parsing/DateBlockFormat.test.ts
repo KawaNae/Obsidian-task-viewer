@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatDateBlock } from '../../../src/services/parsing/tv-inline/DateBlockFormat';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import { makeTask } from '../helpers/makeTask';
 
 /**
@@ -63,7 +63,7 @@ describe('formatDateBlock', () => {
         for (const dates of cases) {
             const task = makeTask({ content: '週報', originalText: '- [ ] 週報', ...dates });
             const block = formatDateBlock(task);
-            expect(TaskParser.format(task)).toBe(`- [ ] 週報${block ? ` ${block}` : ''}`);
+            expect(formatRow(task)).toBe(`- [ ] 週報${block ? ` ${block}` : ''}`);
         }
     });
 });

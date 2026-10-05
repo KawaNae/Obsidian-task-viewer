@@ -3,20 +3,18 @@ import { isolateHistory } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import type { StatusDefinition } from '../types';
 import { completes, isOperation } from '../services/flow/FlowTrigger';
-import { type FireOp, type NotRun, notRunOf } from '../services/flow/FlowExecutor';
-import type { TaskOp } from '../services/persistence/TaskOps';
-import {
-    editLines, replayEdits,
-    type EditorLine, type LineEdit, type LineDraft, type NamedRow, type Refusal, type WriteSession,
-} from '../services/persistence/FileLines';
+import type { FireOp } from '../services/flow/FlowExecutor';
+import { editLines, editorRow } from '../services/persistence/FileLines';
+import { firingTrials, type ApplyOps, type FiringOutcome } from '../services/persistence/FiringTrials';
 import { lineChanges } from './LineChanges';
 import { linesOf } from './EditorDoc';
 import { contentKeyOf } from '../services/core/ContentKey';
-import { logError, logWarn } from '../log/log';
+import { logError } from '../log/log';
 
 /**
  * What the editor's fire needs of the plugin: the settings' completion, the
- * flow layer's plan, the write layer's ops, and where refusals go. Closures,
+ * flow layer's plan, the write layer's ops, and where the fires not run are
+ * told. Closures,
  * so that the editor layer imports neither the index nor the repository.
  */
 export interface EditorFireHost {
@@ -24,11 +22,13 @@ export interface EditorFireHost {
     active(): boolean;
     statusDefinitions(): StatusDefinition[];
     fireOp(path: string): FireOp;
-    applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean;
-    /** Tell the user a write was not made, and why (the index's `reportRefusal`): the editor menu's write. */
-    refused(refusal: Refusal): void;
-    /** Tell the user a completed row's flow, or its move, was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
-    notRun(why: NotRun): void;
+    applyOps: ApplyOps;
+    /**
+     * Tell the user of each completed row whose flow was not run, and why,
+     * once the transaction that completed them is through: the rows stay
+     * completed (`FlowNotices.firing`).
+     */
+    told(outcome: FiringOutcome<FireOp>): void;
 }
 
 /** A row an editor transaction completed: its line in the document after it, and the text there. */
@@ -74,14 +74,17 @@ export function completedRows(startDoc: Text, doc: Text, changes: ChangeSet, def
  * isolated in the history (`isolateHistory`), so completing rows one after
  * another, however quickly, is undone one completion at a time.
  *
- * Each row's fire is its own write, in the order the rows stand: planned from
- * the lines the rows before it left, where its row has been carried to, and
- * made through the one core every write of lines runs (`editLines`, with the
- * same ops and the same checks as a write to the file). A fire with nothing
- * to write is not written. A fire that is refused leaves its row completed
- * without it, and the user is told of that row; the other rows' fires stand.
- * What the fires wrote is turned into changes to the document
- * (`lineChanges`).
+ * The fires are one write over the document the transaction leaves, tried as
+ * a card's write tries the fires of the rows it completed (`firingTrials`),
+ * through the one core every write of lines runs (`editLines`, with the same
+ * ops and the same checks as a write to the file): each row's fire is
+ * planned inside the write from the lines the fires above it left, where its
+ * row has been carried to, and a fire that is refused is set aside, its row
+ * completed without it; the other rows' fires stand. The completion is in
+ * the document already, so the write that fires nothing writes nothing, and
+ * is always made. What the write made is turned into changes to the document
+ * (`lineChanges`), and what the user is owed of the fires not run is told
+ * once the transaction is through (`EditorFireHost.told`).
  */
 export function fireFilter(host: EditorFireHost): Extension {
     return EditorState.transactionFilter.of((tr): TransactionSpec | readonly TransactionSpec[] => {
@@ -93,43 +96,23 @@ export function fireFilter(host: EditorFireHost): Extension {
         if (!path) return [tr, isolated];
 
         const before = linesOf(tr.newDoc);
-        let lines: readonly string[] = before;
-        const edits: LineEdit[] = [];
-        // Where the row that stood at `line` of the document stands now, past
-        // the fires already written; -1 if one of them took it away.
-        const carried = (line: number): number =>
-            edits.length === 0 ? line : replayEdits(before.length, edits)?.origin.indexOf(line) ?? -1;
-        for (const row of rows) {
-            const line = carried(row.line);
-            if (line < 0) {
-                logWarn(`[FlowFire] ${path}: a completed row was taken away by the fire of a row above it; not fired`);
-                continue;
-            }
-            const fire = host.fireOp(path);
-            // Planned where `applyOps` would plan it, first: from the lines
-            // the write is handed, at the row.
-            const ops = fire.op.plan(lines, line);
-            const notRun = notRunOf(fire.planned());
-            if (notRun) queueMicrotask(() => host.notRun(notRun));
-            // The completion is in the document already, and stands whatever
-            // comes of its fire (`CompletionFire`).
-            if (!fire.writes()) continue;
-            // The row is named by the line our own writes' map says it is
-            // (`replayEdits`), read as those writes left it: whatever a fire
-            // above did to it (a move carrying it re-indented, say) is ours,
-            // not a change of the note's. Before any fire, that is the line
-            // the transaction completed.
-            const edited = editLines(path, lines, '\n',
-                (draft, _eol, session) => host.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
-            if (!edited.written) {
-                host.notRun({ kind: 'refused', refusal: edited.refused });
-                continue;
-            }
-            lines = edited.lines;
-            edits.push(...edited.edits);
+        const key = contentKeyOf(before);
+        // Each row named by the line the transaction left it on, reading as it
+        // left it: the write's session carries it across the fires above it.
+        const completed = rows.map(row => editorRow(row.line, row.text, key));
+        const firing = firingTrials(host.applyOps, () => completed, () => host.fireOp(path));
+        const edited = firing.trials.settle(edit => editLines(path, before, '\n', edit));
+        if (!edited.written) {
+            // The write without fires writes nothing, and is never refused:
+            // a refusal here is a bug of the write's.
+            logError(`[FlowFire] ${path}: the completion alone was refused (${edited.refused.reason.kind}); nothing fired`);
+            return [tr, isolated];
         }
+        const outcome: FiringOutcome<FireOp> = { written: true, refused: null, fires: firing.settled().fires };
+        // Not inside the transaction filter: the notice waits for it.
+        queueMicrotask(() => host.told(outcome));
 
-        const changes = lineChanges(before, lines, edits);
+        const changes = lineChanges(before, edited.lines, edited.edits);
         if (changes === null) {
             logError(`[FlowFire] ${path}: a fire's write does not follow; nothing written`);
             return [tr, isolated];
@@ -137,11 +120,4 @@ export function fireFilter(host: EditorFireHost): Extension {
         if (changes.length === 0) return [tr, isolated];
         return [tr, { ...isolated, changes, sequential: true }];
     });
-}
-
-export type { EditorHandle } from './EditorWrite';
-
-/** The editor's fire, as one extension (`fireFilter`). */
-export function flowFireExtension(host: EditorFireHost): Extension {
-    return fireFilter(host);
 }

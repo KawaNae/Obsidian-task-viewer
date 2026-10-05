@@ -1,19 +1,16 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { openLiveVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { NoteOps } from '../../../src/services/data/NoteOps';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { TimerWidget } from '../../../src/timer/TimerWidget';
-import { IDLE_TIMER_ID } from '../../../src/timer/TimerContext';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import type { TimerState } from '../../../src/timer/TimerState';
 import { DEFAULT_SETTINGS } from '../../../src/types';
-import { getDisplayFileName } from '../../../src/services/parsing/utils/TaskContent';
+import { getDisplayFileName } from '../../../src/services/display/TaskContent';
 
 /**
- * widget の見出しのファイル名は `timer.taskFile` に追随する。行を別のノートへ
+ * widget の見出しのファイル名はタイマーの `file` に追随する。行を別のノートへ
  * 送ったとき（`TimerWidget.follow`）もノートの名前を変えたとき
- * （`handleFileRename`）も、書き換わった `taskFile` は索引の変化
- * （`refreshFromIndex`）で見出しに届く。以前は見出しを組み直す（中断する）
- * まで古いファイル名が残った。
+ * （`handleFileRename`）も、`followed` で書き換わった `file` は索引の変化
+ * （`refreshFromIndex`）で見出しに届く。見出しを組み直す（中断する）のを待たない。
  */
 
 const store = new Map<string, string>();
@@ -63,12 +60,8 @@ async function open(files: Record<string, string[]>) {
     Object.assign(session.app.vault, { getName: () => 'test-vault' });
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => session.index,
-        getTaskWriteService: () => new TaskWriteService(session.index),
-        getTaskReadService: () => ({
-            getTask: (id: string) => session.index.getTask(id),
-            onChange: (fn: () => void) => session.index.onChange(fn),
-        }),
+        getIndex: () => session.index,
+        getOperations: () => session.ops,
         registerEvent: () => { },
     };
     const widget = new TimerWidget(session.app, plugin as never);
@@ -82,10 +75,9 @@ async function open(files: Record<string, string[]>) {
         },
     };
     widget.render = () => { };
-    widget.renderTimerItem = () => { };
     widget.ensureContainer = () => container as unknown as HTMLElement;
     widget.activate();
-    const ops = new NoteOps(session.app, new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }), {
+    const ops = new NoteOps(session.app, session.ops, () => ({ ...DEFAULT_SETTINGS }), {
         getTask: (id) => session.index.getTask(id),
         timers: () => widget,
     });
@@ -93,29 +85,26 @@ async function open(files: Record<string, string[]>) {
     const settle = async () => {
         for (let i = 0; i < 3; i++) {
             await new Promise(r => setTimeout(r, 0));
-            await session.settle(...contents.keys());
+            for (const path of contents.keys()) await session.settle(path);
         }
     };
     /**
      * Start a count-up on the row `content`, wait until its first line is
      * written, and draw its header's file name as the header is built.
      */
-    const start = async (content: string): Promise<TimerInstance> => {
+    const start = async (content: string): Promise<TimerState> => {
         const row = task(content);
-        const before = new Set(widget.timers.keys());
-        widget.startTimer({
-            taskId: row.id, taskName: row.content, taskFile: row.file, taskOriginalText: row.originalText,
-            timerTargetId: row.anchor, timerType: 'countup', recordMode: 'child', autoStart: true,
-        });
-        const timer = [...widget.timers.values()].find(one => one.id !== IDLE_TIMER_ID && !before.has(one.id))!;
-        const fileName = getDisplayFileName(timer.taskName, timer.taskFile);
+        const before = new Set(widget.board.values().map(one => one.id));
+        widget.startTimer(row, 'child', { kind: 'countup' });
+        const timer = widget.board.values().find(one => !before.has(one.id))!;
+        const fileName = getDisplayFileName(timer.name, timer.file);
         if (fileName) titleOf(timer.id).createSpan('timer-widget__title-file').setText(fileName);
-        await vi.waitFor(() => expect(timer.tailRecordBlockId).toBeDefined());
+        await vi.waitFor(() => expect(timer.tail).not.toBeNull());
         await settle();
         return timer;
     };
     /** The file name the header of `timer` shows, or null when it shows none. */
-    const shown = (timer: TimerInstance) => titleOf(timer.id).querySelector('.timer-widget__title-file')?.textContent ?? null;
+    const shown = (timer: TimerState) => titleOf(timer.id).querySelector('.timer-widget__title-file')?.textContent ?? null;
     /** Rename the note `from` to `to`, as the vault tells the index and the plugin (`main.ts`) of it. */
     const rename = async (from: string, to: string) => {
         contents.set(to, contents.get(from)!);
@@ -130,7 +119,7 @@ async function open(files: Record<string, string[]>) {
     return { session, widget, ops, start, settle, shown, rename, row };
 }
 
-describe('the file name a timer\'s header shows follows its taskFile', () => {
+describe('the file name a timer\'s header shows follows its file', () => {
     it('its rows sent to another note: the header names that note', async () => {
         const note = await open({ 'a.md': ['- [ ] 計る', ''] });
         const timer = await note.start('計る');
@@ -140,7 +129,7 @@ describe('the file name a timer\'s header shows follows its taskFile', () => {
         await note.settle();
 
         expect(sent.kind).toBe('done');
-        expect(timer.taskFile).toBe('X.md');
+        expect(timer.file).toBe('X.md');
         await vi.waitFor(() => expect(note.shown(timer)).toBe('X'));
     });
 
@@ -151,7 +140,7 @@ describe('the file name a timer\'s header shows follows its taskFile', () => {
 
         await note.rename('a.md', 'b.md');
 
-        expect(timer.taskFile).toBe('b.md');
+        expect(timer.file).toBe('b.md');
         await vi.waitFor(() => expect(note.shown(timer)).toBe('b'));
     });
 
@@ -163,7 +152,7 @@ describe('the file name a timer\'s header shows follows its taskFile', () => {
         await note.ops.send({ rows: [note.row('X')], to: { note: { kind: 'new', folder: '', name: 'X' }, section: SECTION }, frontmatter: [] });
         await note.settle();
 
-        expect(timer.taskFile).toBe('X.md');
+        expect(timer.file).toBe('X.md');
         await vi.waitFor(() => expect(note.shown(timer)).toBeNull());
     });
 

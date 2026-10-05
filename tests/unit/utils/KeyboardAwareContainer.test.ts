@@ -112,6 +112,39 @@ class MockContainer extends MiniEventTarget {
     contains(el: any) { return this.children.has(el); }
 }
 
+/** An animation in the container (the sheet sliding up), ended or cancelled by the test. */
+class MockAnimation {
+    playState: string;
+    finished: Promise<MockAnimation>;
+    private settle!: { end: () => void; cancel: () => void };
+    constructor(private endTime = 150, playState = 'running') {
+        this.playState = playState;
+        this.finished = new Promise((resolve, reject) => {
+            this.settle = {
+                end: () => { this.playState = 'finished'; resolve(this); },
+                cancel: () => { this.playState = 'idle'; reject(new Error('AbortError')); },
+            };
+        });
+        this.finished.catch(() => {});
+    }
+    effect = { getComputedTiming: () => ({ endTime: this.endTime }) };
+    end() { this.settle.end(); }
+    cancel() { this.settle.cancel(); }
+}
+
+/** A container whose DOM lists its animations (`getAnimations`). */
+class AnimatedContainer extends MockContainer {
+    animations: MockAnimation[] = [];
+    subtreeAsked: boolean | undefined;
+    getAnimations(opts?: { subtree?: boolean }) {
+        this.subtreeAsked = opts?.subtree;
+        return this.animations.filter((a) => a.playState !== 'finished' && a.playState !== 'idle');
+    }
+}
+
+/** Let the promises the container waits on settle. */
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 class MockWindow extends MiniEventTarget {
     innerHeight = 800;
     visualViewport: MockVisualViewport | undefined;
@@ -130,6 +163,29 @@ function setup(opts: { withVisualViewport?: boolean; vvHeight?: number } = {}) {
     const kac = new KeyboardAwareContainer(container as any, win as any);
     kac.scrollTarget = panel as any;
     return { win, container, panel, kac };
+}
+
+/** A container whose sheet is sliding up (one animation running), with a field focused in it. */
+function setupAnimated(fieldBottom: number, ...animations: MockAnimation[]) {
+    const win = new MockWindow();
+    win.visualViewport = new MockVisualViewport(800);
+    const container = new AnimatedContainer();
+    container.animations = animations;
+    const panel = new MockPanel();
+    const scrolls: number[] = [];
+    const scrollBy = panel.scrollBy.bind(panel);
+    panel.scrollBy = (o) => { scrolls.push(o.top); scrollBy(o); };
+    const input = new MockInput(fieldBottom);
+    container.adopt(input);
+    container.ownerDocument.activeElement = input;
+    const kac = new KeyboardAwareContainer(container as any, win as any);
+    kac.scrollTarget = panel as any;
+    kac.attach();
+    const openKeyboard = () => {
+        win.visualViewport!.height = 500; // keyboardTop 500
+        win.visualViewport!.dispatch('resize');
+    };
+    return { win, container, panel, scrolls, input, kac, openKeyboard };
 }
 
 describe('KeyboardAwareContainer', () => {
@@ -413,6 +469,122 @@ describe('KeyboardAwareContainer', () => {
             vi.advanceTimersByTime(200);
 
             expect(panel.style.height).toBe(lockedHeight); // still corrected, not restored
+        });
+    });
+
+    describe('measuring once the container has settled', () => {
+        it('does not measure while the sheet slides up, and measures where the field comes to rest once it ends', async () => {
+            const slide = new MockAnimation();
+            const { container, panel, input, openKeyboard } = setupAnimated(871, slide);
+
+            openKeyboard(); // midway the field is still below the window
+            expect(container.subtreeAsked).toBe(true);
+            await flush();
+            expect(panel.lastScrollBy).toBeNull();
+
+            input.bottom = 557; // the sheet in place
+            slide.end();
+            await flush();
+
+            // 557 - 500 + 10 = 67, not the 381 the field midway would give
+            expect(panel.lastScrollBy).toEqual({ top: 67, behavior: 'instant' });
+        });
+
+        it('measures once for every ask made during the wait (the keyboard\'s events, a focus, the caret)', async () => {
+            vi.useFakeTimers();
+            const slide = new MockAnimation();
+            const { win, container, scrolls, input, openKeyboard } = setupAnimated(871, slide);
+
+            openKeyboard();
+            win.dispatch('keyboardWillShow', { keyboardHeight: 300 });
+            container.dispatch('focusin', { target: input });
+            vi.advanceTimersByTime(50);
+            container.ownerDocument.dispatch('selectionchange');
+            input.bottom = 557;
+            slide.end();
+            await vi.runAllTimersAsync();
+
+            expect(scrolls).toEqual([67]);
+        });
+
+        it('waits for every animation running in the container (the backdrop fading, the panel sliding)', async () => {
+            const fade = new MockAnimation();
+            const slide = new MockAnimation();
+            const { panel, input, openKeyboard } = setupAnimated(871, fade, slide);
+
+            openKeyboard();
+            fade.end();
+            await flush();
+            expect(panel.lastScrollBy).toBeNull();
+
+            input.bottom = 557;
+            slide.end();
+            await flush();
+            expect(panel.lastScrollBy).toEqual({ top: 67, behavior: 'instant' });
+        });
+
+        it('measures after an animation cancelled (the sheet dragged by its handle)', async () => {
+            const slide = new MockAnimation();
+            const { panel, input, openKeyboard } = setupAnimated(871, slide);
+
+            openKeyboard();
+            input.bottom = 557;
+            slide.cancel();
+            await flush();
+
+            expect(panel.lastScrollBy).toEqual({ top: 67, behavior: 'instant' });
+        });
+
+        it('measures nothing when the keyboard closed during the wait', async () => {
+            const slide = new MockAnimation();
+            const { win, panel, input, openKeyboard } = setupAnimated(871, slide);
+
+            openKeyboard();
+            win.visualViewport!.height = 800;
+            win.visualViewport!.dispatch('resize');
+            input.bottom = 557;
+            slide.end();
+            await flush();
+
+            expect(panel.lastScrollBy).toBeNull();
+        });
+
+        it('measures nothing when the container was detached (closed) during the wait', async () => {
+            const slide = new MockAnimation();
+            const { panel, input, kac, openKeyboard } = setupAnimated(871, slide);
+
+            openKeyboard();
+            kac.detach();
+            input.bottom = 557;
+            slide.end();
+            await flush();
+
+            expect(panel.lastScrollBy).toBeNull();
+        });
+
+        it('measures the field focused when the wait ends, not the one focused when it began', async () => {
+            const slide = new MockAnimation();
+            const { container, panel, input, openKeyboard } = setupAnimated(871, slide);
+            const other = new MockInput(600);
+            container.adopt(other);
+
+            openKeyboard();
+            container.ownerDocument.activeElement = other;
+            input.bottom = 557;
+            slide.end();
+            await flush();
+
+            expect(panel.lastScrollBy).toEqual({ top: 110, behavior: 'instant' });
+        });
+
+        it('measures at once when no animation runs, an endless one among them', () => {
+            const spinner = new MockAnimation(Infinity);
+            const paused = new MockAnimation(150, 'paused');
+            const { panel, openKeyboard } = setupAnimated(557, spinner, paused);
+
+            openKeyboard();
+
+            expect(panel.lastScrollBy).toEqual({ top: 67, behavior: 'instant' });
         });
     });
 

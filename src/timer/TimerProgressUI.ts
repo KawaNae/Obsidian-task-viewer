@@ -1,189 +1,101 @@
 /**
  * Timer Progress UI
  *
- * Handles rendering and lightweight updates for circular progress indicators.
+ * Draws the progress ring, the time and the repeat text from what
+ * `progressOf` answers. The widget and the standalone view share it; the
+ * classes are built from the block name (`timer-widget__progress-ring`,
+ * `timer-view__progress-ring`, ...).
  */
 
-import type { TimerInstance } from './TimerInstance';
+import type { Progress, Tone } from './TimerProgress';
 
-interface ProgressState {
-    progress: number;
-    displaySeconds: number;
-    phaseClass: string;
-    isCountupLike: boolean;
+/** The ring's colour: a tone of the measure, or `suspended` while the widget's timer waits to resume. */
+export type RingTone = Tone | 'suspended';
+
+export type RingState = Omit<Progress, 'tone'> & { tone: RingTone };
+
+export interface RingOptions {
+    block: 'timer-widget' | 'timer-view';
+    /** The SVG's view box side. */
+    size: number;
+    format: (seconds: number) => string;
 }
 
+const STROKE_WIDTH = 6;
+
 export class TimerProgressUI {
-    static render(
-        container: HTMLElement,
-        timer: TimerInstance,
-        formatTime: (seconds: number) => string,
-        size: number = 120
-    ): void {
-        const strokeWidth = 6;
-        const radius = (size - strokeWidth) / 2;
+    static render(container: HTMLElement, state: RingState, options: RingOptions): void {
+        const { block, size } = options;
+        const radius = (size - STROKE_WIDTH) / 2;
         const circumference = 2 * Math.PI * radius;
-        const state = this.getProgressState(timer);
-        const offset = circumference * (1 - state.progress);
 
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-        svg.setAttribute('class', 'timer-widget__progress-ring');
+        svg.setAttribute('class', `${block}__progress-ring`);
 
         const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         bgCircle.setAttribute('cx', (size / 2).toString());
         bgCircle.setAttribute('cy', (size / 2).toString());
         bgCircle.setAttribute('r', radius.toString());
-        bgCircle.setAttribute('class', 'timer-widget__progress-ring-bg');
-        bgCircle.setAttribute('stroke-width', strokeWidth.toString());
+        bgCircle.setAttribute('class', `${block}__progress-ring-bg`);
+        bgCircle.setAttribute('stroke-width', STROKE_WIDTH.toString());
         svg.appendChild(bgCircle);
 
         const progressCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         progressCircle.setAttribute('cx', (size / 2).toString());
         progressCircle.setAttribute('cy', (size / 2).toString());
         progressCircle.setAttribute('r', radius.toString());
-        progressCircle.setAttribute(
-            'class',
-            `timer-widget__progress-ring-progress timer-widget__progress-ring-progress--${state.phaseClass}`
-        );
-        progressCircle.setAttribute('stroke-width', strokeWidth.toString());
+        progressCircle.setAttribute('class', progressClass(block, state.tone));
+        progressCircle.setAttribute('stroke-width', STROKE_WIDTH.toString());
         progressCircle.setAttribute('stroke-dasharray', circumference.toString());
-        progressCircle.setAttribute('stroke-dashoffset', offset.toString());
+        progressCircle.setAttribute('stroke-dashoffset', (circumference * (1 - state.ring)).toString());
         progressCircle.setAttribute('transform', `rotate(-90 ${size / 2} ${size / 2})`);
         svg.appendChild(progressCircle);
 
         container.appendChild(svg);
 
-        const timeDisplay = container.createDiv('timer-widget__time-display');
-        timeDisplay.setText(formatTime(state.displaySeconds));
-        if (state.isCountupLike) {
-            timeDisplay.addClass('timer-widget__time-display--countup');
+        const timeDisplay = container.createDiv(`${block}__time-display`);
+        timeDisplay.setText(options.format(state.displaySeconds));
+        if (state.countupLike) {
+            timeDisplay.addClass(`${block}__time-display--countup`);
         }
 
-        if (timer.timerType === 'interval') {
-            const repeatInfo = container.createDiv('timer-widget__repeat-info');
+        if (state.repeatText !== null) {
+            const repeatInfo = container.createDiv(`${block}__repeat-info`);
             repeatInfo.dataset.repeatDisplay = 'ring';
-            repeatInfo.setText(this.getIntervalRepeatText(timer));
+            repeatInfo.setText(state.repeatText);
         }
     }
 
-    static updateDisplay(
-        itemEl: HTMLElement,
-        timer: TimerInstance,
-        formatTime: (seconds: number) => string,
-        size: number = 120
-    ): void {
-        const strokeWidth = 6;
-        const radius = (size - strokeWidth) / 2;
+    /** Moves what `render` drew. The repeat text is updated or removed, never added. */
+    static update(itemEl: HTMLElement, state: RingState, options: RingOptions): void {
+        const { block, size } = options;
+        const radius = (size - STROKE_WIDTH) / 2;
         const circumference = 2 * Math.PI * radius;
-        const state = this.getProgressState(timer);
-        const offset = circumference * (1 - state.progress);
 
-        const progressCircle = itemEl.querySelector('.timer-widget__progress-ring-progress') as SVGCircleElement | null;
+        const progressCircle = itemEl.querySelector(`.${block}__progress-ring-progress`) as SVGCircleElement | null;
         if (progressCircle) {
-            progressCircle.setAttribute('stroke-dashoffset', offset.toString());
-            progressCircle.setAttribute(
-                'class',
-                `timer-widget__progress-ring-progress timer-widget__progress-ring-progress--${state.phaseClass}`
-            );
+            progressCircle.setAttribute('stroke-dashoffset', (circumference * (1 - state.ring)).toString());
+            progressCircle.setAttribute('class', progressClass(block, state.tone));
         }
 
-        const timeDisplay = itemEl.querySelector('.timer-widget__time-display') as HTMLElement | null;
+        const timeDisplay = itemEl.querySelector(`.${block}__time-display`) as HTMLElement | null;
         if (timeDisplay) {
-            timeDisplay.setText(formatTime(state.displaySeconds));
-            timeDisplay.toggleClass('timer-widget__time-display--countup', state.isCountupLike);
+            timeDisplay.setText(options.format(state.displaySeconds));
+            timeDisplay.toggleClass(`${block}__time-display--countup`, state.countupLike);
         }
 
         const repeatInfo = itemEl.querySelector('[data-repeat-display="ring"]') as HTMLElement | null;
-        if (timer.timerType === 'interval') {
-            if (repeatInfo) {
-                repeatInfo.setText(this.getIntervalRepeatText(timer));
+        if (repeatInfo) {
+            if (state.repeatText !== null) {
+                repeatInfo.setText(state.repeatText);
+            } else {
+                repeatInfo.remove();
             }
-        } else if (repeatInfo) {
-            repeatInfo.remove();
         }
     }
+}
 
-    private static getProgressState(timer: TimerInstance): ProgressState {
-        if (timer.runState === 'suspended') {
-            // 中断中は「記録済みセッションの合計」を静的に見せる。走っていない
-            // 時間を進行リングで表現しても嘘になるので、リングは止めたまま。
-            const fullRotation = 30 * 60;
-            return {
-                progress: Math.max(0, Math.min(1, (timer.recordedElapsedTime % fullRotation) / fullRotation)),
-                displaySeconds: timer.recordedElapsedTime,
-                phaseClass: 'idle',
-                isCountupLike: true,
-            };
-        }
-
-        switch (timer.timerType) {
-            case 'countup':
-            case 'idle': {
-                const fullRotation = 30 * 60;
-                const progress = (timer.elapsedTime % fullRotation) / fullRotation;
-                return {
-                    progress: Math.max(0, Math.min(1, progress)),
-                    displaySeconds: timer.elapsedTime,
-                    phaseClass: timer.phase,
-                    isCountupLike: true,
-                };
-            }
-            case 'countdown': {
-                if (timer.timeRemaining >= 0) {
-                    const progress = timer.totalTime > 0 ? timer.timeRemaining / timer.totalTime : 0;
-                    return {
-                        progress: Math.min(1, progress),
-                        displaySeconds: timer.timeRemaining,
-                        phaseClass: timer.phase,
-                        isCountupLike: false,
-                    };
-                } else {
-                    const overtime = -timer.timeRemaining;
-                    const fullRotation = 30 * 60;
-                    const progress = (overtime % fullRotation) / fullRotation;
-                    return {
-                        progress: Math.max(0, Math.min(1, progress)),
-                        displaySeconds: timer.timeRemaining,
-                        phaseClass: timer.phase,
-                        isCountupLike: true,
-                    };
-                }
-            }
-            case 'interval': {
-                const currentGroup = timer.groups[timer.currentGroupIndex];
-                const currentSegment = currentGroup?.segments[timer.currentSegmentIndex];
-                const segmentDuration = currentSegment?.durationSeconds ?? timer.segmentTimeRemaining;
-                const progress = segmentDuration > 0
-                    ? timer.segmentTimeRemaining / segmentDuration
-                    : 0;
-                return {
-                    progress: Math.max(0, Math.min(1, progress)),
-                    displaySeconds: timer.segmentTimeRemaining,
-                    phaseClass: timer.phase,
-                    isCountupLike: false,
-                };
-            }
-            default:
-                return {
-                    progress: 0,
-                    displaySeconds: 0,
-                    phaseClass: 'idle',
-                    isCountupLike: false,
-                };
-        }
-    }
-
-    private static getIntervalRepeatText(timer: Extract<TimerInstance, { timerType: 'interval' }>): string {
-        const group = timer.groups[timer.currentGroupIndex];
-        const segment = group?.segments[timer.currentSegmentIndex];
-        if (!group || !segment) {
-            return '';
-        }
-
-        if (group.repeatCount === 0) {
-            return `${segment.label} ${timer.currentRepeatIndex + 1}`;
-        }
-        return `${segment.label} ${timer.currentRepeatIndex + 1}/${group.repeatCount}`;
-    }
+function progressClass(block: string, tone: RingTone): string {
+    return `${block}__progress-ring-progress ${block}__progress-ring-progress--${tone}`;
 }

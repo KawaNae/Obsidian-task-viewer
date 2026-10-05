@@ -1,9 +1,8 @@
-import { SCALAR_FIELDS, type DocumentNode, type ResolvedSources, type ScalarField, type SectionNode, type ValueSource } from './DocumentTree';
+import { SCALAR_FIELDS, type ResolvedSources, type ScalarField, type SectionNode, type ValueSource } from './Sections';
 import type { ScopeKeys, PropertyValue } from '../../../types';
 import { BuiltinPropertyExtractor, fieldKey, type ExtractedProperties } from './BuiltinPropertyExtractor';
-import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
-import { FilePropertyResolver } from '../FilePropertyResolver';
+import { PropertyValues } from '../utils/PropertyValues';
 
 /** What one layer hands the sections below it: its resolved values, and where each came from. */
 interface Resolved {
@@ -17,8 +16,9 @@ const FRONTMATTER: ValueSource = Object.freeze({ kind: 'frontmatter' });
  * Section-scope property resolver.
  *
  * Cascades properties along the section tree (frontmatter → parent section →
- * child section, child-wins). The frontmatter base is delegated to
- * FilePropertyResolver (the File layer in the File/Section/Task pipeline).
+ * child section, child-wins). The frontmatter is the base: its values read
+ * as property values (`PropertyValues.fromFrontmatter`) and its built-ins put
+ * apart by the same extractor as a section's (`BuiltinPropertyExtractor`).
  *
  * Beside each resolved value it records the layer that won it
  * (`SectionNode.resolvedSources`): the frontmatter, or the property line of a
@@ -28,14 +28,14 @@ const FRONTMATTER: ValueSource = Object.freeze({ kind: 'frontmatter' });
  */
 export class SectionPropertyResolver {
     static resolve(
-        doc: DocumentNode,
+        sections: readonly SectionNode[],
         frontmatter: Record<string, any> | undefined,
         keys: ScopeKeys
     ): void {
-        const values = FilePropertyResolver.extract(frontmatter, keys);
+        const values = BuiltinPropertyExtractor.extract(PropertyValues.fromFrontmatter(frontmatter, keys), keys);
         const root: Resolved = { values, sources: this.frontmatterSources(values) };
 
-        for (const section of doc.sections) {
+        for (const section of sections) {
             this.resolveSection(section, root, keys);
         }
     }
@@ -114,10 +114,7 @@ export class SectionPropertyResolver {
         const lines = new Map<string, number>();
         if (!section.propertyBlock) return { raw, lines };
         for (const entry of section.propertyBlock.entries) {
-            raw[entry.key] = {
-                value: entry.value,
-                type: ChildLineClassifier.inferType(entry.value),
-            };
+            raw[entry.key] = PropertyValues.fromText(entry.value);
             lines.set(entry.key, entry.line);
         }
         return { raw, lines };

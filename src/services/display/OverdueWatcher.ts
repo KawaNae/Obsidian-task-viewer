@@ -44,7 +44,6 @@ export class OverdueWatcher {
      */
     sweep(
         tasks: DisplayTask[],
-        startHour: number,
         defs: StatusDefinition[],
         readService: TaskReadService,
     ): boolean {
@@ -52,7 +51,7 @@ export class OverdueWatcher {
         let changed = false;
 
         for (const task of tasks) {
-            const level = getOverdueLevel(task, startHour, defs, readService);
+            const level = getOverdueLevel(task, defs, readService);
             next.set(task.id, level);
 
             const previous = this.levels.get(task.id);

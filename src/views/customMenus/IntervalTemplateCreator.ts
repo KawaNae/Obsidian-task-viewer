@@ -6,15 +6,20 @@
  * windows (host doc/win resolved from the anchor) and follow window resize.
  */
 
-import { type App, Notice, setIcon, getIconIds } from 'obsidian';
+import { type App, setIcon, getIconIds } from 'obsidian';
 import { t } from '../../i18n';
 import { IntervalTemplateWriter } from '../../timer/IntervalTemplateWriter';
-import type { IntervalGroup } from '../../timer/TimerInstance';
+import type { IntervalGroup, IntervalSegment } from '../../timer/IntervalMath';
 import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
+import { defaultSegmentLabel } from '../../timer/IntervalMath';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 import { OverlayShell } from '../sharedUI/OverlayShell';
-import type { WriteChannel } from '../../services/persistence/FileLines';
+import type { TemplateNoteSaver } from '../../services/template/TemplateNote';
+import { refusalText } from '../../services/operations/WriteAnswer';
+import { bindField, type BoundField } from '../../modals/form/bindField';
+import { IssueBoard, readIssue, type FormIssue, type IssueSlot } from '../../modals/form/FormIssue';
+import { IntInput, type NumberRange } from '../../utils/values/NumberValues';
 
 export interface TemplateCreatorCallbacks {
     onSaved: (filePath: string) => void;
@@ -25,8 +30,15 @@ interface FormSegment {
     hours: number;
     minutes: number;
     seconds: number;
-    type: 'work' | 'break' | 'prepare';
+    type: IntervalSegment['type'];
 }
+
+/** The type a segment's type button turns to. */
+const NEXT_SEGMENT_TYPE: Record<IntervalSegment['type'], IntervalSegment['type']> = {
+    work: 'break',
+    break: 'prepare',
+    prepare: 'work',
+};
 
 interface FormGroup {
     repeatCount: number;
@@ -39,6 +51,20 @@ interface FormState {
     groups: FormGroup[];
 }
 
+/**
+ * The parts of the form an issue is of: the name, a group (its repeat), a
+ * segment (its length), and each number of a segment's length. A segment's
+ * issues and its numbers' are said under its row.
+ */
+type SegmentPart = 'hours' | 'minutes' | 'seconds';
+type CreatorField = 'name' | `group:${number}` | `segment:${number}:${number}` | `segment:${number}:${number}:${SegmentPart}`;
+
+/** The numbers of the form, each a whole number in its range; not moved to the range's end. */
+const REPEAT: NumberRange = { min: 0 };
+const HOURS: NumberRange = { min: 0 };
+const MINUTES: NumberRange = { min: 0, max: 59 };
+const SECONDS: NumberRange = { min: 0, max: 59 };
+
 export class IntervalTemplateCreator {
     private overlay = new OverlayShell();
     private stack = new PopoverStack();
@@ -48,10 +74,16 @@ export class IntervalTemplateCreator {
     private callbacks: TemplateCreatorCallbacks | null = null;
     private folderPath = '';
     private editingFilePath: string | null = null;
+    /** What the form says, as drawn now; drawn anew with the form. */
+    private issues: IssueBoard<CreatorField> | null = null;
+    /** Where each part of the form as drawn now says its issues. */
+    private slots = new Map<CreatorField, IssueSlot>();
+    /** The number fields as drawn now: a save commits what they hold, and does not go while one does not read. */
+    private numbers: BoundField<number>[] = [];
 
     constructor(
         private app: App,
-        private channelFor: (path: string) => WriteChannel | undefined,
+        private notes: TemplateNoteSaver,
     ) {}
 
     isOpen(): boolean {
@@ -80,6 +112,7 @@ export class IntervalTemplateCreator {
             anchor: { kind: 'element', element: anchorEl },
             panelClass: 'template-creator',
             childStack: this.stack,
+            keymap: this.app.keymap,
             build: (bodyEl) => {
                 this.rootEl = bodyEl;
                 this.renderContent();
@@ -88,6 +121,9 @@ export class IntervalTemplateCreator {
                 this.stack.closeAll();
                 this.rootEl = null;
                 this.iconShell = null;
+                this.issues = null;
+                this.slots.clear();
+                this.numbers = [];
             },
         });
     }
@@ -98,9 +134,15 @@ export class IntervalTemplateCreator {
 
     // ── Render ──
 
+    /**
+     * Draw the form from its state. What it said is not kept: a field drawn
+     * anew shows its value, and the next save says again what keeps it.
+     */
     private renderContent(): void {
         if (!this.rootEl) return;
         this.rootEl.empty();
+        this.slots.clear();
+        this.numbers = [];
 
         this.renderHeader(this.rootEl);
         const body = this.rootEl.createDiv('template-creator__body');
@@ -122,7 +164,7 @@ export class IntervalTemplateCreator {
             text: this.editingFilePath ? t('timer.editTemplate') : t('timer.newTemplate'),
         });
 
-        const closeBtn = header.createEl('button', { cls: 'template-creator__close-btn' });
+        const closeBtn = header.createEl('button', { cls: 'tv-icon-btn template-creator__close-btn' });
         setIcon(closeBtn, 'x');
         closeBtn.addEventListener('click', () => this.close());
     }
@@ -136,7 +178,11 @@ export class IntervalTemplateCreator {
             placeholder: t('timer.template.namePlaceholder'),
         });
         input.value = this.state.name;
-        input.addEventListener('input', () => { this.state.name = input.value; });
+        input.addEventListener('input', () => {
+            this.state.name = input.value;
+            this.edited();
+        });
+        this.slots.set('name', { input, message: field.createDiv({ cls: 'tv-form__says' }) });
     }
 
     private renderIconField(parent: HTMLElement): void {
@@ -203,7 +249,7 @@ export class IntervalTemplateCreator {
                     const limited = filtered.slice(0, 200); // limit for performance
 
                     for (const name of limited) {
-                        const btn = grid.createEl('button', { cls: 'template-creator__icon-option' });
+                        const btn = grid.createEl('button', { cls: 'tv-icon-btn template-creator__icon-option' });
                         btn.setAttribute('aria-label', name);
                         setIcon(btn.createSpan(), name);
                         btn.addEventListener('click', () => {
@@ -251,14 +297,16 @@ export class IntervalTemplateCreator {
 
         const repeatWrap = header.createSpan('template-creator__repeat-wrap');
         repeatWrap.createSpan({ cls: 'template-creator__repeat-label', text: t('timer.template.repeat') });
-        const repeatInput = this.createNumericInput(repeatWrap, {
-            value: group.repeatCount, min: 0, placeholder: '1',
+        const groupSays = groupEl.createDiv({ cls: 'tv-form__says' });
+        this.createNumericInput(repeatWrap, `group:${groupIndex}`, groupSays, {
+            range: REPEAT, placeholder: '1',
             cls: 'tv-ctrl__text-input template-creator__repeat-input',
-            onChange: (v) => { group.repeatCount = v; },
+            get: () => group.repeatCount,
+            set: (v) => { group.repeatCount = v; },
         });
 
         if (this.state.groups.length > 1) {
-            const removeBtn = header.createEl('button', { cls: 'template-creator__remove-btn' });
+            const removeBtn = header.createEl('button', { cls: 'tv-icon-btn template-creator__remove-btn' });
             setIcon(removeBtn, 'trash-2');
             removeBtn.addEventListener('click', () => {
                 this.state.groups.splice(groupIndex, 1);
@@ -270,7 +318,7 @@ export class IntervalTemplateCreator {
         const segmentsEl = groupEl.createDiv('template-creator__segments');
 
         group.segments.forEach((seg, si) => {
-            this.renderSegment(segmentsEl, seg, group, si);
+            this.renderSegment(segmentsEl, seg, group, groupIndex, si);
         });
 
         const addSegBtn = segmentsEl.createEl('button', { cls: 'template-creator__add-btn template-creator__add-btn--inline' });
@@ -283,8 +331,11 @@ export class IntervalTemplateCreator {
         });
     }
 
-    private renderSegment(parent: HTMLElement, seg: FormSegment, group: FormGroup, segIndex: number): void {
+    private renderSegment(parent: HTMLElement, seg: FormSegment, group: FormGroup, groupIndex: number, segIndex: number): void {
         const row = parent.createDiv('template-creator__segment');
+        const at = `segment:${groupIndex}:${segIndex}` as const;
+        const says = parent.createDiv({ cls: 'tv-form__says' });
+        this.slots.set(at, { input: null, message: says });
 
         // Label
         const labelInput = row.createEl('input', {
@@ -298,26 +349,29 @@ export class IntervalTemplateCreator {
         // Duration: hh : mm : ss
         const durWrap = row.createDiv('template-creator__duration');
 
-        const hInput = this.createNumericInput(durWrap, {
-            value: seg.hours, min: 0, placeholder: t('timer.template.hoursAbbr'),
-            onChange: (v) => { seg.hours = v; },
+        this.createNumericInput(durWrap, `${at}:hours`, says, {
+            range: HOURS, placeholder: t('timer.template.hoursAbbr'),
+            get: () => seg.hours,
+            set: (v) => { seg.hours = v; },
         });
 
         durWrap.createSpan({ cls: 'template-creator__dur-sep', text: ':' });
 
-        const mInput = this.createNumericInput(durWrap, {
-            value: seg.minutes, min: 0, max: 59, placeholder: t('timer.template.minutesAbbr'),
-            onChange: (v) => { seg.minutes = v; },
+        this.createNumericInput(durWrap, `${at}:minutes`, says, {
+            range: MINUTES, placeholder: t('timer.template.minutesAbbr'),
+            get: () => seg.minutes,
+            set: (v) => { seg.minutes = v; },
         });
 
         durWrap.createSpan({ cls: 'template-creator__dur-sep', text: ':' });
 
-        const sInput = this.createNumericInput(durWrap, {
-            value: seg.seconds, min: 0, max: 59, placeholder: t('timer.template.secondsAbbr'),
-            onChange: (v) => { seg.seconds = v; },
+        this.createNumericInput(durWrap, `${at}:seconds`, says, {
+            range: SECONDS, placeholder: t('timer.template.secondsAbbr'),
+            get: () => seg.seconds,
+            set: (v) => { seg.seconds = v; },
         });
 
-        // Type toggle button (cycles work → break → work)
+        // Type button: cycles work → break → prepare → work
         const typeLabel = seg.type === 'work' ? t('timer.template.typeWork')
             : seg.type === 'break' ? t('timer.template.typeBreak')
             : t('timer.template.typePrepare');
@@ -326,13 +380,13 @@ export class IntervalTemplateCreator {
             text: typeLabel,
         });
         typeBtn.addEventListener('click', () => {
-            seg.type = seg.type === 'work' ? 'break' : 'work';
+            seg.type = NEXT_SEGMENT_TYPE[seg.type];
             this.refreshContent();
         });
 
         // Remove segment
         if (group.segments.length > 1) {
-            const removeBtn = row.createEl('button', { cls: 'template-creator__remove-btn' });
+            const removeBtn = row.createEl('button', { cls: 'tv-icon-btn template-creator__remove-btn' });
             setIcon(removeBtn, 'x');
             removeBtn.addEventListener('click', () => {
                 group.segments.splice(segIndex, 1);
@@ -343,8 +397,9 @@ export class IntervalTemplateCreator {
 
     private renderFooter(parent: HTMLElement): void {
         const footer = parent.createDiv('template-creator__footer');
-
-        const errorEl = footer.createSpan('template-creator__error');
+        // The form's issues (a write refused) beside the button; a part's under it.
+        const formSays = footer.createDiv({ cls: 'tv-form__says template-creator__says' });
+        this.issues = new IssueBoard<CreatorField>({ field: (at) => this.slots.get(at) ?? null, form: formSays });
 
         const isEditing = !!this.editingFilePath;
         const saveBtn = footer.createEl('button', {
@@ -352,65 +407,86 @@ export class IntervalTemplateCreator {
             text: isEditing ? t('modal.save') : t('modal.create'),
         });
         saveBtn.addEventListener('click', async () => {
-            const error = this.validate();
-            if (error) {
-                errorEl.setText(error);
-                return;
-            }
-            errorEl.setText('');
+            const issues = this.issues;
+            if (!issues) return;
+            // What is typed in a number is committed, as a blur does; one that
+            // does not read keeps the form, said under its row.
+            for (const field of this.numbers) field.commit();
+            if (this.numbers.some(field => field.pending()?.ok === false)) return;
+            const checked = this.validate();
+            issues.set('check', checked);
+            if (checked.length > 0) return;
 
             const groups = this.buildGroups();
-            const writer = new IntervalTemplateWriter(this.app, this.channelFor);
+            const writer = new IntervalTemplateWriter(this.app, this.notes);
             const data = {
                 name: this.state.name.trim(),
                 icon: this.state.icon.trim() || 'rotate-cw',
                 groups,
             };
 
+            // 書けなかったときは、開いたまま理由をボタンの横に1回だけ出し、
+            // もう一度保存できるようにする（通知は出さない: tellRefusal false）。
+            const refused = (text: string) => issues.set('write', [{ at: 'form', tone: 'error', text }]);
             try {
-                const file = isEditing
-                    ? await writer.updateTemplate(this.editingFilePath!, data)
-                    : await writer.saveTemplate(this.folderPath, data);
-                // 書けなかった。理由は書き込みの層が通知済みなので、モーダルを
-                // 開いたまま残して、もう一度保存できるようにする。
-                if (!file) return;
+                const answer = isEditing
+                    ? await writer.updateTemplate(this.editingFilePath!, data, { tellRefusal: false })
+                    : await writer.saveTemplate(this.folderPath, data, { tellRefusal: false });
+                if (!answer.written || !answer.file) {
+                    refused(refusalText(answer.written ? null : answer.refused));
+                    return;
+                }
                 this.close();
-                this.callbacks?.onSaved(file.path);
+                this.callbacks?.onSaved(answer.file.path);
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                new Notice(isEditing
+                refused(isEditing
                     ? t('timer.template.saveFailed', { error: msg })
                     : t('timer.template.createFailed', { error: msg }));
-                errorEl.setText(msg);
             }
         });
     }
 
     // ── Helpers ──
 
+    /**
+     * A whole number of the form in `range` (`IntInput`, bound by
+     * `bindField`): what does not read (empty, `1.5`, out of range) is said
+     * in `message` (under its row), the field marked, and kept as typed,
+     * not moved to the range's end; a blur or the form's Enter puts a value
+     * that reads in the state.
+     */
     private createNumericInput(
         parent: HTMLElement,
-        opts: { value: number; min?: number; max?: number; placeholder?: string; cls?: string; onChange: (v: number) => void },
+        at: CreatorField,
+        message: HTMLElement,
+        opts: { range: NumberRange; placeholder?: string; cls?: string; get(): number; set(v: number): void },
     ): HTMLInputElement {
         const input = parent.createEl('input', {
             cls: opts.cls ?? 'tv-ctrl__text-input template-creator__dur-input',
-            type: 'number',
+            type: 'text',
         });
-        input.value = String(opts.value);
-        if (opts.min != null) input.min = String(opts.min);
-        if (opts.max != null) input.max = String(opts.max);
         if (opts.placeholder) input.placeholder = opts.placeholder;
         input.inputMode = 'numeric';
-        input.pattern = '[0-9]*';
+        input.value = String(opts.get());
         input.addEventListener('focus', () => input.select());
-        input.addEventListener('change', () => {
-            let val = parseInt(input.value, 10);
-            if (isNaN(val)) val = 0;
-            if (opts.min != null) val = Math.max(opts.min, val);
-            if (opts.max != null) val = Math.min(opts.max, val);
-            opts.onChange(val);
-        });
+        this.slots.set(at, { input, message });
+        this.numbers.push(bindField(input, {
+            codec: IntInput.codec(opts.range),
+            current: () => opts.get(),
+            commit: (value) => {
+                opts.set(value);
+                this.edited();
+            },
+            issues: (issue) => this.issues?.set(`read:${at}`, readIssue(at, issue)),
+        }));
         return input;
+    }
+
+    /** The form was changed: what a save said of it (the checks, a write refused) is taken back. */
+    private edited(): void {
+        this.issues?.set('check', []);
+        this.issues?.set('write', []);
     }
 
     private templateToFormState(template: IntervalTemplate): FormState {
@@ -448,23 +524,27 @@ export class IntervalTemplateCreator {
         return this.state.groups.map(g => ({
             repeatCount: g.repeatCount,
             segments: g.segments.map(s => ({
-                label: s.label.trim() || (s.type === 'work' ? 'Work' : 'Break'),
+                label: s.label.trim() || defaultSegmentLabel(s.type),
                 durationSeconds: s.hours * 3600 + s.minutes * 60 + s.seconds,
                 type: s.type,
             })),
         }));
     }
 
-    private validate(): string | null {
-        if (!this.state.name.trim()) return t('timer.template.errNameRequired');
-        for (const group of this.state.groups) {
-            if (group.segments.length === 0) return t('timer.template.errGroupNeedsSegment');
-            for (const seg of group.segments) {
-                const total = seg.hours * 3600 + seg.minutes * 60 + seg.seconds;
-                if (total <= 0) return t('timer.template.errDurationPositive');
+    /** What keeps the form from being saved, each said where it is: a name, a group with no segment, a segment of no length. */
+    private validate(): FormIssue<CreatorField>[] {
+        const issues: FormIssue<CreatorField>[] = [];
+        if (!this.state.name.trim()) issues.push({ at: 'name', tone: 'error', text: t('timer.template.errNameRequired') });
+        this.state.groups.forEach((group, gi) => {
+            if (group.segments.length === 0) {
+                issues.push({ at: `group:${gi}`, tone: 'error', text: t('timer.template.errGroupNeedsSegment') });
             }
-        }
-        return null;
+            group.segments.forEach((seg, si) => {
+                const total = seg.hours * 3600 + seg.minutes * 60 + seg.seconds;
+                if (total <= 0) issues.push({ at: `segment:${gi}:${si}`, tone: 'error', text: t('timer.template.errDurationPositive') });
+            });
+        });
+        return issues;
     }
 
 }

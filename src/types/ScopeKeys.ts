@@ -2,7 +2,8 @@
  * The frontmatter (and section property) key names that set a note's scope:
  * default dates, style and the ignore switch that every task in the note
  * inherits. Frontmatter makes no task of its own — these keys only hand values
- * down. Also the normalisation and validation the settings apply to them.
+ * down. Also the normalisation the settings' load applies to them; what a
+ * key may be is `ScopeKeyInput`'s.
  */
 export interface ScopeKeys {
     start: string;
@@ -50,26 +51,4 @@ export function normalizeScopeKeys(value: unknown): ScopeKeys {
         normalized[key] = trimmed.length > 0 ? trimmed : DEFAULT_SCOPE_KEYS[key];
     }
     return normalized;
-}
-
-export function validateScopeKeys(keys: ScopeKeys): string | null {
-    const normalizedValues = new Map<keyof ScopeKeys, string>();
-    for (const name of SCOPE_KEY_NAMES) {
-        const value = keys[name].trim();
-        if (!value) {
-            return 'Scope keys cannot be empty.';
-        }
-        normalizedValues.set(name, value);
-    }
-
-    const seen = new Set<string>();
-    for (const name of SCOPE_KEY_NAMES) {
-        const value = normalizedValues.get(name)!;
-        if (seen.has(value)) {
-            return `Scope keys must be unique. Duplicate: "${value}".`;
-        }
-        seen.add(value);
-    }
-
-    return null;
 }

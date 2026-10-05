@@ -2,11 +2,12 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
+import { visualDayAt } from '../../../../utils/DayWindow';
 import { GhostRenderer } from '../../ghost/GhostRenderer';
 import type { GhostPlan } from '../../ghost/GhostPlan';
 import { toDisplayHeightPx, toDisplayTopPx } from '../../../../services/display/TimelineCardPosition';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
-import type { DragPlan } from '../../DragPlan';
+import { dragBase, type DragPlan } from '../../DragPlan';
 import { hostWindow } from '../../../../utils/HostWindow';
 
 /**
@@ -33,7 +34,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     private initialTop: number = 0;
     private initialHeight: number = 0;
     /** Original (pre-split) raw task. commitPlan の materializeRawDates が
-     *  endDate dual-semantic (inclusive vs exclusive) を判定するのに使う。 */
+     *  edit の無い側の時刻を引くのに使う。 */
     private baseTask: Task | null = null;
 
     private autoScrollTimer: number | null = null;
@@ -64,7 +65,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         this.initialHeight = Number.isFinite(durationMinutes) ? durationMinutes * zoomLevel : 0;
 
         const dayCol = el.closest('.timeline-scroll-area__day-column') as HTMLElement;
-        this.currentDayDate = dayCol ? dayCol.dataset.date || null : (task.startDate || null);
+        this.currentDayDate = dayCol ? dayCol.dataset.date || null : this.drawnFirstDay(el, context.plugin.settings.startHour);
 
         const startHour = context.plugin.settings.startHour;
         const startHourMinutes = startHour * 60;
@@ -75,23 +76,24 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
         // 分割タスク: 元 task の絶対分時刻を取得して anchor 計算と initialHeight に使う
         const originalId = getOriginalTaskId(task);
-        const originalTask = context.readService.getTask(originalId);
+        const raw = context.index.getTask(originalId);
+        const originalTask = raw ? dragBase(raw, startHour) : undefined;
         this.baseTask = originalTask ?? task;
 
         let originalTaskStartMinutes: number | null = null;
         let originalTaskEndMinutes: number | null = null;
 
-        const effectiveEndDate = originalTask?.endDate || originalTask?.startDate;
-        if (originalTask?.startDate && originalTask.startTime && effectiveEndDate && originalTask.endTime) {
-            const start = new Date(`${originalTask.startDate}T${originalTask.startTime}`);
-            const end = new Date(`${effectiveEndDate}T${originalTask.endTime}`);
+        const endDateOrStart = originalTask?.endDate || originalTask?.startDate;
+        if (originalTask?.startDate && originalTask.startTime && endDateOrStart && originalTask.endTime) {
+            const start = DateUtils.toDateTime(originalTask.startDate, originalTask.startTime);
+            const end = DateUtils.toDateTime(endDateOrStart, originalTask.endTime);
             if (end < start) end.setDate(end.getDate() + 1);
 
             const dur = (end.getTime() - start.getTime()) / 60000;
             this.initialHeight = dur * zoomLevel;
 
             if (this.currentDayDate) {
-                const currentDayStart = new Date(`${this.currentDayDate}T00:00:00`);
+                const currentDayStart = DateUtils.parseDate(this.currentDayDate);
                 originalTaskStartMinutes = (start.getTime() - currentDayStart.getTime()) / 60000;
                 originalTaskEndMinutes = (end.getTime() - currentDayStart.getTime()) / 60000;
             }
@@ -321,17 +323,17 @@ export class TimelineMoveGesture extends BaseDragStrategy {
         // 例: visual day "2026-04-21" の 02:00 (startHour=5) ドロップ
         //   → totalStartMinutes=1560 → startDayOffset=1, normStart=120
         //   → lastDragResult = { startDate: "2026-04-22", startTime: "02:00" }
-        // これをそのまま `effective*` edits として commitPlan に渡すと、
+        // これをそのまま視覚日の edits として commitPlan に渡すと、
         // materializeRawDates 内部の unshiftVisual が再度 +1 day shift し、
         // raw startDate が 1 日先送りされる (00:00 跨ぎで 1 日ズレるバグ)。
-        // toVisualDate で raw → visual に正規化することで round-trip を成立させる。
+        // visualDayAt で raw → visual に正規化することで round-trip を成立させる。
         const startHour = context.plugin.settings.startHour;
         const { startDate, startTime, endDate, endTime } = this.lastDragResult;
         const edits: DisplayDateEdits = {
-            effectiveStartDate: DateUtils.toVisualDate(startDate, startTime, startHour),
-            effectiveStartTime: startTime,
-            effectiveEndDate: DateUtils.toVisualDate(endDate, endTime, startHour),
-            effectiveEndTime: endTime,
+            startDay: visualDayAt(startDate, startTime, startHour),
+            startTime: startTime,
+            endDay: visualDayAt(endDate, endTime, startHour),
+            endTime: endTime,
         };
         const plan: DragPlan = { edits, baseTask: this.baseTask };
         await this.commitAndReveal({

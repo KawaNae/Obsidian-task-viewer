@@ -39,11 +39,11 @@ describe('what a write left, before any scan', () => {
         session.holdScans();
 
         // The fire puts the next instance above A: B moves down a line.
-        expect(await session.index.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).written).toBe(true);
         const b = taskNamed(session, 'B');
         expect(b.line).toBe(4);
 
-        expect(await session.index.updateTask(b.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(b.id, { statusChar: 'x' })).written).toBe(true);
         expect(contents.get(FILE)!.split('\n').slice(2)).toEqual(['\t- ==> every 1d', '- [x] A @2026-09-21', '- [x] B', '']);
         expect(Notice.messages).toEqual([]);
     });
@@ -53,7 +53,7 @@ describe('what a write left, before any scan', () => {
         const parse = vi.spyOn(FileParsePipeline, 'parse');
         const held = session.holdScans();
 
-        expect(await session.index.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).written).toBe(true);
         expect(parse).toHaveBeenCalledTimes(1);
         expect(parse.mock.calls[0][1]).toEqual(['# note', '- [x] A', '- [ ] B', '']);
 
@@ -68,8 +68,8 @@ describe('what a write left, before any scan', () => {
         const parse = vi.spyOn(FileParsePipeline, 'parse');
         session.holdScans();
 
-        expect(await session.index.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).toBe(true);
-        const reading = parse.mock.calls[parse.mock.calls.length - 1][3];
+        expect((await session.ops.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).written).toBe(true);
+        const reading = parse.mock.calls[parse.mock.calls.length - 1][4];
         expect(reading?.lines).toEqual(['# note', '- [x] A', '']);
     });
 
@@ -78,7 +78,7 @@ describe('what a write left, before any scan', () => {
         const a = taskNamed(session, 'A');
         session.index.setDraggingFile(FILE);
 
-        expect(await session.index.updateTask(a.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(a.id, { statusChar: 'x' })).written).toBe(true);
         // The copy the update wrote from, not a reading of the file.
         expect(session.index.getTasks().find(task => task.content === 'A')?.originalText).toBe('- [ ] A');
 
@@ -110,7 +110,7 @@ describe('a scan that read the file before our write and commits after it', () =
         session.app.vault.read = read;
 
         const held = session.holdScans();
-        expect(await session.index.updateTask(a.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(a.id, { statusChar: 'x' })).written).toBe(true);
         const written = contents.get(FILE);
         expect(taskNamed(session, 'B').line).toBe(4);
 
@@ -122,7 +122,7 @@ describe('a scan that read the file before our write and commits after it', () =
         expect(taskNamed(session, 'B')).toBe(landedB);
         expect(landedB.line).toBe(4);
 
-        expect(await session.index.updateTask(landedB.id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(landedB.id, { statusChar: 'x' })).written).toBe(true);
         const lines = written!.split('\n');
         lines[4] = '- [x] B';
         expect(contents.get(FILE)).toBe(lines.join('\n'));
@@ -177,7 +177,7 @@ describe('a write of ours that lands after a scan read what came after it', () =
         // B's name from before the write names no row of the scan's reading:
         // its line there is A's.
         expect(session.index.getTask(b)).toBeUndefined();
-        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(false);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(false);
         expect(contents.get(FILE)).toBe(outside);
     });
 
@@ -198,7 +198,7 @@ describe('a write of ours that lands after a scan read what came after it', () =
         })).toBe(false);
 
         expect(session.index.getTask(b)?.content).toBe('B');
-        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(b, { statusChar: 'x' })).written).toBe(true);
         expect(contents.get(FILE)).toBe(['- [x] A', '- [x] B', ''].join('\n'));
     });
 });
@@ -210,12 +210,12 @@ describe('writes of ours to rows of one file, asked all at once', () => {
         session.holdScans();
 
         expect(await Promise.all([
-            session.index.updateTask(a, { statusChar: 'x' }),
-            session.index.duplicateTask(b),
-            session.index.updateTask(c, { statusChar: 'x' }),
+            session.ops.updateTask(a, { statusChar: 'x' }).then(a => a.written),
+            session.ops.duplicateTask(b),
+            session.ops.updateTask(c, { statusChar: 'x' }).then(a => a.written),
         ])).toEqual([true, true, true]);
 
-        expect(await session.index.updateTask(d, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(d, { statusChar: 'x' })).written).toBe(true);
         expect(contents.get(FILE)).toBe(['- [x] A', '- [ ] B', '- [ ] B', '- [x] C', '- [x] D', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
     });

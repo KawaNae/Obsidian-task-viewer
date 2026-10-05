@@ -2,15 +2,19 @@
  * TaskNameSuggest - AbstractInputSuggest for task name input.
  * Provides [[wikilink]], [[file#heading]], and #tag suggestions on a plain <input>.
  * What to suggest and over which range is LinkTagCandidates'; this shows it.
+ * It says whether its list is open (`ShownSuggest`): an Enter then picks
+ * from the list, and the form the field is in does not take it.
  */
 
-import { type App, AbstractInputSuggest } from 'obsidian';
+import type { App } from 'obsidian';
+import { ShownSuggest } from './ShownSuggest';
+import { t } from '../i18n';
 import {
     linkTagCandidates, linkTagTrigger, replacedRange,
     type LinkTagCandidate, type LinkTagMode,
 } from './LinkTagCandidates';
 
-export class TaskNameSuggest extends AbstractInputSuggest<LinkTagCandidate> {
+export class TaskNameSuggest extends ShownSuggest<LinkTagCandidate> {
     private inputEl: HTMLInputElement;
     private currentMode: LinkTagMode | null = null;
 
@@ -38,7 +42,7 @@ export class TaskNameSuggest extends AbstractInputSuggest<LinkTagCandidate> {
         }
     }
 
-    selectSuggestion(item: LinkTagCandidate, evt: MouseEvent | KeyboardEvent): void {
+    protected pick(item: LinkTagCandidate, evt: MouseEvent | KeyboardEvent): void {
         const value = this.inputEl.value;
         const pos = this.inputEl.selectionStart ?? value.length;
         const trigger = linkTagTrigger(value.substring(0, pos));
@@ -120,9 +124,9 @@ export class TaskNameSuggest extends AbstractInputSuggest<LinkTagCandidate> {
     private getHintText(): string | null {
         switch (this.currentMode) {
             case 'file':
-                return '#を入力すると 見出しにリンクできます　^を入力すると ブロックにリンクできます';
+                return t('modal.taskNameHint.file');
             case 'heading':
-                return '↵ で確定';
+                return t('modal.taskNameHint.heading');
             default:
                 return null;
         }

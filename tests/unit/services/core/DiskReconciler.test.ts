@@ -6,7 +6,7 @@ import { vaultSession, type VaultSession } from '../../helpers/vaultSession';
 
 /**
  * The reconciler brings the index's readings to the disk when a change
- * notice never comes (`DiskReconciler`, structure.md の読みの鮮度). The disk
+ * notice never comes (`DiskReconciler`, structure/layers.md の読みの鮮度). The disk
  * here is `contents` and a stand-in probe: setting `contents` is an edit no
  * event reports, and the probe's stat says the file moved. `TFile.stat` in
  * the harness is 0/0 for every note, as Obsidian's model of a note it never
@@ -209,7 +209,7 @@ describe('a sweep', () => {
         s.reconciler!.start();
         await swept(1);
         const id = s.index.getTasks()[0].id;
-        expect(await s.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await s.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         disk.moved.set(FILE, { mtime: 7, size: 8 });
         const queueScan = vi.spyOn(s.scanner, 'queueScan');
 
@@ -311,7 +311,7 @@ describe('what asks for a sweep besides the triggers it hears', () => {
 
         const queueScan = vi.spyOn(s.scanner, 'queueScan');
 
-        expect(await s.index.confirmTask(s.index.getTasks().find(t => t.file === FILE)!.id)).toBe(false);
+        expect(await s.ops.confirmTask(s.index.getTasks().find(t => t.file === FILE)!.id)).toBe(false);
         await swept(2);
 
         expect(summaries()[1]).toContain('trigger=stale');

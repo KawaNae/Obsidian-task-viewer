@@ -1,13 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer';
+import { renderGenBody } from '../../../src/services/flow/GenBodyRenderer';
 import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
-import { TaskIndex } from '../../../src/services/core/TaskIndex';
-import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
+import { readLine } from '../helpers/readLine';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { completing } from '../helpers/completing';
 
@@ -138,19 +136,18 @@ const FILE = 'note.md';
 
 function makeRepository() {
     return {
-        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
+        write: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
-        updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
     };
 }
 
 /** What the fire's one write inserts, if it inserts anything. */
-function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
-    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstance | undefined {
+    const ops = repository.write.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
-    return op?.kind === 'insert-instance' ? op.insert : undefined;
+    return op?.kind === 'insert-instance' ? op.instance : undefined;
 }
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>) {
@@ -158,26 +155,18 @@ function makeExecutor(repository: ReturnType<typeof makeRepository>) {
         getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn(() => undefined),
     };
-    return completing(new FlowExecutor(
-        repository as unknown as TaskRepository,
-        taskIndex as unknown as TaskIndex,
-        app as never,
-        () => DEFAULT_SETTINGS
-    ), repository);
+    return completing(new FlowExecutor(taskIndex, () => DEFAULT_SETTINGS), repository);
 }
 
-const app = { vault: { getAbstractFileByPath: () => null } };
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
 /** Complete a task and hand back the line written for the next one. */
 async function fire(line: string): Promise<string | null> {
     const repository = makeRepository();
-    const task = TaskParser.parse(line, FILE, 0);
+    const task = readLine(line, DEFAULT_SETTINGS, FILE);
     await makeExecutor(repository).complete({ ...task!, statusChar: 'x' });
     await flush();
-    const insert = insertOf(repository);
-    if (insert !== undefined && insert.kind !== 'recurrence') throw new Error('the fire inserts no recurrence');
-    return insert?.content ?? null;
+    return insertOf(repository)?.head ?? null;
 }
 
 describe('a plain repeating task cannot write a date either', () => {
@@ -195,7 +184,7 @@ describe('a plain repeating task cannot write a date either', () => {
         const written = await fire('- [x] T @2026-08-17 ==> +1y');
         expect(written).toBe('- [ ] T @2027-08-17 ==> +1y');
         // And the line it wrote is one the scanner reads as the same task.
-        const back = TaskParser.parse(written!, FILE, 0);
+        const back = readLine(written!, DEFAULT_SETTINGS, FILE);
         expect(back?.startDate).toBe('2027-08-17');
         expect(back?.content).toBe('T');
     });

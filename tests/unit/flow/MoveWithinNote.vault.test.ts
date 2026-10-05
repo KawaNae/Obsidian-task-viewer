@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { editorSession } from '../helpers/editorSession';
 import { freezeDate } from '../helpers/fakeDate';
@@ -14,10 +13,11 @@ import type { SectionSide } from '../../../src/services/persistence/utils/Placem
  * carries the completed row and its subtree to that heading's section, at
  * the side the settings say (`sectionSide`, the head unless set; the
  * decision of 2026-09-28). A heading that is not there, or is there twice,
- * and a move that names another note, fire nothing: the completion is
- * written, the command stays, and the user is told. `move()`, naming no
- * heading at all, is read as that too (2026-09-28). The same on every
- * path that completes a row — a card, the API, the editor.
+ * fires nothing: the completion is written, the command stays, and the user
+ * is told. A move that names no heading of the note — another note, or
+ * nothing at all, `move()` — is a syntax error (2026-10-01): the command does
+ * not read, so nothing fires and nothing is said; the editor marks it. The
+ * same on every path that completes a row — a card, the API, the editor.
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
@@ -49,7 +49,7 @@ type Path = 'card' | 'api' | 'editor';
 async function complete(lines: string[], line: number, content: string, path: Path, side: SectionSide = 'head'): Promise<string[]> {
     const note = await open(lines, side);
     if (path === 'card') {
-        await note.session.index.updateTask(note.idOf(content), { statusChar: 'x' });
+        await note.session.ops.updateTask(note.idOf(content), { statusChar: 'x' });
         await note.session.flowSettled(FILE);
         return note.read();
     }
@@ -57,14 +57,15 @@ async function complete(lines: string[], line: number, content: string, path: Pa
         const api = new TaskApi({
             app: note.session.app,
             settings: { startHour: 0 },
-            getTaskReadService: () => new TaskReadService(note.session.index, 0),
-            getTaskWriteService: () => new TaskWriteService(note.session.index),
+            getTaskReadService: () => new TaskReadService(note.session.index, () => ({ startHour: 0, weekStartDay: 1 })),
+            getIndex: () => note.session.index,
+            getOperations: () => note.session.ops,
         } as never);
         await api.update({ id: note.idOf(content), status: 'x' });
         await note.session.flowSettled(FILE);
         return note.read();
     }
-    const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+    const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
     editor.check(line);
     await Promise.resolve();
     return editor.lines();
@@ -128,25 +129,6 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
         expect(Notice.messages).toEqual([]);
     });
 
-    it('fires move(), which names no heading of the note, without the move: the next instance, the command consumed, the row where it was, and says why', async () => {
-        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> every mon move()', '    - [ ] 子', '## Tasks', '- [ ] later', ''];
-        expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', '- [ ] 移す @2026-09-28 ==> every mon move()', '- [x] 移す @2026-09-21', '    - [ ] 子', '## Tasks', '- [ ] later', '',
-        ]);
-        await Promise.resolve();
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('it was not moved');
-        expect(Notice.messages[0]).toContain('names no heading of the note');
-    });
-
-    it.each(['move([[Other]])', 'move()'])('consumes %s alone: the command goes, and the row stays where it was', async (command) => {
-        const lines = ['# note', `- [ ] 移す @2026-09-21 ==> ${command}`, '## Done', ''];
-        expect(await complete(lines, 1, '移す', path)).toEqual(['# note', '- [x] 移す @2026-09-21', '## Done', '']);
-        await Promise.resolve();
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('it was not moved');
-    });
-
     it('writes the next instance where the row was, and carries the row', async () => {
         const lines = ['# note', '- [ ] 移す @2026-09-21 ==> +1d move([[#Done]])', '## Done', ''];
         expect(await complete(lines, 1, '移す', path)).toEqual([
@@ -168,19 +150,19 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
     });
 
     it.each([
-        'move([[Log]])',
+        'move()',
+        'move([[Other]])',
         'move([[note#Done]])',
         'move("Log/Done")',
         'move([[Log/]] + format(done, "YYYY-MM"))',
-    ])('fires without a move that names another note, retired: %s', async (command) => {
-        const lines = ['# note', `- [ ] 移す @2026-09-21 ==> +1d ${command}`, '## Done', ''];
+        'nochildren',
+    ])('fires nothing for a command that does not read: %s', async (clause) => {
+        const lines = ['# note', `- [ ] 移す @2026-09-21 ==> +1d ${clause}`, '    - [ ] 子', '## Done', ''];
         expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', `- [ ] 移す @2026-09-22 ==> +1d ${command}`, '- [x] 移す @2026-09-21', '## Done', '',
+            '# note', `- [x] 移す @2026-09-21 ==> +1d ${clause}`, '    - [ ] 子', '## Done', '',
         ]);
         await Promise.resolve();
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('it was not moved');
-        expect(Notice.messages[0]).toContain('names no heading of the note');
+        expect(Notice.messages).toEqual([]);
     });
 });
 
@@ -228,7 +210,7 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
             if (planned.kind !== 'none') fired.push(`${planned.task.content}:${planned.kind}`);
             return planned;
         };
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         const status = (line: number) => editor.at(line, editor.lines()[line].indexOf('[') + 1);
         editor.change([
             { from: status(1), to: status(1) + 1, insert: 'x' },
@@ -267,7 +249,7 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
 
     it('fires the child once when the parent\'s move carries it to another indentation', async () => {
         const note = await open(['# note', '- [ ] Q', '    - [ ] P @2026-09-21 ==> move([[#Done]])', '        - [ ] C @2026-09-21 ==> +1d', '## Done', '']);
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         const status = (line: number) => editor.at(line, editor.lines()[line].indexOf('[') + 1);
         editor.change([
             { from: status(2), to: status(2) + 1, insert: 'x' },
@@ -282,7 +264,7 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
 
     it('fires the child where it stands when the parent\'s fire fails', async () => {
         const note = await open(['# note', '- [ ] P @2026-09-21 ==> move([[#Nope]])', '    - [ ] C @2026-09-21 ==> +1d', '']);
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         const status = (line: number) => editor.at(line, editor.lines()[line].indexOf('[') + 1);
         editor.change([
             { from: status(1), to: status(1) + 1, insert: 'x' },
@@ -344,7 +326,7 @@ describe.each<Path>(['card', 'api', 'editor'])('an ordered row a move carries, f
 describe('a moved row, after a reload', () => {
     it('is found by its ^id where it went', async () => {
         const note = await open(['# note', '- [ ] 移す @2026-09-21 ==> move([[#Done]]) ^keep', '    - [ ] 子 ^kid', '## Done', '']);
-        await note.session.index.updateTask(note.idOf('移す'), { statusChar: 'x' });
+        await note.session.ops.updateTask(note.idOf('移す'), { statusChar: 'x' });
         await note.session.flowSettled(FILE);
         note.session.dispose();
 

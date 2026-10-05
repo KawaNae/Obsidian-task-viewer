@@ -53,7 +53,7 @@ describe('one definition of indentation', () => {
 
 describe('one relation between lines', () => {
     /**
-     * Two lines are compared as `Outline.VERBATIM` and no other relation. A
+     * Two lines are compared as `Outline.verbatim` and no other way. A
      * comparison or a lookup made of dedented lines by hand is a second
      * relation, which the outline does not answer for.
      */

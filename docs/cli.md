@@ -11,14 +11,30 @@ Obsidian CLI から本プラグインのタスクデータにアクセスでき�
 - `vault` は Obsidian フレームワークが管理するフラグです（本プラグインでは管理しません）
 - ブーリアンフラグ（`leaf`, `root`）: フラグ名のみで有効化（例: `leaf` または `leaf=true`）
 - 未知のフラグはエラーになります（近いフラグ名の候補を提示します）。ブーリアンフラグに値を付けた場合（`leaf=1` 等）もエラーです
-- 語彙の規則: `from`/`to` はクエリ窓（inclusive、窓と重なるタスクが対象）、`date` は単日窓の糖衣（`from=X to=X` と同じ）、`start`/`end`/`due` はタスク自身のフィールドです
+- 値を空にしたフラグ（`limit=`、`due=` など）は、どのコマンドでも `limit must not be empty` のエラーです。既定の値を使うときはフラグごと省きます
+- 語彙の規則: 問い合わせのフラグは、どれも FilterState の条件を1つ足す略記で、全て「かつ」で重なります。`date` は `period overlaps <date>`、`from`/`to` は `period overlaps { from, to }` です。`start`/`end`/`due` は作成と更新ではタスク自身のフィールドで、問い合わせの `due` は `due equals <date>` です
+- 値の検査（必須か、整数か、実在する日か）は Public API が1回だけ行います。CLI はフラグを API の型に直して渡すだけなので、文も API と同じです。ただしフラグの名前は CLI の綴りで出ます（`Missing required parameter: parent-id`）
+
+## エラー
+
+エラーは次の JSON で返ります。
+
+```json
+{ "error": "count must be at least 1, got: \"0\"", "help": "obsidian obsidian-task-viewer:help" }
+```
+
+## 値の書き方
+
+- 日付は `YYYY-MM-DD` で、実在する日でなければなりません（`2026-02-30` はエラー）。日時は `YYYY-MM-DD HH:mm` か `YYYY-MM-DDTHH:mm`、時刻は `HH:mm` です。`9:40` は `09:40` と読みます
+- 全角の数字と記号は半角として読みます。日付の中のハイフンに似た字（`ー`、`−` など）は `-` と読みます。値の前後の空白は落とします
+- 整数のフラグ（`limit`、`count`、`day-offset`、export-image の `width`、`wait` など）は数字だけです。`3days` や `1.5` はエラーです（以前は先頭の数字だけを読んでいました）
 
 ## 共通フラグ
 
 | フラグ | 説明 | デフォルト |
 |-------|------|-----------|
 | `format` | 出力形式: `json`, `tsv`, `jsonl` | `json` |
-| `output-fields` | 出力フィールド（カンマ区切り） | `id` |
+| `output-fields` | 出力フィールド（カンマ区切り。[出力フィールド](#出力フィールド)） | `id` |
 
 ## タスク ID
 
@@ -48,9 +64,9 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | `status` | ステータス文字（カンマ区切り） | `status=x,-` |
 | `tag` | タグ名（カンマ区切り、`#` は自動除去） | `tag=work,reading` |
 | `content` | コンテンツの部分一致 | `content=会議` |
-| `date` | 単日のクエリ窓（`from=X to=X` と同じ） | `date=today` |
-| `from` | クエリ窓の開始（この日以降に終わるタスク） | `from=2026-03-01` |
-| `to` | クエリ窓の終了（この日以前に始まるタスク） | `to=2026-03-31` |
+| `date` | 期間がこの日と重なるタスク（`period overlaps`） | `date=today` |
+| `from` | 窓の始めの日。期間がこの日以降と重なるタスク | `from=2026-03-01` |
+| `to` | 窓の終わりの日。期間がこの日以前と重なるタスク | `to=2026-03-31` |
 | `due` | 締切日 = 指定値 | `due=today` |
 | `leaf` | 子タスクを持たないタスクのみ | `leaf` |
 | `property` | カスタムプロパティ（`key:value` 形式） | `property=priority:high` |
@@ -58,36 +74,52 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | `type` | タスク notation で絞り込み | `type=taskviewer` |
 | `root` | 親タスクを持たないタスクのみ | `root` |
 | `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) | `filter-file=filters/tag.json` |
-| `list` | ピン留めリスト名（`.md` テンプレート用） | `list=urgent` |
+| `list` | ピン留めリスト名（`.md` テンプレート用）。ビューのフィルタは、リストの「ビューフィルターを適用」がオンのときだけ重ねる（ビューの表示と同じ） | `list=urgent` |
+| `start-hour` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） | `start-hour=0` |
 
-> `from`/`to` は inclusive なクエリ窓です。窓と期間が重なるタスクが対象になります（例: 6/28〜7/2 のタスクは `from=2026-07-01` に含まれます）。`date` と `from`/`to` の同時指定はエラーです。
+> `date` は期間の条件 `period overlaps <date>`、`from`/`to` は `period overlaps { from, to }` の略記です。窓と期間が重なるタスクが対象になります（例: 6/28〜7/2 のタスクは `from=2026-07-01` に含まれます）。片方だけなら、その側だけの開いた範囲です。`date` と `from`/`to` の同時指定と、`from` が `to` より後の範囲はエラーです。日時の値（`date="2026-10-04 10:00"`）は、その瞬間に期間がかかるタスクに当たります。
 >
-> list の窓は effective な日付（カレンダー基準、締切のみのタスクは対象外）で判定します。tasks-for-date-range 系の窓は visual な日付（タイムライン表示と同じ基準、締切のみのタスクを含む）で判定します。
+> list、today、tasks-for-date-range 系の窓は、期間が visual な日（タイムライン表示と同じ基準）と重なるかで判定します。時刻の無い終了日はその日を含みます。締切のみのタスクは締切を終了とみなした期間で当たります。
 >
-> `filter-file` や FilterState JSON の詳細は `obsidian obsidian-task-viewer:help` で確認できます。
+> `filter-file` は Public API にそのまま渡し、ファイルは API が読みます（[api.md の list](api.md#list--today)）。`filter-file`、単純フィルタフラグ、`date`/`from`/`to` は全て「かつ」で重なります。どれも読んで検査するので、読めない値はエラーです。`list` は `filter-file`（`.md` テンプレート）と一緒でなければならず、`list` だけを渡すと `'list' requires 'filter-file' (a .md view template)` のエラーです。ピン留めリストは、`sort` が無ければリストに保存された並べ替えで並びます（ビューと同じ並び）。ほかのフラグを重ねても同じです。`filter-file` を使うと、ビューと同じく検証エラーのあるタスクを外します。`filter-file` を使わなければ、検証エラーのあるタスクも返します。
+>
+> FilterState JSON の形、演算子、否定と `target: parent` の意味、読めない条件の扱いは [api.md の FilterState](api.md#filterstate) を参照してください。読めない条件を含むファイルはエラーです。
 
 **ソート・ページネーション:**
 
 | フラグ | 説明 | 例 |
 |-------|------|-----|
 | `sort` | ソートルール（`property[:direction]` カンマ区切り） | `sort=startDate:asc,due:desc` |
-| `limit` | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） | `limit=50` / `limit=all` |
+| `limit` | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） | `limit=50` / `limit=all` |
 
-**ソート可能プロパティ:** `content`, `due`, `startDate`, `endDate`, `file`, `status`, `tag`
+**ソート可能プロパティ:** `content`, `due`, `startDate`, `endDate`, `file`, `status`, `tag`（比べる値は [api.md の ApiSortRule](api.md#list--today)。`due` は受け継いだ締切で時刻も比べ、`startDate` と `endDate` は期間の開始と終了の瞬間を比べます）
 
 ### today — 本日のタスク
 
-visual-date を考慮し、本日アクティブなタスク（日をまたぐタスクを含む）を取得します。
+visual-date を考慮し、本日アクティブなタスク（日をまたぐタスクを含む）を取得します。`list date=today` と同じで、`list` のフラグを `date`、`from`、`to` のほかは全て受けます。`date`、`from`、`to` を渡すと、窓が2つになるのでエラーです。
 
 ```bash
 obsidian obsidian-task-viewer:today output-fields=content,effectiveStartTime,effectiveEndTime
+obsidian obsidian-task-viewer:today tag=work
 ```
 
 | フラグ | 説明 |
 |-------|------|
+| `file` | ファイルパスで絞り込み |
+| `status` | ステータス文字（カンマ区切り） |
+| `tag` | タグ名（カンマ区切り） |
+| `content` | コンテンツの部分一致 |
+| `due` | 締切日 = 指定値 |
 | `leaf` | 子タスクを持たないタスクのみ |
+| `property` | カスタムプロパティ（`key:value` 形式） |
+| `color` | カード色で絞り込み（カンマ区切り） |
+| `type` | タスク notation で絞り込み |
+| `root` | 親タスクを持たないタスクのみ |
+| `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) |
+| `list` | ピン留めリスト名（`.md` テンプレート用） |
+| `start-hour` | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | ソートルール |
-| `limit` | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
+| `limit` | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） |
 
 ### get — 単一タスク取得
 
@@ -98,6 +130,9 @@ obsidian obsidian-task-viewer:get id=abc123 output-fields=content,status,startDa
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
+| `start-hour` | | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
+
+`start-hour` を渡すと、その日の境目で `effective*` を出します。`@2026-10-04` は `start-hour=0` で `effectiveStartTime` `00:00`、`effectiveEndDate` `2026-10-05`、`effectiveEndTime` `00:00` です。
 
 ### create — タスク作成
 
@@ -111,11 +146,11 @@ obsidian obsidian-task-viewer:create file=DailyNotes/2026-03-15.md content="Meet
 | `content` | ○ | タスクの内容 | `content="Weekly review"` |
 | `start` | | 開始日時 | `start=2026-03-15T14:00` |
 | `end` | | 終了日時 | `end=15:00` |
-| `due` | | 締切日 | `due=2026-03-20` |
+| `due` | | 締切（時刻は日付の後にだけ付けられる） | `due=2026-03-20T17:00` |
 | `status` | | ステータス文字（デフォルト: ` `） | `status=!` |
 | `heading` | | 挿入先の見出し（探し方と置き場所は [API の create](api.md#create) と同じ） | `heading=Tasks` |
 
-**日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `HH:mm`
+**日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `YYYY-MM-DD HH:mm`, `HH:mm`（[値の書き方](#値の書き方)）。`due=17:00` のような時刻だけの締切は `due must include a date` のエラーです
 
 ### update — タスク更新
 
@@ -124,15 +159,15 @@ obsidian obsidian-task-viewer:update id=abc123 status=x
 obsidian obsidian-task-viewer:update id=abc123 start=none  # フィールドをクリア
 ```
 
-**日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `YYYY-MM-DD HH:mm`, `HH:mm`
+**日時の形式:** create と同じです。
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-| `content` | | 新しい内容 |
+| `content` | | 新しい内容（`none` も文字列として書く） |
 | `start` | | 新しい開始日時（`none` でクリア） |
 | `end` | | 新しい終了日時（`none` でクリア） |
-| `due` | | 新しい締切日（`none` でクリア） |
+| `due` | | 新しい締切（時刻は日付の後にだけ付けられる。`none` でクリア） |
 | `status` | | 新しいステータス（`none` で未完了に戻す） |
 
 ### delete — タスク削除
@@ -166,31 +201,31 @@ obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
 
 時刻を持たないタスク（終日、日数の範囲、日付なし）はずらす先が無いので、複写は同じ行がそのまま増えます。位置は同じく元タスクの続きです。
 
-子の行は日付や時刻を含めてそのまま写されます。due はどちらの軸でもずらしません。締め切りは予定の時刻とは別の属性だからです。
+子の行は日付や時刻を含めてそのまま写されます。日をずらす複写は、start と end と同じ日数だけ due もずらします。新しいタスクとして毎回の締め切りが要るからです。時刻の軸の複写は due をずらしません。
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-| `day-offset` | | 日付をシフトする日数（デフォルト: 0。0 なら時刻の軸で連ねる） |
-| `count` | | コピー数（デフォルト: 1） |
+| `day-offset` | | 日付をシフトする日数（整数。デフォルト: 0。0 なら時刻の軸で連ねる。それ以外は最初の複写をその日数ずらし、次からは1日ずつ後へ。負なら前の日へ） |
+| `count` | | コピー数（1 以上の整数。デフォルト: 1） |
 
 **戻り値:** `{ "duplicated": "abc123" }`
 
 ### tasks-for-date-range — 日付範囲のタスク取得
 
-期間の判定は from/to そのもの（visual な日付、下の list との違いを参照）で行われます。単純フィルタフラグは、その結果にさらに絞り込みをかけるだけで、期間の判定には関与しません。
+`list` に `from` と `to` を渡すのと同じで、`from` と `to` が必須なことだけが違います。単純フィルタフラグと `filter-file` は、窓と「かつ」で重なります。
 
 ```bash
 obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31 output-fields=content,startDate
 
-# 単純フィルタを重ねる（期間は from/to のまま、status で絞り込むだけ）
+# 単純フィルタを重ねる（窓と status、tag の「かつ」）
 obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31 status=x tag=work
 ```
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
-| `from` | ○ | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
-| `to` | ○ | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `from` | ○ | 窓の始めの日（list の `from` と同じ） |
+| `to` | ○ | 窓の終わりの日（list の `to` と同じ） |
 | `file` | | ファイルパスで絞り込み（`.md` は自動補完） |
 | `status` | | ステータス文字（カンマ区切り） |
 | `tag` | | タグ名（カンマ区切り、`#` は自動除去） |
@@ -201,14 +236,15 @@ obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31
 | `color` | | カード色で絞り込み（カンマ区切り） |
 | `type` | | タスク notation で絞り込み |
 | `root` | | 親タスクを持たないタスクのみ |
-| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
+| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。ほかのフラグと「かつ」（list と同じ） |
 | `list` | | ピン留めリスト名（`.md` テンプレート用） |
+| `start-hour` | | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 | `sort` | | ソートルール |
-| `limit` | | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
+| `limit` | | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） |
 
 ### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 
-日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインの表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。単純フィルタフラグはこの分類の後に絞り込みをかけるだけで、期間・分類の判定には関与しません。
+日付範囲のタスクを日付ごとに allDay / timed に分類して返します。日付への所属は、startHour を考慮した visual な日付（タイムラインの表示と同じ基準）で判定されます。締切のみのタスクは締切を終了とみなした期間を持ち、日付の締切は allDay、時刻付きの締切は timed に入ります。タスクは tasks-for-date-range と同じ条件で集め、窓の visual な日ごとに並べます。`start-hour` を渡すと、日の境目もその値で分けます。
 
 ```bash
 obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 to=2026-03-31 status=x
@@ -216,8 +252,8 @@ obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 t
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
-| `from` | ○ | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
-| `to` | ○ | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `from` | ○ | 窓の始めの日（list の `from` と同じ） |
+| `to` | ○ | 窓の終わりの日（list の `to` と同じ） |
 | `file` | | ファイルパスで絞り込み（`.md` は自動補完） |
 | `status` | | ステータス文字（カンマ区切り） |
 | `tag` | | タグ名（カンマ区切り、`#` は自動除去） |
@@ -228,10 +264,11 @@ obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 t
 | `color` | | カード色で絞り込み（カンマ区切り） |
 | `type` | | タスク notation で絞り込み |
 | `root` | | 親タスクを持たないタスクのみ |
-| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
+| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。ほかのフラグと「かつ」（list と同じ） |
 | `list` | | ピン留めリスト名（`.md` テンプレート用） |
+| `start-hour` | | この呼び出しだけの日の境目（0〜23 の整数。省くと設定の値。`0` で暦日） |
 
-**戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...], "dueOnly": [...] }, ... }`
+**戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...] }, ... }`
 
 ### export-image — ビューを画像として保存
 
@@ -241,7 +278,7 @@ Timeline / Calendar / Schedule / Kanban ビューを PNG として書き出し�
 # 既に開いている timeline ビューをそのまま書き出す
 obsidian obsidian-task-viewer:export-image view=timeline
 
-# 一時ビューを作って書き出す（daysToShow=5、開始日=2026-03-01）
+# 一時ビューを作って書き出す（daysToShow=5、見る日=2026-03-01）
 obsidian obsidian-task-viewer:export-image view=timeline days-to-show=5 anchor-date=2026-03-01
 
 # 保存済みテンプレートから書き出す
@@ -253,18 +290,20 @@ obsidian obsidian-task-viewer:export-image template="My Timeline"
 | `view` | ※ | `timeline` \| `calendar` \| `schedule` \| `kanban`（`template=` 未指定なら必須） |
 | `template` | ※ | 保存済みビューテンプレート名（ビュー種別を推論。`view=` 未指定なら必須） |
 | `name` | | 書き出したビューの表示名 |
-| `anchor-date` | | 日付アンカー（`YYYY-MM-DD`）。「今日」ボタンと同じ役割を任意の日に対して行う。ビューごとのスキーマの日付フィールドに解決される |
-| `width` | | 描画幅（px、デフォルト: 1200） |
-| `output-folder` | | 出力先フォルダ（vault相対 or 絶対パス。デフォルト: `task-viewer-export`） |
+| `anchor-date` | | ビューが見る日（`YYYY-MM-DD`）。今日の代わりにその日を見て開く。Timeline はその前に過去の表示日数を置き、Schedule はその日を描き、Calendar はその日の月の格子を描く（ツールバーの「日付へ移動」と同じ画面）。ビューごとのスキーマの日付フィールド（Timeline、Schedule、Calendar とも `date`）に解決される。Calendar の週送り（`weekOffset`）は 0 になる。テンプレートや開いているビューに残る旧い鍵 `startDate`、`currentDate`、`windowStart` は読まない |
+| `width` | | 描画幅（px、1 以上の整数。デフォルト: 1200） |
+| `output-folder` | | 出力先フォルダ（vault 相対か絶対パス。デフォルト: 設定の書き出し先、未設定なら `task-viewer-export`） |
 | `filename` | | 出力ファイル名（デフォルト: `{ビュー種別}_{日付}.png`） |
-| `wait` | | 描画後の待機時間（ms、デフォルト: 500） |
+| `wait` | | 描画後の待機時間（ms、0 以上の整数。デフォルト: 500） |
 | `keep-open` | | 書き出し後も一時ウィンドウを開いたままにする |
 
-対象ビュー自身の設定フラグもそのまま渡せます（例: timeline の `days-to-show`、1以上30以下の整数）。これを1つでも渡すと一時ビューでの書き出しになります。
+対象ビュー自身の設定フラグもそのまま渡せます（例: timeline の `days-to-show`、1以上30以下の整数。calendar の `week-offset` は `anchor-date` の月の格子から送る週の数）。これを1つでも渡すと一時ビューでの書き出しになります。
 
-**戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-03-01", "to": "2026-03-05" } }`
+vault 相対のフォルダは vault を通して書くので、ファイルシステムでない vault でも書けます。絶対パスのフォルダはデスクトップ版でだけ書けます。テンプレートやフラグのフィルタに読めない条件があると、書き出さずにエラーを返します。
 
-`resolvedAnchor`/`renderedRange` は、書き出したビューが自分で報告できる場合だけ含まれます（Timeline/Calendar/Schedule。Kanban には日付レンジの概念が無いため含まれません）。値は実際に描画された範囲そのものです。Calendar の `renderedRange` は暦月ではなく、実際のグリッドが描く週開始揃えの42日ぶんです。`anchor-date` 等を渡さず既に開いているビューをそのまま書き出す場合も、開いているビューが実際に表示している範囲がそのまま返ります。
+**戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-02-26", "to": "2026-03-02" } }`（上の2つめの例で、過去の表示日数が3のとき）
+
+`resolvedAnchor` はビューが見た日（追従していれば今日）、`renderedRange` は描いた範囲です。どちらも、書き出したビューが自分で報告できる場合だけ含まれます（Timeline/Calendar/Schedule。Kanban には日付レンジの概念が無いため含まれません）。値は実際に描画された範囲そのものです。Calendar の `renderedRange` は暦月ではなく、実際のグリッドが描く週開始揃えの42日ぶんです。`anchor-date` 等を渡さず既に開いているビューをそのまま書き出す場合も、開いているビューが実際に表示している範囲がそのまま返ります。
 
 ### insert-child-task — 子タスク挿入
 
@@ -289,13 +328,15 @@ obsidian obsidian-task-viewer:get-start-hour
 
 **戻り値:** `{ "startHour": 5 }`
 
+設定の値を返します。問い合わせごとの上書きは、各コマンドの `start-hour` で行い、この値は変わりません。
+
 ### help — CLI リファレンス
 
 ```bash
 obsidian obsidian-task-viewer:help
 ```
 
-全コマンドの詳細リファレンス（フラグ一覧・日付形式・ソート・FilterState JSON 構造・使用例）を表示します。
+全コマンドの詳細リファレンス（コマンドごとのフラグ、出力フィールド、日付形式、ソート、FilterState JSON 構造）を表示します。コマンド、フラグ、フィールド、演算子の一覧は、プラグインが使う表から作られます。
 
 ## 日付プリセット
 
@@ -309,9 +350,9 @@ obsidian obsidian-task-viewer:help
 | `nextWeek` | 来週 |
 | `thisMonth` | 今月 |
 | `thisYear` | 今年 |
-| `next7days` | 今後7日間 |
-| `next30days` | 今後30日間 |
+| `next<N>days` | 今後 N 日間（例: `next7days`、`next30days`） |
 | `YYYY-MM-DD` | 絶対日付 |
+| `YYYY-MM-DD HH:mm`、`YYYY-MM-DDTHH:mm` | 日時。日の窓でなく、その瞬間 |
 
 ## 出力フィールド
 
@@ -335,19 +376,23 @@ obsidian obsidian-task-viewer:help
 | `childIds` | `string[]` | 子タスクID一覧 |
 | `color` | `string \| null` | カードの色 |
 | `linestyle` | `string \| null` | 線スタイル |
-| `effectiveStartDate` | `string \| null` | 暗黙値解決済み開始日 |
-| `effectiveStartTime` | `string \| null` | 暗黙値解決済み開始時刻 |
-| `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
-| `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
-| `durationMinutes` | `number \| null` | 所要時間（分） |
+| `effectiveStartDate` | `string \| null` | 期間の開始の瞬間の暦の日付（`@2026-10-04` は `2026-10-04`） |
+| `effectiveStartTime` | `string \| null` | 期間の開始の瞬間の時刻（`@2026-10-04` は startHour の `05:00`） |
+| `effectiveEndDate` | `string \| null` | 期間の終了の瞬間の暦の日付（`@2026-10-04` は `2026-10-05`） |
+| `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
+| `effectiveDue` | `string \| null` | 受け継ぎを含む締切 |
+| `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（`@2026-10-04` と `@>>2026-10-04` は 1440） |
 | `properties` | `Record<string, unknown>` | カスタムプロパティ |
+| `flow` | `string \| null` | `==>` に続くフローのコマンド |
 
 ## 出力形式の例
 
 **json**（デフォルト）:
 ```json
-{ "count": 2, "tasks": [{ "id": "abc", "content": "Meeting", ... }] }
+{ "total": 2, "truncated": false, "limit": 100, "count": 2, "tasks": [{ "id": "abc", "content": "Meeting", ... }] }
 ```
+
+`total` は `limit` を当てる前の件数、`limit` は当てた件数（`limit=all` なら `null`）です。`get`、`create`、`update` は1件のタスクを `{ "id": "abc", ... }` で返します。
 
 **tsv**:
 ```

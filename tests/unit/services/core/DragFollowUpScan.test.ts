@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TaskIndex } from '../../../../src/services/core/TaskIndex';
+import { editorRow } from '../../../../src/services/persistence/FileLines';
+import { Operations } from '../../../../src/services/operations/Operations';
 import { vaultSession, makeFile as sessionFile } from '../../helpers/vaultSession';
 import { freezeDate } from '../../helpers/fakeDate';
 
@@ -9,7 +10,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * What happens to the changes that arrive while a drag is in flight, and what
- * happens to a write that arrives after the index is closed.
+ * happens to a write that arrives after the operations are closed.
  *
  * Readings of the dragged file are held back from the store so it is not
  * overwritten with values from under the pointer (`TaskScanner.hold`), and
@@ -19,7 +20,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  */
 
 const FILE = 'note.md';
-const proto = TaskIndex.prototype as never as Record<string, (...args: unknown[]) => unknown>;
+const proto = Operations.prototype as never as Record<string, (...args: unknown[]) => unknown>;
 
 function buildHost(overrides: Record<string, unknown> = {}) {
     return {
@@ -69,7 +70,7 @@ describe('through the real modify handler', () => {
             await live.scanAll();
             const weekly = live.index.getTasks()[0];
             live.index.setDraggingFile(FILE);
-            await live.index.updateTask(weekly.id, { statusChar: 'x' });
+            await live.ops.updateTask(weekly.id, { statusChar: 'x' });
             await live.settle(FILE);
             expect(contents.get(FILE)).toBe(FIRED);
 
@@ -142,42 +143,45 @@ ${BETA}
 });
 
 describe('writes after dispose', () => {
-    const host = () => buildHost({ disposed: true, refuseAfterDispose: proto.refuseAfterDispose });
+    const host = () => buildHost({ disposed: true, refuseAfterDispose: proto.refuseAfterDispose, update: proto.update });
 
     it('are refused rather than written', async () => {
-        expect(await proto.updateTask.call(host(), 'id', {})).toBe(false);
+        expect((await proto.updateTask.call(host(), 'id', {})).written).toBe(false);
         expect(await proto.deleteTask.call(host(), 'id')).toBe(false);
         expect(await proto.duplicateTask.call(host(), 'id')).toBe(false);
         expect(await proto.createTask.call(host(), FILE, '- [ ] x')).toBe(null);
-        expect(await proto.insertLine.call(host(), 'id', '- [ ] x', 'afterSubtree')).toBe(false);
+        expect((await proto.insertLine.call(host(), 'id', '- [ ] x', 'afterSubtree')).written).toBe(false);
+        expect(await proto.updateByAnchor.call(host(), FILE, 'a', {})).toEqual({ kind: 'not-written', refused: null });
     });
 
-    it('reach neither the store nor the repository', async () => {
+    it('reach neither the index nor the repository', async () => {
         const closed = buildHost({
             disposed: true,
             refuseAfterDispose: proto.refuseAfterDispose,
-            store: { getTask: vi.fn() },
-            repository: { updateTaskInFile: vi.fn(), applyToTask: vi.fn() },
+            hearer: proto.hearer,
+            update: proto.update,
+            index: { getTask: vi.fn() },
+            repository: { write: vi.fn() },
         });
 
         await proto.updateTask.call(closed, 'id', { statusChar: 'x' });
         await proto.deleteTask.call(closed, 'id');
 
-        expect(closed.store.getTask).not.toHaveBeenCalled();
-        expect(closed.repository.updateTaskInFile).not.toHaveBeenCalled();
-        expect(closed.repository.applyToTask).not.toHaveBeenCalled();
+        expect(closed.index.getTask).not.toHaveBeenCalled();
+        expect(closed.repository.write).not.toHaveBeenCalled();
     });
 
     it('leave the line-level writes alone too', async () => {
         const closed = buildHost({
             disposed: true,
             refuseAfterDispose: proto.refuseAfterDispose,
-            withNotify: vi.fn(),
+            hearer: proto.hearer,
+            repository: { write: vi.fn() },
         });
 
-        await proto.writeLine.call(closed, FILE, { line: 0, text: '- [ ] x', key: '' }, [{ kind: 'update', text: '- [x] x' }]);
+        await proto.writeLine.call(closed, FILE, editorRow(0, '- [ ] x', ''), [{ kind: 'update', text: '- [x] x' }]);
         await proto.insertLine.call(closed, 'id', '- [ ] x', 'firstChild');
 
-        expect(closed.withNotify).not.toHaveBeenCalled();
+        expect(closed.repository.write).not.toHaveBeenCalled();
     });
 });

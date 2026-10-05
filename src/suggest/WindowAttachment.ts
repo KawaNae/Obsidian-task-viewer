@@ -1,9 +1,12 @@
 import { type App, setIcon, type Plugin } from 'obsidian';
+import { t } from '../i18n';
 import type { TaskViewerSettings } from '../types';
 import type { EventRegistrar, PluginContext } from '../PluginContext';
-import { PropertyColorSuggest } from './color/PropertyColorSuggest';
-import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
+import { PropertyValueSuggest } from './PropertyValueSuggest';
+import { COLOR_VALUES, LINE_STYLE_VALUES } from './ScopeValues';
 import { normalizeColor, cssColorToHex } from '../utils/ColorUtils';
+import { fileOfElement } from '../utils/ObsidianView';
+import { createNativePicker } from '../views/sharedUI/NativePicker';
 
 export interface AttachmentContext {
     app: App;
@@ -106,31 +109,18 @@ export class WindowAttachment {
             if (!valueDiv) return;
 
             if (isColorKey && settings.suggestColor) {
-                if (!this.ctx.attachedInputs.has(valueDiv)) {
-                    new PropertyColorSuggest(this.ctx.app, valueDiv, this.ctx.suggestHost);
-                    this.addColorPickerIcon(propertyContainer as HTMLElement);
-                    this.suppressNativePropertySuggest(colorKey);
-                    this.ctx.attachedInputs.add(valueDiv);
-                }
-                // valueDiv は Obsidian の再描画で別要素に置き換わりうる。
-                // closure に閉じ込めず毎 sync で fresh な textContent を反映する。
-                this.syncColorInputValue(propertyContainer as HTMLElement, valueDiv);
+                if (this.ctx.attachedInputs.has(valueDiv)) return;
+                new PropertyValueSuggest(this.ctx.app, valueDiv, this.ctx.suggestHost, COLOR_VALUES);
+                this.addColorPicker(propertyContainer as HTMLElement);
+                this.suppressNativePropertySuggest(colorKey);
+                this.ctx.attachedInputs.add(valueDiv);
             } else if (isLineStyleKey && settings.suggestLinestyle) {
                 if (this.ctx.attachedInputs.has(valueDiv)) return;
-                new PropertyLineStyleSuggest(this.ctx.app, valueDiv, this.ctx.suggestHost);
+                new PropertyValueSuggest(this.ctx.app, valueDiv, this.ctx.suggestHost, LINE_STYLE_VALUES);
                 this.suppressNativePropertySuggest(linestyleKey);
                 this.ctx.attachedInputs.add(valueDiv);
             }
         });
-    }
-
-    private syncColorInputValue(container: HTMLElement, valueDiv: HTMLDivElement): void {
-        const colorInput = container.querySelector(
-            '.task-viewer-color-picker-icon input[type="color"]'
-        ) as HTMLInputElement | null;
-        if (!colorInput) return;
-        const next = cssColorToHex(valueDiv.textContent?.trim() ?? '', this.doc);
-        if (colorInput.value !== next) colorInput.value = next;
     }
 
     private suppressNativePropertySuggest(propertyKey: string): void {
@@ -161,59 +151,53 @@ export class WindowAttachment {
         this.nativeSuggestStyles.delete(propertyKey);
     }
 
-    private addColorPickerIcon(container: HTMLElement): void {
-        if (container.querySelector('.task-viewer-color-picker-icon')) return;
+    /**
+     * The color picker beside a color property: a button and the platform's
+     * picker over it (`NativePicker`), which opens on the property's value.
+     * A color picked is written to the note the Properties view shows (the
+     * file of its leaf, `fileOfElement`), not to the active one.
+     */
+    private addColorPicker(container: HTMLElement): void {
+        if (container.querySelector('.task-viewer-color-picker')) return;
 
-        const iconBtn = container.createDiv({ cls: 'task-viewer-color-picker-icon clickable-icon' });
-        iconBtn.setAttribute('aria-label', 'カラーピッカーを開く');
-        iconBtn.style.position = 'relative';
-        iconBtn.style.marginLeft = '4px';
-        iconBtn.style.display = 'inline-flex';
-        iconBtn.style.alignItems = 'center';
-        iconBtn.style.cursor = 'pointer';
-        setIcon(iconBtn, 'palette');
+        // The value's field is found when it is needed: Obsidian draws it anew.
+        const shown = () => container.querySelector('.metadata-input-longtext') as HTMLDivElement | null;
 
-        const colorInput = this.doc.createElement('input');
-        colorInput.type = 'color';
-        colorInput.style.position = 'absolute';
-        colorInput.style.top = '0';
-        colorInput.style.left = '0';
-        colorInput.style.width = '100%';
-        colorInput.style.height = '100%';
-        colorInput.style.opacity = '0';
-        colorInput.style.cursor = 'pointer';
-        iconBtn.appendChild(colorInput);
+        const box = container.createSpan({ cls: 'task-viewer-color-picker' });
+        const button = box.createEl('button', { cls: 'clickable-icon task-viewer-color-picker__button' });
+        button.setAttribute('aria-label', t('modal.openColorPicker'));
+        setIcon(button, 'palette');
+        const colorInput = createNativePicker(box, button, {
+            type: 'color',
+            cls: 'task-viewer-color-picker__input',
+            beforeOpen: () => { colorInput.value = cssColorToHex(shown()?.textContent ?? '', this.doc); },
+        });
 
         const valueContainer = container.querySelector('.metadata-property-value');
         if (valueContainer) {
-            valueContainer.after(iconBtn);
+            valueContainer.after(box);
         }
 
         colorInput.addEventListener('input', () => {
-            const activeFile = this.ctx.app.workspace.getActiveFile();
-            if (!activeFile) return;
+            const file = fileOfElement(this.ctx.app, container);
+            if (!file) return;
 
             const hex = normalizeColor(colorInput.value);
             const colorKey = this.ctx.getSettings().scopeKeys.color;
 
             // 見た目は 1 手ごとに追随させ、ファイルへの書き込みだけ末尾に寄せる。
-            // valueDiv は再描画で別要素に置き換わりうるので closure ではなく都度解決する。
-            const currentValueDiv = container.querySelector(
-                '.metadata-input-longtext'
-            ) as HTMLDivElement | null;
-            if (currentValueDiv) currentValueDiv.textContent = hex;
+            const field = shown();
+            if (field) field.textContent = hex;
 
             this.queueColorWrite(async () => {
-                const written = await this.ctx.suggestHost.getTaskWriteService()
-                    .setFrontmatterKeys(activeFile.path, { [colorKey]: hex });
+                const written = await this.ctx.suggestHost.getOperations()
+                    .setFrontmatterKeys(file.path, { [colorKey]: hex });
                 if (!written) {
                     // 書けなかった。表示を先に変えていたので、ファイルの値へ戻す。
                     // 理由は書き込みの層が通知済み。
-                    const onFile = this.ctx.app.metadataCache.getFileCache(activeFile)?.frontmatter?.[colorKey];
-                    const shown = container.querySelector(
-                        '.metadata-input-longtext'
-                    ) as HTMLDivElement | null;
-                    if (shown) shown.textContent = typeof onFile === 'string' ? onFile : '';
+                    const onFile = this.ctx.app.metadataCache.getFileCache(file)?.frontmatter?.[colorKey];
+                    const now = shown();
+                    if (now) now.textContent = typeof onFile === 'string' ? onFile : '';
                 }
                 return written;
             });

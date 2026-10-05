@@ -92,11 +92,6 @@ const EXEMPTIONS: Exemption[] = [
     },
     {
         file: 'settings/BasicTab.ts',
-        text: 'task-viewer-export',
-        why: 'The default folder name, shown as the value it would take.',
-    },
-    {
-        file: 'settings/BasicTab.ts',
         text: 'Templates/Timers',
         why: 'Example path showing the expected shape of the setting.',
     },
@@ -134,6 +129,11 @@ const EXEMPTIONS: Exemption[] = [
         file: 'settings/NotesTab.ts',
         text: 'Templates/Yearly.md',
         why: 'Example path showing the expected shape of the setting.',
+    },
+    {
+        file: 'utils/values/IssueText.ts',
+        text: 'text',
+        why: 'The English table of the API\'s and the CLI\'s errors (the shape `text`), English on purpose; a form says the same issue through i18n (issueWords).',
     },
     {
         file: 'views/customMenus/IntervalTemplateCreator.ts',

@@ -1,5 +1,5 @@
 import type { Task } from '../types';
-import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
+import { mapRow } from '../services/display/SegmentIds';
 import { BLOCK_ID_SOURCE } from '../services/parsing/utils/TaskLineClassifier';
 
 /**
@@ -38,7 +38,7 @@ const ANCHOR_ID = new RegExp(String.raw`^(.+)#\^(${BLOCK_ID_SOURCE})$`);
  * its row's ID.
  */
 export function apiIdOf(name: string, lookup: TaskLookup): string {
-    return TaskIdGenerator.mapRow(name, row => {
+    return mapRow(name, row => {
         const task = lookup(row);
         return task?.anchor !== undefined ? `${task.file}#^${task.anchor}` : row;
     });

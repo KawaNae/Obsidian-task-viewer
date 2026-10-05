@@ -1,12 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import { parseFlowSegments } from '../../../src/services/lang/flow/FlowSegments';
+import { readLine } from '../helpers/readLine';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
-import { TaskIndex } from '../../../src/services/core/TaskIndex';
-import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { completing } from '../helpers/completing';
 import { freezeDate } from '../helpers/fakeDate';
@@ -29,35 +27,32 @@ const FILE = 'note.md';
 
 function makeRepository() {
     return {
-        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
+        write: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
-        updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
     };
 }
 
 /** What the fire's one write inserts, if it inserts anything. */
-function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
-    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstance | undefined {
+    const ops = repository.write.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
-    return op?.kind === 'insert-instance' ? op.insert : undefined;
+    return op?.kind === 'insert-instance' ? op.instance : undefined;
 }
 
-/** The generated instance the fire's one write inserts (fails if there is none). */
-function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<FlowInstanceInsert, { kind: 'generated' }> {
-    const insert = insertOf(repository);
-    if (insert?.kind !== 'generated') throw new Error('the fire inserts no generated instance');
-    return insert;
+/** The instance the fire's one write inserts (fails if there is none). */
+function generatedOf(repository: ReturnType<typeof makeRepository>): FlowInstance {
+    const instance = insertOf(repository);
+    if (!instance) throw new Error('the fire inserts no instance');
+    return instance;
 }
 
 /** How many strip-flow ops the fires wrote. */
 function stripsOf(repository: ReturnType<typeof makeRepository>): number {
-    return repository.applyToTask.mock.calls
-        .flatMap(c => c[1] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
+    return repository.write.mock.calls
+        .flatMap(c => c[2] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
 }
-
-const app = { vault: { getAbstractFileByPath: () => null } };
 
 function block(name: string, body: string[]): GenBlock {
     return { name, body, openLine: 10, closeLine: 10 + body.length + 1 };
@@ -68,12 +63,7 @@ function makeExecutor(repository: ReturnType<typeof makeRepository>, blocks: Rec
         getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
-    return completing(new FlowExecutor(
-        repository as unknown as TaskRepository,
-        taskIndex as unknown as TaskIndex,
-        app as never,
-        () => DEFAULT_SETTINGS
-    ), repository, blocks);
+    return completing(new FlowExecutor(taskIndex, () => DEFAULT_SETTINGS), repository, blocks);
 }
 
 async function flush() {
@@ -81,7 +71,7 @@ async function flush() {
 }
 
 interface Written {
-    parentLine: string;
+    head: string;
     flowLines: string[];
     children: { depth: number; body: string }[];
     fired: boolean;
@@ -97,16 +87,15 @@ interface Written {
  */
 async function fire(line: string, blocks: Record<string, GenBlock>): Promise<Written> {
     const repository = makeRepository();
-    const task = TaskParser.parse(line, FILE, 0);
+    const task = readLine(line, DEFAULT_SETTINGS, FILE);
     expect(task, `the line has to read back as a task: ${line}`).not.toBeNull();
     await makeExecutor(repository, blocks).complete({ ...task!, statusChar: 'x' });
     await flush();
 
-    const insert = insertOf(repository);
-    if (insert !== undefined && insert.kind !== 'generated') throw new Error('the fire inserts no generated instance');
-    return insert
-        ? { parentLine: insert.parentLine, flowLines: insert.flowLines, children: insert.children, fired: true }
-        : { parentLine: '', flowLines: [], children: [], fired: false };
+    const instance = insertOf(repository);
+    return instance
+        ? { head: instance.head, flowLines: instance.flowLines, children: instance.children, fired: true }
+        : { head: '', flowLines: [], children: [], fired: false };
 }
 
 const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${state.n = state.n + 1}回 @${start}']) };
@@ -114,7 +103,7 @@ const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${state.n = state.n 
 describe('a cell travels from one generation to the next', () => {
     it('prints what the block wrote, not what the line started from', async () => {
         const written = await fire('- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', COUNTER);
-        expect(written.parentLine).toBe(
+        expect(written.head).toBe(
             '- [ ] 週報 第4回 @2026-08-24 ==> every mon state(n: 4) use("週報")');
     });
 
@@ -125,7 +114,7 @@ describe('a cell travels from one generation to the next', () => {
         for (let i = 0; i < 3; i++) {
             const written = await fire(lines[i].replace('- [ ] ', '- [x] '), COUNTER);
             expect(written.fired).toBe(true);
-            lines.push(written.parentLine);
+            lines.push(written.head);
         }
         expect(lines.slice(1)).toEqual([
             '- [ ] 週報 第4回 @2026-08-24 ==> every mon state(n: 4) use("週報")',
@@ -149,11 +138,11 @@ describe('a cell travels from one generation to the next', () => {
                 ]),
             });
         expect(written.fired).toBe(true);
-        expect(written.parentLine.split('\n')).toHaveLength(1);
-        expect(written.parentLine).toContain('state(prev: "- [ ] a\\n- [ ] b")');
+        expect(written.head.split('\n')).toHaveLength(1);
+        expect(written.head).toContain('state(prev: "- [ ] a\\n- [ ] b")');
 
         // 書いた行がそのまま読み戻せること。値も往復する。
-        const back = TaskParser.parse(written.parentLine, FILE, 0);
+        const back = readLine(written.head, DEFAULT_SETTINGS, FILE);
         expect(back!.flow!.diagnostics).toEqual([]);
         expect(back!.flow!.program!.cells!.entries[0].value)
             .toEqual({ type: 'string', value: '- [ ] a\n- [ ] b' });
@@ -174,8 +163,8 @@ describe('a cell travels from one generation to the next', () => {
                 ]),
             });
         expect(written.fired).toBe(true);
-        expect(written.parentLine.split('\n')).toHaveLength(1);
-        expect(TaskParser.parse(written.parentLine, FILE, 0)!.flow!.program!.cells!.entries[0].value)
+        expect(written.head.split('\n')).toHaveLength(1);
+        expect(readLine(written.head, DEFAULT_SETTINGS, FILE)!.flow!.program!.cells!.entries[0].value)
             .toEqual({ type: 'string', value: 'one\ntwo' });
     });
 
@@ -183,13 +172,13 @@ describe('a cell travels from one generation to the next', () => {
         // use() の無いコマンドは評価する物を持たない。宣言された値がその
         // まま次インスタンスへ運ばれる。
         const repository = makeRepository();
-        const task = TaskParser.parse('- [x] 週報 @2026-08-17 ==> every mon state(n: 3)', FILE, 0)!;
+        const task = readLine('- [x] 週報 @2026-08-17 ==> every mon state(n: 3)', DEFAULT_SETTINGS, FILE)!;
         await makeExecutor(repository, {}).complete({ ...task, statusChar: 'x' });
         await flush();
 
         const insert = insertOf(repository);
-        expect(insert?.kind).toBe('recurrence');
-        expect(insert?.kind === 'recurrence' && insert.content).toMatch(/==> every mon state\(n: 3\)$/);
+        expect(insert?.children).toEqual([]);
+        expect(insert?.head).toMatch(/==> every mon state\(n: 3\)$/);
     });
 
     it('keeps a cell on the line it was written on', async () => {
@@ -199,7 +188,7 @@ describe('a cell travels from one generation to the next', () => {
         expect(diagnostics.filter(d => d.severity === 'error')).toEqual([]);
 
         const repository = makeRepository();
-        const task = TaskParser.parse('- [x] 週報 第3回 @2026-08-17', FILE, 0)!;
+        const task = readLine('- [x] 週報 第3回 @2026-08-17', DEFAULT_SETTINGS, FILE)!;
         await makeExecutor(repository, COUNTER).complete({
             ...task,
             statusChar: 'x',
@@ -212,7 +201,7 @@ describe('a cell travels from one generation to the next', () => {
         });
         await flush();
 
-        const { parentLine, flowLines } = generatedOf(repository);
+        const { head: parentLine, flowLines } = generatedOf(repository);
         expect(parentLine).toContain('==> every mon');
         expect(parentLine).not.toContain('state(');
         expect(flowLines).toEqual(['state(n: 4) use("週報")']);
@@ -225,7 +214,7 @@ describe('the state ends with the command', () => {
         // だけ — コマンドの無い行にセルの置き場所は無い。
         const written = await fire(
             '- [x] 週報 第3回 @2026-08-17 ==> every mon x1 state(n: 3) use("週報")', COUNTER);
-        expect(written.parentLine).toBe('- [ ] 週報 第4回 @2026-08-24');
+        expect(written.head).toBe('- [ ] 週報 第4回 @2026-08-24');
         expect(written.flowLines).toEqual([]);
     });
 });
@@ -233,14 +222,13 @@ describe('the state ends with the command', () => {
 describe('a value that cannot be written back stops the fire', () => {
     const refuses = async (body: string[]) => {
         const repository = makeRepository();
-        const task = TaskParser.parse(
-            '- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', FILE, 0)!;
+        const task = readLine('- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', DEFAULT_SETTINGS, FILE)!;
         await makeExecutor(repository, { 週報: block('週報', body) })
             .complete({ ...task, statusChar: 'x' });
         await flush();
 
         // 2 相のまま: 何も書かれず、コマンドも消費されない。
-        expect(repository.applyToTask).not.toHaveBeenCalled();
+        expect(repository.write).not.toHaveBeenCalled();
         expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.stripFlow).not.toHaveBeenCalled();
     };

@@ -1,69 +1,46 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { TimerWidget } from '../../../src/timer/TimerWidget';
-import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
-import { IDLE_TIMER_ID } from '../../../src/timer/TimerContext';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
-import { DEFAULT_SETTINGS } from '../../../src/types';
+import { targetOf, type TimerState } from '../../../src/timer/TimerState';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { begin, timerOn, timerRig } from '../helpers/timerRig';
 
 /**
  * タイマーが外してよいのは、自分の書き込みで付けた `^id` だけで、付けたかどうかは
- * その書き込みが記録する（id の形からは推さない）。外すのは、開いているどの
- * タイマーもその錨を対象にも尻尾にも持っていないときだけ。
+ * その書き込みが記録する（`owned`。id の形からは推さない）。外すのは、同じノートで
+ * 開いているほかのどのタイマーも、その錨で行を引かない（対象、尻尾、書いている
+ * 途中の行）ときだけ。
  *
- * 形 C（反例の実走の3）: タイマー B が A の走行中の行を対象にして先に閉じると、
- * B の片付けが A の尻尾の `^tv-t-` を外していた。A の ■ は尻尾を引けず、予備の
- * 記録を足し、A の開いた行は `[ ]` のまま残った。
+ * タイマー B が A の走行中の行を対象にして先に閉じても、A の尻尾の `^tv-t-` は
+ * 残る。A の ■ はその行を引いて閉じ、予備の記録を足さない。
  */
 (globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => 1, clearInterval: () => { },
+    setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
     addEventListener: () => { }, removeEventListener: () => { },
 };
 const FILE = 'notes/a.md';
 const ORIGINAL = ['- [ ] 対象 @2026-09-21', '- [ ] 下のタスク @2026-09-21', ''].join('\n');
 const at = (h: number, m: number) => new Date(2026, 8, 21, h, m, 0);
 
-/** vaultSession の上の、実物の TimerWidget。描画と保存だけは置き換える。 */
-async function widgetOver() {
+/** 1 つの表の上の 2 つのタイマー: A は「対象」の子に、B は A の走行中の行の子に記録する。 */
+async function twoTimers() {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(at(9, 0));
     const contents = new Map([[FILE, ORIGINAL]]);
     const s = vaultSession(contents);
     await s.scanAll();
-    Object.assign(s.app.vault, { getName: () => 'test-vault' });
-    const plugin = {
-        settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => s.index,
-        getTaskWriteService: () => new TaskWriteService(s.index),
-        getTaskReadService: () => ({ getTask: (id: string) => s.index.getTask(id) }),
-    };
-    const ticker = vi.spyOn(TimerLifecycle.prototype, 'startTimerTicker');
-    const widget = new TimerWidget(s.app, plugin as never);
-    widget.render = () => { };
-    widget.renderTimerItem = () => { };
-    widget.persistTimersToStorage = () => { };
+    const rig = timerRig(s);
 
     const target = s.index.getTasks().find(t => t.content === '対象')!;
-    widget.startTimer({
-        taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-        timerTargetId: target.anchor, timerType: 'countup', recordMode: 'child', autoStart: true,
-    });
-    const lifecycle = ticker.mock.contexts[0] as TimerLifecycle;
-    ticker.mockRestore();
-    const a = [...widget.timers.values()].find(t => t.id !== IDLE_TIMER_ID)!;
+    const a = await begin(rig, timerOn(target, 'child', 'countup', s.recorder.startAnchor(target) ?? undefined), target);
     await lineWritten(s, a);
 
     // B は A の走行中の行を対象にする。その行は A の `^tv-t-` をもう持っている。
-    const line = s.index.getTaskByAnchor(FILE, a.tailRecordBlockId!)!;
-    widget.startTimer({
-        taskId: line.id, taskName: line.content, taskFile: line.file, taskOriginalText: line.originalText,
-        timerTargetId: line.anchor, timerType: 'countup', recordMode: 'child', autoStart: true,
-    });
-    const b = [...widget.timers.values()].find(t => t.id !== IDLE_TIMER_ID && t.id !== a.id)!;
+    const line = s.index.getTaskByAnchor(FILE, a.tail!)!;
+    expect(s.recorder.startAnchor(line)).toBe(a.tail);
+    const b = await begin(rig, timerOn(line, 'child'), line);
     await lineWritten(s, b);
-    expect(b.timerTargetId).toBe(a.tailRecordBlockId);
-    return { s, contents, widget, lifecycle, a, b };
+    expect(targetOf(b)).toBe(a.tail);
+    expect(b.owned).not.toContain(a.tail);
+    return { s, contents, rig, a, b };
 }
 
 async function settleAll(s: VaultSession) {
@@ -74,10 +51,10 @@ async function settleAll(s: VaultSession) {
 }
 
 /** 1 本目の往復が済むまで待つ（行を書き、その錨が尻尾になった）。 */
-async function lineWritten(s: VaultSession, timer: TimerInstance) {
+async function lineWritten(s: VaultSession, timer: TimerState) {
     await vi.waitFor(() => {
-        expect(timer.tailRecordBlockId).toBeDefined();
-        expect(s.index.getTaskByAnchor(timer.taskFile, timer.tailRecordBlockId!)).toBeDefined();
+        expect(timer.tail).not.toBeNull();
+        expect(s.index.getTaskByAnchor(timer.file, timer.tail!)).toBeDefined();
     });
     await settleAll(s);
 }
@@ -90,20 +67,20 @@ describe('two timers: one does not take off an anchor it did not put on, nor one
     afterEach(() => vi.useRealTimers());
 
     it('B, on A\'s running line, closes first: A\'s line keeps its anchor, and A\'s ■ closes that line', async () => {
-        const { s, contents, widget, lifecycle, a, b } = await widgetOver();
-        const aLine = a.tailRecordBlockId!;
+        const { s, contents, rig, a, b } = await twoTimers();
+        const aLine = a.tail!;
 
         vi.setSystemTime(at(9, 5));
-        await lifecycle.finishTimer(b);
+        await rig.lifecycle.stop(b, 'close');
         await settleAll(s);
-        expect(widget.timers.has(b.id)).toBe(false);
+        expect(rig.board.has(b)).toBe(false);
         expect(s.index.getTaskByAnchor(FILE, aLine)).toBeDefined();
 
         vi.setSystemTime(at(9, 10));
-        await lifecycle.finishTimer(a);
+        await rig.lifecycle.stop(a, 'close');
         await settleAll(s);
 
-        expect(widget.timers.has(a.id)).toBe(false);
+        expect(rig.board.has(a)).toBe(false);
         const text = contents.get(FILE)!;
         expect(openLines(text)).toEqual([]);
         expect(records(text).sort()).toEqual(['09:00>09:05', '09:00>09:10']);
@@ -111,16 +88,16 @@ describe('two timers: one does not take off an anchor it did not put on, nor one
     });
 
     it('A closes first: the line B runs on keeps its anchor, so B still finds its target', async () => {
-        const { s, contents, widget, lifecycle, a, b } = await widgetOver();
+        const { s, contents, rig, a, b } = await twoTimers();
 
         vi.setSystemTime(at(9, 10));
-        await lifecycle.finishTimer(a);
+        await rig.lifecycle.stop(a, 'close');
         await settleAll(s);
-        expect(widget.timers.has(a.id)).toBe(false);
-        expect(s.index.getTaskByAnchor(FILE, b.timerTargetId!)).toBeDefined();
+        expect(rig.board.has(a)).toBe(false);
+        expect(s.index.getTaskByAnchor(FILE, targetOf(b)!)).toBeDefined();
 
         vi.setSystemTime(at(9, 15));
-        await lifecycle.finishTimer(b);
+        await rig.lifecycle.stop(b, 'close');
         await settleAll(s);
         const text = contents.get(FILE)!;
         expect(openLines(text)).toEqual([]);

@@ -25,22 +25,23 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
         getTasks: vi.fn().mockReturnValue(task ? [task] : []),
         getAllDisplayTasks: vi.fn().mockReturnValue([]),
         getFilteredTasks: vi.fn().mockReturnValue([]),
-        getTasksForDateRange: vi.fn().mockReturnValue([]),
+        tasksInWindow: vi.fn().mockReturnValue([]),
     };
     // 変更系は「書けた」を返す。API は書けなかった write をエラーにするので、
     // 既定の undefined のままだとパラメータ検証のケースが書き込み失敗で落ちる。
     const mockWriteService = {
-        updateTask: vi.fn().mockResolvedValue(lands),
+        updateTask: vi.fn().mockResolvedValue({ written: lands, refused: null }),
         deleteTask: vi.fn().mockResolvedValue(lands),
         duplicateTask: vi.fn().mockResolvedValue(lands),
-        insertLine: vi.fn().mockResolvedValue(lands),
+        insertLine: vi.fn().mockResolvedValue({ written: lands, refused: null }),
         createTask: vi.fn().mockResolvedValue(lands ? 0 : null),
     };
     const mockPlugin = {
         app: { vault: { getAbstractFileByPath: vi.fn() } },
         settings: { startHour: 0 },
         getTaskReadService: () => mockReadService,
-        getTaskWriteService: () => mockWriteService,
+        getIndex: () => mockReadService,
+        getOperations: () => mockWriteService,
     };
     return new TaskApi(mockPlugin as any);
 }
@@ -171,21 +172,34 @@ describe('C8: 数値パラメータ検証', () => {
         const task = makeTask({ isReadOnly: false });
         const api = createMockApi(task);
         await expect(api.duplicate({ id: 'test-1', dayOffset: NaN }))
-            .rejects.toThrow(/dayOffset must be a number/);
+            .rejects.toThrow(/dayOffset must be a whole number/);
     });
 
     it('duplicate: 文字列 dayOffset を拒否', async () => {
         const task = makeTask({ isReadOnly: false });
         const api = createMockApi(task);
         await expect(api.duplicate({ id: 'test-1', dayOffset: 'abc' as any }))
-            .rejects.toThrow(/dayOffset must be a number/);
+            .rejects.toThrow(/dayOffset must be a whole number/);
+    });
+
+    it('duplicate: 小数の dayOffset を拒否', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.duplicate({ id: 'test-1', dayOffset: 1.5 }))
+            .rejects.toThrow(/dayOffset must be a whole number, got: "1.5"/);
+    });
+
+    it('duplicate: 負の dayOffset は通過（前の日へ写す）', async () => {
+        const task = makeTask({ isReadOnly: false });
+        const api = createMockApi(task);
+        await expect(api.duplicate({ id: 'test-1', dayOffset: -2 })).resolves.toEqual({ duplicated: 'test-1' });
     });
 
     it('duplicate: NaN count を拒否', async () => {
         const task = makeTask({ isReadOnly: false });
         const api = createMockApi(task);
         await expect(api.duplicate({ id: 'test-1', count: NaN }))
-            .rejects.toThrow(/count must be a number/);
+            .rejects.toThrow(/count must be a whole number/);
     });
 
     it('duplicate: count=0 を拒否', async () => {
@@ -212,19 +226,31 @@ describe('C8: 数値パラメータ検証', () => {
     it('list: NaN limit を拒否', async () => {
         const api = createMockApi(undefined);
         await expect(api.list({ limit: NaN }))
-            .rejects.toThrow(/limit must be a number/);
+            .rejects.toThrow(/limit must be a whole number/);
+    });
+
+    it('list: 小数の limit を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.list({ limit: 1.5 }))
+            .rejects.toThrow(/limit must be a whole number, got: "1.5"/);
+    });
+
+    it('list: Infinity は上限なし、0 は件数だけ', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.list({ limit: Infinity })).resolves.toMatchObject({ limit: null });
+        await expect(api.list({ limit: 0 })).resolves.toMatchObject({ limit: 0, count: 0 });
     });
 
     it('list: 負の limit を拒否', async () => {
         const api = createMockApi(undefined);
         await expect(api.list({ limit: -1 }))
-            .rejects.toThrow(/limit must be non-negative/);
+            .rejects.toThrow(/limit must be at least 0/);
     });
 
     it('list: 文字列 limit を拒否', async () => {
         const api = createMockApi(undefined);
         await expect(api.list({ limit: 'abc' as any }))
-            .rejects.toThrow(/limit must be a number/);
+            .rejects.toThrow(/limit must be a whole number/);
     });
 });
 
@@ -232,7 +258,7 @@ describe('C11: list= を filterFile なしで渡すとエラー', () => {
     it('list に filterFile なしで list= を渡すとエラー', async () => {
         const api = createMockApi(undefined);
         await expect(api.list({ list: 'urgent' }))
-            .rejects.toThrow(/list requires filterFile/);
+            .rejects.toThrow(/'list' requires 'filterFile'/);
     });
 
     it('filterFile ありの list= は通過', async () => {
@@ -241,7 +267,7 @@ describe('C11: list= を filterFile なしで渡すとエラー', () => {
         try {
             await api.list({ filterFile: 'template.md', list: 'urgent' });
         } catch (e) {
-            expect((e as Error).message).not.toMatch(/list requires filterFile/);
+            expect((e as Error).message).not.toMatch(/'list' requires 'filterFile'/);
         }
     });
 });
@@ -390,7 +416,7 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
         for (const sep of ['\u2028', '\u2029']) {
             const created = createMockApi(undefined);
             const existing = createMockApi(makeTask({ isReadOnly: false }));
-            const write = (existing as any).plugin.getTaskWriteService();
+            const write = (existing as any).plugin.getOperations();
             // What the mock task lacks for the result does not matter here: the
             // value reached the write, unchanged.
             await existing.update({ id: 'test-1', content: `a${sep}b` }).catch(() => undefined);

@@ -25,7 +25,7 @@ afterEach(() => {
 async function open(disk: string[], shown: string[]) {
     const { contents, session } = await openVault(disk);
     live = session;
-    const editor = editorSession(session.index.editorFireHost(), FILE, shown.join('\n'));
+    const editor = editorSession(session.ops.editorFireHost(), FILE, shown.join('\n'));
     let saves = 0;
     const lookup: ShownTaskLookup = {
         taskAtEditorLine: (path, line, key) => session.index.taskAtEditorLine(path, line, key),

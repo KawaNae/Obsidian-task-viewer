@@ -2,10 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import { editLines } from '../../../src/services/persistence/FileLines';
+import { editorRow, editLines } from '../../../src/services/persistence/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -19,15 +18,15 @@ const FILE = 'note.md';
 const app = { vault: { getAbstractFileByPath: () => null } };
 
 function executor(): FlowExecutor {
-    return new FlowExecutor({} as never, {} as never, app as never, () => DEFAULT_SETTINGS);
+    return new FlowExecutor({} as never, () => DEFAULT_SETTINGS);
 }
 
-const writer = new InlineTaskWriter(app as never, new FileOperations(app as never), () => undefined);
+const writer = new InlineTaskWriter(app as never, () => undefined);
 
 /** The lines a write of `ops` to the row at `line` leaves, with nothing written anywhere. */
 function written(lines: readonly string[], line: number, ops: readonly TaskOp[]): readonly string[] | null {
     const edited = editLines(FILE, lines, '\n',
-        (draft, _eol, session) => writer.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
+        (draft, _eol, session) => writer.applyOps(draft, session, editorRow(line, lines[line], contentKeyOf(lines)), ops));
     return edited.written ? edited.lines : null;
 }
 
@@ -59,7 +58,7 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(plan.kind).toBe('fires');
         if (plan.kind !== 'fires') return;
         const insert = plan.ops.find(op => op.kind === 'insert-instance');
-        expect(insert?.kind === 'insert-instance' && insert.insert.kind).toBe('generated');
+        expect(insert?.kind === 'insert-instance' && insert.instance.children).toEqual([{ depth: 1, body: '- [ ] 資料' }]);
     });
 
     it('fires nothing for a row that is not complete, or is no task, or has no command', () => {
@@ -85,10 +84,7 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(plan.kind).toBe('failed');
     });
 
-    it('drops a move that names another note, and fails one to a heading that is not one, from the lines it is handed', () => {
-        const retired = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move("archive")', '    - c'], 0);
-        expect(retired.kind === 'fires' && retired.unmoved?.code).toBe('eval.move-retired');
-        expect(retired.kind === 'fires' && retired.ops.map(o => o.kind)).toEqual(['strip-flow']);
+    it('fails a move to a heading that is not one place, from the lines it is handed', () => {
         const none = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Other'], 0);
         expect(none.kind === 'failed' && none.error.code).toBe('eval.move-no-heading');
         const many = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done', '# done'], 0);
@@ -97,10 +93,11 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { heading: 'Done', side: 'head' } }]);
     });
 
-    it('fires move(), which names no heading of the note, without its move, as it does a move to another note', () => {
-        const plan = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> every 1d move()', '## Done'], 0);
-        expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
-        expect(plan.kind === 'fires' && plan.ops.map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
+    it('fires nothing for a move that names no heading of the note, nor for nochildren: the command does not read', () => {
+        for (const command of ['every 1d move()', 'move("archive")', 'every 1d move([[Done]])', 'every 1d nochildren']) {
+            const plan = executor().planFire(FILE, [`- [x] T @2026-08-17 ==> ${command}`, '## Done'], 0);
+            expect(plan, command).toEqual({ kind: 'none' });
+        }
     });
 });
 

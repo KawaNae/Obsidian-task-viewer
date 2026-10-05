@@ -19,16 +19,16 @@ export interface RenderSchedulerHandlers {
 
 /**
  * View-shared render scheduler. Coalesces redraw requests through rAF so
- * bursts of `readService.onChange` events collapse into a single render.
+ * bursts of `index.onChange` events collapse into a single render.
  *
  * The renderer no longer makes a partial-vs-full decision: keyed
  * reconciliation inside `performFull` reuses surviving card elements by
- * `data-card-instance-id`, so a "full" render is cheap when most cards are
+ * their key (`CardKey`), so a "full" render is cheap when most cards are
  * unchanged. `blockId` flips have no visual effect at all
  * and are short-circuited here.
  *
  * Exposes:
- *   - `handleChange(taskId, changes)` — `readService.onChange` entry point.
+ *   - `handleChange(taskId, changes)` — `index.onChange` entry point.
  *   - `scheduleRender()` — request a render any time (filter change etc.).
  *   - `performImmediate()` — bypass the rAF, render synchronously now.
  *   - `cancelPending()` — drop a pending rAF without rendering.
@@ -43,7 +43,7 @@ export class RenderScheduler {
     }
 
     /**
-     * `readService.onChange` entry point. Skips the render entirely if every
+     * `index.onChange` entry point. Skips the render entirely if every
      * key in `changes` is purely internal (`blockId`); those
      * flips do not affect any rendered card.
      */
@@ -97,11 +97,11 @@ export class RenderScheduler {
 const NO_RENDER_KEYS = new Set(['blockId']);
 
 /**
- * Whether a `readService.onChange` notification warrants a re-render. A change
+ * Whether a `index.onChange` notification warrants a re-render. A change
  * touching only internal keys (blockId) has zero visual effect
  * and is skipped. Single authority shared by every card-bearing view — both the
- * scheduler-backed views and the renderers that lack a scheduler (e.g.
- * PinnedListRenderer).
+ * scheduler-backed views and the parts that draw themselves (e.g.
+ * PinnedListPanel).
  */
 export function shouldRenderForChanges(changes?: string[]): boolean {
     return !(changes && changes.length > 0 && changes.every(c => NO_RENDER_KEYS.has(c)));

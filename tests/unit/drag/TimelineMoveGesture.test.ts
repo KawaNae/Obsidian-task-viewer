@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TimelineMoveGesture } from '../../../src/interaction/drag/strategies/timeline/TimelineMoveGesture';
-import { DateUtils } from '../../../src/utils/DateUtils';
+import { visualDayAt } from '../../../src/utils/DayWindow';
 import { materializeRawDates } from '../../../src/services/display/DisplayTaskConverter';
 import type { Task } from '../../../src/types';
 
@@ -114,11 +114,11 @@ describe('TimelineMoveGesture.computeOverlappingDays', () => {
  * Timeline drag write-back の visual/raw round-trip 検証。
  *
  * processMove が計算する lastDragResult は raw 表記 (clock day + clock time)。
- * 旧 finishMove はこれをそのまま `effective*` edits として渡していたため、
+ * 旧 finishMove はこれをそのまま visual の edits として渡していたため、
  * materializeRawDates 内の unshiftVisual で「time < startHour なら +1 day」が
  * 適用され、startDate が二重 shift される (00:00 跨ぎ task で 1 日ズレるバグ)。
  *
- * Fix: toVisualDate で raw → visual に正規化してから edits に詰めることで、
+ * Fix: visualDayAt で raw → visual に正規化してから edits に詰めることで、
  * materializeRawDates で逆変換され元の raw に戻る (round-trip)。
  */
 describe('Timeline visual/raw round-trip', () => {
@@ -126,7 +126,7 @@ describe('Timeline visual/raw round-trip', () => {
         // raw 04-22 02:00 は visual 04-21 (time < startHour で -1 day)
         const rawStart = '2026-04-22';
         const rawTime = '02:00';
-        const visual = DateUtils.toVisualDate(rawStart, rawTime, startHour);
+        const visual = visualDayAt(rawStart, rawTime, startHour);
         expect(visual).toBe('2026-04-21');
 
         // edits を visual で作成し materializeRawDates に流すと raw に戻る
@@ -134,7 +134,7 @@ describe('Timeline visual/raw round-trip', () => {
             startDate: '2026-04-20', startTime: '14:00', endTime: '15:00',
         });
         const updates = materializeRawDates(
-            { effectiveStartDate: visual, effectiveStartTime: rawTime },
+            { startDay: visual, startTime: rawTime },
             baseTask,
             startHour,
         );
@@ -143,15 +143,15 @@ describe('Timeline visual/raw round-trip', () => {
     });
 
     it('roundtrips raw 04-21 22:00 (time >= startHour) unchanged', () => {
-        // time 22 >= 5 → toVisualDate は -1 day しない、raw == visual
+        // time 22 >= 5 → visualDayAt は -1 day しない、raw == visual
         const rawStart = '2026-04-21';
         const rawTime = '22:00';
-        const visual = DateUtils.toVisualDate(rawStart, rawTime, startHour);
+        const visual = visualDayAt(rawStart, rawTime, startHour);
         expect(visual).toBe('2026-04-21');
 
         const baseTask = makeTask({ startDate: '2026-04-20', startTime: '14:00', endTime: '15:00' });
         const updates = materializeRawDates(
-            { effectiveStartDate: visual, effectiveStartTime: rawTime },
+            { startDay: visual, startTime: rawTime },
             baseTask,
             startHour,
         );
@@ -160,12 +160,12 @@ describe('Timeline visual/raw round-trip', () => {
 
     it('roundtrips raw 04-22 04:59 (just before next startHour) → visual 04-21', () => {
         // time 04:59 < 5 で -1 day
-        const visual = DateUtils.toVisualDate('2026-04-22', '04:59', startHour);
+        const visual = visualDayAt('2026-04-22', '04:59', startHour);
         expect(visual).toBe('2026-04-21');
 
         const baseTask = makeTask({ startDate: '2026-04-20', startTime: '14:00', endTime: '15:00' });
         const updates = materializeRawDates(
-            { effectiveStartDate: visual, effectiveStartTime: '04:59' },
+            { startDay: visual, startTime: '04:59' },
             baseTask,
             startHour,
         );
@@ -174,12 +174,12 @@ describe('Timeline visual/raw round-trip', () => {
 
     it('roundtrips raw 04-22 05:00 (exactly startHour) unchanged', () => {
         // time 05 >= 5 で同 day
-        const visual = DateUtils.toVisualDate('2026-04-22', '05:00', startHour);
+        const visual = visualDayAt('2026-04-22', '05:00', startHour);
         expect(visual).toBe('2026-04-22');
 
         const baseTask = makeTask({ startDate: '2026-04-20', startTime: '14:00', endTime: '15:00' });
         const updates = materializeRawDates(
-            { effectiveStartDate: visual, effectiveStartTime: '05:00' },
+            { startDay: visual, startTime: '05:00' },
             baseTask,
             startHour,
         );

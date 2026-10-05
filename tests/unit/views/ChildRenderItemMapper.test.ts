@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { buildChildEntries } from '../../../src/services/data/ChildEntryBuilder';
 import { ChildRenderItemMapper } from '../../../src/views/taskcard/ChildRenderItemMapper';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
@@ -14,7 +15,7 @@ import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
  */
 
 function childItems(lines: string[]) {
-    const { tasks } = FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS);
+    const { tasks } = FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
     const byId = new Map(tasks.map(task => [task.id, task]));
     const parent = tasks[0];
     const entries = buildChildEntries(parent, id => byId.get(id) as Task | undefined);

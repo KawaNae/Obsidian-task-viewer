@@ -1,5 +1,8 @@
+import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
 import type { DateTimeRule } from '../../../types';
+
+const CONTAINS_DATE_RE = new RegExp(DateUtils.DATE_PATTERN);
 
 export interface DateTimeValidationInput {
     startDate?: string;
@@ -11,8 +14,6 @@ export interface DateTimeValidationInput {
     endDateImplicit: boolean;
     /** 暗黙の startDate（daily note 継承等） */
     implicitStartDate?: string;
-    /** frontmatter タスクの場合 true（time-only 検出用） */
-    isFrontmatter?: boolean;
 }
 
 export interface DateTimeValidationResult {
@@ -30,6 +31,28 @@ export interface DateTimeValidationResult {
  * raw 値 + コンテキストフラグで検証する（effective 値ではなく）。
  * 全ルールを適用し、最初に見つかった警告を返す。
  */
+/**
+ * Rule 4's hint, with the line's own date and end time written the way the
+ * notation allows: a start time on the start date, ending the same day, or
+ * on the end date the line writes (the next day when it writes none). With
+ * no date on the line, the bare request for a start time.
+ */
+function endTimeWithoutStartHint(date: string | undefined, endDate: string | undefined, endTime: string): string {
+    if (!date || !DateUtils.isValidDateString(date) || !DateUtils.isValidTimeString(endTime)) {
+        return t('validationHint.endTimeWithoutStart');
+    }
+    const end = DateUtils.timeToMinutes(endTime);
+    // A start before the end on the same day: 09:00, or the hour before an early end.
+    const sameDayStart = end > 9 * 60 ? '09:00' : DateUtils.minutesToTime(Math.max(0, end - 60));
+    const otherDate = endDate && endDate !== date ? endDate : DateUtils.addDays(date, 1);
+    return t('validationHint.endTimeWithoutStartExample', {
+        time: endTime,
+        endDate: otherDate,
+        sameDay: `@${date}T${sameDayStart}>${endTime}`,
+        otherDay: `@${date}T09:00>${otherDate}T${endTime}`,
+    });
+}
+
 export function validateDateTimeRules(
     input: DateTimeValidationInput
 ): DateTimeValidationResult | undefined {
@@ -79,32 +102,18 @@ export function validateDateTimeRules(
             severity: 'error',
             rule: 'end-time-without-start',
             message: t('validation.endTimeWithoutStart'),
-            hint: t('validationHint.endTimeWithoutStart'),
+            hint: endTimeWithoutStartHint(effectiveStartDate ?? input.endDate, input.endDate, input.endTime),
         };
     }
 
     // Rule 5: Due without date
-    if (input.due && !/\d{4}-\d{2}-\d{2}/.test(input.due)) {
+    if (input.due && !CONTAINS_DATE_RE.test(input.due)) {
         return {
             severity: 'error',
             rule: 'due-without-date',
             message: t('validation.dueWithoutDate'),
             hint: t('validationHint.dueWithoutDate'),
         };
-    }
-
-    // Rule 6: Frontmatter time-only (YAML sexagesimal problem)
-    if (input.isFrontmatter) {
-        const startTimeOnly = input.startTime && !input.startDate;
-        const endTimeOnly = input.endTime && !input.endDate;
-        if (startTimeOnly || endTimeOnly) {
-            return {
-                severity: 'warning',
-                rule: 'frontmatter-time-only',
-                message: t('validation.frontmatterTimeOnly'),
-                hint: t('validationHint.frontmatterTimeOnly'),
-            };
-        }
     }
 
     return undefined;

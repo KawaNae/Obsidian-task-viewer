@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { TVInlineParser } from '../../../src/services/parsing/tv-inline/TVInlineParser';
 import type { Task } from '../../../src/types';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
+import { readLine } from '../helpers/readLine';
 
 const parser = new TVInlineParser();
 
-/** Helper to build a minimal Task for format() testing. */
+/** Helper to build a minimal Task for formatRow testing. */
 function makeTask(overrides: Partial<Task>): Task {
     return {
         id: 'test:file.md:ln:1',
@@ -82,15 +84,15 @@ describe('TVInlineParser', () => {
         });
 
         it('parses flow commands into an executable program', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> move([[target]])', 'test.md', 0);
+            const result = readLine('- [ ] task @2026-01-15 ==> move([[#target]])');
             expect(result).not.toBeNull();
-            expect(result!.flow?.raw).toBe('move([[target]])');
+            expect(result!.flow?.raw).toBe('move([[#target]])');
             expect(result!.flow?.program?.move).toBeDefined();
             expect(result!.validation).toBeUndefined();
         });
 
         it('keeps raw and surfaces diagnostics for invalid flow', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> evry mon', 'test.md', 0);
+            const result = readLine('- [ ] task @2026-01-15 ==> evry mon');
             expect(result).not.toBeNull();
             expect(result!.flow?.raw).toBe('evry mon');
             expect(result!.flow?.program).toBeNull();
@@ -99,9 +101,16 @@ describe('TVInlineParser', () => {
         });
 
         it('flags legacy repeat() syntax as an unknown clause', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> repeat(weekly)', 'test.md', 0);
+            const result = readLine('- [ ] task @2026-01-15 ==> repeat(weekly)');
             expect(result!.flow?.program).toBeNull();
             expect(result!.flow?.diagnostics.some(d => d.code === 'flow.unknown-head')).toBe(true);
+        });
+
+        it('cuts the command off the content and reads none of it: the note is read for that', () => {
+            const result = parser.parse('- [ ] task @2026-01-15 ==> evry mon', 'test.md', 0);
+            expect(result!.content).toBe('task');
+            expect(result!.flow).toBeUndefined();
+            expect(result!.validation).toBeUndefined();
         });
 
         it('parses block id', () => {
@@ -155,7 +164,7 @@ describe('TVInlineParser', () => {
         });
 
         it('parses flow-command-only task (no date)', () => {
-            const result = parser.parse('- [ ] task ==> at(today + 3d)', 'test.md', 0);
+            const result = readLine('- [ ] task ==> at(today + 3d)');
             expect(result).not.toBeNull();
             expect(result!.flow?.program?.schedule).toMatchObject({ kind: 'at' });
             expect(result!.startDate).toBe('');
@@ -170,13 +179,13 @@ describe('TVInlineParser', () => {
         });
     });
 
-    describe('format', () => {
+    describe('formatRow', () => {
         it('formats basic task', () => {
             const task = makeTask({
                 content: 'hello',
                 startDate: '2026-01-15',
             });
-            expect(parser.format(task)).toBe('- [ ] hello @2026-01-15');
+            expect(formatRow(task)).toBe('- [ ] hello @2026-01-15');
         });
 
         it('formats task with time', () => {
@@ -185,7 +194,7 @@ describe('TVInlineParser', () => {
                 startDate: '2026-01-15',
                 startTime: '09:00',
             });
-            expect(parser.format(task)).toBe('- [ ] meeting @2026-01-15T09:00');
+            expect(formatRow(task)).toBe('- [ ] meeting @2026-01-15T09:00');
         });
 
         it('formats task with end date/time', () => {
@@ -196,7 +205,7 @@ describe('TVInlineParser', () => {
                 endDate: '2026-01-15',
                 endTime: '17:00',
             });
-            expect(parser.format(task)).toBe('- [ ] event @2026-01-15T09:00>17:00');
+            expect(formatRow(task)).toBe('- [ ] event @2026-01-15T09:00>17:00');
         });
 
         it('formats task with due', () => {
@@ -205,7 +214,7 @@ describe('TVInlineParser', () => {
                 startDate: '2026-01-15',
                 due: '2026-01-20',
             });
-            expect(parser.format(task)).toBe('- [ ] task @2026-01-15>>2026-01-20');
+            expect(formatRow(task)).toBe('- [ ] task @2026-01-15>>2026-01-20');
         });
 
         it('formats task with different end date', () => {
@@ -214,7 +223,7 @@ describe('TVInlineParser', () => {
                 startDate: '2026-01-15',
                 endDate: '2026-01-17',
             });
-            expect(parser.format(task)).toBe('- [ ] multi-day @2026-01-15>2026-01-17');
+            expect(formatRow(task)).toBe('- [ ] multi-day @2026-01-15>2026-01-17');
         });
 
         it('formats flow raw verbatim (round-trip contract)', () => {
@@ -224,7 +233,7 @@ describe('TVInlineParser', () => {
                 // Deliberately non-canonical order — format must NOT normalize
                 flow: { raw: 'x3 every mon', childSegments: [], program: null, diagnostics: [] },
             });
-            expect(parser.format(task)).toBe('- [ ] task @2026-01-15 ==> x3 every mon');
+            expect(formatRow(task)).toBe('- [ ] task @2026-01-15 ==> x3 every mon');
         });
 
         it('formats task with block id', () => {
@@ -233,7 +242,7 @@ describe('TVInlineParser', () => {
                 startDate: '2026-01-15',
                 blockId: 'abc123',
             });
-            expect(parser.format(task)).toBe('- [ ] task @2026-01-15 ^abc123');
+            expect(formatRow(task)).toBe('- [ ] task @2026-01-15 ^abc123');
         });
 
         it('preserves asterisk marker', () => {
@@ -242,7 +251,7 @@ describe('TVInlineParser', () => {
                 startDate: '2026-03-01',
                 originalText: '* [ ] star task @2026-03-01',
             });
-            expect(parser.format(task)).toBe('* [ ] star task @2026-03-01');
+            expect(formatRow(task)).toBe('* [ ] star task @2026-03-01');
         });
 
         it('preserves plus marker', () => {
@@ -251,7 +260,7 @@ describe('TVInlineParser', () => {
                 startDate: '2026-03-01',
                 originalText: '+ [ ] plus task @2026-03-01',
             });
-            expect(parser.format(task)).toBe('+ [ ] plus task @2026-03-01');
+            expect(formatRow(task)).toBe('+ [ ] plus task @2026-03-01');
         });
 
         it('preserves numbered marker', () => {
@@ -260,7 +269,7 @@ describe('TVInlineParser', () => {
                 startDate: '2026-03-01',
                 originalText: '1. [ ] num task @2026-03-01',
             });
-            expect(parser.format(task)).toBe('1. [ ] num task @2026-03-01');
+            expect(formatRow(task)).toBe('1. [ ] num task @2026-03-01');
         });
 
         it('formats completed status', () => {
@@ -269,7 +278,7 @@ describe('TVInlineParser', () => {
                 statusChar: 'x',
                 startDate: '2026-01-15',
             });
-            expect(parser.format(task)).toBe('- [x] done @2026-01-15');
+            expect(formatRow(task)).toBe('- [x] done @2026-01-15');
         });
 
         // Regression: a parsed bare checkbox that later gains a startDate via
@@ -282,13 +291,13 @@ describe('TVInlineParser', () => {
             expect(parsed!.startDate).toBe('');
 
             const updated: Task = { ...parsed!, startDate: '2026-05-01' };
-            expect(parser.format(updated)).toBe('- [ ] test @2026-05-01');
+            expect(formatRow(updated)).toBe('- [ ] test @2026-05-01');
         });
 
         it('emits @notation with start time when bare checkbox gains startTime', () => {
             const parsed = parser.parse('- [ ] focus', 'inbox.md', 0)!;
             const updated: Task = { ...parsed, startDate: '2026-05-01', startTime: '09:00' };
-            expect(parser.format(updated)).toBe('- [ ] focus @2026-05-01T09:00');
+            expect(formatRow(updated)).toBe('- [ ] focus @2026-05-01T09:00');
         });
 
         it('returns to bare line when all date fields are cleared', () => {
@@ -301,15 +310,16 @@ describe('TVInlineParser', () => {
                 endTime: undefined,
                 due: undefined,
             };
-            expect(parser.format(cleared)).toBe('- [ ] foo');
+            expect(formatRow(cleared)).toBe('- [ ] foo');
         });
     });
 
-    describe('parse → format round-trip', () => {
+    describe('parse → formatRow round-trip', () => {
+        // A line read as the index reads it: its command too (`readFlow`).
         const roundTrip = (line: string) => {
-            const task = parser.parse(line, 'test.md', 0);
+            const task = readLine(line);
             expect(task).not.toBeNull();
-            return parser.format(task!);
+            return formatRow(task!);
         };
 
         it('round-trips basic task', () => {
@@ -344,17 +354,94 @@ describe('TVInlineParser', () => {
             expect(roundTrip('1. [ ] num @2026-01-15')).toBe('1. [ ] num @2026-01-15');
         });
 
-        // Regression: a second @date token embedded in content must not survive
-        // into the formatted line, or it would hijack the start date on re-parse
-        // (the bug reproduced live: a status toggle silently changed the date).
-        it('discards a second @date token and keeps the first as start date', () => {
+        // A second @date token is no part of the content and no date: it must
+        // not hijack the start date on re-parse (the bug reproduced live: a
+        // status toggle silently changed the date). Writing the row back keeps
+        // it verbatim right after the first block (issue #198).
+        it('keeps a second @date token out of the content and writes it back after the first', () => {
             const task = parser.parse('- [ ] task @2026-01-01 foo @2026-02-02', 'test.md', 0)!;
             expect(task.startDate).toBe('2026-01-01');
             expect(task.content).toBe('task foo');
-            const formatted = parser.format(task);
-            expect(formatted).toBe('- [ ] task foo @2026-01-01');
+            expect(task.unreadDateBlocks).toEqual(['@2026-02-02']);
+            expect(task.validation?.rule).toBe('parse-error');
+            const formatted = formatRow({ ...task, statusChar: 'x' });
+            expect(formatted).toBe('- [x] task foo @2026-01-01 @2026-02-02');
             // Idempotent: re-parsing the formatted line keeps the same start date.
-            expect(parser.parse(formatted, 'test.md', 0)!.startDate).toBe('2026-01-01');
+            const again = parser.parse(formatted, 'test.md', 0)!;
+            expect(again.startDate).toBe('2026-01-01');
+            expect(again.unreadDateBlocks).toEqual(['@2026-02-02']);
+            expect(again.validation?.rule).toBe('parse-error');
+            expect(formatRow(again)).toBe(formatted);
+        });
+
+        it('keeps the extra blocks of every notation and order (issue #198)', () => {
+            for (const [line, written] of [
+                ['- [ ] two blocks @2026-09-22 and @2026-09-21T10:00', '- [x] two blocks and @2026-09-22 @2026-09-21T10:00'],
+                ['- [ ] two blocks @2026-09-21T10:00 and @>2026-09-22', '- [x] two blocks and @2026-09-21T10:00 @>2026-09-22'],
+                ['- [ ] two blocks @2026-09-21T10:00 and @>>2026-09-22 ^abc', '- [x] two blocks and @2026-09-21T10:00 @>>2026-09-22 ^abc'],
+            ]) {
+                const task = parser.parse(line, 'test.md', 0)!;
+                expect(formatRow({ ...task, statusChar: 'x' })).toBe(written);
+            }
+        });
+
+        it('writes the empty block @> first when the dates are cleared, so an extra block does not become the dates', () => {
+            const task = parser.parse('- [ ] task @2026-01-01 foo @2026-02-02', 'test.md', 0)!;
+            const formatted = formatRow({ ...task, startDate: undefined });
+            expect(formatted).toBe('- [ ] task foo @> @2026-02-02');
+            const again = parser.parse(formatted, 'test.md', 0)!;
+            expect(again.startDate).toBe('');
+            expect(again.unreadDateBlocks).toEqual(['@2026-02-02']);
+            expect(formatRow(again)).toBe(formatted);
+        });
+
+        // A block naming a day or a time that does not exist is not read, and
+        // is kept on the line as written: a write-back (a status toggle) does
+        // not drop it, nor guess a date for it.
+        it('reads no dates of a block naming a day that does not exist, and flags it', () => {
+            for (const line of ['- [ ] task @2026-02-30', '- [ ] task @2026-13-45', '- [ ] task @2026-03-01T25:00>26:00']) {
+                const task = parser.parse(line, 'test.md', 0)!;
+                expect(task.startDate, line).toBe('');
+                expect(task.startTime, line).toBeUndefined();
+                expect(task.endTime, line).toBeUndefined();
+                expect(task.content, line).toBe('task');
+                expect(task.validation?.rule, line).toBe('parse-error');
+                expect(task.validation?.severity, line).toBe('error');
+            }
+        });
+
+        it('keeps a block that does not read as written when the row is written back', () => {
+            for (const [line, written] of [
+                ['- [ ] task @2026-02-30', '- [x] task @2026-02-30'],
+                ['- [ ] task @2026-13-45 ^abc', '- [x] task @2026-13-45 ^abc'],
+                ['- [ ] task @2026-03-01T25:00>2026-03-02>2026-03-05', '- [x] task @2026-03-01T25:00>2026-03-02>2026-03-05'],
+                ['- [ ] @2026-02-30 meeting', '- [x] meeting @2026-02-30'],
+                ['- [ ] task @2026-02-30 and @2026-03-05', '- [x] task and @2026-02-30 @2026-03-05'],
+            ]) {
+                const task = parser.parse(line, 'test.md', 0)!;
+                const formatted = formatRow({ ...task, statusChar: 'x' });
+                expect(formatted).toBe(written);
+                const again = parser.parse(formatted, 'test.md', 0)!;
+                expect(again.startDate, line).toBe('');
+                expect(again.validation?.rule, line).toBe('parse-error');
+                expect(formatRow(again)).toBe(formatted);
+            }
+        });
+
+        it('writes new dates before a block that does not read, which stays as written', () => {
+            const task = parser.parse('- [ ] task @2026-02-30', 'test.md', 0)!;
+            expect(task.unreadDateBlocks).toEqual(['@2026-02-30']);
+            const formatted = formatRow({ ...task, startDate: '2026-03-02' });
+            expect(formatted).toBe('- [ ] task @2026-03-02 @2026-02-30');
+            const again = parser.parse(formatted, 'test.md', 0)!;
+            expect(again.startDate).toBe('2026-03-02');
+            expect(again.unreadDateBlocks).toEqual(['@2026-02-30']);
+        });
+
+        it('skips a bare @ before the block (as the editor\'s reading does)', () => {
+            const task = parser.parse('- [ ] @1on1 sync @2026-01-15', 'test.md', 0)!;
+            expect(task.startDate).toBe('2026-01-15');
+            expect(task.content).toBe('@1on1 sync');
         });
 
         it('preserves non-command text after ==> verbatim', () => {

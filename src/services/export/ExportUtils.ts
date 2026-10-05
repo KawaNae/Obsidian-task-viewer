@@ -1,4 +1,3 @@
-import { Notice, type App, TFile } from 'obsidian';
 
 type RestoreFn = () => void;
 
@@ -96,21 +95,5 @@ export class ExportUtils {
         });
         if (!blob) throw new Error('Failed to create blob');
         return blob;
-    }
-
-    /** Save a Blob to the vault as a binary file. Returns the vault-relative path. */
-    static async saveBlobToVault(blob: Blob, filename: string, folder: string, app: App): Promise<string> {
-        const buffer = await blob.arrayBuffer();
-        if (!app.vault.getAbstractFileByPath(folder)) {
-            await app.vault.createFolder(folder);
-        }
-        const filePath = `${folder}/${filename}`;
-        const existing = app.vault.getAbstractFileByPath(filePath);
-        if (existing instanceof TFile) {
-            await app.vault.modifyBinary(existing, buffer);
-        } else {
-            await app.vault.createBinary(filePath, buffer);
-        }
-        return filePath;
     }
 }

@@ -3,21 +3,40 @@ import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
 import { FileSuggest } from '../suggest/FileSuggest';
 import type { SectionSide } from '../services/persistence/utils/Placement';
+import { SETTINGS_SCHEMA } from './SettingsSchema';
+import type { SettingFields } from './SettingFields';
 
-export function render(el: HTMLElement, plugin: PluginContext): void {
+type PeriodicKey =
+    | 'weeklyNoteFormat' | 'weeklyNoteFolder' | 'weeklyNoteTemplate'
+    | 'monthlyNoteFormat' | 'monthlyNoteFolder' | 'monthlyNoteTemplate'
+    | 'yearlyNoteFormat' | 'yearlyNoteFolder' | 'yearlyNoteTemplate';
+
+export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
+    /**
+     * A periodic note's text setting. A format left empty is its default
+     * format; a folder's and a template's path are taken without the space
+     * around them (the settings' table). The template's field lists the notes.
+     */
+    const periodic = (setting: Setting, key: PeriodicKey, shown: { placeholder: string; notes?: boolean }) => fields.text(setting, {
+        codec: SETTINGS_SCHEMA[key].codec,
+        get: () => plugin.settings[key],
+        put: (value) => { plugin.settings[key] = value; },
+        placeholder: shown.placeholder,
+        list: shown.notes ? (input, picked) => new FileSuggest(plugin.app, input, (f) => picked(f.path)) : undefined,
+    });
+
     // Tasks in notes: where a new line goes in a note, whichever note it is
     el.createEl('h3', { text: t('settings.notes.tasksInNotes'), cls: 'setting-section-header' });
 
-    new Setting(el)
+    // The heading's name alone: no `#` before it (HeadingInput).
+    fields.text(new Setting(el)
         .setName(t('settings.notes.taskHeading'))
-        .setDesc(t('settings.notes.taskHeadingDesc'))
-        .addText(text => text
-            .setPlaceholder('Tasks')
-            .setValue(plugin.settings.taskHeading)
-            .onChange(async (value) => {
-                plugin.settings.taskHeading = value;
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.notes.taskHeadingDesc')), {
+        codec: SETTINGS_SCHEMA.taskHeading.codec,
+        get: () => plugin.settings.taskHeading,
+        put: (heading) => { plugin.settings.taskHeading = heading; },
+        placeholder: 'Tasks',
+    });
 
     new Setting(el)
         .setName(t('settings.notes.taskHeadingLevel'))
@@ -62,117 +81,45 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
     // Weekly
     el.createEl('h4', { text: t('settings.notes.weeklySubsection') });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.weeklyNoteFormat'))
-        .setDesc(t('settings.notes.weeklyNoteFormatDesc'))
-        .addText(text => text
-            .setPlaceholder('gggg-[W]ww')
-            .setValue(plugin.settings.weeklyNoteFormat)
-            .onChange(async (value) => {
-                plugin.settings.weeklyNoteFormat = value || 'gggg-[W]ww';
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.notes.weeklyNoteFormatDesc')), 'weeklyNoteFormat', { placeholder: 'gggg-[W]ww' });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.weeklyNoteFolder'))
-        .setDesc(t('settings.notes.weeklyNoteFolderDesc'))
-        .addText(text => text
-            .setPlaceholder('')
-            .setValue(plugin.settings.weeklyNoteFolder)
-            .onChange(async (value) => {
-                plugin.settings.weeklyNoteFolder = value;
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.notes.weeklyNoteFolderDesc')), 'weeklyNoteFolder', { placeholder: '' });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.weeklyNoteTemplate'))
-        .setDesc(t('settings.notes.weeklyNoteTemplateDesc'))
-        .addText(text => {
-            text
-                .setPlaceholder('Templates/Weekly.md')
-                .setValue(plugin.settings.weeklyNoteTemplate)
-                .onChange(async (value) => {
-                    plugin.settings.weeklyNoteTemplate = value;
-                    await plugin.saveSettings();
-                });
-            new FileSuggest(plugin.app, text.inputEl);
-        });
+        .setDesc(t('settings.notes.weeklyNoteTemplateDesc')), 'weeklyNoteTemplate', { placeholder: 'Templates/Weekly.md', notes: true });
 
     // Monthly
     el.createEl('h4', { text: t('settings.notes.monthlySubsection') });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.monthlyNoteFormat'))
-        .setDesc(t('settings.notes.monthlyNoteFormatDesc'))
-        .addText(text => text
-            .setPlaceholder('YYYY-MM')
-            .setValue(plugin.settings.monthlyNoteFormat)
-            .onChange(async (value) => {
-                plugin.settings.monthlyNoteFormat = value || 'YYYY-MM';
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.notes.monthlyNoteFormatDesc')), 'monthlyNoteFormat', { placeholder: 'YYYY-MM' });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.monthlyNoteFolder'))
-        .setDesc(t('settings.notes.monthlyNoteFolderDesc'))
-        .addText(text => text
-            .setPlaceholder('')
-            .setValue(plugin.settings.monthlyNoteFolder)
-            .onChange(async (value) => {
-                plugin.settings.monthlyNoteFolder = value;
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.notes.monthlyNoteFolderDesc')), 'monthlyNoteFolder', { placeholder: '' });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.monthlyNoteTemplate'))
-        .setDesc(t('settings.notes.monthlyNoteTemplateDesc'))
-        .addText(text => {
-            text
-                .setPlaceholder('Templates/Monthly.md')
-                .setValue(plugin.settings.monthlyNoteTemplate)
-                .onChange(async (value) => {
-                    plugin.settings.monthlyNoteTemplate = value;
-                    await plugin.saveSettings();
-                });
-            new FileSuggest(plugin.app, text.inputEl);
-        });
+        .setDesc(t('settings.notes.monthlyNoteTemplateDesc')), 'monthlyNoteTemplate', { placeholder: 'Templates/Monthly.md', notes: true });
 
     // Yearly
     el.createEl('h4', { text: t('settings.notes.yearlySubsection') });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.yearlyNoteFormat'))
-        .setDesc(t('settings.notes.yearlyNoteFormatDesc'))
-        .addText(text => text
-            .setPlaceholder('YYYY')
-            .setValue(plugin.settings.yearlyNoteFormat)
-            .onChange(async (value) => {
-                plugin.settings.yearlyNoteFormat = value || 'YYYY';
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.notes.yearlyNoteFormatDesc')), 'yearlyNoteFormat', { placeholder: 'YYYY' });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.yearlyNoteFolder'))
-        .setDesc(t('settings.notes.yearlyNoteFolderDesc'))
-        .addText(text => text
-            .setPlaceholder('')
-            .setValue(plugin.settings.yearlyNoteFolder)
-            .onChange(async (value) => {
-                plugin.settings.yearlyNoteFolder = value;
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.notes.yearlyNoteFolderDesc')), 'yearlyNoteFolder', { placeholder: '' });
 
-    new Setting(el)
+    periodic(new Setting(el)
         .setName(t('settings.notes.yearlyNoteTemplate'))
-        .setDesc(t('settings.notes.yearlyNoteTemplateDesc'))
-        .addText(text => {
-            text
-                .setPlaceholder('Templates/Yearly.md')
-                .setValue(plugin.settings.yearlyNoteTemplate)
-                .onChange(async (value) => {
-                    plugin.settings.yearlyNoteTemplate = value;
-                    await plugin.saveSettings();
-                });
-            new FileSuggest(plugin.app, text.inputEl);
-        });
+        .setDesc(t('settings.notes.yearlyNoteTemplateDesc')), 'yearlyNoteTemplate', { placeholder: 'Templates/Yearly.md', notes: true });
 }

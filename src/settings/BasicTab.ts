@@ -1,27 +1,28 @@
 import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
-import { FIXED_STATUS_CHARS } from '../types';
+import { DEFAULT_SETTINGS, FIXED_STATUS_CHARS } from '../types';
 import { t } from '../i18n';
 import { FolderSuggest } from '../suggest/FolderSuggest';
+import { SETTINGS_SCHEMA } from './SettingsSchema';
+import type { SettingFields } from './SettingFields';
+import { StatusCharInput } from '../services/parsing/utils/StatusCharInput';
+import { FreeText } from '../utils/values/TextValues';
 
-export function render(el: HTMLElement, plugin: PluginContext): void {
+type FolderKey = 'viewTemplateFolder' | 'exportFolder' | 'intervalTemplateFolder';
+
+export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
     // Time & Calendar (timezone settings will live here too)
     el.createEl('h3', { text: t('settings.basic.timeAndCalendar'), cls: 'setting-section-header' });
 
-    new Setting(el)
+    fields.text(new Setting(el)
         .setName(t('settings.views.startHour'))
-        .setDesc(t('settings.views.startHourDesc'))
-        .addText(text => text
-            .setPlaceholder('5')
-            .setValue(plugin.settings.startHour.toString())
-            .onChange(async (value) => {
-                let hour = parseInt(value);
-                if (isNaN(hour)) hour = 0;
-                if (hour < 0) hour = 0;
-                if (hour > 23) hour = 23;
-                plugin.settings.startHour = hour;
-                await plugin.saveSettings();
-            }));
+        .setDesc(t('settings.views.startHourDesc')), {
+        codec: SETTINGS_SCHEMA.startHour.codec,
+        get: () => plugin.settings.startHour,
+        put: (hour) => { plugin.settings.startHour = hour; },
+        placeholder: '5',
+        inputMode: 'numeric',
+    });
 
     new Setting(el)
         .setName(t('settings.views.weekStartsOn'))
@@ -38,43 +39,25 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
     // Latitude & Longitude
     el.createEl('h3', { text: t('settings.basic.latLon'), cls: 'setting-section-header' });
 
-    new Setting(el)
+    // A text keyboard on a phone: a latitude or a longitude may be negative.
+    const location = SETTINGS_SCHEMA.astronomy.fields.location.fields;
+    fields.text(new Setting(el)
         .setName(t('settings.views.homeLatitude'))
-        .setDesc(t('settings.views.homeLatitudeDesc'))
-        .addText(text => {
-            text.inputEl.type = 'number';
-            text.inputEl.step = 'any';
-            text
-                .setPlaceholder('35.6762')
-                .setValue(String(plugin.settings.astronomy.location.latitude))
-                .onChange(async (value) => {
-                    let n = parseFloat(value);
-                    if (isNaN(n)) return;
-                    if (n < -90) n = -90;
-                    if (n > 90) n = 90;
-                    plugin.settings.astronomy.location.latitude = n;
-                    await plugin.saveSettings();
-                });
-        });
+        .setDesc(t('settings.views.homeLatitudeDesc')), {
+        codec: location.latitude.codec,
+        get: () => plugin.settings.astronomy.location.latitude,
+        put: (n) => { plugin.settings.astronomy.location.latitude = n; },
+        placeholder: '35.6762',
+    });
 
-    new Setting(el)
+    fields.text(new Setting(el)
         .setName(t('settings.views.homeLongitude'))
-        .setDesc(t('settings.views.homeLongitudeDesc'))
-        .addText(text => {
-            text.inputEl.type = 'number';
-            text.inputEl.step = 'any';
-            text
-                .setPlaceholder('139.6503')
-                .setValue(String(plugin.settings.astronomy.location.longitude))
-                .onChange(async (value) => {
-                    let n = parseFloat(value);
-                    if (isNaN(n)) return;
-                    if (n < -180) n = -180;
-                    if (n > 180) n = 180;
-                    plugin.settings.astronomy.location.longitude = n;
-                    await plugin.saveSettings();
-                });
-        });
+        .setDesc(t('settings.views.homeLongitudeDesc')), {
+        codec: location.longitude.codec,
+        get: () => plugin.settings.astronomy.location.longitude,
+        put: (n) => { plugin.settings.astronomy.location.longitude = n; },
+        placeholder: '139.6503',
+    });
 
     // Checkbox Styles
     el.createEl('h3', { text: t('settings.basic.checkboxStyles'), cls: 'setting-section-header' });
@@ -87,7 +70,6 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             .onChange(async (value) => {
                 plugin.settings.applyGlobalStyles = value;
                 await plugin.saveSettings();
-                plugin.updateGlobalStyles();
             }));
 
     // Status Definitions
@@ -96,7 +78,7 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
     statusDesc.createSpan({ text: t('settings.general.statusDefinitionsDesc'), cls: 'setting-item-description' });
 
     const statusListContainer = el.createDiv('status-definitions-list-container');
-    renderStatusDefinitionsList(statusListContainer, plugin);
+    renderStatusDefinitionsList(statusListContainer, plugin, fields);
 
     new Setting(el)
         .setName(t('settings.general.addStatus'))
@@ -106,54 +88,35 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             .onClick(async () => {
                 plugin.settings.statusDefinitions.push({ char: '', label: '', isComplete: false });
                 await plugin.saveSettings();
-                renderStatusDefinitionsList(statusListContainer, plugin);
+                renderStatusDefinitionsList(statusListContainer, plugin, fields);
             })
         );
 
     // Templates
     el.createEl('h3', { text: t('settings.views.templates'), cls: 'setting-section-header' });
 
-    new Setting(el)
+    const folder = (setting: Setting, key: FolderKey, shown: { placeholder: string }) => fields.text(setting, {
+        codec: SETTINGS_SCHEMA[key].codec,
+        get: () => plugin.settings[key],
+        put: (path) => { plugin.settings[key] = path; },
+        placeholder: shown.placeholder,
+        list: (input, picked) => new FolderSuggest(plugin.app, input, (f) => picked(f.path)),
+    });
+
+    folder(new Setting(el)
         .setName(t('settings.views.viewTemplateFolder'))
-        .setDesc(t('settings.views.viewTemplateFolderDesc'))
-        .addText(text => {
-            text.setPlaceholder('Templates/Views')
-                .setValue(plugin.settings.viewTemplateFolder)
-                .onChange(async (value) => {
-                    plugin.settings.viewTemplateFolder = value.trim();
-                    await plugin.saveSettings();
-                });
-            new FolderSuggest(plugin.app, text.inputEl);
-        });
+        .setDesc(t('settings.views.viewTemplateFolderDesc')), 'viewTemplateFolder', { placeholder: 'Templates/Views' });
 
-    new Setting(el)
+    folder(new Setting(el)
         .setName(t('settings.views.exportFolder'))
-        .setDesc(t('settings.views.exportFolderDesc'))
-        .addText(text => {
-            text.setPlaceholder('task-viewer-export')
-                .setValue(plugin.settings.exportFolder)
-                .onChange(async (value) => {
-                    plugin.settings.exportFolder = value.trim();
-                    await plugin.saveSettings();
-                });
-            new FolderSuggest(plugin.app, text.inputEl);
-        });
+        .setDesc(t('settings.views.exportFolderDesc', { folder: DEFAULT_SETTINGS.exportFolder })), 'exportFolder', { placeholder: DEFAULT_SETTINGS.exportFolder });
 
-    new Setting(el)
+    folder(new Setting(el)
         .setName(t('settings.views.intervalTemplateFolder'))
-        .setDesc(t('settings.views.intervalTemplateFolderDesc'))
-        .addText(text => {
-            text.setPlaceholder('Templates/Timers')
-                .setValue(plugin.settings.intervalTemplateFolder)
-                .onChange(async (value) => {
-                    plugin.settings.intervalTemplateFolder = value.trim();
-                    await plugin.saveSettings();
-                });
-            new FolderSuggest(plugin.app, text.inputEl);
-        });
+        .setDesc(t('settings.views.intervalTemplateFolderDesc')), 'intervalTemplateFolder', { placeholder: 'Templates/Timers' });
 }
 
-function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginContext): void {
+function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
     container.empty();
     const fixedChars = new Set<string>(FIXED_STATUS_CHARS as unknown as string[]);
     const defs = plugin.settings.statusDefinitions;
@@ -176,38 +139,29 @@ function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginConte
         setting.nameEl.empty();
         setting.nameEl.appendChild(previewCheckbox);
 
-        setting.addText(text => {
-            text.setPlaceholder(t('settings.general.statusCharPlaceholder'))
-                .setValue(def.char)
-                .onChange(async (value) => {
-                    const c = value.slice(0, 1);
-                    if (c && defs.some((d, j) => j !== i && d.char === c)) {
-                        text.setValue(def.char);
-                        return;
-                    }
-                    defs[i].char = c;
-                    await plugin.saveSettings();
-                    previewCheckbox.checked = c !== ' ';
-                    if (c && c !== ' ') {
-                        previewCheckbox.setAttribute('data-task', c);
-                    } else {
-                        previewCheckbox.removeAttribute('data-task');
-                    }
-                });
-            text.inputEl.maxLength = 1;
-            text.inputEl.addClass('tv-settings__status-char');
-            if (isFixed) text.inputEl.readOnly = true;
+        // A character none of the other statuses has, read as typed (a space is one).
+        // The status is held by itself, not by its place, which a move changes.
+        const { input: charInput } = fields.text(setting, {
+            codec: StatusCharInput.codec(() => defs.filter(d => d !== def).map(d => d.char)),
+            get: () => def.char,
+            put: (c) => { def.char = c; },
+            placeholder: t('settings.general.statusCharPlaceholder'),
+            saved: (c) => {
+                previewCheckbox.checked = c !== ' ';
+                if (c !== ' ') previewCheckbox.setAttribute('data-task', c);
+                else previewCheckbox.removeAttribute('data-task');
+            },
         });
+        charInput.maxLength = 1;
+        charInput.addClass('tv-settings__status-char');
+        if (isFixed) charInput.readOnly = true;
 
-        setting.addText(text => {
-            text.setPlaceholder(t('settings.general.statusLabelPlaceholder'))
-                .setValue(def.label)
-                .onChange(async (value) => {
-                    defs[i].label = value;
-                    await plugin.saveSettings();
-                });
-            text.inputEl.addClass('tv-settings__status-name');
-        });
+        fields.text(setting, {
+            codec: FreeText,
+            get: () => def.label,
+            put: (label) => { def.label = label; },
+            placeholder: t('settings.general.statusLabelPlaceholder'),
+        }).input.addClass('tv-settings__status-name');
 
         setting.addToggle(toggle => {
             // A blank status is fixed to incomplete in isCompleteStatusChar
@@ -234,7 +188,7 @@ function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginConte
             btn.onClick(async () => {
                 [defs[i], defs[i - 1]] = [defs[i - 1], defs[i]];
                 await plugin.saveSettings();
-                renderStatusDefinitionsList(container, plugin);
+                renderStatusDefinitionsList(container, plugin, fields);
             });
         });
 
@@ -247,7 +201,7 @@ function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginConte
             btn.onClick(async () => {
                 [defs[i], defs[i + 1]] = [defs[i + 1], defs[i]];
                 await plugin.saveSettings();
-                renderStatusDefinitionsList(container, plugin);
+                renderStatusDefinitionsList(container, plugin, fields);
             });
         });
 
@@ -261,7 +215,7 @@ function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginConte
                 btn.onClick(async () => {
                     defs.splice(i, 1);
                     await plugin.saveSettings();
-                    renderStatusDefinitionsList(container, plugin);
+                    renderStatusDefinitionsList(container, plugin, fields);
                 });
             }
         });

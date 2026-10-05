@@ -1,52 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import '../../../src/views/registerAllSchemas';
-import { codecFor, shortNameFor } from '../../../src/services/viewConfig';
-// 値として import すると schema 自身の registerSchema が走ってしまい、
-// registerAllSchemas に載っているかを見られなくなる。型だけを借りる。
-import type { TimerConfig } from '../../../src/views/TimerSchema';
+import { TimerCodec, type TimerConfig } from '../../../src/views/TimerSchema';
 import { ViewUriBuilder } from '../../../src/views/sharedLogic/ViewUriBuilder';
-import {
-    VIEW_META_TIMELINE,
-    VIEW_META_SCHEDULE,
-    VIEW_META_TIMER,
-    VIEW_META_CALENDAR,
-    VIEW_META_MINI_CALENDAR,
-    VIEW_META_KANBAN,
-} from '../../../src/constants/viewRegistry';
-
-/**
- * タイマービューだけが schema を持たず、モードとテンプレート名がワークスペース
- * 保存に乗らないまま残っていた。短縮名も registry に無いので、view type から
- * 短縮名を引く経路（`shortNameFor`）はタイマーだけ undefined を返していた。
- */
-
-// ViewType の全数。viewRegistry は型の union しか公開していないので、ここは
-// 手で並べる（増えたときに落ちるよう、TypeScript の網羅チェックに預けたい）。
-const ALL_VIEW_TYPES = [
-    VIEW_META_TIMELINE.type,
-    VIEW_META_SCHEDULE.type,
-    VIEW_META_TIMER.type,
-    VIEW_META_CALENDAR.type,
-    VIEW_META_MINI_CALENDAR.type,
-    VIEW_META_KANBAN.type,
-];
 
 describe('TimerSchema', () => {
-    const codec = codecFor(VIEW_META_TIMER.type)!;
-
-    it('is registered, so the registry can answer for every view type', () => {
-        for (const viewType of ALL_VIEW_TYPES) {
-            expect(shortNameFor(viewType), viewType).toBeDefined();
-        }
-    });
-
-    it('agrees with the short name the URI builder writes', () => {
-        // 短縮名の表は ViewUriBuilder にも手書きで載っている（統合は C6）。
-        // 2 つが食い違うと、書いた URI を読み側が解決できなくなる。
-        for (const viewType of ALL_VIEW_TYPES) {
-            expect(ViewUriBuilder.build(viewType)).toContain(`view=${shortNameFor(viewType)}`);
-        }
-    });
+    const codec = TimerCodec;
 
     it('round-trips the mode and the selected template through the state dict', () => {
         const config: TimerConfig = {
@@ -68,5 +25,24 @@ describe('TimerSchema', () => {
 
     it('omits keys that have no value, so an untouched view saves nothing', () => {
         expect(codec.serializeConfig({})).toEqual({});
+    });
+
+    it('writes the canonical key into a copied URI and reads it back', () => {
+        const config: TimerConfig = { timerViewMode: 'interval', intervalTemplate: '朝のルーチン' };
+        const uri = ViewUriBuilder.build('timer-view', { configParams: codec.toUriParams(config) });
+
+        expect(uri).toContain('view=timer');
+        expect(uri).toContain('timerViewMode=interval');
+        expect(uri).not.toMatch(/[?&]mode=/);
+        const query = Object.fromEntries(new URL(uri.replace('obsidian://', 'http://x/')).searchParams);
+        expect(codec.fromUriParams(query)).toEqual(config);
+    });
+
+    it('reads an older URI that said `mode=`', () => {
+        expect(codec.fromUriParams({ mode: 'countdown' }).timerViewMode).toBe('countdown');
+    });
+
+    it('drops a mode it does not know from a URI', () => {
+        expect(codec.fromUriParams({ mode: 'stopwatch' }).timerViewMode).toBeUndefined();
     });
 });

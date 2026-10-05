@@ -1,15 +1,12 @@
-import type { App, Menu } from 'obsidian';
+import type { Menu } from 'obsidian';
 import type { StatusDefinition, TaskViewerSettings } from '../../../types';
-import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
-import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
-import { DateUtils } from '../../../utils/DateUtils';
-import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
+import { addStatusItems } from '../../../constants/statusOptions';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
 /**
  * The editor's writes to one line. Each answers whether it was written; a
- * write that was not has told the user why (see `TaskIndex.reportRefusal`).
+ * write that was not has told the user why (see `Operations.reportRefusal`).
  */
 export interface CheckboxLineOps {
     updateLine(newContent: string): Promise<boolean>;
@@ -18,21 +15,17 @@ export interface CheckboxLineOps {
 }
 
 /**
- * Menu builder for plain checkbox lines (not recognized as @notation tasks).
- * Agnostic to the mutation backend — callers provide CheckboxLineOps
- * for Editor-based or TaskIndex-based line operations.
+ * The editor's menu for a checkbox line the index does not read: one in a
+ * note out of the read range, or one typed and not read yet (`lineMenuOf`
+ * `'checkbox'`). Agnostic to the mutation backend — callers provide
+ * CheckboxLineOps for the line's writes.
  */
 export class CheckboxMenuBuilder {
-    constructor(
-        private app: App,
-        private getStartHour: () => number,
-    ) {}
-
     /**
-     * Build the full menu for a plain checkbox line:
-     * Status + Duplicate + Convert to Inline + Delete
+     * Build the menu for a plain checkbox line: its status, a duplicate, and
+     * a delete.
      */
-    addFullMenu(menu: Menu, lineText: string, settings: TaskViewerSettings, ops: CheckboxLineOps, filePath?: string): boolean {
+    addFullMenu(menu: Menu, lineText: string, settings: TaskViewerSettings, ops: CheckboxLineOps): boolean {
         const classified = TaskLineClassifier.classify(lineText);
         if (!classified) return false;
 
@@ -44,8 +37,6 @@ export class CheckboxMenuBuilder {
 
         // Duplicate
         this.addDuplicateItem(menu, lineText, ops);
-
-        this.addConvertToInlineItem(menu, classified, lineText, ops, filePath);
 
         // Delete
         this.addDeleteItem(menu, ops);
@@ -61,26 +52,15 @@ export class CheckboxMenuBuilder {
         statusMenuChars: StatusDefinition[],
         ops: CheckboxLineOps
     ): void {
-        const options = buildStatusOptions(statusMenuChars);
-
         menu.addItem((item) => {
             const statusDisplay = `[${currentChar}]`;
             item.setTitle(t('menu.status', { status: statusDisplay }))
                 .setIcon('check-square')
                 .setSubmenu();
 
-            const statusMenu = item.submenu;
-
-            options.forEach(s => {
-                statusMenu.addItem(sub => {
-                    sub.setTitle(createStatusTitle(s))
-                        .setChecked(currentChar === s.char)
-                        .onClick(async () => {
-                            menu.close();
-                            const newLine = prefix + s.char + suffix;
-                            await ops.updateLine(newLine);
-                        });
-                });
+            addStatusItems(item.submenu, statusMenuChars, currentChar, (char) => {
+                menu.close();
+                void ops.updateLine(prefix + char + suffix);
             });
         });
     }
@@ -98,39 +78,6 @@ export class CheckboxMenuBuilder {
                 .onClick(async () => {
                     menu.close();
                     await ops.insertLineAfter(copy);
-                });
-        });
-    }
-
-    private addConvertToInlineItem(
-        menu: Menu,
-        classified: NonNullable<ReturnType<typeof TaskLineClassifier.classify>>,
-        lineText: string,
-        ops: CheckboxLineOps,
-        filePath?: string
-    ): void {
-        const { rawContent, statusChar, indent } = classified;
-        const marker = TaskLineClassifier.extractMarker(lineText);
-        const content = rawContent.trim();
-        const dailyNoteDate = filePath ? DailyNoteUtils.parseDateFromFilePath(this.app, filePath) ?? undefined : undefined;
-
-        menu.addItem((item) => {
-            item.setTitle(t('menu.convertToInline'))
-                .setIcon('at-sign')
-                .onClick(() => {
-                    menu.close();
-                    const today = DateUtils.getVisualDateOfNow(this.getStartHour());
-                    new CreateTaskModal(
-                        this.app,
-                        async (result) => {
-                            const formatted = formatTaskLine(result);
-                            const newLine = indent + TaskLineClassifier.formatPrefix(statusChar, '', marker)
-                                + TaskLineClassifier.splitContent(formatted).content;
-                            await ops.updateLine(newLine);
-                        },
-                        { content, startDate: today },
-                        { title: t('menu.convertToInline'), submitLabel: t('modal.convert'), startHour: this.getStartHour(), dailyNoteDate }
-                    ).open();
                 });
         });
     }

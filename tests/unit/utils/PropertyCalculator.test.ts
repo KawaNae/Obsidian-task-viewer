@@ -1,111 +1,107 @@
 import { describe, it, expect } from 'vitest';
 import { PropertyCalculator } from '../../../src/interaction/menu/PropertyCalculator';
-import type { DisplayTask } from '../../../src/types';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
+import type { DisplayTask, Task } from '../../../src/types';
+import { makeTask } from '../helpers/makeTask';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
-        id: 'tv-inline:note.md:ln:1',
-        file: 'note.md',
-        line: 0,
-        content: 'Test',
-        statusChar: ' ',
-        indent: 0,
-        childIds: [],
-        childLines: [],
-        originalText: '',
-        tags: [],
-        parserId: 'tv-inline',
-        effectiveStartDate: '2026-03-11',
-        startDateImplicit: false,
-        startTimeImplicit: false,
-        endDateImplicit: false,
-        endTimeImplicit: false,
-        originalTaskId: 'tv-inline:note.md:ln:1',
-        isSplit: false,
-        ...overrides,
-    };
-}
-
+/**
+ * What the menu shows of a task's dates: the line's values plain, the rest
+ * faint, at the precision they are written with (startHour 5).
+ */
+const startHour = 5;
+const dt = (task: Partial<Task>): DisplayTask => toDisplayTask(makeTask(task), startHour, NO_TASK_LOOKUP);
 const calc = new PropertyCalculator();
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+const start = (task: Partial<Task>) => calc.calculateStart({ task: dt(task), startHour, viewStartDate: null });
+const end = (task: Partial<Task>) => calc.calculateEnd({ task: dt(task), startHour, viewStartDate: null });
 
 describe('PropertyCalculator', () => {
-
     describe('calculateStart', () => {
-        it('returns date and time for normal task', () => {
-            const dt = makeDT({ effectiveStartDate: '2026-03-11', effectiveStartTime: '09:00' });
-            const result = calc.calculateStart({ task: dt, startHour: 0, viewStartDate: null });
-            expect(result.date).toBe('2026-03-11');
-            expect(result.time).toBe('09:00');
-            expect(result.isUnset).toBeUndefined();
+        it('a written start is plain', () => {
+            expect(start({ startDate: '2026-03-11', startTime: '09:00' }))
+                .toEqual({ date: '2026-03-11', time: '09:00', dateImplicit: false, timeImplicit: false });
         });
 
-        it('returns isUnset for D-type (empty effectiveStartDate)', () => {
-            const dt = makeDT({ effectiveStartDate: '' });
-            const result = calc.calculateStart({ task: dt, startHour: 0, viewStartDate: null });
-            expect(result.isUnset).toBe(true);
+        it('a bare date has no time (no 05:00)', () => {
+            expect(start({ startDate: '2026-03-11' }))
+                .toEqual({ date: '2026-03-11', dateImplicit: false, timeImplicit: true });
         });
 
-        it('reflects implicit flags', () => {
-            const dt = makeDT({ startDateImplicit: true, startTimeImplicit: true });
-            const result = calc.calculateStart({ task: dt, startHour: 0, viewStartDate: null });
-            expect(result.dateImplicit).toBe(true);
-            expect(result.timeImplicit).toBe(true);
+        it('an inherited time is faint', () => {
+            expect(start({ startDate: '2026-03-11', cascadeContext: { startTime: '06:00' } }))
+                .toEqual({ date: '2026-03-11', time: '06:00', dateImplicit: false, timeImplicit: true });
+        });
+
+        it('@>E: the start date the rules give (E itself), faint, with no time', () => {
+            expect(start({ endDate: '2026-03-12' }))
+                .toEqual({ date: '2026-03-12', dateImplicit: true, timeImplicit: true });
+        });
+
+        it('@>>D starts on D, faint, with no time', () => {
+            expect(start({ due: '2026-03-11' }))
+                .toEqual({ date: '2026-03-11', dateImplicit: true, timeImplicit: true });
+        });
+
+        it('@>>DT17:00 starts at 16:00, faint', () => {
+            expect(start({ due: '2026-03-11T17:00' }))
+                .toEqual({ date: '2026-03-11', time: '16:00', dateImplicit: true, timeImplicit: true });
         });
     });
 
     describe('calculateEnd', () => {
-        it('returns date and time when present', () => {
-            const dt = makeDT({ effectiveEndDate: '2026-03-11', effectiveEndTime: '17:00' });
-            const result = calc.calculateEnd({ task: dt, startHour: 0, viewStartDate: null });
-            expect(result.date).toBe('2026-03-11');
-            expect(result.time).toBe('17:00');
+        it('the default hour gives a date and a time, faint', () => {
+            expect(end({ startDate: '2026-03-11', startTime: '09:00' }))
+                .toEqual({ date: '2026-03-11', time: '10:00', dateImplicit: true, timeImplicit: true });
         });
 
-        it('returns isUnset when no effectiveEndDate', () => {
-            const dt = makeDT({ effectiveEndDate: undefined });
-            const result = calc.calculateEnd({ task: dt, startHour: 0, viewStartDate: null });
-            expect(result.isUnset).toBe(true);
+        it('a time past midnight ends the next day', () => {
+            expect(end({ startDate: '2026-03-11', startTime: '23:30' }))
+                .toEqual({ date: '2026-03-12', time: '00:30', dateImplicit: true, timeImplicit: true });
+        });
+
+        it('@D ends on D, with no time', () => {
+            expect(end({ startDate: '2026-03-11' }))
+                .toEqual({ date: '2026-03-11', dateImplicit: true, timeImplicit: true });
+        });
+
+        it('a written bare end date gets no time', () => {
+            expect(end({ startDate: '2026-03-11', endDate: '2026-03-13' }))
+                .toEqual({ date: '2026-03-13', dateImplicit: false, timeImplicit: true });
+        });
+
+        it('a written end is plain', () => {
+            expect(end({ startDate: '2026-03-11', startTime: '09:00', endDate: '2026-03-12', endTime: '18:00' }))
+                .toEqual({ date: '2026-03-12', time: '18:00', dateImplicit: false, timeImplicit: false });
+        });
+
+        it('@>>D ends on D, faint, with no time', () => {
+            expect(end({ due: '2026-03-11' }))
+                .toEqual({ date: '2026-03-11', dateImplicit: true, timeImplicit: true });
+        });
+
+        it('@>>DT17:00 ends at 17:00, faint', () => {
+            expect(end({ due: '2026-03-11T17:00' }))
+                .toEqual({ date: '2026-03-11', time: '17:00', dateImplicit: true, timeImplicit: true });
         });
     });
 
     describe('calculateDue', () => {
-        it('returns date-only due as explicit', () => {
-            const dt = makeDT({ due: '2026-03-20', effectiveDue: '2026-03-20' });
-            const result = calc.calculateDue(dt);
-            expect(result.date).toBe('2026-03-20');
-            expect(result.time).toBeUndefined();
-            expect(result.dateImplicit).toBe(false);
+        it('splits datetime due', () => {
+            expect(calc.calculateDue(dt({ due: '2026-03-15T17:00' })))
+                .toEqual({ date: '2026-03-15', time: '17:00', dateImplicit: false, timeImplicit: false });
         });
 
-        it('splits datetime due', () => {
-            const dt = makeDT({ due: '2026-03-20T15:00', effectiveDue: '2026-03-20T15:00' });
-            const result = calc.calculateDue(dt);
-            expect(result.date).toBe('2026-03-20');
-            expect(result.time).toBe('15:00');
-            expect(result.dateImplicit).toBe(false);
-            expect(result.timeImplicit).toBe(false);
+        it('returns date-only due as explicit', () => {
+            expect(calc.calculateDue(dt({ due: '2026-03-15' })))
+                .toEqual({ date: '2026-03-15', dateImplicit: false, timeImplicit: false });
         });
 
         it('cascade 継承 due (raw due なし) は implicit として表示する', () => {
-            const dt = makeDT({ due: undefined, effectiveDue: '2026-03-31' });
-            const result = calc.calculateDue(dt);
-            expect(result.date).toBe('2026-03-31');
-            expect(result.isUnset).toBeUndefined();
-            expect(result.dateImplicit).toBe(true);
+            expect(calc.calculateDue(dt({ cascadeContext: { due: '2026-03-15' } })))
+                .toEqual({ date: '2026-03-15', dateImplicit: true, timeImplicit: true });
         });
 
         it('returns isUnset when no due at all', () => {
-            const dt = makeDT({ due: undefined, effectiveDue: undefined });
-            const result = calc.calculateDue(dt);
-            expect(result.isUnset).toBe(true);
+            expect(calc.calculateDue(dt({ startDate: '2026-03-11' })).isUnset).toBe(true);
         });
     });
 });

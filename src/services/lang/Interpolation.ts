@@ -33,8 +33,3 @@ export function renderInterpolation(parts: InterpolationPart[], ctx: EvalContext
         return { text: valueToDisplay(value), fromExpr: true, value };
     });
 }
-
-/** The whole line as text, for callers with nothing to decide. */
-export function renderInterpolationText(parts: InterpolationPart[], ctx: EvalContext): string {
-    return renderInterpolation(parts, ctx).map(p => p.text).join('');
-}

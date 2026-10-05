@@ -1,12 +1,11 @@
-import type { TFile } from 'obsidian';
 import type { App, HoverParent } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { periodicNotes } from '../../utils/PeriodicNotes';
+import { periodicNoteLink } from './PeriodicNoteLink';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import { t } from '../../i18n';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 
 interface PeriodicHeaderRendererDeps {
     app: App;
@@ -38,7 +37,7 @@ export class PeriodicHeaderRenderer {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.deps.plugin.settings.startHour);
         const weekStartDay = this.deps.plugin.settings.weekStartDay;
         const todayVisualWeekKey = DateUtils.getVisualWeekKey(
-            this.parseLocalDate(todayVisualDate),
+            DateUtils.parseDate(todayVisualDate),
             weekStartDay,
         );
 
@@ -53,12 +52,6 @@ export class PeriodicHeaderRenderer {
             this.appendWeekSegment(row, seg);
         }
 
-        this.deps.linkInteractionManager.bind(container, {
-            sourcePath: '',
-            hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-            hoverParent: this.deps.hoverParent,
-        }, { bindClick: false });
-
         return container;
     }
 
@@ -67,29 +60,16 @@ export class PeriodicHeaderRenderer {
         segEl.style.gridColumn = `${seg.startIdx + 2} / span ${seg.span}`;
         if (seg.isCurrent) segEl.addClass('is-current');
 
-        const dateObj = this.parseLocalDate(seg.anchorDate);
+        const dateObj = DateUtils.parseDate(seg.anchorDate);
         const m = withWeekStartDay(dateObj, this.deps.plugin.settings.weekStartDay);
 
-        const link = segEl.createEl('a', {
-            cls: 'internal-link periodic-header__link periodic-header__link--week',
-            text: m.format('[W]ww'),
-        });
-        const target = DailyNoteUtils.getWeeklyNoteLinkTarget(this.deps.plugin.settings, dateObj);
-        link.dataset.href = target;
-        link.setAttribute('href', target);
-        link.setAttribute('aria-label', t('aria.openWeeklyNote', { label: m.format('gggg-[W]ww') }));
-        link.addEventListener('click', (event: MouseEvent) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void this.openOrCreateWeeklyNote(dateObj);
-        });
-    }
-
-    private async openOrCreateWeeklyNote(date: Date): Promise<void> {
-        const { app, plugin } = this.deps;
-        let file: TFile | null = DailyNoteUtils.getWeeklyNote(app, plugin.settings, date);
-        if (!file) file = await DailyNoteUtils.createWeeklyNote(app, plugin.settings, date);
-        if (file) await app.workspace.getLeaf(false).openFile(file);
+        const { app, plugin, linkInteractionManager, hoverParent } = this.deps;
+        periodicNoteLink(segEl, { app, notes: plugin.getOperations(), links: linkInteractionManager, hoverParent },
+            periodicNotes(plugin.settings, 'weekly'), seg.anchorDate, {
+                cls: 'periodic-header__link periodic-header__link--week',
+                text: m.format('[W]ww'),
+                ariaLabel: t('aria.openWeeklyNote', { label: m.format('gggg-[W]ww') }),
+            });
     }
 
     private computeWeekSegments(
@@ -100,7 +80,7 @@ export class PeriodicHeaderRenderer {
         const segments: Segment[] = [];
         let current: Segment | null = null;
         for (let i = 0; i < dates.length; i++) {
-            const dateObj = this.parseLocalDate(dates[i]);
+            const dateObj = DateUtils.parseDate(dates[i]);
             const k = DateUtils.getVisualWeekKey(dateObj, weekStartDay);
             if (current && current.key === k) {
                 current.span++;
@@ -117,10 +97,5 @@ export class PeriodicHeaderRenderer {
         }
         if (current) segments.push(current);
         return segments;
-    }
-
-    private parseLocalDate(date: string): Date {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 }

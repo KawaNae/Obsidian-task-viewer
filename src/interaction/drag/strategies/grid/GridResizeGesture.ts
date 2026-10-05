@@ -2,7 +2,7 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
-import type { DragPlan } from '../../DragPlan';
+import { dragBase, type DragPlan } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';
@@ -77,16 +77,15 @@ export class GridResizeGesture extends BaseDragStrategy {
 
         // baseTask: split segment safety
         const originalId = getOriginalTaskId(task);
-        this.baseTask = context.readService.getTask(originalId) ?? task;
-
         const startHour = context.plugin.settings.startHour;
+        this.baseTask = dragBase(context.index.getTask(originalId) ?? task, startHour);
         const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialVisualStart = visual.start;
         this.initialVisualEnd = visual.end;
         this.colWidth = this.gridSurface.getColWidth();
 
         // startCol / initialSpan は **表示値** から取り直す。両 surface とも renderer で
-        // dataset に出力済 (calendar: CalendarView.ts、allday: AllDaySectionRenderer.ts)。
+        // dataset に出力済 (どちらも DateGridLane.ts の drawDateGridLane)。
         // 旧実装では allday だけ visual range 由来で initialSpan を計算しており、view 端
         // clip された split segment (visualSpan > displaySpan) で commit が delta ずれを
         // 起こす reference frame バグの根本だった。表示値統一で対称化。
@@ -245,24 +244,38 @@ export class GridResizeGesture extends BaseDragStrategy {
     }
 
     /**
-     * Resize の commit プラン。targetDate (絶対日付) を受け取って effectiveStartDate /
-     * effectiveEndDate を絶対値で書き出す。calendar / allday で完全共通、surface 由来の
+     * Resize の commit プラン。targetDate (絶対日付) を受け取って startDay /
+     * endDay を絶対値で書き出す。calendar / allday で完全共通、surface 由来の
      * delta / span は登場しない (= 過去 reference frame 不整合バグの再発防止)。
      */
     private buildResizePlan(targetDate: string): DragPlan | null {
         if (!this.baseTask) return null;
-        let edits: DisplayDateEdits | null = null;
-        if (this.resizeDirection === 'right') {
-            const newEnd = targetDate < this.initialVisualStart ? this.initialVisualStart : targetDate;
-            edits = { effectiveEndDate: newEnd };
-        } else {
-            const newStart = targetDate > this.initialVisualEnd ? this.initialVisualEnd : targetDate;
-            edits = { effectiveStartDate: newStart };
-            if (!this.baseTask.endDate) {
-                edits.effectiveEndDate = this.initialVisualEnd;
-            }
+        const edits = GridResizeGesture.buildResizeEdits(
+            this.resizeDirection, targetDate, this.initialVisualStart, this.initialVisualEnd, this.baseTask,
+        );
+        return { edits, baseTask: this.baseTask };
+    }
+
+    /**
+     * Resize の edits ビルダ。右端は終了の日を、左端は開始の日を絶対値で
+     * 書く。左端を動かすとき終了の日を持たないタスクは、今の最後の日を終了と
+     * して書いて右端を留める。
+     *
+     * pure: 引数のみで結果が決まる。
+     */
+    static buildResizeEdits(
+        direction: 'left' | 'right',
+        targetDate: string,
+        initialVisualStart: string,
+        initialVisualEnd: string,
+        baseTask: Task,
+    ): DisplayDateEdits {
+        if (direction === 'right') {
+            return { endDay: targetDate < initialVisualStart ? initialVisualStart : targetDate };
         }
-        return edits ? { edits, baseTask: this.baseTask } : null;
+        const edits: DisplayDateEdits = { startDay: targetDate > initialVisualEnd ? initialVisualEnd : targetDate };
+        if (!baseTask.endDate) edits.endDay = initialVisualEnd;
+        return edits;
     }
 
     private clearCrossWeekPreview(): void {

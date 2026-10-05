@@ -1,14 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
+import { NoteSections } from '../../../../src/services/parsing/tree/NoteSections';
+import { Outline } from '../../../../src/services/parsing/utils/Outline';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
 import { DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
 function buildAndResolve(bodyLines: string[], frontmatter?: Record<string, any>) {
-    const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, keys);
-    return doc;
+    const sections = NoteSections.read(Outline.read(bodyLines));
+    SectionPropertyResolver.resolve(sections, frontmatter, keys);
+    return { sections };
 }
 
 describe('SectionPropertyResolver', () => {
@@ -205,7 +206,7 @@ describe('SectionPropertyResolver', () => {
         ]);
 
         expect(doc.sections[0].resolvedProperties['priority']).toEqual({
-            value: '1', type: 'number',
+            value: '1', type: 'number', number: 1,
         });
     });
 
@@ -322,7 +323,7 @@ describe('SectionPropertyResolver の出所', () => {
     const at = (line: number, text: string | null, level = 2) => ({
         kind: 'section',
         line,
-        heading: text === null ? null : { level, text, line: expect.any(Number) },
+        heading: text === null ? null : { level, text, line: expect.any(Number), end: expect.any(Number) },
     });
 
     it('frontmatter だけ: 値はどれも frontmatter から', () => {
@@ -412,5 +413,34 @@ describe('SectionPropertyResolver の出所', () => {
         const section = doc.sections[0];
         expect(section.resolvedProperties.owner.value).toBe('second');
         expect(section.resolvedSources.properties.owner).toEqual(at(2, 'Section'));
+    });
+
+    // 実在しない日や時刻を指す値は、日付も時刻も読まない。その層は日付を
+    // 言っていないことになり、上の層の値を受け継ぐ（タスクの読めない @ ブロックと同じ）
+    describe('実在しない日付と時刻', () => {
+        it('frontmatter の実在しない日は読まない', () => {
+            const doc = buildAndResolve(['## S', '- [ ] task'], {
+                'tv-start': '2026-02-30', 'tv-end': '2026-13-45T10:00', 'tv-due': '2025-02-29',
+            });
+            const section = doc.sections[0];
+            expect(section.resolvedStartDate).toBeUndefined();
+            expect(section.resolvedEndDate).toBeUndefined();
+            expect(section.resolvedEndTime).toBeUndefined();
+            expect(section.resolvedDue).toBeUndefined();
+        });
+
+        it('見出しのプロパティ行の読めない値は、日付も時刻も読まず、上の層の値になる', () => {
+            const doc = buildAndResolve([
+                '## Morning',
+                '- tv-start:: 2026-02-30T11:00',
+                '- tv-due:: 2026-10-01T25:00',
+                '- [ ] task',
+            ], { 'tv-start': '2026-09-28', 'tv-due': '2026-10-05' });
+            const section = doc.sections[0];
+            expect(section.resolvedStartDate).toBe('2026-09-28');
+            expect(section.resolvedStartTime).toBeUndefined();
+            expect(section.resolvedSources.fields.startDate).toEqual(fm);
+            expect(section.resolvedDue).toBe('2026-10-05');
+        });
     });
 });

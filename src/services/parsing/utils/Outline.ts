@@ -1,4 +1,4 @@
-import { CodeFenceTracker, type FenceDelimiter } from '../../../utils/CodeFenceTracker';
+import { CodeFenceTracker, type FenceDelimiter } from './CodeFenceTracker';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 
 /**
@@ -18,20 +18,6 @@ export const INDENT_SOURCE = `${SPACE_OR_TAB_SOURCE}*`;
 
 const INDENT_RE = new RegExp(`^${INDENT_SOURCE}`);
 const BLANK_RE = /^[ 	 　]*$/;
-
-/**
- * A way two lines of a note can be the same line: two lines stand in it when
- * their keys are equal. `key` is what a collection of lines is keyed by, and
- * `holds` is only ever `key(a) === key(b)`, so the two cannot disagree.
- */
-export interface LineRelation {
-    key(line: string): string;
-    holds(a: string, b: string): boolean;
-}
-
-function relation(key: (line: string) => string): LineRelation {
-    return { key, holds: (a, b) => key(a) === key(b) };
-}
 
 /**
  * What the lines of a note are to each other: how deep a line is, where a
@@ -85,26 +71,27 @@ export class Outline {
         return line.slice(this.indentOf(line).length);
     }
 
-    /*
-     * Two lines are compared as this relation and no other, and which
-     * questions ask it is written here, once:
+    /**
+     * The same line, character for character, indentation included. Two lines
+     * are compared this way and no other, and which questions ask it is
+     * written here, once:
      *
-     * - `VERBATIM`: a plan's row, its subtree and
-     *   generation blocks (`RowBasis.readsAsPlanned`); a write's check that a line
-     *   still reads what it read — the editor's line, a coordinate carried
-     *   across the write's own edits, a line a carry moved (`FileLines`)
+     * - a plan's row, its subtree and generation blocks
+     *   (`RowBasis.readsAsPlanned`); a write's check that a line still reads
+     *   what it read — the editor's line, a coordinate carried across the
+     *   write's own edits, a line a carry moved (`FileLines`)
      *
-     * A comparison of lines not in the table joins it; one that needs
-     * another relation is a question for the outline, not for its caller.
+     * A comparison of lines not in the list joins it; one that needs another
+     * comparison is a question for the outline, not for its caller.
      */
-
-    /** The same line, character for character, indentation included. */
-    static readonly VERBATIM: LineRelation = relation(line => line);
+    static verbatim(a: string, b: string): boolean {
+        return a === b;
+    }
 
     /**
      * A blank line: nothing on it but spaces, tabs, no-break spaces and
      * full-width spaces. Obsidian reads a line of the last two as blank too,
-     * though it does not indent with them (`stages\l2-blocks\measurement.md`).
+     * though it does not indent with them (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L2 の実測).
      */
     static isBlank(line: string): boolean {
         return BLANK_RE.test(line);
@@ -290,7 +277,7 @@ export class OutlineReading {
          * the note only — not in an item, a quote, a fence or indented code,
          * none of which Obsidian links a heading to (F8's Dev measurement).
          * Every reader of a heading asks this: the sections of the note
-         * (`DocumentTreeBuilder`), and where lines go in a heading's
+         * (`NoteSections`), and where lines go in a heading's
          * section (`Placement.into`: a move, a task made under a heading).
          */
         readonly headings: readonly OutlineHeading[],
@@ -376,11 +363,6 @@ export class OutlineReading {
         return this.codes[line] ?? false;
     }
 
-    /** Per-line {@link inCode}. */
-    codeMask(): boolean[] {
-        return [...this.codes];
-    }
-
     /**
      * The index just past `row`'s subtree: the end of the item `row` opens,
      * the blank lines at its very end left out. A blank line inside does
@@ -390,6 +372,22 @@ export class OutlineReading {
      */
     subtreeEnd(row: number): number {
         return this.items.get(row)?.end ?? row + 1;
+    }
+
+    /**
+     * The items that stand directly in the item `line` opens, top to bottom:
+     * those whose parent is `line`, code left out. The lines a task owns by
+     * their shape — its `- ==>` lines (`collectFlowLineIndices`) and its
+     * property lines (`ChildLineClassifier.ownPropertyLines`) — are the
+     * ones among these that have it. A line that opens no item has none.
+     */
+    directItems(line: number): number[] {
+        const direct: number[] = [];
+        const end = this.subtreeEnd(line);
+        for (let i = line + 1; i < end; i++) {
+            if (this.items.get(i)?.parent === line && !this.codes[i]) direct.push(i);
+        }
+        return direct;
     }
 
     /** The items `row`'s item stands in, innermost first. */
@@ -509,7 +507,7 @@ function leafOf(text: string): 'paragraph' | 'quote' | 'none' {
  * The reading is CommonMark's but where the reading view and Live Preview
  * both part from it the same way, in a task, a parent or a subtree: the
  * fence going on over shallower lines, and the blank lines of NBSP and
- * U+3000 (`stages\l2-blocks\measurement.md`, `stages\l3-indent\report.md`).
+ * U+3000 (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, the L2 and L3 measurements).
  * Where only one view parts from CommonMark, the outline reads CommonMark,
  * and the editor warns on the two shapes where the views show another
  * subtree than the one the plugin writes (`OutlineDiagnostics`). The rules

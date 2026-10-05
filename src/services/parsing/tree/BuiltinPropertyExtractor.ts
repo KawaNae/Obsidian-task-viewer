@@ -1,10 +1,11 @@
+import { DateUtils } from '../../../utils/DateUtils';
 import type { ScopeKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { reservedPropertyKeys } from '../utils/FrontmatterPolicy';
-import type { ScalarField } from './DocumentTree';
+import type { ScalarField } from './Sections';
 
 export interface ExtractedProperties {
     color?: string;
@@ -21,8 +22,8 @@ export interface ExtractedProperties {
 
 /**
  * The key a built-in value is written under, on any layer: the one
- * {@link BuiltinPropertyExtractor.extract} and `FilePropertyResolver` read it
- * from. A date and its time share their key.
+ * {@link BuiltinPropertyExtractor.extract} reads it from. A date and its time
+ * share their key.
  */
 export function fieldKey(field: ScalarField | 'tags', keys: ScopeKeys): string {
     switch (field) {
@@ -36,12 +37,21 @@ export function fieldKey(field: ScalarField | 'tags', keys: ScopeKeys): string {
     }
 }
 
+/** The built-ins a key can hold, one per key (a date's time is read with it). */
+type Builtin = 'color' | 'linestyle' | 'mask' | 'tags' | 'startDate' | 'endDate' | 'due';
+const BUILTINS: readonly Builtin[] = ['color', 'linestyle', 'mask', 'tags', 'startDate', 'endDate', 'due'];
+
 /**
- * Record<string, PropertyValue> から組み込みキー（tv-color 等）を
- * 専用フィールドに分離し、残りをカスタムプロパティとして返す。
+ * The built-in values of one layer's properties, put into their own fields,
+ * and the rest as custom properties: the frontmatter's
+ * (`PropertyValues.fromFrontmatter`), a section's and a task's alike, so a
+ * key means one thing on every layer. Which key is which built-in is
+ * {@link fieldKey}'s table.
  *
- * SectionPropertyResolver / TreeTaskExtractor で共通使用（section-scope と
- * task-scope のビルトインキー抽出）。FM層は FilePropertyResolver が担う。
+ * A built-in reads the value as written (`value`), whatever its type, but
+ * tags: a list's items (`tags: [a, b]` in the frontmatter, `tags:: a, b` on a
+ * line) are the tags, and a text is read as `#tag`s or else as a `,` list
+ * (`TagExtractor.fromPropertyValue`).
  */
 export class BuiltinPropertyExtractor {
     static extract(
@@ -50,42 +60,68 @@ export class BuiltinPropertyExtractor {
     ): ExtractedProperties {
         const result: ExtractedProperties = { properties: {} };
         const reserved = reservedPropertyKeys(keys);
+        const builtinOf = new Map<string, Builtin>();
+        for (const field of BUILTINS) {
+            const key = fieldKey(field, keys);
+            if (!builtinOf.has(key)) builtinOf.set(key, field);
+        }
 
         for (const [key, pv] of Object.entries(rawProperties)) {
-            if (key === keys.color) {
-                if (pv.value.trim()) result.color = normalizeColor(pv.value);
-            } else if (key === keys.linestyle) {
-                const val = pv.value.trim().toLowerCase();
-                if (VALID_LINE_STYLES.has(val)) result.linestyle = val;
-            } else if (key === keys.mask) {
-                const trimmed = pv.value.trim();
-                if (trimmed) result.mask = trimmed;
-            } else if (key === 'tags') {
-                const tags = TagExtractor.fromPropertyValue(pv.value);
-                if (tags.length > 0) result.tags = tags;
-            } else if (key === keys.start) {
-                const parsed = parseDateTimeField(pv.value.trim());
-                if (parsed.date) result.startDate = parsed.date;
-                if (parsed.time) result.startTime = parsed.time;
-            } else if (key === keys.end) {
-                const parsed = parseDateTimeField(pv.value.trim());
-                if (parsed.date) result.endDate = parsed.date;
-                if (parsed.time) result.endTime = parsed.time;
-            } else if (key === keys.due) {
-                const parsed = parseDateTimeField(pv.value.trim());
-                if (parsed.date) {
-                    result.due = parsed.time ? `${parsed.date}T${parsed.time}` : parsed.date;
-                }
+            const field = builtinOf.get(key);
+            if (field) {
+                this.readBuiltin(field, pv, result);
             } else if (!reserved.has(key)) {
-                // A reserved key this extractor has no field for (tv-ignore,
-                // the file task's legacy tv-content / tv-status /
-                // tv-timer-target-id, and Obsidian's `position`) is not a
-                // custom property — same rule as the frontmatter resolver
-                // applies at the File layer.
+                // A reserved key with no field (tv-ignore, the file task's
+                // legacy tv-content / tv-status / tv-timer-target-id, and
+                // Obsidian's `position`) is not a custom property.
                 result.properties[key] = pv;
             }
         }
 
         return result;
+    }
+
+    private static readBuiltin(field: Builtin, pv: PropertyValue, result: ExtractedProperties): void {
+        const text = pv.value.trim();
+        switch (field) {
+            case 'color':
+                if (text) result.color = normalizeColor(text);
+                return;
+            case 'linestyle': {
+                const style = text.toLowerCase();
+                if (VALID_LINE_STYLES.has(style)) result.linestyle = style;
+                return;
+            }
+            case 'mask':
+                if (text) result.mask = text;
+                return;
+            case 'tags': {
+                const tags = pv.type === 'array'
+                    ? TagExtractor.fromFrontmatter(pv.items)
+                    : TagExtractor.fromPropertyValue(pv.value);
+                if (tags.length > 0) result.tags = tags;
+                return;
+            }
+            // A value naming a day or a time that does not exist is not read
+            // (`parseDateTimeField`): this layer says no date, and the cascade
+            // gives the one above it, as for a task's block that does not read.
+            case 'startDate': {
+                const parsed = parseDateTimeField(text);
+                if (parsed?.date) result.startDate = parsed.date;
+                if (parsed?.time) result.startTime = parsed.time;
+                return;
+            }
+            case 'endDate': {
+                const parsed = parseDateTimeField(text);
+                if (parsed?.date) result.endDate = parsed.date;
+                if (parsed?.time) result.endTime = parsed.time;
+                return;
+            }
+            case 'due': {
+                const parsed = parseDateTimeField(text);
+                if (parsed?.date) result.due = DateUtils.joinDateTime(parsed.date, parsed.time);
+                return;
+            }
+        }
     }
 }

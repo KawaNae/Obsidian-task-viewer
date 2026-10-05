@@ -1,27 +1,24 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
-import { TimerPersistence } from '../../../src/timer/TimerPersistence';
-import { TimerRenderer } from '../../../src/timer/TimerRenderer';
-import { STORAGE_VERSION } from '../../../src/timer/TimerStorageUtils';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
-import type { CountupTimer, IntervalTimer, TimerInstance } from '../../../src/timer/TimerInstance';
+import { TimerPersistence, STORAGE_VERSION } from '../../../src/timer/TimerPersistence';
+import type { TimerWidget } from '../../../src/timer/TimerWidget';
+import type { TimerState } from '../../../src/timer/TimerState';
 import { t } from '../../../src/i18n';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { widgetOver } from '../helpers/timerRig';
 
 /**
- * 止めたが記録していない走行は、明示的な状態（`pendingRecord`）として残る。
+ * 止めたが記録していない走行は、記録の区切り `session: { kind: 'pending', record }`
+ * として残る（記録待ち）。
  *
- * 出口（⏸、■、interval の ■、interval の満了）は、止めて計測を固定し、保存して
- * から書く。書けたら押した出口の行き先へ進む。書けなければ何も戻さず、状態が
- * そのまま「記録待ち」を言う。再読み込みをまたいでも同じ時刻と長さで書き直す。
+ * 出口（⏸、■、ポモドーロの周の終わり）は、時計を止めて記録を固定し（`stopped`）、
+ * 保存してから書く。書けたら押した出口の行き先へ進む。書けなければ何も戻さず、
+ * 状態がそのまま「記録待ち」を言う。再読み込みをまたいでも、固定した時刻と長さで
+ * 書き直す。
  */
 const store = new Map<string, string>();
 (globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => 1, clearInterval: () => { },
+    setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
     addEventListener: () => { }, removeEventListener: () => { },
     localStorage: {
         getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
@@ -32,48 +29,16 @@ const store = new Map<string, string>();
 
 const FILE = 'notes/a.md';
 const at = (h: number, m: number) => new Date(2026, 8, 21, h, m, 0);
-const keyFor = (version: number) => `task-viewer.active-timers.v${version}:vault-fp`;
-const storageUtils = {
-    deviceId: 'device-1',
-    vaultFingerprint: 'vault-fp',
-    getStorageKey: () => keyFor(STORAGE_VERSION),
-    getStorageKeyForVersion: (v: number) => keyFor(v),
-} as unknown as TimerStorageUtils;
 
 /** 保存に在るタイマー（1 本だけ）。 */
-function saved(): Record<string, unknown> | undefined {
-    const raw = store.get(keyFor(STORAGE_VERSION));
-    return raw ? (JSON.parse(raw) as { timers: Record<string, unknown>[] }).timers[0] : undefined;
-}
-
-/** 1 回の plugin の読み込み: 索引、recorder、lifecycle、保存。 */
-function pluginOver(s: VaultSession) {
-    const ctx = {
-        timers: new Map<string, TimerInstance>(), recorder: s.recorder,
-        plugin: {
-            settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
-            getTaskReadService: () => ({ onChange: () => () => { } }),
-        },
-        app: s.app,
-        startTimer: () => { }, render: () => { }, renderTimerItem: () => { },
-        persistTimersToStorage: () => persistence.persistTimersToStorage(),
-        onTimerClosed: () => { }, discardTimerContent: () => { },
-        flushTimerContent: async () => true,
-        ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
-        getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
-    } as unknown as TimerContext;
-    // interval の tick が走行中の行の end を見に行く。ここでは書き足さない。
-    (s.recorder as unknown as { plugin: Record<string, unknown> }).plugin.getTaskReadService =
-        () => ({ getDisplayTask: () => undefined });
-    const creator = new TimerCreator(ctx);
-    const lifecycle = new TimerLifecycle(ctx, creator);
-    const persistence = new TimerPersistence(ctx, creator, lifecycle, storageUtils);
-    const renderer = new TimerRenderer(ctx, lifecycle, creator, {} as TimerContentBinding);
-    return { ctx, creator, lifecycle, persistence, renderer };
+function saved(): TimerState | undefined {
+    const key = [...store.keys()].find(k => k.startsWith(`task-viewer.active-timers.v${STORAGE_VERSION}:`));
+    const raw = key ? store.get(key) : undefined;
+    return raw ? (JSON.parse(raw) as { timers: TimerState[] }).timers[0] : undefined;
 }
 
 /** 操作列のボタンのラベル。 */
-function controls(renderer: TimerRenderer, timer: TimerInstance): string[] {
+function controls(widget: TimerWidget, timer: TimerState): string[] {
     const labels: string[] = [];
     const make = (): unknown => ({
         createEl: () => make(),
@@ -82,7 +47,7 @@ function controls(renderer: TimerRenderer, timer: TimerInstance): string[] {
             return make();
         },
     });
-    (renderer as unknown as { renderControls(c: unknown, t: TimerInstance): void }).renderControls(make(), timer);
+    (widget as unknown as { renderer: { renderControls(c: unknown, t: TimerState): void } }).renderer.renderControls(make(), timer);
     return labels;
 }
 
@@ -98,30 +63,26 @@ function failNextWrites(s: VaultSession, count: number, seen?: () => void) {
     };
 }
 
-/** 09:00 に child で始めた countup。 */
-async function running(contents: Map<string, string>) {
+/** 09:00 に child で始めたタイマー。1 本目の行を書き終えている。 */
+async function running(contents: Map<string, string>, kind: 'countup' | 'pomodoro' = 'countup') {
     const s = vaultSession(contents);
     await s.scanAll();
-    const target = s.index.getTasks().find(task => task.content === '対象')!;
-    const p = pluginOver(s);
-    const timer = s.creator.createTimer({
-        taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-        timerType: 'countup', recordMode: 'child', autoStart: true,
-    }) as CountupTimer;
-    p.ctx.timers.set(timer.id, timer);
-    expect(await s.recorder.writeStart(timer)).toBe(true);
+    const widget = widgetOver(s);
+    widget.startTimer(s.index.getTasks().find(task => task.content === '対象')!, 'child', { kind });
+    const [timer] = widget.board.values();
+    await vi.waitFor(() => expect(timer.tail).not.toBeNull());
     await s.settle(FILE);
-    timer.startTimeMs = Date.now();
-    return { s, timer, ...p };
+    return { s, widget, timer };
 }
 
 /** 保存から戻す、次の plugin の読み込み。 */
 async function reload(contents: Map<string, string>) {
     const s = vaultSession(contents);
     await s.scanAll();
-    const p = pluginOver(s);
-    p.persistence.restoreTimersFromStorage();
-    return { s, ...p, timer: [...p.ctx.timers.values()][0] };
+    const widget = widgetOver(s);
+    const { timers, idle } = new TimerPersistence(s.app).restore();
+    widget.board.restore(timers, idle);
+    return { s, widget, timer: widget.board.values()[0] };
 }
 
 const notes = () => new Map([[FILE, ['- [ ] 対象 @2026-09-21', ''].join('\n')]]);
@@ -137,25 +98,24 @@ describe('a record that could not be written is kept as a state, saved before th
 
     it('⏸ that cannot be written: the record is fixed and saved before the write, and nothing moves on', async () => {
         const contents = notes();
-        const { s, timer, lifecycle } = await running(contents);
+        const { s, widget, timer } = await running(contents);
         const before = contents.get(FILE)!;
 
         vi.setSystemTime(at(9, 10));
-        let savedAtWrite: Record<string, unknown> | undefined;
+        let savedAtWrite: TimerState | undefined;
         failNextWrites(s, 1, () => { savedAtWrite ??= saved(); });
         Notice.messages.length = 0;
-        await lifecycle.suspendTimer(timer);
+        await widget.lifecycle.stop(timer, 'suspend');
+        widget.board.flush();
 
-        const fixed = { endMs: at(9, 10).getTime(), seconds: 600, then: 'suspend' };
+        const fixed = { kind: 'pending', record: { endMs: at(9, 10).getTime(), seconds: 600, then: 'suspend' } };
         // 書く前に固定して保存している。
-        expect(savedAtWrite?.pendingRecord).toEqual(fixed);
-        expect(timer.pendingRecord).toEqual(fixed);
-        // 状態は進んでいない: 中断にも、記録済みにもならない。
-        expect(timer.runState).toBe('running');
-        expect(timer.isRunning).toBe(false);
-        expect(timer.sessionCount).toBe(0);
-        expect(timer.recordedElapsedTime).toBe(0);
-        expect(saved()?.pendingRecord).toEqual(fixed);
+        expect(savedAtWrite?.session).toEqual(fixed);
+        expect(timer.session).toEqual(fixed);
+        // 時計は止まり、中断にも記録済みにもならない。
+        expect(timer.clock).toEqual({ kind: 'frozen', seconds: 600 });
+        expect(timer.recorded).toEqual({ seconds: 0, count: 0 });
+        expect(saved()?.session).toEqual(fixed);
         expect(Notice.messages).toHaveLength(1);
         expect(contents.get(FILE)).toBe(before);
         s.dispose();
@@ -166,108 +126,68 @@ describe('a record that could not be written is kept as a state, saved before th
         const first = await running(contents);
         vi.setSystemTime(at(9, 10));
         failNextWrites(first.s, 1);
-        await first.lifecycle.suspendTimer(first.timer);
+        await first.widget.lifecycle.stop(first.timer, 'suspend');
+        first.widget.board.flush();
         first.s.dispose();
 
         vi.setSystemTime(at(9, 40));
         const next = await reload(contents);
-        const timer = next.timer as CountupTimer;
-        expect(timer.pendingRecord).toEqual({ endMs: at(9, 10).getTime(), seconds: 600, then: 'suspend' });
-        expect(timer.isRunning).toBe(false);
-        expect(timer.elapsedTime).toBe(600);
+        const timer = next.timer;
+        expect(timer.session).toEqual({ kind: 'pending', record: { endMs: at(9, 10).getTime(), seconds: 600, then: 'suspend' } });
+        expect(timer.clock).toEqual({ kind: 'frozen', seconds: 600 });
         // 記録待ちの操作列は ⏸ と ■。
-        expect(controls(next.renderer, timer)).toEqual([t('timer.suspend'), t('timer.finish')]);
+        expect(controls(next.widget, timer)).toEqual([t('timer.suspend'), t('timer.finish')]);
 
-        await next.lifecycle.finishTimer(timer);
+        await next.widget.lifecycle.stop(timer, 'close');
         await next.s.settle(FILE);
         expect(recorded(contents.get(FILE)!)).toEqual(['09:00>09:10']);
-        expect(next.ctx.timers.has(timer.id)).toBe(false);
+        expect(next.widget.board.has(timer)).toBe(false);
         next.s.dispose();
     });
 
     it('⏸ again after a failed ■ records with the same time and then suspends', async () => {
         const contents = notes();
-        const { s, timer, lifecycle } = await running(contents);
+        const { s, widget, timer } = await running(contents);
         vi.setSystemTime(at(9, 10));
         failNextWrites(s, 1);
-        await lifecycle.finishTimer(timer);
-        expect(timer.pendingRecord?.then).toBe('close');
+        await widget.lifecycle.stop(timer, 'close');
+        expect(timer.session).toMatchObject({ kind: 'pending', record: { then: 'close' } });
 
         vi.setSystemTime(at(9, 25));
-        await lifecycle.suspendTimer(timer);
+        await widget.lifecycle.stop(timer, 'suspend');
         await s.settle(FILE);
+        widget.board.flush();
         expect(recorded(contents.get(FILE)!)).toEqual(['09:00>09:10']);
-        expect(timer.pendingRecord).toBeNull();
-        expect(timer.runState).toBe('suspended');
-        expect(timer.sessionCount).toBe(1);
-        expect(timer.recordedElapsedTime).toBe(600);
-        expect(saved()?.pendingRecord).toBeNull();
+        expect(timer.session).toEqual({ kind: 'suspended' });
+        expect(timer.recorded).toEqual({ seconds: 600, count: 1 });
+        expect(saved()?.session).toEqual({ kind: 'suspended' });
         s.dispose();
     });
 
-    it('an interval whose end cannot be written waits with ■ alone, and ■ writes the end it reached', async () => {
+    it('a pomodoro whose last segment filled and could not be written waits, and ■ writes the end it reached', async () => {
         const contents = notes();
-        const s = vaultSession(contents);
-        await s.scanAll();
-        const target = s.index.getTasks().find(task => task.content === '対象')!;
-        const p = pluginOver(s);
-        const timer = p.creator.createTimer({
-            taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-            timerType: 'interval', recordMode: 'child', autoStart: true,
-            intervalGroups: [{ repeatCount: 1, segments: [{ label: 'Work', durationSeconds: 600, type: 'work' }] }],
-        }) as IntervalTimer;
-        p.ctx.timers.set(timer.id, timer);
-        expect(await s.recorder.writeStart(timer)).toBe(true);
-        await s.settle(FILE);
+        const { s, widget, timer } = await running(contents, 'pomodoro');
+        if (timer.measure.type !== 'interval') throw new Error('not a pomodoro');
+        widget.board.dispatch(timer, {
+            type: 'retimed',
+            groups: [{ repeatCount: 1, segments: [{ label: 'Work', durationSeconds: 600, type: 'work' }] }],
+        });
 
-        vi.setSystemTime(at(9, 10));
+        // tick は時間の表示を進める。描く項目の無い器を渡す。
+        widget.ensureContainer = () => ({ querySelector: () => null }) as unknown as HTMLElement;
+        vi.setSystemTime(at(9, 12));
         failNextWrites(s, 1);
-        (p.lifecycle as unknown as { tick(id: string): void }).tick(timer.id);
-        await vi.waitFor(() => expect(timer.pendingRecord).not.toBeNull());
-        await vi.waitFor(() => expect((p.lifecycle as unknown as { busy: Set<string> }).busy.size).toBe(0));
-        expect(timer.pendingRecord).toEqual({ endMs: at(9, 10).getTime(), seconds: 600, then: 'close' });
-        expect(p.ctx.timers.has(timer.id)).toBe(true);
-        expect(controls(p.renderer, timer)).toEqual([t('timer.stop')]);
+        widget.lifecycle.tick(at(9, 12).getTime());
+        await vi.waitFor(() => expect(timer.session.kind).toBe('pending'));
+        await vi.waitFor(() => expect(widget.runtime.busy.size).toBe(0));
+        expect(timer.session).toEqual({ kind: 'pending', record: { endMs: at(9, 10).getTime(), seconds: 600, then: 'close' } });
+        expect(widget.board.has(timer)).toBe(true);
 
         vi.setSystemTime(at(9, 30));
-        await p.lifecycle.stopIntervalTimer(timer);
+        await widget.lifecycle.stop(timer, 'close');
         await s.settle(FILE);
         expect(recorded(contents.get(FILE)!)).toEqual(['09:00>09:10']);
-        expect(p.ctx.timers.has(timer.id)).toBe(false);
+        expect(widget.board.has(timer)).toBe(false);
         s.dispose();
-    });
-});
-
-describe('the saved state is read only at its own version', () => {
-    beforeEach(() => store.clear());
-
-    it('a v6 save is not read, and its key is dropped', async () => {
-        store.set(keyFor(6), JSON.stringify({
-            version: 6, ownerDeviceId: 'device-1', vaultFingerprint: 'vault-fp', updatedAtMs: 0,
-            timers: [{
-                id: 'timer-6', taskId: 'tv-inline:notes/a.md:ln:1', taskName: 'A', taskOriginalText: '- [ ] A',
-                taskFile: FILE, startTimeMs: 0, pausedElapsedTime: 30, isRunning: false, isExpanded: true,
-                timerType: 'countup', recordMode: 'child', parserId: 'tv-inline', elapsedTime: 30,
-            }],
-        }));
-        const next = await reload(notes());
-        expect(next.ctx.timers.size).toBe(0);
-        expect(store.has(keyFor(6))).toBe(false);
-        expect(STORAGE_VERSION).toBe(8);
-        next.s.dispose();
-    });
-
-    it('a saved timer without pendingRecord is not read', async () => {
-        const contents = notes();
-        const first = await running(contents);
-        first.persistence.persistTimersToStorage();
-        const raw = JSON.parse(store.get(keyFor(STORAGE_VERSION))!) as { timers: Record<string, unknown>[] };
-        delete raw.timers[0].pendingRecord;
-        store.set(keyFor(STORAGE_VERSION), JSON.stringify(raw));
-        first.s.dispose();
-
-        const next = await reload(contents);
-        expect(next.ctx.timers.size).toBe(0);
-        next.s.dispose();
     });
 });

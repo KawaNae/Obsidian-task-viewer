@@ -2,8 +2,9 @@ import { BaseDragStrategy } from '../BaseDragStrategy';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { DateUtils } from '../../../../utils/DateUtils';
+import { instantText, visualDayAt } from '../../../../utils/DayWindow';
 import { type DisplayDateEdits, getOriginalTaskId, toDisplayTask } from '../../../../services/display/DisplayTaskConverter';
-import type { DragPlan } from '../../DragPlan';
+import { dragBase, type DragPlan } from '../../DragPlan';
 
 /**
  * Timeline (timed タスク) の Resize Gesture。resize 方向は top / bottom のみ。
@@ -60,7 +61,7 @@ export class TimelineResizeGesture extends BaseDragStrategy {
         this.initialBottom = this.initialTop + this.initialHeight;
 
         const dayCol = el.closest('.timeline-scroll-area__day-column') as HTMLElement;
-        this.currentDayDate = dayCol?.dataset.date || task.startDate || null;
+        this.currentDayDate = dayCol?.dataset.date || this.drawnFirstDay(el, context.plugin.settings.startHour);
 
         el.addClass('is-dragging');
     }
@@ -149,14 +150,14 @@ export class TimelineResizeGesture extends BaseDragStrategy {
         }
 
         const originalId = getOriginalTaskId(this.dragTask);
-        const originalTask = context.readService.getTask(originalId);
+        const originalTask = context.index.getTask(originalId);
         if (!originalTask) {
             this.cleanup();
             return;
         }
 
         const startHour = context.plugin.settings.startHour;
-        const displayTask = toDisplayTask(originalTask, startHour, (id) => context.readService.getTask(id));
+        const displayTask = toDisplayTask(originalTask, startHour, (id) => context.index.getTask(id));
         const startHourMinutes = startHour * 60;
 
         // 現状は CSS 変数が single source of truth。processResize が更新した
@@ -174,39 +175,42 @@ export class TimelineResizeGesture extends BaseDragStrategy {
         const normEnd = ((roundedEnd % 1440) + 1440) % 1440;
 
         // newStart/End は raw 表記 (currentDayDate + offset、normalize 0-1439)。
-        // 注: displayTask.effective* も実は raw 表記 (toDisplayTask は implicit
-        // 補完だけして visual 変換しない — visual range は getTaskDateRange が
-        // toVisualDate で別計算する)。つまりこのメソッドは raw 値しか持たない。
+        // 動かさない側はタスクの期間 (span) の瞬間を暦の日時で読む。
         //
         // commitPlan は edits を visual と前提するため、materializeRawDates の
         // unshiftVisual が time<startHour で +1 day 適用する。raw を渡すと
-        // 二重 shift になるので、すべて toVisualDate で visual に正規化してから
+        // 二重 shift になるので、すべて visualDayAt で visual に正規化してから
         // 渡し、round-trip で raw に戻す。
         const newStartDate = DateUtils.addDays(this.currentDayDate, startDayOffset);
         const newStartTime = DateUtils.minutesToTime(normStart);
         const newEndDate = DateUtils.addDays(this.currentDayDate, endDayOffset);
         const newEndTime = DateUtils.minutesToTime(normEnd);
-
-        const rawToVisual = (date: string | undefined, time: string | undefined): string | undefined =>
-            date ? DateUtils.toVisualDate(date, time, startHour) : undefined;
+        const kept = displayTask.span;
+        if (!kept) {
+            this.cleanup();
+            return;
+        }
+        const keptStart = instantText(kept.startMs);
+        const keptEnd = instantText(kept.endMs);
 
         const edits: DisplayDateEdits = this.resizeDirection === 'top'
             ? {
-                effectiveStartDate: DateUtils.toVisualDate(newStartDate, newStartTime, startHour),
-                effectiveStartTime: newStartTime,
-                effectiveEndDate: rawToVisual(displayTask.effectiveEndDate, displayTask.effectiveEndTime),
-                effectiveEndTime: displayTask.effectiveEndTime,
+                startDay: visualDayAt(newStartDate, newStartTime, startHour),
+                startTime: newStartTime,
+                endDay: visualDayAt(keptEnd.date, keptEnd.time, startHour),
+                endTime: keptEnd.time,
             }
             : {
-                effectiveStartDate: rawToVisual(displayTask.effectiveStartDate, displayTask.effectiveStartTime),
-                effectiveStartTime: displayTask.effectiveStartTime,
-                effectiveEndDate: DateUtils.toVisualDate(newEndDate, newEndTime, startHour),
-                effectiveEndTime: newEndTime,
+                startDay: visualDayAt(keptStart.date, keptStart.time, startHour),
+                startTime: keptStart.time,
+                endDay: visualDayAt(newEndDate, newEndTime, startHour),
+                endTime: newEndTime,
             };
 
-        const plan: DragPlan = { edits, baseTask: originalTask };
-        // 書けなかったときも後続は同じ。拒否の通知と写しの巻き戻しは TaskIndex が、
-        // 伸ばした見た目の描き直しは DragSession.handleUp の notifyImmediate が行う。
+        const plan: DragPlan = { edits, baseTask: dragBase(originalTask, startHour) };
+        // 書けなかったときも後続は同じ。拒否の通知は書き込みの層が、伸ばした
+        // 見た目の描き直しは DragSession.handleUp の、ノートを読み直したあとの
+        // 全体の描画が行う。
         await this.commitPlan(context, plan, this.dragTask.id);
         this.cleanup();
     }

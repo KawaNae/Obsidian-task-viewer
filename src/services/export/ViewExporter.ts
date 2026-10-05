@@ -1,6 +1,7 @@
 import { Notice } from 'obsidian';
 import type { ViewExportOptions, ExportTargetSpec } from './ExportTypes';
 import { ExportUtils } from './ExportUtils';
+import { saveExportImage } from './ExportSave';
 import { logError } from '../../log/log';
 import { t } from '../../i18n';
 
@@ -115,7 +116,7 @@ export class ViewExporter {
 
         try {
             const { blob } = await ViewExporter.captureExpanded(container, spec);
-            const filePath = await ExportUtils.saveBlobToVault(blob, filename, folder, app);
+            const filePath = await saveExportImage(app, blob, folder, filename);
             progress.hide();
             new Notice(t('notice.imageSaved', { path: filePath }));
         } catch (err) {

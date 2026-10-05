@@ -2,7 +2,9 @@ import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { DestinationAsk } from '../../services/data/NoteOps';
 import { ShownSuggest } from '../../suggest/ShownSuggest';
+import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
+import type { IssueSlot } from '../form/FormIssue';
 import { NoteFields } from './NoteFields';
 
 /** What a {@link DestinationField} opens with, and whom it tells. */
@@ -25,12 +27,13 @@ export interface DestinationFieldOptions {
  *
  * It holds what the user typed and nothing of the operation it is for:
  * what the note is, which headings it has and whether a field is wrong are
- * the form's to find out and to say ({@link offerHeadings},
- * {@link markInvalid}).
+ * the form's to find out ({@link offerHeadings}) and to say, under the
+ * field's row ({@link slot}).
  */
 export class DestinationField {
     private readonly note: NoteFields;
-    readonly headingInput: HTMLInputElement;
+    private readonly headingInput: HTMLInputElement;
+    private readonly headingSays: HTMLElement;
     private readonly headingSuggest: HeadingSuggest;
 
     constructor(app: App, container: HTMLElement, opts: DestinationFieldOptions) {
@@ -41,7 +44,8 @@ export class DestinationField {
             onEnter: opts.onEnter,
         });
 
-        const { row } = createFormRow(container, t('modal.send.heading'), { icon: 'heading' });
+        const { row, says } = createFormRow(container, t('modal.send.heading'), { icon: 'heading' });
+        this.headingSays = says;
         this.headingInput = row.createEl('input', {
             type: 'text',
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
@@ -50,12 +54,7 @@ export class DestinationField {
         this.headingInput.value = opts.initial.heading;
         this.headingInput.addEventListener('input', () => opts.onChange());
         this.headingSuggest = new HeadingSuggest(app, this.headingInput);
-        this.headingInput.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key !== 'Enter' || e.isComposing) return;
-            if (this.headingSuggest.listShown) return;
-            e.preventDefault();
-            opts.onEnter();
-        });
+        onFormEnter(this.headingInput, () => opts.onEnter(), { takesEnter: () => this.headingSuggest.listShown });
     }
 
     /** What the fields hold now. */
@@ -68,14 +67,16 @@ export class DestinationField {
         this.headingSuggest.headings = headings;
     }
 
-    /** Say which fields are wrong, as an invalid input reads (`tv-ctrl__text-input--invalid`). */
-    markInvalid(invalid: { name: boolean; heading: boolean }): void {
-        this.note.nameInput.toggleClass('tv-ctrl__text-input--invalid', invalid.name);
-        this.headingInput.toggleClass('tv-ctrl__text-input--invalid', invalid.heading);
+    /** Where what is said of the note's name, or of the heading, goes: its input and the line under its row. */
+    slot(at: 'name' | 'heading'): IssueSlot {
+        return at === 'name'
+            ? { input: this.note.nameInput, message: this.note.nameSays }
+            : { input: this.headingInput, message: this.headingSays };
     }
 
-    focus(): void {
-        this.note.nameInput.focus();
+    /** Focus the note's name. */
+    focus(options?: FocusOptions): void {
+        this.note.nameInput.focus(options);
     }
 }
 
@@ -96,7 +97,7 @@ class HeadingSuggest extends ShownSuggest<string> {
         el.setText(name);
     }
 
-    selectSuggestion(name: string): void {
+    protected pick(name: string): void {
         this.field.value = name;
         this.field.trigger('input');
         this.close();

@@ -1,12 +1,11 @@
-import type { Task } from '../../types';
 import { splitLines, type ReadMark } from '../persistence/FileLines';
-import { plannedOn } from '../persistence/TaskRefs';
+import type { ReadCopy } from '../persistence/TaskRefs';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 import { readReading, type ReadingId } from './Reading';
 
 /**
  * Whether the index's reading of a file is the file on disk, asked before an
- * operation is planned from it (structure.md, 読みの鮮度).
+ * operation is planned from it (structure/layers.md, 読みの鮮度).
  *
  * `fresh`: it is, or our own writes carry it there. `stale`: the file changed
  * in a way the index has not read — an edit from outside whose change event
@@ -21,8 +20,6 @@ export type Checked =
     | { verdict: 'unread' }
     | { verdict: 'unreadable' };
 
-export type Verdict = Checked['verdict'];
-
 /**
  * The file as a check of a copy read it. `read` says whether these lines are
  * the reading the copy was made in: when they are not, our own writes carried
@@ -34,13 +31,9 @@ export interface OnDisk {
     read: boolean;
 }
 
-/**
- * {@link Checked} of a copy, with what the check read when it read the file:
- * a fresh copy whose name gives no reading is not checked against anything,
- * and has none.
- */
+/** {@link Checked} of a copy, with what the check read of the file when it is fresh. */
 export type CopyChecked =
-    | { verdict: 'fresh'; disk: OnDisk | null }
+    | { verdict: 'fresh'; disk: OnDisk }
     | Exclude<Checked, { verdict: 'fresh' }>;
 
 /** What a check asks of the index and of the disk. */
@@ -60,13 +53,9 @@ export interface CheckDeps {
  * write that check would let through. A copy carried across our own writes
  * is fresh, and so is one of the file being dragged whose reading since is
  * held back (`TaskScanner.hold`): it is numbered, if not committed.
- *
- * A copy whose name gives no reading is not one the index read: nothing
- * reads it fresh, and the write turns it away on its own (`changed`).
  */
-export async function checkCopy(deps: CheckDeps, task: Task): Promise<CopyChecked> {
-    const { read, line } = plannedOn(task);
-    if (read === undefined) return { verdict: 'fresh', disk: null };
+export async function checkCopy(deps: CheckDeps, task: ReadCopy): Promise<CopyChecked> {
+    const { reading: read, line } = task;
     const disk = await diskContent(deps, task.file);
     if (disk === null) return { verdict: 'unreadable' };
     if (deps.follow(task.file, read, line, disk.key) === null) return { verdict: 'stale', disk: disk.key };
@@ -76,7 +65,7 @@ export async function checkCopy(deps: CheckDeps, task: Task): Promise<CopyChecke
 
 /**
  * Whether the index's last reading of `path` is the file on disk: the check
- * for a row looked up by its anchor (`TaskIndex.freshByAnchor`), which looks
+ * for a row looked up by its anchor (`Operations.freshByAnchor`), which looks
  * in the last reading, whichever it is. A file the index has not read yet is
  * `unread`, not `stale`: no notice was missed for it.
  */

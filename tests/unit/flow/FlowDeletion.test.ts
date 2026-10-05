@@ -5,7 +5,7 @@ import {
     planFlowForDeletion,
 } from '../../../src/services/flow/FlowDeletion';
 import type { FlowPlanDeps } from '../../../src/services/flow/FlowPlanner';
-import { singleLineFlow } from '../../../src/services/flow/FlowSegments';
+import { singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
@@ -44,7 +44,7 @@ describe('planFlowForDeletion', () => {
             if (outlook.kind !== 'creates') return;
             // strip-flow has no place here: the line it would rewrite is the
             // line about to be deleted.
-            expect(outlook.effects.map(e => e.kind)).toEqual(['create-next']);
+            expect(outlook.effects.map(e => e.kind)).toEqual(['create-instance']);
         });
 
         it('previews the line the writer would put on the page', () => {
@@ -63,7 +63,7 @@ describe('planFlowForDeletion', () => {
 
             expect(outlook.kind).toBe('creates');
             if (outlook.kind !== 'creates') return;
-            expect(outlook.effects.map(e => e.kind)).toEqual(['create-generated']);
+            expect(outlook.effects.map(e => e.kind)).toEqual(['create-instance']);
             expect(outlook.previewLine).toBe('- [ ] 週報 第1回 @2026-07-06 ==> every mon use("週次")');
         });
     });
@@ -88,16 +88,16 @@ describe('planFlowForDeletion', () => {
         });
 
         it('move alone: archiving is not what a delete was asked for', () => {
-            const outlook = planFlowForDeletion(flowTask('move([[Archive]])'), DEPS);
+            const outlook = planFlowForDeletion(flowTask('move([[#Archive]])'), DEPS);
             expect(outlook.kind).toBe('nothing');
         });
 
         it('move alongside a schedule: the next instance is kept, the copy is not', () => {
-            const outlook = planFlowForDeletion(flowTask('every mon move([[Archive]])'), DEPS);
+            const outlook = planFlowForDeletion(flowTask('every mon move([[#Archive]])'), DEPS);
 
             expect(outlook.kind).toBe('creates');
             if (outlook.kind !== 'creates') return;
-            expect(outlook.effects.map(e => e.kind)).toEqual(['create-next']);
+            expect(outlook.effects.map(e => e.kind)).toEqual(['create-instance']);
         });
     });
 

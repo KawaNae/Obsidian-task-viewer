@@ -70,16 +70,11 @@ export function logWarn(message: string): void {
 /**
  * Log an error, and show it as a notice unless `notice: false`. Pass that
  * where the user is already told of the same failure once, in their words: a
- * write that failed is told by its refusal (`TaskIndex.reportRefusal`), and
+ * write that failed is told by its refusal (`Operations.reportRefusal`), and
  * a second notice with the log line would say it twice.
  */
 export function logError(message: string, opts: { notice?: boolean } = {}): void {
     pushEntry("error", message);
     console.error(message);
     if (opts.notice !== false) _showNotice?.(message, 8000);
-}
-
-export function notify(message: string, durationMs = 5000): void {
-    pushEntry("info", message);
-    _showNotice?.(message, durationMs);
 }

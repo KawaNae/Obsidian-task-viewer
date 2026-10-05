@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
-import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
@@ -22,17 +22,16 @@ import { plannedOn } from '../../../src/services/persistence/TaskRefs';
  */
 
 /** The next instance a `use("週報")` block writes: the same words, no child. */
-const GENERATED = {
-    kind: 'generated' as const,
-    parentLine: '- [ ] 週報',
+const GENERATED: FlowInstance = {
+    head: '- [ ] 週報',
     flowLines: ['use("週報")'],
     children: [],
 };
 
 /** A deletion fire as the executor writes it: the instances, then the removal, as one write. */
-async function deletionFire(h: WriteBench, task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
-    const outcome = await h.writer.applyToTask(plannedOn(task), [
-        ...inserts.map(insert => ({ kind: 'insert-instance' as const, insert })),
+async function deletionFire(h: WriteBench, task: Task, instances: FlowInstance[]): Promise<boolean> {
+    const outcome = await h.writer.write(task.file, plannedOn(task), [
+        ...instances.map(instance => ({ kind: 'insert-instance' as const, instance })),
         { kind: 'remove' as const },
     ]);
     return outcome.written;
@@ -115,7 +114,7 @@ describe('deletion fire: which line the delete takes', () => {
         const task = h.taskAt(1);
 
         const removed = await deletionFire(h, task, [
-            { kind: 'recurrence', content: '- [ ] 週報 @2026-09-28 ==> every mon', flowLines: [] },
+            { head: '- [ ] 週報 @2026-09-28 ==> every mon', flowLines: [], children: [] },
         ]);
 
         expect(removed).toBe(true);

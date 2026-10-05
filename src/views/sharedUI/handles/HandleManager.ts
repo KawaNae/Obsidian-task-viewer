@@ -56,7 +56,7 @@ export class HandleManager implements SelectionHost {
      */
     selectTask(taskId: string | null): void {
         // Remove handles from the previously selected task. Selection z-index
-        // is a CSS overlay (.is-selected), so there is no inline z to restore.
+        // is CSS's (.is-selected), so there is no inline z to restore.
         if (this.selectedTaskId) {
             this.removeHandles(this.selectedTaskId);
         }
@@ -73,10 +73,10 @@ export class HandleManager implements SelectionHost {
     reapplySelectionClass(): void {
         const taskId = this.getSelectedTaskId();
         const taskCards = this.getMainTaskCards();
-        // Selection is a pure class toggle. The z-index overlay lives in CSS
-        // (.task-card.is-selected → --z-task-card-selected !important), so the
-        // base z-index stays owned solely by decorateLane and never needs the
-        // save/restore that previously went stale across re-renders.
+        // Selection is a pure class toggle. The z-index lives in CSS: a lane
+        // gives a card its rank (`--lane-z`), and `.task-card.is-selected`
+        // (--z-task-card-selected) outranks it by specificity, so nothing is
+        // saved and restored across re-renders.
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
             const isSelected = !!taskId && heldBy(htmlEl)?.name === taskId;

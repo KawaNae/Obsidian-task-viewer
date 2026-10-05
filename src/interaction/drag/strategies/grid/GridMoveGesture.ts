@@ -5,6 +5,7 @@ import { DateUtils } from '../../../../utils/DateUtils';
 import { GhostRenderer } from '../../ghost/GhostRenderer';
 import type { GhostPlan } from '../../ghost/GhostPlan';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
+import { dragBase } from '../../DragPlan';
 import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';
@@ -106,9 +107,8 @@ export class GridMoveGesture extends BaseDragStrategy {
         }
 
         const originalId = getOriginalTaskId(task);
-        this.baseTask = context.readService.getTask(originalId) ?? task;
-
         const startHour = context.plugin.settings.startHour;
+        this.baseTask = dragBase(context.index.getTask(originalId) ?? task, startHour);
         const visual = this.getVisualDateRange(this.baseTask, startHour);
         this.initialVisualStart = visual.start;
         this.initialVisualEnd = visual.end;
@@ -124,7 +124,7 @@ export class GridMoveGesture extends BaseDragStrategy {
                 ? Math.min(7, this.startCol + span - 1)
                 : this.startCol;
         } else {
-            this.startCol = colStart + 1; // AllDay: dataset.colStart は 0-based、+1 で grid 1-based
+            this.startCol = colStart + 1; // AllDay: dataset.colStart は日の列の 1 始まり。時刻の軸の列が前にあるので格子の列は +1
             this.grabCol = this.startCol;
         }
 
@@ -360,7 +360,7 @@ export class GridMoveGesture extends BaseDragStrategy {
 
     /**
      * Calendar/AllDay 共通の Move 用 edits ビルダ。endDate 系の値があれば
-     * effectiveEndDate も同 dayDelta だけ shift し、なければ start のみ更新。
+     * endDay も同 dayDelta だけ shift し、なければ start のみ更新。
      *
      * pure: 入力 (initialVisualStart, initialVisualEnd, dayDelta, baseTask の
      * endDate/endTime 有無) のみで結果が決まる。
@@ -374,9 +374,9 @@ export class GridMoveGesture extends BaseDragStrategy {
         if (dayDelta === 0) return null;
         const movedStart = DateUtils.addDays(initialVisualStart, dayDelta);
         const movedEnd = DateUtils.addDays(initialVisualEnd, dayDelta);
-        const edits: DisplayDateEdits = { effectiveStartDate: movedStart };
+        const edits: DisplayDateEdits = { startDay: movedStart };
         if (baseTask.endDate || baseTask.endTime) {
-            edits.effectiveEndDate = movedEnd;
+            edits.endDay = movedEnd;
         }
         return edits;
     }
@@ -413,10 +413,10 @@ export class GridMoveGesture extends BaseDragStrategy {
         const endDayOffset = Math.floor(totalEndMin / 1440);
 
         return {
-            effectiveStartDate: DateUtils.addDays(targetDate, startDayOffset),
-            effectiveStartTime: DateUtils.minutesToTime(totalMin),
-            effectiveEndDate: DateUtils.addDays(targetDate, endDayOffset),
-            effectiveEndTime: DateUtils.minutesToTime(totalEndMin),
+            startDay: DateUtils.addDays(targetDate, startDayOffset),
+            startTime: DateUtils.minutesToTime(totalMin),
+            endDay: DateUtils.addDays(targetDate, endDayOffset),
+            endTime: DateUtils.minutesToTime(totalEndMin),
         };
     }
 

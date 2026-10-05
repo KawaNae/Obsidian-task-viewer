@@ -16,7 +16,7 @@ import { join, relative } from 'path';
 const SRC = join(__dirname, '../../../src');
 
 /** The two files the reading lives in. */
-const READING = new Set(['services/parsing/utils/Outline.ts', 'utils/CodeFenceTracker.ts']);
+const READING = new Set(['services/parsing/utils/Outline.ts', 'services/parsing/utils/CodeFenceTracker.ts']);
 
 const IDIOMS: Array<{ name: string; test: (line: string) => boolean }> = [
     // A fence delimiter written into a pattern or a string: ``` or ~~~, or a
@@ -34,14 +34,14 @@ const IDIOMS: Array<{ name: string; test: (line: string) => boolean }> = [
 /** A line that may stay, by its file and a piece of its text, and why. */
 const ALLOWED: Array<{ file: string; contains: string; reason: string }> = [
     {
-        file: 'services/parsing/tree/DocumentTreeBuilder.ts',
-        contains: 'Outline.depthOf(line) !== 0',
+        file: 'services/parsing/tree/NoteSections.ts',
+        contains: 'Outline.depthOf(text) !== 0',
         reason: 'a section property is a line at column 0: a point check of one line, not a walk',
     },
     {
-        file: 'services/parsing/tree/DocumentTreeBuilder.ts',
-        contains: 'indent: Outline.depthOf(rawLine)',
-        reason: 'TaskBlock.indent, the task\'s depth as a value (Task.indent); no walk reads it',
+        file: 'services/parsing/tree/NoteTasks.ts',
+        contains: 'task.indent = Outline.depthOf(',
+        reason: 'the task\'s depth as a value (Task.indent); no walk reads it',
     },
     {
         file: 'services/persistence/utils/SubtreeFrame.ts',
@@ -51,9 +51,8 @@ const ALLOWED: Array<{ file: string; contains: string; reason: string }> = [
     // A template file keeps its JSON in a fence it writes and reads whole;
     // that is the file's own format, not a reading of a note's blocks.
     { file: 'services/template/ViewTemplateLoader.ts', contains: '```json', reason: 'template JSON' },
-    { file: 'services/template/ViewTemplateWriter.ts', contains: '```', reason: 'template JSON' },
+    { file: 'services/template/TemplateNote.ts', contains: '```', reason: 'template JSON' },
     { file: 'timer/IntervalTemplateLoader.ts', contains: '```json', reason: 'template JSON' },
-    { file: 'timer/IntervalTemplateWriter.ts', contains: '```', reason: 'template JSON' },
 ];
 
 function sources(dir: string): string[] {

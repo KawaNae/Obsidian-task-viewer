@@ -1,9 +1,10 @@
-import { setIcon } from 'obsidian';
+import { setIcon, type Keymap } from 'obsidian';
 import type {
-    SortState, SortRule, SortProperty, SortDirection,
+    SortState, SortRule, SortDirection,
 } from '../../services/sort/SortTypes';
 import {
     createDefaultSortRule,
+    SORT_PROPERTIES,
     createEmptySortState,
     getSortPropertyLabel,
     SORT_PROPERTY_ICONS,
@@ -39,12 +40,26 @@ export class SortMenuComponent {
     private dragStartY = 0;
     private dragCleanup: (() => void) | null = null;
 
+    /** @param keymap Obsidian's keymap, whose hotkeys the menu keeps out while it has the focus. */
+    constructor(private readonly keymap: Keymap) { }
+
     getSortState(): SortState {
         return this.state;
     }
 
     setSortState(state: SortState): void {
-        this.state = structuredClone(state);
+        this.state = state;
+    }
+
+    /** Hold `rules`, draw the menu from them and tell the owner. */
+    private commit(rules: readonly SortRule[]): void {
+        this.state = { rules };
+        this.refreshPopover();
+    }
+
+    /** The rules with the one at `index` replaced by `rule`. */
+    private replaceRule(index: number, rule: SortRule): void {
+        this.commit(this.state.rules.map((r, i) => (i === index ? rule : r)));
     }
 
     isOpen(): boolean {
@@ -69,6 +84,7 @@ export class SortMenuComponent {
             anchor,
             panelClass: 'sort-popover',
             childStack: this.stack,
+            keymap: this.keymap,
             build: (bodyEl) => {
                 this.rootEl = bodyEl;
                 this.renderContent();
@@ -132,7 +148,7 @@ export class SortMenuComponent {
         propBtn.createSpan().setText(getSortPropertyLabel(rule.property));
         propBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.showPropertyMenu(propBtn, rule);
+            this.showPropertyMenu(propBtn, rule, index);
         });
 
         // Direction dropdown
@@ -142,16 +158,15 @@ export class SortMenuComponent {
         });
         dirBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.showDirectionMenu(dirBtn, rule);
+            this.showDirectionMenu(dirBtn, rule, index);
         });
 
         // Remove button (×)
-        const removeBtn = row.createEl('button', { cls: 'sort-popover__remove-btn' });
+        const removeBtn = row.createEl('button', { cls: 'tv-icon-btn sort-popover__remove-btn' });
         setIcon(removeBtn.createSpan(), 'x');
         removeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.state.rules.splice(index, 1);
-            this.refreshPopover();
+            this.commit(this.state.rules.filter((_, i) => i !== index));
         });
     }
 
@@ -166,8 +181,7 @@ export class SortMenuComponent {
         addBtn.createSpan().setText(t('sort.addSort'));
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.state.rules.push(createDefaultSortRule());
-            this.refreshPopover();
+            this.commit([...this.state.rules, createDefaultSortRule()]);
         });
 
         // Delete sort (only when rules exist)
@@ -177,19 +191,15 @@ export class SortMenuComponent {
             deleteBtn.createSpan().setText(t('sort.deleteSort'));
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.state.rules = [];
-                this.refreshPopover();
+                this.commit([]);
             });
         }
     }
 
     // ── Property / Direction Menus ──
 
-    private showPropertyMenu(anchorEl: HTMLElement, rule: SortRule): void {
-        const properties: SortProperty[] = [
-            'content', 'due', 'startDate', 'endDate', 'file', 'status', 'tag',
-        ];
-        const items: SelectItem[] = properties.map(p => ({
+    private showPropertyMenu(anchorEl: HTMLElement, rule: SortRule, index: number): void {
+        const items: SelectItem[] = SORT_PROPERTIES.map(p => ({
             label: getSortPropertyLabel(p),
             value: p,
             checked: rule.property === p,
@@ -197,12 +207,12 @@ export class SortMenuComponent {
         }));
 
         this.childShell = openSelectPopover(this.stack, anchorEl, items, (val) => {
-            rule.property = val as SortProperty;
-            this.refreshPopover();
+            const property = SORT_PROPERTIES.find(p => p === val);
+            if (property) this.replaceRule(index, { ...rule, property });
         }, { onClose: () => { this.childShell = null; } });
     }
 
-    private showDirectionMenu(anchorEl: HTMLElement, rule: SortRule): void {
+    private showDirectionMenu(anchorEl: HTMLElement, rule: SortRule, index: number): void {
         const directions: SortDirection[] = ['asc', 'desc'];
         const items: SelectItem[] = directions.map(d => ({
             label: getSortDirectionLabel(d),
@@ -211,8 +221,8 @@ export class SortMenuComponent {
         }));
 
         this.childShell = openSelectPopover(this.stack, anchorEl, items, (val) => {
-            rule.direction = val as SortDirection;
-            this.refreshPopover();
+            const direction = directions.find(d => d === val);
+            if (direction) this.replaceRule(index, { ...rule, direction });
         }, { onClose: () => { this.childShell = null; } });
     }
 
@@ -301,13 +311,13 @@ export class SortMenuComponent {
             this.dragOverIndex !== null &&
             this.dragIndex !== this.dragOverIndex
         ) {
-            const rules = this.state.rules;
+            const rules = [...this.state.rules];
             const [moved] = rules.splice(this.dragIndex, 1);
             const insertAt = this.dragOverIndex > this.dragIndex
                 ? this.dragOverIndex - 1
                 : this.dragOverIndex;
             rules.splice(insertAt, 0, moved);
-            this.refreshPopover();
+            this.commit(rules);
         } else {
             // Clean up visual state without re-render
             if (this.dragRowEl) {

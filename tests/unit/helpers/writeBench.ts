@@ -1,14 +1,14 @@
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskStore } from '../../../src/services/core/TaskStore';
-import { TaskValidator } from '../../../src/services/core/TaskValidator';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
-import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
-import type { LineEdit, Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
+import type { LineEdit, Refusal, RowRef, WriteChannel } from '../../../src/services/persistence/FileLines';
+import type { CompletionFire, FiringOutcome } from '../../../src/services/persistence/FiringTrials';
+import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 
 /**
  * A vault in memory with a real `TaskScanner` over it, and the write layer
@@ -51,7 +51,6 @@ export interface WriteBench {
     readonly contents: Map<string, string>;
     readonly scanner: TaskScanner;
     readonly writer: InlineTaskWriter;
-    readonly cloner: TaskCloner;
     readonly repo: TaskRepository;
     /** Every write given up, in order, as the channel was told it. */
     readonly refused: Refusal[];
@@ -101,8 +100,8 @@ export async function writeBench(files: string | string[] | Record<string, strin
         metadataCache: { getCache: () => null },
     };
 
-    const store = new TaskStore(DEFAULT_SETTINGS);
-    const scanner = new TaskScanner(app as never, store, new TaskValidator(), DEFAULT_SETTINGS);
+    const store = new TaskStore();
+    const scanner = new TaskScanner(app as never, store, DEFAULT_SETTINGS);
 
     const refused: Refusal[] = [];
     const filed: Filed[] = [];
@@ -119,14 +118,12 @@ export async function writeBench(files: string | string[] | Record<string, strin
     const repo = new TaskRepository(app);
     repo.connect(channel);
     const writes = (path: string) => repo.channelOf(path);
-    const fileOps = new FileOperations(app);
 
     const bench: WriteBench = {
         app,
         contents,
         scanner,
-        writer: new InlineTaskWriter(app, fileOps, writes),
-        cloner: new TaskCloner(app, fileOps, writes),
+        writer: new InlineTaskWriter(app, writes),
         repo,
         refused,
         filed,
@@ -147,4 +144,20 @@ export async function writeBench(files: string | string[] | Record<string, strin
 
     for (const path of contents.keys()) await bench.scan(path);
     return bench;
+}
+
+/**
+ * The row rewritten as `task`, its property lines by `childOps`, with `fire`
+ * when the rewrite completes it: the `update` a card's write hands the
+ * write layer (`TaskIndex.writeUpdate`), through `writer`'s `write`.
+ */
+export function updateRow<F extends CompletionFire>(
+    writer: Pick<InlineTaskWriter, 'write'>,
+    file: string,
+    target: RowRef,
+    task: Task,
+    childOps: PropertyOp[] = [],
+    fire?: F,
+): Promise<FiringOutcome<F>> {
+    return writer.write(file, target, [{ kind: 'update', text: formatRow(task), childOps }], { fire });
 }

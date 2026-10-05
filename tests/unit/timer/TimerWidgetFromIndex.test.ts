@@ -1,9 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { TimerWidget } from '../../../src/timer/TimerWidget';
-import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
-import { IDLE_TIMER_ID } from '../../../src/timer/TimerContext';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
@@ -11,9 +7,10 @@ import { vaultSession, type VaultSession } from '../helpers/vaultSession';
  * widget の表示は索引の読みから作り、索引が変わるたびに描き直す。tick は時間の
  * 表示だけを進める。
  *
- * 形 A（実機の A）: 再読み込みのあと、走っていない widget（中断中と記録待ち）の
- * 名前欄が空のままになる。復元の描画は最初のスキャンの前に走り、名前欄を合わせ
- * 直すのは tick と描き直しだけだった。止まっている widget には tick が来ない。
+ * 再読み込みのあと、走っていない widget（中断中と記録待ち）の名前欄も、最初の
+ * スキャンが済めば尻尾の行の名前になる。復元の描画は最初のスキャンの前に走り、
+ * 止まっている widget には時間の表示を進める tick しか来ないので、名前欄を合わせ
+ * 直すのは索引の変化（`refreshFromIndex`）である。
  */
 const store = new Map<string, string>();
 (globalThis as unknown as { window: unknown }).window = {
@@ -50,18 +47,13 @@ function widgetOver(s: VaultSession) {
     Object.assign(s.app.vault, { getName: () => 'test-vault' });
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => s.index,
-        getTaskWriteService: () => new TaskWriteService(s.index),
-        getTaskReadService: () => ({
-            getTask: (id: string) => s.index.getTask(id),
-            onChange: (fn: () => void) => s.index.onChange(fn),
-        }),
+        getIndex: () => s.index,
+        getOperations: () => s.ops,
         registerEvent: () => { },
     };
     const widget = new TimerWidget(s.app, plugin as never);
     const dom = fakeContainer();
     widget.render = () => { };
-    widget.renderTimerItem = () => { };
     widget.ensureContainer = () => dom.container;
     return { widget, inputOf: dom.inputOf };
 }
@@ -85,30 +77,25 @@ describe('a restored widget that is not running takes its name from the index on
         // 1 回目: 始めて、中断する。
         const first = vaultSession(contents);
         await first.scanAll();
-        const ticker = vi.spyOn(TimerLifecycle.prototype, 'startTimerTicker');
         const w1 = widgetOver(first);
         const target = first.index.getTasks().find(t => t.content === '設計メモ')!;
-        w1.widget.startTimer({
-            taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-            timerTargetId: target.anchor, timerType: 'countup', recordMode: 'child', autoStart: true,
-        });
-        const lifecycle = ticker.mock.contexts[0] as TimerLifecycle;
-        ticker.mockRestore();
-        const timer = [...w1.widget.timers.values()].find(t => t.id !== IDLE_TIMER_ID)! as TimerInstance;
-        await vi.waitFor(() => expect(timer.tailRecordBlockId).toBeDefined());
+        w1.widget.startTimer(target, 'child', { kind: 'countup' });
+        const [timer] = w1.widget.board.values();
+        await vi.waitFor(() => expect(timer.tail).not.toBeNull());
         await settleAll(first);
         vi.setSystemTime(at(9, 10));
-        await lifecycle.suspendTimer(timer);
+        await w1.widget.lifecycle.stop(timer, 'suspend');
         await settleAll(first);
-        expect(timer.runState).toBe('suspended');
+        expect(timer.session).toEqual({ kind: 'suspended' });
+        w1.widget.board.flush();
         first.dispose();
 
         // 再読み込み: 復元は最初のスキャンの前に走る。
         const s = vaultSession(contents);
         const w2 = widgetOver(s);
         w2.widget.activate();
-        const restored = [...w2.widget.timers.values()].find(t => t.id === timer.id)!;
-        expect(restored.runState).toBe('suspended');
+        const restored = w2.widget.board.get(timer.id)!;
+        expect(restored.session).toEqual({ kind: 'suspended' });
         expect(w2.inputOf(restored.id).value).toBe('');
 
         await s.scanAll();

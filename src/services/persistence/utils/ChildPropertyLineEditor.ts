@@ -2,8 +2,7 @@ import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
 import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../FileLines';
-import { INDENT_SOURCE, Outline, type OutlineReading } from '../../parsing/utils/Outline';
-import { SPACE_OR_TAB_SOURCE } from '../../parsing/utils/ListMarker';
+import type { OutlineReading } from '../../parsing/utils/Outline';
 
 interface OwnPropertyLine {
     lineIdx: number;
@@ -25,9 +24,6 @@ interface OwnPropertyLine {
  *   全 own 宣言行を除去（先行の重複が透け戻るのを防ぐ）
  */
 export class ChildPropertyLineEditor {
-    /** `- key:: ` プレフィックス捕捉用（PROPERTY_LINE と同じ形状制約） */
-    private static readonly PROPERTY_PREFIX = new RegExp(`^(${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+[^:[\\]]+?::\\s*)`);
-
     /**
      * タスク直下の own プロパティ行を列挙する。どの行が own かはパーサと
      * 同じ1か所（`ChildLineClassifier.ownPropertyLines`）が決める: ノート
@@ -58,7 +54,6 @@ export class ChildPropertyLineEditor {
      * で、子の無いタスクに最初のプロパティ行を足すときの字下げになる。
      */
     static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[], unit: string): void {
-        const lines = draft.lines;
         for (const op of ops) {
             const ownLines = this.findOwnPropertyLines(draft.reading(), taskLineIdx);
             const matching = ownLines.filter(l => l.key === op.key);
@@ -74,19 +69,16 @@ export class ChildPropertyLineEditor {
             if (matching.length > 0) {
                 // 更新: 最後の宣言行の値部分のみ置換（プレフィックス保存）
                 const target = matching[matching.length - 1];
-                const prefix = lines[target.lineIdx].match(this.PROPERTY_PREFIX)?.[1];
-                if (prefix !== undefined) {
-                    const value = this.formatValue(op.value, target.value);
-                    // 空値行 (`- key ::`) はプレフィックスが `::` で終わるため、
-                    // 値を書き込むときはセパレータの空白を補う
-                    const sep = value !== '' && !/\s$/.test(prefix) ? ' ' : '';
-                    // 値が変わっただけで、行の素性は変わらない。
-                    draft.rewrite(target.lineIdx, prefix + sep + value);
-                    continue;
-                }
-                // プレフィックスが取れない（理論上到達しない）場合は行ごと再構築
-                const indent = Outline.indentOf(lines[target.lineIdx]);
-                draft.rewrite(target.lineIdx, `${indent}- ${op.key}:: ${this.formatValue(op.value, target.value)}`);
+                // 値の前まで（字下げ、記号、キー、`::` とその後の空白）。own の行は
+                // PROPERTY_LINE に合うので、値の捕捉を除いた残りがそれである。
+                const line = draft.lines[target.lineIdx];
+                const prefix = line.slice(0, line.length - line.match(ChildLineClassifier.PROPERTY_LINE)![2].length);
+                const value = this.formatValue(op.value, target.value);
+                // 空値行 (`- key ::`) はプレフィックスが `::` で終わるため、
+                // 値を書き込むときはセパレータの空白を補う
+                const sep = value !== '' && !/\s$/.test(prefix) ? ' ' : '';
+                // 値が変わっただけで、行の素性は変わらない。
+                draft.rewrite(target.lineIdx, prefix + sep + value);
                 continue;
             }
 
@@ -94,7 +86,7 @@ export class ChildPropertyLineEditor {
             // その最後の兄弟として部分木の後ろ（宣言塊を保つ。その行の下の
             // 行はその行のまま）、なければタスクの最初の子（タスクの本文の
             // 続きの行の後ろ）。新しい行なので、字下げは隣の項目の綴りで、
-            // 隣に兄弟が無ければ子の字下げ（`FileOperations.resolveChildIndent`。
+            // 隣に兄弟が無ければ子の字下げ（`Placement.resolveChildIndent`。
             // 子が1つも無ければ Obsidian の設定の一段）。
             const line = `- ${op.key}:: ${this.formatValue(op.value, null)}`;
             const spot = ownLines.length > 0

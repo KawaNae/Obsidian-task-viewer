@@ -29,32 +29,32 @@ describe('GridMoveGesture.buildMoveEdits', () => {
     it('shifts start only when baseTask has neither endDate nor endTime', () => {
         const baseTask = makeTask({ startDate: '2026-04-20' });
         const edits = GridMoveGesture.buildMoveEdits('2026-04-20', '2026-04-20', 2, baseTask);
-        expect(edits).toEqual({ effectiveStartDate: '2026-04-22' });
+        expect(edits).toEqual({ startDay: '2026-04-22' });
     });
 
     it('shifts both start and end when baseTask has endDate', () => {
         const baseTask = makeTask({ startDate: '2026-04-20', endDate: '2026-04-22' });
         const edits = GridMoveGesture.buildMoveEdits('2026-04-20', '2026-04-22', 3, baseTask);
-        expect(edits).toEqual({ effectiveStartDate: '2026-04-23', effectiveEndDate: '2026-04-25' });
+        expect(edits).toEqual({ startDay: '2026-04-23', endDay: '2026-04-25' });
     });
 
     it('shifts both start and end when baseTask has endTime (timed task)', () => {
         const baseTask = makeTask({ startDate: '2026-04-20', startTime: '13:00', endTime: '14:00' });
         const edits = GridMoveGesture.buildMoveEdits('2026-04-20', '2026-04-20', 1, baseTask);
-        expect(edits).toEqual({ effectiveStartDate: '2026-04-21', effectiveEndDate: '2026-04-21' });
+        expect(edits).toEqual({ startDay: '2026-04-21', endDay: '2026-04-21' });
     });
 
     it('handles negative dayDelta (drag left)', () => {
         const baseTask = makeTask({ startDate: '2026-04-25', endDate: '2026-04-27' });
         const edits = GridMoveGesture.buildMoveEdits('2026-04-25', '2026-04-27', -2, baseTask);
-        expect(edits).toEqual({ effectiveStartDate: '2026-04-23', effectiveEndDate: '2026-04-25' });
+        expect(edits).toEqual({ startDay: '2026-04-23', endDay: '2026-04-25' });
     });
 
     it('shifts end too when only endTime is set (no endDate)', () => {
         // S-Timed: endDate なし、endTime あり → endTime が dual-semantic を決める
         const baseTask = makeTask({ startDate: '2026-04-20', startTime: '14:00', endTime: '16:00' });
         const edits = GridMoveGesture.buildMoveEdits('2026-04-20', '2026-04-20', 5, baseTask);
-        expect(edits).toEqual({ effectiveStartDate: '2026-04-25', effectiveEndDate: '2026-04-25' });
+        expect(edits).toEqual({ startDay: '2026-04-25', endDay: '2026-04-25' });
     });
 });
 
@@ -83,11 +83,11 @@ describe('GridMoveGesture.buildTimelineDropEdits', () => {
         // startHour=5, totalMin = 5*60 + 60 = 360 = 06:00
         const edits = GridMoveGesture.buildTimelineDropEdits(section, 120, 2, 5);
         expect(edits).toMatchObject({
-            effectiveStartDate: '2026-04-20',
-            effectiveStartTime: '06:00',
-            effectiveEndDate: '2026-04-20',
+            startDay: '2026-04-20',
+            startTime: '06:00',
+            endDay: '2026-04-20',
             // endTime = start + DEFAULT_TIMED_DURATION_MINUTES (60) = 07:00
-            effectiveEndTime: '07:00',
+            endTime: '07:00',
         });
     });
 
@@ -98,16 +98,16 @@ describe('GridMoveGesture.buildTimelineDropEdits', () => {
         // normStart = 1500-1440 = 60 → 01:00
         const section = makeTimelineSection('2026-04-20', 0);
         const edits = GridMoveGesture.buildTimelineDropEdits(section, 2400, 2, 5);
-        expect(edits?.effectiveStartDate).toBe('2026-04-21');
-        expect(edits?.effectiveStartTime).toBe('01:00');
+        expect(edits?.startDay).toBe('2026-04-21');
+        expect(edits?.startTime).toBe('01:00');
     });
 
     it('aligns to startHour when clientY equals section top', () => {
         const section = makeTimelineSection('2026-04-20', 100);
         // clientY=100, top=100 → yInContainer=0 → totalMin=startHour*60=300=05:00
         const edits = GridMoveGesture.buildTimelineDropEdits(section, 100, 2, 5);
-        expect(edits?.effectiveStartTime).toBe('05:00');
-        expect(edits?.effectiveEndTime).toBe('06:00');
+        expect(edits?.startTime).toBe('05:00');
+        expect(edits?.endTime).toBe('06:00');
     });
 });
 

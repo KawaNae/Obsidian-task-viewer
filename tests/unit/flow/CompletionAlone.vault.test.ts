@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { editorRow } from '../../../src/services/persistence/FileLines';
 import { Notice } from 'obsidian';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
@@ -43,7 +44,7 @@ describe('a completion whose fire would disturb the note', () => {
     it('is written alone in one write, from a card', async () => {
         const note = await open();
         const id = note.session.index.getTasks().find(t => t.content === 'A')!.id;
-        expect(await note.session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(DONE.join('\n'));
         expect(note.processed()).toBe(1);
@@ -53,8 +54,8 @@ describe('a completion whose fire would disturb the note', () => {
 
     it('is written alone in one write, from the editor menu on a note no editor shows', async () => {
         const note = await open();
-        const at = { line: 2, text: NOTE[2], key: contentKeyOf(NOTE) };
-        expect(await note.session.index.writeLine(FILE, at, [{ kind: 'update', text: DONE[2] }])).toBe(true);
+        const at = editorRow(2, NOTE[2], contentKeyOf(NOTE));
+        expect(await note.session.ops.writeLine(FILE, at, [{ kind: 'update', text: DONE[2] }])).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(DONE.join('\n'));
         expect(note.processed()).toBe(1);
@@ -66,7 +67,7 @@ describe('a completion whose fire would disturb the note', () => {
 /**
  * A completion whose fire could not be planned is written, and told in the
  * same words as one whose fire's write was refused: the task was completed,
- * the flow was not run, and why (`FlowExecutor.reportNotRun`).
+ * the flow was not run, and why (`FlowNotices.firing`).
  */
 describe('a completion whose fire could not be planned', () => {
     const FAILS = ['# note', '- [ ] A @2026-09-21 ==> at(end + 1d)', ''];
@@ -75,7 +76,7 @@ describe('a completion whose fire could not be planned', () => {
     it('is written, and told the flow was not run, from a card', async () => {
         const note = await open(FAILS);
         const id = note.session.index.getTasks().find(t => t.content === 'A')!.id;
-        expect(await note.session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(['# note', '- [x] A @2026-09-21 ==> at(end + 1d)', ''].join('\n'));
         expect(Notice.messages).toHaveLength(1);
@@ -84,7 +85,7 @@ describe('a completion whose fire could not be planned', () => {
 
     it('stands in the editor, told the same', async () => {
         const note = await open(FAILS);
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         editor.check(1);
         await Promise.resolve();
         expect(editor.lines()[1]).toBe('- [x] A @2026-09-21 ==> at(end + 1d)');
@@ -120,7 +121,7 @@ describe('a completion whose fire is refused for a reason not of where its lines
     it('is written alone from a card, in one write, and told the flow was not run', async () => {
         const note = await open(ROW);
         const task = refusedAsGone(note.session);
-        expect(await note.session.index.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        expect((await note.session.ops.updateTask(task.id, { statusChar: 'x' })).written).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(CHECKED.join('\n'));
         expect(note.processed()).toBe(1);
@@ -130,9 +131,10 @@ describe('a completion whose fire is refused for a reason not of where its lines
     it('stands in the editor, told the same', async () => {
         const note = await open(ROW);
         refusedAsGone(note.session);
-        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const editor = editorSession(note.session.ops.editorFireHost(), FILE, note.contents.get(FILE)!);
         editor.check(1);
         expect(editor.lines()).toEqual(CHECKED);
+        await Promise.resolve();
         expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedGone'), subject: '- [x] A @2026-09-21' })]);
     });
 });

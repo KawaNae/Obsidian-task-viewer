@@ -1,7 +1,9 @@
 import { DateUtils } from '../utils/DateUtils';
 import { t } from '../i18n';
+import type { FormIssue } from './form/FormIssue';
 import { validateDateTimeRules } from '../services/parsing/utils/DateTimeRuleValidator';
 
+/** The six date and time inputs of a task form, as typed. The due's two are joined by {@link DateUtils.joinDateTime}. */
 export interface DateTimeFields {
     startDate: string;
     startTime: string;
@@ -18,34 +20,21 @@ export interface ValidationContext {
 }
 
 export interface DateValidationError {
-    field: 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'dueDate' | 'dueTime';
+    field: keyof DateTimeFields;
     message: string;
     hint?: string;
 }
 
 /**
- * Validate date/time format strings.
- * Empty values are OK; non-empty values must match YYYY-MM-DD or HH:mm.
+ * The rules across a task's date fields (a time needs a date, an end comes
+ * after its start), checked on values each field has read: the one rule
+ * broken first, as the error of the field it is of, with its hint on a line
+ * of its own; none when they hold.
  */
-export function validateDateTimeFormats(fields: DateTimeFields): DateValidationError | null {
-    const checks: Array<{ value: string; field: DateValidationError['field']; label: string; type: 'date' | 'time' }> = [
-        { value: fields.startDate, field: 'startDate', label: 'Start', type: 'date' },
-        { value: fields.startTime, field: 'startTime', label: 'Start', type: 'time' },
-        { value: fields.endDate, field: 'endDate', label: 'End', type: 'date' },
-        { value: fields.endTime, field: 'endTime', label: 'End', type: 'time' },
-        { value: fields.dueDate, field: 'dueDate', label: 'Due', type: 'date' },
-        { value: fields.dueTime, field: 'dueTime', label: 'Due', type: 'time' },
-    ];
-    for (const c of checks) {
-        if (!c.value) continue;
-        const valid = c.type === 'date' ? DateUtils.isValidDateString(c.value) : DateUtils.isValidTimeString(c.value);
-        if (!valid) {
-            const label = t(`modal.${c.label.toLowerCase()}`);
-            const expected = c.type === 'date' ? 'YYYY-MM-DD' : 'HH:mm';
-            return { field: c.field, message: t('validation.invalidFormat', { label, type: c.type, expected }) };
-        }
-    }
-    return null;
+export function dateRuleIssues(fields: DateTimeFields, ctx: ValidationContext = {}): FormIssue<keyof DateTimeFields>[] {
+    const err = validateDateRequirements(fields, ctx) ?? validateDateRange(fields, ctx);
+    if (!err) return [];
+    return [{ at: err.field, tone: 'error', text: err.hint ? `${err.message}\n${err.hint}` : err.message }];
 }
 
 /**
@@ -70,9 +59,7 @@ export function validateDateRequirements(fields: DateTimeFields, ctx: Validation
  * Cross-midnight, same-day inversion, end-before-start are all handled by the shared rules.
  */
 export function validateDateRange(fields: DateTimeFields, ctx: ValidationContext = {}): DateValidationError | null {
-    const due = fields.dueDate
-        ? (fields.dueTime ? `${fields.dueDate}T${fields.dueTime}` : fields.dueDate)
-        : undefined;
+    const due = DateUtils.joinDateTime(fields.dueDate, fields.dueTime);
 
     const result = validateDateTimeRules({
         startDate: fields.startDate || undefined,

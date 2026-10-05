@@ -2,7 +2,7 @@ import { ViewPlugin, type ViewUpdate, Decoration, WidgetType, type EditorView, t
 import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
 import { editorInfoField, setIcon, MarkdownView, Notice } from 'obsidian';
 import type { App } from 'obsidian';
-import type { TaskReadService } from '../services/data/TaskReadService';
+import type { IndexReads } from '../services/core/TaskIndex';
 import type { TaskViewerSettings } from '../types';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
@@ -13,7 +13,7 @@ import type { ValidationMenuBuilder } from '../interaction/menu/builders/Validat
 import type { MenuPresenter } from '../interaction/menu/MenuPresenter';
 import type { TaskHubOpener } from '../interaction/menu/MenuHandler';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
-import { getTaskNotation } from '../services/filter/parserTaxonomy';
+import { lineMenuOf } from './LineMenu';
 import { t } from '../i18n';
 import { editorCm } from '../utils/editorCm';
 import { outlineFor } from './EditorOutline';
@@ -22,7 +22,7 @@ import { keyOf } from './EditorDoc';
 import { writeEditorLine, type EditorLineHost } from './EditorWrite';
 import { taskShownAt, type ShownTaskLookup } from './ShownTask';
 import type { ContentKey } from '../services/core/ContentKey';
-import type { EditorLine } from '../services/persistence/FileLines';
+import { editorRow, type RowRef } from '../services/persistence/FileLines';
 import type { TaskOp } from '../services/persistence/TaskOps';
 
 const taskIndexChanged = StateEffect.define<void>();
@@ -42,7 +42,7 @@ class TaskMenuWidget extends WidgetType {
 
     toDOM(view: EditorView): HTMLElement {
         const btn = document.createElement('button');
-        btn.className = 'tv-editor-menu-btn';
+        btn.className = 'tv-icon-btn tv-editor-menu-btn';
         btn.setAttribute('aria-label', t('aria.taskMenu'));
         btn.setAttribute('tabindex', '-1');
 
@@ -76,7 +76,7 @@ export interface TaskMenuExtensionResult {
 
 export function createTaskMenuExtension(
     app: App,
-    readService: TaskReadService,
+    index: IndexReads,
     lineHost: EditorLineHost,
     propertiesBuilder: PropertiesMenuBuilder,
     timerBuilder: TimerMenuBuilder,
@@ -89,11 +89,11 @@ export function createTaskMenuExtension(
 ): TaskMenuExtensionResult {
 
     const lookup: ShownTaskLookup = {
-        taskAtEditorLine: (path, line, key) => readService.taskAtEditorLine(path, line, key),
+        taskAtEditorLine: (path, line, key) => index.taskAtEditorLine(path, line, key),
         readShown: async (editor) => {
             const info = editor.state.field(editorInfoField, false);
             if (info instanceof MarkdownView) await info.save();
-            if (info?.file) await readService.readNow(info.file);
+            if (info?.file) await index.requestScan(info.file);
         },
     };
 
@@ -111,13 +111,15 @@ export function createTaskMenuExtension(
             new Notice(t('notice.editorMenuNotRead'));
             return;
         }
-        const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
+        // Read again since the button was drawn: the line may offer none now.
+        const kind = lineMenuOf(task, getSettings());
+        if (kind === 'none') return;
 
         menuPresenter.present((menu) => {
-            if (isTaskviewerTask && task) {
+            if (kind === 'task' && task) {
                 // Recognized taskviewer-notation task: full menu (G1〜G5)
                 validationBuilder.addValidationWarning(menu, task);
-                const dt = toDisplayTask(task, getSettings().startHour, (id) => readService.getTask(id));
+                const dt = toDisplayTask(task, getSettings().startHour, (id) => index.getTask(id));
                 // G1: 自身のデータ操作
                 propertiesBuilder.addStatusSubmenu(menu, task);
                 actionsBuilder.addOwnDataActions(menu, task);
@@ -136,27 +138,28 @@ export function createTaskMenuExtension(
                 // G5: 破壊的変更
                 actionsBuilder.addDestructiveActions(menu, task);
             } else {
-                // Plain checkbox or external-notation task (tasks-plugin / day-planner):
-                // status + basic actions, writing through CheckboxLineOps preserves the original notation.
+                // A checkbox the index reads no task on: status and the basic
+                // actions, written through CheckboxLineOps as the line stands.
                 const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
                 // The line holds only in the content the menu was opened in.
-                const at = { line: lineNumber, text: lineText, key: keyOf(view.state.doc) };
+                const key = keyOf(view.state.doc);
+                const at = editorRow(lineNumber, lineText, key);
                 // What a delete takes, as the editor shows it now: the line
                 // and its subtree. The write takes it only if they still
                 // read so.
                 const subtree = subtreeAt(outlineFor(view.state.doc), lineNumber);
                 // Written in this editor while it shows the note, as the
                 // user's own edit is; to the file once it does not (`shows`).
-                const write = (target: EditorLine, ops: readonly TaskOp[]) =>
+                const write = (target: RowRef, ops: readonly TaskOp[]) =>
                     writeEditorLine(view, filePath, target, ops, lineHost);
                 const ops: CheckboxLineOps = {
                     updateLine: (content) => write(at, [{ kind: 'update', text: content }]),
-                    insertLineAfter: (content) => write(at, [{ kind: 'copy', text: content }]),
-                    deleteLine: () => write({ ...at, subtree }, [{ kind: 'remove' }]),
+                    insertLineAfter: (content) => write(at, [{ kind: 'copies', side: 'below', lines: [content], children: false }]),
+                    deleteLine: () => write(editorRow(lineNumber, lineText, key, subtree), [{ kind: 'remove' }]),
                 };
 
-                checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);
+                checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops);
             }
         }, { kind: 'belowRect', rect });
     };
@@ -166,19 +169,15 @@ export function createTaskMenuExtension(
         if (!settings.editorMenuForTasks && !settings.editorMenuForCheckboxes) {
             return RangeSet.of([]);
         }
-
-        const needsFilter = !settings.editorMenuForTasks || !settings.editorMenuForCheckboxes;
-        let filePath: string | undefined;
-        if (needsFilter) {
-            const info = view.state.field(editorInfoField);
-            filePath = info?.file?.path;
-        }
+        // Whatever the settings, each line asks the index what it holds: a
+        // line of the Tasks or Day Planner notation has no button.
+        const filePath = view.state.field(editorInfoField)?.file?.path;
 
         const widgets: { from: number; deco: Decoration }[] = [];
         const seen = new Set<number>();
         // A checkbox line in code, or one that opens no list item, is text,
-        // not a task — DocumentTreeBuilder reads it so from the same reading;
-        // this scan is independent of that tree (see the TaskLineClassifier
+        // not a task — the extraction (NoteTasks) reads it so from the same
+        // reading; this scan is independent of the extraction (see the TaskLineClassifier
         // import above), so it asks the reading itself.
         const outline = outlineFor(view.state.doc);
         // The key of what the editor shows, made once and only if asked.
@@ -192,15 +191,11 @@ export function createTaskMenuExtension(
 
                 if (TaskLineClassifier.opensTask(outline, lineNumber) && !seen.has(line.number)) {
                     seen.add(line.number);
-                    let show = true;
-                    if (needsFilter && filePath) {
-                        // Not read yet in what the editor shows: a checkbox
-                        // until the scan's change draws the buttons again.
-                        key ??= keyOf(view.state.doc);
-                        const found = readService.taskAtEditorLine(filePath, lineNumber, key) ?? undefined;
-                        const isTaskviewerTask = !!found && getTaskNotation(found.parserId) === 'taskviewer';
-                        show = isTaskviewerTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
-                    }
+                    // Not read yet in what the editor shows: a checkbox
+                    // until the scan's change draws the buttons again.
+                    key ??= keyOf(view.state.doc);
+                    const found = filePath ? index.taskAtEditorLine(filePath, lineNumber, key) : undefined;
+                    const show = lineMenuOf(found, settings) !== 'none';
                     if (show) {
                         widgets.push({
                             from: line.to,
@@ -245,7 +240,7 @@ export function createTaskMenuExtension(
         }
     );
 
-    const unsubscribe = readService.onChange(() => {
+    const unsubscribe = index.onChange(() => {
         app.workspace.iterateAllLeaves((leaf) => {
             if (leaf.view instanceof MarkdownView) {
                 const cm = editorCm(leaf.view.editor);

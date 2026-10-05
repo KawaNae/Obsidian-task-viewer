@@ -8,7 +8,7 @@ import { freezeDate } from './fakeDate';
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
- * A flow's own writes do not fire again (structure.md, 「発火の可否」). A fire
+ * A flow's own writes do not fire again (structure/firing.md, 「発火の可否」). A fire
  * is made in the write that completes its row, and nothing else has a way to
  * fire: the scans that read the flow's writes, the `changed` that follows
  * them, have none (stage X). These count the fires the index plans, through
@@ -37,7 +37,7 @@ describe("vaultSession: a flow's own writes", () => {
         const weekly = session.index.getTasks().find(t => t.content === '週報')!;
 
         const fires = countFires(session);
-        await session.index.updateTask(weekly.id, { statusChar: 'x' });
+        await session.ops.updateTask(weekly.id, { statusChar: 'x' });
         expect(contents.get(FILE)!.split('\n').filter(l => l.trim())).toEqual([
             '- [ ] 週報 @2026-09-28 ==> every mon',
             '- [x] 週報 @2026-09-21',
@@ -58,7 +58,7 @@ describe("vaultSession: a flow's own writes", () => {
 
         vi.useFakeTimers();
         try {
-            await session.index.updateTask(weekly.id, { statusChar: 'x' });
+            await session.ops.updateTask(weekly.id, { statusChar: 'x' });
             await vi.advanceTimersByTimeAsync(1500);
             const settled = contents.get(FILE);
 

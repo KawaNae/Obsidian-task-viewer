@@ -4,6 +4,7 @@ import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap, placeholder, tooltips, type Rect } from '@codemirror/view';
 import type { App } from 'obsidian';
+import type { SubtreeFrame } from '../../../services/persistence/utils/SubtreeFrame';
 import { t } from '../../../i18n';
 import { BRACKET_CLOSERS, BRACKET_PAIRS } from '../../../utils/BracketRules';
 import { keyboardTop, trackKeyboard } from '../../../utils/KeyboardState';
@@ -86,7 +87,6 @@ export interface SourceDraft {
  */
 export interface DraftEditor {
     draft(): SourceDraft;
-    isDirty(): boolean;
     isCompleting(): boolean;
     closeCompletion(): boolean;
     focus(): void;
@@ -209,12 +209,30 @@ export function indentColumns(unit: string): number {
  *  with a block's corners, since the text in it runs to many lines. */
 const FIELD_BOX = 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow tv-ctrl__input-wrap--block';
 
+/**
+ * An editor in `container` on the text a subtree opened as (`SubtreeFrame`):
+ * the one way a draft of a subtree is opened, for the hub's source mode and
+ * each row of the send dialog. Mod+Enter in it is `submit`, a change of its
+ * text is told to `edited`. Whether a draft would lose anything is not the
+ * editor's to say: it is what the frame makes of it (`SubtreeFrame.check`).
+ */
+export function editorOn(container: HTMLElement, frame: SubtreeFrame, app: App, hooks: { submit(): void; edited(): void }): SourceEditor {
+    return new SourceEditor(container, {
+        parent: frame.parent,
+        children: frame.children,
+        indentUnit: frame.unit,
+        app,
+        onSubmit: hooks.submit,
+        onChange: hooks.edited,
+    });
+}
+
 export class SourceEditor implements DraftEditor {
     readonly dom: HTMLElement;
     private readonly parentView: EditorView;
     private readonly childrenView: EditorView;
 
-    constructor(container: HTMLElement, private readonly options: SourceEditorOptions) {
+    constructor(container: HTMLElement, options: SourceEditorOptions) {
         this.dom = container.createDiv({ cls: 'tv-source-editor' });
         trackKeyboard(container.ownerDocument.defaultView ?? window);
         const hooks: EditorHooks = { onSubmit: options.onSubmit, onChange: options.onChange };
@@ -240,12 +258,6 @@ export class SourceEditor implements DraftEditor {
         return draftOf(this.parentView.state, this.childrenView.state);
     }
 
-    /** Whether the text differs from what it was opened with. */
-    isDirty(): boolean {
-        return this.parentView.state.doc.toString() !== this.options.parent
-            || this.childrenView.state.doc.toString() !== this.options.children.join('\n');
-    }
-
     /** Whether either editor shows a completion list (an Escape there closes the list). */
     isCompleting(): boolean {
         return completionStatus(this.parentView.state) !== null || completionStatus(this.childrenView.state) !== null;
@@ -256,11 +268,6 @@ export class SourceEditor implements DraftEditor {
         const parent = closeCompletion(this.parentView);
         const children = closeCompletion(this.childrenView);
         return parent || children;
-    }
-
-    /** Whether `node` is in either editor, or in a list one of them shows. */
-    contains(node: Node | null): boolean {
-        return node !== null && this.dom.contains(node);
     }
 
     /** Focus the parent's line, at its end. */

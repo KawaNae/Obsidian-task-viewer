@@ -1,0 +1,50 @@
+/* ======================================================
+   Question dialogs (tv-ask__*): askChoice, confirm and
+   askText (src/modals/ask). They stand on OverlayShell's
+   centered panel (a sheet from below on a phone), and are
+   built of the form's shared pieces (_form.css): the title,
+   the row of a field, the button row. This file holds what
+   only the questions have.
+   ====================================================== */
+
+/* A few lines and a row of buttons: narrower than the form dialogs. */
+.tv-overlay__panel--dialog.tv-ask {
+    width: min(28em, calc(100vw - 32px));
+}
+
+/* The question's paragraphs, a gap above the button row. */
+.tv-ask .tv-ask__body {
+    margin-bottom: 20px;
+}
+
+.tv-ask .tv-ask__body > :first-child {
+    margin-top: 0;
+}
+
+.tv-ask .tv-ask__body > :last-child {
+    margin-bottom: 0;
+}
+
+/* Flow delete choice — the line the fire would write
+   (tv-form__line-preview, _form.css).
+
+   Shown verbatim because the delete-time fire does not always land on the
+   date a completion would have produced (`at(today + 3d)` reads the day of
+   the deletion), so the date is something to read rather than to trust. The
+   monospace block says "this is the text, as text". */
+.tv-flow-delete__preview {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.tv-flow-delete__preview-label {
+    font-size: 0.85em;
+    color: var(--tv-text-muted);
+}
+
+.tv-flow-delete__descendants {
+    color: var(--tv-text-muted);
+    font-size: 0.9em;
+}

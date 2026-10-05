@@ -1,12 +1,12 @@
 import type { App, Menu } from 'obsidian';
+import { TaskValues } from '../../../services/filter/TaskValues';
 import type { Task, DisplayTask, PropertyType } from '../../../types';
-import type { TaskWriteService } from '../../../services/data/TaskWriteService';
+import type { Operations } from '../../../services/operations/Operations';
 import type { PluginContext } from '../../../PluginContext';
 import type { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import type { PropertyFormatter } from '../PropertyFormatter';
-import { DateUtils } from '../../../utils/DateUtils';
-import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
-import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
+import { getTaskDisplayName } from '../../../services/display/TaskContent';
+import { addStatusItems } from '../../../constants/statusOptions';
 import { openFile } from '../../../utils/NavigationUtils';
 import { t } from '../../../i18n';
 import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
@@ -25,7 +25,7 @@ type OpenHub = (field: TaskHubFocusField) => void;
 export class PropertiesMenuBuilder {
     constructor(
         private app: App,
-        private writeService: TaskWriteService,
+        private operations: Operations,
         private plugin: PluginContext,
         private propertyCalculator: PropertyCalculator,
         private propertyFormatter: PropertyFormatter
@@ -85,19 +85,9 @@ export class PropertiesMenuBuilder {
                 .setIcon('check-square')
                 .setSubmenu();
 
-            const statusMenu = sub.submenu;
-
-            buildStatusOptions(this.plugin.settings.statusDefinitions).forEach(s => {
-                statusMenu.addItem(item => {
-                    item.setTitle(createStatusTitle(s))
-                        .setChecked(task.statusChar === s.char)
-                        .onClick(async () => {
-                            menu.close();
-                            await this.writeService.updateTask(task.id, {
-                                statusChar: s.char
-                            });
-                        });
-                });
+            addStatusItems(sub.submenu, this.plugin.settings.statusDefinitions, statusChar, (char) => {
+                menu.close();
+                void this.operations.updateTask(task.id, { statusChar: char });
             });
         });
     }
@@ -111,7 +101,7 @@ export class PropertiesMenuBuilder {
                 .setIcon('file-text')
                 .onClick(() => {
                     (rootMenu ?? menu).close();
-                    openFile(this.app, task.file, this.plugin.settings.reuseExistingTab);
+                    void openFile(this.app, task.file, this.plugin.settings.reuseExistingTab);
                 });
 
             if (sub.dom) {
@@ -154,7 +144,7 @@ export class PropertiesMenuBuilder {
         this.addEndItem(menu, task, endParts, openModal);
         this.addDueItem(menu, task, dueParts, openModal);
         menu.addSeparator();
-        this.addLengthItem(menu, startParts, endParts, context.startHour);
+        this.addLengthItem(menu, task, context.startHour);
         this.addTagsItem(menu, task, openModal);
         this.addColorItem(menu, task, openModal);
         this.addLinestyleItem(menu, task, openModal);
@@ -274,36 +264,28 @@ export class PropertiesMenuBuilder {
         }
     }
 
-    private addLengthItem(menu: Menu, startParts: CalculatedProperty, endParts: CalculatedProperty, startHour: number): void {
-        let lengthText = '-';
-
-        if (startParts.date) {
-            const durationMs = DateUtils.getTaskDurationMs(
-                startParts.date,
-                startParts.time,
-                endParts.date,
-                endParts.time,
-                startHour
-            );
-            if (!Number.isNaN(durationMs) && durationMs > 0) {
-                const totalMinutes = Math.round(durationMs / 60000);
-                const days = Math.floor(totalMinutes / 1440);
-                const hours = Math.floor((totalMinutes % 1440) / 60);
-                const minutes = totalMinutes % 60;
-
-                const parts: string[] = [];
-                if (days > 0) parts.push(`${days}d`);
-                if (hours > 0) parts.push(`${hours}h`);
-                if (minutes > 0) parts.push(`${minutes}m`);
-
-                lengthText = parts.length > 0 ? parts.join(' ') : '0m';
-            }
-        }
+    /** The span the filter's `length` and the API's `durationMinutes` read. */
+    private addLengthItem(menu: Menu, task: DisplayTask, startHour: number): void {
+        const durationMs = TaskValues.length(task).value;
+        const lengthText = durationMs !== undefined && durationMs > 0 ? PropertiesMenuBuilder.lengthText(durationMs) : '-';
 
         menu.addItem((item) => {
             item.setTitle(t('menu.lengthLabel', { value: lengthText }))
                 .setIcon('clock')
                 .setDisabled(true);
         });
+    }
+
+    private static lengthText(durationMs: number): string {
+        const totalMinutes = Math.round(durationMs / 60000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+
+        const parts: string[] = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        return parts.length > 0 ? parts.join(' ') : '0m';
     }
 }

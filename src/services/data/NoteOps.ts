@@ -1,13 +1,14 @@
 import { Notice, TFile, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task, TaskViewerSettings } from '../../types';
-import { HeadingInserter } from '../../utils/HeadingInserter';
+import { headingLine } from '../persistence/Notes';
 import { openFile } from '../../utils/NavigationUtils';
-import type { RowSnapshot, SendRow, SendWrite } from '../core/TaskIndex';
+import type { RowSnapshot, SendRow, SendWrite } from '../operations/Operations';
 import { refusalClause, refusalNotice } from '../core/RefusalClause';
-import { outermostRows } from '../core/SendRows';
+import { outermostRows } from '../persistence/writers/SendRows';
 import { unresolvedAt, type UnresolvedReference } from '../flow/FlowReferences';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../core/RowNames';
 import { Outline } from '../parsing/utils/Outline';
 import { Destination, type Section } from '../persistence/Destination';
 import { splitLines } from '../persistence/FileLines';
@@ -17,11 +18,11 @@ import type { SubtreeReplacement } from '../persistence/TaskOps';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logWarn } from '../../log/log';
 import { inheritedAt, type InheritedValue } from './InheritedValues';
-import type { TaskWriteService } from './TaskWriteService';
+import type { Operations } from '../operations/Operations';
 import { NoteName, type NameCheck } from './NoteName';
 import { anchorsIn, linksTo, type AnchorLink, type LineSpan } from './NoteRefs';
 
-export type { SendRow } from '../core/TaskIndex';
+export type { SendRow } from '../operations/Operations';
 
 /** The note a send goes to: one to make, by its folder and name, or one there is, by its path. */
 export type SendNote =
@@ -165,7 +166,7 @@ export interface SendingLines {
 }
 
 /**
- * The open timers, as a send asks them (note-ops-plan.md 段 B4). A timer
+ * The open timers, as a send asks them (`archive/2026-09-send.md`, 開いているタイマー; `structure/writes.md`). A timer
  * finds its lines by their `^id`s in its note; the timers are not the
  * send's to know, so they answer here.
  */
@@ -224,7 +225,7 @@ export type SendResult =
 
 /**
  * The operations on notes the UI asks for: sending rows and their subtrees
- * to a section of a note (`v0.58-features.md`, 送る操作への一般化). Each takes
+ * to a section of a note (`archive/2026-09-send.md`, 仕様の決定, 移す操作から送る操作へ). Each takes
  * what the dialog holds as its arguments; what is told the user, the
  * operation tells, and the dialog only decides from the result whether it
  * closes.
@@ -232,21 +233,21 @@ export type SendResult =
 export class NoteOps {
     constructor(
         private app: App,
-        private writeService: TaskWriteService,
+        private operations: Operations,
         private getSettings: () => TaskViewerSettings,
         private deps: NoteOpsDeps,
     ) { }
 
     /**
      * What a send of `taskIds` opens on, read as the disk holds each row
-     * (`TaskIndex.rowSnapshot`): a row inside another's subtree goes with
+     * (`Operations.rowSnapshot`): a row inside another's subtree goes with
      * that one (`outermostRows`). Null when a row is not the one on the
      * disk, and the user told why, as for a write.
      */
     async previewSend(taskIds: readonly string[]): Promise<SendPreview | null> {
         const rows: RowSnapshot[] = [];
         for (const id of taskIds) {
-            const row = await this.writeService.rowSnapshot(id);
+            const row = await this.operations.rowSnapshot(id);
             if (!row) return null;
             rows.push(row);
         }
@@ -293,7 +294,7 @@ export class NoteOps {
                 ignored: false,
                 namesakes: at.namesakes,
                 shared: [],
-                unresolved: unresolvedAt(sentTasks, [HeadingInserter.headingLine(section)]),
+                unresolved: unresolvedAt(sentTasks, [headingLine(section)]),
                 anchors: new Map(),
             };
         }
@@ -310,11 +311,11 @@ export class NoteOps {
             heading: found,
             headings: outline.headings.map(h => h.text),
             present: preview.candidates.filter(one => FrontmatterLineEditor.hasKey(lines, one.key)).map(one => one.key),
-            ignored: FileParsePipeline.resolveTree(path, lines, settings) === null,
+            ignored: FileParsePipeline.resolveSections(lines, settings) === null,
             namesakes: at.namesakes,
             shared: anchorsIn(rows.filter(row => row.task.file !== path).flatMap(row => row.task.subtreeLines ?? []))
                 .filter(id => inNote.has(id)),
-            unresolved: unresolvedAt(sentTasks, found.kind === 'none' ? [...lines, HeadingInserter.headingLine(section)] : lines),
+            unresolved: unresolvedAt(sentTasks, found.kind === 'none' ? [...lines, headingLine(section)] : lines),
             anchors: TaskLineClassifier.blockIdCounts(lines),
         };
     }
@@ -350,7 +351,7 @@ export class NoteOps {
     }
 
     /**
-     * Send the rows `req` names to its destination (`TaskIndex.send`), and
+     * Send the rows `req` names to its destination (`Operations.send`), and
      * tell the user what came of it, once.
      *
      * A new note is looked up again as the send is made (`NoteName.at`): a
@@ -400,7 +401,7 @@ export class NoteOps {
         }
         const went = new Map(sending.from.map(note => [note.path, [...TaskLineClassifier.blockIdCounts(note.sent).keys()]]));
         const landed = (from: string) => this.deps.timers()?.follow(from, path, went.get(from) ?? []);
-        const written = await this.writeService.send(req.rows, { path, create, section, frontmatter: req.frontmatter }, { ...opts, landed });
+        const written = await this.operations.send(req.rows, { path, create, section, frontmatter: req.frontmatter }, { ...opts, landed });
         if (written.kind === 'not-done') return written.refused ? { kind: 'not-done', why: refusalNotice(written.refused) } : wrongly;
         return this.tell(written, req.rows.length, opts.tellRefusal !== false);
     }
@@ -471,7 +472,7 @@ export class NoteOps {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             notice.hide();
-            openFile(this.app, note.path, this.getSettings().reuseExistingTab);
+            void openFile(this.app, note.path, this.getSettings().reuseExistingTab);
         });
         el.appendText(text.slice(at + note.path.length));
     }
@@ -499,7 +500,8 @@ function spanOf(task: Task): LineSpan {
  */
 function withDescendants(rows: readonly RowSnapshot[], settings: TaskViewerSettings): Task[] {
     const spans = rows.map(row => spanOf(row.task));
-    const { tasks } = FileParsePipeline.parse(rows[0].task.file, [...rows[0].lines], settings);
+    const path = rows[0].task.file;
+    const { tasks } = FileParsePipeline.parse(path, [...rows[0].lines], settings, namesOutsideIndex(path));
     return tasks.filter(task => spans.some(span => task.line >= span.start && task.line < span.end));
 }
 

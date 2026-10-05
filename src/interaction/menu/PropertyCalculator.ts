@@ -1,4 +1,6 @@
+import { DateUtils } from '../../utils/DateUtils';
 import type { DisplayTask } from '../../types';
+import { sideValues, type SideValue } from '../../utils/TaskDates';
 
 export interface CalculatedProperty {
     date?: string;
@@ -15,83 +17,44 @@ export interface PropertyCalculationContext {
 }
 
 /**
- * タスクプロパティの暗黙的値を計算
- *
- * DisplayTask の effective フィールドと implicit フラグを直接使用。
- * 呼び出し元（MenuHandler.showContextMenu）が toDisplayTask() で変換済み。
- *
- * README Period Calculation Rulesに従う:
- * 1. SED, SE: actual time from start to end
- * 2. SD, S-All: start day's startHour to startHour+23:59
- * 3. S-Timed: start time to +1 hour
- * 4. E, ED: implicit start derived from endDate (reverse of S/SD default duration)
- * 5. D: no start/end — marked as unset
+ * タスクの開始、終了、期限をメニューに出す値。行に書かれた値は普通の字で、
+ * 書かれていない値（受け継いだ値、規則が作る値）は薄字で出す。値はハブの
+ * 薄字と同じ `sideValues` が作り、書いた値と同じ精度で、書き写せば同じ意味に
+ * なる（日付だけの値に時刻を付けない）。
  */
 export class PropertyCalculator {
-    /**
-     * Start プロパティの計算
-     */
+    /** Start プロパティの計算 */
     calculateStart(context: PropertyCalculationContext): CalculatedProperty {
-        const { task } = context;
-
-        // D type: effectiveStartDate is "" — no start, mark as unset
-        if (!task.effectiveStartDate) {
-            return { dateImplicit: false, timeImplicit: false, isUnset: true };
-        }
-        return {
-            date: task.effectiveStartDate,
-            time: task.effectiveStartTime,
-            dateImplicit: task.startDateImplicit,
-            timeImplicit: task.startTimeImplicit,
-        };
+        const sides = sideValues(context.task, context.startHour);
+        return sides ? shown(sides.start) : UNSET;
     }
 
-    /**
-     * End プロパティの計算
-     */
+    /** End プロパティの計算 */
     calculateEnd(context: PropertyCalculationContext): CalculatedProperty {
-        const { task } = context;
-
-        if (task.effectiveEndDate) {
-            return {
-                date: task.effectiveEndDate,
-                time: task.effectiveEndTime,
-                dateImplicit: task.endDateImplicit,
-                timeImplicit: task.endTimeImplicit,
-            };
-        }
-        // D type or no effective end: mark as unset
-        return { dateImplicit: false, timeImplicit: false, isUnset: true };
+        const sides = sideValues(context.task, context.startHour);
+        return sides ? shown(sides.end) : UNSET;
     }
 
     /**
-     * Due プロパティの計算
+     * Due プロパティの計算。cascade 継承 due (raw due なし) は implicit 扱いで
+     * 表示する。超過の判定と同じ due を見せることで食い違いを防ぐ。
      */
     calculateDue(task: DisplayTask): CalculatedProperty {
-        // cascade 継承 due (raw due なし) は implicit 扱いで表示する。
-        // overdue 判定 (TaskStatusQuery) と同じ effectiveDue を見せることで
-        // 表示と判定の食い違いを防ぐ。
-        const due = task.effectiveDue;
-        if (!due) {
-            return { dateImplicit: false, timeImplicit: false, isUnset: true };
-        }
-
+        const due = task.stated.due;
+        if (!due) return UNSET;
         const inherited = !task.due;
-
-        if (due.includes('T')) {
-            const [date, time] = due.split('T');
-            return {
-                date,
-                time,
-                dateImplicit: inherited,
-                timeImplicit: inherited
-            };
-        }
-
-        return {
-            date: due,
-            dateImplicit: inherited,
-            timeImplicit: inherited
-        };
+        const { date, time } = DateUtils.splitDateTime(due);
+        return time !== undefined
+            ? { date, time, dateImplicit: inherited, timeImplicit: inherited }
+            : { date: due, dateImplicit: inherited, timeImplicit: inherited };
     }
+}
+
+const UNSET: CalculatedProperty = { dateImplicit: false, timeImplicit: false, isUnset: true };
+
+function shown(side: SideValue): CalculatedProperty {
+    const value: CalculatedProperty = { dateImplicit: !side.dateWritten, timeImplicit: !side.timeWritten };
+    if (side.date) value.date = side.date;
+    if (side.time) value.time = side.time;
+    return value;
 }

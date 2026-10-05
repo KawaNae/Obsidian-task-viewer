@@ -1,11 +1,13 @@
 import { parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
-import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
-import type { DocumentNode } from './tree/DocumentTree';
+import type { SectionNode } from './tree/Sections';
+import { NoteSections } from './tree/NoteSections';
+import { NoteTasks, type RowNamer } from './tree/NoteTasks';
 import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
-import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
+import { lineParsers } from './TaskParser';
+import { PropertyValues } from './utils/PropertyValues';
 
 export interface FileParseResult {
     /** tv-ignore'd file: produce no tasks (caller clears existing state). */
@@ -20,16 +22,16 @@ export interface FileParseResult {
  * File → Task[] parse pipeline — the single place that knows the parse
  * order contract:
  *
- *   frontmatter boundary → ignore check
- *   → DocumentTreeBuilder → SectionPropertyResolver → TreeTaskExtractor
+ *   the note's reading (`Outline.read`) → frontmatter → ignore check
+ *   → NoteSections.read → SectionPropertyResolver.resolve → NoteTasks.extract
  *
  * Frontmatter makes no task: it is the root of the property cascade, which
  * hands its dates, style and tags down to every task in the note.
  *
- * build → resolve → extract mutate one shared DocumentNode in that exact
- * order; wrapping them here means callers cannot get it wrong. Pure with
- * respect to the vault: no I/O, no store access — TaskScanner owns the
- * store commits.
+ * The sections are read, then resolved in place, then read by the
+ * extraction, in that exact order; wrapping them here means callers cannot
+ * get it wrong. Pure with respect to the vault: no I/O, no store access —
+ * TaskScanner owns the store commits.
  */
 export class FileParsePipeline {
     /**
@@ -43,6 +45,10 @@ export class FileParsePipeline {
      * reading a write lands and the scan that follows have to read the same
      * lines the same way, which only the lines themselves allow.
      *
+     * `name` gives each row its name (`RowNamer`): the index's scan names
+     * the rows of one reading, and a reader outside the index gives its own.
+     * Parsing spells no name.
+     *
      * `reading` is a reading of these very lines someone already made (a
      * write's check, `processLines`), taken instead of reading them again.
      * One of other lines is not taken.
@@ -51,16 +57,18 @@ export class FileParsePipeline {
         filePath: string,
         lines: string[],
         settings: TaskViewerSettings,
+        name: RowNamer,
         reading?: OutlineReading,
     ): FileParseResult {
-        const tree = this.resolveTree(filePath, lines, settings, reading);
-        if (!tree) return { ignored: true, tasks: [], genBlocks: new Map() };
-        const { doc } = tree;
-        const { outline } = doc;
+        const read = this.resolveSections(lines, settings, reading);
+        if (!read) return { ignored: true, tasks: [], genBlocks: new Map() };
+        const { outline, sections } = read;
 
-        const tasks = TreeTaskExtractor.extract(doc, {
+        const tasks = NoteTasks.extract(outline, sections, {
             filePath,
             scopeKeys: settings.scopeKeys,
+            parsers: lineParsers(settings),
+            name,
         });
         // What an operation that takes a row away plans from (`RowBasis`).
         // Slices of one array share its strings, so a deep tree costs one
@@ -79,27 +87,28 @@ export class FileParsePipeline {
     }
 
     /**
-     * The note's section tree with every section's values resolved, and
-     * where each came from (`SectionNode.resolvedSources`): what `parse`
-     * extracts the rows from, for a reader who asks what a line of the note
-     * inherits (`InheritedValues`). Null for a tv-ignore'd note, which has
-     * no rows. `frontmatter` is the block as the YAML parser read it.
+     * The note's reading and its sections with every section's values
+     * resolved, and where each came from (`SectionNode.resolvedSources`):
+     * what `parse` extracts the rows from, for a reader who asks what a line
+     * of the note inherits (`InheritedValues`). Null for a tv-ignore'd note,
+     * which has no rows. `frontmatter` is the block as the YAML parser read
+     * it.
      */
-    static resolveTree(
-        filePath: string,
+    static resolveSections(
         lines: readonly string[],
         settings: TaskViewerSettings,
         reading?: OutlineReading,
-    ): { doc: DocumentNode; frontmatter: Record<string, any> | undefined } | null {
-        // --- Frontmatter境界検出 ---
+    ): { outline: OutlineReading; sections: SectionNode[]; frontmatter: Record<string, any> | undefined } | null {
+        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
+
         // The same reading a write takes of where the body begins
         // (`Placement`): a line the parser reads as body is one a write may
         // place a line at.
-        const bodyStartIndex = Outline.bodyStart(lines);
+        const { bodyStart } = outline;
         let frontmatterObj: Record<string, any> | undefined;
-        if (bodyStartIndex > 0) {
+        if (bodyStart > 0) {
             try {
-                const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
+                const yamlContent = lines.slice(1, bodyStart - 1).join('\n');
                 const parsed: unknown = parseYaml(yamlContent);
                 if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
             } catch {
@@ -108,15 +117,21 @@ export class FileParsePipeline {
             }
         }
 
-        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex, settings)) return null;
+        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStart, settings)) return null;
 
-        // --- ツリーパイプライン（順序契約: build → resolve → extract）---
-        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
-        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex, outline);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
-        return { doc, frontmatter: frontmatterObj };
+        const sections = NoteSections.read(outline);
+        SectionPropertyResolver.resolve(sections, frontmatterObj, settings.scopeKeys);
+        return { outline, sections, frontmatter: frontmatterObj };
     }
 
+    /**
+     * Whether the note says `tv-ignore` (the configured key) is true, by the
+     * one boolean rule of property values (`PropertyValues`): the YAML's
+     * boolean `true` (`true`, `True`, `TRUE`). `yes`, `on`, `1` and a quoted
+     * `"true"` are not true. A block YAML refuses still says it line by line:
+     * then the key's line, with a trailing ` # comment` left out, must be one
+     * of those three spellings.
+     */
     private static isIgnoredByFrontmatter(
         frontmatterObj: Record<string, any> | undefined,
         lines: readonly string[],
@@ -124,45 +139,17 @@ export class FileParsePipeline {
         settings: TaskViewerSettings
     ): boolean {
         const ignoreKey = settings.scopeKeys.ignore;
-        if (this.isTruthyIgnoreValue(frontmatterObj?.[ignoreKey])) {
-            return true;
-        }
+        if (frontmatterObj) return PropertyValues.isTrue(PropertyValues.fromYaml(frontmatterObj[ignoreKey]));
+        if (bodyStartIndex <= 0) return false;
 
-        if (bodyStartIndex <= 0) {
-            return false;
-        }
-
-        // A block YAML refuses still says tv-ignore line by line.
         const escapedKey = ignoreKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const keyLineRegex = new RegExp(`^${escapedKey}\\s*:\\s*(.*)$`);
-
         for (let i = 1; i < bodyStartIndex - 1; i++) {
             const match = lines[i].match(keyLineRegex);
             if (!match) continue;
-            return this.isTruthyIgnoreValue(match[1]);
+            return PropertyValues.isTrue(PropertyValues.fromText(match[1].replace(/\s+#.*$/, '').trim()));
         }
-
         return false;
-    }
-
-    private static isTruthyIgnoreValue(value: unknown): boolean {
-        if (value === true || value === 1) {
-            return true;
-        }
-        if (typeof value !== 'string') {
-            return false;
-        }
-
-        const normalized = value
-            .trim()
-            .replace(/^['"]|['"]$/g, '')
-            .replace(/\s+#.*$/, '')
-            .toLowerCase();
-
-        return normalized === 'true'
-            || normalized === 'yes'
-            || normalized === 'on'
-            || normalized === '1';
     }
 }
 

@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { loadFilterFile, mergeFilters } from '../../../src/api/FilterFileLoader';
+import { loadFilterFile } from '../../../src/api/FilterFileLoader';
+import { TaskApiError } from '../../../src/api/TaskApiTypes';
+import { toCliName } from '../../../src/api/OperationSchemas';
 import type { FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
-import { isFilterCondition, isFilterGroup } from '../../../src/services/filter/FilterTypes';
 import type { App } from 'obsidian';
 import type { ViewTemplate, PinnedListDefinition } from '../../../src/types';
+import type { ListQuery } from '../../../src/services/filter/PinnedListQuery';
 
 // ── Mock ViewTemplateLoader ──
 
@@ -57,7 +59,7 @@ function makePinnedList(name: string, applyViewFilter?: boolean): PinnedListDefi
  * `template.config`. This helper packs flat-style overrides into `config`
  * automatically so existing test bodies keep working.
  */
-function makeTemplate(overrides: {
+function makeTemplate(filePath: string, overrides: {
     filterState?: FilterState;
     pinnedLists?: PinnedListDefinition[];
     grid?: PinnedListDefinition[][];
@@ -82,27 +84,28 @@ function makeTemplate(overrides: {
         })));
     }
     return {
-        filePath: 'templates/test.md',
+        filePath,
         name: overrides.name ?? 'Test',
-        viewType: 'timeline',
+        // The template is read by its view's schema: the grid is Kanban's.
+        viewType: overrides.grid ? 'kanban' : 'timeline',
         config,
     };
 }
 
+/** The query, or the error's text in the API's spelling. */
+async function load(app: App, path: string, listName?: string): Promise<ListQuery | string> {
+    const result = await loadFilterFile(app, path, listName);
+    return result instanceof TaskApiError ? result.rawMessage : result;
+}
+
+/** The error about the list, as the API and the CLI each spell it. */
+async function listError(app: App, path: string, listName?: string): Promise<{ param?: string; api: string; cli: string }> {
+    const result = await loadFilterFile(app, path, listName);
+    if (!(result instanceof TaskApiError)) throw new Error('expected an error');
+    return { param: result.param, api: result.rawMessage, cli: result.textFor(toCliName) };
+}
+
 // ── Tests ──
-
-describe('mergeFilters', () => {
-    it('combines two FilterStates under an AND group', () => {
-        const a = makeFilterState();
-        const b = makeFilterState();
-        const merged = mergeFilters(a, b);
-
-        expect(merged.logic).toBe('and');
-        expect(merged.filters).toHaveLength(2);
-        expect(merged.filters[0]).toBe(a);
-        expect(merged.filters[1]).toBe(b);
-    });
-});
 
 describe('loadFilterFile', () => {
     beforeEach(() => {
@@ -113,7 +116,7 @@ describe('loadFilterFile', () => {
 
     it('returns error when file does not exist', async () => {
         const app = makeApp({});
-        const result = await loadFilterFile(app, 'missing.json');
+        const result = await load(app, 'missing.json');
         expect(result).toBe('Filter file not found: missing.json');
     });
 
@@ -121,7 +124,7 @@ describe('loadFilterFile', () => {
 
     it('returns error for unsupported file type', async () => {
         const app = makeApp({ 'filter.txt': '' });
-        const result = await loadFilterFile(app, 'filter.txt');
+        const result = await load(app, 'filter.txt');
         expect(result).toBe('Unsupported file type: filter.txt. Use .json or .md');
     });
 
@@ -129,7 +132,7 @@ describe('loadFilterFile', () => {
 
     it('normalizes backslashes in file path', async () => {
         const app = makeApp({});
-        const result = await loadFilterFile(app, 'filters\\test.json');
+        const result = await load(app, 'filters\\test.json');
         expect(result).toBe('Filter file not found: filters/test.json');
     });
 
@@ -144,9 +147,9 @@ describe('loadFilterFile', () => {
                 ],
             };
             const app = makeApp({ 'filters/test.json': JSON.stringify(v6Json) });
-            const result = await loadFilterFile(app, 'filters/test.json');
+            const result = await load(app, 'filters/test.json');
             expect(typeof result).not.toBe('string');
-            const state = result as FilterState;
+            const state = (result as ListQuery).filter;
             expect(state.filters).toHaveLength(1);
             const c = state.filters[0] as FilterCondition;
             expect(c.value).toEqual(['work']);
@@ -154,13 +157,19 @@ describe('loadFilterFile', () => {
 
         it('returns error for invalid JSON', async () => {
             const app = makeApp({ 'filters/bad.json': '{not valid json' });
-            const result = await loadFilterFile(app, 'filters/bad.json');
+            const result = await load(app, 'filters/bad.json');
             expect(result).toBe('Invalid JSON in filter file: filters/bad.json');
+        });
+
+        it('returns error when a condition cannot be read', async () => {
+            const app = makeApp({ 'filters/bad.json': '{"logic": "and", "filters": [{"property": "due", "operator": "after", "value": "tomorrow"}]}' });
+            const result = await load(app, 'filters/bad.json');
+            expect(result).toMatch(/^Invalid filter in filters\/bad\.json: filters\[0\]: 'due' takes a date that exists/);
         });
 
         it('returns error when no conditions found', async () => {
             const app = makeApp({ 'filters/empty.json': '{"logic": "and", "conditions": []}' });
-            const result = await loadFilterFile(app, 'filters/empty.json');
+            const result = await load(app, 'filters/empty.json');
             expect(typeof result).toBe('string');
             expect(result).toContain('no conditions found');
         });
@@ -173,112 +182,153 @@ describe('loadFilterFile', () => {
             const app = makeApp({ 'templates/bad.md': '' });
             mockLoadFullTemplate.mockResolvedValue(null);
 
-            const result = await loadFilterFile(app, 'templates/bad.md');
+            const result = await load(app, 'templates/bad.md');
             expect(result).toBe('Failed to load view template: templates/bad.md');
         });
 
         it('returns viewFilter when template has no pinned lists', async () => {
             const filterState = makeFilterState();
             const app = makeApp({ 'templates/simple.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({ filterState }));
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/simple.md', { filterState }));
 
-            const result = await loadFilterFile(app, 'templates/simple.md');
-            expect(result).toEqual(filterState);
+            const result = await load(app, 'templates/simple.md');
+            expect(result).toEqual({ filter: filterState });
+        });
+
+        it('returns error when the template holds a condition it cannot read, as the API filter does', async () => {
+            const bad = { filters: [{ property: 'tag', operator: 'includes', value: 'work' }], logic: 'and' } as unknown as FilterState;
+            const app = makeApp({ 'templates/bad-cond.md': '' });
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/bad-cond.md', { grid: [[{ ...makePinnedList('A'), filterState: bad }]] }));
+
+            const result = await load(app, 'templates/bad-cond.md', 'A');
+            expect(result).toBe(`Invalid filter in templates/bad-cond.md: list "A" filters[0]: 'tag' takes a list of strings`);
         });
 
         it('returns error when template has no filter and no pinned lists', async () => {
             const app = makeApp({ 'templates/empty.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate());
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/empty.md'));
 
-            const result = await loadFilterFile(app, 'templates/empty.md');
+            const result = await load(app, 'templates/empty.md');
             expect(result).toBe('Template has no filter: templates/empty.md');
         });
 
         it('returns error when pinned lists exist but list name not specified', async () => {
             const app = makeApp({ 'templates/lists.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
                 pinnedLists: [makePinnedList('urgent'), makePinnedList('backlog')],
             }));
 
-            const result = await loadFilterFile(app, 'templates/lists.md');
-            expect(result).toBe('Template has pinned lists. Specify one with list=<name>: urgent, backlog');
+            expect(await listError(app, 'templates/lists.md')).toEqual({
+                param: 'list',
+                api: "Template has pinned lists. Name one with 'list': urgent, backlog",
+                cli: "Template has pinned lists. Name one with 'list': urgent, backlog",
+            });
         });
 
         it('returns pinned list filter when list name matches', async () => {
             const pinnedList = makePinnedList('urgent');
             const app = makeApp({ 'templates/lists.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
                 pinnedLists: [pinnedList, makePinnedList('backlog')],
             }));
 
-            const result = await loadFilterFile(app, 'templates/lists.md', 'urgent');
-            expect(result).toEqual(pinnedList.filterState);
+            const result = await load(app, 'templates/lists.md', 'urgent');
+            expect(result).toEqual({ filter: pinnedList.filterState });
         });
 
         it('returns error when list name does not match', async () => {
             const app = makeApp({ 'templates/lists.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
                 pinnedLists: [makePinnedList('urgent')],
             }));
 
-            const result = await loadFilterFile(app, 'templates/lists.md', 'missing');
-            expect(result).toBe('Pinned list "missing" not found. Available: urgent');
+            const error = await listError(app, 'templates/lists.md', 'missing');
+            expect(error.param).toBe('list');
+            expect(error.api).toBe('Pinned list "missing" not found. Available: urgent');
         });
 
         it('returns error when list specified but no pinned lists exist', async () => {
             const app = makeApp({ 'templates/simple.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/simple.md', {
                 filterState: makeFilterState(),
             }));
 
-            const result = await loadFilterFile(app, 'templates/simple.md', 'anything');
-            expect(result).toBe('No pinned lists in template. Remove --list flag');
+            expect(await listError(app, 'templates/simple.md', 'anything')).toEqual({
+                param: 'list',
+                api: "No pinned lists in template: templates/simple.md. Leave out 'list'",
+                cli: "No pinned lists in template: templates/simple.md. Leave out 'list'",
+            });
         });
 
         it('merges viewFilter and pinnedList filter when applyViewFilter is true', async () => {
             const viewFilter = makeFilterState();
             const pinnedList = makePinnedList('urgent', true);
             const app = makeApp({ 'templates/merged.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/merged.md', {
                 filterState: viewFilter,
                 pinnedLists: [pinnedList],
             }));
 
-            const result = await loadFilterFile(app, 'templates/merged.md', 'urgent');
-            // Should be a merged AND group. Inner FilterStates are structurally
-            // equal but not necessarily reference-equal: the codec parses fresh
-            // copies via FilterSerializer.fromJSON to keep template.config a
-            // pure JSON dict.
+            const result = await load(app, 'templates/merged.md', 'urgent');
+            // An AND of the list's filter and the view's, as the view's own
+            // pinned list shows it (PinnedListQuery.resolve).
             expect(typeof result).not.toBe('string');
-            const merged = result as FilterState;
+            const merged = (result as ListQuery).filter;
             expect(merged.logic).toBe('and');
             expect(merged.filters).toHaveLength(2);
-            expect(merged.filters[0]).toEqual(viewFilter);
-            expect(merged.filters[1]).toEqual(pinnedList.filterState);
+            expect(merged.filters[0]).toEqual(pinnedList.filterState);
+            expect(merged.filters[1]).toEqual(viewFilter);
         });
 
         it('skips viewFilter merge when applyViewFilter is false', async () => {
             const viewFilter = makeFilterState();
             const pinnedList = makePinnedList('urgent', false);
             const app = makeApp({ 'templates/no-merge.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/no-merge.md', {
                 filterState: viewFilter,
                 pinnedLists: [pinnedList],
             }));
 
-            const result = await loadFilterFile(app, 'templates/no-merge.md', 'urgent');
-            expect(result).toEqual(pinnedList.filterState);
+            const result = await load(app, 'templates/no-merge.md', 'urgent');
+            expect(result).toEqual({ filter: pinnedList.filterState });
+        });
+
+        // The toggle's default lives in the codec: a list saved before the
+        // toggle was touched has no key and reads as false. The view shows such
+        // a list without the view filter; the CLI/API used to layer it in.
+        it('a list saved without the key does not layer the view filter, as the view does', async () => {
+            const pinnedList = makePinnedList('urgent');
+            const app = makeApp({ 'templates/untouched.md': '' });
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/untouched.md', {
+                filterState: makeFilterState(),
+                pinnedLists: [pinnedList],
+            }));
+
+            const result = await load(app, 'templates/untouched.md', 'urgent');
+            expect(result).toEqual({ filter: pinnedList.filterState });
+        });
+
+        // The template is read by its view's schema, as the view reads it: a
+        // key its view does not keep is not read.
+        it('reads the lists its view keeps, and no other key', async () => {
+            const app = makeApp({ 'templates/timeline.md': '' });
+            const template = makeTemplate('templates/timeline.md', { pinnedLists: [makePinnedList('kept')] });
+            template.config!.grid = [[{ id: 'g', name: 'grid-cell', filterState: makeFilterState() }]];
+            mockLoadFullTemplate.mockResolvedValue(template);
+
+            expect(await load(app, 'templates/timeline.md', 'grid-cell'))
+                .toBe('Pinned list "grid-cell" not found. Available: kept');
         });
 
         it('uses grid flat() when pinnedLists is undefined', async () => {
             const pinnedList = makePinnedList('col1');
             const app = makeApp({ 'templates/grid.md': '' });
-            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/grid.md', {
                 grid: [[pinnedList]],
             }));
 
-            const result = await loadFilterFile(app, 'templates/grid.md', 'col1');
-            expect(result).toEqual(pinnedList.filterState);
+            const result = await load(app, 'templates/grid.md', 'col1');
+            expect(result).toEqual({ filter: pinnedList.filterState });
         });
     });
 });

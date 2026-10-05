@@ -27,10 +27,6 @@ class FakeEditor implements DraftEditor {
         this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
     }
     draft(): SourceDraft { return { parent: this.parent, children: this.children.map(line => ({ ...line })) }; }
-    isDirty(): boolean {
-        return this.parent !== this.frame.parent
-            || this.children.map(line => line.text).join('\n') !== this.frame.children.join('\n');
-    }
     isCompleting(): boolean { return this.completing; }
     closeCompletion(): boolean {
         const was = this.completing;
@@ -192,7 +188,7 @@ describe('applying a draft', () => {
 
         expect(h.state()).toMatchObject({
             phase: 'source',
-            message: t('notice.notWritten', { reason: t('notice.refusedDisturbs'), subject: 'P' }),
+            issues: [{ at: 'form', tone: 'error', text: t('notice.notWritten', { reason: t('notice.refusedDisturbs'), subject: 'P' }) }],
         });
         expect(h.editor().destroyed).toBe(false);
         expect(h.editor().draft().parent).toBe('- [x] P');
@@ -204,11 +200,11 @@ describe('applying a draft', () => {
         const h = await opened({ answers: [{ written: false, refused }, { written: true }] });
         h.editor().parent = '- [x] P';
         await h.source.apply();
-        const why = h.state().message;
+        const why = h.state().issues;
 
         await h.source.apply();
         expect(h.replace).toHaveBeenCalledTimes(1);
-        expect(h.state()).toMatchObject({ phase: 'source', message: why });
+        expect(h.state()).toMatchObject({ phase: 'source', issues: why });
 
         h.editor().parent = '- [x] P2';
         await h.source.apply();
@@ -233,7 +229,7 @@ describe('applying a draft', () => {
         h.editor().parent = 'P';
         await h.source.apply();
         expect(h.replace).not.toHaveBeenCalled();
-        expect(h.state()).toMatchObject({ phase: 'source', message: t('modal.hub.source.notTask') });
+        expect(h.state()).toMatchObject({ phase: 'source', issues: [{ at: 'form', tone: 'error', text: t('modal.hub.source.notTask') }] });
     });
 
     it('is not made while a write of the draft is on its way', async () => {
@@ -280,6 +276,16 @@ describe('cancelling', () => {
 });
 
 describe('closing the hub (beforeClose)', () => {
+    it('lets it close over an edit that writes nothing: a blank line added at the end of the children (論点2)', async () => {
+        const h = await opened();
+        h.editor().children.push({ text: '', was: null });
+        expect(h.source.beforeClose()).toBe(true);
+        expect(h.asked()).toBe(0);
+        // Back to the card, too, without asking.
+        h.source.cancel();
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+    });
+
     it('lets it close on the card, and in the source without a draft', async () => {
         const h = setUp();
         expect(h.source.beforeClose()).toBe(true);
@@ -361,7 +367,7 @@ describe('going back to the draft while asked', () => {
         h.source.cancel();
         await h.source.apply();
         expect(h.replace).not.toHaveBeenCalled();
-        expect(h.state()).toMatchObject({ phase: 'source', asking: false, message: t('modal.hub.source.notTask') });
+        expect(h.state()).toMatchObject({ phase: 'source', asking: false, issues: [{ at: 'form', tone: 'error', text: t('modal.hub.source.notTask') }] });
     });
 
     it('forgets the close given up on back: a discard asked later by cancel goes back to the card, the hub open', async () => {

@@ -3,7 +3,6 @@ import {
     isTvInline,
     isDpInline,
     isTpInline,
-    hasScheduling,
     isCompleteStatusChar,
     type StatusDefinition,
 } from '../../../src/types';
@@ -31,20 +30,6 @@ describe('isTpInline', () => {
     });
 });
 
-describe('hasScheduling', () => {
-    it('returns false when no date/time fields are set', () => {
-        expect(hasScheduling({})).toBe(false);
-    });
-
-    it('returns true for any single date/time field', () => {
-        expect(hasScheduling({ startDate: '2026-01-01' })).toBe(true);
-        expect(hasScheduling({ startTime: '09:00' })).toBe(true);
-        expect(hasScheduling({ endDate: '2026-01-01' })).toBe(true);
-        expect(hasScheduling({ endTime: '17:00' })).toBe(true);
-        expect(hasScheduling({ due: '2026-01-01' })).toBe(true);
-    });
-});
-
 describe('isCompleteStatusChar', () => {
     const defsWithBlankMarkedComplete: StatusDefinition[] = [
         { char: ' ', label: 'Todo', isComplete: true }, // as if set via the settings toggle, or loaded from a stale data.json
@@ -54,8 +39,8 @@ describe('isCompleteStatusChar', () => {
 
     it('never treats blank as complete, even when a definition says so', () => {
         // G1: a flow's next instance is always written as `[ ]`. If blank
-        // could read as complete, that write would complete itself the
-        // moment it lands (see .plan/structure.md).
+        // could read as complete, every instance would read as done the
+        // moment it lands (see isCompleteStatusChar).
         expect(isCompleteStatusChar(' ', defsWithBlankMarkedComplete)).toBe(false);
     });
 

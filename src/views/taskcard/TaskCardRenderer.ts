@@ -1,19 +1,89 @@
-import { type App, MarkdownRenderer, Component } from 'obsidian';
-import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type TopRightConfig } from '../../types';
-import { getOverdueLevel, type OverdueLevel } from '../../services/display/TaskStatusQuery';
-import { resolveTopRightField } from './TopRightFieldResolver';
+import { type App, Component } from 'obsidian';
+import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type StatusDefinition, type TopRightConfig } from '../../types';
+import { exceedsDue, getOverdueLevel, type OverdueLevel } from '../../services/display/TaskStatusQuery';
+import { composeTopRight, topRightText, TIME_TOP_RIGHT, type TopRightPiece } from './TopRightFieldResolver';
 
+/**
+ * What a card's top right shows: nothing, or the fields of a config
+ * (`TopRightFieldResolver`). A saved list passes its own config; Timeline,
+ * Calendar and Schedule pass `TIME_TOP_RIGHT`.
+ */
 export type TopRightSpec =
-    | { mode: 'time' }
-    | { mode: 'template'; config: TopRightConfig }
-    | { mode: 'none' };
+    | { mode: 'none' }
+    | { mode: 'fields'; config: TopRightConfig };
 
-interface RenderOptions {
-    cardInstanceId: string;
-    context?: 'inline' | 'hub-preview';
+/**
+ * How one card is drawn. Every policy is its own field, so a caller that
+ * draws cards apart from the views (the hub's preview) says what it wants
+ * of each, and the renderer has no branch for that caller.
+ */
+export interface RenderOptions {
+    /** Which card this is in its view; an opened card is kept by it. */
+    key: CardKey;
     topRight?: TopRightSpec;
     compact?: boolean;
-    hooks?: { onNavigate?: () => void };
+    /** Show every child, however many: no collapsed section. Default false. */
+    expandChildren?: boolean;
+    /** Links in the card can be clicked whatever `enableCardFileLink` says. Default false. */
+    alwaysLinks?: boolean;
+    /** A double tap on the card does the setting's action. Default true. */
+    doubleTap?: boolean;
+    /** The view's mask mode applies to the card. Default true. */
+    mask?: boolean;
+    hooks?: {
+        /** A link in the card was followed. */
+        onNavigate?: () => void;
+        /** What the card's context menu does in place of its defaults. */
+        menu?: TaskMenuHooks;
+    };
+}
+
+/**
+ * What a card does when the user acts on it, given once to the renderer.
+ * Every handler is handed the task the card shows when it is used
+ * (`CardHold`), or the child's name now.
+ */
+export interface CardActions {
+    /** Open the task's details (the hub). */
+    openDetail(task: Task): void;
+    /** Open the task's context menu at a point. */
+    showMenu(task: Task, x: number, y: number): void;
+    /** Open a child's context menu, from its ⋯ button. */
+    showChildMenu: ChildMenuCallback;
+    /** Open the task's line in the editor. */
+    openInEditor(task: Task): void;
+    /** What a double tap on a card does, read when it happens. */
+    doubleTapAction(): DoubleTapAction;
+    /** Give the card its context menu (a right click, a long press). */
+    bindMenu(card: HTMLElement, hooks?: TaskMenuHooks): void;
+}
+
+/** What a renderer draws with, given once. */
+export interface TaskCardRendererDeps {
+    app: App;
+    readService: TaskReadService;
+    index: IndexReads;
+    operations: Operations;
+    menuPresenter: MenuPresenter;
+    linkRuntime: TaskCardLinkRuntime;
+    getSettings: () => TaskViewerSettings;
+    /**
+     * The owning view's mask-mode toggle, read on every draw. When it is on,
+     * a card that takes the mask (`RenderOptions.mask`) shows its task's
+     * `tv-mask` value in place of its text (see `applyMaskToContent`).
+     */
+    getMaskMode: () => boolean;
+    actions: CardActions;
+}
+
+/** The policies of `options`, with their defaults filled in. */
+function policiesOf(options: RenderOptions) {
+    return {
+        expandChildren: options.expandChildren ?? false,
+        alwaysLinks: options.alwaysLinks ?? false,
+        doubleTap: options.doubleTap ?? true,
+        mask: options.mask ?? true,
+    };
 }
 
 /**
@@ -34,8 +104,9 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 
 const SHAPE_CLASS = 'task-card__shape';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { getFileBaseName, hasTaskContent } from '../../services/parsing/utils/TaskContent';
+import type { Operations } from '../../services/operations/Operations';
+import type { IndexReads } from '../../services/core/TaskIndex';
+import { getFileBaseName, hasTaskContent } from '../../services/display/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, type ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
@@ -43,9 +114,56 @@ import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { ChildRenderItem, TaskCardLinkRuntime } from './types';
-import { getEffectiveMask } from '../../services/data/EffectiveProperties';
-import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { getEffectiveColor, getEffectiveLinestyle, getEffectiveMask } from '../../services/data/EffectiveProperties';
+import { TaskStyling } from '../sharedUI/TaskStyling';
+import type { TaskMenuHooks } from '../../interaction/menu/MenuHandler';
+import { ExpandedCards, stampCardKey, type CardKey } from './CardKey';
 import { holdCard, type CardHold } from './CardHold';
+import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
+import { renderCardMarkdown, type LateContent } from './CardMarkdown';
+
+/**
+ * Draws a card's top right (`composeTopRight`), each piece with the class of
+ * its role (`task-card__time-start`, `-end`, `-sep`, `-seg`), in units
+ * (`topRightUnits`, each a `task-card__time-unit`). Nothing when there are
+ * no pieces.
+ *
+ * The box is one line high and wraps between units (`_task-card.css`): a unit
+ * after the first that does not fit on the line goes whole to the next, out
+ * of sight, with what follows it. So the end shows whenever it fits, and
+ * never cut.
+ */
+export function renderTopRight(container: HTMLElement, pieces: readonly TopRightPiece[]): void {
+    if (pieces.length === 0) return;
+    const el = container.createDiv('task-card__time');
+    for (const unit of topRightUnits(pieces)) {
+        const unitEl = el.createSpan('task-card__time-unit');
+        for (const piece of unit) {
+            unitEl.createSpan(`task-card__time-${piece.role}`).textContent = piece.text;
+        }
+    }
+}
+
+/**
+ * The pieces in the units a narrow card drops whole: the end (`>11:00`, its
+ * separator in it) on its own, after what comes before it and before what
+ * follows it. One unit when there is no end.
+ */
+export function topRightUnits(pieces: readonly TopRightPiece[]): TopRightPiece[][] {
+    const units: TopRightPiece[][] = [];
+    let current: TopRightPiece[] = [];
+    for (const piece of pieces) {
+        if (piece.role === 'end') {
+            if (current.length > 0) units.push(current);
+            units.push([piece]);
+            current = [];
+        } else {
+            current.push(piece);
+        }
+    }
+    if (current.length > 0) units.push(current);
+    return units;
+}
 
 /**
  * What a card shows, to tell whether a kept card can stay as it is drawn.
@@ -68,6 +186,7 @@ export function computeContentSignature(
     isExpanded: boolean,
     children: readonly ChildRenderItem[],
 ): string {
+    const policies = policiesOf(options);
     const childSig = children.map(item => [
         item.isCheckbox ? 1 : 0,
         item.markdown,
@@ -87,13 +206,11 @@ export function computeContentSignature(
         task.parserId,
         // A child's time-only notation is shown with the parent's own date.
         task.startDate ?? '',
-        task.effectiveStartDate,
-        task.effectiveStartTime ?? '',
-        task.effectiveEndDate ?? '',
-        task.effectiveEndTime ?? '',
-        task.startTimeImplicit ? '1' : '0',
-        task.endTimeImplicit ? '1' : '0',
-        task.effectiveDue ?? '',
+        task.span?.startMs ?? '',
+        task.span?.endMs ?? '',
+        task.drawn?.startMs ?? '',
+        task.drawn?.endMs ?? '',
+        task.dueMs ?? '',
         task.isReadOnly ? '1' : '0',
         topRightResolved,
         // Overdue is judged against the clock, not against task fields, so
@@ -102,7 +219,10 @@ export function computeContentSignature(
         // for as long as the task is not edited.
         overdueLevel,
         options.compact ? '1' : '0',
-        options.context ?? '',
+        policies.expandChildren ? '1' : '0',
+        policies.alwaysLinks ? '1' : '0',
+        policies.doubleTap ? '1' : '0',
+        policies.mask ? '1' : '0',
         maskMode ? '1' : '0',
         maskMode ? (getEffectiveMask(task) ?? '') : '',
         isExpanded ? '1' : '0',
@@ -114,52 +234,56 @@ export function computeContentSignature(
     ]);
 }
 
+/**
+ * The overdue mark a card shows: the overdue level (`getOverdueLevel`), and
+ * 🚨 (`past-due`) as well when the task's span runs past its due
+ * (`exceedsDue`), before the due too. The one place a card reads
+ * `exceedsDue`; the overdue counts read `getOverdueLevel` alone.
+ */
+export function cardOverdueLevel(
+    task: DisplayTask,
+    defs: StatusDefinition[],
+    readService: Pick<TaskReadService, 'getDisplayTask'>,
+    now: number = Date.now(),
+): OverdueLevel {
+    const level = getOverdueLevel(task, defs, readService, now);
+    if (level === 'past-due') return level;
+    return exceedsDue(task, defs, readService) ? 'past-due' : level;
+}
+
 export class TaskCardRenderer extends Component {
-    private expandedTaskIds: Set<string> = new Set();
+    private expanded = new ExpandedCards();
     private childItemBuilder: ChildItemBuilder;
     private childSectionRenderer: ChildSectionRenderer;
     private checkboxWiring: CheckboxWiring;
     private linkInteractionManager: TaskLinkInteractionManager;
-    private onDetailClick: ((task: Task) => void) | null = null;
-    private onContextMenu: ((task: Task, x: number, y: number) => void) | null = null;
-    private onOpenInEditor: ((task: Task) => void) | null = null;
-    private getDoubleTapAction: () => DoubleTapAction = () => 'detail';
+    private readonly app: App;
+    private readonly readService: TaskReadService;
+    private readonly index: IndexReads;
+    private readonly linkRuntime: TaskCardLinkRuntime;
+    private readonly getMaskMode: () => boolean;
+    private readonly actions: CardActions;
     private cardComponents: WeakMap<HTMLElement, Component> = new WeakMap();
     private unsubscribeTaskDeleted: (() => void) | null = null;
 
-    constructor(
-        private app: App,
-        readService: TaskReadService,
-        writeService: TaskWriteService,
-        menuPresenter: MenuPresenter,
-        private linkRuntime: TaskCardLinkRuntime,
-        getSettings: () => TaskViewerSettings,
-        /**
-         * Lazy reader for the owning view's mask-mode toggle. When it returns
-         * true, every card rendered through this renderer substitutes its
-         * content with the task's `tv-mask` value (see `applyMaskToContent`).
-         * Default returns false so the renderer keeps working uninstrumented
-         * in tests and lightweight call sites.
-         */
-        private getMaskMode: () => boolean = () => false
-    ) {
+    constructor(deps: TaskCardRendererDeps) {
         super();
-        this.checkboxWiring = new CheckboxWiring(writeService, menuPresenter);
-        this.childItemBuilder = new ChildItemBuilder(readService);
-        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
-        this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
-        // Clean up expandedTaskIds entries for tasks deleted via the UI so the
-        // set does not grow unbounded over the renderer's lifetime. Keys are
-        // `${viewId}::${scope}::${task.id}` (cardInstanceId). Match by suffix so
-        // all card instances of the deleted task are dropped regardless of view /
-        // scope (main grid, pinned list, etc.).
-        this.unsubscribeTaskDeleted = writeService.onTaskDeleted((taskId) => {
-            const suffix = `::${taskId}`;
-            for (const key of [...this.expandedTaskIds]) {
-                if (key.endsWith(suffix)) {
-                    this.expandedTaskIds.delete(key);
-                }
-            }
+        const { app, readService, index } = deps;
+        this.app = app;
+        this.readService = readService;
+        this.index = index;
+        this.linkRuntime = deps.linkRuntime;
+        this.getMaskMode = deps.getMaskMode;
+        this.actions = deps.actions;
+        this.checkboxWiring = new CheckboxWiring(deps.operations, deps.menuPresenter);
+        this.childItemBuilder = new ChildItemBuilder(readService, index);
+        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, index, deps.actions.showChildMenu);
+        this.linkInteractionManager = new TaskLinkInteractionManager(app, deps.getSettings);
+        // Forget the opened cards of rows whose names ended (the index's
+        // delete notification), segments included, in every place, so the
+        // set does not grow over the renderer's lifetime.
+        this.unsubscribeTaskDeleted = index.onTaskDeleted((taskId) => {
+            this.expanded.forgetRow(taskId);
         });
     }
 
@@ -171,63 +295,24 @@ export class TaskCardRenderer extends Component {
         super.onunload();
     }
 
-    setChildMenuCallback(cb: ChildMenuCallback): void {
-        this.childSectionRenderer.setChildMenuCallback(cb);
-    }
-
     /**
-     * Whether the card `cardInstanceId`, drawing the task `taskId`, was left
-     * expanded. A key ends in the name the task had when it was expanded, and
-     * a name lasts one reading of its file: one given before a write of ours
-     * is followed to the row's name now (`getTask`), and the key is taken
-     * over by this card. One from before a change that was not ours names
-     * nothing, and the card is drawn collapsed.
+     * Draw `task` into `container`. The card is drawn whole when this
+     * returns: its body, its children, their notation, its links and the
+     * mask. Only content that is truly asynchronous (`LateContent`) comes in
+     * later, and the mask is laid again once it has.
      */
-    private isExpanded(cardInstanceId: string, taskId: string): boolean {
-        if (this.expandedTaskIds.has(cardInstanceId)) return true;
-        if (!cardInstanceId.endsWith(taskId)) return false;
-        const scope = cardInstanceId.slice(0, cardInstanceId.length - taskId.length);
-        const readService = this.childItemBuilder.getReadService();
-        for (const key of this.expandedTaskIds) {
-            if (!key.startsWith(scope)) continue;
-            const held = key.slice(scope.length);
-            const now = TaskIdGenerator.mapRow(held, row => readService.getTask(row)?.id);
-            if (now !== taskId) continue;
-            this.expandedTaskIds.delete(key);
-            this.expandedTaskIds.add(cardInstanceId);
-            return true;
-        }
-        return false;
-    }
-
-    setDetailCallback(cb: (task: Task) => void): void {
-        this.onDetailClick = cb;
-    }
-
-    setContextMenuCallback(cb: (task: Task, x: number, y: number) => void): void {
-        this.onContextMenu = cb;
-    }
-
-    setOpenInEditorCallback(cb: (task: Task) => void): void {
-        this.onOpenInEditor = cb;
-    }
-
-    setDoubleTapActionGetter(getter: () => DoubleTapAction): void {
-        this.getDoubleTapAction = getter;
-    }
-
-    async render(
+    render(
         container: HTMLElement,
         task: DisplayTask,
         settings: TaskViewerSettings,
         options: RenderOptions
-    ): Promise<void> {
-        const cardInstanceId = options.cardInstanceId;
-        const topRight: TopRightSpec = options.topRight ?? { mode: 'time' };
+    ): void {
+        const key = options.key;
+        const topRight: TopRightSpec = options.topRight ?? { mode: 'fields', config: TIME_TOP_RIGHT };
         const compact = options.compact ?? false;
-        const isHubPreview = options.context === 'hub-preview';
-        const forceExpand = isHubPreview;
-        const enableLinks = isHubPreview || settings.enableCardFileLink;
+        const policies = policiesOf(options);
+        const enableLinks = policies.alwaysLinks || settings.enableCardFileLink;
+        const masked = policies.mask && this.getMaskMode();
         const onNavigate = options.hooks?.onNavigate;
 
         // What the card shows of its children, and the names behind them. A
@@ -237,23 +322,26 @@ export class TaskCardRenderer extends Component {
             : [];
         // Every draw puts the task it draws in the hold, whether or not the
         // card is drawn anew: a kept card acts on the task it shows.
-        const hold = holdCard(container, task, cardInstanceId, children.map(item => item.handler?.taskId ?? null));
-        container.dataset.cardInstanceId = cardInstanceId;
+        const hold = holdCard(container, task, key, children.map(item => item.handler?.taskId ?? null));
+        stampCardKey(container, key);
 
-        if (isHubPreview) {
-            container.addClass('task-card--in-hub-preview');
-        }
+        // The card's look outside its content, and its menu, on every draw:
+        // a kept card is drawn for a task whose color may have gone.
+        TaskStyling.applyTaskColor(container, getEffectiveColor(task) ?? null);
+        TaskStyling.applyTaskLinestyle(container, getEffectiveLinestyle(task) ?? null);
+        TaskStyling.applyReadOnly(container, task);
+        this.actions.bindMenu(container, options.hooks?.menu);
 
         // Compute content signature for render skip
-        const topRightResolved = this.resolveTopRightString(task, settings, topRight);
-        const isExpanded = this.isExpanded(cardInstanceId, task.id);
-        const overdueLevel = getOverdueLevel(
-            task, settings.startHour, settings.statusDefinitions,
-            this.childItemBuilder.getReadService(),
-        );
+        const topRightPieces = topRight.mode === 'fields'
+            ? composeTopRight(task, topRight.config, settings)
+            : [];
+        const topRightResolved = topRightText(topRightPieces);
+        const isExpanded = this.expanded.isOpen(key, row => this.index.getTask(row)?.id);
+        const overdueLevel = cardOverdueLevel(task, settings.statusDefinitions, this.readService);
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
-            this.getMaskMode(), isExpanded, children,
+            masked, isExpanded, children,
         );
 
         if (container.dataset.contentSig === sig) {
@@ -280,17 +368,17 @@ export class TaskCardRenderer extends Component {
         this.addChild(cardComp);
         this.cardComponents.set(container, cardComp);
 
-        this.renderTopRightMeta(container, task, settings, topRight);
-        if (!isHubPreview) {
+        renderTopRight(container, topRightPieces);
+        if (policies.doubleTap) {
             bindTapIntents(container, {
                 onDoubleTap: (x, y) => {
-                    const action = this.getDoubleTapAction();
+                    const action = this.actions.doubleTapAction();
                     if (action === 'menu') {
-                        this.onContextMenu?.(hold.task, x, y);
+                        this.actions.showMenu(hold.task, x, y);
                     } else if (action === 'open') {
-                        this.onOpenInEditor?.(hold.task);
+                        this.actions.openInEditor(hold.task);
                     } else {
-                        this.onDetailClick?.(hold.task);
+                        this.actions.openDetail(hold.task);
                     }
                 },
             }, {
@@ -310,40 +398,36 @@ export class TaskCardRenderer extends Component {
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
+        let late: LateContent;
         if (compact) {
-            // Reserve the child-count bar synchronously, BEFORE the markdown await.
-            // Without this, the bar appears in a microtask after MarkdownRenderer
-            // resolves, briefly shrinking compact cards by ~21px. For allday
-            // cards stacked on a CSS grid, that transient propagates to the
-            // allday-section height, which combined with the sync scroll-restore
-            // in TimelineView.performRender produces a 1-frame flicker of timed
-            // cards shifting up then settling back.
-            const childCountBar = container.createDiv('task-card__child-count');
-            const countLabelSpan = childCountBar.createSpan();
-
-            const strippedMarkdown = parentMarkdown
-                .replace(/!\[\[([^\]]*)\]\]/g, '')
-                .replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
-            await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, cardComp);
-
+            late = renderCardMarkdown(this.app, withoutEmbeds(parentMarkdown), contentContainer, task.file, cardComp);
+            // The bar is there with or without children, so compact cards
+            // of one lane keep one height.
+            const countLabelSpan = container.createDiv('task-card__child-count').createSpan();
             const { completed, total } = this.getChildCompletion(task, settings);
             if (total > 0) {
                 countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
         } else if (task.childEntries.length > 0) {
-            await this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, forceExpand);
+            late = this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, policies.expandChildren);
         } else {
-            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
+            late = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
         this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
         this.bindParentCheckbox(contentContainer, hold, settings, task.isReadOnly);
 
         // Apply mask last so it overlays whatever child/inline renderer produced.
-        // Detail modal opts out — the user explicitly asked to inspect this task.
         const mask = getEffectiveMask(task);
-        if (!isHubPreview && this.getMaskMode() && mask) {
+        if (masked && mask) {
             TaskCardRenderer.applyMaskToContent(contentContainer, mask);
+            // Text a post-processor puts in later would show unmasked: lay the
+            // mask again once it is in, while the card still shows this draw.
+            void late.then(() => {
+                if (container.dataset.contentSig !== sig) return;
+                if (this.cardComponents.get(container) !== cardComp) return;
+                TaskCardRenderer.applyMaskToContent(contentContainer, mask);
+            });
         }
     }
 
@@ -391,7 +475,7 @@ export class TaskCardRenderer extends Component {
     }
 
     private getOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
-        const level = getOverdueLevel(task, settings.startHour, settings.statusDefinitions, this.childItemBuilder.getReadService());
+        const level = cardOverdueLevel(task, settings.statusDefinitions, this.readService);
         return level === 'past-due' ? '🚨 '
             : level === 'past-end' ? '⚠️ '
             : '';
@@ -410,67 +494,15 @@ export class TaskCardRenderer extends Component {
     private getChildCompletion(task: DisplayTask, settings: TaskViewerSettings): { completed: number; total: number } {
         let completed = 0;
         let total = 0;
-        const lookup = this.childItemBuilder.getReadService();
-
         for (const entry of task.childEntries) {
             if (entry.kind !== 'task') continue;
-            const child = lookup.getTask(entry.taskId);
+            const child = this.index.getTask(entry.taskId);
             if (!child) continue;
             total++;
             if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
         }
 
         return { completed, total };
-    }
-
-    private resolveTopRightString(task: DisplayTask, settings: TaskViewerSettings, spec: TopRightSpec): string {
-        if (spec.mode === 'none') return '';
-        if (spec.mode === 'time') {
-            if (!task.effectiveStartTime || task.startTimeImplicit) return '';
-            const end = (task.effectiveEndTime && !task.endTimeImplicit) ? `>${task.effectiveEndTime}` : '';
-            return `${task.effectiveStartTime}${end}`;
-        }
-        const { fields, separator, prefix, suffix } = spec.config;
-        const segments = fields
-            .map(f => resolveTopRightField(task, f, settings))
-            .filter((v): v is string => v != null && v !== '');
-        if (segments.length === 0) return '';
-        return `${prefix ?? ''}${segments.join(separator ?? '')}${suffix ?? ''}`;
-    }
-
-    private renderTopRightMeta(
-        container: HTMLElement,
-        task: DisplayTask,
-        settings: TaskViewerSettings,
-        spec: TopRightSpec,
-    ): void {
-        if (spec.mode === 'none') return;
-
-        if (spec.mode === 'time') {
-            if (!task.effectiveStartTime || task.startTimeImplicit) return;
-            const el = container.createDiv('task-card__time');
-            el.createSpan('task-card__time-start').textContent = task.effectiveStartTime;
-            if (task.effectiveEndTime && !task.endTimeImplicit) {
-                el.createSpan('task-card__time-end').textContent = `>${task.effectiveEndTime}`;
-            }
-            return;
-        }
-
-        const { fields, separator, prefix, suffix } = spec.config;
-        const segments = fields
-            .map(f => resolveTopRightField(task, f, settings))
-            .filter((v): v is string => v != null && v !== '');
-        if (segments.length === 0) return;
-
-        const el = container.createDiv('task-card__time');
-        if (prefix) el.createSpan('task-card__time-seg').textContent = prefix;
-        for (let i = 0; i < segments.length; i++) {
-            if (i > 0 && separator) {
-                el.createSpan('task-card__time-sep').textContent = separator;
-            }
-            el.createSpan('task-card__time-seg').textContent = segments[i];
-        }
-        if (suffix) el.createSpan('task-card__time-seg').textContent = suffix;
     }
 
     private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {
@@ -500,7 +532,7 @@ export class TaskCardRenderer extends Component {
      * (see NotationUtils contract), so the parent date substituted into
      * time-only child notations must live in the same raw coordinate system.
      */
-    private async renderInlineChildren(
+    private renderInlineChildren(
         contentContainer: HTMLElement,
         task: DisplayTask,
         items: ChildRenderItem[],
@@ -508,29 +540,29 @@ export class TaskCardRenderer extends Component {
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
-        forceExpand = false
-    ): Promise<void> {
+        expandChildren = false
+    ): LateContent {
         const nameAt = (index: number) => hold.childAt(index);
-        if (!forceExpand && items.length >= settings.childCollapseThreshold) {
-            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
-            await this.childSectionRenderer.renderCollapsed(
+        if (!expandChildren && items.length >= settings.childCollapseThreshold) {
+            const parentLate = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, component);
+            const childrenLate = this.childSectionRenderer.renderCollapsed(
                 contentContainer,
                 items,
                 nameAt,
-                this.expandedTaskIds,
-                () => hold.cardInstanceId,
+                this.expanded,
+                () => hold.key,
                 task.file,
                 component,
                 settings,
                 task.startDate,
                 this.getChildOverdueIcon(task, settings)
             );
-            return;
+            return Promise.all([parentLate, childrenLate]).then(() => undefined);
         }
 
         // Under the parent's line, each item goes one level in.
         const indentedItems = items.map(item => ({ ...item, markdown: '    ' + item.markdown }));
-        await this.childSectionRenderer.renderParentWithChildren(
+        return this.childSectionRenderer.renderParentWithChildren(
             contentContainer,
             parentMarkdown,
             indentedItems,
@@ -566,8 +598,11 @@ export class TaskCardRenderer extends Component {
      * Replace card-visible text with the mask string and hide any wikilinks /
      * internal links so the file name itself does not leak. Operates on the
      * `.task-card__content` subtree only (other card chrome — time, child
-     * count, checkbox — stays legible). Idempotent: every render starts from
-     * a freshly built content subtree, so no restore is necessary.
+     * count, checkbox — stays legible). Every draw starts from a freshly
+     * built content subtree, so no restore is necessary. Laying it again on
+     * the same subtree changes only text that came in since: the first run
+     * already holds the mask, the rest are empty and the links hidden. That
+     * is what the draw relies on to mask late content (`render`).
      *
      * Mirrors the old ExportUtils.applyMasking logic but as a forward-only
      * render-time transform — masking is now a live visual mode, not an

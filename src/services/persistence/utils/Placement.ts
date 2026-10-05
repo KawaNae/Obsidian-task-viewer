@@ -1,7 +1,7 @@
 import { Outline, type OutlineHeading, type OutlineReading } from '../../parsing/utils/Outline';
 import type { PlacedReading } from '../../parsing/utils/OutlineCheck';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
-import { FileOperations } from './FileOperations';
+import { NoteSections } from '../../parsing/tree/NoteSections';
 
 /**
  * Where a write puts lines: the index to put them at, the item they go under
@@ -26,7 +26,7 @@ export type HeadingLookup =
 
 /**
  * Which end of a heading's section new lines go to: its head, just below the
- * heading, or its end, just above the first heading below it. The setting
+ * heading and the section's own property lines, or its end, just above the first heading below it. The setting
  * `sectionSide`, the one answer for every write that adds lines to a section
  * (a flow's move, a task made under a heading, a timer's record in the daily
  * note).
@@ -43,7 +43,7 @@ export interface InSection {
  * Where lines go in a section (`Placement.into`): the spot, or why there is
  * none — no heading by the name, or more than one, which a link to the
  * heading cannot tell apart either. Whether a heading is made when there is
- * none is the caller's to say (`HeadingInserter` makes one; a flow's move
+ * none is the caller's to say (`Notes.sectionSpot` makes one; a flow's move
  * fails).
  */
 export type SectionLookup =
@@ -111,7 +111,6 @@ export class Placement {
      * tasks it stands among, not the text above them.
      */
     static groupHead(outline: OutlineReading, row: number, head: string, unit: string): Spot {
-        const { lines } = outline;
         const parent = outline.item(row)?.parent ?? null;
         if (parent !== null) return this.sibling(outline, parent + 1, parent, head, unit);
 
@@ -121,7 +120,7 @@ export class Placement {
             let above = outline.ownerOf(first - 1);
             while (above !== null && outline.item(above)!.parent !== null) above = outline.item(above)!.parent;
             if (above === null || outline.subtreeEnd(above) !== first) break;
-            if (!TaskLineClassifier.isTaskLine(lines[above])) break;
+            if (!TaskLineClassifier.opensTask(outline, above)) break;
             first = above;
         }
         return this.sibling(outline, first, null, head, unit);
@@ -232,7 +231,12 @@ export class Placement {
      * - `head`: just below the heading, past the paragraph and the code
      *   below it, at the top as a sibling of the items there. A task
      *   indented under the heading stays where it stands, not under the new
-     *   line.
+     *   line. A section with property lines of its own has its head just
+     *   past them (`PropertyBlock.end`, as `NoteSections` reads the block):
+     *   a line put above them would stand before them, and they would read
+     *   as no longer the section's, which reads its properties only above
+     *   its first task. The blank lines past the block stay below the line,
+     *   as those below the heading do.
      * - `end`: just past the section's last line that is not blank — past
      *   the subtree of an item that ends it, as a sibling at the top — so
      *   the blank lines that end it stay below. A section with nothing in it
@@ -242,7 +246,10 @@ export class Placement {
         const found = this.heading(outline, to.heading);
         if (found.kind !== 'one') return found;
         const { heading } = found;
-        if (to.side === 'head') return { kind: 'spot', spot: this.topSibling(outline, heading.end, head) };
+        if (to.side === 'head') {
+            const section = NoteSections.all(NoteSections.read(outline)).find(s => s.heading?.line === heading.line);
+            return { kind: 'spot', spot: this.topSibling(outline, section?.propertyBlock?.end ?? heading.end, head) };
+        }
         const { lines } = outline;
         const next = outline.headings.find(h => h.line >= heading.end);
         let at = next ? next.line : lines.length;
@@ -251,16 +258,72 @@ export class Placement {
     }
 
     /**
+     * The indent string of the task's first child, or null when it has none:
+     * the first list item the outline reads directly under the task's own
+     * item, past the lines in `except`. A line of the subtree that opens no
+     * item — a paragraph going on at any depth, indented code — is no child,
+     * and a line written at its indentation would be none either.
+     */
+    static firstChildIndent(
+        outline: OutlineReading,
+        taskLineIndex: number,
+        except: ReadonlySet<number> = new Set(),
+    ): string | null {
+        const end = outline.subtreeEnd(taskLineIndex);
+        for (let j = taskLineIndex + 1; j < end; j++) {
+            if (outline.item(j)?.parent === taskLineIndex && !except.has(j)) return Outline.indentOf(outline.lines[j]);
+        }
+        return null;
+    }
+
+    /**
+     * The indent to give a new child of the task at `taskLineIndex`, the
+     * child going under `parent`: the task's own line, or a line not yet
+     * written in its place — the next instance of a series, a generated
+     * parent or child — whose children are to be spelled as the task's are.
+     *
+     * Obsidian's editor's rule, as the source editor keeps it too: a line
+     * written at the depth of a line there takes that line's spelling, and a
+     * line one level deeper than any there takes `unit`, the level Obsidian's
+     * settings say (`ObsidianConfig.indentUnit`). So the task's existing
+     * children decide it, and a subtree keeps one spelling: its first child,
+     * past the lines in `except` (the ones the write takes away) where it has
+     * another, carried under `parent` as far past it as it stood past the
+     * task (`Outline.shiftedIndent`). A task with no children has its first
+     * one a level deeper: `parent`'s indentation and `unit`, repeated until
+     * the line reaches the parent's content column (`Outline.childIndent`,
+     * the one rule for a child's indentation). How the rest of the file is
+     * indented does not decide it, as it does not in the editor: a
+     * space-indented vault with a note of top-level tasks had its first child
+     * written with a tab, the editor's children with spaces. The lines are
+     * read as `outline` reads them.
+     */
+    static resolveChildIndent(
+        outline: OutlineReading,
+        taskLineIndex: number,
+        unit: string,
+        parent: string = outline.lines[taskLineIndex],
+        except: ReadonlySet<number> = new Set(),
+    ): string {
+        const lines = outline.lines;
+        const first = Placement.firstChildIndent(outline, taskLineIndex, except)
+            ?? (except.size > 0 ? Placement.firstChildIndent(outline, taskLineIndex) : null);
+        const sample = first === null ? null
+            : Outline.shiftedIndent(first, Outline.indentOf(lines[taskLineIndex]), Outline.indentOf(parent));
+        return Outline.childIndent(parent, sample, unit);
+    }
+
+    /**
      * At `at` or past what a line there takes in, a new line under `parent`,
      * spelled as the item next to it is (`siblingIndent`). A child is a
      * sibling of the children there. With none next to it, it is a child of
-     * `parent` as a new one is (`FileOperations.resolveChildIndent`): the
+     * `parent` as a new one is ({@link resolveChildIndent}): the
      * first child of a row with none takes `unit`, the new level Obsidian's
      * settings say.
      */
     private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string, unit: string): Spot {
         const indentAt = (spot: number) => this.siblingIndent(outline, parent, spot)
-            ?? (parent === null ? '' : FileOperations.resolveChildIndent(outline, parent, unit));
+            ?? (parent === null ? '' : Placement.resolveChildIndent(outline, parent, unit));
         return this.settle(outline, at, parent, head, indentAt);
     }
 

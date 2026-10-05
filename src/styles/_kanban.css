@@ -129,18 +129,6 @@
 .kanban-view button.kanban-view__cell-btn {
     width: 22px;
     height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 1px solid transparent !important;
-    border-radius: var(--tv-radius-s);
-    background: transparent !important;
-    color: var(--tv-text-muted);
-    box-shadow: none;
-    cursor: pointer;
     transition:
         background-color 120ms ease,
         border-color 120ms ease,
@@ -153,9 +141,7 @@
 }
 
 .kanban-view button.kanban-view__cell-btn:hover {
-    background-color: var(--tv-bg-hover) !important;
-    border-color: var(--tv-border) !important;
-    color: var(--tv-text);
+    border-color: var(--tv-border);
 }
 
 .kanban-view button.kanban-view__cell-btn:focus-visible {

@@ -1,4 +1,5 @@
 import { addDays, addMonths, addYears } from 'date-fns';
+import { DateUtils } from '../../utils/DateUtils';
 
 /**
  * Decimal places a number keeps.
@@ -72,72 +73,19 @@ export type Value =
 
 export type LangType = Value['type'];
 
-// ---------------------------------------------------------------------------
-// Date string helpers (local time, matching DateUtils conventions)
-// ---------------------------------------------------------------------------
-
-/**
- * A date built from a year this language computed.
- *
- * `new Date(y, ...)` maps a two-digit year onto 1900 + y, and the years here
- * are four digits: `0026` is the year 26 and not 1926. Every construction from
- * a year that arithmetic could have produced goes through this, so the shift
- * cannot come back in one of them — it is silent where it happens and only
- * visible much later, on a line that says a different century than the one
- * that was written.
- */
-export function dateAt(year: number, monthIndex: number, day: number): Date {
-    const date = new Date(year, monthIndex, day);
-    if (year >= 0 && year <= 99) date.setFullYear(year);
-    return date;
-}
-
-export function parseDateStr(s: string): Date {
-    const [y, m, d] = s.split('-').map(n => parseInt(n, 10));
-    return dateAt(y, m - 1, d);
-}
-
-export function formatDateStr(d: Date): string {
-    // Padded like the month and the day, and for the same reason: the notation
-    // reads four digits, so a year written with fewer is a date the next scan
-    // does not see. Every ordinary year is already four, so this shows up only
-    // where arithmetic has walked back past the year 1000.
-    const y = String(d.getFullYear()).padStart(4, '0');
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
-/**
- * The years a date can be written in and read back out of.
- *
- * Four digits, because that is what the lexer's date token is and what the
- * `@` notation on a task line accepts. Outside them the shape is still
- * printable and no longer readable: a fire writing `@12025-08-17` produces a
- * line whose date is not a date any more — the text lands in the task's title
- * and the task loses the day it was on. `NaN-NaN-NaN` is the same failure with
- * a louder spelling.
- */
-const WRITABLE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * Whether a date value can still be written down and read back.
  *
- * Two readers have to agree with the printer, so both are asked. The notation
- * on a task line takes four digits and nothing else, which is what refuses a
- * year that overflowed into five or fell below zero. And what this language
- * itself reads out of those four digits has to be the day that was written,
- * which is a different question: a shape can be perfectly well formed and
- * still be read as another date.
- *
- * Written as the property rather than as a shape, so that a change to either
- * reader shows up here instead of quietly leaving the rule behind.
+ * The `@` notation on a task line and the lexer's date token both take a
+ * four-digit year and nothing else, which is what refuses a year that
+ * overflowed into five or fell below zero: `@12025-08-17` would land in the
+ * task's title and the task would lose its day. And the four digits have to
+ * read back as the day that was printed. `DateUtils.isValidDateString` asks
+ * both, so a change to either reader shows up here instead of quietly
+ * leaving the rule behind.
  */
 export function isWritableDatish(v: Value & { type: 'date' | 'datetime' }): boolean {
-    const printed = v.type === 'date' ? v.value : v.date;
-    if (!WRITABLE_DATE_RE.test(printed)) return false;
-    const read = parseDateStr(printed);
-    return Number.isFinite(read.getTime()) && formatDateStr(read) === printed;
+    return DateUtils.isValidDateString(v.type === 'date' ? v.value : v.date);
 }
 
 function pad2(n: number): string {
@@ -180,17 +128,17 @@ export function addDuration(
         const totalMin = hh * 60 + mm + amount * (dur.unit === 'h' ? 60 : 1);
         const dayShift = Math.floor(totalMin / 1440);
         const minOfDay = ((totalMin % 1440) + 1440) % 1440;
-        const newDate = formatDateStr(addDays(parseDateStr(baseDate), dayShift));
+        const newDate = DateUtils.addDays(baseDate, dayShift);
         return { type: 'datetime', date: newDate, time: `${pad2(Math.floor(minOfDay / 60))}:${pad2(minOfDay % 60)}` };
     }
 
-    let d = parseDateStr(baseDate);
+    let d = DateUtils.parseDate(baseDate);
     if (dur.unit === 'd') d = addDays(d, amount);
     else if (dur.unit === 'w') d = addDays(d, amount * 7);
     else if (dur.unit === 'mo') d = addMonths(d, amount);
     else d = addYears(d, amount);
 
-    const newDate = formatDateStr(d);
+    const newDate = DateUtils.getLocalDateString(d);
     return baseTime !== undefined
         ? { type: 'datetime', date: newDate, time: baseTime }
         : { type: 'date', value: newDate };
@@ -201,7 +149,7 @@ export function addDuration(
 // ---------------------------------------------------------------------------
 
 /** Sortable key for date/datetime values (plain dates sort as 00:00). */
-export function datishKey(v: Value & { type: 'date' | 'datetime' }): string {
+function datishKey(v: Value & { type: 'date' | 'datetime' }): string {
     return v.type === 'date' ? `${v.value}T00:00` : `${v.date}T${v.time}`;
 }
 
@@ -265,7 +213,7 @@ export function fieldKeyLiteral(key: string): string {
  * values the grid exists to support. Trailing zeros go, since they say
  * nothing.
  */
-export function numberToLiteral(value: number): string {
+function numberToLiteral(value: number): string {
     if (Number.isInteger(value)) return String(value);
     return value.toFixed(DECIMAL_PLACES).replace(/0+$/, '').replace(/\.$/, '');
 }

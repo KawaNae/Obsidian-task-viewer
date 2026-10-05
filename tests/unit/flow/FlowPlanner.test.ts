@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { FlowPlanDeps, planFlow } from '../../../src/services/flow/FlowPlanner';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
-import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
+import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
+import { parseFlowSegments } from '../../../src/services/lang/flow/FlowSegments';
 import { EvalError } from '../../../src/services/lang/ExprEvaluator';
 import { Task } from '../../../src/types';
 import { TIMER_ICONS } from '../../../src/utils/TimerIcons';
 import { makeTask } from '../helpers/makeTask';
+import { readLine } from '../helpers/readLine';
 
 // 2026-07-02 is a Thursday.
 const DEPS: FlowPlanDeps = {
@@ -23,10 +24,17 @@ function plan(src: string, overrides: Partial<Task> = {}) {
     return planFlow(task, program, DEPS);
 }
 
-function createNextOf(effects: ReturnType<typeof plan>) {
-    const e = effects.find(e => e.kind === 'create-next');
-    if (!e || e.kind !== 'create-next') throw new Error('no create-next effect');
-    return e;
+/**
+ * The next instance a plan writes, with its first line read back as the
+ * index reads a note (`readLine`): what is checked is the line written, not
+ * the task it was formatted from.
+ */
+function nextOf(effects: ReturnType<typeof plan>) {
+    const e = effects.find(e => e.kind === 'create-instance');
+    if (!e || e.kind !== 'create-instance') throw new Error('no create-instance effect');
+    const newTask = readLine(e.instance.head);
+    if (!newTask) throw new Error(`the next instance's first line reads as no row: ${e.instance.head}`);
+    return { ...e.instance, newTask };
 }
 
 /** Plan a fire whose command names a block, with that block in hand. */
@@ -42,16 +50,16 @@ function planGenerated(src: string, body: string[], overrides: Partial<Task> = {
         ...DEPS,
         getBlock: (_file, name) => ({ name, body, openLine: 0, closeLine: body.length + 1 }),
     });
-    const e = effects.find(e => e.kind === 'create-generated');
-    if (!e || e.kind !== 'create-generated') throw new Error('no create-generated effect');
+    const e = effects.find(e => e.kind === 'create-instance');
+    if (!e || e.kind !== 'create-instance') throw new Error('no create-instance effect');
     return e;
 }
 
 describe('FlowPlanner', () => {
     describe('effect ordering (invariant: line-mutating effects last)', () => {
-        it('repeat: create-next then strip-flow', () => {
+        it('repeat: create-instance then strip-flow', () => {
             const effects = plan('every mon', { startDate: '2026-06-29' });
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
+            expect(effects.map(e => e.kind)).toEqual(['create-instance', 'strip-flow']);
         });
 
         it('move alone: move', () => {
@@ -59,15 +67,15 @@ describe('FlowPlanner', () => {
             expect(effects.map(e => e.kind)).toEqual(['move']);
         });
 
-        it('repeat + move: create-next, move', () => {
+        it('repeat + move: create-instance, move', () => {
             const effects = plan('every mon move([[#Log]])', { startDate: '2026-06-29' });
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'move']);
+            expect(effects.map(e => e.kind)).toEqual(['create-instance', 'move']);
         });
     });
 
     describe('date shifting', () => {
         it('shifts the whole date block by the anchor delta', () => {
-            const { newTask } = createNextOf(plan('every mon', {
+            const { newTask } = nextOf(plan('every mon', {
                 startDate: '2026-06-29', startTime: '09:00',
                 endDate: '2026-06-30', endTime: '10:00',
                 due: '2026-07-03',
@@ -80,45 +88,54 @@ describe('FlowPlanner', () => {
             expect(newTask.due).toBe('2026-07-10');
         });
 
+        it('writes out an end written as a time alone with the start\'s day', () => {
+            const { newTask, head } = nextOf(plan('every mon', {
+                startDate: '2026-06-29', startTime: '09:00', endTime: '17:00',
+            }));
+            expect(head).toContain('@2026-07-06T09:00>17:00 ');
+            expect(newTask.startDate).toBe('2026-07-06');
+            expect(newTask.endTime).toBe('17:00');
+            expect(newTask.due).toBeUndefined();
+        });
+
         it('anchors on due when start/end are absent', () => {
-            const { newTask } = createNextOf(plan('every mo@25', { due: '2026-06-25T18:00' }));
+            const { newTask } = nextOf(plan('every mo@25', { due: '2026-06-25T18:00' }));
             expect(newTask.due).toBe('2026-07-25T18:00');
-            expect(newTask.startDate).toBeUndefined();
+            expect(newTask.startDate).toBeFalsy();
         });
 
         it('places dateless completion-relative results on start', () => {
-            const { newTask } = createNextOf(plan('at(today + 3d)'));
+            const { newTask } = nextOf(plan('at(today + 3d)'));
             expect(newTask.startDate).toBe('2026-07-05');
             // `today` is date-granular: no completion time leaks in
             expect(newTask.startTime).toBeUndefined();
         });
 
         it('resets per-instance identity', () => {
-            const { newTask } = createNextOf(plan('at(today + 1d)', {
+            const { newTask, head } = nextOf(plan('at(today + 1d)', {
                 startDate: '2026-07-01', blockId: 'abc',
                 statusChar: 'x', originalText: '- [x] Test task @2026-07-01 ==> at(today + 1d) ^abc',
             }));
             expect(newTask.statusChar).toBe(' ');
-            expect(newTask.id).toBe('');
             expect(newTask.blockId).toBeUndefined();
-            expect(newTask.originalText).toBe('');
+            expect(head).toBe('- [ ] Test task @2026-07-03 ==> at(today + 1d)');
         });
     });
 
     describe('telomere', () => {
         it('decrements the count into the next instance', () => {
-            const { newTask } = createNextOf(plan('at(today + 1d) x14', { startDate: '2026-07-01' }));
+            const { newTask } = nextOf(plan('at(today + 1d) x14', { startDate: '2026-07-01' }));
             expect(newTask.flow?.raw).toBe('at(today + 1d) x13');
             expect(newTask.flow?.program?.lifetime).toMatchObject({ count: 13 });
         });
 
         it('x1: final instance carries no flow at all', () => {
-            const { newTask } = createNextOf(plan('at(today + 1d) x1', { startDate: '2026-07-01' }));
+            const { newTask } = nextOf(plan('at(today + 1d) x1', { startDate: '2026-07-01' }));
             expect(newTask.flow).toBeUndefined();
         });
 
         it('inherits the command canonically when no telomere', () => {
-            const { newTask } = createNextOf(plan('until(2026-12-31) every mon', { startDate: '2026-06-29' }));
+            const { newTask } = nextOf(plan('until(2026-12-31) every mon', { startDate: '2026-06-29' }));
             expect(newTask.flow?.raw).toBe('every mon until(2026-12-31)');
         });
     });
@@ -141,38 +158,38 @@ describe('FlowPlanner', () => {
         }
 
         it('keeps each node on its line, canonical within the line', () => {
-            const { newTask } = createNextOf(planSegments(
+            const { newTask, flowLines } = nextOf(planSegments(
                 ['every mon', 'setDue(start + 3d) x3'],
                 { startDate: '2026-06-29' },
             ));
             expect(newTask.flow?.raw).toBe('every mon');
             // canonical within line: xN (decremented) before setter
-            expect(newTask.flow?.childSegments.map(s => s.raw)).toEqual(['x2 setDue(start + 3d)']);
-            expect(newTask.flow?.childSegments[0].bodyLine).toBe(-1);
+            expect(flowLines).toEqual(['x2 setDue(start + 3d)']);
         });
 
         it('supports flows living only in child lines (empty task-line segment)', () => {
-            const { newTask } = createNextOf(planSegments(
+            const { head, flowLines } = nextOf(planSegments(
                 ['', 'every mon'],
                 { startDate: '2026-06-29' },
             ));
-            expect(newTask.flow?.raw).toBe('');
-            expect(newTask.flow?.childSegments.map(s => s.raw)).toEqual(['every mon']);
+            expect(head).not.toContain('==>');
+            expect(flowLines).toEqual(['every mon']);
         });
 
         it('x1 on a child line: the final instance carries no flow at all', () => {
-            const { newTask } = createNextOf(planSegments(
+            const { newTask, flowLines } = nextOf(planSegments(
                 ['every mon', 'x1'],
                 { startDate: '2026-06-29' },
             ));
             expect(newTask.flow).toBeUndefined();
+            expect(flowLines).toEqual([]);
         });
     });
 
     describe('until (inclusive, checked against next anchor date)', () => {
         it('generates when next date equals until', () => {
             const effects = plan('every mon until(2026-07-06)', { startDate: '2026-06-29' });
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
+            expect(effects.map(e => e.kind)).toEqual(['create-instance', 'strip-flow']);
         });
 
         it('consumes without generating when next date exceeds until', () => {
@@ -183,13 +200,13 @@ describe('FlowPlanner', () => {
 
     describe('set()', () => {
         it('evaluates against the post-shift snapshot', () => {
-            const { newTask } = createNextOf(plan('every mon setDue(start + 3d)', { startDate: '2026-06-29' }));
+            const { newTask } = nextOf(plan('every mon setDue(start + 3d)', { startDate: '2026-06-29' }));
             // post-shift start = 7/6 → due = 7/9
             expect(newTask.due).toBe('2026-07-09');
         });
 
         it('applies all assignments from one snapshot (no chaining)', () => {
-            const { newTask } = createNextOf(plan('every mon setStart(due) setDue(start + 1d)', {
+            const { newTask } = nextOf(plan('every mon setStart(due) setDue(start + 1d)', {
                 startDate: '2026-06-29', due: '2026-07-01',
             }));
             // post-shift: start=7/6, due=7/8. Both RHS see that snapshot:
@@ -199,14 +216,14 @@ describe('FlowPlanner', () => {
         });
 
         it('sets content from string expressions', () => {
-            const { newTask } = createNextOf(plan('every mon setContent("週報 " + format(start, "MM/DD"))', {
+            const { newTask } = nextOf(plan('every mon setContent("週報 " + format(start, "MM/DD"))', {
                 startDate: '2026-06-29', content: 'old',
             }));
             expect(newTask.content).toBe('週報 [MM/DD]');
         });
 
         it('clears the time part when set assigns a plain date', () => {
-            const { newTask } = createNextOf(plan('every mon setStart(2026-08-01)', {
+            const { newTask } = nextOf(plan('every mon setStart(2026-08-01)', {
                 startDate: '2026-06-29', startTime: '09:00',
             }));
             expect(newTask.startDate).toBe('2026-08-01');
@@ -214,7 +231,7 @@ describe('FlowPlanner', () => {
         });
 
         it('strips the time each generation: +3d setStart(date(start))', () => {
-            const { newTask } = createNextOf(plan('+3d setStart(date(start))', {
+            const { newTask } = nextOf(plan('+3d setStart(date(start))', {
                 startDate: '2026-07-14', startTime: '11:00',
             }));
             expect(newTask.startDate).toBe('2026-07-17');
@@ -223,7 +240,7 @@ describe('FlowPlanner', () => {
         });
 
         it('sets an absolute time: setStart(date(start) + 13:00)', () => {
-            const { newTask } = createNextOf(plan('+3d setStart(date(start) + 13:00)', {
+            const { newTask } = nextOf(plan('+3d setStart(date(start) + 13:00)', {
                 startDate: '2026-07-14', startTime: '11:00',
             }));
             expect(newTask.startDate).toBe('2026-07-17');
@@ -233,23 +250,23 @@ describe('FlowPlanner', () => {
 
     describe('none — field clearing', () => {
         it('clears start with setStart(none)', () => {
-            const { newTask } = createNextOf(plan('+3d setStart(none)', {
+            const { newTask } = nextOf(plan('+3d setStart(none)', {
                 startDate: '2026-07-14', startTime: '09:00', endDate: '2026-07-15',
             }));
-            expect(newTask.startDate).toBeUndefined();
+            expect(newTask.startDate).toBeFalsy();
             expect(newTask.startTime).toBeUndefined();
-            expect(newTask.endDate).toBeDefined();
+            expect(newTask.endDate).toBe('2026-07-18');
         });
 
         it('clears due with setDue(none)', () => {
-            const { newTask } = createNextOf(plan('+3d setDue(none)', {
+            const { newTask } = nextOf(plan('+3d setDue(none)', {
                 startDate: '2026-07-14', due: '2026-07-17',
             }));
             expect(newTask.due).toBeUndefined();
         });
 
         it('clears content with setContent(none)', () => {
-            const { newTask } = createNextOf(plan('+3d setContent(none)', {
+            const { newTask } = nextOf(plan('+3d setContent(none)', {
                 startDate: '2026-07-14', content: 'old text',
             }));
             expect(newTask.content).toBe('');
@@ -258,7 +275,7 @@ describe('FlowPlanner', () => {
 
     describe('setStartTime / setEndTime / setDueTime — time patch', () => {
         it('patches start time, keeps date', () => {
-            const { newTask } = createNextOf(plan('+3d setStartTime(14:00)', {
+            const { newTask } = nextOf(plan('+3d setStartTime(14:00)', {
                 startDate: '2026-07-14', startTime: '09:00',
             }));
             expect(newTask.startDate).toBe('2026-07-17');
@@ -266,7 +283,7 @@ describe('FlowPlanner', () => {
         });
 
         it('clears start time with setStartTime(none)', () => {
-            const { newTask } = createNextOf(plan('+3d setStartTime(none)', {
+            const { newTask } = nextOf(plan('+3d setStartTime(none)', {
                 startDate: '2026-07-14', startTime: '09:00',
             }));
             expect(newTask.startDate).toBe('2026-07-17');
@@ -274,21 +291,21 @@ describe('FlowPlanner', () => {
         });
 
         it('patches due time', () => {
-            const { newTask } = createNextOf(plan('+3d setDueTime(14:00)', {
+            const { newTask } = nextOf(plan('+3d setDueTime(14:00)', {
                 startDate: '2026-07-14', due: '2026-07-17',
             }));
             expect(newTask.due).toBe('2026-07-20T14:00');
         });
 
         it('clears due time with setDueTime(none)', () => {
-            const { newTask } = createNextOf(plan('+3d setDueTime(none)', {
+            const { newTask } = nextOf(plan('+3d setDueTime(none)', {
                 startDate: '2026-07-14', due: '2026-07-17T18:00',
             }));
             expect(newTask.due).toBe('2026-07-20');
         });
 
         it('copies time from start to end with time()', () => {
-            const { newTask } = createNextOf(plan('+3d setEndTime(time(start))', {
+            const { newTask } = nextOf(plan('+3d setEndTime(time(start))', {
                 startDate: '2026-07-14', startTime: '09:00',
                 endDate: '2026-07-14', endTime: '17:00',
             }));
@@ -296,14 +313,14 @@ describe('FlowPlanner', () => {
         });
 
         it('ignores time patch when no date exists', () => {
-            const { newTask } = createNextOf(plan('+3d setStartTime(14:00)', {
+            const { newTask } = nextOf(plan('+3d setStartTime(14:00)', {
                 startDate: '2026-07-14',
                 endDate: '2026-07-14',
             }));
             expect(newTask.startTime).toBe('14:00');
             // endTime patch without endDate having time — test with due that's undefined
             const effects2 = plan('+3d setDueTime(14:00)', { startDate: '2026-07-14' });
-            const newTask2 = (effects2.find(e => e.kind === 'create-next') as any).newTask;
+            const { newTask: newTask2 } = nextOf(effects2);
             expect(newTask2.due).toBeUndefined();
         });
     });
@@ -311,20 +328,20 @@ describe('FlowPlanner', () => {
     describe('until(expr) — expression evaluation', () => {
         it('evaluates until expression against pre-shift context', () => {
             const effects = plan('every mon until(endOf(year))', { startDate: '2026-06-29' });
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
+            expect(effects.map(e => e.kind)).toEqual(['create-instance', 'strip-flow']);
         });
 
         it('evaluates until with arithmetic', () => {
             const effects = plan('every mon until(due + 30d)', {
                 startDate: '2026-06-29', due: '2026-07-01',
             });
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
+            expect(effects.map(e => e.kind)).toEqual(['create-instance', 'strip-flow']);
         });
     });
 
     describe('at() evaluates pre-shift, set() post-shift', () => {
         it('at(start + 7d) uses the ORIGINAL start', () => {
-            const { newTask } = createNextOf(plan('at(start + 7d)', { startDate: '2026-06-29' }));
+            const { newTask } = nextOf(plan('at(start + 7d)', { startDate: '2026-06-29' }));
             expect(newTask.startDate).toBe('2026-07-06');
         });
     });
@@ -332,17 +349,6 @@ describe('FlowPlanner', () => {
     describe('move', () => {
         it('goes where the parser read it goes, evaluating nothing', () => {
             expect(plan('move([[#Done|d]])').find(e => e.kind === 'move')).toMatchObject({ heading: 'Done' });
-        });
-
-        it('drops a retired move, and only the move: the command is consumed and the rest is planned', () => {
-            for (const src of ['move([[Log/]] + file.name)', 'move()', 'move([[Other]])']) {
-                const kinds = plan(src).map(e => e.kind);
-                expect(kinds).toEqual(['strip-flow', 'move-dropped']);
-            }
-            const effects = plan('every mon move()');
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow', 'move-dropped']);
-            const dropped = effects[2];
-            expect(dropped.kind === 'move-dropped' && dropped.error.code).toBe('eval.move-retired');
         });
 
         it('strips the flow from the moved task and keeps its ^id: the row is carried, not copied', () => {
@@ -354,19 +360,8 @@ describe('FlowPlanner', () => {
     });
 
     describe('options', () => {
-        it('plans the same effect with or without the retired clause', () => {
-            // Nothing in the effect answers for children any more. What a
-            // task's children hold is what that instance did, and the writer
-            // has no knob left to be asked otherwise.
-            const plain = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' }));
-            const retired = createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' }));
-
-            expect(Object.keys(plain).sort()).toEqual(['kind', 'newTask']);
-            expect(retired.newTask.startDate).toBe(plain.newTask.startDate);
-        });
-
         it('strips timer emoji prefixes from the copied content', () => {
-            const { newTask } = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01', content: '⏱️ Test task' }));
+            const { newTask } = nextOf(plan('at(today + 1d)', { startDate: '2026-07-01', content: '⏱️ Test task' }));
             expect(newTask.content).toBe('Test task');
         });
 
@@ -374,7 +369,7 @@ describe('FlowPlanner', () => {
         // interval（非ポモドーロ）の `🔁` が次インスタンスに残っていた。
         it('strips every icon the timer can produce', () => {
             for (const icon of TIMER_ICONS) {
-                const { newTask } = createNextOf(
+                const { newTask } = nextOf(
                     plan('at(today + 1d)', { startDate: '2026-07-01', content: `${icon} Test task` })
                 );
                 expect(newTask.content).toBe('Test task');
@@ -398,7 +393,7 @@ describe('FlowPlanner', () => {
                 { startDate: '2026-06-29' },
             );
 
-            expect(effect.parentLine.startsWith('- [ ] ')).toBe(true);
+            expect(effect.instance.head.startsWith('- [ ] ')).toBe(true);
             expect(effect.warnings.map(w => w.code)).toEqual(['gen.generated-status']);
         });
 
@@ -407,7 +402,7 @@ describe('FlowPlanner', () => {
             // content, not the line, so no second space opens up before it.
             const effect = planGenerated('every mon use("週報")', ['- [ ] '], { startDate: '2026-06-29' });
 
-            expect(effect.parentLine).toBe('- [ ] ==> every mon use("週報")');
+            expect(effect.instance.head).toBe('- [ ] ==> every mon use("週報")');
         });
 
         it('says nothing when there was nothing to correct', () => {
@@ -431,7 +426,7 @@ describe('FlowPlanner', () => {
                 { startDate: '2026-06-29' },
             );
 
-            expect(effect.children).toEqual([{ depth: 1, body: '- [x] 経費確認 ==> every 1mo' }]);
+            expect(effect.instance.children).toEqual([{ depth: 1, body: '- [x] 経費確認 ==> every 1mo' }]);
             expect(effect.warnings.map(w => w.code)).toEqual(['gen.generated-child-status']);
             expect(effect.warnings[0].params).toEqual({ status: 'x' });
         });
@@ -443,7 +438,7 @@ describe('FlowPlanner', () => {
                 { startDate: '2026-06-29' },
             );
 
-            expect(effect.children).toEqual([{ depth: 1, body: '- [x] 定型の確認' }]);
+            expect(effect.instance.children).toEqual([{ depth: 1, body: '- [x] 定型の確認' }]);
             expect(effect.warnings).toEqual([]);
         });
     });
@@ -455,7 +450,7 @@ describe('FlowPlanner', () => {
             const effect = planGenerated(
                 'every mon use("週報")', ['- [ ] 週報 ${dates}'], dated);
 
-            expect(effect.parentLine)
+            expect(effect.instance.head)
                 .toBe('- [ ] 週報 @2026-07-06>2026-07-10>2026-07-12 ==> every mon use("週報")');
         });
 
@@ -465,9 +460,9 @@ describe('FlowPlanner', () => {
             const byHand = planGenerated(
                 'every mon use("週報")', ['- [ ] 週報 @${start}'], dated);
 
-            expect(byHand.parentLine).toContain('@2026-07-06 ');
-            expect(byHand.parentLine).not.toContain('2026-07-10');
-            expect(byHand.parentLine).not.toContain('2026-07-12');
+            expect(byHand.instance.head).toContain('@2026-07-06 ');
+            expect(byHand.instance.head).not.toContain('2026-07-10');
+            expect(byHand.instance.head).not.toContain('2026-07-12');
         });
 
         it('writes the times too, in the notation the line uses', () => {
@@ -475,7 +470,7 @@ describe('FlowPlanner', () => {
                 'every mon use("週報")', ['- [ ] 週報 ${dates}'],
                 { startDate: '2026-06-29', startTime: '09:00', endDate: '2026-06-29', endTime: '10:30' });
 
-            expect(effect.parentLine).toContain('@2026-07-06T09:00>10:30');
+            expect(effect.instance.head).toContain('@2026-07-06T09:00>10:30');
         });
 
         it('is empty when the instance ends up with no dates at all', () => {
@@ -485,7 +480,7 @@ describe('FlowPlanner', () => {
                 'every mon setStart(none) use("週報")', ['- [ ] 週報${dates}'],
                 { startDate: '2026-06-29' });
 
-            expect(effect.parentLine).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
+            expect(effect.instance.head).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
         });
 
         it('leaves no trailing space behind when it is empty', () => {
@@ -495,13 +490,13 @@ describe('FlowPlanner', () => {
                 'every mon setStart(none) use("週報")', ['- [ ] ${content} ${dates}'],
                 { content: '週報', startDate: '2026-06-29' });
 
-            expect(effect.parentLine).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
+            expect(effect.instance.head).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
         });
 
         it('reads on the flow line as well, against the same snapshot set() sees', () => {
-            const effect = createNextOf(plan('every mon setContent(dates)', dated));
+            const effect = nextOf(plan('every mon setContent(dates)', dated));
 
-            expect(effect.newTask.content).toBe('@2026-07-06>2026-07-10>2026-07-12');
+            expect(effect.head).toBe('- [ ] @2026-07-06>2026-07-10>2026-07-12 @2026-07-06>2026-07-10>2026-07-12 ==> every mon setContent(dates)');
         });
     });
 });
@@ -520,7 +515,7 @@ describe('FlowPlanner', () => {
  */
 describe('an instance always starts unchecked', () => {
     it('a recurrence starts unchecked, whatever status fired it', () => {
-        const next = createNextOf(plan('every mon', { startDate: '2026-06-29', statusChar: 'x' }));
+        const next = nextOf(plan('every mon', { startDate: '2026-06-29', statusChar: 'x' }));
 
         expect(next.newTask.statusChar).toBe(' ');
     });
@@ -528,7 +523,7 @@ describe('an instance always starts unchecked', () => {
     it('a generated parent starts unchecked even when the block wrote it checked', () => {
         const effect = planGenerated('every mon use("週報")', ['- [x] 週報'], { startDate: '2026-06-29' });
 
-        expect(effect.parentLine.startsWith('- [ ] 週報')).toBe(true);
+        expect(effect.instance.head.startsWith('- [ ] 週報')).toBe(true);
         // Dropped, not refused — and said out loud, because the line written
         // is not the line the block describes.
         expect(effect.warnings.map(w => w.code)).toContain('gen.generated-status');

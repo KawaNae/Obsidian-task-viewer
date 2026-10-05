@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     assertParams, suggestKey,
     LIST_SCHEMA, GET_SCHEMA, CREATE_SCHEMA,
-    TASKS_FOR_DATE_RANGE_SCHEMA,
+    TASKS_FOR_DATE_RANGE_SCHEMA, toCliFlags, renderParamTable,
 } from '../../../src/api/OperationSchemas';
 import { TaskApiError } from '../../../src/api/TaskApiTypes';
 
@@ -91,5 +91,17 @@ describe('schema 整合性', () => {
                 expect(ok, `${name}.${key}`).toBe(true);
             }
         }
+    });
+});
+
+describe('CLI の綴りが API と違うパラメータ', () => {
+    it('limit: API の表は Infinity と既定 100、CLI のフラグは all と形式ごとの既定を言う', () => {
+        const api = renderParamTable(LIST_SCHEMA).split('\n').find(l => l.trimStart().startsWith('limit '))!;
+        expect(api).toContain('limit <number>');
+        expect(api).toContain('Infinity=no limit');
+        expect(api).not.toContain('tsv');
+        const cli = toCliFlags(LIST_SCHEMA).limit;
+        expect(cli.value).toBe('<number|all>');
+        expect(cli.description).toContain('all for tsv/jsonl');
     });
 });

@@ -1,14 +1,14 @@
 import type { HoverParent } from 'obsidian';
-import type { ViewState } from '../TimelineViewState';
+import type { TimelineState } from '../TimelineSchema';
 import type { PluginContext } from '../../../PluginContext';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import type { HandleManager } from '../../sharedUI/handles/HandleManager';
 import { t } from '../../../i18n';
 
 import type { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
 import type { TimelineSectionRenderer } from './TimelineSectionRenderer';
-import { isDisplayTaskOnVisualDate } from '../../../services/display/DisplayTaskConverter';
+import { daysWindow } from '../../../utils/DayWindow';
+import { overlaps } from '../../../utils/SpanRelation';
 import type { DisplayTask } from '../../../types';
 import type { MoonPhaseRenderer } from '../../sharedUI/MoonPhaseRenderer';
 import { getEffectiveAstronomyDisplay } from '../../../services/astronomy/AstronomyService';
@@ -24,7 +24,7 @@ import { getOverdueLevel } from '../../../services/display/TaskStatusQuery';
 export class GridRenderer {
     constructor(
         private container: HTMLElement,
-        private viewState: ViewState,
+        private getState: () => Readonly<TimelineState>,
         private plugin: PluginContext,
         private menuHandler: MenuHandler,
         private hoverParent: HoverParent,
@@ -37,13 +37,13 @@ export class GridRenderer {
         allDayRenderer: AllDaySectionRenderer,
         timelineRenderer: TimelineSectionRenderer,
         moonRenderer: MoonPhaseRenderer,
-        handleManager: HandleManager,
         dates: string[],
         filteredTasks: DisplayTask[],
         reconciler: CardReconciler,
     ) {
         const grid = parentContainer.createDiv('timeline-grid');
-        const colTemplate = `30px repeat(${this.viewState.daysToShow}, minmax(0, 1fr))`;
+        const state = this.getState();
+        const colTemplate = `30px repeat(${dates.length}, minmax(0, 1fr))`;
 
         this.menuHandler.setViewStartDate(dates[0]);
 
@@ -55,10 +55,10 @@ export class GridRenderer {
         const defs = this.plugin.settings.statusDefinitions;
         const overdueDates = new Set<string>();
         for (const dt of filteredTasks) {
-            if (getOverdueLevel(dt, startHour, defs, readService) === 'none') continue;
+            if (getOverdueLevel(dt, defs, readService) === 'none') continue;
             for (const date of dates) {
                 if (date >= todayVisualDate) continue;
-                if (isDisplayTaskOnVisualDate(dt, date, startHour)) {
+                if (dt.span && overlaps(dt.span, daysWindow(date, date, startHour))) {
                     overdueDates.add(date);
                 }
             }
@@ -70,9 +70,9 @@ export class GridRenderer {
             gridTemplateColumns: colTemplate,
         });
 
-        // 3. Date header — reference year-month from startDate for contextual labels
-        const refYear = parseInt(this.viewState.startDate.substring(0, 4), 10);
-        const refMonth = parseInt(this.viewState.startDate.substring(5, 7), 10) - 1;
+        // 3. Date header — reference year-month from the first day drawn, for contextual labels
+        const refYear = parseInt(dates[0].substring(0, 4), 10);
+        const refMonth = parseInt(dates[0].substring(5, 7), 10) - 1;
 
         this.dateHeaderRenderer.render(grid, {
             dates,
@@ -83,7 +83,7 @@ export class GridRenderer {
 
         // 4. Moon Phase Row
         const astronomyDisplay = getEffectiveAstronomyDisplay(
-            this.viewState.astronomyDisplay,
+            state.astronomyDisplay,
             this.plugin.settings.astronomy,
         );
         grid.toggleClass('is-sun-front', astronomyDisplay.sunTimes && astronomyDisplay.sunTimesInFront);
@@ -93,12 +93,15 @@ export class GridRenderer {
             moonRenderer.render(moonRow, dates);
         }
 
-        const showAllDay = this.viewState.showAllDay ?? this.plugin.settings.showAllDay;
-        const showTimeline = this.viewState.showTimeline ?? this.plugin.settings.showTimeline;
+        const showAllDay = state.showAllDay ?? this.plugin.settings.showAllDay;
+        const showTimeline = state.showTimeline ?? this.plugin.settings.showTimeline;
 
         // 5. Scroll Area (allday + timeline grid)
         const scrollArea = grid.createDiv('timeline-scroll-area');
-        const buckets = bucketBySection(filteredTasks, startHour);
+        // The all-day lane and the time grid. A task with only a due is drawn
+        // with the span read from its due: a due date in the lane, a timed due
+        // on the grid.
+        const { allDay, timed } = bucketBySection(filteredTasks);
 
         // 5.1. All-Day Row
         if (showAllDay) {
@@ -118,12 +121,11 @@ export class GridRenderer {
                 if (i === dates.length - 1) cell.addClass('is-last-cell');
                 cell.dataset.date = date;
                 cell.style.gridColumn = `${i + 2}`;
-                cell.style.zIndex = '0';
                 allDayRenderer.addEmptySpaceContextMenu(cell, date);
                 dateCells.push(cell);
             });
 
-            const laneCount = allDayRenderer.render(allDayRow, dates, buckets.allDay, reconciler);
+            const laneCount = allDayRenderer.render(allDayRow, dates, allDay, reconciler);
             const rowSpan = Math.max(laneCount + 2, 2);
             axisCell.style.gridRow = `1 / span ${rowSpan}`;
             for (const cell of dateCells) {
@@ -144,8 +146,7 @@ export class GridRenderer {
                 attachSunAxisArrows(timeCol, dates[0], { startHour, latitude, longitude });
             }
 
-            const timelineInput = [...buckets.timed, ...buckets.dueOnly];
-            const splitResult = splitTasks(timelineInput, { type: 'visual-date', startHour });
+            const splitResult = splitTasks(timed, { type: 'visual-date', startHour });
             const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
             dates.forEach(date => {
                 const col = timelineGrid.createDiv('timeline-scroll-area__day-column');

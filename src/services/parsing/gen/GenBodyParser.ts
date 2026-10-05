@@ -1,4 +1,4 @@
-import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
+import { type Diagnostic, type LocatedDiagnostic, error, warning } from '../../lang/Diagnostic';
 import type { InterpolationPart } from '../../lang/ExprAst';
 import {
     type Bindings, FLOW_TYPE_ENV, NO_BINDINGS, type VarBinding, checkExpr,
@@ -12,7 +12,6 @@ import { parseProgram } from '../../lang/StmtParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { INDENT_SOURCE, Outline } from '../utils/Outline';
 import { IN_LINE } from '../../../utils/LineBreak';
-import type { LocatedDiagnostic } from './GenBlockCollector';
 import { childStatusWarning, parentStatusWarning } from './GenGeneratedStatusCheck';
 
 /** One literal line of a block body, with its indentation read as a depth. */

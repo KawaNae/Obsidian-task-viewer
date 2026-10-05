@@ -1,12 +1,14 @@
-import { Notice, Setting } from 'obsidian';
+import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
-import { type ScopeKeys, validateScopeKeys } from '../types';
+import { DEFAULT_SCOPE_KEYS, type ScopeKeys } from '../types';
 import { t } from '../i18n';
+import { ScopeKeyInput } from '../services/parsing/utils/PropertyKeyInput';
+import type { SettingFields } from './SettingFields';
 
-export function render(el: HTMLElement, plugin: PluginContext): void {
+export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
     el.createEl('h3', { text: t('settings.frontmatter.frontmatterKeys'), cls: 'setting-section-header' });
 
-    addScopeKeySettings(el, plugin);
+    addScopeKeySettings(el, plugin, fields);
 
     el.createEl('h3', { text: t('settings.frontmatter.suggest'), cls: 'setting-section-header' });
 
@@ -35,45 +37,24 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             }));
 }
 
-function addScopeKeySettings(containerEl: HTMLElement, plugin: PluginContext): void {
-    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.startKey'), t('settings.frontmatter.startKeyDesc'), 'tv-start', 'start');
-    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.endKey'), t('settings.frontmatter.endKeyDesc'), 'tv-end', 'end');
-    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.dueKey'), t('settings.frontmatter.dueKeyDesc'), 'tv-due', 'due');
-    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.colorKey'), t('settings.frontmatter.colorKeyDesc'), 'tv-color', 'color');
-    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.lineStyleKey'), t('settings.frontmatter.lineStyleKeyDesc'), 'tv-linestyle', 'linestyle');
-    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.maskKey'), t('settings.frontmatter.maskKeyDesc'), 'tv-mask', 'mask');
-    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.ignoreKey'), t('settings.frontmatter.ignoreKeyDesc'), 'tv-ignore', 'ignore');
-}
-
-function addScopeKeySetting(
-    containerEl: HTMLElement,
-    plugin: PluginContext,
-    name: string,
-    description: string,
-    placeholder: string,
-    key: keyof ScopeKeys
-): void {
-    new Setting(containerEl)
-        .setName(name)
-        .setDesc(description)
-        .addText((text) => {
-            text.setPlaceholder(placeholder);
-            text.setValue(plugin.settings.scopeKeys[key]);
-            text.onChange(async (value) => {
-                const nextKeys: ScopeKeys = {
-                    ...plugin.settings.scopeKeys,
-                    [key]: value.trim(),
-                };
-
-                const error = validateScopeKeys(nextKeys);
-                if (error) {
-                    new Notice(error);
-                    text.setValue(plugin.settings.scopeKeys[key]);
-                    return;
-                }
-
-                plugin.settings.scopeKeys = nextKeys;
-                await plugin.saveSettings();
-            });
+function addScopeKeySettings(containerEl: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
+    const keys: { key: keyof ScopeKeys; name: string; desc: string }[] = [
+        { key: 'start', name: t('settings.frontmatter.startKey'), desc: t('settings.frontmatter.startKeyDesc') },
+        { key: 'end', name: t('settings.frontmatter.endKey'), desc: t('settings.frontmatter.endKeyDesc') },
+        { key: 'due', name: t('settings.frontmatter.dueKey'), desc: t('settings.frontmatter.dueKeyDesc') },
+        { key: 'color', name: t('settings.frontmatter.colorKey'), desc: t('settings.frontmatter.colorKeyDesc') },
+        { key: 'linestyle', name: t('settings.frontmatter.lineStyleKey'), desc: t('settings.frontmatter.lineStyleKeyDesc') },
+        { key: 'mask', name: t('settings.frontmatter.maskKey'), desc: t('settings.frontmatter.maskKeyDesc') },
+        { key: 'ignore', name: t('settings.frontmatter.ignoreKey'), desc: t('settings.frontmatter.ignoreKeyDesc') },
+    ];
+    for (const { key, name, desc } of keys) {
+        // Read as typed and committed once (a blur, the form's Enter): the notes
+        // are read again for a key committed, not for each key typed (I#11).
+        fields.text(new Setting(containerEl).setName(name).setDesc(desc), {
+            codec: ScopeKeyInput.codec(() => keys.filter(other => other.key !== key).map(other => plugin.settings.scopeKeys[other.key])),
+            get: () => plugin.settings.scopeKeys[key],
+            put: (value) => { plugin.settings.scopeKeys = { ...plugin.settings.scopeKeys, [key]: value }; },
+            placeholder: DEFAULT_SCOPE_KEYS[key],
         });
+    }
 }

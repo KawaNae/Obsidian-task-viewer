@@ -38,6 +38,17 @@
     gap: 1px;
 }
 
+/* Timeline's all-day row: the date cells stand at the base, the cards a
+   lane rank above them (ladder [B] in _variables.css). Schedule's all-day
+   cell holds its cards inside, and has neither. */
+.timeline-view .allday-section__cell:not(.allday-section__axis) {
+    z-index: var(--z-base);
+}
+
+.timeline-view .allday-section > .task-card {
+    --lane-z: var(--z-allday-card);
+}
+
 /* AllDay Axis Cell Layout */
 .allday-section__axis {
     display: flex;

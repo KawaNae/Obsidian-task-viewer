@@ -12,6 +12,7 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/crud/cli-e2e.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { execFileSync } from 'child_process';
 import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
     cliDuplicate, cliTasksForDateRange, cliCategorizedTasksForDateRange,
@@ -427,18 +428,17 @@ describe('tasks-for-date-range', () => {
 // 13. categorized-tasks-for-date-range
 // ────────────────────────────────────────────
 describe('categorized-tasks-for-date-range', () => {
-    it('returns categorized result keyed by date with allDay/timed/dueOnly', () => {
+    it('returns categorized result keyed by date with allDay/timed, and no due-only bucket', () => {
         // 2026-03-16 has multiple tasks in TEST_FILE
         const r = cliCategorizedTasksForDateRange('2026-03-16', '2026-03-16');
         expect(r).toHaveProperty('2026-03-16');
         const day = r['2026-03-16'];
         expect(day).toHaveProperty('allDay');
         expect(day).toHaveProperty('timed');
-        expect(day).toHaveProperty('dueOnly');
+        expect(Object.keys(day).sort()).toEqual(['allDay', 'timed']);
         expect(Array.isArray(day.allDay)).toBe(true);
         expect(Array.isArray(day.timed)).toBe(true);
-        expect(Array.isArray(day.dueOnly)).toBe(true);
-        const total = day.allDay.length + day.timed.length + day.dueOnly.length;
+        const total = day.allDay.length + day.timed.length;
         expect(total).toBeGreaterThan(0);
     });
 
@@ -559,5 +559,21 @@ describe('strict flag validation', () => {
         const r = cliTasksForDateRange({ from: 'today', to: 'today', 'output-fields': 'id' });
         expect(r).toHaveProperty('count');
         expect(r).not.toHaveProperty('error');
+    });
+
+    // Obsidian's CLI hands `x=` to the plugin as an empty string, which is
+    // refused for every flag; the helper drops empty values, so this calls
+    // the CLI itself (directly, as on macOS and Linux).
+    it.skipIf(process.platform === 'win32')('an empty flag is refused', () => {
+        const out = execFileSync('obsidian', ['vault=dev', 'obsidian-task-viewer:list', 'limit='], { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' });
+        expect(JSON.parse(out.trim())).toMatchObject({ error: 'limit must not be empty' });
+    });
+
+    it('list= without filter-file is refused in the API\'s words', () => {
+        expect(cliList({ list: 'x' })).toMatchObject({ error: "'list' requires 'filter-file' (a .md view template)" });
+    });
+
+    it('a whole-number flag reads digits only', () => {
+        expect(cliList({ limit: '3days' })).toMatchObject({ error: 'limit must be a whole number or "all", got: "3days"' });
     });
 });

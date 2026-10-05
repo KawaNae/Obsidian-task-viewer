@@ -1,6 +1,7 @@
 import type { CliData, CliFlags } from 'obsidian';
 import { suggestKey } from '../api/OperationSchemas';
 import { cliError } from './CliOutputFormatter';
+import { issueText } from '../utils/values/IssueText';
 
 /**
  * Keys injected by the Obsidian CLI framework itself, exempt from strict
@@ -40,6 +41,21 @@ export function validateCliParams(
         if (!flags[key].value && params[key] !== 'true') {
             return cliError(`Flag '${key}' is a boolean flag and does not take a value. Pass '${key}' alone`);
         }
+    }
+    return null;
+}
+
+/**
+ * A flag written with `=` and nothing after it (`count=`), refused for every
+ * command, whatever the flag. An empty value is taken neither as the flag
+ * left out (its default) nor as a value: leaving a flag out is how the
+ * default is asked for. A flag given alone is not empty (`'true'`).
+ *
+ * Returns a cliError JSON string, or null when no flag is empty.
+ */
+export function refuseEmptyFlags(params: CliData): string | null {
+    for (const [key, value] of Object.entries(params)) {
+        if (value === '') return cliError(issueText({ code: 'empty' }, key));
     }
     return null;
 }

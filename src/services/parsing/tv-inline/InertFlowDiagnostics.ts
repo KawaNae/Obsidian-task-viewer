@@ -1,7 +1,7 @@
 import type { Diagnostic, Span } from '../../lang/Diagnostic';
 import { warning } from '../../lang/Diagnostic';
 import { isDpInline, isTpInline } from '../../../types';
-import { TaskParser } from '../TaskParser';
+import type { ParserChain } from '../strategies/ParserChain';
 
 /** Notation of a line whose `==>` never fires, or null when it does fire. */
 export type InertNotation = 'day-planner' | 'tasks-plugin';
@@ -21,12 +21,13 @@ const NOTATION_LABEL: Record<InertNotation, string> = {
  * up inside the task's content and shows up as part of its name. Nothing in
  * the note says so, which is what this diagnostic is for.
  *
- * The judgment runs the REAL parser chain, so it follows the settings: turn
- * Day Planner off and the same line becomes a tv-inline task whose command
- * does fire — and the warning disappears on its own.
+ * The judgment runs the REAL parser chain the settings build
+ * (`lineParsers`), so it follows them: turn Day Planner off and the same line
+ * becomes a tv-inline task whose command does fire — and the warning
+ * disappears on its own.
  */
-export function inertNotationOf(lineText: string): InertNotation | null {
-    const task = TaskParser.parse(lineText, '', 0);
+export function inertNotationOf(lineText: string, parsers: ParserChain): InertNotation | null {
+    const task = parsers.parse(lineText, '', 0);
     if (!task) return null;
     if (isDpInline(task)) return 'day-planner';
     if (isTpInline(task)) return 'tasks-plugin';

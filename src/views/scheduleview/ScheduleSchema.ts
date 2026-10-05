@@ -3,11 +3,10 @@
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { AstronomyDisplay } from '../../types';
-import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 
 export interface ScheduleConfig {
     customName?: string;
@@ -17,11 +16,15 @@ export interface ScheduleConfig {
 }
 
 export interface ScheduleTransient {
-    currentDate?: string;
+    /** The day the view draws. Absent, the view follows today. */
+    date?: string;
 }
 
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type ScheduleState = Partial<ScheduleConfig> & Partial<ScheduleTransient>;
+
 export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
-    viewType: VIEW_META_SCHEDULE.type,
+    viewType: 'schedule-view',
     shortName: 'schedule',
     defaults: {
         maskMode: false,
@@ -32,10 +35,11 @@ export const ScheduleSchema: ViewSchema<ScheduleConfig, ScheduleTransient> = {
         maskMode:         F.boolean('maskMode'),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
     },
-    anchorKey: 'currentDate',
+    anchorKey: 'date',
     transient: {
-        currentDate:             T.dateString('currentDate'),
+        date:                    T.dateString('date'),
     },
 };
 
-registerSchema(ScheduleSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const ScheduleCodec = new ViewConfigCodec(ScheduleSchema);

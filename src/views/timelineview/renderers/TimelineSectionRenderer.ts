@@ -2,38 +2,33 @@ import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
+import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import { TaskLayout } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import type { HandleManager } from '../../sharedUI/handles/HandleManager';
+import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import {
     appendEmptySpaceMenuItems,
     openCreateTaskForDailyNote,
-    openDailyNoteTimer,
+    startDailyNoteTimer,
 } from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
+// The gap between the ranks of successive cards in a lane. The z-index is
+// CSS's: the rank capped under the selected card (`.task-card`, ladder [B]
+// in _variables.css).
 const Z_GAP = 10;
-// Cap base lane z-index one gap below the selection overlay (CSS:
-// .task-card.is-selected → --z-task-card-selected: 200) so a selected card
-// always layers above non-selected ones.
-const Z_MAX = 190;
 
 export class TimelineSectionRenderer {
     constructor(
         private plugin: PluginContext & TimerHost,
-        private menuHandler: MenuHandler,
-        private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
         private getZoomLevel: () => number,
-        private viewId: string
     ) { }
 
     public render(
@@ -46,27 +41,23 @@ export class TimelineSectionRenderer {
         const startHour = this.plugin.settings.startHour;
 
         // Calculate layout for overlapping tasks
-        const layout = TaskLayout.calculateTaskLayout(timedTasks, date, startHour);
+        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour);
 
         timedTasks.forEach((task, index) => {
-            if (!task.effectiveStartTime) return;
+            if (!task.drawn) return;
 
-            const cardInstanceId = `${this.viewId}::lane-${date}::${task.id}`;
-            const reused = reconciler.acquire(cardInstanceId, task);
+            const key = { scope: `lane-${date}`, name: task.id };
+            const reused = reconciler.acquire(key, task);
             const el = reused ?? container.createDiv('task-card');
             markHandleSurface(el, 'timeline');
             if (reused) container.appendChild(reused);
 
-            this.decorateLane(el, task, date, index, layout, startHour);
+            this.decorateLane(el, task, index, layout, startHour);
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
-                cardInstanceId,
-                topRight: { mode: 'time' },
+                key,
+                topRight: { mode: 'fields', config: TIME_TOP_RIGHT },
             });
-            // addTaskContextMenu is idempotent (WeakSet-guarded) so re-calling
-            // on a reused element is a no-op, but skip the call to keep the
-            // hot path tight.
-            if (!reused) this.menuHandler.addTaskContextMenu(el);
         });
 
         if (renderOptions.showSunTimes) {
@@ -93,50 +84,17 @@ export class TimelineSectionRenderer {
     private decorateLane(
         el: HTMLElement,
         task: DisplayTask,
-        date: string,
         index: number,
         layout: ReturnType<typeof TaskLayout.calculateTaskLayout>,
         startHour: number,
     ): void {
-        // Selection class is owned by HandleManager; sync it from authoritative state.
-        el.toggleClass('is-selected', task.id === this.handleManager.getSelectedTaskId());
-
         // Reset + apply split-segment variant classes (idempotent).
         TaskStyling.applySplitClasses(el, task);
 
-        TaskStyling.applyTaskColor(el, getEffectiveColor(task) ?? null);
-        TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(task) ?? null);
-        TaskStyling.applyReadOnly(el, task);
-
-        // Position math (mirrors the previous in-line code; isolated here for
-        // tidy reuse on reconciled elements).
-        let startMinutes = DateUtils.timeToMinutes(task.effectiveStartTime!);
-        let endMinutes: number;
-
-        if (task.effectiveEndTime) {
-            if (task.effectiveEndTime.includes('T')) {
-                const startDate = new Date(`${date}T00:00:00`);
-                const endDate = new Date(task.effectiveEndTime);
-                const diffMs = endDate.getTime() - startDate.getTime();
-                endMinutes = Math.floor(diffMs / 60000);
-            } else {
-                endMinutes = DateUtils.timeToMinutes(task.effectiveEndTime);
-                if (endMinutes < startMinutes) {
-                    endMinutes += 24 * 60;
-                }
-            }
-        } else {
-            endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-        }
-
-        const startHourMinutes = startHour * 60;
-        if (startMinutes < startHourMinutes) {
-            startMinutes += 24 * 60;
-            endMinutes += 24 * 60;
-        }
-
-        const relativeStart = startMinutes - startHourMinutes;
-        const duration = endMinutes - startMinutes;
+        // Position: what the card is drawn over, in minutes of its visual day,
+        // the same minutes TaskLayout stacks by.
+        const { start: relativeStart, end: endMinutes } = minutesOfSpan(task.drawn!, startHour);
+        const duration = endMinutes - relativeStart;
 
         const taskLayout = layout.get(task.id) || { width: 100, left: 0, zIndex: 1 };
         const widthFraction = taskLayout.width / 100;
@@ -146,7 +104,7 @@ export class TimelineSectionRenderer {
         el.style.setProperty('--duration-minutes', String(duration));
         el.style.width = `calc((100% - 8px) * ${widthFraction})`;
         el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
-        el.style.zIndex = String(Math.min(index * Z_GAP + taskLayout.zIndex, Z_MAX));
+        el.style.setProperty('--lane-z', String(index * Z_GAP + taskLayout.zIndex));
 
         // cascade-offset: leftmost = unset, 重なって右にずれた card に '1'。
         if (taskLayout.left > 0) {
@@ -217,12 +175,7 @@ export class TimelineSectionRenderer {
         let taskDate = date;
         if (rawTotalMinutes >= 24 * 60) {
             // It's the next day
-            const d = new Date(date);
-            // Fix timezone for date calc
-            const [y, m, day] = date.split('-').map(Number);
-            d.setFullYear(y, m - 1, day);
-            d.setDate(d.getDate() + 1);
-            taskDate = DateUtils.getLocalDateString(d);
+            taskDate = DateUtils.addDays(date, 1);
         }
 
         openCreateTaskForDailyNote(this.plugin, date, { startDate: taskDate, startTime: timeString });
@@ -233,7 +186,7 @@ export class TimelineSectionRenderer {
         this.plugin.menuPresenter.present((menu) => {
             appendEmptySpaceMenuItems(menu, {
                 onCreate: () => this.handleCreateTaskTrigger(offsetY, date),
-                onTimer: (timerType) => openDailyNoteTimer(this.plugin, date, timerType),
+                onTimer: (kind) => startDailyNoteTimer(this.plugin, date, kind),
             });
         }, { kind: 'position', x, y });
     }

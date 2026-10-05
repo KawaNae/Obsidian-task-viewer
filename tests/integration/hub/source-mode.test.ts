@@ -64,7 +64,7 @@ const state = () => ({
     parent: viewOf('parent')?.state.doc.toString() ?? null,
     children: viewOf('children')?.state.doc.toString() ?? null,
     message: shown('.task-hub__source-message') ? document.querySelector('.task-hub__source-message').textContent : null,
-    asking: shown('.task-hub__source-ask'),
+    asking: shown('.task-hub__source-actions .tv-form__ask'),
     lost: shown('.task-hub__source-lost'),
     actions: shown('.task-hub__source-actions'),
     shut: shown('.task-hub__mode-shut') ? document.querySelector('.task-hub__mode-shut').textContent : null,
@@ -115,7 +115,7 @@ function sourceState(): SourceState {
 /** Open the hub on the row whose name starts with `name`, and switch it to the source. */
 function openSource(name: string): SourceState {
     return run<SourceState>(`
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(${JSON.stringify(name)}));
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(${JSON.stringify(name)}));
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         plugin.openTaskHub(task.id);
         await until(() => document.querySelector('.task-hub__mode-toggle'));
@@ -142,7 +142,7 @@ function closeHub(): void {
     run(`
         document.querySelector('.task-hub .tv-overlay__close, .tv-overlay__close')?.click();
         await sleep(100);
-        document.querySelector('.task-hub__source-discard')?.click();
+        document.querySelector('.task-hub__source-actions .tv-form__discard')?.click();
         await until(() => !document.querySelector('.task-hub'));
         return 'ok';
     `);
@@ -184,7 +184,7 @@ describe('the hub\'s source mode', () => {
         expect(asked).toMatchObject({ hub: true, source: true, asking: true });
         // One row asks: the question and discard beside it at its start, back (where cancel was, with the focus) and apply at its end.
         const row = run<Record<string, unknown>>(`
-            const actions = document.querySelector('.task-hub__source-actions');
+            const actions = document.querySelector('.task-hub__source-actions .tv-form__buttons');
             const items = [...actions.children].filter(el => getComputedStyle(el).display !== 'none');
             const rects = items.map(el => el.getBoundingClientRect());
             const box = actions.getBoundingClientRect();
@@ -194,12 +194,12 @@ describe('the hub\'s source mode', () => {
                 askAtStart: Math.abs(rects[0].left - box.left) < 2,
                 applyAtEnd: Math.abs(rects[3].right - box.right) < 2,
                 apart: rects[2].left - rects[1].right > 16,
-                focused: document.activeElement === actions.querySelector('.task-hub__source-cancel'),
+                focused: document.activeElement === actions.querySelector('.tv-form__cancel'),
             });
         `);
         expect(row).toEqual({ items: ['下書きを捨てますか', '捨てる', '戻る', '適用'], oneLine: true, askAtStart: true, applyAtEnd: true, apart: true, focused: true });
-        const kept = click('.task-hub__source-cancel');
-        expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual(['キャンセル', '適用']);
+        const kept = click('.task-hub__source-actions .tv-form__cancel');
+        expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions .tv-form__buttons > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual(['キャンセル', '適用']);
         expect(kept).toMatchObject({ source: true, asking: false, children: '- [ ] 子a2\n- [ ] 子b\n    - [ ] 孫' });
 
         const applied = run<SourceState>(`
@@ -229,7 +229,7 @@ describe('the hub\'s source mode', () => {
         run(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: 0, to: children.state.doc.length, insert: 'text' } });
-            const service = plugin.writeService;
+            const service = plugin.operations;
             window.__tvSourceWrites = 0;
             window.__tvSourceReplace = service.replaceSubtree;
             service.replaceSubtree = function (...args) { window.__tvSourceWrites++; return window.__tvSourceReplace.apply(this, args); };
@@ -248,7 +248,7 @@ describe('the hub\'s source mode', () => {
             expect(run<number>('return window.__tvSourceWrites;')).toBe(1);
             expect(readTestFile(TEST_FILE)).toBe(FENCED);
         } finally {
-            run(`plugin.writeService.replaceSubtree = window.__tvSourceReplace; delete window.__tvSourceReplace; delete window.__tvSourceWrites; return 'ok';`);
+            run(`plugin.operations.replaceSubtree = window.__tvSourceReplace; delete window.__tvSourceReplace; delete window.__tvSourceWrites; return 'ok';`);
         }
     });
 
@@ -379,7 +379,7 @@ describe('the hub\'s source mode', () => {
         const asked = run<Record<string, unknown>>(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.length, insert: ' 下書き' } });
-            const next = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('次'));
+            const next = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('次'));
             plugin.openTaskHub(next.id);
             await sleep(100);
             const pane = document.querySelector('.task-hub__source-pane');
@@ -390,7 +390,7 @@ describe('the hub\'s source mode', () => {
         expect(asked).toMatchObject({ hub: true, source: true, asking: true, marked: true, red: true, children: '- [ ] 子a\n- [ ] 子b 下書き' });
 
         const discarded = run<Record<string, unknown>>(`
-            document.querySelector('.task-hub__source-discard').click();
+            document.querySelector('.task-hub__source-actions .tv-form__discard').click();
             await until(() => !document.querySelector('.task-hub'));
             await sleep(300);
             return JSON.stringify(state());
@@ -439,7 +439,7 @@ describe('the hub\'s source mode', () => {
         const steps = run<Record<string, unknown>>(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.length, insert: ' 下書き' } });
-            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-cancel');
+            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-actions .tv-form__cancel');
             const outside = () => document.querySelector('.task-hub .tv-overlay__backdrop, .tv-overlay__backdrop')
                 .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
             // First asked by a press outside, with the focus in the editor.
@@ -468,19 +468,18 @@ describe('the hub\'s source mode', () => {
         });
     });
 
-    it('takes the back as Escape: a child popover first, then a close that asks over a draft', async () => {
+    it('takes the back as Escape: a list open under a field first, then a close that asks over a draft', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         // Obsidian's history.back() calls what is on top of its stack, as Android's back and the mouse's back button do.
         const steps = run<Record<string, unknown>>(`
-            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-cancel');
-            const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
-            plugin.openTaskHub(task.id);
-            await until(() => document.querySelector('.task-hub__status-pill'));
-            document.querySelector('.task-hub__status-pill').click();
-            await until(() => document.querySelector('.tv-ctrl__suggest'));
+            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-actions .tv-form__cancel');
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+            // The list under the tag field (Obsidian's), open as the field takes the focus.
+            plugin.openTaskHub(task.id, { focusField: 'tags' });
+            await until(() => document.querySelector('.suggestion-container'));
             window.history.back();
             await sleep(200);
-            const child = { child: !!document.querySelector('.tv-ctrl__suggest'), hub: state().hub };
+            const child = { child: !!document.querySelector('.suggestion-container'), hub: state().hub };
 
             document.querySelectorAll('.task-hub__mode-toggle button')[1].click();
             await until(() => viewOf('children'));
@@ -495,7 +494,7 @@ describe('the hub\'s source mode', () => {
             await sleep(100);
             const again = { ...state(), onBack: onBack() };
 
-            document.querySelector('.task-hub__source-discard').click();
+            document.querySelector('.task-hub__source-actions .tv-form__discard').click();
             await until(() => !document.querySelector('.task-hub:not(.is-closing)'));
             const discarded = state().hub;
 
@@ -515,7 +514,7 @@ describe('the hub\'s source mode', () => {
         });
     });
 
-    it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, its child popovers among it', async () => {
+    it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, a list open under a field among it', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`
             const file = app.vault.getAbstractFileByPath(${JSON.stringify(TEST_FILE)});
@@ -527,7 +526,7 @@ describe('the hub\'s source mode', () => {
             const pick = () => editor.setSelection({ line: 4, ch: 6 }, { line: 4, ch: 7 });
             const bold = () => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', keyCode: 66, metaKey: true, ctrlKey: navigator.platform.indexOf('Mac') < 0, bubbles: true, cancelable: true }));
             try {
-                const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+                const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
                 plugin.openTaskHub(task.id);
                 await until(() => document.querySelector('.task-hub__form input.tv-ctrl__text-input'));
                 pick();
@@ -536,16 +535,17 @@ describe('the hub\'s source mode', () => {
                 await sleep(200);
                 const inField = editor.getLine(4);
 
-                document.querySelector('.task-hub__status-pill').click();
-                await until(() => document.querySelector('.tv-ctrl__suggest button, .tv-ctrl__suggest input'));
-                document.querySelector('.tv-ctrl__suggest button, .tv-ctrl__suggest input').focus();
-                const inChild = { inPanel: !!document.activeElement.closest('.task-hub') };
+                // A list open under a field (Obsidian's, on the body): the focus stays in the field.
+                document.querySelector('.task-hub__tag-add-wrap input').focus();
+                await until(() => document.querySelector('.suggestion-container'));
+                const inChild = { inPanel: !!document.activeElement.closest('.task-hub'), list: !!document.querySelector('.suggestion-container') };
+                pick();
                 bold();
                 await sleep(200);
                 inChild.line = editor.getLine(4);
                 document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, cancelable: true }));
                 await sleep(200);
-                const afterEscape = { child: !!document.querySelector('.tv-ctrl__suggest'), hub: !!document.querySelector('.task-hub:not(.is-closing)') };
+                const afterEscape = { child: !!document.querySelector('.suggestion-container'), hub: !!document.querySelector('.task-hub:not(.is-closing)') };
 
                 // The same key with the focus moved to the note: the hotkey is let in again.
                 editor.focus();
@@ -560,7 +560,7 @@ describe('the hub\'s source mode', () => {
         `);
         expect(result).toMatchObject({
             inField: '- [ ] 次',
-            inChild: { inPanel: false, line: '- [ ] 次' },
+            inChild: { inPanel: true, list: true, line: '- [ ] 次' },
             afterEscape: { child: false, hub: true },
             inNote: '- [ ] **次**',
         });

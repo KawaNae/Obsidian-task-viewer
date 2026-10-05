@@ -4,6 +4,7 @@ import { taskToRecord } from '../../../src/api/TaskNormalizer';
 import { normalizeTask } from '../../../src/api/TaskNormalizer';
 import { makeTask } from '../helpers/makeTask';
 import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
+import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 
 /** No row answers to a name: every ID goes out as it is. */
 const noRow = () => undefined;
@@ -162,9 +163,9 @@ describe('boolean properties (TaskNormalizer)', () => {
     it('reads true whether a property line spells it True or frontmatter reads it back as true', () => {
         const normalized = makeNormalized({
             properties: {
-                line: { value: 'True', type: 'boolean' },
-                front: { value: 'true', type: 'boolean' },
-                off: { value: 'false', type: 'boolean' },
+                line: PropertyValues.fromText('True'),
+                front: PropertyValues.fromYaml(true)!,
+                off: PropertyValues.fromText('false'),
             },
         });
         expect(normalized.properties).toMatchObject({ line: true, front: true, off: false });

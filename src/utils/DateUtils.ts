@@ -1,49 +1,163 @@
+import type { TimeOfDay } from '../types';
+
+/**
+ * The date module: every conversion between a `YYYY-MM-DD` string and a
+ * `Date`, the visual "today", the start of a week, and shifting by days. A
+ * day as a stretch of time is `DayWindow`'s. Pure — the wall clock is read only by the entry points
+ * that say so (`getVisualDateOfNow`, `getToday`); everything
+ * else takes the moment as an argument.
+ *
+ * Dates are local calendar days. Years are four digits, as the `@` notation
+ * and the expression language's lexer read them: `0026` is the year 26, not
+ * 1926, and a year below 1000 is still printed with four digits.
+ */
 export class DateUtils {
     /** Default duration in minutes for single-sided timed tasks (S-Timed / E-Timed). */
     static readonly DEFAULT_TIMED_DURATION_MINUTES = 60;
 
+    /**
+     * The shape of a date, as regex source. Grammars that embed a date (the
+     * date block, the Tasks emoji fields, the lexer, segment ids) build their
+     * patterns from this, so the shape is written once.
+     */
+    static readonly DATE_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`;
+
+    /** The shape of an `HH:mm` time, as regex source, for the same grammars. */
+    static readonly TIME_PATTERN = String.raw`\d{2}:\d{2}`;
+
+    private static readonly DATE_SHAPE_RE = new RegExp(`^${DateUtils.DATE_PATTERN}$`);
+    private static readonly TIME_SHAPE_RE = new RegExp(`^${DateUtils.TIME_PATTERN}$`);
+
+    /** Whether `value` has the `YYYY-MM-DD` shape. Does not ask whether the day exists. */
+    static isDateShape(value: string): boolean {
+        return DateUtils.DATE_SHAPE_RE.test(value);
+    }
+
+    /** Whether `value` has the `HH:mm` shape. Does not ask whether the time exists. */
+    static isTimeShape(value: string): boolean {
+        return DateUtils.TIME_SHAPE_RE.test(value);
+    }
+
+    /**
+     * A date built from a year that may have fewer than three digits.
+     *
+     * `new Date(y, ...)` maps a two-digit year onto 1900 + y. Every
+     * construction from a computed or parsed year goes through this, so the
+     * shift cannot come back in one of them.
+     */
+    static dateAt(year: number, monthIndex: number, day: number): Date {
+        const date = new Date(year, monthIndex, day);
+        if (year >= 0 && year <= 99) date.setFullYear(year);
+        return date;
+    }
+
+    /**
+     * `YYYY-MM-DD` as local midnight (not UTC). The caller vouches for the
+     * shape; use {@link readDate} for text that has not been checked.
+     */
+    static parseDate(dateStr: string): Date {
+        const [y, m, d] = dateStr.split('-').map(n => parseInt(n, 10));
+        return DateUtils.dateAt(y, m - 1, d);
+    }
+
+    /**
+     * `YYYY-MM-DD` as local midnight, or null when the text is not that shape
+     * or names a day that does not exist (Feb 30, Apr 31, Feb 29 of a
+     * non-leap year).
+     */
+    static readDate(value: string): Date | null {
+        if (!DateUtils.isDateShape(value)) return null;
+        const date = DateUtils.parseDate(value);
+        return DateUtils.getLocalDateString(date) === value ? date : null;
+    }
+
+    /** A date and an `HH:mm` time as a local moment. */
+    static toDateTime(date: string, time: string): Date {
+        const d = DateUtils.parseDate(date);
+        const [h, m] = time.split(':').map(n => parseInt(n, 10));
+        d.setHours(h, m, 0, 0);
+        return d;
+    }
+
     static getLocalDateString(date: Date): string {
-        const year = date.getFullYear();
+        // Four digits like the notation reads; every ordinary year already is.
+        const year = date.getFullYear().toString().padStart(4, '0');
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         const day = date.getDate().toString().padStart(2, '0');
         return `${year}-${month}-${day}`;
     }
 
+    /** Day of the week of a `YYYY-MM-DD` date (0 = Sunday, as `Date.getDay`). */
+    static weekdayOf(date: string): number {
+        return DateUtils.parseDate(date).getDay();
+    }
+
     /** Format hours/minutes as `HH:mm`, zero-padded. */
-    static formatHHMM(hours: number, minutes: number): string {
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    static formatHHMM(hours: number, minutes: number): TimeOfDay {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` as TimeOfDay;
     }
 
-    static getVisualDateOfNow(startHour: number): string {
-        const now = new Date();
-        const visualDateOfNow = new Date(now);
+    /**
+     * A time a row holds (`Task.startTime`, `endTime`, or the section's), taken
+     * for the `HH:mm` it is: the parsers read only that shape (`TIME_PATTERN`),
+     * and every writer checks or builds it. The form's preview reads a time
+     * still being typed through here too, as it always has.
+     */
+    static timeOfDay(time: string | undefined): TimeOfDay | undefined {
+        return time as TimeOfDay | undefined;
+    }
 
+    /**
+     * Split a date-time text (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`, the shape a
+     * due is kept in) into its date and its time.
+     */
+    static splitDateTime(value: string): { date: string; time?: string } {
+        const t = value.indexOf('T');
+        if (t === -1) return { date: value };
+        const time = value.slice(t + 1);
+        return time ? { date: value.slice(0, t), time } : { date: value.slice(0, t) };
+    }
+
+    /**
+     * Join a date and a time into the one text a due is kept in. No date, no
+     * value; a time without a date is dropped.
+     */
+    static joinDateTime(date: string | undefined, time: string | undefined): string | undefined {
+        if (!date) return undefined;
+        return time ? `${date}T${time}` : date;
+    }
+
+    /**
+     * The visual date at `now`: before `startHour` the day still belongs to
+     * the previous date.
+     */
+    static visualDateAt(now: Date, startHour: number): string {
+        const visual = new Date(now);
         if (now.getHours() < startHour) {
-            visualDateOfNow.setDate(visualDateOfNow.getDate() - 1);
+            visual.setDate(visual.getDate() - 1);
         }
-
-        return this.getLocalDateString(visualDateOfNow);
+        return DateUtils.getLocalDateString(visual);
     }
 
+    /** The visual date now, on the wall clock. */
+    static getVisualDateOfNow(startHour: number): string {
+        return DateUtils.visualDateAt(new Date(), startHour);
+    }
+
+    /** The calendar date now, on the wall clock (midnight boundary). */
     static getToday(): string {
-        return this.getLocalDateString(new Date());
-    }
-
-    /** Parse 'YYYY-MM-DD' as local midnight (not UTC). */
-    private static parseLocalDate(dateStr: string): Date {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        return new Date(y, m - 1, d);
+        return DateUtils.getLocalDateString(new Date());
     }
 
     static getDiffDays(start: string, end: string): number {
-        const d1 = DateUtils.parseLocalDate(start);
-        const d2 = DateUtils.parseLocalDate(end);
+        const d1 = DateUtils.parseDate(start);
+        const d2 = DateUtils.parseDate(end);
         const diffTime = d2.getTime() - d1.getTime();
         return Math.round(diffTime / (1000 * 60 * 60 * 24));
     }
 
     static addDays(date: string, days: number): string {
-        const d = DateUtils.parseLocalDate(date);
+        const d = DateUtils.parseDate(date);
         d.setDate(d.getDate() + days);
         return this.getLocalDateString(d);
     }
@@ -68,7 +182,7 @@ export class DateUtils {
     static getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
         const day = date.getDay();
         const diff = (day - weekStartDay + 7) % 7;
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate() - diff);
+        return DateUtils.dateAt(date.getFullYear(), date.getMonth(), date.getDate() - diff);
     }
 
     /**
@@ -77,7 +191,7 @@ export class DateUtils {
      * window here.
      */
     static getMonthGridStart(date: Date, weekStartDay: 0 | 1): string {
-        const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+        const monthStart = DateUtils.dateAt(date.getFullYear(), date.getMonth(), 1);
         return this.getLocalDateString(this.getWeekStart(monthStart, weekStartDay));
     }
 
@@ -90,55 +204,24 @@ export class DateUtils {
         return this.getLocalDateString(this.getWeekStart(date, weekStartDay));
     }
 
-    /**
-     * Get the visual start date for a task considering startHour.
-     * If a task's startTime is before startHour, it visually belongs to the previous day.
-     * 
-     * @param date YYYY-MM-DD - The calendar date
-     * @param time HH:mm or undefined - The time component
-     * @param startHour The configured start hour for visual day (e.g., 5 for 5:00 AM)
-     * @returns The visual date YYYY-MM-DD
-     */
-    static toVisualDate(date: string, time: string | undefined, startHour: number): string {
-        if (!time) return date;  // All-day tasks use actual date
-
-        const [h] = time.split(':').map(Number);
-        if (h < startHour) {
-            // time is before startHour → visually belongs to previous day
-            return this.addDays(date, -1);
-        }
-        return date;
-    }
 
     /**
-     * 日時文字列を指定日数シフト（時刻部分は保持）
-     * @param dateStr YYYY-MM-DD or YYYY-MM-DDTHH:mm
-     * @param days シフトする日数
-     * @returns シフト後の日時文字列
+     * Shift a date or date-time (`YYYY-MM-DD` / `YYYY-MM-DDTHH:mm`) by whole
+     * days, keeping the time. The one way a copy or a next instance moves a
+     * date.
      */
     static shiftDateString(dateStr: string, days: number): string {
-        const hasTime = dateStr.includes('T');
-        const datePart = dateStr.split('T')[0];
-        const timePart = hasTime ? dateStr.split('T')[1] : null;
-
-        const newDateStr = this.addDays(datePart, days);
-        return timePart ? `${newDateStr}T${timePart}` : newDateStr;
+        const { date, time } = DateUtils.splitDateTime(dateStr);
+        return DateUtils.joinDateTime(DateUtils.addDays(date, days), time)!;
     }
 
-
+    /** `YYYY-MM-DD` naming a day that exists. */
     static isValidDateString(value: string): boolean {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-        // new Date('YYYY-MM-DD') silently rolls day overflow forward (Feb 30 ->
-        // Mar 2), so it never reports invalid days. Round-trip the components to
-        // reject impossible dates (Feb 30, Apr 31, non-leap Feb 29) while still
-        // allowing a real Feb 29 on leap years.
-        const [y, m, d] = value.split('-').map(Number);
-        const dt = new Date(y, m - 1, d);
-        return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+        return DateUtils.readDate(value) !== null;
     }
 
     static isValidTimeString(value: string): boolean {
-        if (!/^\d{2}:\d{2}$/.test(value)) return false;
+        if (!DateUtils.TIME_SHAPE_RE.test(value)) return false;
         const [h, m] = value.split(':').map(Number);
         return h >= 0 && h <= 23 && m >= 0 && m <= 59;
     }
@@ -148,157 +231,17 @@ export class DateUtils {
         return h * 60 + m;
     }
 
-    static minutesToTime(minutes: number): string {
+    static minutesToTime(minutes: number): TimeOfDay {
         let m = Math.round(minutes);
         if (m < 0) m = 0;
         while (m >= 24 * 60) m -= 24 * 60;
         const h = Math.floor(m / 60);
         const min = m % 60;
-        return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-    }
-
-    /**
-     * 日付+時刻を frontmatter/YAML 互換の文字列にフォーマット。
-     * - time-only 禁止（YAML sexagesimal / Obsidian 非互換）
-     * - endDate 未設定時は fallbackDate（通常 startDate）で same-day 推論
-     */
-    static formatDateTimeForStorage(date?: string, time?: string, fallbackDate?: string): string | null {
-        const effectiveDate = date || fallbackDate;
-        if (effectiveDate && time) return `${effectiveDate}T${time}`;
-        if (effectiveDate) return effectiveDate;
-        return null;
-    }
-
-    /**
-     * Calculate task duration in milliseconds based on README spec.
-     * Returns the duration considering start/end dates and times.
-     * 
-     * @param startDate YYYY-MM-DD
-     * @param startTime HH:mm or undefined
-     * @param endDate YYYY-MM-DD or undefined
-     * @param endTime HH:mm or full ISO string or undefined
-     * @param startHour The configured start hour for visual day
-     * @returns Duration in milliseconds
-     */
-    static getTaskDurationMs(
-        startDate: string,
-        startTime: string | undefined,
-        endDate: string | undefined,
-        endTime: string | undefined,
-        startHour: number
-    ): number {
-        const startHourStr = startHour.toString().padStart(2, '0') + ':00';
-
-        // Calculate effective start datetime
-        const effectiveStartTime = startTime || startHourStr;
-        const startDateTime = new Date(`${startDate}T${effectiveStartTime}`);
-
-        // Calculate effective end datetime
-        let endDateTime: Date;
-
-        if (endTime) {
-            if (endTime.includes('T')) {
-                // Full ISO format
-                endDateTime = new Date(endTime);
-            } else {
-                // HH:mm format
-                const effectiveEndDate = endDate || startDate;
-                endDateTime = new Date(`${effectiveEndDate}T${endTime}`);
-                // If end is strictly before start, assume next day
-                // Note: end == start means 0 duration, not 24 hours
-                if (endDateTime < startDateTime) {
-                    endDateTime.setDate(endDateTime.getDate() + 1);
-                }
-            }
-        } else if (endDate && endDate !== startDate) {
-            // Different end date, no end time: end at startHour-1:59 of end date
-            let endHour = startHour - 1;
-            if (endHour < 0) endHour = 23;
-            endDateTime = new Date(`${endDate}T${endHour.toString().padStart(2, '0')}:59`);
-        } else {
-            // Same date or no end date: depends on whether there's a start time
-            if (startTime) {
-                // S-Timed: +1 hour
-                endDateTime = new Date(startDateTime.getTime() + DateUtils.DEFAULT_TIMED_DURATION_MINUTES * 60 * 1000);
-            } else {
-                // S-All, SD, etc: next day at startHour-1:59 (24 hours)
-                const nextDay = this.addDays(startDate, 1);
-                let endHour = startHour - 1;
-                if (endHour < 0) endHour = 23;
-                endDateTime = new Date(`${nextDay}T${endHour.toString().padStart(2, '0')}:59`);
-            }
-        }
-
-        return endDateTime.getTime() - startDateTime.getTime();
-    }
-
-    /**
-     * Check if a task duration is 24 hours or more
-     */
-    static isAllDayTask(
-        startDate: string,
-        startTime: string | undefined,
-        endDate: string | undefined,
-        endTime: string | undefined,
-        startHour: number
-    ): boolean {
-        // Tasks without start time are always considered All Day
-        // This covers S-All, SD, ED, E, D types per README spec
-        if (!startTime) return true;
-
-        const durationMs = this.getTaskDurationMs(startDate, startTime, endDate, endTime, startHour);
-        const threshold = 23.5 * 60 * 60 * 1000; // 23h30m
-        return durationMs >= threshold;
-    }
-
-    /**
-     * Check if a date/time is in the past considering startHour.
-     * For visual date boundary: if current time < startHour, yesterday is considered "today".
-     * 
-     * @param dateStr YYYY-MM-DD - The date to check
-     * @param timeStr HH:mm or undefined - The time to check (optional)
-     * @param startHour The configured start hour for visual day boundary
-     * @returns true if the date/time is in the past
-     */
-    static isPastDate(dateStr: string, timeStr: string | undefined, startHour: number): boolean {
-        const now = new Date();
-        const visualToday = this.getVisualDateOfNow(startHour);
-        const taskVisualDate = this.toVisualDate(dateStr, timeStr, startHour);
-
-        if (taskVisualDate < visualToday) return true;
-        if (taskVisualDate > visualToday) return false;
-
-        // Same visual date - compare in visual-day-relative minutes
-        if (timeStr) {
-            const startMinutes = startHour * 60;
-            const currentMinutes = now.getHours() * 60 + now.getMinutes();
-            const taskMinutes = this.timeToMinutes(timeStr);
-            const currentVisual = (currentMinutes - startMinutes + 1440) % 1440;
-            const taskVisual = (taskMinutes - startMinutes + 1440) % 1440;
-            return taskVisual < currentVisual;
-        }
-
-        // Same date, no time specified - not past yet (it's "today")
-        return false;
-    }
-
-    /**
-     * Check if a due date is in the past considering startHour.
-     *
-     * @param due YYYY-MM-DD or YYYY-MM-DDTHH:mm format
-     * @param startHour The configured start hour for visual day boundary
-     * @returns true if the due date is in the past
-     */
-    static isPastDue(due: string, startHour: number): boolean {
-        const hasTime = due.includes('T');
-        const datePart = due.split('T')[0];
-        const timePart = hasTime ? due.split('T')[1] : undefined;
-
-        return this.isPastDate(datePart, timePart, startHour);
+        return DateUtils.formatHHMM(h, min);
     }
 
     static dueDatePart(due: string | undefined): string | undefined {
         if (!due) return undefined;
-        return due.split('T')[0];
+        return DateUtils.splitDateTime(due).date;
     }
 }

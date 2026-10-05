@@ -12,7 +12,7 @@ import type { App } from 'obsidian';
  */
 
 const openLeafFromState = vi.fn(async () => { });
-const buildViewStateFromParams = vi.fn(async () => ({ state: {} as Record<string, unknown>, templateNotFound: undefined as string | undefined }));
+const buildViewStateFromParams = vi.fn(async () => ({ state: {} as Record<string, unknown>, templateNotFound: undefined as string | undefined, issues: [] as { field: string; text: string }[] }));
 const resolveViewTypeFromShortName = vi.fn((_: string) => undefined as string | undefined);
 const notices: string[] = [];
 
@@ -42,7 +42,7 @@ const settings = { viewTemplateFolder: 'Templates' } as never;
 beforeEach(() => {
     openLeafFromState.mockClear();
     buildViewStateFromParams.mockClear();
-    buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: undefined });
+    buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: undefined, issues: [] });
     resolveViewTypeFromShortName.mockReturnValue(undefined);
     notices.length = 0;
 });
@@ -59,7 +59,7 @@ describe('openViewFromUri', () => {
 
     it('opens a registered view with the state its template produced', async () => {
         resolveViewTypeFromShortName.mockReturnValue('kanban-view');
-        buildViewStateFromParams.mockResolvedValue({ state: { startDate: '2026-08-22' }, templateNotFound: undefined });
+        buildViewStateFromParams.mockResolvedValue({ state: { startDate: '2026-08-22' }, templateNotFound: undefined, issues: [] });
 
         await openViewFromUri(app, settings, { view: 'kanban', template: 'Sprint', position: 'tab' });
 
@@ -70,7 +70,7 @@ describe('openViewFromUri', () => {
 
     it('still opens the view when the named template is missing, and says so', async () => {
         resolveViewTypeFromShortName.mockReturnValue('kanban-view');
-        buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: 'Sprint' });
+        buildViewStateFromParams.mockResolvedValue({ state: {}, templateNotFound: 'Sprint', issues: [] });
 
         await openViewFromUri(app, settings, { view: 'kanban', template: 'Sprint' });
 
@@ -78,6 +78,20 @@ describe('openViewFromUri', () => {
         // default view with nothing to say it was not the one asked for.
         expect(notices).toHaveLength(1);
         expect(notices[0]).toContain('Sprint');
+        expect(openLeafFromState).toHaveBeenCalledOnce();
+    });
+
+    it('opens the view without the conditions it could not read, and says how many', async () => {
+        resolveViewTypeFromShortName.mockReturnValue('kanban-view');
+        buildViewStateFromParams.mockResolvedValue({
+            state: {}, templateNotFound: undefined,
+            issues: [{ field: 'filterState', text: 'filters[0]: Unknown filter property: tagg' }, { field: 'grid', text: 'list "A" sort rules[0]: x' }],
+        });
+
+        await openViewFromUri(app, settings, { view: 'kanban', template: 'Sprint' });
+
+        expect(notices).toHaveLength(1);
+        expect(notices[0]).toContain('2');
         expect(openLeafFromState).toHaveBeenCalledOnce();
     });
 
@@ -91,36 +105,30 @@ describe('openViewFromUri', () => {
 });
 
 describe('openViewFromUri: the timer view', () => {
-    // The timer view reaches the registry like every other view now that it
-    // has a schema; it used to need a hand-written fallback here because it
-    // did not. What still sets it apart is where its state comes from.
+    // The timer view takes the same road as every other view: its state is
+    // what buildViewStateFromParams reads from the query through its schema.
     beforeEach(() => {
         resolveViewTypeFromShortName.mockImplementation(
             (name: string) => (name === 'timer' ? 'timer-view' : undefined),
         );
     });
 
-    it('is reachable by its registered short name', async () => {
+    it('is reachable by its short name', async () => {
         await openViewFromUri(app, settings, { view: 'timer' });
 
         expect(openLeafFromState).toHaveBeenCalledOnce();
         expect(openLeafFromState.mock.calls[0][2]).toBe('timer-view');
     });
 
-    it('takes its state from the query, not from a template', async () => {
-        await openViewFromUri(app, settings, {
-            view: 'timer', mode: 'countdown', intervalTemplate: 'pomodoro', name: '朝の集中',
+    it('reads its state from the query through the schema, as the other views do', async () => {
+        buildViewStateFromParams.mockResolvedValue({
+            state: { timerViewMode: 'countdown' }, templateNotFound: undefined, issues: [],
         });
+        const params = { view: 'timer', mode: 'countdown', name: '朝の集中' };
 
-        expect(buildViewStateFromParams).not.toHaveBeenCalled();
-        expect(openLeafFromState.mock.calls[0][4]).toEqual({
-            timerViewMode: 'countdown', intervalTemplate: 'pomodoro', customName: '朝の集中',
-        });
-    });
+        await openViewFromUri(app, settings, params);
 
-    it('carries only the query fields that were given', async () => {
-        await openViewFromUri(app, settings, { view: 'timer', mode: 'stopwatch' });
-
-        expect(openLeafFromState.mock.calls[0][4]).toEqual({ timerViewMode: 'stopwatch' });
+        expect(buildViewStateFromParams).toHaveBeenCalledWith(app, 'Templates', 'timer-view', params);
+        expect(openLeafFromState.mock.calls[0][4]).toEqual({ timerViewMode: 'countdown' });
     });
 });

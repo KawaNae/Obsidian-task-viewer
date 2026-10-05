@@ -1,30 +1,30 @@
-import { differenceInCalendarDays } from 'date-fns';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { shiftTaskDates } from '../../utils/ShiftDates';
 import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
 import type { Diagnostic } from '../lang/Diagnostic';
 import type { PropName } from '../lang/ExprAst';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import type { EvalHost, StaticType } from '../lang/functions';
 import type { CellStore } from '../lang/StmtEvaluator';
-import { type Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
+import { type Value, isDatishValue, valueToDisplay } from '../lang/Value';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../parsing/gen/GenBodyParser';
-import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
-import { TaskParser } from '../parsing/TaskParser';
+import { renderGenBody } from './GenBodyRenderer';
+import { formatRow } from '../parsing/TaskLineFormat';
 import { formatDateBlock } from '../parsing/tv-inline/DateBlockFormat';
-import type { GeneratedChild } from '../persistence/TaskCloner';
-import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from './FlowAst';
+import type { FlowInstance, GeneratedChild } from '../persistence/FlowInstanceLines';
+import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from '../lang/flow/FlowAst';
 import type { FlowEffect } from './FlowEffects';
 import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
-import { flowRaws, joinSegments } from './FlowSegments';
-import { serializeFlowLines } from './FlowSerializer';
+import { flowRaws, joinSegments } from '../lang/flow/FlowSegments';
+import { serializeFlowLines } from '../lang/flow/FlowSerializer';
 import { holdsLineBreak } from '../../utils/LineBreak';
 import { type DateAnchor, type NextOccurrence, nextOccurrence } from './ScheduleEngine';
 
 export interface FlowPlanDeps {
-    /** Local calendar date of "now" (YYYY-MM-DD). */
+    /** The visual day of "now" (YYYY-MM-DD), which startHour starts. */
     today: string;
     /** Local date+time of "now". */
     now: { date: string; time: string };
@@ -77,12 +77,11 @@ export class GenerationError extends Error {
  *
  * Fire-consumes semantics: the returned effects ALWAYS remove the command
  * from the original line (strip-flow, or the move that carries it), even
- * when no next instance is generated (until expired / telomere exhausted),
- * and when the move is retired and dropped (move-dropped).
+ * when no next instance is generated (until expired / telomere exhausted).
  *
  * Evaluation contexts (do not mix up):
  * - at(expr) evaluates against the PRE-shift original task. move(...) is not
- *   evaluated: where it goes is read off how it is written (`MoveTarget`).
+ *   evaluated: the heading it names is read off how it is written.
  * - set(field: expr) evaluates against the POST-shift new instance; all
  *   right-hand sides see the same snapshot, then apply at once (no chaining).
  *
@@ -128,32 +127,22 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
                 // those apart was never possible while one copy rule
                 // covered both.
                 newTask.flow = nextFlow(program, task.flow!);
-                effects.push({ kind: 'create-next', newTask });
+                effects.push({ kind: 'create-instance', instance: instanceOf(newTask), warnings: [] });
             }
         }
     }
 
-    // Where to is the parser's answer, read off how the clause is written;
-    // nothing of it is evaluated. A retired destination is known here, before
-    // any note is read, and this is the one place it is answered: the move
-    // is dropped, and only the move. The command is consumed as a fire
-    // without a move consumes it, and the rest of the fire stands — the
-    // clause will never move anything, so keeping the command for it would
-    // hold the next instance back for a move that cannot come. Whether a
-    // heading of the note is one place is answered against the note's lines
-    // (`FlowExecutor.planTask`), and failing there fails the fire whole.
-    const move = program.move;
-    if (move?.to.kind === 'heading') {
+    // The heading is the parser's answer, read off how the clause is written;
+    // nothing of it is evaluated. Whether it is one place in the note is
+    // answered against the note's lines (`FlowExecutor.planTask`), and
+    // failing there fails the fire whole.
+    if (program.move) {
         // The row is carried, not copied, so it keeps its `^id`: only a
         // write that makes a copy (the next instance, a duplicate) takes
         // the copy's off.
-        effects.push({ kind: 'move', heading: move.to.name, movedTask: { ...task, flow: undefined } });
+        effects.push({ kind: 'move', heading: program.move.heading, movedTask: { ...task, flow: undefined } });
     } else {
         effects.push({ kind: 'strip-flow' });
-        if (move) {
-            effects.push({ kind: 'move-dropped', error: new GenerationError('eval.move-retired',
-                'move() moves the task to a heading\'s section of its note, and this one names no heading of the note') });
-        }
     }
 
     return effects;
@@ -243,12 +232,27 @@ function planGenerated(
 
     const warnings: Diagnostic[] = [];
     return {
-        kind: 'create-generated',
-        parentLine: composeParentLine(rendered.parentText, newTask, warnings),
-        flowLines: (newTask.flow?.childSegments ?? []).map(s => s.raw),
-        children: rendered.children.map(child => checkedChild(child, warnings)),
+        kind: 'create-instance',
+        instance: {
+            head: composeParentLine(rendered.parentText, newTask, warnings),
+            flowLines: flowLinesOf(newTask),
+            children: rendered.children.map(child => checkedChild(child, warnings)),
+        },
         warnings,
     };
+}
+
+/**
+ * The next instance of a recurrence without a block: the task line, spelled
+ * the way every row is (`formatRow`), and its `==>` lines; no children.
+ */
+function instanceOf(newTask: Task): FlowInstance {
+    return { head: formatRow(newTask), flowLines: flowLinesOf(newTask), children: [] };
+}
+
+/** The `==>` lines the next instance carries under its task line. */
+function flowLinesOf(newTask: Task): string[] {
+    return (newTask.flow?.childSegments ?? []).map(s => s.raw);
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +303,7 @@ function withWrittenCells(program: FlowProgram, written: ReadonlyMap<string, Val
  * task when the block wrote no parent line.
  *
  * Both roads end in one string so the write layer never learns that a block
- * can leave the parent out. The clause is spelled the way format() spells
+ * can leave the parent out. The clause is spelled the way formatRow spells
  * it, since these are two ways of writing the same line.
  *
  * Corrections collect into `warnings`. A status the block wrote as done is
@@ -311,7 +315,7 @@ function composeParentLine(
     newTask: Task,
     warnings: Diagnostic[],
 ): string {
-    if (parentText === null) return TaskParser.format(newTask);
+    if (parentText === null) return formatRow(newTask);
 
     const checked = checkGeneratedParentLine(parentText);
     // The line check speaks in diagnostics, and its sentence is the whole of
@@ -349,17 +353,14 @@ function checkedChild(child: { depth: number; body: string }, warnings: Diagnost
 export function resolveAnchor(task: Task): DateAnchor | null {
     if (task.startDate) return { date: task.startDate, time: task.startTime };
     if (task.endDate) return { date: task.endDate, time: task.endTime };
-    if (task.due) {
-        const [date, time] = task.due.split('T');
-        return { date, time };
-    }
+    if (task.due) return DateUtils.splitDateTime(task.due);
     return null;
 }
 
 /**
  * Build the next instance: shift the whole date block by the anchor delta
- * and reset per-instance identity (same override set as the legacy
- * generation path, so blockId/timer state never leaks into copies).
+ * and reset per-instance identity, so the blockId and the timer icons never
+ * leak into copies.
  */
 function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurrence): Task {
     const newTask: Task = {
@@ -382,21 +383,19 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
         return newTask;
     }
 
-    const shiftDays = differenceInCalendarDays(parseDateStr(next.date), parseDateStr(anchor.date));
+    const shiftDays = DateUtils.getDiffDays(anchor.date, next.date);
 
-    newTask.startDate = task.startDate ? DateUtils.shiftDateString(task.startDate, shiftDays) : undefined;
-    newTask.endDate = task.endDate
-        ? DateUtils.shiftDateString(task.endDate, shiftDays)
-        : (task.endTime && task.startDate)
-            ? DateUtils.shiftDateString(task.startDate, shiftDays)
-            : undefined;
-    newTask.due = task.due ? DateUtils.shiftDateString(task.due, shiftDays) : undefined;
+    const shifted = shiftTaskDates(task, shiftDays, ['start', 'end', 'due']);
+    newTask.startDate = shifted.startDate || undefined;
+    // An end written as a time alone is written out with the start's day.
+    newTask.endDate = shifted.endDate || (task.endTime && shifted.startDate) || undefined;
+    newTask.due = shifted.due || undefined;
 
     // Minute/hour grids move the anchor field's time as well.
     if (next.time !== undefined) {
         if (task.startDate) newTask.startTime = next.time;
         else if (task.endDate) newTask.endTime = next.time;
-        else if (task.due) newTask.due = `${next.date}T${next.time}`;
+        else if (task.due) newTask.due = DateUtils.joinDateTime(next.date, next.time);
     }
 
     return newTask;
@@ -474,18 +473,18 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
                 if (value.type === 'none') {
                     newTask.due = undefined;
                 } else if (value.type === 'datetime') {
-                    newTask.due = `${value.date}T${value.time}`;
+                    newTask.due = DateUtils.joinDateTime(value.date, value.time);
                 } else if (value.type === 'date') {
                     newTask.due = value.value;
                 }
                 break;
             case 'dueTime':
                 if (newTask.due) {
-                    const dueDate = newTask.due.split('T')[0];
+                    const dueDate = DateUtils.splitDateTime(newTask.due).date;
                     if (value.type === 'none') {
                         newTask.due = dueDate;
                     } else if (value.type === 'time') {
-                        newTask.due = `${dueDate}T${value.value}`;
+                        newTask.due = DateUtils.joinDateTime(dueDate, value.value);
                     }
                 }
                 break;
@@ -526,7 +525,7 @@ function nextFlow(program: FlowProgram, originalFlow: TaskFlow): TaskFlow | unde
     const lines = serializeFlowLines(nextProgram, table);
     return {
         raw: lines.taskLine,
-        childSegments: lines.childLines.map(raw => ({ raw, bodyLine: -1 })),
+        childSegments: lines.childLines.map(raw => ({ raw })),
         program: nextProgram,
         diagnostics: [],
     };
@@ -541,8 +540,9 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
         content: { type: 'string', value: task.content },
         'file.name': { type: 'string', value: fileName(task.file) },
         // Completion moment, two granularities: `done` carries the clock
-        // (at(done + 2h)), `today` is the plain calendar date (at(today + 3d))
-        // so day-granular offsets don't smear the completion time onto tasks.
+        // (at(done + 2h)), `today` is the visual day it falls in, which
+        // startHour starts (at(today + 3d)), so day-granular offsets don't
+        // smear the completion time onto tasks.
         done: { type: 'datetime', date: deps.now.date, time: deps.now.time },
         today: { type: 'date', value: deps.today },
         // The whole date block, built where the line formatter builds it. A
@@ -551,10 +551,14 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
         // this is the one string that carries all of them.
         dates: { type: 'string', value: formatDateBlock(task) },
     };
+    // The row's own dates, not the effective ones the filter and the sort
+    // compare (`TaskValues`): what the program computes is written on the
+    // next instance's line, and a due inherited from the section put there
+    // by `at(due+7d)` would write the inheritance out onto the line.
     if (task.startDate) props.start = datish(task.startDate, task.startTime);
     if (task.endDate) props.end = datish(task.endDate, task.endTime);
     if (task.due) {
-        const [date, time] = task.due.split('T');
+        const { date, time } = DateUtils.splitDateTime(task.due);
         props.due = datish(date, time);
     }
     return { props, today: deps.today, now: deps.now, weekStartDay: deps.weekStartDay, host: deps.host };

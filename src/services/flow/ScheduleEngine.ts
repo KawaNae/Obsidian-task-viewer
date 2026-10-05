@@ -1,8 +1,9 @@
 import { addMonths } from 'date-fns';
+import { DateUtils } from '../../utils/DateUtils';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import { MAX_GRID_STEPS, nextCycle, nextWeekdayAfter } from '../lang/functions';
-import { addDuration, dateAt, formatDateStr, isDatishValue, isWritableDatish, parseDateStr } from '../lang/Value';
-import type { EveryRule, ScheduleNode } from './FlowAst';
+import { addDuration, isDatishValue, isWritableDatish } from '../lang/Value';
+import type { EveryRule, ScheduleNode } from '../lang/flow/FlowAst';
 
 /** The task's primary date (start > end > due priority), if any. */
 export interface DateAnchor {
@@ -16,7 +17,7 @@ export interface NextOccurrence {
 }
 
 export interface ScheduleRuntime {
-    /** Local calendar date of "now". */
+    /** The visual day of "now", which startHour starts. */
     today: string;
     /** Local date+time of "now" (minute/hour grids). */
     now: { date: string; time: string };
@@ -105,13 +106,13 @@ function nextGridOccurrence(rule: EveryRule, anchor: DateAnchor | null, rt: Sche
         }
 
         case 'monthday': {
-            const baseDate = parseDateStr(anchor?.date ?? rt.today);
-            const baseMonthStart = dateAt(baseDate.getFullYear(), baseDate.getMonth(), 1);
+            const baseDate = DateUtils.parseDate(anchor?.date ?? rt.today);
+            const baseMonthStart = DateUtils.dateAt(baseDate.getFullYear(), baseDate.getMonth(), 1);
             for (let k = 0; k <= MAX_GRID_STEPS; k++) {
                 const month = addMonths(baseMonthStart, k * rule.intervalMonths);
-                const lastDay = dateAt(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+                const lastDay = DateUtils.dateAt(month.getFullYear(), month.getMonth() + 1, 0).getDate();
                 const day = rule.day === 'last' ? lastDay : Math.min(rule.day, lastDay);
-                const s = formatDateStr(dateAt(month.getFullYear(), month.getMonth(), day));
+                const s = DateUtils.getLocalDateString(DateUtils.dateAt(month.getFullYear(), month.getMonth(), day));
                 if (s > lowerBound) return { date: s };
             }
             throw new EvalError('eval.recurrence-overflow', 'Recurrence grid overflow', { start: 0, end: 0 });

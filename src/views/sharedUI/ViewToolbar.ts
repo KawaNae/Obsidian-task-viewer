@@ -1,11 +1,15 @@
 import { setIcon, Notice } from 'obsidian';
 import type { App, Menu, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
+import { ViewUriBuilder, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
+import type { LeafPosition } from '../../services/viewConfig/LeafOpener';
 import { shortNameFor } from '../../services/viewConfig';
-import { InputModal } from '../../modals/InputModal';
+import { askText } from '../../modals/ask/askText';
+import { TextInput } from '../../utils/values/TextValues';
 import type { Task, ViewTemplate } from '../../types';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
+import { createEmptyFilterState, type FilterState } from '../../services/filter/FilterTypes';
+import type { StateSource } from '../base/ViewStore';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
@@ -14,7 +18,9 @@ import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
 import { createNativePicker } from './NativePicker';
-import type { WriteChannel } from '../../services/persistence/FileLines';
+import type { TemplateNoteSaver } from '../../services/template/TemplateNote';
+import { refusalText } from '../../services/operations/WriteAnswer';
+import { ToolbarFold } from './ToolbarFold';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -28,11 +34,18 @@ import type { WriteChannel } from '../../services/persistence/FileLines';
  * DOM depends on state that changes between renders (e.g. month labels in
  * mini-calendar, timer-mode controls). Such toolbars rebuild their content on
  * every mount; static toolbars rebuild only on first mount.
+ *
+ * A toolbar that puts its actions in an action zone ({@link createActionZone})
+ * folds the zone into its ⋮ button when its row does not fit
+ * ({@link ToolbarFold}); the view calls `close()` when it closes, which stops
+ * the watching.
  */
 export abstract class ViewToolbarBase {
     protected host: HTMLElement | null = null;
     protected rootEl: HTMLElement | null = null;
     private readonly dynamicContent: boolean;
+    /** Folds the action zone into ⋮; there when the toolbar has an action zone. */
+    private fold: ToolbarFold | null = null;
 
     constructor(options: { dynamicContent?: boolean } = {}) {
         this.dynamicContent = options.dynamicContent ?? false;
@@ -55,12 +68,14 @@ export abstract class ViewToolbarBase {
                 this.buildDom(this.rootEl);
             }
             this.update();
+            this.fold?.attach(this.rootEl);
             return;
         }
         this.host = host;
         this.rootEl = host.createDiv('view-toolbar');
         this.buildDom(this.rootEl);
         this.update();
+        this.fold?.attach(this.rootEl);
     }
 
     detach(): void {
@@ -70,10 +85,28 @@ export abstract class ViewToolbarBase {
         this.host = null;
     }
 
+    /**
+     * The view closes: stop watching the toolbar's width. Subclasses that
+     * close more (their popovers) call this too.
+     */
+    close(): void {
+        this.fold?.detach();
+    }
+
     /** Refresh dynamic UI without rebuilding DOM. Override in subclasses. */
     update(): void {}
 
     protected abstract buildDom(rootEl: HTMLElement): void;
+
+    /**
+     * The zone of the actions that fold into the ⋮ button
+     * (`view-toolbar__btn--more`, which the toolbar puts in its row) when the
+     * row does not fit. Making it is what makes the toolbar fold.
+     */
+    protected createActionZone(toolbar: HTMLElement): HTMLElement {
+        this.fold ??= new ToolbarFold();
+        return toolbar.createDiv('view-toolbar__action-zone');
+    }
 }
 
 /** What a view hands {@link DateNavigator} so the user can jump to any date. */
@@ -430,21 +463,41 @@ export class MaskToggleButton {
     }
 }
 
+/** The part of a view's state the filter and mask controls read and write. */
+export interface FilterAndMask {
+    filterState?: FilterState;
+    maskMode?: boolean;
+}
+
+/**
+ * Open the view's filter editor, at a click or under an element, on the
+ * filter the view holds; each edit is written back to the view's state.
+ */
+export function editViewFilter(
+    filterMenu: FilterMenuComponent,
+    at: { event: MouseEvent } | { element: HTMLElement },
+    store: StateSource<FilterAndMask>,
+    getTasks: () => Task[],
+): void {
+    const options = {
+        value: store.get().filterState ?? createEmptyFilterState(),
+        onChange: (next: FilterState) => store.update({ filterState: next }),
+        getTasks,
+    };
+    if ('event' in at) filterMenu.showMenu(at.event, options);
+    else filterMenu.showMenuAtElement(at.element, options);
+}
+
 /**
  * The two entries every compact ("⋮") toolbar menu carries: open the filter
  * popover, and toggle mask mode. Timeline, Calendar and Schedule each used to
- * spell these out; the wording, icons and the "refresh the toolbar afterwards"
- * step now live here.
+ * spell these out; the wording and icons live here. Both write the view's
+ * state, and the toolbar, subscribed to it, shows the change.
  */
 export interface CompactMenuDeps {
     filterMenu: FilterMenuComponent;
+    store: StateSource<FilterAndMask>;
     getTasks: () => Task[];
-    getStartHour: () => number;
-    onFilterChange: () => void;
-    getMaskMode: () => boolean;
-    setMaskMode: (next: boolean) => void;
-    /** Called after either item acts — the toolbars pass their `update()`. */
-    onAfter: () => void;
 }
 
 /** Append the filter + mask entries to a compact toolbar menu. */
@@ -456,27 +509,15 @@ export function appendCompactFilterAndMask(
     menu.addItem((item: MenuItem) => {
         item.setTitle(t('toolbar.filter'))
             .setIcon('filter')
-            .onClick(() => {
-                deps.filterMenu.showMenuAtElement(anchorEl, {
-                    onFilterChange: () => {
-                        deps.onFilterChange();
-                        deps.onAfter();
-                    },
-                    getTasks: () => deps.getTasks(),
-                    getStartHour: () => deps.getStartHour(),
-                });
-            });
+            .onClick(() => editViewFilter(deps.filterMenu, { element: anchorEl }, deps.store, deps.getTasks));
     });
 
-    const maskOn = deps.getMaskMode();
+    const maskOn = deps.store.get().maskMode ?? false;
     menu.addItem((item: MenuItem) => {
         item.setTitle(t('toolbar.maskMode'))
             .setIcon(maskOn ? 'eye-off' : 'eye')
             .setChecked(maskOn)
-            .onClick(() => {
-                deps.setMaskMode(!maskOn);
-                deps.onAfter();
-            });
+            .onClick(() => deps.store.update({ maskMode: !maskOn }));
     });
 }
 
@@ -502,13 +543,11 @@ export interface ViewSettingsOptions {
     onRename: (newName: string | undefined) => void;
     buildUri: () => ViewUriOptions;
     viewType: string;
-    getViewTemplateFolder: () => string;
-    /** Where saving a view template over an existing note reports that it did. */
-    writeChannel: (path: string) => WriteChannel | undefined;
-    getViewTemplate: () => ViewTemplate;
-    onApplyTemplate: (template: ViewTemplate) => void;
+    /** Saving and loading view templates; a view without them has no such items. */
+    templates?: ViewTemplateOptions;
     onReset: () => void;
     menuPresenter: MenuPresenter;
+    /** The folder an export from the menu is saved in (`exportFolderOf`); a view without it has no export item. */
     getExportFolder?: () => string;
     /** View-specific menu items appended above the Save/Load/Reset block.
      *  Used by views to surface their own overlay/display toggles
@@ -516,9 +555,20 @@ export interface ViewSettingsOptions {
     appendCustomItems?: (menu: Menu) => void;
 }
 
+/** What the settings menu needs to save and load the view's templates. */
+export interface ViewTemplateOptions {
+    getFolder: () => string;
+    /** What saves a view template as a note (`Operations.saveTemplateNote`). */
+    notes: TemplateNoteSaver;
+    getViewTemplate: () => ViewTemplate;
+    onApply: (template: ViewTemplate) => void;
+}
+
 /**
  * View settings gear button and menu.
- * Provides: Rename, Save/Load view, Copy URI, Position display.
+ * Provides: the view's own items, Save/Load view (a view that keeps
+ * templates), Reset, Copy URI, Copy as link, Export (a view that exports an
+ * image) and the Position display.
  */
 export class ViewSettingsMenu {
     static renderButton(toolbar: HTMLElement, options: ViewSettingsOptions): HTMLElement {
@@ -537,80 +587,20 @@ export class ViewSettingsMenu {
 
     static appendItems(menu: Menu, options: ViewSettingsOptions): void {
         const {
-            app, leaf, getCustomName, getDefaultName, onRename,
-            buildUri, viewType, getViewTemplateFolder, getViewTemplate, onApplyTemplate, onReset,
+            app, leaf, getCustomName, getDefaultName,
+            buildUri, viewType, templates, onReset,
             appendCustomItems,
         } = options;
 
-        const folder = getViewTemplateFolder();
+        /** The template folder, when the view keeps templates; a Copy URI names its template then. */
+        const folder = templates?.getFolder() ?? '';
 
         if (appendCustomItems) {
             appendCustomItems(menu);
             menu.addSeparator();
         }
 
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.saveView'))
-                .setIcon('save')
-                .onClick(() => {
-                    if (!folder) {
-                        new Notice(t('notice.setViewTemplateFolder'));
-                        return;
-                    }
-                    const defaultName = getCustomName() || getDefaultName();
-                    new InputModal(
-                        app,
-                        t('toolbar.saveViewTitle'),
-                        t('toolbar.saveViewLabel'),
-                        defaultName,
-                        async (value) => {
-                            const name = value.trim();
-                            if (!name) return;
-                            const template = getViewTemplate();
-                            template.name = name;
-                            const writer = new ViewTemplateWriter(app, options.writeChannel);
-                            const saved = await writer.saveTemplate(folder, template);
-                            // 書けなかったときは、書き込みの層が理由を通知済み。
-                            if (!saved) return;
-                            onRename(name);
-                            new Notice(t('notice.viewSaved', { name }));
-                        },
-                    ).open();
-                });
-        });
-
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.loadView'))
-                .setIcon('folder-open');
-
-            const shortViewType = ViewSettingsMenu.toShortViewType(viewType);
-
-            if (!folder) {
-                item.setSubmenu().addItem((sub: MenuItem) =>
-                    sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
-            } else {
-                const loader = new ViewTemplateLoader(app);
-                const summaries = loader.loadTemplates(folder)
-                    .filter(s => s.viewType === shortViewType);
-
-                const submenu = item.setSubmenu();
-                if (summaries.length === 0) {
-                    submenu.addItem((sub: MenuItem) =>
-                        sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
-                } else {
-                    for (const summary of summaries) {
-                        submenu.addItem((sub: MenuItem) => {
-                            sub.setTitle(summary.name)
-                                .onClick(async () => {
-                                    const full = await loader.loadFullTemplate(summary.filePath);
-                                    if (full) onApplyTemplate(full);
-                                    else new Notice(t('notice.failedToLoadTemplate'));
-                                });
-                        });
-                    }
-                }
-            }
-        });
+        if (templates) ViewSettingsMenu.appendTemplateItems(menu, options, templates, folder);
 
         menu.addItem((item) => {
             item.setTitle(t('toolbar.resetView'))
@@ -659,7 +649,8 @@ export class ViewSettingsMenu {
         });
 
         const descriptor = exportDescriptorFor(viewType);
-        if (descriptor) {
+        const getExportFolder = options.getExportFolder;
+        if (descriptor && getExportFolder) {
             menu.addSeparator();
 
             menu.addItem((item) => {
@@ -678,7 +669,7 @@ export class ViewSettingsMenu {
                         }
                         const label = getCustomName() || ViewSettingsMenu.toShortViewType(viewType);
                         const filename = buildExportFilename(label);
-                        const folder = options.getExportFolder?.()?.trim() || 'task-viewer-export';
+                        const folder = getExportFolder();
                         await ViewExporter.exportAsPng({
                             app: options.app,
                             container,
@@ -700,6 +691,78 @@ export class ViewSettingsMenu {
             item.setTitle(`  ${getPositionLabel(pos)}`)
                 .setChecked(true)
                 .setDisabled(true);
+        });
+    }
+
+    /** Save view... and Load view..., for a view that keeps templates. */
+    private static appendTemplateItems(
+        menu: Menu,
+        options: ViewSettingsOptions,
+        templates: ViewTemplateOptions,
+        folder: string,
+    ): void {
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.saveView'))
+                .setIcon('save')
+                .onClick(() => {
+                    if (!folder) {
+                        new Notice(t('notice.setViewTemplateFolder'));
+                        return;
+                    }
+                    const defaultName = options.getCustomName() || options.getDefaultName();
+                    void askText(options.app, {
+                        title: t('toolbar.saveViewTitle'),
+                        label: t('toolbar.saveViewLabel'),
+                        initial: defaultName,
+                        // A name, as typed: not normalized, only the space around it taken off.
+                        codec: TextInput,
+                        submitLabel: t('modal.save'),
+                        submit: async (name) => {
+                            const template = templates.getViewTemplate();
+                            template.name = name;
+                            const writer = new ViewTemplateWriter(templates.notes);
+                            // Not written, why is said in the dialog alone, which stays with the name typed.
+                            const saved = await writer.saveTemplate(folder, template, { tellRefusal: false });
+                            if (!saved.written) return { at: 'form', tone: 'error', text: refusalText(saved.refused) };
+                            options.onRename(name);
+                            new Notice(t('notice.viewSaved', { name }));
+                            return null;
+                        },
+                    });
+                });
+        });
+
+        menu.addItem((item) => {
+            item.setTitle(t('toolbar.loadView'))
+                .setIcon('folder-open');
+
+            const shortViewType = ViewSettingsMenu.toShortViewType(options.viewType);
+
+            if (!folder) {
+                item.setSubmenu().addItem((sub: MenuItem) =>
+                    sub.setTitle(t('toolbar.noFolderConfigured')).setDisabled(true));
+            } else {
+                const loader = new ViewTemplateLoader(options.app);
+                const summaries = loader.loadTemplates(folder)
+                    .filter(s => s.viewType === shortViewType);
+
+                const submenu = item.setSubmenu();
+                if (summaries.length === 0) {
+                    submenu.addItem((sub: MenuItem) =>
+                        sub.setTitle(t('toolbar.noTemplatesFound')).setDisabled(true));
+                } else {
+                    for (const summary of summaries) {
+                        submenu.addItem((sub: MenuItem) => {
+                            sub.setTitle(summary.name)
+                                .onClick(async () => {
+                                    const full = await loader.loadFullTemplate(summary.filePath);
+                                    if (full) templates.onApply(full);
+                                    else new Notice(t('notice.failedToLoadTemplate'));
+                                });
+                        });
+                    }
+                }
+            }
         });
     }
 

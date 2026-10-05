@@ -16,8 +16,10 @@
 
 import { type App, TFile, TFolder } from 'obsidian';
 import type { ViewTemplateSummary, ViewTemplate } from '../../types';
+import { ALL_VIEWS } from '../../views/ViewDescriptors';
 
-const VALID_VIEWS = new Set(['timeline', 'calendar', 'schedule', 'mini-calendar', 'kanban']);
+/** The short names a template's `_tv-view` may hold: the views that keep templates. */
+const VALID_VIEWS: ReadonlySet<string> = new Set(ALL_VIEWS.filter(d => d.hasTemplates).map(d => d.shortName));
 
 export class ViewTemplateLoader {
     constructor(private app: App) {}

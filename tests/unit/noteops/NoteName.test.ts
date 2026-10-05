@@ -54,6 +54,10 @@ describe('NoteName.linksIn: the notes a row links to', () => {
     it('not a link into its own note', () => {
         expect(NoteName.linksIn('見る [[#Done]] [[#^id]] [t](#h)')).toEqual([]);
     });
+
+    it('no link whose text holds a bracket, which no note name can', () => {
+        expect(NoteName.linksIn('[[A]] [[a[b]]')).toEqual(['A']);
+    });
 });
 
 describe('NoteName.check: whether a name can be a note\'s', () => {

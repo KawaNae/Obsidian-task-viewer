@@ -1,19 +1,28 @@
+import { instantText } from '../utils/DayWindow';
+import { TaskValues } from '../services/filter/TaskValues';
 import type { DisplayTask, PropertyValue } from '../types';
 import type { NormalizedTask } from './TaskApiTypes';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
 } from '../services/data/EffectiveProperties';
-import { serializeFlow } from '../services/flow/FlowSerializer';
-import { flowRaws } from '../services/flow/FlowSegments';
-import { ChildLineClassifier } from '../services/parsing/utils/ChildLineClassifier';
+import { serializeFlow } from '../services/lang/flow/FlowSerializer';
+import { flowRaws } from '../services/lang/flow/FlowSegments';
 import { apiIdOf, type TaskLookup } from './TaskIds';
 
 // ── Field extractors ──
 
+/** What an extractor may read besides the task. */
+interface RecordEnv {
+    lookup: TaskLookup;
+}
+
 // Every ID goes out through `apiIdOf`: the row's own, its parent's and its
 // children's alike, so no ID of one shape reaches a caller in another.
-const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, lookup: TaskLookup) => unknown> = {
-    id:          (t, lookup) => apiIdOf(t.id, lookup),
+// Keyed by NormalizedTask's own fields, so a field added to the type without
+// an extractor (or the other way) is a compile error, and ALL_FIELD_NAMES —
+// the CLI's output-fields and the references read it — lists them all.
+const FIELD_EXTRACTORS: { [K in keyof NormalizedTask]: (task: DisplayTask, env: RecordEnv) => unknown } = {
+    id:          (t, { lookup }) => apiIdOf(t.id, lookup),
     file:        t => t.file,
     line:        t => t.line,
     content:     t => t.content,
@@ -25,15 +34,17 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, lookup: TaskLookup) =
     due:         t => t.due ?? null,
     tags:        t => getEffectiveTags(t),
     parserId:    t => t.parserId,
-    parentId:    (t, lookup) => (t.parentId === undefined ? null : apiIdOf(t.parentId, lookup)),
-    childIds:    (t, lookup) => t.childIds.map(id => apiIdOf(id, lookup)),
+    parentId:    (t, { lookup }) => (t.parentId === undefined ? null : apiIdOf(t.parentId, lookup)),
+    childIds:    (t, { lookup }) => t.childIds.map(id => apiIdOf(id, lookup)),
     color:       t => getEffectiveColor(t) ?? null,
     linestyle:   t => getEffectiveLinestyle(t) ?? null,
-    effectiveStartDate: t => t.effectiveStartDate || null,
-    effectiveStartTime: t => t.effectiveStartTime ?? null,
-    effectiveEndDate:   t => t.effectiveEndDate ?? null,
-    effectiveEndTime:   t => t.effectiveEndTime ?? null,
-    effectiveDue:       t => t.effectiveDue ?? null,
+    // The span's moments on the calendar and the clock (`@2026-10-04` ends
+    // `2026-10-05` `05:00`); the due as stated, inherited ones included.
+    effectiveStartDate: t => (t.span ? instantText(t.span.startMs).date : null),
+    effectiveStartTime: t => (t.span ? instantText(t.span.startMs).time : null),
+    effectiveEndDate:   t => (t.span ? instantText(t.span.endMs).date : null),
+    effectiveEndTime:   t => (t.span ? instantText(t.span.endMs).time : null),
+    effectiveDue:       t => t.stated.due ?? null,
     durationMinutes:    t => computeDurationMinutes(t),
     properties:         t => {
         const result: Record<string, unknown> = {};
@@ -45,7 +56,7 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, lookup: TaskLookup) =
     flow:               t => extractFlowString(t),
 };
 
-export const ALL_FIELD_NAMES: string[] = Object.keys(FIELD_EXTRACTORS);
+export const ALL_FIELD_NAMES: readonly string[] = Object.keys(FIELD_EXTRACTORS);
 
 // ── Flow extraction ──
 
@@ -60,42 +71,40 @@ function extractFlowString(task: DisplayTask): string | null {
 
 function toNativeValue(pv: PropertyValue): unknown {
     switch (pv.type) {
-        case 'number': return Number(pv.value);
-        // A property line spells it True/False, frontmatter reads it back as true/false.
-        case 'boolean': return pv.value.toLowerCase() === 'true';
-        case 'array': return ChildLineClassifier.arrayItems(pv.value);
-        default: return pv.value;
+        case 'number': return pv.number;
+        case 'boolean': return pv.boolean;
+        case 'array': return pv.items;
+        case 'string': return pv.value;
     }
 }
 
 // ── Duration computation ──
 
+/** How long the span lasts (`@2026-10-04` is 1440); null with no span, or one that ends before it starts. */
 function computeDurationMinutes(task: DisplayTask): number | null {
-    const startTime = task.effectiveStartTime;
-    const endTime = task.effectiveEndTime;
-    if (!startTime || !endTime) return null;
-
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-    let minutes = (eh * 60 + em) - (sh * 60 + sm);
-    if (minutes < 0) minutes += 24 * 60; // midnight crossing
-    return minutes;
+    const length = TaskValues.length(task).value;
+    return length === undefined ? null : Math.round(length / 60_000);
 }
 
 // ── Record extraction (for CLI field selection) ──
 
-export function taskToRecord(task: DisplayTask, fields: string[], lookup: TaskLookup): Record<string, unknown> {
+export function taskToRecord(task: DisplayTask, fields: readonly string[], lookup: TaskLookup): Record<string, unknown> {
     const record: Record<string, unknown> = {};
+    const env: RecordEnv = { lookup };
     for (const field of fields) {
-        const extractor = FIELD_EXTRACTORS[field];
-        record[field] = extractor ? extractor(task, lookup) : null;
+        const extractor = (FIELD_EXTRACTORS as Record<string, ((task: DisplayTask, env: RecordEnv) => unknown) | undefined>)[field];
+        record[field] = extractor ? extractor(task, env) : null;
     }
     return record;
 }
 
 // ── Full normalization (for API) ──
 
-/** `lookup` finds a row by its name, to give its ID (`apiIdOf`). */
+/**
+ * `lookup` finds a row by its name, to give its ID (`apiIdOf`). The times
+ * are the copy's own: a copy drawn with another start hour (a call's
+ * `startHour`) gives that start hour's span.
+ */
 export function normalizeTask(task: DisplayTask, lookup: TaskLookup): NormalizedTask {
     return taskToRecord(task, ALL_FIELD_NAMES, lookup) as unknown as NormalizedTask;
 }

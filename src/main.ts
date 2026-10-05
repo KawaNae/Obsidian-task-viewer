@@ -1,33 +1,27 @@
-import { apiVersion, Notice, Platform, Plugin, TFile } from 'obsidian';
-import './views/registerAllSchemas';
-import { TaskIndex } from './services/core/TaskIndex';
-import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
-import { ScheduleView, VIEW_TYPE_SCHEDULE } from './views/scheduleview';
-import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALENDAR } from './views/calendar';
-import { KanbanView, VIEW_TYPE_KANBAN } from './views/kanban';
-import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
+import { apiVersion, Notice, Platform, Plugin, TFile, type View, type WorkspaceLeaf } from 'obsidian';
+import { TaskIndex, type IndexReads } from './services/core/TaskIndex';
+import { TimelineView } from './views/timelineview';
+import { ScheduleView } from './views/scheduleview';
+import { CalendarView, MiniCalendarView } from './views/calendar';
+import { KanbanView } from './views/kanban';
+import { TimerView } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
-import {
-    type TaskViewerSettings,
-    DEFAULT_SETTINGS,
-    DEFAULT_SCOPE_KEYS,
-    normalizeScopeKeys,
-    validateScopeKeys,
-} from './types';
+import type { TaskViewerSettings } from './types';
 import type { Task } from './types';
 import { TaskViewerSettingTab } from './settings';
-import { ColorSuggest } from './suggest/color/ColorSuggest';
-import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
+import { readSettings } from './settings/SettingsSchema';
+import { issueText } from './utils/values/IssueText';
+import { FrontmatterValueSuggest } from './suggest/FrontmatterValueSuggest';
+import { COLOR_VALUES, LINE_STYLE_VALUES } from './suggest/ScopeValues';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
 import { untrackAllKeyboards } from './utils/KeyboardState';
 import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
-import { getViewMeta, isViewType } from './constants/viewRegistry';
+import { ALL_VIEWS, isViewType, viewTypesWhere, type ViewType } from './views/ViewDescriptors';
 import { openLeafFromState } from './services/viewConfig/LeafOpener';
 import { openViewFromUri } from './services/viewConfig/UriViewOpener';
-import { migrateSettings } from './services/settings/migration';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -36,38 +30,53 @@ import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsM
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { MenuPresenter } from './interaction/menu/MenuPresenter';
-import { MenuHandler } from './interaction/menu/MenuHandler';
-import { TaskCardRenderer } from './views/taskcard/TaskCardRenderer';
-import { TaskViewHoverParent } from './views/taskcard/TaskViewHoverParent';
+import { createTaskHubOpener, type TaskHubOpenerHandle } from './views/sharedUI/CardRendering';
 import { closeAllOverlays } from './views/sharedUI/OverlayRegistry';
 import { OverdueWatcher } from './services/display/OverdueWatcher';
-import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
+import type { TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
-import { flowFireExtension } from './editor/FlowFireExtension';
+import { fireFilter } from './editor/FlowFireExtension';
 import { createGenBlockPreview } from './editor/GenBlockPreview';
 import { GEN_LANGUAGE_TAG } from './services/parsing/gen/GenBlockCollector';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
 import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
-import { TaskWriteService } from './services/data/TaskWriteService';
+import { Operations } from './services/operations/Operations';
 import { NoteOps } from './services/data/NoteOps';
+import { CreatePlaces } from './services/data/CreatePlaces';
 import { initI18n, t } from './i18n';
-import { TaskParser, enabledLineParserIds } from './services/parsing/TaskParser';
-import { initLog, logInfo } from './log/log';
+import { enabledLineParserIds } from './services/parsing/TaskParser';
+import { initLog, logInfo, logWarn } from './log/log';
 import { LogStorage } from './log/log-storage';
 import { LogManager } from './log/log-manager';
 import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
-import type { DeviceInfo } from './log/markdown-formatter';
-import { refreshView } from './utils/ObsidianView';
-import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
+import { collectDeviceInfo, deriveOsLabel } from './log/host-diagnostics';
+import { ViewEvents } from './views/sharedLogic/ViewEvents';
+import { startMinuteClock } from './views/sharedLogic/MinuteClock';
+import { applyBodyStyles, clearBodyStyles } from './settings/BodyStyles';
+
+/**
+ * The constructor of each view. The table (`VIEW_DESCRIPTORS`) cannot hold
+ * them without importing the view classes, which import the table; keyed by
+ * `ViewType`, a view left out here is a compile error.
+ */
+const VIEW_CONSTRUCTORS: Record<ViewType, (leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) => View> = {
+    'timeline-view': (leaf, plugin) => new TimelineView(leaf, plugin),
+    'schedule-view': (leaf, plugin) => new ScheduleView(leaf, plugin),
+    'timer-view': (leaf, plugin) => new TimerView(leaf, plugin),
+    'calendar-view': (leaf, plugin) => new CalendarView(leaf, plugin),
+    'mini-calendar-view': (leaf, plugin) => new MiniCalendarView(leaf, plugin),
+    'kanban-view': (leaf, plugin) => new KanbanView(leaf, plugin),
+};
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private readService: TaskReadService;
-    private writeService: TaskWriteService;
+    private operations: Operations;
     private noteOps: NoteOps;
+    private createPlaces: CreatePlaces;
     private timerWidget: TimerWidget;
     private logStorage: LogStorage;
     private logManager: LogManager;
@@ -76,14 +85,15 @@ export default class TaskViewerPlugin extends Plugin {
     public exportService: ExportService;
     public menuPresenter: MenuPresenter;
 
-    // Day boundary check
-    private lastVisualDate: string = '';
-    private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
+    // Settings-changed, day-rolled and minute events to the open views that hear them
+    private viewEvents = new ViewEvents(
+        () => viewTypesWhere(d => d.hearsEvents)
+            .flatMap(viewType => this.app.workspace.getLeavesOfType(viewType).map(leaf => leaf.view)),
+        () => DateUtils.getVisualDateOfNow(this.settings.startHour),
+    );
 
-    // Overdue watch (clock-driven, see startOverdueWatch)
+    // Overdue judgement, swept every minute (see sweepOverdue)
     private overdueWatcher = new OverdueWatcher();
-    private overdueAlignTimeout: ReturnType<typeof setTimeout> | null = null;
-    private overdueInterval: ReturnType<typeof setInterval> | null = null;
 
     // Properties View color/linestyle suggest observer
     private propertySuggestObserver: PropertySuggestObserver | null = null;
@@ -92,11 +102,8 @@ export default class TaskViewerPlugin extends Plugin {
     private taskMenuCleanup: (() => void) | null = null;
     private taskMenuNotifySettingsChanged: (() => void) | null = null;
 
-    // ビュー外コンテキスト（editor ··· menu / file-menu）からタスクハブ
-    // モーダルを開くための共有インスタンス（lazy 生成）
-    private hubHoverParent = new TaskViewHoverParent();
-    private hubTaskRenderer: TaskCardRenderer | null = null;
-    private hubMenuHandler: MenuHandler | null = null;
+    // The task hub opened outside the views (the editor's ··· menu)
+    private taskHub: TaskHubOpenerHandle;
 
     async onload() {
 
@@ -110,7 +117,6 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Load Settings
         await this.loadSettings();
-        TaskParser.rebuildChain(this.settings);
 
         // Initialize logging subsystem
         initLog(
@@ -132,7 +138,7 @@ export default class TaskViewerPlugin extends Plugin {
             getPluginVersion: () => this.manifest.version,
             getObsidianVersion: () => apiVersion,
             getPlatform: () => ({
-                os: this.deriveOsLabel(),
+                os: deriveOsLabel(),
                 isMobile: Platform.isMobile,
             }),
             getTaskDiagnostics: () => ({
@@ -141,7 +147,7 @@ export default class TaskViewerPlugin extends Plugin {
                 enabledParsers: this.getEnabledParsers(),
                 startHour: this.settings.startHour,
             }),
-            getDeviceInfo: () => this.collectDeviceInfo(),
+            getDeviceInfo: collectDeviceInfo,
             vault: {
                 exists: (p) => this.app.vault.adapter.exists(p),
                 createBinary: async (p, d) => { await this.app.vault.createBinary(p, d); },
@@ -149,14 +155,14 @@ export default class TaskViewerPlugin extends Plugin {
             doc: typeof document !== 'undefined' ? document : undefined,
             win: typeof window !== 'undefined' ? window : undefined,
         });
-        this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
-        this.readService.updateWeekStartDay(this.settings.weekStartDay);
-        this.writeService = new TaskWriteService(this.taskIndex);
+        this.readService = new TaskReadService(this.taskIndex, () => this.settings);
+        this.operations = new Operations(this.app, this.taskIndex);
         // The timer widget is made below; a send asks for it as it is made.
-        this.noteOps = new NoteOps(this.app, this.writeService, () => this.settings, {
-            getTask: (id) => this.readService.getTask(id),
+        this.noteOps = new NoteOps(this.app, this.operations, () => this.settings, {
+            getTask: (id) => this.taskIndex.getTask(id),
             timers: () => this.timerWidget ?? null,
         });
+        this.createPlaces = new CreatePlaces(this.app, this.operations, () => this.settings, (id) => this.taskIndex.getTask(id));
 
         // Single source of truth for menu lifecycle (dedup across all views/touch paths).
         this.menuPresenter = new MenuPresenter();
@@ -191,121 +197,25 @@ export default class TaskViewerPlugin extends Plugin {
             defaultMod: false,
         });
 
-        this.registerView(
-            VIEW_TYPE_TIMELINE,
-            (leaf) => new TimelineView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_SCHEDULE,
-            (leaf) => new ScheduleView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_TIMER,
-            (leaf) => new TimerView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_CALENDAR,
-            (leaf) => new CalendarView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_MINI_CALENDAR,
-            (leaf) => new MiniCalendarView(leaf, this)
-        );
-
-        this.registerView(
-            VIEW_TYPE_KANBAN,
-            (leaf) => new KanbanView(leaf, this)
-        );
+        // Each view: its constructor, a ribbon icon and a command, from the table
+        for (const view of ALL_VIEWS) {
+            this.registerView(view.type, (leaf) => VIEW_CONSTRUCTORS[view.type](leaf, this));
+            this.addRibbonIcon(view.icon, t(view.ribbonTitleKey), () => {
+                void this.activateView(view.type);
+            });
+            this.addCommand({
+                id: view.commandId,
+                name: t(view.commandNameKey),
+                callback: () => {
+                    void this.activateView(view.type);
+                },
+            });
+        }
 
         this.registerView(
             VIEW_TYPE_LOG,
             (leaf) => new LogView(leaf)
         );
-
-        const timelineViewMeta = getViewMeta(VIEW_TYPE_TIMELINE);
-        const scheduleViewMeta = getViewMeta(VIEW_TYPE_SCHEDULE);
-        const timerViewMeta = getViewMeta(VIEW_TYPE_TIMER);
-        const calendarViewMeta = getViewMeta(VIEW_TYPE_CALENDAR);
-        const miniCalendarViewMeta = getViewMeta(VIEW_TYPE_MINI_CALENDAR);
-        const kanbanViewMeta = getViewMeta(VIEW_TYPE_KANBAN);
-
-        // Add Ribbon Icon
-        this.addRibbonIcon(timelineViewMeta.icon, timelineViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_TIMELINE);
-        });
-
-        this.addRibbonIcon(scheduleViewMeta.icon, scheduleViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_SCHEDULE);
-        });
-
-        this.addRibbonIcon(timerViewMeta.icon, timerViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_TIMER);
-        });
-
-        this.addRibbonIcon(calendarViewMeta.icon, calendarViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_CALENDAR);
-        });
-
-        this.addRibbonIcon(miniCalendarViewMeta.icon, miniCalendarViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_MINI_CALENDAR);
-        });
-
-        this.addRibbonIcon(kanbanViewMeta.icon, kanbanViewMeta.ribbonTitle, () => {
-            this.activateView(VIEW_TYPE_KANBAN);
-        });
-
-        // Add Command
-        this.addCommand({
-            id: 'open-timeline-view',
-            name: timelineViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_TIMELINE);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-schedule-view',
-            name: scheduleViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_SCHEDULE);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-timer-view',
-            name: timerViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_TIMER);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-calendar-view',
-            name: calendarViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_CALENDAR);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-mini-calendar-view',
-            name: miniCalendarViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_MINI_CALENDAR);
-            }
-        });
-
-        this.addCommand({
-            id: 'open-kanban-view',
-            name: kanbanViewMeta.commandName,
-            callback: () => {
-                this.activateView(VIEW_TYPE_KANBAN);
-            }
-        });
 
         this.addCommand({
             id: 'open-log-view',
@@ -319,31 +229,26 @@ export default class TaskViewerPlugin extends Plugin {
         this.addSettingTab(new TaskViewerSettingTab(this.app, this));
 
         // Register Editor Suggest
-        this.registerEditorSuggest(new ColorSuggest(this.app, this));
-        this.registerEditorSuggest(new LineStyleSuggest(this.app, this));
+        this.registerEditorSuggest(new FrontmatterValueSuggest(this.app, this, COLOR_VALUES));
+        this.registerEditorSuggest(new FrontmatterValueSuggest(this.app, this, LINE_STYLE_VALUES));
+
+        this.taskHub = createTaskHubOpener({ app: this.app, plugin: this, owner: this });
 
         // Menu builders for inline task menu button
         const editorPropertiesBuilder = new PropertiesMenuBuilder(
-            this.app, this.writeService, this,
+            this.app, this.operations, this,
             new PropertyCalculator(), new PropertyFormatter()
         );
         const editorTimerBuilder = new TimerMenuBuilder(this);
-        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.writeService, this);
+        const editorActionsBuilder = new TaskActionsMenuBuilder(this.app, this.operations, this);
         const editorValidationBuilder = new ValidationMenuBuilder();
-        const editorCheckboxBuilder = new CheckboxMenuBuilder(
-            this.app,
-            () => this.settings.startHour,
-        );
-
-        // What the editor's writes need of the index: the fire of a completion
-        // made in the editor, and the menu's write to the line it was opened on.
-        const editorFireHost = this.taskIndex.editorFireHost();
+        const editorCheckboxBuilder = new CheckboxMenuBuilder();
 
         // Register inline menu button on checkbox lines (CM6 extension)
         const taskMenuResult = createTaskMenuExtension(
             this.app,
-            this.readService,
-            { ...editorFireHost, writeLine: (path, at, ops) => this.writeService.writeLine(path, at, ops) },
+            this.taskIndex,
+            this.operations.editorLineHost(),
             editorPropertiesBuilder,
             editorTimerBuilder,
             editorActionsBuilder,
@@ -359,24 +264,26 @@ export default class TaskViewerPlugin extends Plugin {
 
         // A completion made in the editor fires its flow in the transaction
         // that made it; nothing else in the editor fires.
-        this.registerEditorExtension(flowFireExtension(editorFireHost));
+        this.registerEditorExtension(fireFilter(this.operations.editorFireHost()));
 
         // Wavy-underline diagnostics for `==>` flow commands and `@date`
         // blocks. Pure re-parse of visible lines — no TaskIndex.
-        this.registerEditorExtension(createDiagnosticsExtension());
+        this.registerEditorExtension(createDiagnosticsExtension(() => this.settings));
 
         // Reading-view rendering of `tv-gen` blocks. Also the only place a
         // Live Preview user sees their diagnostics: Obsidian replaces a
         // closed fence with this widget, and the editor underlines go with it.
         this.registerMarkdownCodeBlockProcessor(GEN_LANGUAGE_TAG, createGenBlockPreview());
 
-        // Apply global styles if enabled
-        this.updateGlobalStyles();
-        this.updateViewHeaderStyles();
+        // Body classes and root variables the settings drive
+        applyBodyStyles(this.settings);
 
-        // Start day boundary check (every 5 minutes)
-        this.startDateBoundaryCheck();
-        this.startOverdueWatch();
+        // The one clock of minutes: the overdue sweep, the day check, the views
+        this.viewEvents.watch();
+        startMinuteClock(this, () => {
+            this.sweepOverdue();
+            this.viewEvents.minutePassed();
+        });
 
         // Start Properties View color suggest observer
         this.propertySuggestObserver = new PropertySuggestObserver(
@@ -393,22 +300,18 @@ export default class TaskViewerPlugin extends Plugin {
         });
     }
 
+    /**
+     * Read the stored settings by the settings' table (`readSettings`): each
+     * key, and each key of a group (`defaultViewPositions`), read on its own;
+     * a missing one takes its default, and so does one that does not read,
+     * logged.
+     */
     async loadSettings() {
-        const raw = await this.loadData();
-        const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
-
-        migrateSettings(rawObject);
-
-        const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
-        const normalizedKeys = normalizeScopeKeys(merged.scopeKeys);
-        const keysValidationError = validateScopeKeys(normalizedKeys);
-
-        this.settings = {
-            ...merged,
-            scopeKeys: keysValidationError
-                ? { ...DEFAULT_SCOPE_KEYS }
-                : normalizedKeys,
-        };
+        const { settings, fixes } = readSettings(await this.loadData());
+        for (const fix of fixes) {
+            logWarn(`[loadSettings] ${issueText(fix.issue, fix.path)}; the default is used`);
+        }
+        this.settings = settings;
     }
 
     async saveSettings() {
@@ -418,35 +321,9 @@ export default class TaskViewerPlugin extends Plugin {
         // Reconfigure editor extensions so diagnostics pick up the rebuilt
         // parser chain immediately (dp/tp toggles change line ownership).
         this.app.workspace.updateOptions();
-        this.readService.updateStartHour(this.settings.startHour);
-        this.readService.updateWeekStartDay(this.settings.weekStartDay);
-        this.updateViewHeaderStyles();
+        applyBodyStyles(this.settings);
 
-        this.refreshAllViews();
-    }
-
-    updateGlobalStyles() {
-        if (this.settings.applyGlobalStyles) {
-            document.body.classList.add('task-viewer-global-styles');
-        } else {
-            document.body.classList.remove('task-viewer-global-styles');
-        }
-    }
-
-    updateViewHeaderStyles() {
-        if (this.settings.hideViewHeader) {
-            document.body.classList.add('task-viewer-hide-view-header');
-        } else {
-            document.body.classList.remove('task-viewer-hide-view-header');
-        }
-        if (this.settings.fixMobileGradientWidth) {
-            document.body.classList.add('task-viewer-fix-mobile-gradient');
-        } else {
-            document.body.classList.remove('task-viewer-fix-mobile-gradient');
-        }
-        document.documentElement.style.setProperty(
-            '--tv-mobile-top-offset', `${this.settings.mobileTopOffset}px`
-        );
+        this.viewEvents.settingsChanged();
     }
 
     notifyEditorMenuSettingsChanged() {
@@ -454,42 +331,15 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     /**
-     * ビュー外コンテキスト（editor ··· menu / file-menu）からタスクハブ
-     * モーダルを開く。ビュー内はビュー自身の openTaskHub（自前の
-     * TaskCardRenderer / MenuHandler を使用）を通る。
+     * Open the task hub outside the views (the editor's ··· menu); a view
+     * opens it through its own cards. See `createTaskHubOpener`.
      */
     openTaskHub(taskId: string, options?: TaskHubPanelOptions): void {
-        const task = this.readService.getTask(taskId);
-        if (!task) return;
-
-        if (!this.hubTaskRenderer) {
-            this.hubTaskRenderer = new TaskCardRenderer(
-                this.app, this.readService, this.writeService, this.menuPresenter,
-                {
-                    hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                    getHoverParent: () => this.hubHoverParent,
-                },
-                () => this.settings,
-                () => false,
-            );
-            this.addChild(this.hubTaskRenderer);
-        }
-        if (!this.hubMenuHandler) {
-            this.hubMenuHandler = new MenuHandler(this.app, this.readService, this.writeService, this);
-            this.hubMenuHandler.setTaskHubOpener((id, opts) => this.openTaskHub(id, opts));
-        }
-
-        new TaskHubPanel(this.app, task, {
-            taskRenderer: this.hubTaskRenderer,
-            menuHandler: this.hubMenuHandler,
-            readService: this.readService,
-            writeService: this.writeService,
-            plugin: this,
-        }, options).open();
+        this.taskHub.open(taskId, options);
     }
 
     // Public accessors for services
-    getTaskIndex(): TaskIndex {
+    getIndex(): IndexReads {
         return this.taskIndex;
     }
 
@@ -497,12 +347,16 @@ export default class TaskViewerPlugin extends Plugin {
         return this.readService;
     }
 
-    getTaskWriteService(): TaskWriteService {
-        return this.writeService;
+    getOperations(): Operations {
+        return this.operations;
     }
 
     getNoteOps(): NoteOps {
         return this.noteOps;
+    }
+
+    getCreatePlaces(): CreatePlaces {
+        return this.createPlaces;
     }
 
     getTimerWidget(): TimerWidget {
@@ -510,10 +364,7 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     /**
-     * Start checking for day boundary changes every 5 minutes
-     */
-    /**
-     * Turn the passage of time into a render, but only when it changed
+     * Turn the passage of a minute into a render, but only when it changed
      * something.
      *
      * A card that crosses its end or due moves no task field, so no vault
@@ -525,53 +376,14 @@ export default class TaskViewerPlugin extends Plugin {
      * The notification is a full invalidation on purpose: a span names one
      * task, and a tick can move several. It carries no field list because
      * NotifyCoalescer drops one without a task id anyway.
-     *
-     * The first tick lands on the next minute boundary so a card turns
-     * overdue within a second of the minute it belongs to, not up to a
-     * minute later.
      */
-    private startOverdueWatch(): void {
-        const sweep = () => {
-            const changed = this.overdueWatcher.sweep(
-                this.readService.getAllDisplayTasks(),
-                this.settings.startHour,
-                this.settings.statusDefinitions,
-                this.readService,
-            );
-            if (changed) this.taskIndex.notifyImmediate();
-        };
-
-        const msToNextMinute = 60000 - (Date.now() % 60000);
-        this.overdueAlignTimeout = setTimeout(() => {
-            this.overdueAlignTimeout = null;
-            sweep();
-            this.overdueInterval = setInterval(sweep, 60000);
-        }, msToNextMinute);
-    }
-
-    private startDateBoundaryCheck(): void {
-        // Record current visual date
-        this.lastVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
-
-        // Check every 5 minutes
-        this.dateCheckInterval = setInterval(() => {
-            const currentVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
-            if (currentVisualDate !== this.lastVisualDate) {
-                this.lastVisualDate = currentVisualDate;
-                this.refreshAllViews();
-            }
-        }, 5 * 60 * 1000); // 5 minutes
-    }
-
-    /**
-     * Refresh all task viewer views
-     */
-    public refreshAllViews(): void {
-        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN].forEach(viewType => {
-            this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
-                refreshView(leaf.view);
-            });
-        });
+    private sweepOverdue(): void {
+        const changed = this.overdueWatcher.sweep(
+            this.readService.getAllDisplayTasks(),
+            this.settings.statusDefinitions,
+            this.readService,
+        );
+        if (changed) this.taskIndex.notifyImmediate();
     }
 
     /** Open a view via ribbon / command. No state seeding — view uses its own defaults. */
@@ -587,26 +399,11 @@ export default class TaskViewerPlugin extends Plugin {
         this.logStorage?.close();
         this.taskMenuCleanup?.();
         untrackAllKeyboards();
+        this.operations?.dispose();
         this.taskIndex?.dispose();
         AudioUtils.dispose();
-        document.body.classList.remove('task-viewer-global-styles');
+        clearBodyStyles();
         this.timerWidget?.destroy();
-
-        // Clear day boundary check interval
-        if (this.dateCheckInterval) {
-            clearInterval(this.dateCheckInterval);
-            this.dateCheckInterval = null;
-        }
-
-        // Clear the overdue watch (alignment timeout may still be pending)
-        if (this.overdueAlignTimeout) {
-            clearTimeout(this.overdueAlignTimeout);
-            this.overdueAlignTimeout = null;
-        }
-        if (this.overdueInterval) {
-            clearInterval(this.overdueInterval);
-            this.overdueInterval = null;
-        }
 
         // Disconnect Properties color suggest observer
         this.propertySuggestObserver?.destroy();
@@ -632,69 +429,9 @@ export default class TaskViewerPlugin extends Plugin {
         }
     }
 
-    private deriveOsLabel(): string {
-        if (typeof process !== 'undefined' && process.platform) return process.platform;
-        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-        if (Platform.isAndroidApp) {
-            const m = /Android (\d+(?:\.\d+)?)/.exec(ua);
-            return m ? `android ${m[1]}` : 'android';
-        }
-        if (Platform.isIosApp) {
-            const base = Platform.isTablet ? 'ipados' : 'ios';
-            const m = /OS (\d+(?:_\d+)*)/.exec(ua);
-            return m ? `${base} ${m[1].replace(/_/g, '.')}` : base;
-        }
-        return 'unknown';
-    }
-
-    private collectDeviceInfo(): DeviceInfo {
-        const d: DeviceInfo = {};
-        try {
-            if (typeof navigator !== 'undefined') {
-                if (typeof navigator.hardwareConcurrency === 'number') {
-                    d.cpuCores = navigator.hardwareConcurrency;
-                }
-                if (navigator.userAgent) d.userAgent = navigator.userAgent;
-                const dm = deviceMemoryGb();
-                if (dm !== undefined) d.deviceMemoryGb = dm;
-            }
-        } catch { /* best effort */ }
-        try {
-            const pm = jsHeapStats();
-            if (pm) {
-                if (typeof pm.usedJSHeapSize === 'number') {
-                    d.jsHeapUsedMb = Math.round(pm.usedJSHeapSize / 1048576);
-                }
-                if (typeof pm.jsHeapSizeLimit === 'number') {
-                    d.jsHeapLimitMb = Math.round(pm.jsHeapSizeLimit / 1048576);
-                }
-            }
-        } catch { /* best effort */ }
-        try {
-            const os = nodeOs();
-            if (os) {
-                d.arch = os.arch();
-                d.osRelease = os.release();
-                const cpus = os.cpus();
-                if (cpus?.length) {
-                    d.cpuCores = cpus.length;
-                    const model = (cpus[0]?.model ?? '').trim();
-                    if (model) d.cpuModel = model;
-                }
-                d.totalRamGb = Math.round((os.totalmem() / 1073741824) * 10) / 10;
-                d.freeRamGb = Math.round((os.freemem() / 1073741824) * 10) / 10;
-            }
-        } catch { /* best effort */ }
-        return d;
-    }
-
     private countActiveViews(): number {
-        const viewTypes = [
-            VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR,
-            VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN, VIEW_TYPE_TIMER,
-        ];
         let count = 0;
-        for (const vt of viewTypes) {
+        for (const vt of viewTypesWhere(d => d.countsAsActive)) {
             count += this.app.workspace.getLeavesOfType(vt).length;
         }
         return count;

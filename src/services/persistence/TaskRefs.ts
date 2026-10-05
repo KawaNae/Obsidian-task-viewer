@@ -1,7 +1,6 @@
 import type { Task } from '../../types';
-import type { RowBasis } from './RowBasis';
+import type { RowRef } from './FileLines';
 import type { ReadingId } from '../core/Reading';
-import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 /** How a refused write names what it was about, to the user. */
 export function subjectOf(task: Task): string {
@@ -9,25 +8,16 @@ export function subjectOf(task: Task): string {
 }
 
 /**
- * A row as the index hands it to a write: the file it is in, the line the
- * index's copy of it stands on, what to call it if the write has to be
- * refused, and what the operation was planned from. The line is a coordinate
- * in the content the index last read; the basis says whether the file still
- * reads that way there (see `WriteSession.row`). Nothing looks for the row
- * anywhere else.
- *
- * `read` is the reading the copy was made in, which its name carries
- * (`TaskIdGenerator.nameOf`): the line counts only while the file reads as
- * that reading did, or where our own writes from it carried the line
- * (`NamedRow.read`). Undefined for a copy that has no such name, which is
- * not written.
+ * A copy of a row the index read: one that names the reading it was made in
+ * (`Task.reading`), the content its line is a coordinate in. Only such a copy
+ * is planned from (`plannedOn`); one read outside the index, or made by no
+ * reading, is not written.
  */
-export interface PlannedTarget {
-    file: string;
-    line: number;
-    subject: string;
-    basis: RowBasis;
-    read: ReadingId | undefined;
+export type ReadCopy = Task & { reading: ReadingId };
+
+/** Whether `task` names the reading it was made in (see {@link ReadCopy}). */
+export function isReadCopy(task: Task): task is ReadCopy {
+    return task.reading !== undefined;
 }
 
 /** What {@link plannedOn} is told the plan read, besides the row's line. */
@@ -41,15 +31,15 @@ export interface PlanReads {
 }
 
 /**
- * The target of an operation planned from the index's copy of `task`: its
- * line, and whatever else `reads` says the plan read of it.
+ * The row an operation planned from the index's copy of `task` names: its
+ * line in the reading the copy was made in, and whatever else `reads` says
+ * the plan read of it. The file is the write's to say (`task.file`).
  */
-export function plannedOn(task: Task, reads: PlanReads = {}): PlannedTarget {
+export function plannedOn(task: ReadCopy, reads: PlanReads = {}): RowRef {
     return {
-        file: task.file,
         line: task.line,
         subject: subjectOf(task),
-        read: TaskIdGenerator.readName(task.id)?.reading,
+        in: { reading: task.reading },
         basis: {
             text: task.originalText,
             ...(reads.commands ? { commands: (task.flow?.childSegments ?? []).map(segment => segment.raw) } : {}),

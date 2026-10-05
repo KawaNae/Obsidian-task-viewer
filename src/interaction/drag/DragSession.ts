@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { DragContext, DragStrategy } from './DragStrategy';
 import { logDebug, logError } from '../../log/log';
 
@@ -11,10 +12,11 @@ import { logDebug, logError } from '../../log/log';
  * dispatch する。このクラス自体は listener を持たない（listener bind は
  * `DragHandler` の責務）。
  *
- * commit (writeService.updateTask) 自体は Strategy 内の `commitPlan` で完結
- * するため、Session の責務は「pointerup 直前の合成 click 抑制」「writeService
- * への drag-progress 通知（draggingFile / notifyImmediate）」「touchAction の
- * 一時 lock」だけ。
+ * commit (operations.updateTask) 自体は Strategy 内の `commitPlan` で完結
+ * するため、Session の責務は「掴んだ行がディスクのとおりかを問う
+ * （operations.confirmTask）」「索引へのドラッグの保留と、終わりの描画
+ * （index.setDraggingFile / notifyImmediate。書き込みでないので操作を通さない）」
+ * 「touchAction の一時 lock」だけ。
  */
 export class DragSession {
     private currentStrategy: DragStrategy | null = null;
@@ -35,7 +37,8 @@ export class DragSession {
     constructor(
         private readonly context: DragContext,
         private readonly container: HTMLElement,
-        private readonly writeService: TaskWriteService,
+        private readonly operations: Pick<Operations, 'confirmTask'>,
+        private readonly index: Pick<IndexReads, 'setDraggingFile' | 'notifyImmediate'>,
     ) {}
 
     isActive(): boolean {
@@ -55,8 +58,8 @@ export class DragSession {
         logDebug(`[Drag:start] taskId=${task.id}`);
         this.currentStrategy = strategy;
         this.currentDragTaskId = task.id;
-        this.writeService.setDraggingFile(task.file);
-        const confirmed = this.writeService.confirmTask(task.id).catch((error: unknown) => {
+        void this.index.setDraggingFile(task.file);
+        const confirmed = this.operations.confirmTask(task.id).catch((error: unknown) => {
             logError(`[Drag:confirm] taskId=${task.id} failed: ${(error as Error)?.message ?? error}`);
             return false;
         });
@@ -72,20 +75,19 @@ export class DragSession {
     handleMove(e: PointerEvent): void {
         if (!this.currentStrategy) return;
         this.currentStrategy.onMove(e, this.context);
-        this.context.onTaskMove(); // handle 位置の追従更新
     }
 
     /**
      * pointerup の lifecycle を完了させる。
      *
      * 1. Strategy の onUp を await（finish*Move/Resize 内部で commitPlan）
-     * 2. notifyImmediate で onChange の coalesce/partial に乗せる
-     * 3. draggingFile をその場で解除する（`end`。onUp が投げても通る）。解除すると、ドラッグ中に保留した
-     *    ファイルの読み（確定の書き込みを含む）を入れて通知する
-     *    （`TaskIndex.setDraggingFile`）。以前は 1 frame 遅らせて、確定の
-     *    書き込みの遅れて来る `changed` を draggingFile で除いていた。今は
-     *    `changed` がすでに読んだ内容かを内容で答える（`f8827b9a`）ので、
-     *    フレームを待つ理由は無い。
+     * 2. draggingFile を解除する（`end`。onUp が投げても通る）。解除すると、
+     *    ドラッグ中に保留したファイルの読み（確定の書き込みを含む）が索引に
+     *    入る（`TaskIndex.setDraggingFile`）
+     * 3. 確定したなら、その読みが入るのを待って全体を即時に描く。書き込みは
+     *    索引の写しを書き換えないので、読みが入る前に描くと元の位置へ一瞬
+     *    戻る。区間でなく全体を描くのは、確定のあとの行の名前が新しい読みの
+     *    名前で、ドラッグを始めたときの名前ではもう引けないから
      *
      * drag 完了時の合成 click による誤 deselect は SelectionController が
      * `pointerdown` で deselect するように設計されているため構造的に発生
@@ -97,6 +99,7 @@ export class DragSession {
         const taskId = this.currentDragTaskId;
 
         this.committing = true;
+        let released: Promise<void>;
         try {
             // A short drag can let go before the check has answered: the
             // commit waits for it, and a drag of a stale row ends as if
@@ -107,14 +110,12 @@ export class DragSession {
             }
             await strategy.onUp(e, this.context);
             logDebug(`[Drag:committed] taskId=${taskId}`);
-            this.writeService.notifyImmediate(
-                taskId ?? undefined,
-                taskId ? ['startDate', 'startTime', 'endDate', 'endTime'] : undefined,
-            );
         } finally {
             this.committing = false;
-            this.end();
+            released = this.end();
         }
+        await released;
+        this.index.notifyImmediate();
     }
 
     /**
@@ -129,7 +130,7 @@ export class DragSession {
         try {
             this.currentStrategy.onCancel();
         } finally {
-            this.end();
+            void this.end();
         }
     }
 
@@ -139,11 +140,12 @@ export class DragSession {
      * while it was dragged go into the index. A file left held would keep every
      * reading of it out, and every write to it refused.
      */
-    private end(): void {
-        this.writeService.setDraggingFile(null);
+    private end(): Promise<void> {
+        const released = this.index.setDraggingFile(null);
         this.currentStrategy = null;
         this.currentDragTaskId = null;
         this.confirmed = null;
         this.container.style.touchAction = '';
+        return released;
     }
 }

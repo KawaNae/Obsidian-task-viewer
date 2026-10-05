@@ -1,9 +1,9 @@
 import type { App, HoverParent } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import { DateUtils } from '../../utils/DateUtils';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { dailyNotes, label as noteLabel } from '../../utils/PeriodicNotes';
+import { periodicNoteLink } from './PeriodicNoteLink';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { t } from '../../i18n';
 
 interface DateHeaderRendererDeps {
@@ -69,27 +69,15 @@ export class DateHeaderRenderer {
 
         dates.forEach(date => {
             const cell = row.createDiv('date-header__cell');
-            const dayName = weekdays[new Date(date + 'T00:00:00Z').getUTCDay()];
+            const dayName = weekdays[DateUtils.weekdayOf(date)];
 
-            const dateObj = this.parseLocalDate(date);
-            const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(app, dateObj);
-            const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(app, dateObj);
-
-            const label = contextualDateLabel(date, referenceYearMonth, dayName);
-
-            const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: label });
-            linkEl.dataset.href = linkTarget;
-            linkEl.setAttribute('href', linkTarget);
-            linkEl.setAttribute('aria-label', t('aria.openDailyNote', { label: `${linkLabel} ${dayName}` }));
-            linkEl.addEventListener('click', (event: MouseEvent) => {
-                event.preventDefault();
+            const daily = dailyNotes(app);
+            periodicNoteLink(cell, { app, notes: plugin.getOperations(), links: linkInteractionManager, hoverParent }, daily, date, {
+                cls: 'date-header__date-link',
+                text: contextualDateLabel(date, referenceYearMonth, dayName),
+                ariaLabel: t('aria.openDailyNote', { label: `${noteLabel(daily, date)} ${dayName}` }),
+                opensFrom: cell,
             });
-
-            linkInteractionManager.bind(cell, {
-                sourcePath: '',
-                hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                hoverParent,
-            }, { bindClick: false });
 
             if (date === todayVisualDate) {
                 cell.addClass('is-today');
@@ -100,23 +88,8 @@ export class DateHeaderRenderer {
 
             cell.dataset.date = date;
 
-            cell.addEventListener('click', async () => {
-                let file = DailyNoteUtils.getDailyNote(app, dateObj);
-                if (!file) {
-                    file = await DailyNoteUtils.createDailyNote(app, dateObj);
-                }
-                if (file) {
-                    await app.workspace.getLeaf(false).openFile(file);
-                }
-            });
-
         });
 
         return { row, axisCell };
-    }
-
-    private parseLocalDate(date: string): Date {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 }

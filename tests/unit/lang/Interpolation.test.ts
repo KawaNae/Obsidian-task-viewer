@@ -4,8 +4,8 @@ import { FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker
 import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 import { parseExpr, splitInterpolations } from '../../../src/services/lang/ExprParser';
 import { printExpr } from '../../../src/services/lang/ExprPrinter';
-import { renderInterpolation, renderInterpolationText } from '../../../src/services/lang/Interpolation';
-import { findInterpolationEnd, scanInterpolations, tokenize } from '../../../src/services/lang/Lexer';
+import { renderInterpolation } from '../../../src/services/lang/Interpolation';
+import { scanInterpolations, tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
 import type { EvalHost } from '../../../src/services/lang/functions';
 
@@ -32,10 +32,21 @@ function render(line: string, props: EvalContext['props'] = {}): string {
     const diagnostics: Diagnostic[] = [];
     const parts = splitInterpolations(line, diagnostics);
     expect(codes(diagnostics)).toEqual([]);
-    return renderInterpolationText(parts, ctx(props));
+    return renderText(parts, ctx(props));
+}
+
+/** The whole line as text: the pieces joined, with nothing to decide. */
+function renderText(parts: Parameters<typeof renderInterpolation>[0], c: EvalContext): string {
+    return renderInterpolation(parts, c).map(p => p.text).join('');
 }
 
 describe('finding the end of an interpolation', () => {
+    // 閉じる位置は scanInterpolations の答えから読む（先頭の `${` の閉じ `}` の位置、閉じなければ -1）
+    const findInterpolationEnd = (src: string, open: number): number => {
+        const seam = scanInterpolations(src.slice(open))[0];
+        return seam && seam.closed ? open + seam.span.end - 1 : -1;
+    };
+
     it('takes the brace that closes it, not the first one', () => {
         // 素朴に「最初の }」で切ると、関数本体やオブジェクトで切れる
         const src = '${xs.map(x => { return x })} tail';
@@ -233,7 +244,7 @@ describe('template literals', () => {
         const expr = parseExpr(new TokenCursor(tokens), diagnostics, 'block');
         expect(diagnostics).toEqual([]);
         expect(checkExpr(expr!, FLOW_TYPE_ENV, diagnostics)).toBe('string');
-        expect(renderInterpolationText([{ kind: 'expr', expr: expr!, span: { start: 0, end: src.length } }], ctx()))
+        expect(renderText([{ kind: 'expr', expr: expr!, span: { start: 0, end: src.length } }], ctx()))
             .toBe('    - [ ] 設計 の振り返り|    - [ ] 実装 の振り返り');
     });
 });

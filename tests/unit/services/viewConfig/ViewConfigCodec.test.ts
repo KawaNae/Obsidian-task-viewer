@@ -5,13 +5,15 @@ import {
     ViewConfigCodec,
     type ViewSchema,
 } from '../../../../src/services/viewConfig';
+import type { ViewType } from '../../../../src/views/ViewDescriptors';
+import type { ConfigIssue } from '../../../../src/services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../../../src/services/filter/FilterTypes';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../../../src/types';
 
 interface TestConfig {
     name?: string;
     enabled?: boolean;
-    count?: 1 | 3 | 7;
+    count?: number;
     rate?: number;
     span?: number;
     filter?: FilterState;
@@ -28,13 +30,14 @@ interface TestTransient {
 }
 
 const SCHEMA: ViewSchema<TestConfig, TestTransient> = {
-    viewType: 'test-view',
+    // Not a view of the plugin: the codec reads only the fields.
+    viewType: 'test-view' as ViewType,
     shortName: 'test',
     defaults: { count: 3, rate: 1.0, enabled: false },
     config: {
         name: F.optionalString('name'),
         enabled: F.boolean('enabled'),
-        count: F.intEnum('count', [1, 3, 7], { legacyKeys: ['days'] }),
+        count: F.int('count', { min: 1, max: 7, legacyKeys: ['days'] }),
         rate: F.float('rate', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
         span: F.int('span', { min: 1, max: 30, legacyKeys: ['spanLegacy'] }),
         filter: F.filter('filter', { legacyKeys: ['filterState'] }),
@@ -71,7 +74,8 @@ const fullFixture: TestConfig = {
     grid: [[{
         id: 'g-1',
         name: 'Col A',
-        filterState: { filters: [{ property: 'status', operator: 'equals', value: ' ' }], logic: 'and' },
+        filterState: { filters: [{ property: 'status', operator: 'includes', value: [' '] }], logic: 'and' },
+        applyViewFilter: true,
     }]],
     sky: { sunTimes: true, moonPhase: true },
     cursor: '2026-05-22',
@@ -83,6 +87,41 @@ describe('ViewConfigCodec', () => {
             const json = codec.serializeConfig(fullFixture);
             const back = codec.parseConfig(json);
             expect(back).toEqual(fullFixture);
+        });
+
+        it('parseConfig drops a filter condition or a sort rule it cannot read, and reports where', () => {
+            const issues: ConfigIssue[] = [];
+            const back = codec.parseConfig({
+                filter: { logic: 'and', filters: [
+                    { property: 'tag', operator: 'includes', value: ['x'] },
+                    { property: 'tagg', operator: 'includes', value: ['x'] },
+                ] },
+                grid: [[{
+                    id: 'g-1', name: 'A', applyViewFilter: false,
+                    filterState: { logic: 'and', filters: [
+                        { property: 'status', operator: 'equals', value: ' ' },
+                        { property: 'due', operator: 'isSet' },
+                    ] },
+                    sortState: { rules: [{ property: 'due', direction: 'up' }, { id: 's-1', property: 'file', direction: 'desc' }] },
+                }]],
+            }, issues);
+            expect(back.filter?.filters).toEqual([{ property: 'tag', operator: 'includes', value: ['x'] }]);
+            expect(back.grid?.[0][0].filterState.filters).toEqual([{ property: 'due', operator: 'isSet' }]);
+            expect(back.grid?.[0][0].sortState).toEqual({ rules: [{ property: 'file', direction: 'desc' }] });
+            expect(issues).toEqual([
+                { field: 'filter', text: expect.stringMatching(/^filters\[1\]: Unknown filter property: tagg/) },
+                { field: 'grid', text: `list "A" filters[0]: Invalid operator 'equals' for filter property 'status'. Available: includes, excludes` },
+                { field: 'grid', text: 'list "A" sort rules[0]: Invalid sort direction: up. Use asc or desc' },
+            ]);
+        });
+
+        it('fromUriParams reports what it dropped too', () => {
+            const issues: ConfigIssue[] = [];
+            const uri = codec.toUriParams({ filter: { logic: 'and', filters: [{ property: 'content', operator: 'contains', value: 'a' }] } });
+            const bad = codec.toUriParams({ filter: { logic: 'and', filters: [{ property: 'content', operator: 'contains', value: 3 as never }] } });
+            expect(codec.fromUriParams(uri, issues).filter?.filters).toHaveLength(1);
+            expect(codec.fromUriParams(bad, issues).filter).toBeUndefined();
+            expect(issues).toEqual([{ field: 'filter', text: "filters[0]: 'content' takes text" }]);
         });
 
         it('serializeConfig omits undefined fields', () => {
@@ -106,6 +145,24 @@ describe('ViewConfigCodec', () => {
         it('parseConfig ignores unrelated keys', () => {
             const cfg = codec.parseConfig({ foo: 'bar', baz: 123 });
             expect(cfg).toEqual({});
+        });
+    });
+
+    describe('applyViewFilter is always a boolean past the codec', () => {
+        const list = { id: 'pl-1', name: 'L', filterState: { filters: [], logic: 'and' } };
+
+        it('a list saved without the key reads as false', () => {
+            expect(F.pinnedLists('pins').parse([list])?.[0].applyViewFilter).toBe(false);
+            expect(F.grid('grid').parse([[list]])?.[0][0].applyViewFilter).toBe(false);
+        });
+
+        it('a value that is not a boolean reads as false', () => {
+            expect(F.pinnedLists('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0].applyViewFilter).toBe(false);
+        });
+
+        it('false is written, not omitted', () => {
+            const json = codec.serializeConfig({ pins: [{ ...list, applyViewFilter: false } as PinnedListDefinition] });
+            expect((json.pins as Record<string, unknown>[])[0].applyViewFilter).toBe(false);
         });
     });
 
@@ -187,11 +244,6 @@ describe('ViewConfigCodec', () => {
     });
 
     describe('validation', () => {
-        it('intEnum rejects values outside allowed set', () => {
-            expect(codec.parseConfig({ count: 5 }).count).toBeUndefined();
-            expect(codec.parseConfig({ count: 1 }).count).toBe(1);
-        });
-
         it('float clamps with min/max', () => {
             expect(codec.parseConfig({ rate: 0.1 }).rate).toBeUndefined();
             expect(codec.parseConfig({ rate: 20 }).rate).toBeUndefined();
@@ -217,19 +269,51 @@ describe('ViewConfigCodec', () => {
         });
 
         it('int rejects string input that Number() would parse but is not a plain decimal integer', () => {
-            // Number() alone accepts hex, exponent notation, and padded
-            // whitespace as valid integers — this field should not.
+            // Number() alone accepts hex and exponent notation as valid
+            // integers — this field should not. parseInt would take a
+            // leading number out of '3days'.
             expect(codec.fromUriParams({ span: '0x10' }).span).toBeUndefined();
             expect(codec.fromUriParams({ span: '1e1' }).span).toBeUndefined();
-            expect(codec.fromUriParams({ span: ' 5 ' }).span).toBeUndefined();
+            expect(codec.fromUriParams({ span: '3days' }).span).toBeUndefined();
             expect(codec.parseConfig({ span: '0x10' }).span).toBeUndefined();
             expect(codec.parseConfig({ span: '1e1' }).span).toBeUndefined();
-            expect(codec.parseConfig({ span: ' 5 ' }).span).toBeUndefined();
+        });
+
+        it('int reads typed text as the input codec does: space around it and full-width digits', () => {
+            // Stage 7, input decision C: a URI carries text a person typed.
+            expect(codec.fromUriParams({ span: ' 5 ' }).span).toBe(5);
+            expect(codec.fromUriParams({ span: '１２' }).span).toBe(12);
+            expect(codec.parseConfig({ span: ' 5 ' }).span).toBe(5);
+        });
+
+        it('float reads only a decimal number (no parseFloat prefix)', () => {
+            expect(codec.fromUriParams({ rate: '1.5' }).rate).toBe(1.5);
+            expect(codec.fromUriParams({ rate: '1.5x' }).rate).toBeUndefined();
+            expect(codec.fromUriParams({ rate: '2e0' }).rate).toBeUndefined();
+            expect(codec.parseConfig({ rate: '1.5x' }).rate).toBeUndefined();
         });
 
         it('dateString rejects malformed input', () => {
             expect(codec.parseConfig({ cursor: 'not-a-date' }).cursor).toBeUndefined();
             expect(codec.parseConfig({ cursor: '2026-05-22' }).cursor).toBe('2026-05-22');
+        });
+
+        it('dateString reads only a day that exists, from the URI and the stored state alike', () => {
+            expect(codec.fromUriParams({ cursor: '2026-02-30' }).cursor).toBeUndefined();
+            expect(codec.fromUriParams({ cursor: '2026-13-45' }).cursor).toBeUndefined();
+            expect(codec.parseConfig({ cursor: '2026-02-30' }).cursor).toBeUndefined();
+            expect(codec.parseTransient({ date: '2026-02-30' }).date).toBeUndefined();
+            expect(codec.parseTransient({ date: '2026-02-28' }).date).toBe('2026-02-28');
+        });
+
+        it('dateString reads full-width digits and hyphen-like characters as the date', () => {
+            expect(codec.fromUriParams({ cursor: '２０２６－０５－２２' }).cursor).toBe('2026-05-22');
+            expect(codec.fromUriParams({ cursor: '2026ー05ー22' }).cursor).toBe('2026-05-22');
+        });
+
+        it('boolean reads true and false around space, and nothing else', () => {
+            expect(codec.fromUriParams({ enabled: ' true ' }).enabled).toBe(true);
+            expect(codec.fromUriParams({ enabled: 'yes' }).enabled).toBeUndefined();
         });
 
         it('astronomyDisplay strips unknown keys', () => {
@@ -250,22 +334,22 @@ describe('ViewConfigCodec', () => {
             const transient: TestTransient = {
                 date: '2026-05-22',
                 expanded: true,
-                collapsed: { 'test::a': true, 'test::b': true },
+                collapsed: { a: true, b: true },
             };
             const json = codec.serializeTransient(transient);
             const back = codec.parseTransient(json);
             expect(back).toEqual(transient);
         });
 
-        it('collapsedKeys migrates legacy un-prefixed entries', () => {
-            const json = { collapsed: { 'a': true, 'test::b': true } };
+        it("collapsedKeys reads a key saved with the view's name as the list id, and drops another view's", () => {
+            const json = { collapsed: { 'a': true, 'test::b': true, 'other::c': true } };
             const back = codec.parseTransient(json);
-            expect(back.collapsed).toEqual({ 'test::a': true, 'test::b': true });
+            expect(back.collapsed).toEqual({ a: true, b: true });
         });
 
         it('collapsedKeys drops false entries', () => {
-            const json = codec.serializeTransient({ collapsed: { 'test::a': true, 'test::b': false } });
-            expect(json.collapsed).toEqual({ 'test::a': true });
+            const json = codec.serializeTransient({ collapsed: { a: true, b: false } });
+            expect(json.collapsed).toEqual({ a: true });
         });
 
         it('transient stays separate from config', () => {
@@ -334,7 +418,7 @@ describe('SchemaRegistry', () => {
         });
 
         it('clears a previously held value when the field is absent from cfg', () => {
-            const held = { name: 'stale', count: 7 as const, rate: 2.0 };
+            const held = { name: 'stale', count: 7, rate: 2.0 };
             Object.assign(held, codec.withDefaults({ count: 1 }));
             expect(held.name).toBeUndefined();
             expect(held.count).toBe(1);
@@ -364,20 +448,5 @@ describe('SchemaRegistry', () => {
     it('codecFor unknown viewType returns undefined', async () => {
         const { codecFor } = await import('../../../../src/services/viewConfig');
         expect(codecFor('nonexistent-view')).toBeUndefined();
-    });
-
-    it('registerSchema makes codec available via codecFor', async () => {
-        const { codecFor, schemaFor, resolveViewTypeFromShortName, registerSchema } = await import('../../../../src/services/viewConfig');
-        const localSchema: ViewSchema<{ x?: boolean }, Record<string, never>> = {
-            viewType: 'unit-test-throwaway-view',
-            shortName: 'utt',
-            defaults: {},
-            config: { x: F.boolean('x') },
-            transient: {},
-        };
-        registerSchema(localSchema);
-        expect(codecFor('unit-test-throwaway-view')).toBeDefined();
-        expect(schemaFor('unit-test-throwaway-view')).toBe(localSchema);
-        expect(resolveViewTypeFromShortName('utt')).toBe('unit-test-throwaway-view');
     });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { ItemView } from 'obsidian';
-import { viewContentEl, refreshView } from '../../../src/utils/ObsidianView';
+import { viewContentEl, redrawView, notifyDayRolled } from '../../../src/utils/ObsidianView';
 import { editorCm } from '../../../src/utils/editorCm';
 import { deviceMemoryGb, jsHeapStats, electronRequire } from '../../../src/utils/hostEnv';
 
@@ -59,15 +59,29 @@ describe('viewContentEl', () => {
     });
 });
 
-describe('refreshView', () => {
-    it('calls refresh when the view has one', () => {
+describe('redrawView', () => {
+    it('calls redraw when the view has one', () => {
         let called = 0;
-        refreshView({ refresh: () => { called++; } } as never);
+        redrawView({ redraw: () => { called++; } } as never);
         expect(called).toBe(1);
     });
 
     it('is a no-op when the view has none', () => {
-        expect(() => refreshView({} as never)).not.toThrow();
+        expect(() => redrawView({} as never)).not.toThrow();
+    });
+});
+
+describe('notifyDayRolled', () => {
+    it('calls onDayRolled, not redraw, when the view has its own answer', () => {
+        const calls: string[] = [];
+        notifyDayRolled({ redraw: () => calls.push('redraw'), onDayRolled: () => calls.push('day') } as never);
+        expect(calls).toEqual(['day']);
+    });
+
+    it('falls back to redraw for a view without one', () => {
+        const calls: string[] = [];
+        notifyDayRolled({ redraw: () => calls.push('redraw') } as never);
+        expect(calls).toEqual(['redraw']);
     });
 });
 

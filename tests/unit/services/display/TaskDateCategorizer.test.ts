@@ -31,40 +31,36 @@ function dt(overrides: Partial<Task> = {}): DisplayTask {
     return toDisplayTask(makeTask(overrides), startHour, NO_TASK_LOOKUP);
 }
 
-/** Hand-built DisplayTask for branches the converter cannot produce. */
-function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    return {
-        ...makeTask(),
-        effectiveStartDate: '',
-        startDateImplicit: true,
-        startTimeImplicit: true,
-        endDateImplicit: true,
-        endTimeImplicit: true,
-        originalTaskId: 'tv-inline:test.md:ln:1',
-        isSplit: false,
-        childEntries: [],
-        ...overrides,
-    };
-}
 
 function idsOf(tasks: DisplayTask[]): string[] {
     return tasks.map((t) => t.id);
 }
 
-describe('日付所属: dueOnly', () => {
-    it('due の calendar 日付に所属する（visual 日付ではない）', () => {
-        // due 2026-01-16T02:00 は startHour=5 の visual では Jan15 夜だが、
-        // 所属は raw due の calendar 日付 Jan16（締切 = calendarDate の意味論）
-        const task = dt({ id: 'due-task', due: '2026-01-16T02:00' });
-        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).dueOnly)).toEqual(['due-task']);
-        expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).dueOnly)).toEqual([]);
+describe('日付所属: 期限だけのタスク（期限を終了に読む）', () => {
+    it('日付だけの期限 D は D の allDay', () => {
+        const task = dt({ id: 'due-day', due: '2026-01-16' });
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).allDay)).toEqual(['due-day']);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).allDay)).toEqual([]);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-17', startHour).allDay)).toEqual([]);
+    });
+
+    it('時刻つきの期限 DT17:00 は D の timed', () => {
+        const task = dt({ id: 'due-17', due: '2026-01-16T17:00' });
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).timed)).toEqual(['due-17']);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).allDay)).toEqual([]);
+    });
+
+    it('startHour より前の期限 DT02:00 は前の日の timed', () => {
+        const task = dt({ id: 'due-02', due: '2026-01-16T02:00' });
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).timed)).toEqual(['due-02']);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).timed)).toEqual([]);
     });
 });
 
 describe('日付所属: allDay', () => {
-    // allDay の所属は AllDay レーンのカード配置と同じ getTaskDateRange の
-    // visual span。S-AllDay の effective 解決（翌日 04:59 終端）は
-    // toVisualDate シフトで吸収され、所属は 1 visual 日になる。
+    // allDay の所属は AllDay レーンのカード配置と同じ visualDaysOf の
+    // visual 日。S-AllDay の span（翌日 05:00 終端）は終端の直前の瞬間で
+    // 日を読むので、所属は 1 visual 日になる。
     it('S-AllDay Jan15 は visual 1 日分（Jan15）のみに所属する', () => {
         const task = dt({ id: 'allday-s', startDate: '2026-01-15' });
         expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).allDay)).toEqual(['allday-s']);
@@ -72,19 +68,16 @@ describe('日付所属: allDay', () => {
         expect(idsOf(categorizeTasksForDate([task], '2026-01-17', startHour).allDay)).toEqual([]);
     });
 
-    it('SE-AllDay Jan15〜Jan17（raw endDate は exclusive 側の二重規格）は visual Jan15/16 に所属する', () => {
+    it('SE-AllDay Jan15〜Jan17（日付だけの終了はその日を含む）は visual Jan15〜17 に所属する', () => {
         const task = dt({ id: 'allday-se', startDate: '2026-01-15', endDate: '2026-01-17' });
         expect(idsOf(categorizeTasksForDate([task], '2026-01-15', startHour).allDay)).toEqual(['allday-se']);
         expect(idsOf(categorizeTasksForDate([task], '2026-01-16', startHour).allDay)).toEqual(['allday-se']);
-        expect(idsOf(categorizeTasksForDate([task], '2026-01-17', startHour).allDay)).toEqual([]);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-17', startHour).allDay)).toEqual(['allday-se']);
+        expect(idsOf(categorizeTasksForDate([task], '2026-01-18', startHour).allDay)).toEqual([]);
     });
 
-    it('反転 range（effectiveEndDate < effectiveStartDate）はクランプされ開始日 1 日に所属する', () => {
-        const task = makeDisplayTask({
-            id: 'inverted',
-            effectiveStartDate: '2026-01-17',
-            effectiveEndDate: '2026-01-15',
-        });
+    it('反転した期間（終了 < 開始）は時点として開始日 1 日に所属する', () => {
+        const task = { ...dt({ startDate: '2026-01-17', endDate: '2026-01-15' }), id: 'inverted' };
         expect(idsOf(categorizeTasksForDate([task], '2026-01-17', startHour).allDay)).toEqual(['inverted']);
         for (const date of ['2026-01-15', '2026-01-16']) {
             const buckets = categorizeTasksForDate([task], date, startHour);
@@ -125,7 +118,6 @@ describe('categorizeTasksForDate ≡ categorizeTasksByDate（単日と複数日�
             const multi = byDate.get(date)!;
             expect(idsOf(multi.allDay)).toEqual(idsOf(single.allDay));
             expect(idsOf(multi.timed)).toEqual(idsOf(single.timed));
-            expect(idsOf(multi.dueOnly)).toEqual(idsOf(single.dueOnly));
         }
     });
 
@@ -133,13 +125,13 @@ describe('categorizeTasksForDate ≡ categorizeTasksByDate（単日と複数日�
         const byDate = categorizeTasksByDate(fixture, dates, startHour);
         const snapshot = dates.map((date) => {
             const b = byDate.get(date)!;
-            return `${date} allDay=[${idsOf(b.allDay)}] timed=[${idsOf(b.timed)}] dueOnly=[${idsOf(b.dueOnly)}]`;
+            return `${date} allDay=[${idsOf(b.allDay)}] timed=[${idsOf(b.timed)}]`;
         });
         expect(snapshot).toEqual([
-            '2026-01-14 allDay=[f-se] timed=[] dueOnly=[]',
-            '2026-01-15 allDay=[f-se,f-allday] timed=[f-timed,f-latenight] dueOnly=[]',
-            '2026-01-16 allDay=[] timed=[] dueOnly=[f-due]',
-            '2026-01-17 allDay=[] timed=[] dueOnly=[]',
+            '2026-01-14 allDay=[f-se] timed=[]',
+            '2026-01-15 allDay=[f-se,f-allday] timed=[f-timed,f-due,f-latenight]',
+            '2026-01-16 allDay=[f-se] timed=[]',
+            '2026-01-17 allDay=[] timed=[]',
         ]);
     });
 });
@@ -152,7 +144,7 @@ describe('バケツ内ソート（TaskRenderOrder 準拠）', () => {
         expect(idsOf(timed)).toEqual(['z-2300', 'a-0430']);
     });
 
-    it('timed: 同時刻は duration 降順、同一なら id 昇順', () => {
+    it('timed: 同時刻は duration 降順、同一なら書かれた場所の順', () => {
         const short = dt({ id: 'a-short', startDate: '2026-01-15', startTime: '10:00', endTime: '10:30' });
         const long = dt({ id: 'z-long', startDate: '2026-01-15', startTime: '10:00', endTime: '12:00' });
         const k2 = dt({ id: 'k2', startDate: '2026-01-15', startTime: '14:00' });
@@ -161,7 +153,7 @@ describe('バケツ内ソート（TaskRenderOrder 準拠）', () => {
         expect(idsOf(timed)).toEqual(['z-long', 'a-short', 'k1', 'k2']);
     });
 
-    it('allDay: 開始日昇順、同日は id 昇順', () => {
+    it('allDay: 開始日昇順、同日は書かれた場所の順', () => {
         const b = dt({ id: 'b', startDate: '2026-01-15', endDate: '2026-01-16' });
         const a = dt({ id: 'a', startDate: '2026-01-15', endDate: '2026-01-16' });
         const earlier = dt({ id: 'z-earlier', startDate: '2026-01-14', endDate: '2026-01-16' });
@@ -169,11 +161,42 @@ describe('バケツ内ソート（TaskRenderOrder 準拠）', () => {
         expect(idsOf(allDay)).toEqual(['z-earlier', 'a', 'b']);
     });
 
-    it('dueOnly: due 昇順', () => {
+    it('期限だけのタスクは期限から補った期間の順', () => {
         const evening = dt({ id: 'a-evening', due: '2026-01-15T18:00' });
         const morning = dt({ id: 'z-morning', due: '2026-01-15T09:00' });
-        const dueOnly = categorizeTasksForDate([evening, morning], '2026-01-15', startHour).dueOnly;
-        expect(idsOf(dueOnly)).toEqual(['z-morning', 'a-evening']);
+        const timed = categorizeTasksForDate([evening, morning], '2026-01-15', startHour).timed;
+        expect(idsOf(timed)).toEqual(['z-morning', 'a-evening']);
+    });
+});
+
+// A tie is broken by where the task is written: its file, then its line as
+// a number. The ID is a name for one reading of the note
+// (`parserId:path:n:<reading>:<line>`), so comparing it as text put line 10
+// before line 9 and a file's tasks after another's by their notation.
+describe('同順位は書かれた場所の順（ファイル、行番号）', () => {
+    const name = (parserId: string, file: string, line: number) => `${parserId}:${file}:n:r1:${line}`;
+    const at = (parserId: string, file: string, line: number, fields: Partial<Task>) =>
+        dt({ id: name(parserId, file, line), file, line, parserId: parserId as Task['parserId'], ...fields });
+
+    it('timed: 行 9 が行 10 より先', () => {
+        const ten = at('tv-inline', 'note.md', 10, { startDate: '2026-01-15', startTime: '10:00' });
+        const nine = at('tv-inline', 'note.md', 9, { startDate: '2026-01-15', startTime: '10:00' });
+        const timed = categorizeTasksForDate([ten, nine], '2026-01-15', startHour).timed;
+        expect(timed.map(t => t.line)).toEqual([9, 10]);
+    });
+
+    it('allDay: ファイルの順が記法の順に勝つ', () => {
+        const b = at('day-planner', 'b.md', 1, { startDate: '2026-01-15' });
+        const a = at('tv-inline', 'a.md', 1, { startDate: '2026-01-15' });
+        const allDay = categorizeTasksForDate([b, a], '2026-01-15', startHour).allDay;
+        expect(allDay.map(t => t.file)).toEqual(['a.md', 'b.md']);
+    });
+
+    it('期限だけ: 同じ期限は行番号の数の順', () => {
+        const ten = at('tv-inline', 'note.md', 10, { due: '2026-01-15' });
+        const two = at('tv-inline', 'note.md', 2, { due: '2026-01-15' });
+        const allDay = categorizeTasksForDate([ten, two], '2026-01-15', startHour).allDay;
+        expect(allDay.map(t => t.line)).toEqual([2, 10]);
     });
 });
 

@@ -1,9 +1,9 @@
 import type { App } from 'obsidian';
+import { instantText } from '../../../utils/DayWindow';
 import type { TaskViewerSettings } from '../../../types';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
+import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import type { GridRow, TaskPlacement, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 import type { ScheduleOverlapLayout } from '../utils/ScheduleOverlapLayout';
@@ -14,7 +14,6 @@ import type { CardReconciler } from '../../sharedUI/CardReconciler';
 export interface ScheduleTaskRendererOptions {
     app: App;
     taskRenderer: TaskCardRenderer;
-    menuHandler: MenuHandler;
     getSettings: () => TaskViewerSettings;
     gridCalculator: ScheduleGridCalculator;
     overlapLayout: ScheduleOverlapLayout;
@@ -23,7 +22,6 @@ export interface ScheduleTaskRendererOptions {
 
 export class ScheduleTaskRenderer {
     private readonly taskRenderer: TaskCardRenderer;
-    private readonly menuHandler: MenuHandler;
     private readonly getSettings: () => TaskViewerSettings;
     private readonly gridCalculator: ScheduleGridCalculator;
     private readonly overlapLayout: ScheduleOverlapLayout;
@@ -31,19 +29,18 @@ export class ScheduleTaskRenderer {
 
     constructor(options: ScheduleTaskRendererOptions) {
         this.taskRenderer = options.taskRenderer;
-        this.menuHandler = options.menuHandler;
         this.getSettings = options.getSettings;
         this.gridCalculator = options.gridCalculator;
         this.overlapLayout = options.overlapLayout;
         this.timelineTopPaddingPx = options.timelineTopPaddingPx;
     }
 
-    async renderTaskCards(
+    renderTaskCards(
         container: HTMLElement,
         placements: TaskPlacement[],
         timelineHeight: number,
         reconciler: CardReconciler,
-    ): Promise<void> {
+    ): void {
         const tasksContainer = container.createDiv('schedule-tasks');
         tasksContainer.style.height = `${timelineHeight}px`;
 
@@ -62,7 +59,7 @@ export class ScheduleTaskRenderer {
             wrapper.style.width = `${widthPct}%`;
             wrapper.style.left = `${placement.column * widthPct}%`;
 
-            await this.renderTaskCard(wrapper, placement.task, true, reconciler);
+            this.renderTaskCard(wrapper, placement.task, true, reconciler);
         }
     }
 
@@ -81,7 +78,7 @@ export class ScheduleTaskRenderer {
 
                 placements.push({
                     task,
-                    startTime: task.startTime ?? this.gridCalculator.visualMinuteToTime(task.visualStartMinute),
+                    startTime: task.drawn ? instantText(task.drawn.startMs).time : this.gridCalculator.visualMinuteToTime(task.visualStartMinute),
                     top,
                     height,
                     column: assignment.column,
@@ -97,32 +94,17 @@ export class ScheduleTaskRenderer {
         });
     }
 
-    async renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean, reconciler: CardReconciler): Promise<void> {
+    renderTaskCard(container: HTMLElement, task: DisplayTask, flowCard: boolean, reconciler: CardReconciler): void {
         const wrapper = container.createDiv(flowCard ? 'schedule-tasks__card-wrap' : 'schedule-section__task-wrap');
 
-        const scope = flowCard ? 'flow' : 'section';
-        const cardInstanceId = `schedule::${scope}::${task.id}`;
-        const reused = reconciler.acquire(cardInstanceId, task);
+        const key = { scope: flowCard ? 'flow' : 'section', name: task.id };
+        const reused = reconciler.acquire(key, task);
         const card = reused ?? wrapper.createDiv('task-card');
         if (reused) wrapper.appendChild(reused);
 
-        this.decorateScheduleCard(card, task);
-        const options = flowCard
-            ? { cardInstanceId, topRight: { mode: 'time' as const } }
-            : { cardInstanceId, topRight: { mode: 'time' as const }, compact: true };
-        await this.taskRenderer.render(card, task, this.getSettings(), options);
-        if (!reused) this.menuHandler.addTaskContextMenu(card);
-    }
-
-    /**
-     * Idempotent decoration for schedule cards. Variant classes reset before
-     * applying current task split state.
-     */
-    private decorateScheduleCard(card: HTMLElement, task: DisplayTask): void {
         TaskStyling.applySplitClasses(card, task);
-
-        TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
-        TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
-        TaskStyling.applyReadOnly(card, task);
+        const topRight = { mode: 'fields' as const, config: TIME_TOP_RIGHT };
+        const options = flowCard ? { key, topRight } : { key, topRight, compact: true };
+        this.taskRenderer.render(card, task, this.getSettings(), options);
     }
 }

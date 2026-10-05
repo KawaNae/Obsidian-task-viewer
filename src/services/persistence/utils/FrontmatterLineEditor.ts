@@ -33,6 +33,24 @@ export class FrontmatterLineEditor {
     }
 
     /**
+     * Where the value of the top-level key `key` stands on `line`, as a key
+     * line of {@link findKeyRange} reads it: from past the key, its colon and
+     * the spaces after them, to before a comment (` # …`) and the spaces
+     * before it or the line's end. Null when the line is no line of `key`.
+     * What an edit of the value alone replaces: the key and the separator
+     * stay as they are spelled, and so does a comment.
+     */
+    static valueRange(line: string, key: string): { start: number; end: number } | null {
+        const head = line.match(/^([^:\s]+)\s*:[ \t]*/);
+        if (!head || head[1] !== key) return null;
+        const start = head[0].length;
+        const rest = line.slice(start);
+        const comment = rest.search(/(^|\s)#/);
+        const value = (comment < 0 ? rest : rest.slice(0, comment)).replace(/\s+$/, '');
+        return { start, end: start + value.length };
+    }
+
+    /**
      * frontmatter を持たないファイルのために空の block を先頭へ挿し、
      * fmEnd を返す。既にある場合は何も足さない。
      *
@@ -45,20 +63,6 @@ export class FrontmatterLineEditor {
         if (existing >= 0) return existing;
         draft.splice(0, 0, '---', '---');
         return 1;
-    }
-
-    /**
-     * キーの値を**書かれたまま**（引用符を外さず）返す。キーが無ければ null。
-     *
-     * 条件付き削除のための読み取りなので、値の解釈はしない。比較側は
-     * {@link escapeYamlScalar} を通した形と生の形の双方を許す。マルチライン値は
-     * 対象外で、キー行の右側だけを見る。
-     */
-    static readRawScalar(lines: readonly string[], fmEnd: number, key: string): string | null {
-        const range = this.findKeyRange(lines, fmEnd, key);
-        if (!range) return null;
-        const m = lines[range[0]].match(/^[^:\s]+\s*:\s*(.*)$/);
-        return m ? m[1].trim() : null;
     }
 
     /**

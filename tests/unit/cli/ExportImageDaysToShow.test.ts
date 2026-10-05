@@ -4,10 +4,9 @@ import {
     validateDaysToShow,
 } from '../../../src/cli/handlers/ExportImageHandler';
 import { schemaFor } from '../../../src/services/viewConfig';
-import { VIEW_META_TIMELINE, VIEW_META_CALENDAR } from '../../../src/constants/viewRegistry';
 
-const TIMELINE_TYPE = VIEW_META_TIMELINE.type;
-const CALENDAR_TYPE = VIEW_META_CALENDAR.type;
+const TIMELINE_TYPE = 'timeline-view';
+const CALENDAR_TYPE = 'calendar-view';
 
 function errorMessage(result: string | null): string {
     expect(result).not.toBe(null);

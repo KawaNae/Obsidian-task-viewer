@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import { diagnosticText } from './diagnosticText';
+import { diagnosticText } from '../lang/flow/diagnosticText';
 import { GenerationError } from './FlowPlanner';
 import type { EvalError } from '../lang/ExprEvaluator';
 

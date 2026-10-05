@@ -37,12 +37,12 @@ function fakeEl(tag: string, cls = '', text = ''): FakeEl {
     return node;
 }
 
-function build(block: string) {
+function build(block: string, variant?: 'primary') {
     const container = fakeEl('div');
     const clicks: number[] = [];
     const btn = createControlButton(container as unknown as HTMLElement, {
         block,
-        variant: 'primary',
+        variant,
         icon: 'play',
         label: '開始',
         onClick: () => clicks.push(1),
@@ -52,8 +52,11 @@ function build(block: string) {
 
 describe('createControlButton', () => {
     it('names the button from the block it belongs to', () => {
-        expect(build('timer-widget').btn.cls).toBe('timer-widget__btn timer-widget__btn--primary');
-        expect(build('timer-view').btn.cls).toBe('timer-view__btn timer-view__btn--primary');
+        expect(build('timer-view', 'primary').btn.cls).toBe('timer-view__btn timer-view__btn--primary');
+    });
+
+    it('adds no variant class when none is given (the widget has one look)', () => {
+        expect(build('timer-widget').btn.cls).toBe('timer-widget__btn');
     });
 
     it('puts the icon in a span instead of hanging it under the button', () => {

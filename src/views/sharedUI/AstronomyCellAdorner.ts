@@ -39,7 +39,7 @@ export function attachMoonPhase(
     options: AttachMoonPhaseOptions = {},
 ): HTMLElement {
     const { size = 16, modifier } = options;
-    const illum = getMoonIllumination(new Date(`${date}T12:00:00`));
+    const illum = getMoonIllumination(DateUtils.toDateTime(date, '12:00'));
     const phaseName = getMoonPhaseName(illum.phase);
     const pct = Math.round(illum.fraction * 100);
 
@@ -76,7 +76,7 @@ export interface AttachSunIndicatorsOptions {
  * day's actual sun time, not today's (they drift a few minutes day-to-day).
  */
 function sunTimesForWrap(date: string, latitude: number, longitude: number): [SunTimes, SunTimes] {
-    const today = new Date(`${date}T12:00:00`);
+    const today = DateUtils.toDateTime(date, '12:00');
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     return [getSunTimes(today, latitude, longitude), getSunTimes(tomorrow, latitude, longitude)];

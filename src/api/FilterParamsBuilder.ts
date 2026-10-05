@@ -1,197 +1,74 @@
-import type { FilterState, FilterCondition, FilterGroup, FilterProperty } from '../services/filter/FilterTypes';
-import { getAllConditions, PROPERTY_OPERATORS } from '../services/filter/FilterTypes';
-import { FilterSerializer } from '../services/filter/FilterSerializer';
-import { parseDatePreset } from '../cli/CliDatePresetParser';
+import type { FilterState } from '../services/filter/FilterTypes';
+import { FilterSerializer, filterIssueText } from '../services/filter/FilterSerializer';
+import type { App } from 'obsidian';
+import type { SortState } from '../services/sort/SortTypes';
 import { TaskApiError } from './TaskApiTypes';
-import type { ListParams } from './TaskApiTypes';
+import type { SimpleFilterParams, FilterSourceParams, WindowParams } from './TaskApiTypes';
+import { loadFilterFile } from './FilterFileLoader';
+import { shorthandConditions } from './QueryShorthand';
 
 /**
- * Boundary validation for externally supplied FilterState (API `filter`
- * param, CLI `filter-file`). The filter engine silently passes unknown
- * properties/operators through as all-match, so typos in a filter JSON
- * would otherwise go undetected. Internal (UI-built) filters don't pass
- * through here.
+ * The `filter` param, read by the one reader of saved filters. A part it
+ * cannot read is an error: the API does not run a query on less than it was
+ * asked.
  */
-export function assertValidFilterState(state: FilterState): void {
-    for (const cond of getAllConditions(state)) {
-        const ops = PROPERTY_OPERATORS[cond.property as FilterProperty];
-        if (!ops) {
-            throw new TaskApiError(
-                `Unknown filter property: ${String(cond.property)}. Available: ${Object.keys(PROPERTY_OPERATORS).join(', ')}`,
-            );
-        }
-        if (!ops.includes(cond.operator)) {
-            throw new TaskApiError(
-                `Invalid operator '${String(cond.operator)}' for filter property '${String(cond.property)}'. Available: ${ops.join(', ')}`,
-            );
-        }
+function readExplicitFilter(filter: FilterState | Record<string, unknown>): FilterState {
+    const { state, issues } = FilterSerializer.parse(filter);
+    if (issues.length > 0) {
+        throw new TaskApiError(`Invalid filter: ${issues.map(filterIssueText).join('; ')}`);
     }
-}
-
-// ── Internal helpers ──
-
-function condition(
-    property: FilterCondition['property'],
-    operator: FilterCondition['operator'],
-    value?: FilterCondition['value'],
-    extra?: { key?: string; unit?: 'hours' | 'minutes' },
-): FilterCondition {
-    const node: FilterCondition = { property, operator };
-    if (value !== undefined) node.value = value;
-    if (extra?.key) node.key = extra.key;
-    if (extra?.unit) node.unit = extra.unit;
-    return node;
-}
-
-export function normalizeStringArray(value: string | string[] | undefined, stripHash = false): string[] {
-    if (!value) return [];
-    const arr = typeof value === 'string' ? value.split(',') : value;
-    return arr.map(s => { let v = s.trim(); if (stripHash) v = v.replace(/^#/, ''); return v; }).filter(Boolean);
-}
-
-/**
- * The simple per-field filter params shared by `list` and the date-range
- * family (tasksForDateRange / categorizedTasksForDateRange). Deliberately
- * excludes `date`/`from`/`to`: those are list's own query-window fields, and
- * the range operations have their own from/to (a required window bound, not
- * a filter condition) — a range operation must never also apply a `list`-style
- * date-window condition on top of its own window, or a task could need to
- * satisfy two different date judgments (visual-date window match, then
- * effective-date filter match) to appear at all.
- */
-export interface SimpleFilterFields {
-    file?: string;
-    status?: string | string[];
-    tag?: string | string[];
-    content?: string;
-    due?: string;
-    leaf?: boolean;
-    property?: string;
-    color?: string | string[];
-    type?: string | string[];
-    root?: boolean;
-}
-
-function buildSimpleFieldConditions(params: SimpleFilterFields): FilterCondition[] {
-    const conditions: FilterCondition[] = [];
-
-    if (params.file) {
-        const file = params.file.endsWith('.md') ? params.file : params.file + '.md';
-        conditions.push(condition('file', 'includes', [file]));
-    }
-
-    const statusArr = normalizeStringArray(params.status);
-    if (statusArr.length > 0) {
-        conditions.push(condition('status', 'includes', statusArr));
-    }
-
-    const tagArr = normalizeStringArray(params.tag, true);
-    if (tagArr.length > 0) {
-        conditions.push(condition('tag', 'includes', tagArr));
-    }
-
-    if (params.content) {
-        conditions.push(condition('content', 'contains', params.content));
-    }
-
-    if (params.due) {
-        const dueValue = parseDatePreset(params.due);
-        if (!dueValue) throw new TaskApiError(`Invalid date value for due: ${params.due}. Use YYYY-MM-DD or a preset`);
-        conditions.push(condition('due', 'equals', dueValue));
-    }
-
-    if (params.leaf) {
-        conditions.push(condition('children', 'isNotSet'));
-    }
-
-    if (params.property) {
-        const colonIdx = params.property.indexOf(':');
-        if (colonIdx < 1) throw new TaskApiError('Invalid property filter format. Use "key:value"');
-        const key = params.property.substring(0, colonIdx).trim();
-        const value = params.property.substring(colonIdx + 1).trim();
-        conditions.push(condition('property', 'contains', value, { key }));
-    }
-
-    const colorArr = normalizeStringArray(params.color);
-    if (colorArr.length > 0) {
-        conditions.push(condition('color', 'includes', colorArr));
-    }
-
-    const typeArr = normalizeStringArray(params.type);
-    if (typeArr.length > 0) {
-        conditions.push(condition('notation', 'includes', typeArr));
-    }
-
-    if (params.root) {
-        conditions.push(condition('parent', 'isNotSet'));
-    }
-
-    return conditions;
-}
-
-/** `params.filter`, parsed and validated, when present — the override every
- *  simple-field builder shares (an explicit FilterState always wins). */
-function resolveExplicitFilter(filter: FilterState | Record<string, unknown> | undefined): FilterState | undefined {
-    if (!filter) return undefined;
-    const state = 'filters' in filter ? filter as FilterState : FilterSerializer.fromJSON(filter);
-    assertValidFilterState(state);
     return state;
 }
 
 /**
- * Build a FilterState from simple ListParams fields, `list`'s own query
- * window (`date`/`from`/`to`) included. Returns null if no filter conditions
- * are needed. If params.filter is provided, it overrides all simple fields
- * (including the window).
+ * What a query asks for, from all its params taken together: the tasks
+ * `filter` passes (null: every task), in `sort`'s order when the call names
+ * none, and whether the tasks with a validation error are among them.
  */
-export function buildFilterFromParams(params: ListParams): FilterState | null {
-    const explicit = resolveExplicitFilter(params.filter);
-    if (explicit) return explicit;
-
-    const conditions = buildSimpleFieldConditions(params);
-
-    // Query window (inclusive overlap): a task matches when its effective
-    // span intersects [from, to]. `date` is sugar for a single-day window
-    // (from=X to=X), presets included, so the whole family shares one rule:
-    //   from → the task must not end before the window starts
-    //   to   → the task must not start after the window ends
-    if (params.date && (params.from || params.to)) {
-        throw new TaskApiError("Cannot use 'date' together with 'from'/'to'. Use either 'date' for a single-day window, or 'from'/'to' for a range.");
-    }
-    const windowFrom = params.date ?? params.from;
-    const windowTo = params.date ?? params.to;
-    const windowFromName = params.date ? 'date' : 'from';
-    const windowToName = params.date ? 'date' : 'to';
-    if (windowFrom) {
-        const fromValue = parseDatePreset(windowFrom);
-        if (!fromValue) throw new TaskApiError(`Invalid date value for ${windowFromName}: ${windowFrom}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`);
-        conditions.push(condition('endDate', 'onOrAfter', fromValue));
-    }
-    if (windowTo) {
-        const toValue = parseDatePreset(windowTo);
-        if (!toValue) throw new TaskApiError(`Invalid date value for ${windowToName}: ${windowTo}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`);
-        conditions.push(condition('startDate', 'onOrBefore', toValue));
-    }
-
-    if (conditions.length === 0) return null;
-
-    return { filters: conditions, logic: 'and' };
+export interface ApiQuery {
+    filter: FilterState | null;
+    /** The saved query's order (a pinned list's): the caller's `sort` wins over it. */
+    sort?: SortState;
+    /**
+     * A query of the call's own (`filter`, the shorthand) lists every task
+     * the index holds; one with a saved query in it (a filter file) the
+     * tasks its view would show, which leaves out the tasks with a
+     * validation error.
+     */
+    includeInvalid: boolean;
 }
 
 /**
- * Build a FilterState from simple filter fields for the date-range family —
- * same simple fields and the same params.filter override as `list`, but
- * never a date-window condition: tasksForDateRange/categorizedTasksForDateRange
- * already have their own required from/to (a window bound passed straight to
- * getTasksForDateRange), and SimpleFilterFields has no date/from/to field to
- * read in the first place, so the two window judgments structurally can't mix.
+ * The query a call names: the filter file's (`list` picks one pinned list
+ * out of a .md template), `filter`, and the shorthand's conditions
+ * (`shorthandConditions`: the simple fields, `date`, `from` and `to`), all
+ * taken together — a task answers when it passes every one. `list`,
+ * `today` and the date-range family all resolve their query here.
+ *
+ * A filter file is a saved query, and is answered as the UI answers it
+ * (stage 7, point Q): with the tasks a view shows, so not those with a
+ * validation error, and in the pinned list's own order unless the call
+ * names a `sort` — whatever else the call adds to it.
  */
-export function buildRangeFilterFromParams(params: SimpleFilterFields & { filter?: FilterState | Record<string, unknown> }): FilterState | null {
-    const explicit = resolveExplicitFilter(params.filter);
-    if (explicit) return explicit;
+export async function resolveQuery(
+    app: App,
+    params: SimpleFilterParams & FilterSourceParams & WindowParams,
+): Promise<ApiQuery> {
+    if (params.list && !params.filterFile) {
+        throw new TaskApiError(n => `'${n('list')}' requires '${n('filterFile')}' (a .md view template)`, 'list');
+    }
+    // Every param is read, and so checked, whatever else is given.
+    const shorthand = shorthandConditions(params);
+    const explicit = params.filter ? readExplicitFilter(params.filter) : null;
+    const loaded = params.filterFile ? await loadFilterFile(app, params.filterFile, params.list) : null;
+    if (loaded instanceof TaskApiError) throw loaded;
 
-    const conditions = buildSimpleFieldConditions(params);
-    if (conditions.length === 0) return null;
-
-    return { filters: conditions, logic: 'and' };
+    const sources = [loaded?.filter, explicit].filter((s): s is FilterState => !!s);
+    const filter: FilterState | null = shorthand.length === 0 && sources.length <= 1
+        ? sources[0] ?? null
+        : { logic: 'and', filters: [...sources, ...shorthand] };
+    if (!loaded) return { filter, includeInvalid: true };
+    return loaded.sort
+        ? { filter, sort: loaded.sort, includeInvalid: false }
+        : { filter, includeInvalid: false };
 }

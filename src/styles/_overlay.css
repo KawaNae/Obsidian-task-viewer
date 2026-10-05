@@ -65,6 +65,12 @@ body:not(.theme-dark) .tv-overlay {
     overflow: hidden;
 }
 
+/* The panel holds the focus when no field is named (OverlayShell's first
+   focus); it is a surface, not a control, so it draws no ring */
+.tv-overlay__panel:focus {
+    outline: none;
+}
+
 /* --- Body --- */
 .tv-overlay__body {
     flex: 1;
@@ -94,26 +100,10 @@ body:not(.theme-dark) .tv-overlay {
 .tv-overlay .tv-overlay__close {
     position: absolute;
     top: 10px;
-    right: 10px;
+    inset-inline-end: 10px;
     width: 28px;
     height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    appearance: none;
-    -webkit-appearance: none;
-    padding: 0 !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: var(--tv-radius-s);
-    color: var(--tv-text-muted);
-    cursor: pointer;
-}
-
-.tv-overlay .tv-overlay__close:hover {
-    color: var(--tv-text);
-    background: var(--tv-bg-hover) !important;
+    border: none;
 }
 
 .tv-overlay__close .svg-icon {
@@ -209,7 +199,9 @@ body:not(.theme-dark) .tv-overlay {
 
 .is-phone .tv-overlay .tv-overlay__panel {
     position: relative;
-    left: auto !important;
+    /* Undoes the anchored mode's position, which the script writes as left
+       whatever the direction: both sides, so in either direction */
+    inset-inline: auto !important;
     top: auto !important;
     max-height: calc(100% - 120px) !important;
     width: 100%;

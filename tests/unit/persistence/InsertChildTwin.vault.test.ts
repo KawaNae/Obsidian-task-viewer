@@ -3,8 +3,10 @@ import { Notice } from 'obsidian';
 import { TaskActionsMenuBuilder } from '../../../src/interaction/menu/builders/TaskActionsMenuBuilder';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { t } from '../../../src/i18n';
+import { CreatePlaces, type CreatePlace } from '../../../src/services/data/CreatePlaces';
+import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
@@ -24,14 +26,14 @@ const FILE = 'note.md';
 const TWINS = ['- [ ] 読書', '- [ ] 読書', ''];
 const EDITED = ['メモ', '- [ ] 読書', '- [ ] 読書', ''].join('\n');
 
-/** What the menu's "Add child task" dialog writes, once it is opened. */
-let submitted: Promise<unknown> | undefined;
+/** What the menu's "Add child task" dialog answers of its write, once it is opened and `c` created. */
+let submitted: Promise<WriteAnswer> | undefined;
 
-vi.mock('../../../src/modals/CreateTaskModal', () => ({
-    formatTaskLine: () => '- [ ] c',
-    CreateTaskModal: class {
-        constructor(_app: unknown, private readonly submit: (result: unknown) => Promise<unknown>) { }
-        open() { submitted = this.submit({}); }
+/** The dialog creates `c` in its place as it opens, its refusal said in it (`CreateModal`). */
+vi.mock('../../../src/modals/create/CreateModal', () => ({
+    CreateModal: class {
+        constructor(_app: unknown, private readonly places: CreatePlaces, _startHour: unknown, private readonly place: CreatePlace) { }
+        open() { submitted = this.places.create(this.place, '- [ ] c', { tellRefusal: false }); }
     },
 }));
 
@@ -80,21 +82,23 @@ function recordingMenu() {
     return { menu, clicks };
 }
 
-async function addChildFromCardMenu(session: VaultSession, task: ReturnType<typeof secondTwin>): Promise<void> {
-    const plugin = { settings: { startHour: 0 }, getTimerWidget: () => undefined };
-    const builder = new TaskActionsMenuBuilder(session.app as never, new TaskWriteService(session.index), plugin as never);
+async function addChildFromCardMenu(session: VaultSession, task: ReturnType<typeof secondTwin>): Promise<WriteAnswer> {
+    const places = new CreatePlaces(session.app, session.ops, () => DEFAULT_SETTINGS, (id) => session.index.getTask(id));
+    const plugin = { settings: { startHour: 0 }, getTimerWidget: () => undefined, getCreatePlaces: () => places };
+    const builder = new TaskActionsMenuBuilder(session.app as never, session.ops, plugin as never);
     const { menu, clicks } = recordingMenu();
     builder.addChildActions(menu as never, task);
     await clicks.get(t('menu.addChildTask'))!();
-    await submitted;
+    return submitted!;
 }
 
 function apiOver(session: VaultSession): TaskApi {
     const plugin = {
         app: session.app,
         settings: { startHour: 0 },
-        getTaskReadService: () => new TaskReadService(session.index, 0),
-        getTaskWriteService: () => new TaskWriteService(session.index),
+        getTaskReadService: () => new TaskReadService(session.index, () => ({ startHour: 0, weekStartDay: 1 })),
+        getIndex: () => session.index,
+        getOperations: () => session.ops,
     };
     return new TaskApi(plugin as never);
 }
@@ -111,9 +115,12 @@ describe('a child added from a card\'s menu', () => {
         const task = secondTwin(session);
         contents.set(FILE, EDITED);
 
-        await addChildFromCardMenu(session, task);
+        const answer = await addChildFromCardMenu(session, task);
         expect(contents.get(FILE)).toBe(EDITED);
-        expect(Notice.messages).toHaveLength(1);
+        // Said in the dialog, which stays open: no notice besides.
+        expect(answer.written).toBe(false);
+        expect(answer.written === false && answer.refused).not.toBeNull();
+        expect(Notice.messages).toHaveLength(0);
     });
 });
 
@@ -144,13 +151,13 @@ describe('a timer\'s record (the same check as every write)', () => {
 
     it('is refused as a first child on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect(await session.index.insertLine(task.id, '- [x] rec', 'firstChild')).toBe(false);
+        expect((await session.ops.insertLine(task.id, '- [x] rec', 'firstChild')).written).toBe(false);
         expect(contents.get(FILE)).toBe(INDENTED);
     });
 
     it('is refused as a next sibling on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect(await session.index.insertLine(task.id, '- [x] rec', 'afterSubtree')).toBe(false);
+        expect((await session.ops.insertLine(task.id, '- [x] rec', 'afterSubtree')).written).toBe(false);
         expect(contents.get(FILE)).toBe(INDENTED);
     });
 });

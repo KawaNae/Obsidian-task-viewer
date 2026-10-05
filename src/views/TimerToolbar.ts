@@ -1,21 +1,31 @@
 import { setIcon } from 'obsidian';
 import { t } from '../i18n';
-import { ViewToolbarBase } from './sharedUI/ViewToolbar';
+import { ViewSettingsMenu, ViewToolbarBase } from './sharedUI/ViewToolbar';
+import type { ViewSettingsOptions } from './sharedUI/ViewToolbar';
+import type { ViewToolbarHost } from './base/TaskViewerView';
+import type { TimerState, TimerViewMode } from './TimerSchema';
 
-export type TimerViewMode = 'countup' | 'countdown' | 'pomodoro' | 'interval';
+/** What the timer does that is not a change of its state, or reads from more than it. */
+export interface TimerCommands {
+    /** Whether no timer runs (the mode can be changed only then). */
+    isIdle(): boolean;
+    /** Open the menu of modes. */
+    selectMode(event: MouseEvent): void;
+    /** Read the interval templates again. */
+    reloadTemplates(): void;
+    /** The gear menu: the shared settings with the timer's lengths above them. */
+    settingsOptions(): ViewSettingsOptions;
+}
 
 export interface TimerToolbarDeps {
-    getMode: () => TimerViewMode;
-    isIdle: () => boolean;
-    onSelectMode: (event: MouseEvent) => void;
-    onReloadTemplates: () => void;
-    onShowSettingsMenu: (event: MouseEvent) => void;
+    host: ViewToolbarHost<TimerState>;
+    commands: TimerCommands;
 }
 
 /**
- * Persistent toolbar for TimerView. Marked dynamic-content because button
- * visibility/state depends on timer phase (idle/running/paused) and selected
- * mode, which both change between renders.
+ * Persistent toolbar for TimerView. Marked dynamic-content: its buttons
+ * depend on the mode and on whether a timer runs, so it is built anew on
+ * each mount, and the view draws on every change of its state.
  */
 export class TimerToolbar extends ViewToolbarBase {
     constructor(private deps: TimerToolbarDeps) {
@@ -23,9 +33,9 @@ export class TimerToolbar extends ViewToolbarBase {
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { deps } = this;
-        const mode = deps.getMode();
-        const isIdle = deps.isIdle();
+        const { host, commands } = this.deps;
+        const mode = host.store.get().timerViewMode ?? 'pomodoro';
+        const isIdle = commands.isIdle();
 
         const labels: Record<TimerViewMode, string> = {
             countup: t('timer.countup'),
@@ -40,7 +50,7 @@ export class TimerToolbar extends ViewToolbarBase {
         setIcon(modeIcon, 'chevrons-up-down');
         modeLabel.setText(labels[mode]);
         modeBtn.disabled = !isIdle;
-        modeBtn.onclick = (e) => deps.onSelectMode(e);
+        modeBtn.onclick = (e) => commands.selectMode(e);
 
         toolbar.createDiv('view-toolbar__spacer');
 
@@ -48,12 +58,9 @@ export class TimerToolbar extends ViewToolbarBase {
             const refreshBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
             setIcon(refreshBtn, 'refresh-cw');
             refreshBtn.setAttribute('aria-label', t('timer.reloadTemplates'));
-            refreshBtn.onclick = () => deps.onReloadTemplates();
+            refreshBtn.onclick = () => commands.reloadTemplates();
         }
 
-        const settingsBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon' });
-        setIcon(settingsBtn, 'settings');
-        settingsBtn.setAttribute('aria-label', t('timer.settings'));
-        settingsBtn.onclick = (e) => deps.onShowSettingsMenu(e);
+        ViewSettingsMenu.renderButton(toolbar, commands.settingsOptions());
     }
 }

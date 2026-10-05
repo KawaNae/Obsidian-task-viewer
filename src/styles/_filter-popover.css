@@ -4,7 +4,7 @@
  * is provided by OverlayShell (_overlay.css). This file only defines
  * content-specific sizing and the inner layout.
  *
- * 原子部品（pill / suggest / text input / input-wrap / swatch /
+ * 原子部品（pill / text input / input-wrap / swatch /
  * status-checkbox）は共有部品 tv-ctrl__*（_controls.css）を使う。
  */
 
@@ -165,26 +165,11 @@
     margin-left: auto;
     width: 24px;
     height: 24px;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent !important;
-    border: 1px solid transparent !important;
-    box-shadow: none;
-    color: var(--tv-text-muted);
-    cursor: pointer;
     border-radius: var(--clickable-icon-radius, var(--tv-radius-s));
-    flex-shrink: 0;
 }
 
 .filter-popover .filter-popover__more-btn:hover {
-    color: var(--tv-text);
-    background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
-    box-shadow: none;
 }
 
 .filter-popover .filter-popover__more-btn .svg-icon {
@@ -298,23 +283,60 @@ body:not(.theme-dark) .filter-popover__group-body[data-depth]:not([data-depth="0
 
 /* ── Date Value Selector ── */
 
+/* [kind ▾] then the value: a date field, a preset, or a range's two fields.
+   The fields are 段10's (`.tv-ctrl .tv-form__input-with-picker`, _form.css). */
 .filter-popover__date-value {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
     min-width: 0;
 }
 
-.filter-popover .filter-popover__date-mode-btn {
+.filter-popover .filter-popover__date-kind-btn {
     flex-shrink: 0;
     font-size: 10px;
     padding: 2px 6px;
     color: var(--tv-text-muted);
 }
 
-.filter-popover .filter-popover__date-input {
+/* A range: [from] 〜 [to]; narrow, the fields go to two lines */
+.filter-popover__range {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 300px;
     min-width: 0;
-    flex: 1;
+}
+
+.filter-popover__range-sep {
+    color: var(--tv-text-muted);
+}
+
+/* A date field, and the time of a value with one, faint beside it */
+.filter-popover__date-slot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 140px;
+    min-width: 0;
+}
+
+.filter-popover__date-slot > .tv-form__input-with-picker {
+    flex: 1 1 auto;
+    min-width: 140px;
+}
+
+.filter-popover__date-time {
+    font-size: var(--font-ui-smaller);
+    color: var(--tv-text-faint);
+    white-space: nowrap;
+}
+
+/* Phone: the range under the kind button, the width of the row */
+.is-phone .filter-popover__range {
+    flex-basis: 100%;
 }
 
 /* Number Value Selector (Length filter) */
@@ -416,4 +438,15 @@ body:not(.theme-dark) .filter-popover__group-body[data-depth]:not([data-depth="0
 
 .filter-child-popover__item--danger .filter-child-popover__icon {
     color: var(--tv-text-danger);
+}
+
+/* A number of a row (N of nextNDays, a length): read as typed; what does
+   not read is said under the row's value line (FilterConditionRenderer). */
+.filter-popover .tv-ctrl__text-input.filter-popover__number-input {
+    width: 52px;
+    flex-shrink: 0;
+}
+
+.filter-popover .filter-popover__says > .tv-form__error {
+    margin: 4px 0 0;
 }

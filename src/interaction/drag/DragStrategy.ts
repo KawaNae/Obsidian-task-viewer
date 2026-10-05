@@ -1,16 +1,16 @@
 import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { IndexReads } from '../../services/core/TaskIndex';
+import type { Operations } from '../../services/operations/Operations';
 import type { SelectionController } from '../selection/SelectionController';
 
 export interface DragContext {
     container: HTMLElement;
     plugin: PluginContext;
-    readService: TaskReadService;
-    writeService: TaskWriteService;
+    /** The index's copies, and the drag's hold on its note (`PluginContext.getIndex`). */
+    index: IndexReads;
+    operations: Operations;
     selectionController: SelectionController;
-    onTaskMove: () => void;
     onTaskClick: (taskId: string) => void;
     // Helper to get visual date from column element
     getDateFromCol: (el: HTMLElement) => string | null;

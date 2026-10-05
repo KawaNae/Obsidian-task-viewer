@@ -1,15 +1,24 @@
 import type { Diagnostic } from '../services/lang/Diagnostic';
-import type { FlowProgram } from '../services/flow/FlowAst';
+import type { FlowProgram } from '../services/lang/flow/FlowAst';
 
 /**
  * One `- ==> ...` child line owned by the task's flow program.
- * `raw` is the verbatim text after the line's `==>` marker (trimmed);
- * `bodyLine` is the absolute file line (same convention as
- * ChildLine.bodyLine), or -1 for a not-yet-written new instance.
+ * `raw` is the verbatim text after the line's `==>` marker (trimmed).
  */
 export interface FlowChildSegment {
     raw: string;
-    bodyLine: number;
+    /**
+     * The absolute file line it was read from (same convention as
+     * ChildLine.bodyLine). None on a segment the plugin has planned and not
+     * written yet: a next instance's (`FlowPlanner`). A flow read off a note
+     * has one on every segment (`ReadFlow`).
+     */
+    bodyLine?: number;
+}
+
+/** A flow as a note writes it (`readFlow`): every segment stands on its line. */
+export interface ReadFlow extends TaskFlow {
+    childSegments: Required<FlowChildSegment>[];
 }
 
 /**
@@ -22,13 +31,13 @@ export interface FlowChildSegment {
  *
  * Invariants:
  * - `raw` is the verbatim task-line text after `==>` (trimmed; '' when the
- *   flow lives only in child lines). format() re-emits it unchanged for
+ *   flow lives only in child lines). formatTaskLine re-emits it unchanged for
  *   round-trip safety, even when parsing failed. Child segments are never
- *   rewritten by format() — they are physical lines of their own.
+ *   rewritten by formatTaskLine — they are physical lines of their own.
  * - `program` is non-null iff parsing AND checking the joined source
  *   produced no error diagnostics — i.e. the command is executable.
  * - `diagnostics` spans are offsets into the joined source (see
- *   services/flow/FlowSegments.ts for the segment table mapping).
+ *   services/lang/flow/FlowSegments.ts for the segment table mapping).
  */
 export interface TaskFlow {
     raw: string;

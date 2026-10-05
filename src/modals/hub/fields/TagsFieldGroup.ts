@@ -6,18 +6,36 @@ import { FilterValueCollector } from '../../../services/filter/FilterValueCollec
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
+import { bindField, type BoundField } from '../../form/bindField';
+import { readIssue, type IssueSlot } from '../../form/FormIssue';
+import { TagInput } from '../../../services/parsing/utils/TagInput';
+import { optional } from '../../../utils/values/Read';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
-import type { FieldGroupContext } from './FieldGroupContext';
+import { ValueSuggest } from '../../../suggest/ValueSuggest';
+import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
+
+const ADD_TAGS = optional(TagInput);
 
 /**
  * タグ chips + 追加 input。effective 表示のうち:
  * - content 由来 #tag → ロック chip（編集は name フィールドの責務）
  * - own property 宣言 → ×付き chip（削除可）
  * - cascade 由来のみ → グレーロック chip + 出所（負の上書きは提供しない）
+ *
+ * 追加の欄は `TagInput` で読み（空白で区切った語、`#` は有っても無くても
+ * よい）、1つのタグに読めない語は欄の下に理由を出して足さない。chip の増減で
+ * 組み直しても、打ちかけの字は残す。足す書き込みが拒まれたら、打った字を欄に戻す。
  */
-export class TagsFieldGroup {
+export class TagsFieldGroup implements ClosingPart {
     private sectionEl: HTMLElement;
     private addInput: HTMLInputElement | null = null;
+    private addWrap: HTMLElement | null = null;
+    private says: HTMLElement | null = null;
+    private addBound: BoundField<string[] | undefined> | null = null;
+    /** The list under the add field as last built: closed before the rows are built anew. */
+    private suggest: ValueSuggest | null = null;
+    /** What is typed in the add field and not yet added: kept across a rebuild. */
+    private draft = '';
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
         this.sectionEl = container.createDiv({ cls: 'task-hub__tags' });
@@ -25,7 +43,8 @@ export class TagsFieldGroup {
     }
 
     render(force = false): void {
-        if (!force && this.sectionEl.contains(document.activeElement)) return;
+        if (!force && this.sectionEl.contains(this.sectionEl.ownerDocument.activeElement)) return;
+        this.suggest?.close();
         this.sectionEl.empty();
 
         const task = this.ctx.getTask();
@@ -45,7 +64,7 @@ export class TagsFieldGroup {
                     chip.addClass('task-hub__tag-chip--locked');
                     chip.setAttribute('aria-label', t('modal.hub.contentTagLocked'));
                 } else if (ownTags.has(tag)) {
-                    const removeBtn = chip.createEl('button', { cls: 'tv-ctrl__pill-remove' });
+                    const removeBtn = chip.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
                     setIcon(removeBtn.createSpan(), 'x');
                     removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
                     removeBtn.disabled = shut;
@@ -60,8 +79,10 @@ export class TagsFieldGroup {
         }
 
         // label + input の行（中央揃え — 他フィールドと同じ）
-        const { row } = createFormRow(this.sectionEl, t('modal.hub.tags'), { icon: PROPERTY_ICONS.tags });
+        const { row, says } = createFormRow(this.sectionEl, t('modal.hub.tags'), { icon: PROPERTY_ICONS.tags });
+        this.says = says;
         const inputWrap = row.createDiv({ cls: 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow task-hub__tag-add-wrap tv-form__control' });
+        this.addWrap = inputWrap;
         const input = inputWrap.createEl('input', {
             type: 'text',
             placeholder: t('modal.hub.addTag'),
@@ -69,30 +90,43 @@ export class TagsFieldGroup {
         });
         this.addInput = input;
         input.disabled = shut;
+        input.value = this.draft;
+        input.addEventListener('input', () => { this.draft = input.value; });
 
-        const addTags = (raw: string) => {
-            const added = raw.split(/\s+/).map(s => s.replace(/^#/, '')).filter(s => s.length > 0);
-            if (added.length === 0) return;
+        const addTags = (added: readonly string[]): void => {
+            const typed = input.value;
+            this.draft = '';
             input.value = '';
-            this.commit([...this.ctx.getTask().tags, ...added]);
+            const write = this.commit([...this.ctx.getTask().tags, ...added]);
+            // Refused: what was typed is the field's again, unless something was typed since.
+            void write?.then((written) => {
+                if (written || this.draft !== '') return;
+                this.draft = typed;
+                if (this.addInput && this.addInput.value === '') this.addInput.value = typed;
+            });
         };
 
-        this.ctx.attachSuggest(input, inputWrap, {
-            getCandidates: (query) => {
-                const q = query.toLowerCase().replace(/^#/, '');
+        this.suggest = new ValueSuggest(this.ctx.app, input, {
+            candidates: (query) => {
+                const q = query.trim().toLowerCase().replace(/^#/, '');
                 const selected = new Set(getEffectiveTags(this.ctx.getTask()));
-                return FilterValueCollector.collectTags(this.ctx.readService.getTasks())
+                return FilterValueCollector.collectTags(this.ctx.index.getTasks())
                     .filter(v => !selected.has(v))
                     .filter(v => !q || v.toLowerCase().includes(q));
             },
-            renderItem: (item, val) => { item.createSpan().setText(`#${val}`); },
-            onPick: (val) => addTags(val),
+            render: (val, el) => el.setText(`#${val}`),
+            pick: (val) => addTags([val]),
+        });
+        // The field stands for nothing: what it reads is added, and it empties.
+        this.addBound = bindField(input, {
+            codec: ADD_TAGS,
+            current: () => undefined,
+            commit: (added) => { if (added) addTags(added); },
+            issues: (issue) => this.ctx.issues.set('tags', readIssue('tags', issue)),
+            takesEnter: () => this.suggest?.listShown ?? false,
         });
         input.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.isComposing) {
-                const raw = input.value.trim();
-                if (raw) addTags(raw);
-            } else if (e.key === 'Backspace' && !input.value) {
+            if (e.key === 'Backspace' && !input.value) {
                 // 空入力での Backspace は末尾の削除可能タグ（own 宣言かつ
                 // content 由来でない）を除去する — filter pill と同じ操作感
                 const current = this.ctx.getTask();
@@ -101,21 +135,34 @@ export class TagsFieldGroup {
                 if (last) this.commit(current.tags.filter(x => x !== last));
             }
         });
-        input.addEventListener('blur', () => {
-            const raw = input.value.trim();
-            if (raw) addTags(raw);
-        });
+        this.ctx.issues.redraw();
     }
 
-    private commit(tags: string[]): void {
-        if (this.ctx.isShut()) return;
-        this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
+    private commit(tags: string[]): Promise<boolean> | undefined {
+        if (this.ctx.isShut()) return undefined;
+        const write = this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。
-        const restoreFocus = document.activeElement === this.addInput;
-        this.ctx.stack.closeAll();
+        const restoreFocus = !!this.addInput && this.addInput.ownerDocument.activeElement === this.addInput;
         this.render(true);
         if (restoreFocus) this.addInput?.focus();
+        return write;
+    }
+
+    unsaved(): UnsavedField[] {
+        return this.addBound?.pending()?.ok === false && this.addInput
+            ? [{ label: t('modal.hub.tags'), input: this.addInput }]
+            : [];
+    }
+
+    discardUnsaved(): void {
+        if (this.addBound?.pending()?.ok !== false) return;
+        this.draft = '';
+        this.addBound.discard();
+    }
+
+    save(): void {
+        if (this.addBound?.pending()?.ok) this.addBound.commit();
     }
 
     /** 外部変更（echo）の取り込み。focus 中はスキップする既存の render ガードに乗る。 */
@@ -129,7 +176,13 @@ export class TagsFieldGroup {
         this.render(true);
     }
 
-    focus(): void {
-        this.addInput?.focus();
+    /** Where the add field says its issues: its box and the line under its row. */
+    slot(): IssueSlot | null {
+        return this.addWrap && this.says ? { input: this.addWrap, message: this.says } : null;
+    }
+
+    /** The field that adds a tag. */
+    fieldElement(): HTMLElement | null {
+        return this.addInput ?? null;
     }
 }

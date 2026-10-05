@@ -1,4 +1,4 @@
-import { TFile, type App } from 'obsidian';
+import { TFile, TFolder, type App } from 'obsidian';
 import { logError, logWarn } from '../../log/log';
 import { LINE_BREAK, holdsLineBreak } from '../../utils/LineBreak';
 import { Outline, type OutlineReading } from '../parsing/utils/Outline';
@@ -64,6 +64,14 @@ export function splitLines(content: string): SplitLines {
 /** Put the lines back together with the terminator the file is written in. */
 export function joinLines(lines: string[], eol: Eol): string {
     return lines.join(eol);
+}
+
+/**
+ * The content of `lines` as a file holds them: joined with its terminator,
+ * and opened with the mark when it had one (what {@link splitLines} took off).
+ */
+export function joinContent(lines: readonly string[], { eol, bom }: Pick<SplitLines, 'eol' | 'bom'>): string {
+    return (bom ? BOM : '') + joinLines([...lines], eol);
 }
 
 /**
@@ -347,7 +355,7 @@ function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[];
             reported.push(edit);
             placedBy.set(edit, put);
             items.forEach((item, i) => {
-                if (!Outline.VERBATIM.holds(item.text, sources[i])) reported.push({ kind: 'replaced', at: start + i });
+                if (!Outline.verbatim(item.text, sources[i])) reported.push({ kind: 'replaced', at: start + i });
             });
         },
     };
@@ -358,30 +366,6 @@ function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[];
 function spliceStart(length: number, at: number): number {
     const n = Number.isNaN(at) ? 0 : Math.trunc(at);
     return n < 0 ? Math.max(length + n, 0) : Math.min(n, length);
-}
-
-/**
- * A line the editor pointed at: its number, the text the editor showed on it,
- * and the content it was taken in. The one place a write takes a coordinate
- * from outside — the editor's cursor is not a row the index knows.
- *
- * A coordinate in the editor holds only in the content it was taken in: an
- * unsaved line above, or an edit from outside, can bring a twin onto its
- * number, and the twin reads as the text did. So the write is made only in
- * lines whose key is `key` (`WriteSession.row`), whether they are the
- * editor's or the file's, and there only if the line still reads `text`.
- */
-export interface EditorLine {
-    line: number;
-    text: string;
-    /** The key of the content `line` is a coordinate in: the editor's document when the line was taken. */
-    key: ContentKey;
-    /**
-     * The line and every line of its subtree as the editor showed them, for a
-     * write that takes them away. The write is made only if the file still
-     * reads them so, as a delete that names its row is (F5).
-     */
-    subtree?: readonly string[];
 }
 
 /**
@@ -486,33 +470,45 @@ export interface Landing {
 }
 
 /**
- * A row a write names: the line the index's copy of it stands on, and what
- * the write was planned from — the basis the lines have to read as, on that
- * line, for the write to be made there (see `RowBasis`).
- *
- * The line is a coordinate in the content the index last read. The basis is
- * what says whether the lines handed to the write are still that content
- * where it matters: a line moved or rewritten since reads otherwise there,
- * and nothing is written. Nothing looks for the row anywhere else.
+ * A row a write names: the line it stands on, what to call it if the write
+ * has to be refused, and what the write was planned from — the basis the
+ * lines have to read as, on that line, for the write to be made there (see
+ * `RowBasis`). Nothing looks for the row anywhere else.
  *
  * The basis cannot tell two rows that read the same apart: an edit from
- * outside can move a row's twin onto its line. So a row the index read names
- * the reading it was read in (`read`), and its line counts only while the
- * file reads as that reading did, or as our own writes from it left it,
- * across which the line is carried ({@link WriteChannel.follow}). A content
- * the file had before is not that reading: a write of ours can bring it back
- * with other rows on its lines. In any other content the row is not written,
- * however its line reads, until the index has read the file again.
+ * outside, or an unsaved line above, can bring a row's twin onto its line.
+ * So the line is a coordinate in one content, which the row names (`in`),
+ * and counts only there:
+ *
+ * - `reading`: a reading the index made (`plannedOn`). The line counts while
+ *   the file reads as that reading did, or as our own writes from it left
+ *   it, across which the line is carried ({@link WriteChannel.follow}). A
+ *   content the file had before is not that reading: a write of ours can
+ *   bring it back with other rows on its lines. In any other content the
+ *   row is not written, however its line reads, until the index has read
+ *   the file again.
+ * - `key`: the editor's document when the editor pointed at the line
+ *   ({@link editorRow}) — the one place a write takes a coordinate from
+ *   outside. The line counts only in lines whose key is that one, the
+ *   editor's or the file's.
  */
-export interface NamedRow {
+export interface RowRef {
     line: number;
     subject: string;
     basis: RowBasis;
-    /**
-     * The reading `line` is a coordinate in. A row without one is not
-     * written.
-     */
-    read?: ReadingId;
+    /** Which content `line` is a coordinate in. */
+    in: { reading: ReadingId } | { key: ContentKey };
+}
+
+/**
+ * The row at a line the editor pointed at: `line`, reading `text` as the
+ * editor showed it, in the content whose key is `key`; with `subtree`, the
+ * line and every line of its subtree as the editor showed them, for a write
+ * that takes them away, made only if the file still reads them so, as a
+ * delete that names its row is (F5).
+ */
+export function editorRow(line: number, text: string, key: ContentKey, subtree?: readonly string[]): RowRef {
+    return { line, subject: text.trim(), basis: { text, ...(subtree ? { subtree } : {}) }, in: { key } };
 }
 
 /**
@@ -532,7 +528,7 @@ export interface MarkedLine {
 }
 
 /** What a write can ask its session for the line of (`WriteSession.row`). */
-export type RowTarget = NamedRow | EditorLine | MarkedLine;
+export type RowTarget = RowRef | MarkedLine;
 
 /**
  * What one `processLines` callback is handed besides its draft: where its
@@ -540,9 +536,9 @@ export type RowTarget = NamedRow | EditorLine | MarkedLine;
  * refusal and whom it is about are answered here, in one place.
  *
  * `row` is the one way a write takes a line. A row is named with what the
- * write was planned from, or it is a line the editor pointed at with the text
- * the editor showed there and the content it was taken in; either way, the
- * line is handed out only if the lines read as that. So every write that takes a line checks it once, and the
+ * write was planned from and the content its line is a coordinate in — the
+ * index's reading, or the editor's document (`RowRef`) — and the line is
+ * handed out only if the lines read as that. So every write that takes a line checks it once, and the
  * same check, and no write writes a plan over an edit the plan never saw.
  */
 export interface WriteSession {
@@ -581,7 +577,7 @@ export interface WriteSession {
     /**
      * Give the write up for what the lines hold, not for a target: the
      * section it goes to is under more than one heading of its name
-     * (`HeadingInserter`), a subtree's replacement would not read as the
+     * (`Notes.putInNote`), a subtree's replacement would not read as the
      * row's subtree (`ReplaceSubtree`), or the lines are not the ones the
      * write was made for (`changed`: a send's row whose subtree, once its
      * draft and fires are written, is not what went to its note, `SendWriter`;
@@ -633,9 +629,8 @@ export type DraftEdit = (draft: LineDraft, eol: Eol, session: WriteSession) => b
  * comes between the tries. `settle` is run again on every run of the
  * callback, and only the last run's answer counts.
  *
- * A completion's fires are tried so (`InlineTaskWriter.writeFiring`): a fire
- * the write is refused with is set aside, and the completion written without
- * it.
+ * A completion's fires are tried so (`firingTrials`): a fire the write is
+ * refused with is set aside, and the completion written without it.
  */
 export interface EditTrials {
     settle(tryEdit: (edit: DraftEdit) => EditedLines): EditedLines;
@@ -756,7 +751,7 @@ function explains(
     for (let i = 0; i < after.length; i++) {
         const from = replayed.origin[i];
         if (from === null || replayed.rewritten[i]) continue;
-        if (!Outline.VERBATIM.holds(after[i], before[from])) return false;
+        if (!Outline.verbatim(after[i], before[from])) return false;
     }
 
     return true;
@@ -787,9 +782,9 @@ export type EditedLines =
     }
     | { written: false; refused: Refusal };
 
-/** The text a write is about when it asks for `target`: a named row's subject, the editor's line, the line marked. */
+/** The text a write is about when it asks for `target`: a row's subject, or the line marked. */
 function subjectOf(target: RowTarget): string {
-    return 'basis' in target ? target.subject : target.text.trim();
+    return 'marked' in target ? target.text.trim() : target.subject;
 }
 
 /**
@@ -811,11 +806,11 @@ function subjectOf(target: RowTarget): string {
  * written either (see `BrokenWrite`).
  *
  * A refusal is told by what the write is about: the subject of the row it
- * asked for last (`NamedRow.subject`, the editor's text), else `about`, else
+ * asked for last (`RowRef.subject`), else `about`, else
  * the file. `asked` hears each subject as the write asks for its row, for a
  * caller that has to name the write after it threw.
  *
- * A row that names the reading it was read in (`NamedRow.read`) is taken in
+ * A row that names a reading of the index's (`RowRef.in`) is taken in
  * these lines only where `subjects.follow` finds its line in them (the write's
  * channel, `WriteChannel.follow`); without it, not at all.
  *
@@ -852,7 +847,7 @@ export function editLines(
     };
     // Each target is asked once, of the lines as they were handed in, and
     // its basis checked there: the answer is its line, or why not.
-    const answered = new Map<NamedRow | EditorLine, number | RefusalReason>();
+    const answered = new Map<RowRef, number | RefusalReason>();
     // The lines this write marked (`WriteSession.mark`): a mark of another
     // write names a line of other lines.
     const marks = new WeakSet<MarkedLine>();
@@ -870,7 +865,7 @@ export function editLines(
         const now = replayed.origin.indexOf(line);
         // Taken away by this very write: the row is not on these lines.
         if (now < 0) return null;
-        if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(working[now], before[line])) {
+        if (!replayed.rewritten[now] && !Outline.verbatim(working[now], before[line])) {
             unsound = `line ${line} carried to ${now} does not read what it read`;
             return null;
         }
@@ -878,38 +873,24 @@ export function editLines(
     };
     // The key of the lines as handed in, made once and only if a row asks.
     let handed: ContentKey | null = null;
-    const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
-        // A coordinate in some content, good only while the lines there
-        // still read as the write was planned from: the index's copy of
-        // the row, or what the editor showed there. A line past the end
-        // reads as nothing.
+    const answer = (target: RowRef): number | RefusalReason => {
+        // A coordinate in the content the row names (`RowRef.in`), good
+        // only while the lines there still read as the write was planned
+        // from. In any other content, a line reading as its basis may be
+        // its twin.
+        handed ??= contentKeyOf(before);
         let { line } = target;
-        // A line the editor pointed at counts only in the content it was
-        // taken in: in any other, a line reading as its text may be its twin.
-        if (!('basis' in target)) {
-            handed ??= contentKeyOf(before);
-            if (target.key !== handed) return { kind: 'changed' };
-        }
-        if ('basis' in target) {
-            // A row the index read counts only while the file reads as its
-            // reading did, or carried across our own writes from there: in
-            // any other content, a line reading as its basis may be its twin.
-            // A copy that names no reading is not one the index read.
-            if (target.read === undefined) return { kind: 'changed' };
-            handed ??= contentKeyOf(before);
-            const found = subjects.follow?.(target.read, line, handed) ?? null;
+        if ('reading' in target.in) {
+            // The index's reading, or carried across our own writes from it.
+            const found = subjects.follow?.(target.in.reading, line, handed) ?? null;
             if (found === null) return { kind: 'changed' };
             line = found;
+        } else if (target.in.key !== handed) {
+            return { kind: 'changed' };
         }
+        // A line past the end reads as nothing.
         if (!Number.isInteger(line) || line < 0 || line >= before.length) return { kind: 'changed' };
-        let holds: boolean;
-        if (!('basis' in target)) {
-            const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
-            holds = readsAsPlanned(readBefore(), line, shown);
-        } else {
-            holds = readsAsPlanned(readBefore(), line, target.basis);
-        }
-        return holds ? line : { kind: 'changed' };
+        return readsAsPlanned(readBefore(), line, target.basis) ? line : { kind: 'changed' };
     };
     // Where the line a mark names stands now, carried across the edits
     // reported since it was made, as `carry` carries a row from the lines
@@ -924,7 +905,7 @@ export function editLines(
         }
         const now = replayed.origin.indexOf(marked.marked);
         if (now < 0) return null;
-        if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(working[now], marked.text)) {
+        if (!replayed.rewritten[now] && !Outline.verbatim(working[now], marked.text)) {
             unsound = `the line marked at ${marked.marked}, carried to ${now}, does not read what it read`;
             return null;
         }
@@ -1114,7 +1095,7 @@ export async function processLines(
         }
         const { before, lines: next, edits: reported } = edited;
         // The mark the note opened with, put back where it was.
-        const rebuilt = (bom ? BOM : '') + joinLines([...next], eol);
+        const rebuilt = joinContent(next, { eol, bom });
 
         // A rewrite that produced the same bytes is not a write: Obsidian
         // fires no `modify` for it, and there is nothing new to read. The
@@ -1248,10 +1229,10 @@ export function fileGone(channel: WriteChannel | undefined, file: string, subjec
 /**
  * Create a note holding what `content` makes, as one write: made, with the
  * note, or refused as `failed` and told once. Every note the plugin creates
- * for a write is created here. Making the content — a folder to put it in, a
- * template to read — is part of the write, and failing there fails it too.
- * As with `processLines`, a failure that left the note in place reading as
- * asked is a write that landed.
+ * for a write is created here. Making the note — the folders its path names
+ * ({@link ensureFolderOf}), its content, a template to read — is part of the
+ * write, and failing there fails it too. As with `processLines`, a failure
+ * that left the note in place reading as asked is a write that landed.
  *
  * These writes do not queue with the ones to notes already there (see
  * {@link processOrFail}): there was no note for another write to change.
@@ -1264,12 +1245,13 @@ export async function createFile(
     content: () => string | Promise<string>,
 ): Promise<WriteRefused | (WriteMade & { file: TFile })> {
     let asked: string | null = null;
-    let handed: ReadMark | undefined;
+    let landing: Landing | null = null;
     try {
+        await ensureFolderOf(app, path);
         asked = await content();
-        handed = channel?.reading();
+        landing = wholeLanding(channel, [], splitLines(asked).lines);
         const file = await app.vault.create(path, asked);
-        if (channel && handed) channel.landed({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
+        if (landing) channel?.landed(landing);
         return { written: true, refused: null, file };
     } catch (error) {
         const made = app.vault.getAbstractFileByPath(path);
@@ -1277,9 +1259,55 @@ export async function createFile(
             return writeFailed(channel, path, subject, error);
         }
         logWarn(`[FileLines] ${path}: creating the note reported a failure, but it reads as written; kept: ${String(error)}`);
-        if (channel && handed) channel.landed({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
+        if (landing) channel?.landed(landing);
         return { written: true, refused: null, file: made };
     }
+}
+
+/**
+ * Make the folders `path` is to be in, those not there yet, from the top. A
+ * folder is there when the vault holds one by its path; creating one that
+ * throws is taken as made when the vault holds it then (another write made
+ * it meanwhile), and fails the write otherwise — a note in the way included.
+ */
+export async function ensureFolderOf(app: App, path: string): Promise<void> {
+    const folders = path.split('/').slice(0, -1).filter(part => part !== '');
+    let at = '';
+    for (const folder of folders) {
+        at = at === '' ? folder : `${at}/${folder}`;
+        if (app.vault.getAbstractFileByPath(at) instanceof TFolder) continue;
+        try {
+            await app.vault.createFolder(at);
+        } catch (error) {
+            if (!(app.vault.getAbstractFileByPath(at) instanceof TFolder)) throw error;
+        }
+    }
+}
+
+/**
+ * The landing of a write that put `lines` in place of `before` whole — a
+ * note created, a content replaced — which cannot say which line became
+ * which, and so lands with no report and no reading of its own. Made as the
+ * write is handed its lines, for the reading it starts from
+ * (`Landing.handed`); null with no channel to hand it to.
+ */
+function wholeLanding(channel: WriteChannel | undefined, before: readonly string[], lines: readonly string[]): Landing | null {
+    return channel ? { before, lines, edits: null, reading: null, handed: channel.reading() } : null;
+}
+
+/**
+ * `channel`, with a refusal handed to `refused` instead, or told to nobody
+ * for `'quiet'`; `channel` itself when `refused` is not given. A caller that
+ * says what came of the write itself — in a place of its own, or from the
+ * outcome — hears the refusal there (the index still learns what a write
+ * left); told through the channel too, it would be the same news twice.
+ */
+export function withRefused(
+    channel: WriteChannel | undefined,
+    refused: ((refusal: Refusal) => void) | 'quiet' | undefined,
+): WriteChannel | undefined {
+    if (!channel || refused === undefined) return channel;
+    return { ...channel, refused: refused === 'quiet' ? () => { } : refused };
 }
 
 /** Whether the file now reads as `content`, the mark at its head aside. A file that cannot be read does not. */
@@ -1307,18 +1335,39 @@ export async function replaceWhole(
     channel: WriteChannel | undefined,
     content: string,
 ): Promise<WriteOutcome> {
+    const outcome = await processWhole(app, file, channel, () => content);
+    return 'refused' in outcome ? outcome : { written: true, refused: null };
+}
+
+/**
+ * One `vault.process` that writes the content `next` answers of the file's,
+ * whole, or leaves the file as it is where `next` answers null; the landing
+ * ({@link wholeLanding}) told once it is over, when the content changed.
+ * Answers whether `next` answered a content in the run written, or the
+ * refusal when the write threw (`processOrFail`).
+ */
+async function processWhole(
+    app: App,
+    file: TFile,
+    channel: WriteChannel | undefined,
+    next: (content: string) => string | null,
+): Promise<{ written: boolean } | WriteRefused> {
+    let written = false;
     let landing: Landing | null = null;
-    const threw = await processOrFail(app, file, channel, (current) => {
+    const threw = await processOrFail(app, file, channel, (content) => {
+        written = false;
         landing = null;
-        if (current === content) return current;
-        if (channel) landing = { before: splitLines(current).lines, lines: splitLines(content).lines, edits: null, reading: null, handed: channel.reading() };
-        return content;
+        const whole = next(content);
+        if (whole === null) return content;
+        written = true;
+        if (whole !== content) landing = wholeLanding(channel, splitLines(content).lines, splitLines(whole).lines);
+        return whole;
     }, () => file.path);
     if (threw) return threw;
     // Set inside the callback, which the compiler does not follow.
     const landed = landing as Landing | null;
     if (landed !== null) channel?.landed(landed);
-    return { written: true, refused: null };
+    return { written: written as boolean };
 }
 
 /**
@@ -1373,7 +1422,7 @@ export async function takeBack(
     const readsAsLeft = (lines: readonly string[]) => lines.length === left.length && lines.every((line, i) => line === left[i]);
     if (app.vault.getAbstractFileByPath(file.path) !== file) return { taken: false, why: 'gone' };
     // Told to nobody: the caller says what became of the operation.
-    const quiet: WriteChannel | undefined = channel ? { ...channel, refused: () => { } } : undefined;
+    const quiet = withRefused(channel, 'quiet');
     switch (how.kind) {
         case 'made':
             return inLineOf(file, async (): Promise<TakenBack> => {
@@ -1408,24 +1457,14 @@ export async function takeBack(
             return { taken: false, why: outcome.refused.reason.kind === 'changed' ? 'changed' : 'failed' };
         }
         case 'restore': {
-            let written = false;
-            let landing: Landing | null = null;
-            const threw = await processOrFail(app, file, quiet, (content) => {
-                written = false;
-                landing = null;
+            const outcome = await processWhole(app, file, quiet, (content) => {
                 const { lines, eol, bom } = splitLines(content);
-                if (!readsAsLeft(lines)) return content;
-                written = true;
+                if (!readsAsLeft(lines)) return null;
                 // The note's own mark and line ends, as they are now.
-                const back = (bom ? BOM : '') + joinLines([...how.lines], eol);
-                if (back !== content && quiet) landing = { before: lines, lines: [...how.lines], edits: null, reading: null, handed: quiet.reading() };
-                return back;
-            }, () => file.path);
-            if (threw) return { taken: false, why: 'failed' };
-            // Set inside the callback, which the compiler does not follow.
-            const landed = landing as Landing | null;
-            if (landed !== null) quiet?.landed(landed);
-            return (written as boolean) ? { taken: true } : { taken: false, why: 'changed' };
+                return joinContent(how.lines, { eol, bom });
+            });
+            if ('refused' in outcome) return { taken: false, why: 'failed' };
+            return outcome.written ? { taken: true } : { taken: false, why: 'changed' };
         }
     }
 }

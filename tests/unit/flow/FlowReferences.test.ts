@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { unresolvedAt } from '../../../src/services/flow/FlowReferences';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /** The rows of `lines`, each as the index reads it. */
-const rowsOf = (lines: string[]) => FileParsePipeline.parse('from.md', lines, DEFAULT_SETTINGS).tasks;
+const rowsOf = (lines: string[]) => FileParsePipeline.parse('from.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('from.md')).tasks;
 
 const GEN = ['```tv-gen 週報', '- [ ] 資料集め', '```'];
 
@@ -47,7 +48,7 @@ describe('unresolvedAt', () => {
         expect(unresolvedAt(rows, [])).toEqual([{ kind: 'heading', task: child, name: '完了', found: 'none' }]);
     });
 
-    it('廃止された move は判定しない（パーサが警告する）', () => {
+    it('見出しを指さない move は判定しない（コマンドが読めず、パーサが誤りを出す）', () => {
         const rows = rowsOf(['- [ ] 片づける @2026-09-28 ==> move()']);
         expect(unresolvedAt(rows, [])).toEqual([]);
     });

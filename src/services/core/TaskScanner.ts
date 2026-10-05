@@ -1,12 +1,11 @@
 import { type App, TFile } from 'obsidian';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
-import type { TaskValidator } from './TaskValidator';
 import type { Task, TaskViewerSettings } from '../../types';
-import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 import { WriteLinks } from './WriteLinks';
 import { newSession, readReading, readingId, type ReadingId } from './Reading';
+import { nameOf, namesOfReading, readName } from './RowNames';
 import { splitLines, type Landing, type ReadMark } from '../persistence/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
@@ -14,18 +13,19 @@ import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
  * タスクスキャナー — ファイル単位の読みのオーケストレーション。
- * 1 回の読みは 4 相を順に呼ぶだけ:
- *   parse    — FileParsePipeline（ファイル → Task[]、仮 ID。パース順序契約の所有者）
- *   name     — 仮 ID を、この読みの中の名前（パス、読みの番号、行）に置き換える
- *   validate — バリデーション警告の収集（以降は名前しか見ない）
+ * 1 回の読みは次を順に呼ぶだけ:
+ *   parse    — FileParsePipeline（ファイル → Task[]。パース順序契約の所有者）。
+ *              各行の名前は、この読みの中の名前（パス、読みの番号、行）を
+ *              `namesOfReading` が付け、パースはそれを当てるだけ
+ *   anchor   — `^id` が一意な行に anchor を付ける
  *   commit   — store 更新
  *
  * 前回の読みと突き合わせない。名前は 1 回の読みの中だけで意味を持ち、読み
- * 直しをまたぐ同一性は `^id` だけが担う（structure.md の「名前」）。自分の
+ * 直しをまたぐ同一性は `^id` だけが担う（structure/layers.md の「名前」）。自分の
  * 書き込みをまたぐ名前は、書き込みの報告で写す（`WriteLinks`）。
  *
  * スキャンは読むだけで、フローを発火させない。発火は完了させた操作が起こす
- * （エディタのトランザクションと、プラグイン自身の書き込み。structure.md の
+ * （エディタのトランザクションと、プラグイン自身の書き込み。structure/firing.md の
  * 「発火の可否」）。
  */
 export class TaskScanner {
@@ -69,18 +69,23 @@ export class TaskScanner {
      * copy the drag draws from until it ends.
      */
     private holding: { path: string; held: boolean } | null = null;
+
+    /**
+     * @param dropped hears the names a change to the store took out of it,
+     * once it is made (`tellDropped`): what the index's delete notification
+     * asks of (`TaskIndex.onTaskDeleted`).
+     */
     constructor(
         private app: App,
         private store: TaskStore,
-        private validator: TaskValidator,
-        private settings: TaskViewerSettings
+        private settings: TaskViewerSettings,
+        private readonly dropped: (names: readonly string[]) => void = () => {},
     ) { }
 
     /**
-     * Vault全体をスキャン
+     * Vault全体をスキャン。告げるのは呼び手（索引）。
      */
     async scanVault(): Promise<void> {
-        this.validator.clearErrors();
         // Every file is read again from here on, whatever it read last.
         for (const path of this.committed.keys()) this.stale.add(path);
         const allFiles = this.app.vault.getMarkdownFiles();
@@ -93,7 +98,6 @@ export class TaskScanner {
             await this.queue(file);
         }
 
-        this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
     }
 
@@ -253,18 +257,18 @@ export class TaskScanner {
      * some other way since, or what our writes left is not committed yet.
      */
     follow(name: string): string | null {
-        const read = TaskIdGenerator.readName(name);
+        const read = readName(name);
         const reading = read ? readReading(read.reading) : null;
         if (!read || !reading || reading.session !== this.session) return null;
         const last = this.numbers.get(read.filePath);
         if (last === undefined || this.committed.get(read.filePath) !== last.n) return null;
         const line = this.carry(read.filePath, reading.n, read.line);
         if (line === null) return null;
-        return TaskIdGenerator.nameOf(read.parserId as Task['parserId'], read.filePath, line, readingId(this.session, last.n));
+        return nameOf(read.parserId as Task['parserId'], read.filePath, line, readingId(this.session, last.n));
     }
 
     /**
-     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → commit）
+     * ファイルをスキャンしてタスクを抽出（parse → name → commit）
      */
     private async scanFile(file: TFile): Promise<boolean> {
         // Before the read: a number given while it is under way may be of a
@@ -335,35 +339,20 @@ export class TaskScanner {
             return false;
         }
         const file = { path };
-        this.validator.clearErrorsForFile(file.path);
 
-        // --- parse ---
-        const parsed = FileParsePipeline.parse(file.path, lines, this.settings, reading);
+        // --- parse and name ---
+        // Every row is named by this reading as it is read (`namesOfReading`).
+        const parsed = FileParsePipeline.parse(file.path, lines, this.settings, namesOfReading(file.path, readingId(this.session, n)), reading);
 
         if (parsed.ignored) {
-            this.store.removeTasksByFile(file.path);
+            const before = this.store.removeTasksByFile(file.path);
             this.links.drop(file.path);
             this.readRead(file.path, n);
+            this.tellDropped(before);
             return true;
         }
 
-        // --- name ---
-        // Right after parse, so nothing downstream — validator included — ever
-        // sees a provisional ID.
-        nameRows(parsed.tasks, file.path, readingId(this.session, n));
         anchorRows(parsed.tasks, lines);
-
-        // --- validate ---
-        for (const task of parsed.tasks) {
-            if (task.validation) {
-                this.validator.addError({
-                    file: file.path,
-                    line: task.line + 1, // 1-indexed表示
-                    taskId: task.id,
-                    error: task.validation.message,
-                });
-            }
-        }
 
         // Two readings of one change, or a pipeline that outlived its index
         // and kept scanning, print this line twice: the console belongs to the
@@ -371,9 +360,10 @@ export class TaskScanner {
         logDebug(`[scan] file=${file.path} tasks=${parsed.tasks.length}`);
 
         // --- commit (batched: 1 file = 1 revision bump) ---
+        let before: string[] = [];
         this.store.beginBatch();
         try {
-            this.store.removeTasksByFile(file.path);
+            before = this.store.removeTasksByFile(file.path);
 
             for (const task of parsed.tasks) {
                 this.store.setTask(task.id, task);
@@ -388,7 +378,20 @@ export class TaskScanner {
         } finally {
             this.store.endBatch();
         }
+        this.tellDropped(before);
         return true;
+    }
+
+    /**
+     * Hand `dropped` the names of `before`, the names the store held for a
+     * file before a change to it, that it holds no more. Whether each still
+     * names a row, followed across a write of ours (`follow`), is not asked
+     * here: a scan may commit what a write of ours left before the write
+     * reports it (`landed`), and until then nothing follows a name across it.
+     */
+    private tellDropped(before: readonly string[]): void {
+        const dropped = before.filter(name => !this.store.getTask(name));
+        if (dropped.length > 0) this.dropped(dropped);
     }
 
     /** Reading `n` of `path` is committed. */
@@ -399,7 +402,7 @@ export class TaskScanner {
 
     /**
      * ファイルリネーム（md → md）時の内部状態の破棄。名前はパスを含むので、
-     * 新パスの読みが新しい名前を付ける。
+     * 新パスの読みが新しい名前を付ける。旧パスの行はすべて終わる。
      */
     handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
@@ -407,8 +410,9 @@ export class TaskScanner {
     }
 
     /**
-     * ファイル削除（md → 非 md のリネームを含む）時の内部状態の破棄。
-     * scanQueue から path を除去し、読みと書き込みの記録を捨てる。
+     * ファイル削除（md → 非 md のリネーム、ディスクに無いことを含む）時の
+     * 内部状態の破棄。scanQueue から path を除去し、行と読みと書き込みの
+     * 記録を捨てる。行はすべて終わる。
      */
     handleFileDeleted(path: string): void {
         this.scanQueue.delete(path);
@@ -416,16 +420,19 @@ export class TaskScanner {
     }
 
     /**
-     * Let go of what was read of `path`, but the last number given, and of
-     * holding it: a file renamed or deleted is not the one being dragged.
+     * Take `path`'s rows out of the store, and let go of what was read of it,
+     * but the last number given, and of holding it: a file renamed or
+     * deleted is not the one being dragged. Its names are dropped (`dropped`).
      */
     private forget(path: string): void {
+        const dropped = this.store.removeTasksByFile(path);
         if (this.holding?.path === path) this.holding = null;
         const last = this.numbers.get(path);
         if (last !== undefined) this.numbers.set(path, { n: last.n, key: undefined });
         this.committed.delete(path);
         this.stale.delete(path);
         this.links.drop(path);
+        if (dropped.length > 0) this.dropped(dropped);
     }
 
     /**
@@ -433,24 +440,6 @@ export class TaskScanner {
      */
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
-    }
-}
-
-/**
- * Give every row of one reading its name, in place of the provisional ID the
- * parser gave it: `parentId` and `childIds` too, which the parser has
- * already written with the provisional ones. A provisional ID is the row's
- * line, and so is a name, so one reading's names are as distinct as its
- * lines.
- */
-function nameRows(tasks: Task[], path: string, reading: ReadingId): void {
-    const names = new Map<string, string>();
-    for (const task of tasks) names.set(task.id, TaskIdGenerator.nameOf(task.parserId, path, task.line, reading));
-    const rename = (id: string) => names.get(id) ?? id;
-    for (const task of tasks) {
-        task.id = rename(task.id);
-        if (task.parentId !== undefined) task.parentId = rename(task.parentId);
-        task.childIds = task.childIds.map(rename);
     }
 }
 

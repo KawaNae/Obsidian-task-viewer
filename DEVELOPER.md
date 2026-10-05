@@ -10,10 +10,12 @@ src/views/taskcard/
   ChildItemBuilder.ts              # Task/childLines -> ChildRenderItem[]
   ChildRenderItemMapper.ts         # Maps child data to ChildRenderItem[]
   ChildSectionRenderer.ts          # Child markdown/toggle rendering
+  CardMarkdown.ts                  # The one call of MarkdownRenderer.render for a card
   CheckboxWiring.ts                # Parent/child checkbox interaction and status menu
   NotationUtils.ts                 # @notation label formatting helpers
   TaskLinkInteractionManager.ts    # Internal link click/hover handling
   TaskViewHoverParent.ts           # HoverParent decoupling Page Preview popovers from the WorkspaceLeaf
+  TopRightFieldResolver.ts         # What a card's top right says (fields of the stated dates, tags, properties)
   types.ts                         # ChildRenderItem / CheckboxHandler (taskcard-local types)
   index.ts                         # Barrel exports
 ```
@@ -22,14 +24,18 @@ src/views/taskcard/
 
 1. `TaskCardRenderer` is the entry point used by Timeline/Schedule renderers.
 2. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
-3. `CheckboxWiring` owns all checkbox event binding. Every checkbox, parent or child, is a task, so every write goes through `TaskWriteService.updateTask(taskId, { statusChar })`.
+3. `CheckboxWiring` owns all checkbox event binding. Every checkbox, parent or child, is a task, so every write goes through `Operations.updateTask(taskId, { statusChar })`.
 4. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
+5. A card is drawn whole when `TaskCardRenderer.render` returns: it is synchronous, and lays the body, the children, their notation, the links and the mask in one go. No view waits on a card. `renderCardMarkdown` is the one call of `MarkdownRenderer.render`; that the body is in the element when the call returns is how Obsidian's renderer behaves, not what its API promises, so an empty element right after the call is logged once a session. The promise the call returns tells only when truly asynchronous content (images, embeds, math, code, mermaid, other plugins' post-processors) is in; the mask is laid again then, if the card still shows that draw.
+6. How a card is drawn is said by `RenderOptions`, one field per policy: `expandChildren` (no collapsed section), `alwaysLinks` (links live whatever `enableCardFileLink` says), `doubleTap`, `mask`. The renderer has no branch for any caller; the hub's preview passes its set and puts its own `task-card--in-hub-preview` class on the card.
+7. A card's top right is made in one place, `TopRightFieldResolver`, for every view. It shows the dates the note states (`DisplayTask.stated`, made by `statedDates` in `utils/TaskDates.ts`): the line's values, and its section's and frontmatter's where the line has none, in the form they are written. A value the rules fill in (`05:00` for a bare date's start, the end of `@2026-10-04`, the default hour's end of `@2026-10-04T10:00`) is not written, so it is not shown. `stated` is made before a task is split, so both segments of `@2026-10-04T22:00>2026-10-05T08:00` show `22:00>08:00`. What a card shows is a `TopRightSpec`: `none`, or the fields of a `TopRightConfig` (fields, separator, prefix, suffix). A saved list passes its own config; Timeline, Calendar's cards of a day and Schedule pass `TIME_TOP_RIGHT`, the one field `times` (`10:00`, or `10:00>11:00`; empty with no start time). `composeTopRight` gives the pieces, each with a role (`start`, `end`, `sep`, `seg`); the card draws them with the class of their role (`renderTopRight`, `task-card__time-<role>`), and its signature holds their text. They are drawn in units (`topRightUnits`, `task-card__time-unit`), the end (`>11:00`) one of its own, in a box one line high across the card's top row that wraps between units: a unit after the first that does not fit goes whole to the line the box cuts away, with what follows it. So the end shows whenever it fits and is never cut, in every view, with no width to keep; the first unit stays and is cut only when it alone does not fit.
+8. The renderer gives the card all of its look and its menu, on every draw before the signature is compared: the content, the color, the line style and the read-only mark (`TaskStyling`, which takes a value off when the task has none, so a kept card loses a color its task lost), and the context menu (`CardActions.bindMenu`). A view places the card and marks its split; it decorates nothing else. What a card does when used (details, menu, a child's menu, open in the editor, the double-tap action) is given once, as `CardActions`, when the renderer is made. Every view, and the plugin for a hub opened outside the views, makes its renderer, its `MenuHandler` and the hub they open together with `createCardRendering` (`views/sharedUI/CardRendering.ts`).
 
 ### Child rendering rule
 
 1. The renderer consumes `getChildEntries(parent): ChildEntry[]` (`'task' | 'line'`). A `'line'` entry is never a checkbox: every checkbox line is a task of its own. A `- [ ]` inside a code fence is an example and renders as plain text (no checkbox, not counted in the card's n/m). A `- [[note]]` child is an ordinary link line.
 2. Each entry carries an absolute `bodyLine`, so render code does no line-number arithmetic.
-3. The data layer (`buildChildEntries`) enforces a 1-line-1-owner invariant across siblings: a body line owned by a sibling task's subtree never surfaces in a `'line'` entry, so the renderer never deduplicates.
+3. Every body line is one task's at most: the extraction (`NoteTasks`) leaves a child task's subtree and a task's own `- ==>` lines out of its `childLines`. The data layer (`buildChildEntries`) only merges `childIds` and `childLines` by line, so neither it nor the renderer deduplicates.
 4. `ChildItemBuilder` walks the entries depth-first: a `'task'` entry renders the child and recurses into its own entries (depth-capped, cycle-guarded); a `'line'` entry renders the raw line.
 
 ### Line write rule
@@ -46,8 +52,8 @@ Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskM
 
 1. `Task.content` stores raw user-provided content only.
 2. A bare `- [ ]` keeps `content` as an empty string.
-3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/services/parsing/utils/TaskContent.ts`), not in parsers.
-4. API normalizer (`TaskNormalizer`) passes `content` through as-is (`t => t.content`); it does not fall back to file basename. Basename fallback is a display-only concern handled by `getTaskDisplayName` (`src/services/parsing/utils/TaskContent.ts`).
+3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/services/display/TaskContent.ts`), not in parsers.
+4. API normalizer (`TaskNormalizer`) passes `content` through as-is (`t => t.content`); it does not fall back to file basename. Basename fallback is a display-only concern handled by `getTaskDisplayName` (`src/services/display/TaskContent.ts`).
 
 ---
 
@@ -57,36 +63,43 @@ Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskM
 
 ```mermaid
 graph TB
-    UI[UI Layer<br/>Views]
-    Read[TaskReadService<br/>Read Facade]
-    Write[TaskWriteService<br/>Write Facade]
-    Index[TaskIndex<br/>Orchestration]
+    UI[Consumers<br/>views, menus, hub, timers, API, CLI, editor]
+    Read[TaskReadService<br/>Display side]
+    Ops[Operations<br/>The one write port]
+    Index[TaskIndex<br/>The last reading's copies]
     Parser[Parsers<br/>Read]
-    Repo[Repository<br/>Write]
+    Repo[Persistence<br/>Write]
 
-    UI -->|read| Read
-    UI -->|write| Write
+    UI -->|draw| Read
+    UI -->|copies, changes: IndexReads| Index
+    UI -->|write| Ops
     Read --> Index
-    Write --> Index
+    Ops -->|check, landed| Index
+    Ops -->|write| Repo
     Index -->|parse| Parser
-    Index -->|write| Repo
 
     style Parser fill:#e1f5e1
     style Repo fill:#e1f5e1
     style Index fill:#fff4e1
+    style Ops fill:#fff4e1
     style Read fill:#e8f0fe
-    style Write fill:#e8f0fe
     style UI fill:#e1e8f5
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Views** | UI rendering and user interaction |
-| **TaskReadService** | Read facade; cached DisplayTask conversion, filtering, date-range queries |
-| **TaskWriteService** | Write facade; delegates all mutations to TaskIndex |
-| **TaskIndex** | Central orchestration; scanning, indexing, event management |
+| **Consumers** | UI rendering and user interaction, the API, the CLI, timers, the editor's extensions |
+| **TaskReadService** | The display side of the read: cached DisplayTask conversion, date ranges, filters and sorts, a row's children in order. It passes no copy through |
+| **TaskIndex** (`services/core`) | The copies of the last reading of each note, looked up by name, anchor and line; whether a copy is what the disk holds; the telling of a change. Its read port is the type `IndexReads` (`PluginContext.getIndex`), which has no method that writes a note. The copies are written by the scan and by what a write of ours left (`landed`), nothing else. It knows nothing of the operations |
+| **Operations** (`services/operations`) | The one way a consumer writes (`PluginContext.getOperations`): checks the copy it plans from against the disk (`planCopy`, the read-only check included), orders the writes asked of one row (`onRow`), writes through the repository with the row's fire (a completion's planned inside the write, a deletion's planned before it, both by `FlowExecutor`), tells the user a refusal once and a flow that was not run (`FlowNotices`). Daily and periodic notes (`putInDailyNote`, `openPeriodicNote`) and template notes (`saveTemplateNote`) are written here too; the write channel does not leave it |
 | **Parsers** | Convert markdown to Task objects |
-| **Repository** | Write tasks back to files (CRUD) |
+| **Persistence** | Write rows back to files: each write checks the lines it planned from and writes them in one `vault.process` (`TaskRepository`, `writers/`, `FileLines`, `Notes`) |
+
+A write does not change the index's copy. What it left comes back to the index as its next reading (`landed`), and that reading's notification draws it. A view that shows new values before then shows them from its own state (the hub's draft, the box a click changed).
+
+**Notification.** The index tells its `onChange` listeners through two ports only, both of its coalescer (`NotifyCoalescer`): `schedule`, merged over one frame (16ms), and `flushNow` (`TaskIndex.notifyImmediate`), for a view that has to match the index in this frame (the end of a drag, the overdue watch). It tells only when what it holds changed: a scan that committed, a write that landed, a note forgotten, the settings. A reading of the whole vault is told to each listener in a task of its own (`staggered`).
+
+**Delete notification.** `IndexReads.onTaskDeleted` hears each name that ends: a row the index held that it holds no more, under that name or the one a write of ours carried it to (`getTask`). A delete of ours ends the rows it took away; an edit from outside ends every row of its note, as it ends their names; a note deleted or renamed ends all of its rows. It is told in the task after the change, whoever made it, apart from the drawing notification. The selection (`SelectionController`) and a card's open children (`TaskCardRenderer`) let go of the name.
 
 ---
 
@@ -97,47 +110,52 @@ src/
 ├── main.ts                    # Plugin entry point (onload / onunload)
 ├── types/                     # Cross-layer types and settings (Task, DisplayTask, TaskViewerSettings, etc.)
 ├── settings/                  # Settings UI (9 tabs: Basic, Behavior, Views, View Details, Notes, Note scope, Parsers, Log, About)
-├── constants/                 # Constants and view registry
+├── constants/                 # Constants (layout, hover, styles, status options)
 ├── i18n/                      # Internationalization (locale files)
-├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
-├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliDatePresetParser, CliOutputFormatter, handlers/)
+├── api/                       # Public API (TaskApi, TaskApiTypes, TaskIds, TaskNormalizer, OperationSchemas: the parameters; Reference: the help texts; QueryShorthand: the params as conditions; FilterParamsBuilder, FilterFileLoader)
+├── cli/                       # CLI handlers (CliRegistrar: registers Reference's CLI_COMMANDS; CliParamValidator, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
-│   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, TaskValidator, identity/, etc.)
-│   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
-│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator)
-│   ├── parsing/               # Parser layer
+│   ├── core/                  # The index (TaskIndex, IndexReads, TaskStore, TaskScanner, NotifyCoalescer, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
+│   ├── data/                  # The display side of the read (TaskReadService), children in order, effective properties, NoteOps, CreatePlaces
+│   ├── operations/            # The one write port (Operations), DuplicateShift
+│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, SegmentIds, TaskDateCategorizer, TaskContent)
+│   ├── parsing/               # Parser layer (TaskParser: lineParsers; TaskLineFormat: formatTaskLine, formatRow; FileParsePipeline)
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
-│   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
-│   │   └── utils/             # Parser utilities (ChildLineClassifier, TagExtractor, TaskContent, TaskLineClassifier)
-│   ├── persistence/           # Write layer (TaskRepository, TaskCloner)
-│   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter
-│   │   └── utils/             # FrontmatterLineEditor, FileOperations
-│   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
-│   ├── filter/                # Filter engine, serializer, types, value collector
+│   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
+│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagExtractor, TaskLineClassifier)
+│   ├── persistence/           # Write layer (FileLines: one target type `RowRef`, `createFile`; Notes: a block put in a note, a note made; FiringTrials: which fires of a completion are written; TaskRepository, InlineTaskWriter)
+│   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
+│   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
+│   ├── export/                # View image export (ViewExporter; ExportRegistry: what each view expands; ExportSave: where an export is saved; ExportService: the CLI's export-image)
+│   ├── filter/                # Filter types, serializer (the one reader), FilterExpr (the tree evaluated), engine, FilterEdit (edits as new values), PinnedListQuery, value collector, TaskValues (what the filter and the sort compare)
 │   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
-│   ├── template/              # View template load/save (ViewTemplateLoader/Writer)
-│   ├── flow/                  # ==> フロー記法の実行 (FlowExecutor/FlowParser/FlowPlanner/ScheduleEngine, every/+/at/x/until/move)
-│   └── lang/                  # 式パーサ (Lexer/ExprParser/ExprEvaluator)
-├── editor/                    # Editor extensions (TaskMenuExtension)
+│   ├── template/              # View template load/save (ViewTemplateLoader/Writer; TemplateNote: a template note, saved)
+│   ├── flow/                  # ==> フローの計画と通知 (FlowExecutor: 計画だけで書かない; FlowPlanner/GenBodyRenderer/ScheduleEngine/FlowTrigger; FlowNotices: 発火しなかったことを告げる)
+│   └── lang/                  # 式と文の言語 (Lexer/ExprParser/ExprEvaluator/StmtParser, Diagnostic)
+│       └── flow/              # ==> フロー記法の言語 (FlowAst/FlowParser/FlowChecker/FlowSegments/FlowSerializer/diagnosticText)。lang、i18n、types だけに依存する
+├── editor/                    # Editor extensions (TaskMenuExtension, DiagnosticsExtension, GenHighlight, etc.)
 ├── views/
-│   ├── timelineview/          # Timeline view (including renderers/)
+│   ├── ViewDescriptors.ts     # The view table (VIEW_DESCRIPTORS); see "View Skeleton"
+│   ├── base/                  # TaskViewerView, ViewStore, ViewSettings (the settings menu), ViewedDay
+│   ├── timelineview/          # Timeline view (including renderers/, TimelineDays)
 │   ├── scheduleview/          # Schedule view (including renderers/, utils/)
-│   ├── calendar/              # CalendarView, MiniCalendarView
+│   ├── calendar/              # CalendarView, MiniCalendarView, CalendarGrid, WeekNumberCell
 │   ├── kanban/                # Kanban view
 │   ├── taskcard/              # Task card rendering (see section above)
-│   ├── sharedUI/              # Shared UI components (ViewToolbar, PinnedListRenderer, etc.)
-│   ├── sharedLogic/           # Shared logic (GridTaskLayout, etc.)
+│   ├── sharedUI/              # Shared UI components (ViewToolbar, TaskListSections, PinnedListPanel, DateGridLane, PeriodicNoteLink, etc.)
+│   ├── sharedLogic/           # Shared logic (ViewEvents, MinuteClock, ViewUriBuilder, GridTaskLayout, etc.)
 │   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
 │   ├── sidebar/               # SidebarManager, SidebarToggleButton
 │   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup / Interval)
-├── timer/                     # Timer widget and all timer services (including AudioUtils)
+├── timer/                     # Timer widget and all timer services (including AudioUtils, TimerTargetIdUtils)
 ├── interaction/
 │   ├── drag/                  # Drag & drop (DragHandler, DragStrategy, strategies/, ghost/)
 │   └── menu/                  # Context menus (MenuHandler, PropertyCalculator, PropertyFormatter, builders/)
-├── modals/                    # Modal UI (CreateTaskModal, ConfirmModal, etc.)
-├── suggest/                   # Obsidian property panel autocomplete (color/, line/, tags/)
-├── utils/                     # General utilities (DateUtils, ViewUriBuilder, etc.)
+├── modals/                    # Dialogs (CreateTaskModal, the hub, the send dialog, the questions in modals/ask/)
+├── suggest/                   # The lists of candidates under fields (ShownSuggest, ValueSuggest, TaskNameSuggest), and a frontmatter color's and line style's values in the editor and the Properties view (ScopeValues, color/, line/)
+├── utils/                     # Layer-less leaves used by two or more layers (DateUtils, LineBreak, HostWindow, etc.; see "utils placement rule")
+│   └── values/                # Input codecs: how typed text is read into a value (Read<T>, Normalize, DateValues, NumberValues, ChoiceValues, IssueText)
 └── styles/                    # CSS (BEM naming, --tv-* tokens)
 ```
 
@@ -194,68 +212,94 @@ Quick reference for locating the right layer when implementing a feature.
 
 | Subsystem | Primary file | Responsibility |
 |-----------|--------------|----------------|
-| **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
-| **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
-| **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/detect/commit の3相 orchestration) |
-| **ReadingCheck** | `services/core/ReadingCheck.ts` | Whether the index's reading of a note is the note on disk, asked before an operation is planned from a copy (`checkCopy`, the same `followLine` question as a write's first check) or a row is looked up by anchor (`checkFile`). `TaskIndex.copyToPlan` and `freshByAnchor` act on the answer; a stale reading is refused through `reportRefusal` |
+| **TaskIndex** | `services/core/TaskIndex.ts` | The copies of the last readings, their lookups (`IndexReads`), the vault's change events, the drag's hold, the check of a copy against the disk (`checkCopy`, `checkFile`, `learnFrom`), the report of a write of ours (`landed`, `followLine`, `readingOf`), and the two notifications (`onChange`, `onTaskDeleted`) |
+| **Operations** | `services/operations/Operations.ts` | The one write port: rows (`updateTask`, `updateByAnchor`, `deleteTask`, `duplicateTask`, `createTask`, `insertLine`, `replaceSubtree`, `send`, `writeLine`), the editor's hosts, notes (`putInDailyNote`, `openPeriodicNote`, `saveTemplateNote`, `setFrontmatterKeys`), and the checks a caller asks before it acts (`confirmTask`, `rowSnapshot`, `freshByAnchor`, `assessFlowDelete`) |
+| **TaskStore** | `services/core/TaskStore.ts` | In-memory copies and the `(file, anchor)` table; written by the scanner only, tells no one |
+| **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/name/commit); the one writer of the store, and what hands the index the names a change dropped |
+| **NotifyCoalescer** | `services/core/NotifyCoalescer.ts` | The index's listeners and the two ports that tell them (`schedule`, `flushNow`) |
+| **ReadingCheck** | `services/core/ReadingCheck.ts` | Whether the index's reading of a note is the note on disk, asked before an operation is planned from a copy (`checkCopy`, the same `followLine` question as a write's first check) or a row is looked up by anchor (`checkFile`). `Operations.planCopy` and `freshByAnchor` act on the answer; a stale reading is refused through `reportRefusal` |
 | **DiskReconciler** | `services/core/DiskReconciler.ts` | Brings the index's readings to the disk when a change notice never comes: on start, focus, a plugin view, a refusal, a stale check and each minute (desktop), stats the notes Obsidian holds (`DiskProbe`; the whole vault on desktop, the notes the index has read elsewhere), reads again what moved through `queueScan`, forgets what is gone, and logs where Obsidian's stat of a note lasted apart from the disk (`modified`, `deleted`). Obsidian's model is only observed, never mended; a note Obsidian never heard created stays out of the index |
 | **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
-| **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
-| **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
-| **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
-| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) and insertion under a heading |
+| **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain); parses only, never writes |
+| **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level); cuts the `==>` command off the content without reading it (`readFlow` does) |
+| **TaskRepository** | `services/persistence/TaskRepository.ts` | Assembles the writers and the index's channel; its ports: `write(file, target, ops, { fire?, refused? })` (the one write of ops to a row, duplicates included as a `copies` op), `applyOps`, `replaceSubtree`, `send`, `putInNote`, `setFrontmatterKeys` |
+| **Notes** | `services/persistence/Notes.ts` | The one way a block is put in a note's section or at its end, the note made when the caller gives its seed (`putInNote`), the one way a note is made of lines (`createNote`, over `createFile`, the only `vault.create`), and daily / periodic notes made from their template (`openPeriodicNote`, `putInPeriodicNote`, called by `Operations`). Writes to one path run one at a time |
+| **PeriodicNotes** | `utils/PeriodicNotes.ts` | The description of a daily or periodic note (`PeriodicNote`) and the pure answers of which note a date names: `notePath`, `linkTarget`, `label`, `dateOfPath` (formats with `/` included), `findNote` |
+| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
-| **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation |
-| **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). The one load path for saved views and pinned lists, so it drops conditions on retired properties (`kind`) on read; a group left empty stays, and evaluates as true |
-| **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing |
+| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`), the text a sort rule compares (`sortKey`) and each value in words for the references (`words`). The API's `leaf` (`list` and `today`) is its `children`. A flow's expression is not read through it: `start`, `end` and `due` in `at(due+7d)` are the row's own, since the value is written to the next instance's line and an inherited due would be written out onto it (`FlowPlanner`) |
+| **FilterExpr** | `services/filter/FilterExpr.ts` | `compileFilter(state)`: the saved FilterState compiled into the tree the engine evaluates — groups, `not`, `ancestors` (some ancestor) and positive atoms. A negative operator is `not(positive)`; with `target: parent`, `not(ancestors(positive))`. An unfinished condition (no value chosen) is `ALWAYS`. Never saved |
+| **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Evaluates a compiled `FilterExpr` over the values `TaskValues` gives, in a required `FilterContext` (start hour, week start, task lookup, now) |
+| **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). `parse(raw)` is the one reader of every saved or handed-in filter: it returns `{ state, issues }`, dropping a condition of an unknown property, an operator the property does not take, or a value of the wrong shape into `issues` (the API throws them, a view drops them with a notice), and dropping conditions on retired properties (`kind`) silently; a group left empty stays, and evaluates as true. `SortSerializer.parse` does the same for sorts |
+| **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing, over the values `TaskValues` gives; without rules, `DEFAULT_SORT_ORDER` (due, startDate, content) |
+| **FilterEdit** | `services/filter/FilterEdit.ts` | The filter menu's edits as functions that return a new tree (`updateConditionAt`, `replaceAt`, `appendTo`, `toggleLogic`, `withOperator`, ...), a node addressed by its path from the root (`NodePath`). `FilterState` and `SortState` are `readonly` values: no holder changes one in place, so none copies one to protect itself |
+| **PinnedListQuery** | `services/filter/PinnedListQuery.ts` | Which tasks a pinned list shows: `resolve(list, viewFilter)` (the list's filter, and the view's when `applyViewFilter`) for the views' lists and Kanban's cells; `fromTemplate(template, listName?)` for a filter file, the template read by its view's schema and its lists by the schema's `listsOf` |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
-| **TaskReadService** | `services/data/TaskReadService.ts` | Read facade; filter, sort, DisplayTask conversion |
-| **TaskWriteService** | `services/data/TaskWriteService.ts` | Write facade; create, update, delete, duplicate |
-| **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion with effective field resolution |
+| **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order. A question's `QueryOptions` name whether the invalid tasks are in and the start hour: the setting's copies are cached, another start hour's drawn anew and not kept (`displayTasksAt`). `windowContext(startHour)` is the one context a window is placed by |
+| **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion (stated dates, span, drawn), the split at a day boundary |
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
-| **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed / dueOnly kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
-| **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Per-date bucketing: delegates kind to `classifyForSection`, owns date membership (allDay/timed = visual span, dueOnly = calendar due) and sort via TaskRenderOrder |
-| **ViewExporter** | `services/export/ViewExporter.ts` | View data export with per-view ExportStrategy |
-| **FilePropertyResolver** | `services/parsing/FilePropertyResolver.ts` | File-scope frontmatter → ExtractedProperties; the cascade root for SectionPropertyResolver |
+| **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
+| **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Per-date bucketing: delegates kind to `classifyForSection`, owns date membership (the visual days a task is drawn over) and sort via TaskRenderOrder |
+| **TaskRenderOrder** | `services/display/TaskRenderOrder.ts` | The canonical order of each section's bucket, which every view draws in; a tie goes by where the task is written (file, then line as a number, then ID). See "Canonical order within a section" |
+| **ViewExporter** | `services/export/ViewExporter.ts` | Clones a view's container, grows what scrolls (each view's `ExportTargetSpec` in `ExportRegistry`) and captures it as a PNG |
+| **ExportSave** | `services/export/ExportSave.ts` | Where an export is saved and saving it, for the view menu and the CLI alike: `exportFolderOf(settings, override?)` (the folder asked for, else the setting, else `DEFAULT_SETTINGS.exportFolder`), `saveExportImage` (a vault-relative folder through the vault, an absolute one through Node's `fs`, desktop only) |
+| **PropertyValues** | `services/parsing/utils/PropertyValues.ts` | The one reading of a property's value (`PropertyValue`): `fromText` for a line, `fromYaml` / `fromFrontmatter` for the frontmatter; see "プロパティの値" |
 | **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
-| **DocumentTreeBuilder** | `services/parsing/tree/DocumentTreeBuilder.ts` | Document structure tree for section property inheritance |
+| **NoteSections** | `services/parsing/tree/NoteSections.ts` | A note's sections from `outline.headings`, each with its own property lines (the section scope of the cascade) |
+| **NoteTasks** | `services/parsing/tree/NoteTasks.ts` | A note's rows: every line that opens a task, its parent, child lines, flow, properties and section cascade, read once |
+| **FlowLineScanner** | `services/parsing/utils/FlowLineScanner.ts` | `readFlow(outline, taskLine)`: the one place a flow program is read from a note (the task line's tail and its own `- ==>` lines); the extraction and the editor diagnostics both use it |
 | **DayPlannerParser** | `services/parsing/tv-inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
 | **TasksPluginParser** | `services/parsing/tv-inline/TasksPluginParser.ts` | Tasks plugin compatible parser (read-only) |
-| **TaskApi** | `api/TaskApi.ts` | Public API (13 methods) |
+| **TaskApi** | `api/TaskApi.ts` | Public API (13 methods). Checks every parameter once (required, whole numbers, dates); the CLI passes its flags on unchecked. `list`, `today` (`list` with `date=today`) and the two range operations answer through one path (`resolveQuery`, then `TaskReadService.getFilteredTasks`), and a query's `startHour` draws the copies and places the windows of that call |
+| **OperationSchemas** | `api/OperationSchemas.ts` | The parameters of each operation (`ParamSpec`: key, required, a whole number's range, description), bound to the param types by `satisfies`; the shared blocks `SIMPLE_FILTER_SCHEMA`, `FILTER_SOURCE_SCHEMA`, `SORT_PARAM`, `LIMIT_PARAM` |
+| **Reference** | `api/Reference.ts` | `api.help()` and the CLI's `help`, made from the tables: the operations (`OPERATIONS`, whose CLI side `CLI_COMMANDS` the registrar registers), `ALL_FIELD_NAMES`, `PROPERTY_OPERATORS` with `FILTER_VALUE_DOC`, and the sort properties with `TaskValues.words` |
+| **Input codecs** | `utils/values/` | How a value typed by a person or a script is read: `Read<T>` (a value, or an `Issue`), `typed` (NFKC, trimmed) and `dashed` (hyphen-like characters as `-`, dates only), `DateInput` (a day that exists), `TimeInput` (`9:40` as `09:40`), `DateTimeInput`, `IntInput` / `IntValue` (whole numbers, a range), `FloatInput`, `BoolInput`, `ChoiceInput`, and `issueText` (the English sentence of an issue). The API, the CLI, the URI and saved view state (`FieldCodecs`' `F.*`) read through them; the note's notation does not |
 | **TaskNormalizer** | `api/TaskNormalizer.ts` | Task → NormalizedTask conversion for API output |
 | **FilterFileLoader** | `api/FilterFileLoader.ts` | Filter file (.json/.md) loading |
-| **FlowExecutor** | `services/flow/FlowExecutor.ts` | Executes `==>` flow commands (every / + / at / x / until / move) |
+| **FlowExecutor** | `services/flow/FlowExecutor.ts` | Plans what a `==>` command (every / + / at / x / until / move) writes, and writes nothing: a completion's fire from the lines the completing write holds (`planFire`, as a `fire` op: `fireOp`), a deletion's next instance and removal (`planDeletion`). Reads the notes only through `FlowReads` (a generation block, a row by id). A `move` carries the row to a heading of its own note (`[[#heading]]`) as one `move` op; a heading that is not one place in the note fails the plan |
+| **FlowNotices** | `services/flow/FlowNotices.ts` | What the user is told of the flow: for each completed row whose flow was not run, why (`notRunsOf(outcome)`, the one rule for a card's write, a send and the editor), and a delete its fire stopped (`deletionStopped`); the same failure once per window |
+| **FiringTrials** | `services/persistence/FiringTrials.ts` | `firingTrials`: the one rule of which fires of a completion are written — every fire, else none, else each put back from the top and kept or set aside with its refusal — for `InlineTaskWriter`, `SendWriter` and the editor's fire alike (`FiringOutcome`) |
 | **DragHandler** | `interaction/drag/DragHandler.ts` | Delegates pointer events to `DragRouter` (Strategy selection) / `DragSession` (gesture lifecycle) |
 | **MenuHandler** | `interaction/menu/MenuHandler.ts` | Context menu facade coordinating multiple Builder classes |
-| **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; manages and persists all timer instances |
+| **TimerWidget** | `timer/TimerWidget.ts` | Floating timer UI; starts timers and owns their board, lifecycle and recorder |
 | **IntervalTemplateLoader/Writer** | `timer/IntervalTemplateLoader.ts` et al. | Interval template read/write |
 | **AudioUtils** | `timer/AudioUtils.ts` | Web Audio API notifications with serialized context management |
-| **KanbanView** | `views/kanban/KanbanView.ts` | Kanban board view |
+| **KanbanView** | `views/kanban/KanbanView.ts` | Kanban board view: the grid of its lists, their rows and columns (see "Saved lists, lanes and note links") |
 | **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup / Interval) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
-| **SidebarManager** | `views/sidebar/SidebarManager.ts` | Sidebar visibility and pinned list management. A new list (Kanban, Calendar and Timeline alike) starts with `createDefaultListFilterState()`, i.e. `parent isNotSet`: every checkbox is a task, and a nested one is already drawn inside its parent's card |
-| **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI, also used by "Convert to inline" (shared form widgets live in `modals/form/`) |
-| **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`, owns a PopoverStack for SuggestController-based fields. Entry: card double-tap, menu Properties items (with field focus) |
-| **SuggestController** | `views/customMenus/SuggestController.ts` | Shared suggest-dropdown machinery (tv-ctrl__suggest) used by both filter-popover value selectors and TaskHubPanel form fields |
+| **SidebarManager** | `views/sidebar/SidebarManager.ts` | The sidebar of Timeline and Calendar: its layout, and whether it is open (closed at narrow width until the toggle opens it). What it holds is the pinned lists' panel (`PinnedListPanel`) |
+| **CreateDialog / CreateModal** | `modals/create/` | The create dialog: a new task line and the place it goes (`CreatePlace`: a daily note's task section, or the head of a row's children), its logic (`CreateDialog`) apart from how it looks (`CreateModal`), as the send dialog's is. It asks the place what it is (`CreatePlaces.facts`, `services/data/`) and says where the line goes; its placeholders and date rules read only what a line there inherits (the reading's answer, never a daily note's day). Opens on the name field and creates nothing while the name is empty; waits for the write, closing once written and saying why above its buttons when refused |
+| **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`. Its fields' lists are Obsidian's (`ValueSuggest`), its status button opens the card menu's statuses (`addStatusItems`). Entry: card double-tap, menu Properties items (with field focus) |
+| **OverlayShell** | `views/sharedUI/OverlayShell.ts` | The one surface of the plugin's dialogs and popovers (centered: a dialog, a bottom sheet on a phone; anchored: a popover). Every overlay is given Obsidian's keymap and keeps its hotkeys out while the focus is in it (`HotkeyShield`); a frame after it opens, it puts the focus on the field the body names (`initialFocus`, its text selected), else on the panel itself, and gives the focus back on close. A close the user asks for (×, Escape, the back, outside, a swipe) asks the body first (`beforeClose`, a `CloseAnswer`: close, stay, or a promise waited for; `CloseGate`) |
+| **askChoice / confirm / askText** | `modals/ask/` | The questions put to the user, on OverlayShell's centered panel (a sheet from below on a phone), each answered once when it has closed (`ask`): a choice of buttons opens with the focus on cancel and answers `'cancel'` however else it closes (×, Escape, the back, outside, a swipe); a text opens on its field, says under it what does not read (`issueWords`), and waits for its `submit` before closing. Their button row is `FormActions` (`modals/form/`) |
+| **onFormEnter** | `modals/form/formEnter.ts` | The one answer to whether a field's Enter is the form's: not an IME's commit (`isComposing`, `keyCode` 229, the field's own composition flag; Windows sends `Process`), nor one a list open on the field takes (`takesEnter`, e.g. `ShownSuggest.listShown`). Every field of ours puts its Enter through it; the commit Enter of an IME commits only, and the next Enter is the form's |
+| **ShownSuggest / ValueSuggest** | `suggest/` | Every list of candidates under a field of ours is Obsidian's input suggest, with Obsidian's keys: the first item selected as it opens, Enter puts it in, a value that is no item goes in by Escape then Enter. `ShownSuggest` says whether its list is open (`listShown`, an Enter the field yields), takes every key its list does not so the hotkeys behind stay out, and picks nothing on an IME's committing Enter (`isFormEnter`); a subclass says what picking does (`pick`). `ValueSuggest` is a field's list of values (the hub's tags, style and properties, the filter's keys, values and pills, a list's top-right fields): what is picked is committed by the field's `pick`. `HotkeyShield` follows the focus in the capture phase of `focus`, so a list that opens as its field takes the focus has its scope above the shield's |
+| **FrontmatterValueSuggest / PropertyValueSuggest** | `suggest/` | A frontmatter color's and line style's values (`ScopeValueKind`: the key, the candidates, the drawing), in the editor on the key's line where the reading finds the frontmatter, writing the value alone (`FrontmatterLineEditor.valueRange`), and in the Properties view with its color picker (`WindowAttachment`), writing to the note of the leaf the field is in (`fileOfElement`), not the active one |
 | **PropertyUpdatePlanner** | `services/persistence/PropertyUpdatePlanner.ts` | Pure diff: `Partial<Task>` updates → normalized PropertyOp[] for non-time properties (canonical-location / clear semantics) |
 | **ChildPropertyLineEditor** | `services/persistence/utils/ChildPropertyLineEditor.ts` | Surgical CRUD for inline child property lines (`- key:: value`), representation-preserving |
-| **TaskParser** | `services/parsing/TaskParser.ts` | Static facade wrapping active ParserChain; rebuilt on settings change |
+| **TaskParser** | `services/parsing/TaskParser.ts` | `lineParsers(settings)`: the ParserChain the settings read lines with, built by whoever reads (FileParsePipeline, editor diagnostics); no chain is held. `lineParsersFingerprint` says when settings read lines differently |
+| **TaskLineFormat** | `services/parsing/TaskLineFormat.ts` | `formatTaskLine(fields)`: the one spelling of a task line the plugin writes (new or rewritten); `formatRow(task)`: a read row written back (tv-inline via `formatTaskLine`, read-only notations return `originalText`) |
 
 ---
 
-## Document Tree Pipeline
+## Parse Pipeline
 
 `FileParsePipeline` (`services/parsing/FileParsePipeline.ts`) owns the parse order contract for each file. `TaskScanner` delegates the whole file to it and only handles the surrounding parse/detect/commit orchestration. The pipeline runs:
 
 ```
-0. Frontmatter boundary detection → tv-ignore check
-1. DocumentTreeBuilder.build()         — Parse file into heading-based hierarchy tree
-2. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (delegates FM extraction to FilePropertyResolver)
-3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached
+0. Outline.read(lines)                 — the note's one reading (items, subtrees, code, headings, body start)
+1. Frontmatter → tv-ignore check
+2. NoteSections.read(outline)          — sections from outline.headings, each with its own property lines
+3. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (the frontmatter read by PropertyValues.fromFrontmatter, then BuiltinPropertyExtractor)
+4. NoteTasks.extract()                 — every line that opens a task, read once, with its section's values attached
 ```
+
+Parsing spells no name. A line parser answers an unnamed task (`UnnamedTask`); `NoteTasks` finds each row's parent and children by line and names them with the `RowNamer` its caller hands the pipeline. The index's scan passes `namesOfReading(path, reading)` (`services/core/RowNames.ts`), so a row is named once, by the reading that read it; a reader outside the index (a fire's plan, a send's preview) passes `namesOutsideIndex(path)`, whose names never reach the store.
+
+The name layer lives in `services/core/RowNames.ts`: the spelling of a name (`nameOf`, `readName`) and the namers. A namer gives a row its reading (`Task.reading`) together with its name, so a write takes the reading from the copy (`plannedOn`) and reads no name's spelling. What outlives a reading is a row's anchor (`Task.anchor`, set by the scan); `TaskStore` keeps a `(file, anchor) → name` table with the tasks, and `TaskIndex.getTaskByAnchor` is one lookup in it. A segment of a task split at the day boundary (`<name>##seg:YYYY-MM-DD`, `services/display/SegmentIds.ts`) is a key within the display: a caller acting on one hands its row's name (`getOriginalTaskId`), and the write side does not take segments apart.
 
 Frontmatter makes no task. It is only the root of the cascade below: its scope keys (`tv-start`/`tv-end`/`tv-due`/`tv-color`/`tv-linestyle`/`tv-mask`), `tags` and custom properties are inherited by every task in the note.
 
@@ -265,7 +309,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
-| **File** | `FilePropertyResolver` | Frontmatter object | Extract builtin keys (`color`/`linestyle`/`mask`) with validation, normalize tags, separate custom properties. Used as the cascade root by `SectionPropertyResolver`. |
+| **File** | `PropertyValues.fromFrontmatter` + `BuiltinPropertyExtractor` | Frontmatter object | Read every key as a `PropertyValue`, then put the builtin keys apart with the same extractor a section and a task use. Used as the cascade root by `SectionPropertyResolver`. |
 | **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`. |
 
 **Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass. (Task-scope inheritance — `TaskPropertyResolver` BFS + `parentStyle` propagation — was removed 2026-07-03.)
@@ -274,32 +318,72 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 | Layer | Dates | Properties / tags / style | Written by | Read by |
 |-------|-------|---------------------------|------------|---------|
-| **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `format()`, all writers (round-trip fidelity) |
-| **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `TreeTaskExtractor`, from `SectionNode.resolvedX` | Merge step below |
-| **effective** | `DisplayTask.effectiveStartDate` etc. (materialized — merge needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
+| **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `formatTaskLine`, all writers (round-trip fidelity) |
+| **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `NoteTasks`, from `SectionNode.resolvedX` | Merge step below |
+| **effective** | `DisplayTask.stated` (merged), `span` and `dueMs` (resolved — needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
 Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
 
 **Builtin vs custom properties.** Builtin (`color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both inherit with child-wins precedence at every layer; the only structural difference is type-level (separate Task fields vs `Record`).
 
+### プロパティの値
+
+プロパティの値は `PropertyValues`（`parsing/utils/PropertyValues.ts`）の1か所で `PropertyValue` に読む。`PropertyValue` は型で分かれる判別共用体で、`value` に書かれたとおりの綴りを持ち、型ごとの値（`number`、`boolean`、`items`）を別の欄に持つ。書き戻しは `value` を書くので、利用者の綴りは変わらない。読み手は型の欄を読み、`value` から真偽や数を決め直さない。
+
+- 行の値（`- key:: value`、節の `- properties::` の項目、ハブの入力）は `fromText` で読む。数は数字と小数、配列は `[` `]` の中か `,` 区切り、ほかは文字列である
+- 真偽値の綴りは `true` `True` `TRUE` `false` `False` `FALSE` の6つだけで、Obsidian の YAML と同じである。`tRue`、`yes`、`on` は文字列、`1` は数である
+- frontmatter は `fromFrontmatter` で読む。型は YAML のパーサが決めたもので、引用符の付いた `"true"` は文字列である。日付のキー（`tv-start` など）の YAML の `Date` と一日の分の数（`10:30` を YAML 1.1 が読んだ 630）は、ここで日付の文字列にする
+- `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
+- プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
+
+組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず `value` を読む。ただしタグは、配列ならその項目、文字列なら `#tag` か `,` 区切りとして読む。
+
 ### Inline child line extraction
 
-チェックボックス行はすべてタスクになり、`childLines` にはチェックボックスでない行だけが残る。TreeTaskExtractor は次の規則でタスクと `childLines` を組む。
+チェックボックス行はすべてタスクになり、`childLines` にはチェックボックスでない行だけが残る。`NoteTasks.extract` は次の規則でタスクと `childLines` を組む。
 
-1. `DocumentTreeBuilder` がタスク行配下のインデント行を全て収集する（`childRawLines`）。コードフェンスの中の行は `childFenced` で印が付き、記法として読まれない
-2. フェンスの外のチェックボックス行は、直下のブロックとして `childTaskBlocks` にまとまる。間に非タスク行（`- メモ` など）を挟んだ深い行も、そのタスクの部分木の中にあれば同じ扱いになる
-3. `TreeTaskExtractor.classifyBlock()` が各 block を 1 回だけ判定し、パーサが読めればタスクにする。日付もコマンドも持たない `- [ ]` も、別のタスクの下の `- [ ]` もタスクになる。結果の `BlockOutcome` を、`childLines` からの除外と再帰の両方が共有する
-4. 親は直上のタスクブロックだけで、インデント幅（2 スペース、4 スペース、タブ）には依らない。孫は子の再帰が張るので、祖父の `childIds` には入らない。トップレベルの非タスク行の下のチェックボックスは、所有者のいない独立したタスクになる
-5. 各 `ChildLine.bodyLine` に絶対行番号を格納する
+1. タスクを開く行（`TaskLineClassifier.opensTask`: 読みが項目と読み、コードでないチェックボックス行）を上から1回走査し、各行を連鎖でパースする。日付もコマンドも持たない `- [ ]` も、別のタスクの下の `- [ ]` もタスクになる。連鎖の最後の `tv-inline` はチェックボックス行をすべて受け取るので、拒まれる行は無い
+2. 親は、祖先の項目（`itemsAbove`）のうち最も近いタスクである。インデント幅（2 スペース、4 スペース、タブ）にも、間に挟まる非タスク行（`- メモ` など）にも依らない。孫は子の `childIds` に入り、祖父のには入らない。トップレベルの非タスク行の下のチェックボックスは、所有者のいない独立したタスクになる
+3. `childLines` は、部分木の行から、子タスクの部分木と自分のフロー行を除いたものである。除外はこの1回で済み、ノートの各行はたかだか1つのタスクのものになる。字下げは部分木の空でない行の最小の字下げで揃える
+4. 各 `ChildLine.bodyLine` に絶対行番号を格納する
+5. プロパティは自分のプロパティ行（`ChildLineClassifier.ownPropertyLines`: `directItems` のうち `- key:: value` の形の行）から読む。記号はフロー行と同じく、すべての箇条書きの記号（`LIST_BULLET_SOURCE`: `-` `*` `+` と番号）を受ける。書き込み（`ChildPropertyLineEditor`）が編集する行と同じ集合である
 
 フェンスの中の `- [ ]` はタスクにならず、`childLines` に普通の行として残る。カードではコードブロックの一部として描かれ、チェックボックスにはならない。
 
+#### フローと validation
+
+フロープログラムはタスク行の `==>` の後ろと、直下の `- ==>` 行（`collectFlowLineIndices`: `directItems` のうちフロー行の形の行）の全部から1回で決まる。行のパーサ（`TVInlineParser`）は `==>` から後ろを本文から切り落とすだけで、読まない。`readFlow(outline, taskLine)` が行の尾とフロー行を集めて1回パースし、抽出（`tv-inline` の行）とエディタの診断（`DiagnosticsExtension`、`FlowGroup`）がこれを使う。
+
+フローの式が読む `due`（`start`、`end` も）は行に書かれた値で、節やノートから受け継いだ値（`stated.due`）ではない。式は次の回の行に書く値を作るもので、受け継いだ締切を入れると `at(due+7d)` が受け継ぎを行へ書き出してしまう。絞り込みと並べ替えが比べる値（`TaskValues`、受け継ぎを含む）とは目的が違う。
+
+`Task.validation` の1枠は抽出で1回だけ埋まる。行のパーサが入れた日付の規則、日付ブロックの parse-error を優先し、どちらも無い行だけがフローの最初の診断を受け取る。
+
+#### 日付ブロック
+
+`@start>end>due` は `readDateBlock(text)`（`parsing/tv-inline/DateBlock.ts`）の1か所で読む。`text` は、内容から末尾の `^id` とコマンド（`==>` から後ろ）を除いたもの（`taskContentText`）である。返すものは次のとおり。
+
+- 最初のブロックの区間と値（開始、終了、期限）
+- 最初のブロックのうち、実在しない日か時刻を指す区画の区間（`unread`）
+- 3つ目以降の `>` の区間
+- 2つ目以降のブロックの区間と原文
+
+`@` だけの一致（`@alice`、`@1on1`）はブロックではない。`TVInlineParser` は値を読む。エディタの診断（`DateBlockDiagnostics`）と日をずらす複製（`shiftLineDates`）は、`readLineDateBlock(line)` で行の桁の区間を読む。
+
+区画の日付と時刻は `parseDateTimeField`（`parsing/utils/DateTimeFieldParser.ts`）で読む。日付の形の断片が実在の日を指さない（`DateUtils.readDate` が null。入力の codec と同じ述語）か、時刻の形の断片が範囲の外なら null を返し、その値は日付も時刻も読まない。片方だけ読むと値を推測することになるからである。
+
+2つ目以降のブロックは日付ではなく、内容にも入らず、parse-error の診断が付く。最初のブロックの区画が1つでも読めなければ、そのブロックも日付を与えず、parse-error の診断が読めない区画に付く。2つ目以降のブロックを日付に繰り上げることはしない。日付を読まなかったブロックの原文は、書かれた順に `Task.unreadDateBlocks` に残り、`formatTaskLine` が日付のブロックの直後にそのまま書き戻す（issue #198、段7の論点 N）。位置は本文の途中から日付のブロックの直後へ移る。それでも読み直しで同じブロックが日付になるので、開始日は入れ替わらない。日付の無いタスクでは、残したブロックの先頭がそれだけで日付として読めるときに限り、先に空の `@>`（日付なし）を書く。先頭が読めないブロックなら書かないので、書き戻しで行に `@>` が増えることはない。`shiftLineDates` は読めないブロックをずらさない。
+
+`@` の外の日付も同じ述語で読む。frontmatter と節のプロパティ行（`BuiltinPropertyExtractor`）は読めない値をその層の値とせず、継承の上の層の値になる。行を書き直す書き手は無いので文字は残るが、エディタの診断の経路は無い。Tasks の絵文字の行（`TasksPluginParser`）は読めない日付を欄に入れず、行の持ち主は形で決めたまま、warning の parse-error を付ける（エディタの診断が無いので、error にしてビューから黙って消さない）。式のリテラル（`Lexer`）は `lex.no-such-day` / `lex.no-such-time` の診断になる。
+
+#### 本文の記法
+
+本文の中の記法は `scanNotation(text)`（`parsing/utils/InlineNotation.ts`）が一度に切る。切るものは、コード（`` ` ``）、wikilink と Markdown のリンク（`!` が付けば埋め込み）、タグである。記法の中の記法は数えない。そのため `[[報告書#見出し]]` やコードの中の `#x` はタグにならない。`TagExtractor.fromContent` はこの結果のタグを読む。
+
+リンクの正規表現は同じ断片（`WIKILINK_SOURCE`、`MARKDOWN_LINK_SOURCE`）から組む。使う所は `ChildLineClassifier` の wikilink の子行と配列の項目、`NoteName`、カードの埋め込みの除去（`withoutEmbeds`）である。wikilink の中身は `[` `]` と改行を含まない。
+
 #### ChildLine.bodyLine のセマンティクス
 
-各 ChildLine は、ファイル先頭からの絶対行番号を内包する（`Task.line` と同規約）。レンダラとライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が `ChildLine.bodyLine` をそのまま entry に転載する）。
-
-- `TreeTaskExtractor` は `block.childLineNumbers`（= 絶対行）を classify に渡す
-- `bodyLine < 0` の entry は `buildChildEntries` で除外される（parser 契約上発生しない想定）
+各 ChildLine は、ファイル先頭からの絶対行番号を内包する（`Task.line` と同規約）。レンダラとライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が `ChildLine.bodyLine` をそのまま entry に転載する）。負の値は無い。フローのセグメント（`FlowChildSegment.bodyLine`）は、読んだものには必ず行があり、発火が計画してまだ書いていない次のインスタンスのものには無い。
 
 ---
 
@@ -323,9 +407,9 @@ The plugin recognizes eight task types internally.
 ### Display-based task classification
 
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
-All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
-Display-layer implicit value resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
-Parse-layer date inheritance is via `cascadeContext` (set by `TreeTaskExtractor`, consumed by `DisplayTaskConverter`).
+All times are relative to the configured `startHour` (default 5 → visual day `[05:00, 05:00 the next day)`).
+A task's dates are read two ways (`utils/TaskDates.ts`): the dates the note states (`statedDates`, `DisplayTask.stated`), and the time the task occupies, `[startMs, endMs)`, with the moment it is due (`resolveSpan`, `DisplayTask.span` and `dueMs`). `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`) puts both on the display copy, and the in-place duplicate asks `resolveSpan` for the slot a task fills.
+Parse-layer date inheritance is via `cascadeContext` (set by `NoteTasks`, consumed by `DisplayTaskConverter`).
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 
@@ -340,7 +424,7 @@ At least one side has an explicit time, and only one side (start or end) is spec
 Only one side specified, no time on that side.
 
 - **Display**: Calendar (all-day) lane, 1 visual-day duration
-- **Inference**: implicit time = startHour:00 / (startHour−1):59; reverse date = same day
+- **Inference**: one visual day (see the span below)
 - Examples: `@2026-03-09`, `@>2026-03-09`, `@2026-03-09>>due`
 
 #### 3. SE / SED All-day (no time on either side)
@@ -348,81 +432,164 @@ Only one side specified, no time on that side.
 Both start and end are specified, neither has a time.
 
 - **Display**: Calendar (all-day) lane, spanning the specified days
-- **Inference**: implicit times = startHour:00 / (startHour−1):59
-- Examples: `@2026-03-09>2026-03-11`, `@2026-03-09>2026-03-11>due`
+- **Inference**: from the start of the first day to the end of the last: a bare end date is included (see the span below)
+- Examples: `@2026-03-09>2026-03-11` (03/09 to 03/11), `@2026-03-09>2026-03-11>due`
 
 #### 4. SE / SED Timed (at least one side has time)
 
 Both start and end are specified, at least one has an explicit time.
 
 - **Display**: < 23h30m → Timeline lane; ≥ 23h30m → Calendar (all-day) lane
-- **Inference**: if one side's time is missing, infer from startHour:00 / (startHour−1):59
+- **Inference**: a side without a time rests on its date (see the span below)
 - Examples: `@2026-03-09T10:00>12:00`, `@2026-03-09T10:00>2026-03-10T18:00`
 
 #### 5. D (due only)
 
 Only a due is specified, no start or end.
 
-- **Display**: Calendar (all-day) lane on the due date (display only)
-- **Inference**: none — D does not affect display position or duration inference
+- **Display**: read as if the due were the end (`spanDates`: `@>>D` as `@>D`, `@>>DT17:00` as `@>DT17:00`). A due date is drawn all day on that day, a timed due on the time grid in the hour before it, in every view, and the window queries find it there
+- **Inference**: the span the due gives; the due itself is unchanged
+- A due inherited from a heading or the note gives a span too, as an inherited start date does
+- A drag writes the span it is drawn with as the line's dates and leaves the due (`dueSpanWritten`, `dragBase`)
 - Example: `@>>2026-03-13`
 
-### Implicit value resolution rules (`toDisplayTask()`)
+#### Canonical order within a section
 
-All display-layer implicit resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
-Written dates are **calendarDates**. Complement uses `startHour` where possible,
-falling back to `00:00`/`23:59` when same-day end < start occurs.
+`TaskRenderOrder` orders each section's bucket (`TaskDateCategorizer` sorts with it), and the views draw in that order. Schedule's time grid places its cards by `ScheduleOverlapLayout`, which keeps an order of its own with the same rule (start, the longer first, where written).
 
-#### Stage 1: E-type start resolution (no startDate, has endDate)
+| Section | Order |
+|---|---|
+| timed | visual start (minutes from startHour), then the longer first |
+| allDay | the start of what is drawn (`drawn.startMs`) |
 
-| Subtype | Condition | Rule |
+A tie goes by where the task is written: the file (`localeCompare`), then the line as a number, then the ID (only the segments of one row share a file and a line). The ID does not order tasks by itself: it is a name for one reading of the note, and compared as text it put line 10 before line 9.
+
+### The span (`resolveSpan()`)
+
+`resolveSpan(stated, startHour)` fills in what the note does not state and gives moments (local epoch ms). `dayStart(D)` is D at `startHour:00` (`utils/DayWindow.ts`). A bare date D is the whole visual day D: written as a start it is D's start, written as an end D's end. A time inherited from the section or the note is a written time. A task with only a due is read as if the due were its end (`spanDates`).
+
+| Written | Start | End |
 |---|---|---|
-| E-Timed | endTime present | start = endTime − 1h (may cross to previous calendarDate) |
-| E-AllDay | no endTime | endTime = `(startHour−1):59`, startDate = `toVisualDate(endDate, endTime, startHour)`, startTime = `startHour:00` |
+| `@D` | `dayStart(D)` | `dayStart(D+1)` |
+| `@D>E`, `@D>D` | `dayStart(D)` | `dayStart(E+1)` (`@D>D` is `@D`) |
+| `@>E` | `dayStart(E)` | `dayStart(E+1)` |
+| `@DT10:00` | D 10:00 | an hour later |
+| `@DT10:00>11:00` | D 10:00 | D 11:00, the next day's when before the start |
+| `@DT10:00>D`, `@DT22:00>E` | the written start | `dayStart(E+1)` |
+| `@>ET11:00` (rule 4's error), `@>>DT11:00` | an hour before the end | the written end |
+| `@>>D` | `dayStart(D)` | `dayStart(D+1)` |
 
-#### Stage 2: All-day startTime complement
+The due is `dayStart(D+1)` for a due date D and the written moment for a timed one. The rows rule 4 calls errors (an end time on a line with no start time) are not drawn; they are read by the same rules and not mended (`@D>DT02:00` ends before it starts), for the API's `includeInvalid`.
 
-| Condition | Rule |
-|---|---|
-| startDate present, no startTime | startTime = `startHour:00` |
+A segment of a split task holds its line's values, `stated` and `span`; what it is drawn over is `drawn`, cut at `dayStart` of the boundary. The visual days a span is drawn over are `visualDaysOf` (the last is the day of the moment before the end, so `[D 05:00, D+1 05:00)` is D only); the place on the time grid is `minutesOfSpan`. Windows of days (`daysWindow`, a filter's value by `ofValue`) and how a span or a moment stands to them (`utils/SpanRelation.ts`: `overlaps`, `within`, `startIn`, `endIn`) answer the views, the window queries (`TaskReadService.tasksInWindow`), the API's shorthand (`QueryShorthand`: `today`, `date`, `from`/`to` as `period overlaps`), Timeline's overdue heading, the filter and the sort alike. A start belongs to the window it is in; an end and a due to the window they close.
 
-#### Stage 3: S-type end resolution (has startDate, no endDate)
+A filter's date value (`DateFilterValue` in `services/filter/FilterTypes.ts`) is a date, a date and a time (`YYYY-MM-DDTHH:mm`), a preset, or a range `{ from?, to? }` of these; `isDateRange`, `isPresetValue` and `isDateTimeText` there are the only places its kind is told. `ofValue` makes every value a window: a date and a preset their visual days, a range from the start of its `from` to the end of its `to` (open on a side with no end), a date and a time a point (`startMs === endMs`). The start, end and due conditions compare a moment with a window by the table of the start and the closing side, and with a point as numbers. The period condition (`overlaps`, `within`, their negations) reads `SpanRelation.overlaps` and `within` on the span alone, the due unread; a point M is overlapped by `start <= M < end`. A task with no span matches no period row, a negative one too (`FilterExpr` compiles a negation as `all(has(period), not(atom))`), and a period row takes no `target`. A range is taken by the period condition and by the `equals` of the others only (`takesRange`); the reader (`FilterSerializer`) refuses the rest with a reason.
 
-| Subtype | Condition | Rule |
-|---|---|---|
-| S + explicit endTime | endTime present, no endDate, endTime ≥ startTime | endDate = startDate (same-day inheritance) |
-| S + explicit endTime (cross-midnight) | endTime present, no endDate, endTime < startTime | endDate = startDate + 1 day |
-| S-Timed | startTime present, no endTime | end = startTime + 1h (may cross to next calendarDate) |
-| S-AllDay | no startTime, no endTime | end = startTime + 23h59m |
+The hub's faint values and the menu's dates are `sideValues`: the line's value, else the inherited one, else what the rules make, at the precision it is written with (a bare date gets no faint time; `@D`'s end is D, `@>>D`'s start and end are D, `@>>DT17:00`'s 16:00 and 17:00).
 
-#### Stage 4: SE/SED endTime complement
-
-| Condition | Rule |
-|---|---|
-| endDate present, no endTime | endTime = `(startHour−1):59` |
-
-#### Stage 5: Same-day fallback
-
-| Condition | Rule |
-|---|---|
-| same calendarDate, one side implicit, end < start | implicit startTime → `00:00`, implicit endTime → `23:59` |
-
-#### D-Only
-
-D-Only tasks (`@>>due`) have no start or end — `toDisplayTask()` produces
-`effectiveStartDate = ''` and `effectiveEndDate = undefined`. No resolution is applied.
-
-#### Due complement (conceptual)
-
-Due represents a deadline date (calendarDate). If time complement is needed,
-`23:59` is used (end of calendar day, startHour-independent).
+A task is late when it is past its due (`dueMs <= now`, 🚨 `past-due`) or past its end (`span.endMs <= now`, ⚠️ `past-end`): `getOverdueLevel`, which the overdue counts read (Timeline's heading, Schedule, the oldest overdue, the watcher). A card also shows 🚨 when its span runs past its due (`exceedsDue`: `span.endMs > dueMs`, without the clock), before the due too: `cardOverdueLevel` in `TaskCardRenderer` is the one place that reads it.
 
 ### All-day boundary
 
-- Duration ≥ 23h30m → All-day lane
-- Duration < 23h30m → Timeline lane
+A task is drawn all day when its start is a bare date (a start date with no start time, or with no start an end date with no end time), or it lasts 23h30m or more (`isAllDay` in `services/display/SectionClassifier.ts`). Otherwise it is drawn on the time grid.
 
-(`DateUtils.isAllDayTask`, threshold `23.5 * 60 * 60 * 1000` ms)
+---
+
+## View Skeleton
+
+The six views (Timeline, Schedule, Calendar, MiniCalendar, Kanban, Timer) share one skeleton: a table that says what each view is, a base class that holds its state and answers each change of it, and the plugin's events that tell the views what happened. The log view is not one of them.
+
+### The view table (`views/ViewDescriptors.ts`)
+
+`VIEW_DESCRIPTORS` declares each view once, keyed by `ViewType` (`satisfies Record<ViewType, ViewDescriptor>`): its schema's codec (and through it the type and the short name), icon, the i18n keys of its name, ribbon and command, the command id, the settings field of its default position, and whether it exports an image (`exportable`), keeps view templates (`hasTemplates`), hears the plugin's events (`hearsEvents`) and counts as open in the diagnostics (`countsAsActive`). The table imports the schemas only, never a view class; names are kept as keys and read with `t()` when used.
+
+What is read from the table:
+
+- `main`: the registration, the ribbon icon and the command of every view, the views `ViewEvents` tells (`hearsEvents`), the count of open views (`countsAsActive`)
+- `SchemaRegistry` (`codecFor`, `schemaFor`, the short names) for the string boundaries: the URI, the CLI, `PinnedListQuery`. A caller that knows the view imports its codec from the schema module instead
+- `ExportRegistry`'s keys (`ExportableViewType`, checked by the compiler), the CLI's and `Reference`'s view names, `ViewTemplateLoader`'s valid views, `LeafOpener`'s default position, the settings menu's template and export items
+
+Adding a view is one table entry plus its modules: `ViewType`, the schema module with its codec, the view class, its entry in `main`'s `VIEW_CONSTRUCTORS` (the table cannot hold the constructors without importing the classes, which import the table; a type left out there is a compile error), its i18n keys, its field in `defaultViewPositions`, and, when it exports, its target in `ExportRegistry`. The settings tab's list of default positions (`settings/ViewsTab.ts`) is still written by hand, one row per view with its label.
+
+A view answers `getViewType()` from its schema module (`TimelineCodec.schema.viewType`), not from a field: Obsidian's `View` constructor reads the type (the leaf's `data-type`) before the subclass has any field.
+
+### The base view and its store (`views/base/`)
+
+Each view extends `TaskViewerView<TConfig, TTransient>` (an `ItemView`). Its state is its schema's config and transient fields as one value, held in a `ViewStore`. The state changes only through `update(patch)`: the store merges the patch shallowly into a new value (the old one is never changed in place) and tells each listener the patch and the value before it. A patch is told even when it changes nothing (Now pressed while following today).
+
+The base answers every patch in one place:
+
+| The patch | The answer |
+|---|---|
+| any | One draw in the next frame (`RenderScheduler`, coalesced over `requestAnimationFrame` of the view's own window). `update(patch, { draw: false })` is for a change the view has already shown itself (a zoom gesture, the sidebar's slide, MiniCalendar's week slide) |
+| holds a field of the schema (config or transient) | The layout is saved (`requestSaveLayout`), except for the workspace's own state (`setState`) |
+| holds `customName` | The tab's header is retitled |
+
+`getState` and `setState` go through the codec: `setState` lays the config over the schema's defaults (REPLACE: a field the state lacks goes back to its default) and puts the transient fields it could read. Where the view is (the schema's `anchorKey` and `anchorOffsetKeys`: `date`, and Calendar's `weekOffset`) is set whole: a state that names one of them clears the others it lacks (`ViewConfigCodec.transientOfState`), so a URI's `date=` over a Calendar moved by weeks shows that day's month grid. Obsidian opens a view and hands it its state afterwards, and may hand it a state again (a URI opened over it); `onReady` runs once both have happened.
+
+The toolbars and the pinned lists subscribe to the store and mend themselves; they hold no copy of the state. A toolbar is handed the store and, apart from it, the few commands that are not a change of state (move by days, Now, Go to date). The filter menu edits a value it is handed and gives back a new one (`editViewFilter`).
+
+Timeline's, Calendar's and Schedule's toolbars put their actions in an action zone (`ViewToolbarBase.createActionZone`), which folds into ⋮ (`is-compact` on the toolbar) when the row does not fit (`sharedUI/ToolbarFold.ts`). The width the row needs open is measured on each change of the toolbar's DOM (the month's name, a label, a button), with the zone shown whether or not it is folded, so folding never unfolds it; the width the toolbar has is read on each resize. A toolbar out of sight (no width) keeps its fold, and is measured again once seen. The view's `toolbar.close()` stops the watching.
+
+The settings (gear) menu is built once for every view, by `buildViewSettingsOptions` (`ViewSettings.ts`), from the descriptor and the store: Save and Load view (when the view keeps templates; saving names the view after the template), Copy URI and Copy as link (the config through `codec.toUriParams`), Reset (the config back to the defaults, the transient fields cleared except where the view is: the date looked at and Calendar's week offset), Export (when it exports). The view's own items go above them.
+
+### The plugin's events
+
+| Event | Who tells | Base default |
+|---|---|---|
+| `redraw()` | Settings saved (`ViewEvents.settingsChanged`) | Draw again |
+| `onDayRolled()` | The visual day changed (`ViewEvents.rollIfChanged`) | Draw again |
+| `onMinute()` | A minute passed (`ViewEvents.minutePassed`) | Nothing; Timeline and Schedule move their now-line |
+
+The plugin has one clock of minutes (`sharedLogic/MinuteClock.ts`, `startMinuteClock`): its first tick lands on the next minute boundary, every tick after it one minute later, and its timers are the plugin's, cleared when it unloads. Each tick sweeps the overdue judgement and calls `ViewEvents.minutePassed`, which checks the visual day (`startHour`) every minute and tells the views. `ViewEvents` is the one place that decides the day rolled; a settings save that moves the day (a new start hour) is told as a day roll instead of a redraw. A running timer's clock of seconds is not this clock.
+
+### The day a dated view looks at
+
+Timeline, Schedule, Calendar and MiniCalendar hold the transient `date` (`base/ViewedDay.ts`). Absent, the view follows today; present, it stays on that day. The workspace, the URI (`date=`) and the CLI (`anchor-date=`) read and write this one key; the older `startDate`, `currentDate` and `windowStart` are not read. Today is the visual day (`startHour`) in every view.
+
+| Moment | Following | Fixed |
+|---|---|---|
+| Now / Today | — | Clears `date` (and Calendar's `weekOffset`): follows again |
+| Go to date `d`, the arrows | Fixes `date` | Moves `date` (Calendar's arrows move only `weekOffset`) |
+| The day rolls | Moves to the new today (Timeline and Schedule scroll to now) | Stays; only today's mark is drawn anew |
+| Restart | Opens following | Opens on the saved `date` |
+| Settings saved | The range is read anew from the settings | The range is read anew; `date` stays |
+
+What a view draws is derived from `date`, the settings and (Timeline) the tasks each time, never held, so a change of the past days to show or of the week start shows at the save:
+
+- **Timeline** (`timelineview/TimelineDays.ts`): the window starts at the day looked at minus the past days to show, and holds the days to show. An arrow moves the window drawn by `n` days and fixes `date` at the new start plus the past days, so a pulled window moves without a jump. Go to date looks at the day, the past days before it.
+    - "Start from the oldest overdue task" (S2) pulls the window's start back to the oldest overdue day only while the view follows today, read at the moments it enters following: opened with its tasks, Now, the day rolled, the settings saved. Between them the pull is kept, so completing the oldest overdue task does not move the window; it is not saved. A fixed day is never pulled. Pulled far enough, today can fall out of the window
+- **Schedule**: draws the day looked at; the arrows move `date` by a day
+- **Calendar** and **MiniCalendar** (`calendar/CalendarGrid.ts`): they also hold the transient `weekOffset`, the weeks the grid was moved from `date`'s month grid (absent: 0). `gridRange` is the one function of the days drawn: the week of the 1st of the day looked at's month (today while following), moved by `weekOffset` weeks, six weeks. Go to date, a URI's `date=` and the CLI's `anchor-date=` put the day in `date` as given and clear the offset, so all three show the same screen. The arrows and MiniCalendar's wheel move only the offset; while following they fix today in `date` first. Today clears both. The week start is read at each draw, so a month grid keeps its month's 1st on the top row when it changes. The date picker opens on the day looked at, as Timeline's and Schedule's do. The toolbar names the month of the grid's middle, which is `date`'s month while the offset is 0. So `date` means the day looked at in every dated view; what each view draws around it is its own: Timeline puts the past days before it, Calendar draws its month grid
+
+The E2E suite drives these rules through the toolbars in the Dev vault (`tests/integration/views/viewed-date.test.ts`, `toolbar-state.test.ts`).
+
+### Saved lists, lanes and note links
+
+Three things more than one view draws are drawn by one part each.
+
+**Saved lists** (`sharedUI/TaskListSections.ts`). A saved list (`PinnedListDefinition`) is a pinned list of Timeline and Calendar, or a cell of Kanban. `TaskListSections` draws a list from its definition to its cards: which tasks it shows (`PinnedListQuery.resolve`, the view's filter added when the list applies it), its section (`ListSectionRenderer`), its pages (`TaskPagingController`, which hands each batch the draw's reconciler, or none for a page "Show more" adds), its cards (each list a card place of its own, `<scopePrefix>-<id>`), the sort and filter popovers, the top-right editor, the rename, and the items every list's ⋯ menu has (Rename, Duplicate, Top right, Apply view filter). Where the lists sit is the placement's (`ListPlacement`): it holds the lists, writes a list it is handed back (`replaceList`), puts a copy in and adds its own menu items.
+
+| Placement | Holds | Its own |
+|---|---|---|
+| `PinnedListPanel` (Timeline, Calendar) | `pinnedLists`, `pinnedListCollapsed` | The add button (a new list's name is edited once it is drawn), Move up / Move down, Remove. A copy goes right below its list |
+| `KanbanView` | `grid`, `gridCollapsed` | Insert a row or a column, remove one (never the last). A copy goes right of its list, and the other rows get a new list in that column |
+
+- A change of a list is a new list written into the view's state; nothing changes a definition in place. A rename writes the new name and the list is drawn with it
+- Which lists are collapsed is kept by list id. An older layout names them `timeline::<id>` or `calendar::<id>`; the codec reads that as `<id>` (`T.collapsedKeys`)
+- A new list's id is made by `newListId` (`services/viewConfig/ListIds.ts`), also for a list read without one. A new list shows every task that is not a child (`createDefaultListFilterState()`, `parent isNotSet`) and does not apply the view's filter. A copy shares its filter, sort and top-right values, which are never changed in place
+- The panel draws itself, on a change of its fields of the state and of the tasks; it writes with `update(patch, { draw: false })`, so a change of a list does not draw the view. Its element outlives the view's draws: the view takes it out before it gathers its own cards (`lift`) and puts it into the sidebar it built (`mount`), so the pages and the opened cards are kept. Kanban draws its cells in its own draw
+
+**Lanes** (`sharedUI/DateGridLane.ts`). `drawDateGridLane` lays the tasks of some days on a grid row as cards spanning their days: Calendar's week row and Timeline's all-day row (`AllDaySectionRenderer`, which also gives the row's empty space its menu). A task is cut at the lane's ends (`splitTasks` with `date-range` only: the `startHour` boundary is not drawn inside a lane), put on a track (`computeGridLayout`) and drawn compact, with the arrow to a later due. A card spanning days, or cut at an end, is a bar (`task-card--multi-day`) marked on the cut side; these classes are put on anew at each draw, so a kept card that became a bar or stopped being one is drawn right. The card's columns and track are written on it (`data-col-start`, `data-span`, `data-track-index`), where the grid drag reads them. The two lanes differ only in their offsets, their look and whether a one-day card shows its time:
+
+| Lane | Columns before the days | First track row | Card place | Class | Time on a one-day card |
+|---|---|---|---|---|---|
+| Calendar's week row | The week number, when shown | 2 | `lane` | — | Yes |
+| Timeline's all-day row | The time axis | 2 | `allday` | `task-card--allday` | No |
+
+**Links to periodic notes** (`sharedUI/PeriodicNoteLink.ts`). `periodicNoteLink` makes every link to a daily or weekly note in a view: an `a.internal-link` pointed at the note (`pointPeriodicLink`), previewed on hover, and a click on it, or on the cell given as `opensFrom`, opens the note in the current leaf, made from its template when it is not there (`openPeriodicNoteInLeaf`). The toolbar's year and month label points its links the same way. Calendar and MiniCalendar draw their week numbers with one cell (`calendar/WeekNumberCell.ts`).
+
+The E2E suite drives the lists and the lanes in the Dev vault (`tests/integration/views/pinned-lists.test.ts`, `kanban.test.ts`, `lanes.test.ts`).
 
 ---
 
@@ -544,7 +711,7 @@ src/styles/
 ├── _pinned-list.css          # Pinned list component
 ├── _sidebar.css              # Sidebar styles
 ├── _settings.css             # Settings tab
-├── _modal.css                # Modal dialogs
+├── _ask-dialog.css           # Question dialogs (askChoice, confirm, askText)
 ├── _kanban.css               # Kanban view
 ├── _template-creator.css     # Template creator UI
 ├── _cal-base.css             # Shared calendar base styles
@@ -608,6 +775,10 @@ The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault pa
 | `src/views/taskcard/types.ts` | Task-card-local render helper types |
 | Inside each subsystem directory | Subsystem-specific types (do not promote to cross-layer) |
 
+### utils placement rule
+
+`src/utils/` holds only leaves that belong to no layer and are used by two or more layers (e.g. `DateUtils`, `LineBreak`, `HostWindow`). A module that answers one layer's question, or that only one layer uses, lives in that layer, even when it is a small pure helper: `CodeFenceTracker` is a parsing question and lives in `services/parsing/utils/`; `TimerTargetIdUtils` is the timer's and lives in `timer/`. When the last caller outside a layer goes away, move the module into that layer. Existing files that do not meet the rule yet are moved when touched, not kept as precedent. Nothing in `src/utils/` imports a layer's procedures: a write (`processLines`, `createFile`) belongs in `services/persistence`, so a module that answers "which note" purely (`PeriodicNotes`) stays here and the part that makes and writes the note lives in `persistence/Notes`.
+
 ### Tooltip convention
 
 Use `aria-label` for tooltips. **Never set `title`** on interactive elements — Obsidian renders styled tooltips from `aria-label`, and a `title` attribute would cause a duplicate native browser tooltip.
@@ -645,12 +816,12 @@ menu.addItem(item => item.setTitle('Delete task'));
 
 | Pattern | Where used |
 |---------|-----------|
-| **Facade** | `TaskIndex`, `TaskReadService`, `TaskWriteService`, `MenuHandler`, `TaskRepository`, `TaskParser` |
+| **Facade** | `TaskReadService`, `Operations`, `MenuHandler`, `TaskRepository` |
 | **Strategy** | `DragRouter.pickGesture()` selecting `TimelineMoveGesture` / `TimelineResizeGesture` / `GridMoveGesture` / `GridResizeGesture`, `ParserStrategy` |
 | **Builder** | `PropertiesMenuBuilder`, `TimerMenuBuilder`, and other menu builders |
-| **Observer** | `TaskStore.onChange()` notifies UI of task changes |
+| **Observer** | `IndexReads.onChange()` (drawing, through `NotifyCoalescer`) and `IndexReads.onTaskDeleted()` (names that ended) |
 | **Surgical Edit** | `FrontmatterLineEditor` operates on YAML one key range at a time |
-| **Document Tree** | `DocumentTreeBuilder` builds heading-based hierarchy for section property cascade |
+| **One reading** | `Outline.read` answers items, subtrees, code and headings once; `NoteSections` and `NoteTasks` read the note's sections and rows off it |
 
 ---
 
@@ -664,20 +835,32 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 
 ### Parameters
 
+`view`, `position`, `name` and `template` are the URI's own. Every other parameter is a field of the view's config schema (`<View>Schema.ts`), under its key or a legacy alias; Copy URI writes the key. A field added to a schema is read from a URI with no change here.
+
 | Parameter | Format | Description | Example |
 |-----------|--------|-------------|---------|
-| `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` / `timer` |
+| `view` | string | **Required.** View short name | `timeline` / `calendar` / `schedule` / `mini-calendar` / `timer` / `kanban` |
 | `position` | string | Leaf placement | `left` / `right` / `tab` / `window` / `override` |
-| `name` | string | Custom view name (URL-encoded) | `My%20Timeline` |
-| `days` | integer | Display days (validated: 1, 3, 7) | `3` |
-| `zoom` | float | Zoom level (validated: 0.25–10.0) | `1.5` |
-| `date` | YYYY-MM-DD | Start date | `2026-02-28` |
+| `name` | string | Custom view name (URL-encoded); set as the view's `customName` | `My%20Timeline` |
+| `daysToShow` (alias `days`) | integer | Timeline display days, 1–30 | `3` |
+| `zoomLevel` (alias `zoom`) | number | Timeline zoom level, 0.25–10 | `1.5` |
+| `date` | YYYY-MM-DD | The day a dated view looks at. Timeline puts the past days to show before it; Schedule draws it; Calendar and MiniCalendar draw its month grid (from the week of the month's 1st), as Go to date does. Absent, the view follows today. The older `startDate`, `currentDate` and `windowStart` are not read | `2026-02-28` |
+| `weekOffset` | integer | Calendar and MiniCalendar: the weeks the grid is moved from `date`'s month grid (from today's while `date` is absent). Absent, 0 | `-2` |
 | `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
-| `filter` | base64 | FilterState JSON (`{ version: 4, root: {...} }`) | `eyJ2ZXJzaW9uIjo0LC...` |
+| `filterState` (alias `filter`) | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
 | `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
-| `template` | string | View template name (URL-encoded). When set, `filter`/`pinnedLists` are omitted | `My%20Template` |
-| `mode` | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
-| `intervalTemplate` | string | Interval template name (URL-encoded) | `Deep%20Work` |
+| `template` | string | View template name (URL-encoded). When set, `filterState`/`pinnedLists` are omitted | `My%20Template` |
+| `timerViewMode` (alias `mode`) | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
+| `intervalTemplate` | string | Timer: the interval template's name (URL-encoded) | `Deep%20Work` |
+
+### Reading values
+
+A value is read by the schema field's codec (`FieldCodecs`' `F.*` and `T.*`), which reads through the input codecs (`utils/values/`), as the API and the CLI do:
+
+- The text is normalized first: full-width characters as ASCII (NFKC) and spaces around it dropped; in a date, hyphen-like characters (`ー`, `−`, ...) as `-`
+- A date names a day that exists (`2026-02-30` is not one); a whole number is digits only (`3days`, `1.5` are not); a number is a plain decimal; a boolean is `true` or `false`; a choice is one of its values
+- A number outside its range is not moved to the end of it
+- A filter or a pinned list is read by `FilterSerializer.parse`: a condition it cannot read (an unknown property, an operator the property does not take, a value of the wrong shape) is dropped, and the rest is kept
 
 ### Example URIs
 
@@ -715,15 +898,16 @@ obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base6
 | **Settings menu** | `src/views/sharedUI/ViewToolbar.ts` | `ViewSettingsMenu` — gear icon menu with Save/Load view, Copy URI, Copy as link, Position |
 | **URI handler** | `src/main.ts` | `registerObsidianProtocolHandler('task-viewer', ...)` — parses params |
 | **View activation** | `src/main.ts` | `activateView()` — creates leaf at specified position and sets view state |
-| **Filter serialization** | `src/services/filter/FilterSerializer.ts` | `toURIParam()` / `fromURIParam()` — base64 encode/decode |
+| **Filter serialization** | `src/services/filter/FilterSerializer.ts` | `parse()` (the one reader: drops what it cannot read into issues) / `toJSON()`, `toURIParam()` / `parseURIParam()` — base64 encode/decode |
+| **URI reading** | `src/services/viewConfig/UriViewOpener.ts`, `ViewStateFactory.ts` | `openViewFromUri` names the view, loads the template, lays the query's fields over it (`codec.fromUriParams`) and tells the issues |
 
 ### View settings menu
 
-Each view's toolbar has a gear icon (settings) button. The menu provides:
+Each view's toolbar has a gear icon (settings) button. The menu is built once for every view (`views/base/ViewSettings.ts`, `buildViewSettingsOptions`) from its descriptor and its store; the view's own items (astronomy, the timer's lengths) go above it. The menu provides:
 
 | Item | Action |
 |------|--------|
-| **Save view...** | Saves current view state as a named template (stored in configured `viewTemplateFolder`) |
+| **Save view...** | Saves current view state as a named template (stored in configured `viewTemplateFolder`). Not on the timer, which keeps no templates |
 | **Load view...** | Submenu listing saved templates; applies selected template to current view |
 | **Reset view** | Resets view state to defaults |
 | **Copy URI** | Copies `obsidian://task-viewer?...` with current state including auto-detected `position` and `name` |
@@ -732,11 +916,11 @@ Each view's toolbar has a gear icon (settings) button. The menu provides:
 
 ### Copy URI parameters per view
 
-- **TimelineView**: `filterState`, `days`, `zoom`, `pinnedLists`, `showSidebar`, `position`, `name`
-- **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, `position`, `name`
+- **TimelineView**: `filterState`, `daysToShow`, `zoomLevel`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
+- **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
 - **ScheduleView**: `filterState`, `position`, `name`
-- **TimerView**: `mode`, `intervalTemplate`, `position`, `name`
-- All views support `template` (when set, `filter`/`pinnedLists` are omitted from URI)
+- **TimerView**: `timerViewMode`, `intervalTemplate`, `position`, `name` (no `template`: the timer keeps no view templates)
+- Every view that keeps templates supports `template` (when set, `filterState`/`pinnedLists` are omitted from URI). Copy URI writes the config only: where a view is (the date it looks at, Calendar's week offset) is not in it
 
 ### Toolbar icon order
 
@@ -748,10 +932,12 @@ ScheduleView omits view-mode, zoom, and sidebar-toggle.
 
 ### Error handling
 
+- Unknown `view` → nothing opens, silently (a typo in a link should not raise a dialog)
 - Invalid `position` value → ignored, falls back to default behavior
-- Invalid `name` → used as-is (stored as `customName` in view state)
-- Invalid `filter` or `pinnedLists` base64 → silently ignored (empty filter / no pinned lists)
-- Invalid `days`, `zoom`, `date` → ignored (view uses its defaults)
+- `name` → used as-is
+- A value that cannot be read (above) → ignored, the field takes the template's value or the view's default
+- `filterState` or `pinnedLists` that is not base64 JSON, or holds a condition that cannot be read → the view opens without it, and a notice says how many parts were dropped (`UriViewOpener`, `noticeConfigIssues`; each one is logged)
+- `template` not found → a notice, and the view opens on its defaults
 
 ---
 
@@ -768,10 +954,12 @@ A scan, a `modify`, a sync, or another plugin's write to the vault is no operati
 
 ### Implementation
 
-- [`FlowFireExtension.ts`](./src/editor/FlowFireExtension.ts): the editor's fire (`fireFilter`)
 - [`FlowTrigger.ts`](./src/services/flow/FlowTrigger.ts): `completes` and `isOperation`
-- [`TaskIndex.ts`](./src/services/core/TaskIndex.ts): a completing write and its fire as one write (`writeCompleting`)
-- [`FlowExecutor.ts`](./src/services/flow/FlowExecutor.ts): the fire's plan (`planFire`)
+- [`FlowExecutor.ts`](./src/services/flow/FlowExecutor.ts): the plans, and nothing written: a completion's fire (`planFire`, carried into the write as a `fire` op by `fireOp`) and a deletion's (`planDeletion`: the next instance and the row's removal, or why the delete stops)
+- [`FiringTrials.ts`](./src/services/persistence/FiringTrials.ts): `firingTrials`, the one rule of which fires of a write are written. The write is tried with every fire, then with none, then with each fire put back from the top; a fire whose write is refused is set aside with its refusal, and its row stays completed with its command. All of it is tried on the lines of one run of the write (`EditTrials`)
+- [`Operations.ts`](./src/services/operations/Operations.ts): writes both kinds of fire. A completing write carries the row's fire (`writeCompleting`); a delete with its fire writes the plan's ops in one write, checked against the row, its subtree, its command lines and the blocks the plan read (`writeFiringDelete`)
+- [`FlowFireExtension.ts`](./src/editor/FlowFireExtension.ts): the editor's fire (`fireFilter`). The rows a transaction completed are one write over the document it leaves, tried by the same `firingTrials` with the same ops (`editLines`), and turned into changes of the transaction (`lineChanges`)
+- [`FlowNotices.ts`](./src/services/flow/FlowNotices.ts): what the user is told, derived from the write's `FiringOutcome` by one function (`notRunsOf`): for each completed row, the refusal its fire was set aside with, else its plan's failure, else nothing. A card's write, a send and the editor (`EditorFireHost.told`, after the transaction) all tell through it
 
 ---
 
@@ -795,61 +983,110 @@ MIT License
 4. Component/style files must use only `--tv-*` tokens.
 5. Keep token design effectively single-layer; only keep `theme-light`/`theme-dark` overrides for app/card background and shadow strength.
 6. Drag-and-drop visuals must separate drop-zone tokens (`--tv-drop-*`) from drag-ghost tokens (`--tv-ghost-*`).
+7. A z-index is a token of ladder [A] or [B] (`src/styles/_variables.css`), never a bare number or an inline `z-index`. A lane card's script writes only its rank, `--lane-z`; `.task-card` turns it into the z-index, capped by `--z-task-card-max`, and `.task-card.is-selected` outranks it by specificity. `.is-selected` itself is written only by `HandleManager`.
 
 ---
 
 ## Timer Widget
 
-`src/timer/` — A fully independent floating UI. Operates separately from the Timeline and Schedule views.
+`src/timer/` — the floating timer widget, and the parts it shares with the standalone Timer view (`views/TimerView.ts`). The widget records what it measures into notes; the view only measures.
 
-### Timer types (defined in `timer/TimerInstance.ts`)
+### State (`timer/TimerState.ts`)
 
-| Type | Description |
-|------|-------------|
-| `CountupTimer` | Elapsed time measurement; supports both task-linked and standalone modes |
-| `CountdownTimer` | Countdown; tracks `timeRemaining` |
-| `IntervalTimer` | Multi-segment (work/break) loop; Pomodoro is implemented as this type |
-| `IdleTimer` | Passive idle tracking; no task association |
+A widget timer is one `TimerState`. It holds only what cannot be derived; elapsed time, time remaining and the position in the intervals are read from the clock and the measure each time.
 
-Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
+| Field | Type | Meaning |
+|-------|------|---------|
+| `subject` | `Subject` | What it measures: `{ kind: 'task', anchor }` (the target row's `^id`) or `{ kind: 'daily', date }` (a daily note, no target row) |
+| `measure` | `Measure` (`TimerProgress.ts`) | `countup`, `countdown` (`totalSeconds`), or `interval` (`groups` and a cursor `at`). The widget starts only the Pomodoro interval; templates are the view's |
+| `clock` | `Clock` (`TimerClock.ts`) | `running` (`startMs`) or `frozen` (`seconds`). It runs only while the session runs |
+| `session` | `Session` | `running` (the record counts from clock reading `from`), `pending` (stopped, the record fixed but not yet written), or `suspended` (recorded, waiting for ▶) |
+| `file`, `tail`, `owned`, `opening` | | The note its lines are in, the `^id` of the line it records into, the `^id`s it put on itself, and the write in flight |
+| `mode` | `'self' \| 'child' \| 'sibling'` | Where the first record goes. From the second on, a record is always the tail's sibling |
 
-### Persistence
+There is no "not started" state: a timer runs from the moment it is started. `name` and `color` are display copies, refreshed from the target row whenever the index changes. The runtime schedule (the one tick, operations in flight, the lazy-end gate, the ✕ confirmation) lives in `TimerRuntime` and is never saved.
 
-- Storage key: `task-viewer.active-timers.v5:{vaultFingerprint}`
-- Migration logic exists for v3 → v4 → v5.
-- **Always bump the version number and add a migration handler when changing the storage key.**
+### Transitions
 
-### Task integration
+`TimerTransitions.step(state, event, nowMs)` is the only function that answers the next state; it is pure. `TimerBoard.dispatch(timer, event)` applies it to the same object (render closures keep their reference) and schedules one save and one render on a microtask. `TimerLifecycle` writes first and dispatches only once the write has landed ("write, then move the state").
 
-- `TimerTaskResolver` — resolves the timer's inline task (by `timerTargetId`, then task ID, then file + original text)
-- `TimerRecorder` — records a session to the target line itself (self), as a child of the target line (child), as a sibling after the last record (sibling), or under the daily note's heading when the timer started from the daily note
-- `timerTargetId` — the inline block ID (`^id`) the timer anchors to; it survives edits and file renames. Frontmatter holds no timer target: a leftover `tv-timer-target-id` key is only reserved so it never becomes a custom property
+| From | On | Writes | Then | If the write fails |
+|------|----|--------|------|--------------------|
+| — | start (`TimerWidget.startTimer`) | the first line (self: the target's start; child; sibling; daily: under the heading) | running | closed |
+| running | ⏸ | the record | suspended | pending |
+| running | ■, or the last Pomodoro segment ends (no auto repeat) | the record | closed, anchors taken off | pending |
+| running | a segment ends with more to come | nothing | next segment (sound) | — |
+| running | shift the start (countup, countdown) | the running line's start | the clock starts `from` seconds before the new start | nothing moves |
+| running, pending | ✕ twice (confirm) | deletes the running line, if it wrote that line | closed | closed |
+| pending | ⏸ or ■ | the fixed record again | as pressed | stays pending |
+| suspended | ▶ | a new running line (the tail's sibling) | running: countup from 0, countdown and Pomodoro where they stopped | stays suspended |
+| suspended | ■ or ✕ | nothing | closed, anchors taken off | — |
+
+Every run is one record, whichever the measure; only the clock differs on ▶. A countup counts again from 0, while a countdown's time left and a Pomodoro's segments go on from where they stopped, and the new record counts from the reading at the press (`session.from`). While suspended, the widget shows the frozen clock by its measure (a countdown's time left, below zero past it; a Pomodoro segment's time left), and a countup shows the records so far, since its clock starts again (`TimerRenderer.timerRing`).
+
+`TimerLifecycle.close(timer, confirmed)` answers the ✕ from `session.kind` alone; the renderer only draws the confirmation. The next-task suggestion (`TimerBoard.idle`, `NextTaskSuggester`) is not a timer: it appears when no timer holds a run and disappears when one starts.
+
+### Starting
+
+```ts
+startTimer(subject: Task | { daily: string }, mode: RecordMode, start: { kind: 'countup' } | { kind: 'countdown'; seconds } | { kind: 'pomodoro' })
+```
+
+`TimerStartRules` answers both the command and the menus: a read-only notation is refused, a task that can trigger a flow does not take `self` (it falls back to `child`, and `TimerMenuBuilder` does not offer the self items), and `self` on a `[x]` row asks (`askTimerStart`). The display copies are taken from the Task once, here.
+
+### Anchors
+
+A timer follows its rows across readings only by their `^id`s: the target by `subject.anchor`, the record line by `tail`, both looked up with `getTaskByAnchor(file, anchor)` and written through `Operations` (`updateByAnchor`, `insertLine`, `putInDailyNote`). There is no lookup by task ID or by text. A duplicate start is detected by `(file, anchor)` and by the daily date; a row without an anchor is no timer's target yet. The anchors a timer relies on are answered in one place, `TimerSendCheck.anchorsOf` (used by the send operation and by whether an anchor may be taken off). `TimerTargetIdUtils` makes the short `tv-t-` ids. Frontmatter holds no timer target: a leftover `tv-timer-target-id` key is only reserved so it never becomes a custom property.
+
+### Persistence (`timer/TimerPersistence.ts`)
+
+- Storage key: `task-viewer.active-timers.v9:{vaultFingerprint}`; the content is `{ version, vaultFingerprint, idleSinceMs, timers: TimerState[] }`.
+- Only `TimerBoard`'s scheduled save calls `persist`. The rule "save `opening` before writing the line" holds because the microtask runs before the write's round trip returns.
+- The read checks the shape strictly and drops a timer that does not match. Nothing is rebuilt on restore: elapsed time comes from the clock, and the first tick moves the intervals.
+- An older version is not migrated: its state is dropped, and its key (and the old device-id key) is removed on restore (`OBSOLETE_STORAGE_VERSIONS`).
+- **When the persisted shape changes, bump `STORAGE_VERSION` and add the old version to `OBSOLETE_STORAGE_VERSIONS`.**
 
 ### Components (all in `src/timer/`)
 
-- `TimerProgressUI` — circular progress ring + time display
-- `TimerSettingsMenu` — Pomodoro settings context menu
-- `TimerRenderer` — timer UI rendering
-- `TimerContext` — timer context management
-- `TimerCreator` — timer instance creation
-- `TimerLifecycle` — timer lifecycle management
-- `TimerStorageUtils` — timer storage utilities
-- `TimerTargetManager` — timer-task association management
-- `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval template read/write (markdown files with `_tv-*` frontmatter keys)
+Shared with the standalone view:
+
+- `TimerClock` — the running or frozen clock (`readSeconds`, `freeze`, `resume`, `restart`, `shift`)
+- `IntervalMath` — moves the interval cursor, the round text, total duration, the Pomodoro segments
+- `TimerProgress` — what a measure shows (`progressOf`) and what a tick brings (`tickOf`)
+- `TimerProgressUI` — draws the ring and the time from `progressOf`, under the block it is given (`timer-widget__` or `timer-view__`)
+- `TimerControlButton` — one control button; the view passes a variant (primary, secondary, danger), the widget's buttons have one look
+- `TimerSettingsMenu` — the duration menu (Pomodoro and countdown lengths)
+- `AudioUtils` — sounds (below)
+- `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval templates (markdown files with `_tv-*` frontmatter keys); segments are `work`, `break` or `prepare`
+
+The widget's own:
+
+- `TimerWidget` — owns the board, runtime, lifecycle and recorder; `startTimer`, restore, file renames, following a send
+- `TimerState`, `TimerTransitions`, `TimerBoard`, `TimerRuntime` — the state, its transitions, the table that applies them, the unsaved schedule
+- `TimerLifecycle` — the operations: `begin`, `stop`, `resume`, `offsetStart`, `close`, `tick`
+- `TimerRecorder` — the line writes: the first line, running lines, records, putting anchors on and off. The record notice is one sentence (`notice.timerRecorded`)
+- `TimerStartRules`, `TimerStartMode` — whether and how a start may use `self`
+- `TimerStartOffset` — where "shift the start" lands (the menu and `TimerStartOffsetModal`)
+- `TimerContentBinding` — keeps the widget's name field and the running line in step
+- `TimerLazyEnd` — when to write a later end onto a running line that has outlived its implied end
+- `TimerSendCheck` — whether a send may carry a timer's lines (`anchorsOf`)
+- `TimerPersistence`, `TimerTargetIdUtils`
+- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion
+- `FloatingOverlayHost`, `TimerWidgetWindowObserver` — the container, dragging, and moving between windows. The default corner is in the stylesheet (`.timer-widget`); the host keeps only a dragged position
 
 ### Audio notifications (`timer/AudioUtils.ts`)
 
-State-transition-based sound mapping. All sounds use Web Audio API scheduling (no `setTimeout`).
+State-transition-based sound mapping. All sounds use Web Audio API scheduling (no `setTimeout`). The widget plays them from `TimerLifecycle` (and `TimerWidget` on start), only when the operation goes ahead; the view plays them itself.
 
 | Action | Sound | Method | Notes |
 |--------|-------|--------|-------|
-| Start (initial) | Long × 2 (660 Hz, 0.35 s each) | `playStartSound()` | — |
-| Resume | Long × 2 | `playStartSound()` | Same as Start |
-| Pause | G5→E5→C5 descending 3-note | `playPauseSound()` | Mirrors finish sound in reverse |
-| Stop (manual) | C5→E5→G5 ascending 3-note | `playFinishSound()` | Same as auto-complete |
-| Auto-complete | C5→E5→G5 ascending 3-note | `playFinishSound()` | Interval finish / countdown expire |
-| Segment transition | Long × 2 | `playTransitionConfirm()` | Same pattern as Start |
-| Warning (3, 2, 1 s) | Short × 1 per tick (660 Hz, 0.25 s) | `playWarningBeep()` | Called each tick when remaining ≤ 3 s |
+| Start | Long × 2 (660 Hz, 0.35 s each) | `playStartSound()` | Widget: every start, any mode |
+| Resume (▶) | Long × 2 | `playStartSound()` | Same as Start |
+| Suspend (⏸) / Pause | G5→E5→C5 descending 3-note | `playPauseSound()` | Mirrors finish sound in reverse |
+| End (■) / Stop | C5→E5→G5 ascending 3-note | `playFinishSound()` | Same as auto-complete |
+| Auto-complete | C5→E5→G5 ascending 3-note | `playFinishSound()` | The last interval segment; in the view also a countdown reaching 0 (the widget keeps recording past 0, silently) |
+| Segment transition | Long × 2 | `playTransitionConfirm()` | Once per tick, however many segments it moved |
+| Warning (3, 2, 1 s) | Short × 1 per tick (660 Hz, 0.25 s) | `playWarningBeep()` | Remaining ≤ 3 s: interval segments in both; countdown in the view only |
 
 **Design notes**:
 - Multi-note patterns prevent wireless earphone auto-sleep from swallowing notifications.
@@ -903,7 +1140,7 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 
 Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is written only through `setFrontmatterKeys` (scope keys from the property suggests), never on a task's behalf.
 
-- Every task has a real body line. `TimerRecorder` calls `createTempTask()` without a `line`, so the resulting temp Task gets `line: 0` (the `createTempTask` default).
+- Every task has a real body line. A new line (the API's `create` and `insertChildTask`, the create dialog, the timer's records) is written from its fields with `formatTaskLine`, never through a temporary Task; `createTempTask` is only for the create dialog's preview.
 
 ### Inline persistence rules
 
@@ -911,14 +1148,14 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 
 - Time-only values are allowed (`@10:00`); the date comes from the section or note scope via `cascadeContext`.
 - `endDate` is omitted when it equals `startDate` (`>14:00` = same day as start).
-- Updates re-format the whole line via `TVInlineParser.format()`.
+- Updates re-format the whole line via `formatRow` (`formatTaskLine` for tv-inline).
 - An empty field in the hub is a sparse update: the field is omitted, so the cascade value shows through.
 
-#### tv-inline notation format rules (`TVInlineParser.format()`)
+#### tv-inline notation format rules (`formatTaskLine`)
 
 **cascadeContext**:
 - Inherited values from file/section cascade; consumed by DisplayTaskConverter only
-- `format()` reads raw fields only — cascade values are never serialized back
+- `formatTaskLine` reads raw fields only — cascade values are never serialized back
 
 **endDate same-day omission**:
 - `endDate === startDate` + endTime → `>14:00` (date omitted)
@@ -930,9 +1167,9 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 
 | Event | Dates | Properties / tags / style |
 |-------|-------|---------------------------|
-| Parse (TreeTaskExtractor) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
-| Effective merge | `DisplayTaskConverter` → `DisplayTask.effective*` via `\|\|` fallback | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
-| `format()` (TVInlineParser) / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
+| Parse (NoteTasks) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
+| Effective merge | `statedDates` → `DisplayTask.stated` via `\|\|` fallback, then `resolveSpan` → `span`, `dueMs` | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
+| `formatTaskLine` / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
 | Explicit edit (drag / resize / future property edit) | Raw fields set explicitly → cascade no longer contributes | Same principle |
 
 ---
@@ -946,63 +1183,43 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 | **calendarDate** | The date as defined by midnight (00:00). `task.startDate`, `task.endDate`, `task.due` are all calendar dates. | Fixed (midnight) |
 | **visualDate** | The date as perceived by the user, shifted by `startHour`. A task at 03:00 with `startHour=5` belongs to the previous visual day. | `startHour` setting |
 
-- `getVisualDateOfNow()`, `toVisualDate()` return **visualDate**
+- `getVisualDateOfNow()`, `DayWindow.visualDayOf()` return **visualDate**
 - `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
 - `startHour` is the boundary between two visual days (default: 5:00 AM)
 
-### @notation endDate semantics — **dual semantic at raw layer**
+`DateUtils` is the one date module. Converting between `YYYY-MM-DD` text and `Date` (`parseDate`, `readDate`, `toDateTime`, `getLocalDateString`), the date shape (`DATE_PATTERN`, `isDateShape`), the visual today at a given moment (`visualDateAt(now, startHour)`), the week start, shifting by days (`shiftDateString`), and splitting and joining a due (`splitDateTime`, `joinDateTime`) are answered there. A day as a stretch of time, the day a moment is in and the days a span is drawn over are `utils/DayWindow.ts`'s. Other code does not split date strings, build `new Date('...')` from them, or write the date regex; a grammar that embeds a date builds its pattern from `DATE_PATTERN`. Years are four digits (`0026` is the year 26).
 
-`task.endDate` is a **calendarDate** with a **dual semantic** that depends on whether `endTime` is present:
+### @notation endDate semantics
 
-| `endTime` | `endDate` semantic | Why |
-|-----------|--------------------|-----|
-| **absent** (pure all-day) | **exclusive** (one day past last covered day) | Matches `@2026-03-24>2026-03-29` notation: 5 visual days, 03-24 ~ 03-28 inclusive. |
-| **present** | **inclusive** (the day on which `endTime` occurs) | Matches `@2026-05-13T07:30>2026-05-19T09:45` notation: the task literally ends on 05-19 at 09:45. |
-
-This duality is preserved at the raw layer for round-trip with the external @notation. The display layer **collapses the duality** so that `DisplayTask.effectiveEndDate` is always the inclusive visual end:
+`task.endDate` is a calendar date. With `endTime`, it is the date the end time is on. Without it, it is a bare date, and a bare date ends at the end of that visual day: the last day the task covers is the date written.
 
 ```
-@2026-03-24>2026-03-29  (endTime absent → exclusive raw)
-toDisplayTask() resolves:  effectiveEndTime = '04:59' (startHour−1)
-toVisualDate('2026-03-29', '04:59', 5) → '2026-03-28'  ← inclusive visual
+@2026-03-24>2026-03-28  (a bare end date: 03-28 is included)
+span: [03-24 05:00, 03-29 05:00)  → visual days 03-24 … 03-28
 
-@2026-05-13T07:30>2026-05-19T09:45  (endTime present → inclusive raw)
-toDisplayTask():           effectiveEndTime = '09:45'
-toVisualDate('2026-05-19', '09:45', 5) → '2026-05-19'  ← inclusive visual
+@2026-05-13T07:30>2026-05-19T09:45  (an end time: the task ends on 05-19 at 09:45)
+span: [05-13 07:30, 05-19 09:45)  → visual days 05-13 … 05-19
 ```
 
-**Mechanism**: For all-day tasks, `toDisplayTask()` injects `effectiveEndTime = (startHour−1):59`. Since this time is before `startHour`, `toVisualDate` shifts back by 1 day, producing the inclusive last visual day. For timed tasks, `effectiveEndTime` is the real time, and `toVisualDate` shifts only when that time is before `startHour`.
-
-**Rule**: always use `toVisualDate()` to convert both start and end dates to visual dates. There is no separate `getVisualEndDate()` — the same function handles both because the shift direction depends solely on whether the time is before startHour.
-
-**Drag write-back rule**: never write `Task.endDate` directly with `addDays(visualEnd, 1)` — that pattern is correct only for the all-day branch and silently corrupts timed tasks. Funnel updates through `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`), the single boundary that converts inclusive visual edits to raw based on `baseTask.endTime`.
+**Drag write-back**: a drag's edits are in visual days (`visualDaysOf`), and `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`) is the single place they become the line's dates. It writes the last visual day as it is; a time before `startHour` goes on the next calendar date.
 
 ### Visual date pipeline
 
-All visual date calculations MUST flow through the same code path. Two canonical functions exist:
+All visual date calculations flow through the same code path:
 
 | Function | Location | Purpose |
 |----------|----------|---------|
-| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Resolves implicit effective fields from raw Task |
-| `getTaskDateRange()` | `services/display/VisualDateRange.ts` (canonical; re-exported from `views/calendar/CalendarDateUtils.ts`) | Converts DisplayTask effective fields to inclusive visual start/end dates |
+| `statedDates()`, `resolveSpan()` | `utils/TaskDates.ts` | The dates the note states; the span and the due as moments |
+| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Raw Task → DisplayTask (`stated`, `span`, `dueMs`, `drawn`, child entries) |
+| `visualDaysOf()`, `minutesOfSpan()` | `utils/DayWindow.ts` | The visual days a span is drawn over; its place on the time grid |
 
-Any code that needs a task's visual date range — renderers, grid layout, drag ghosts, split boundaries — must use this pipeline, never compute visual dates independently from raw task fields.
-
-```
-Raw Task
-  ↓  toDisplayTask(task, startHour)
-DisplayTask (effectiveStartDate/Time, effectiveEndDate/Time)
-  ↓  getTaskDateRange(displayTask, startHour)
-{ effectiveStart: visualDate, effectiveEnd: visualDate }  ← inclusive range
-```
+Any code that needs a task's visual date range — renderers, grid layout, drag ghosts, split boundaries — reads `visualDaysOf(drawn)` (a segment's own part) or `visualDaysOf(span)` (the whole task), never computes visual dates from raw task fields.
 
 ### Pitfall: raw endDate ≠ visual end (and the gap is conditional)
 
-`task.endDate` and the inclusive visual end date differ by 1 day **only for all-day tasks** (no `endTime`). For timed tasks they coincide. Any code that converts between the two must do so explicitly via the canonical helpers:
-
 | Direction | Method |
 |-----------|--------|
-| raw → visual (for rendering/ghost) | `getTaskDateRange(toDisplayTask(task, startHour), startHour).effectiveEnd` |
+| raw → visual (for rendering/ghost) | `visualDaysOf(toDisplayTask(task, startHour, NO_TASK_LOOKUP).span!, startHour).last` |
 | visual → raw (for write-back) | `materializeRawDates(edits, baseTask, startHour)` (`services/display/DisplayTaskConverter.ts`) |
 
 `materializeRawDates` reads `baseTask.endTime` to pick the correct branch (no +1 for timed, +1 for all-day). Direct `addDays(visualEnd, 1)` is the bug pattern this helper eliminates — see Bug fix in commit history (Calendar end-handle 1-day drift on timed multi-day tasks).
@@ -1042,17 +1259,16 @@ allTasks (DisplayTask[])
      Position on grid with colStart, span, trackIndex
 ```
 
-AllDaySectionRenderer also uses only the date-range split (allDay tasks don't need visual-date splitting). The visual-date split is used by other views (e.g. Timeline) where a `startHour` boundary is visually meaningful within a day.
+Calendar's week rows and Timeline's all-day row are the same lane (`drawDateGridLane`, see "Saved lists, lanes and note links"), so both use only the date-range split. The visual-date split is used where a `startHour` boundary is visually meaningful within a day (Timeline's time grid).
 
 ### Split segment fields
 
-Split segments inherit all fields from the original via `...dt` spread. Modified fields:
+Split segments inherit all fields from the original via `...dt` spread: the line's values, `stated` and `span` are the whole task's. Modified fields:
 
 | Field | Head segment | Tail segment |
 |-------|-------------|--------------|
-| `id` | `makeSegmentId(originalId, startDate)` | `makeSegmentId(originalId, boundaryDate)` |
-| `effectiveEndDate/Time` | Set to boundary | Inherited from original |
-| `effectiveStartDate/Time` | Inherited from original | Set to boundary |
+| `id` | `makeSegmentId(originalId, its first visual day)` | `makeSegmentId(originalId, boundaryDate)` |
+| `drawn` | From its start up to `dayStart(boundaryDate)` | From `dayStart(boundaryDate)` to its end |
 | `isSplit` | `true` | `true` |
 | `splitContinuesBefore` | From original (or `false`) | `true` |
 | `splitContinuesAfter` | `true` | From original (or `false`) |
@@ -1065,7 +1281,7 @@ Drag strategies (Move/Resize) must use the same visual date pipeline as the rend
 ```typescript
 // In BaseDragStrategy:
 protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string }
-  // Internally: toDisplayTask(task, startHour) → getTaskDateRange(dt, startHour)
+  // Internally: toDisplayTask(task, startHour) → visualDaysOf(dt.drawn, startHour)
 ```
 
 Each Gesture (`GridMoveGesture` / `GridResizeGesture`) caches the inclusive visual range at drag start:
@@ -1074,7 +1290,7 @@ Each Gesture (`GridMoveGesture` / `GridResizeGesture`) caches the inclusive visu
 |-------|----------|----------|
 | `initialVisualStart` / `initialVisualEnd` | Inclusive visualDates (from `getVisualDateRange`) | Ghost rendering (`GhostRenderer.render`), span calculation, resize bounds |
 
-Raw calendarDates (`baseTask.startDate` / `baseTask.endDate`, endDate exclusive) are read from `baseTask` directly for write-back; there is no separate cached `initialCalendarDate` field.
+`baseTask` is the line's task as the drag starts from it (`dragBase`: a task with only a due has the span it is drawn with written out as its dates, `dueSpanWritten`). `commitPlan` writes `planUpdates`: the edits materialized on `baseTask`, compared with the line's own task from the index, so the written-out dates are written; there is no separate cached `initialCalendarDate` field.
 
 ---
 
@@ -1082,21 +1298,29 @@ Raw calendarDates (`baseTask.startDate` / `baseTask.endDate`, endDate exclusive)
 
 Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `src/types/index.ts`). Defaults are in `DEFAULT_SETTINGS` in the same file; the scope keys live in `src/types/ScopeKeys.ts`.
 
+What each key may hold is said once, in `SETTINGS_SCHEMA` (`src/settings/SettingsSchema.ts`): for each key, how a stored value reads (`check`) and, for a key a text field sets, how its text reads (`codec`, from `utils/values` and the notation's own readings: `ScopeKeyInput`, `StatusCharInput`, `HeadingInput`). A group (`defaultViewPositions`, `astronomy`, `tasksPluginMapping`) is a table of its own keys. Three readers share it:
+
+- The load (`readSettings`, called by `loadSettings`) reads every key by the table, a group key by key. A missing key takes its default, and so does one that does not read, logged as a warning. A key the table does not hold is left out, and goes from `data.json` on the next save. There is no merge over the defaults.
+- The settings tab's text fields (`SettingFields`, on `bindField`) read what is typed by the key's codec and commit once, on a blur or the form's Enter; a value that does not read is said under the setting's description and not saved. What is typed is committed as the tab is hidden. A save (and, for a scope key, the notes read again) happens once per commit, not per key typed.
+- A menu that sets a key reads its range there: the timer's Custom... (`TimerSettingsMenu`) takes the work, break and countdown lengths in their keys' ranges. The work and the break take any length of a minute or more; the countdown 1 to 120.
+
+A new key is a field of `TaskViewerSettings`, its default in `DEFAULT_SETTINGS`, and its entry in `SETTINGS_SCHEMA`; the table is checked against the type (`satisfies`), so a key left out is a compile error.
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `startHour` | number | 5 | Visual day boundary hour. Times before this hour belong to the previous visualDate. |
 | `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
 | `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
 | `statusDefinitions` | StatusDefinition[] | *(see below)* | Status character definitions (char, label, isComplete) |
-| `scopeKeys` | ScopeKeys | `tv-*` family | Key names for the note scope (frontmatter) and section property lines; formerly `frontmatterTaskKeys`, then `tvFileKeys` (migrated in that order) |
+| `scopeKeys` | ScopeKeys | `tv-*` family | Key names for the note scope (frontmatter) and section property lines |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
 | `pastDaysToShow` | number | 0 | Number of past days to show in timeline |
 | `pomodoroWorkMinutes` | number | 25 | Pomodoro work segment length |
 | `pomodoroBreakMinutes` | number | 5 | Pomodoro break segment length |
 | `countdownMinutes` | number | 25 | Default countdown duration |
-| `dailyNoteHeader` | string | `'Tasks'` | Heading for daily note task insertion |
-| `dailyNoteHeaderLevel` | number | 2 | Heading level for daily note (2 = `##`) |
+| `taskHeading` | string | `'Tasks'` | The heading a new task goes under when nothing names one; its name alone, without `#` (`HeadingInput`) |
+| `taskHeadingLevel` | number | 2 | The level that heading is made at (2 = `##`) |
 | `weekStartDay` | 0 \| 1 | 0 | Calendar week start day (0=Sun, 1=Mon) |
 | `calendarShowWeekNumbers` | boolean | `false` | Show ISO week numbers in calendar |
 | `weeklyNoteFormat` | string | `'gggg-[W]ww'` | Weekly note filename format |
@@ -1110,8 +1334,8 @@ Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `sr
 | `pinnedListPageSize` | number | 10 | Pinned list page size |
 | `defaultViewPositions` | object | *(see below)* | Per-view default leaf position |
 | `reuseExistingTab` | boolean | `true` | Reuse existing tab of same view type |
-| `editorMenuForTasks` | boolean | `true` | Show task operations in editor context menu |
-| `editorMenuForCheckboxes` | boolean | `true` | Show checkbox operations in editor context menu |
+| `editorMenuForTasks` | boolean | `true` | The editor's line button on a task of this plugin's notation (none on a Tasks or Day Planner line: `lineMenuOf`) |
+| `editorMenuForCheckboxes` | boolean | `true` | The editor's line button on a checkbox the index reads no task on (a note the views do not read), with status, duplicate and delete |
 | `suggestColor` | boolean | `true` | Show color suggestions in property panel |
 | `suggestLinestyle` | boolean | `true` | Show linestyle suggestions in property panel |
 | `hideViewHeader` | boolean | `true` | Hide view header |
@@ -1127,7 +1351,7 @@ Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `sr
 
 **`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
 
-All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
+All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Each must be a key a property line reads (no `:`, `[`, `]`), none of `tags`, `position` and the file task's former keys, and none of the other scope keys (`ScopeKeyInput`); a stored set with one that is not falls back to the defaults whole. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
 
 ---
 
@@ -1192,27 +1416,38 @@ DataviewJS  →                TaskApi method → typed result (used directly)
 
 ```
 src/api/
-  TaskApi.ts             # Public API class (13 methods)
-  TaskApiTypes.ts        # Param/result interfaces + TaskApiError
+  TaskApi.ts             # Public API class (13 methods); checks every parameter once
+  TaskApiTypes.ts        # Param/result interfaces (SimpleFilterParams, FilterSourceParams) + TaskApiError
+  TaskIds.ts             # The IDs the API hands out and takes (path#^id, or a reading's name)
   OperationSchemas.ts    # Single source of truth for the CLI/API parameter surface
                          #   (per-operation ParamSpec, satisfies-bound to the param types;
-                         #    derives CLI flags, both validators, and help flag tables)
-  TaskNormalizer.ts      # Task → NormalizedTask conversion
-  FilterParamsBuilder.ts # ListParams → FilterState conversion + FilterState boundary validation
-  FilterFileLoader.ts    # Vault filter file (.json/.md) loading
+                         #    derives CLI flags, the API's key check, and the parameter tables)
+  Reference.ts           # api.help() and the CLI's help, made from the tables; OPERATIONS and
+                         #   CLI_COMMANDS (the commands the registrar registers)
+  TaskNormalizer.ts      # Task → NormalizedTask conversion (ALL_FIELD_NAMES)
+  QueryShorthand.ts      # The params as conditions: date and from/to as period overlaps, the
+                         #   simple fields as their own; the one place a param becomes a condition
+  FilterParamsBuilder.ts # The query a call's params name (resolveQuery: the filter file, filter
+                         #   and the shorthand, ANDed). With a filter file it is answered as the
+                         #   views answer it: no task with a validation error, the pinned list's
+                         #   order unless sort is given
+  FilterFileLoader.ts    # Vault filter file (.json FilterState, .md view template via PinnedListQuery)
 
 src/cli/
-  CliRegistrar.ts        # Registers 13 CLI handlers, export-image included (flags derived from OperationSchemas)
-  CliParamValidator.ts   # Strict flag validation (unknown flags error with did-you-mean)
-  CliFilterBuilder.ts    # Flag value parsers (date/datetime, sort)
-  CliDatePresetParser.ts # Date preset parsing (today, thisWeek, etc.)
-  CliOutputFormatter.ts  # Field selection + JSON/TSV/JSONL formatting
+  CliRegistrar.ts        # Registers CLI_COMMANDS (13, export-image included) through one wrapper:
+                         #   flag check, empty flags refused, a thrown error as cliError
+  CliParamValidator.ts   # Strict flag validation (unknown flags error with did-you-mean; x= refused)
+  CliFilterBuilder.ts    # Sort flag parser
+  CliOutputFormatter.ts  # Field selection + JSON/TSV/JSONL formatting, readIntFlag/parseLimit, cliErrorOf
   handlers/
     TaskQueryHandlers.ts   # list / today / get
     TaskCrudHandlers.ts    # create / update / delete
     TaskActionHandlers.ts  # duplicate / tasks-for-date-range / categorized-tasks-for-date-range / insert-child-task / get-start-hour
-    HelpHandler.ts         # help
+    ExportImageHandler.ts  # export-image (checks the exported view's own flags)
+    HelpHandler.ts         # help (Reference's CLI_REFERENCE)
 ```
+
+A handler turns the flags' text into the API's types and calls the API; it checks no parameter itself. Whether one is required, whether a number is whole and in range, whether a date names a day — the API checks, once, for a script and the CLI alike. Dates and numbers are read by the input codecs (`utils/values/`).
 
 ### API entry point
 
@@ -1232,15 +1467,15 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 | Method | Sync/Async | Returns |
 |--------|-----------|---------|
-| `list(params?)` | async | `TaskListResult { count, tasks: NormalizedTask[] }` |
-| `today(params?)` | sync | `TaskListResult` |
-| `get({ id })` | sync | `NormalizedTask` |
+| `list(params?)` | async | `TaskListResult { total, count, truncated, limit, tasks: NormalizedTask[] }` |
+| `today(params?)` | async | `TaskListResult` (`list` with `date=today`) |
+| `get({ id, startHour? })` | sync | `NormalizedTask` |
 | `create({ file, content, ... })` | async | `MutationResult { task: NormalizedTask }` |
 | `update({ id, ... })` | async | `MutationResult` |
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
 | `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
 | `tasksForDateRange({ from, to, ... })` | async | `TaskListResult` |
-| `categorizedTasksForDateRange({ from, to, ... })` | async | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed, dueOnly }>`) |
+| `categorizedTasksForDateRange({ from, to, ... })` | async | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed }>`) |
 | `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
 | `getStartHour()` | sync | `StartHourResult { startHour }` |
 | `onChange(callback)` | sync | `() => void` (unsubscribe) |
@@ -1250,21 +1485,26 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 
 | Command | Description | Key flags |
 |---------|-------------|-----------|
-| `list` | List tasks with filters | file, status, tag, content, date, from, to, due, leaf, root, property, color, type, filter-file, list, sort, limit |
-| `today` | Today's active tasks | leaf, sort, limit |
-| `get` | Single task by ID | id (required) |
+| `list` | List tasks with filters | file, status, tag, content, date, from, to, due, leaf, root, property, color, type, filter-file, list, start-hour, sort, limit |
+| `today` | Today's active tasks (`list date=today`) | list's flags but date, from and to |
+| `get` | Single task by ID | id (required), start-hour |
 | `create` | Create inline task | file (req), content (req), start, end, due, status, heading |
 | `update` | Update task fields | id (req), content, start, end, due, status (use `none` to clear) |
 | `delete` | Delete task | id (required) |
 | `duplicate` | Duplicate task | id (req), day-offset, count |
-| `tasks-for-date-range` | Tasks in date range | from (req), to (req), sort, limit |
-| `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req) |
+| `tasks-for-date-range` | Tasks in date range | from (req), to (req), the simple filter flags (file, status, tag, content, due, leaf, root, property, color, type), filter-file, list, start-hour, sort, limit |
+| `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req), the simple filter flags, filter-file, list, start-hour |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
 | `get-start-hour` | Get startHour setting | *(none)* |
-| `export-image` | Export a view as a PNG image | view-config flags (see `help`) |
+| `export-image` | Export a view as a PNG image | view, template, name, anchor-date, width, output-folder, filename, wait, keep-open, and the view's config flags |
 | `help` | Show CLI reference | *(none)* |
 
 ### Error handling
 
-- API methods throw `TaskApiError` on validation or not-found errors.
-- CLI handlers catch `TaskApiError` and return `{ "error": "message" }` JSON.
+- API methods throw `TaskApiError` on validation or not-found errors. Its message ends with `— See api.help() for reference`; `rawMessage` is the text without it. An error about a parameter carries the parameter's key (`param`) and words its text through a namer (`textFor`).
+- The CLI's wrapper turns a thrown error into `{ "error": "<message>", "help": "obsidian obsidian-task-viewer:help" }` (`cliErrorOf`), a `TaskApiError` worded with the flags' names (`textFor(toCliName)`: `parent-id`, not `parentId`).
+- A flag given empty (`x=`) is refused by the wrapper for every command (`x must not be empty`); a flag given alone is `'true'`.
+
+### Help texts
+
+`api/Reference.ts` makes both references from the tables the plugin runs on: the operations (`OPERATIONS`: summary, schema, notes, the API's signature and result, the CLI's command), `ALL_FIELD_NAMES`, `PROPERTY_OPERATORS` with how each property's value is written (`FILTER_VALUE_DOC`, `satisfies Record<FilterProperty, …>`), and the sort properties with what each compares (`TaskValues.words`). A public method of `TaskApi` without its line in `OPERATIONS` is a compile error, and the registrar registers the commands of `CLI_COMMANDS` with a handler for each (`HANDLERS`, keyed by the same names). Only the prose between the tables is written by hand. `tests/unit/api/ReferenceDocs.test.ts` checks that the tables of `docs/api.md` and `docs/cli.md` name the same parameters, flags and fields.

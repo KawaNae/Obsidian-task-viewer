@@ -177,3 +177,17 @@ body.is-mobile.theme-dark .tv-settings {
     word-break: break-word;
     color: var(--text-muted);
 }
+
+/* ─── What a field says (SettingFields) ───────────────────── */
+
+/* A text field's issue, under the setting's description, in the form's
+   tone (`tv-form__error`); the field is marked as a form's is. */
+.tv-settings .tv-settings__says > .tv-form__error {
+    margin: 4px 0 0;
+    white-space: pre-line;
+}
+
+.tv-settings .tv-ctrl__text-input--invalid {
+    border-color: var(--tv-text-danger) !important;
+    background-color: var(--tv-danger-bg-subtle);
+}

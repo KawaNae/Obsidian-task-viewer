@@ -1,8 +1,10 @@
 import type { Task, DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { dayBoundaryAt } from './DayBoundary';
-import { TaskIdGenerator } from './TaskIdGenerator';
+import { dayStart, visualDaysOf } from '../../utils/DayWindow';
+import { isAllDay } from './SectionClassifier';
+import { makeSegmentId } from './SegmentIds';
 import { buildChildEntries } from '../data/ChildEntryBuilder';
+import { resolveSpan, statedDates } from '../../utils/TaskDates';
 
 /** Lookup signature for resolving sibling tasks during ChildEntry materialization. */
 export type TaskLookup = (id: string) => Task | undefined;
@@ -23,144 +25,23 @@ export function getOriginalTaskId(task: { id: string; originalTaskId?: string })
 }
 
 /**
- * Converts raw Task objects into DisplayTask with resolved effective fields
- * and materialized {@link ChildEntry} list. This is the single entry point
- * for implicit value resolution.
+ * Converts raw Task objects into DisplayTask with the dates the note states
+ * (`statedDates`), the span and the due as moments (`resolveSpan`) and
+ * materialized {@link ChildEntry} list.
  *
  * `getTask` resolves sibling tasks for child-entry partitioning. Pass
  * {@link NO_TASK_LOOKUP} for synthetic temp tasks that have no children
  * (modal placeholders, drag previews, etc.).
  */
 export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup): DisplayTask {
-    let effectiveStartDate = task.startDate || task.cascadeContext?.startDate || '';
-    let effectiveStartTime = task.startTime || task.cascadeContext?.startTime;
-    let effectiveEndDate = task.endDate || task.cascadeContext?.endDate;
-    let effectiveEndTime = task.endTime || task.cascadeContext?.endTime;
-    const effectiveDue = task.due || task.cascadeContext?.due;
-
-    // Which fields the 3 layers actually produced. Every implicit-resolution
-    // branch below asks THESE, not the raw fields: a time inherited from the
-    // section (`- tv-start:: 06:00`) is a time, and resolving the missing end
-    // from the raw fields alone turned such a task into a 23h59m all-day
-    // block — and dropped an inherited end time on the floor.
-    const hasStartDate = !!effectiveStartDate;
-    const hasEndDate = !!effectiveEndDate;
-    const hasEndTime = !!effectiveEndTime;
-    const hasStartTime = !!effectiveStartTime;
-
-    // The `*Implicit` flags stay RAW-based: they mean "not written on this
-    // task line", which is what the menu and the form's placeholders read
-    // them for. An inherited value is written in the note but not here, so
-    // it must keep showing as a placeholder — filling the field would
-    // materialize the inherited value onto the line on save.
-    let startDateImplicit = !task.startDate;
-    let startTimeImplicit = !task.startTime;
-    let endDateImplicit = !task.endDate;
-    let endTimeImplicit = !task.endTime;
-
-    // Whether the converter synthesized the value (no layer supplied one).
-    // Only the same-day inversion fallback needs this distinction, and it
-    // must not rewrite an inherited real value to 00:00 / 23:59.
-    let startTimeDefaulted = false;
-    let endTimeDefaulted = false;
-
-    // Resolve implicit start for E/ED types (have endDate, no startDate at all)
-    if (!hasStartDate && hasEndDate) {
-        if (hasEndTime) {
-            // E-Timed: 1 hour before endTime
-            const endMinutes = DateUtils.timeToMinutes(effectiveEndTime!);
-            const startMinutes = endMinutes - DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-            if (startMinutes >= 0) {
-                effectiveStartDate = effectiveEndDate!;
-                effectiveStartTime = DateUtils.minutesToTime(startMinutes);
-            } else {
-                effectiveStartDate = DateUtils.addDays(effectiveEndDate!, -1);
-                effectiveStartTime = DateUtils.minutesToTime(startMinutes + 24 * 60);
-            }
-        } else {
-            // E-AllDay: resolve endTime first, then find visual day start
-            const endHour = startHour === 0 ? 23 : startHour - 1;
-            const implicitEndTime = DateUtils.formatHHMM(endHour, 59);
-            effectiveEndTime = implicitEndTime;
-            endTimeDefaulted = true;
-            effectiveStartDate = DateUtils.toVisualDate(effectiveEndDate!, implicitEndTime, startHour);
-            effectiveStartTime = DateUtils.formatHHMM(startHour, 0);
-        }
-        startTimeDefaulted = true;
-        // startDateImplicit / startTimeImplicit remain true
-    }
-
-    // Resolve implicit start time for all-day tasks (date only, no time)
-    if (effectiveStartDate && !effectiveStartTime) {
-        effectiveStartTime = DateUtils.formatHHMM(startHour, 0);
-        startTimeDefaulted = true;
-    }
-
-    // Resolve implicit end for S/SD types (have startDate, no endDate)
-    if (effectiveStartDate && !hasEndDate) {
-        if (hasEndTime) {
-            // endTime is known (raw or inherited), only endDate needs resolution
-            // Cross-midnight fallback: if endTime < startTime, resolve to next calendar day
-            if (effectiveStartTime && effectiveEndTime! < effectiveStartTime) {
-                effectiveEndDate = DateUtils.addDays(effectiveStartDate, 1);
-            } else {
-                effectiveEndDate = effectiveStartDate;
-            }
-        } else if (hasStartTime) {
-            // S-Timed: startTime + DEFAULT_TIMED_DURATION_MINUTES
-            const startMinutes = DateUtils.timeToMinutes(effectiveStartTime!);
-            const endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-            if (endMinutes < 24 * 60) {
-                effectiveEndDate = effectiveStartDate;
-                effectiveEndTime = DateUtils.minutesToTime(endMinutes);
-            } else {
-                effectiveEndDate = DateUtils.addDays(effectiveStartDate, 1);
-                effectiveEndTime = DateUtils.minutesToTime(endMinutes - 24 * 60);
-            }
-            endTimeDefaulted = true;
-        } else {
-            // S-AllDay: startTime (resolved above) + 23h59m
-            const startMinutes = DateUtils.timeToMinutes(effectiveStartTime!);
-            const endMinutes = startMinutes + 23 * 60 + 59;
-            effectiveEndDate = DateUtils.addDays(effectiveStartDate, Math.floor(endMinutes / (24 * 60)));
-            effectiveEndTime = DateUtils.minutesToTime(endMinutes % (24 * 60));
-            endTimeDefaulted = true;
-        }
-        // endDateImplicit remains true (endDate was not explicit)
-    }
-
-    // Resolve implicit end time for SE/SED types (have endDate, no endTime)
-    if (effectiveEndDate && !effectiveEndTime) {
-        const endHour = startHour === 0 ? 23 : startHour - 1;
-        effectiveEndTime = DateUtils.formatHHMM(endHour, 59);
-        endTimeDefaulted = true;
-    }
-
-    // Fallback: if same calendarDate and defaulted end < defaulted start, use 00:00/23:59
-    if (effectiveStartDate && effectiveEndDate
-        && effectiveStartDate === effectiveEndDate
-        && effectiveStartTime && effectiveEndTime
-        && startTimeDefaulted !== endTimeDefaulted
-        && effectiveEndTime < effectiveStartTime) {
-        if (startTimeDefaulted) {
-            effectiveStartTime = '00:00';
-        }
-        if (endTimeDefaulted) {
-            effectiveEndTime = '23:59';
-        }
-    }
-
+    const stated = statedDates(task);
+    const { span, dueMs } = resolveSpan(stated, startHour);
     return {
         ...task,
-        effectiveStartDate,
-        effectiveStartTime,
-        effectiveEndDate,
-        effectiveEndTime,
-        effectiveDue,
-        startDateImplicit,
-        startTimeImplicit,
-        endDateImplicit,
-        endTimeImplicit,
+        stated,
+        span,
+        dueMs,
+        drawn: span,
         originalTaskId: task.id,
         isSplit: false,
         childEntries: buildChildEntries(task, getTask),
@@ -173,25 +54,23 @@ export function toDisplayTasks(tasks: Task[], startHour: number, getTask: TaskLo
 }
 
 /**
- * Inclusive visual edits to a DisplayTask, expressed in the same coordinate
- * system as `effective*` fields. Pass only the fields that change; absent
- * fields are not touched.
+ * A drag's edits in visual days: the first and the last visual day a task is
+ * drawn over (`visualDaysOf`), and the times on them. Pass only the fields
+ * that change; absent fields are not touched.
  */
 export interface DisplayDateEdits {
-    /** Inclusive visual start date (matches DisplayTask.effectiveStartDate). */
-    effectiveStartDate?: string;
-    effectiveStartTime?: string;
-    /** Inclusive visual end date (matches DisplayTask.effectiveEndDate). */
-    effectiveEndDate?: string;
-    effectiveEndTime?: string;
+    /** The visual day the task starts on. */
+    startDay?: string;
+    startTime?: string;
+    /** The last visual day the task is drawn on (inclusive). */
+    endDay?: string;
+    endTime?: string;
 }
 
 /**
- * Inverse of `toVisualDate`. Given a visual date and the time at that visual
- * day, returns the underlying raw calendar date.
- *
- * `toVisualDate(date, time, startHour)` shifts -1 day when `time < startHour`,
- * so the inverse shifts +1 day in the same condition.
+ * Inverse of `DayWindow.visualDayAt`. Given a visual date and the time at
+ * that visual day, returns the underlying raw calendar date: a time before
+ * `startHour` is on the next calendar date.
  */
 function unshiftVisual(visualDate: string, time: string | undefined, startHour: number): string {
     if (!time) return visualDate;
@@ -202,22 +81,14 @@ function unshiftVisual(visualDate: string, time: string | undefined, startHour: 
 }
 
 /**
- * Convert inclusive visual edits to a raw `Partial<Task>` update.
+ * Convert a drag's edits in visual days to a raw `Partial<Task>` update: the
+ * single boundary between the drag and resize layer (which thinks in the
+ * visual days `visualDaysOf` gives) and the line's dates.
  *
- * This is the **single boundary** between drag/resize layer (which thinks in
- * inclusive visual dates, matching `DisplayTask.effective*`) and the raw Task
- * layer (where `endDate` is exclusive when `endTime` is absent and inclusive
- * when `endTime` is present — a dual semantic preserved for parser/writer
- * round-trip with the external @notation).
- *
- * `baseTask` provides the existing endTime to decide which semantic applies
- * to the raw `endDate` write. If `edits.effectiveEndTime` is also being
- * changed, the edit value wins (a drag that adds/removes endTime can flip the
- * semantic).
- *
- * Drag write-back must always go through this function. Direct
- * `addDays(visualEnd, 1)` in caller code is the bug pattern this helper
- * eliminates.
+ * A side is written on the visual day it is on: a bare date as that day (a
+ * bare end date is the end of the day it names, so the last day drawn is the
+ * date written), a time before `startHour` on the next calendar date.
+ * `baseTask` gives the time a side keeps when the edit does not change it.
  */
 export function materializeRawDates(
     edits: DisplayDateEdits,
@@ -226,136 +97,68 @@ export function materializeRawDates(
 ): Partial<Task> {
     const updates: Partial<Task> = {};
 
-    if (edits.effectiveStartDate !== undefined) {
-        const time = edits.effectiveStartTime !== undefined
-            ? edits.effectiveStartTime
+    if (edits.startDay !== undefined) {
+        const time = edits.startTime !== undefined
+            ? edits.startTime
             : baseTask.startTime;
-        updates.startDate = unshiftVisual(edits.effectiveStartDate, time, startHour);
+        updates.startDate = unshiftVisual(edits.startDay, time, startHour);
     }
-    if (edits.effectiveStartTime !== undefined) {
-        updates.startTime = edits.effectiveStartTime;
+    if (edits.startTime !== undefined) {
+        updates.startTime = edits.startTime;
     }
 
-    if (edits.effectiveEndDate !== undefined) {
-        const willHaveEndTime = edits.effectiveEndTime !== undefined
-            ? !!edits.effectiveEndTime
-            : !!baseTask.endTime;
-        if (willHaveEndTime) {
-            const endTime = edits.effectiveEndTime !== undefined
-                ? edits.effectiveEndTime
-                : baseTask.endTime;
-            updates.endDate = unshiftVisual(edits.effectiveEndDate, endTime, startHour);
-        } else {
-            // pure all-day: visual inclusive end → raw exclusive (+1)
-            updates.endDate = DateUtils.addDays(edits.effectiveEndDate, 1);
-        }
+    if (edits.endDay !== undefined) {
+        const time = edits.endTime !== undefined
+            ? edits.endTime
+            : baseTask.endTime;
+        updates.endDate = unshiftVisual(edits.endDay, time, startHour);
     }
-    if (edits.effectiveEndTime !== undefined) {
-        updates.endTime = edits.effectiveEndTime;
+    if (edits.endTime !== undefined) {
+        updates.endTime = edits.endTime;
     }
 
     return updates;
 }
 
 /**
- * Returns true when a DisplayTask crosses the visual day boundary and should be split.
- * Uses effective values so E/ED types can also be split.
+ * Returns true when a timed DisplayTask is drawn over two visual days and
+ * should be split at the boundary between them. An all-day task spans its
+ * days by design and is never split.
  */
 export function shouldSplitDisplayTask(dt: DisplayTask, startHour: number): boolean {
-    if (!dt.effectiveStartDate || !dt.effectiveEndDate || !dt.effectiveStartTime || !dt.effectiveEndTime) {
-        return false;
-    }
-
-    // AllDay tasks (duration >= 23.5h) span multiple visual days by design — never split
-    if (DateUtils.isAllDayTask(dt.effectiveStartDate, dt.effectiveStartTime, dt.effectiveEndDate, dt.effectiveEndTime, startHour)) {
-        return false;
-    }
-
-    // Timed tasks: check if they cross a visual-date boundary
-    const visualStartDay = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-
-    let visualEndDay = dt.effectiveEndDate;
-    const [endH, endM] = dt.effectiveEndTime.split(':').map(Number);
-    if (endH < startHour || (endH === startHour && endM === 0)) {
-        visualEndDay = DateUtils.addDays(dt.effectiveEndDate, -1);
-    }
-
-    return visualStartDay !== visualEndDay;
+    if (!dt.drawn || isAllDay(dt)) return false;
+    const { first, last } = visualDaysOf(dt.drawn, startHour);
+    return first !== last;
 }
 
 /**
- * Splits a DisplayTask into two segments at the visual day boundary.
- * Overrides both raw and effective start/end fields for each segment.
+ * Splits a DisplayTask into two segments at the start of the visual day
+ * after the one it starts on. Each segment is drawn over its part
+ * (`drawn`); its line's values, `stated` and `span` are the whole task's.
  */
 export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): [DisplayTask, DisplayTask] {
-    if (!dt.effectiveStartDate || !dt.effectiveEndDate || !dt.effectiveStartTime || !dt.effectiveEndTime) {
-        throw new Error('DisplayTask must have effective start and end date/time to split');
-    }
-
-    let boundaryCalendarDate: string;
-    if (dt.effectiveStartDate === dt.effectiveEndDate) {
-        boundaryCalendarDate = dt.effectiveStartDate;
-    } else {
-        boundaryCalendarDate = DateUtils.addDays(dt.effectiveStartDate, 1);
-    }
-
-    // head の effective end は boundary の 1 分前。これにより `toVisualDate` が
-    // head を前日に置き、tail の visual start day と重ならない。boundary 時刻
-    // ちょうど ('05:00') を head end にすると toVisualDate (`h < startHour`) が
-    // 当日扱いとなり tail と同日に重複し、GridTaskLayout の greedy track 割り当てで
-    // 別 track に飛ぶバグを生む。日付と時刻を対で受け取るのは、両者がずれると
-    // head が 1 日長くなり、23.5h 閾値を越えて allDay に誤分類されるため
-    // (startHour=0 で実際に起きていた。dayBoundaryAt の doc を参照)。
-    const boundary = dayBoundaryAt(boundaryCalendarDate, startHour);
-
-    const beforeSegmentDate = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-    const afterSegmentDate = DateUtils.toVisualDate(boundary.date, boundary.time, startHour);
+    if (!dt.drawn) throw new Error('DisplayTask must have a span to split');
+    const first = visualDaysOf(dt.drawn, startHour).first;
+    const next = DateUtils.addDays(first, 1);
+    const boundaryMs = dayStart(next, startHour);
 
     const headSegment: DisplayTask = {
         ...dt,
-        id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, beforeSegmentDate),
+        id: makeSegmentId(dt.originalTaskId, first),
         isSplit: true,
         splitContinuesBefore: dt.splitContinuesBefore ?? false,
         splitContinuesAfter: true,
-        // Override both raw and effective end to boundary - 1min (前日 inclusive)
-        endDate: boundary.beforeDate,
-        endTime: boundary.beforeTime,
-        effectiveEndDate: boundary.beforeDate,
-        effectiveEndTime: boundary.beforeTime,
+        drawn: { startMs: dt.drawn.startMs, endMs: boundaryMs },
     };
 
     const tailSegment: DisplayTask = {
         ...dt,
-        id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, afterSegmentDate),
+        id: makeSegmentId(dt.originalTaskId, next),
         isSplit: true,
         splitContinuesBefore: true,
         splitContinuesAfter: dt.splitContinuesAfter ?? false,
-        // Override both raw and effective start to boundary
-        startDate: boundary.date,
-        startTime: boundary.time,
-        effectiveStartDate: boundary.date,
-        effectiveStartTime: boundary.time,
+        drawn: { startMs: boundaryMs, endMs: dt.drawn.endMs },
     };
 
     return [headSegment, tailSegment];
-}
-
-/**
- * Returns true when a DisplayTask belongs to the given visual date.
- * Timed tasks: check visual start date. AllDay tasks: check date range.
- */
-export function isDisplayTaskOnVisualDate(
-    dt: DisplayTask, visualDate: string, startHour: number
-): boolean {
-    if (!dt.effectiveStartDate) return false;
-    // True all-day: no explicit start or end time in original task
-    const isAllDay = !dt.startTime && !dt.endTime;
-    if (!isAllDay && dt.effectiveStartTime) {
-        return DateUtils.toVisualDate(
-            dt.effectiveStartDate, dt.effectiveStartTime, startHour
-        ) === visualDate;
-    }
-    // AllDay: date range check
-    const end = dt.effectiveEndDate || dt.effectiveStartDate;
-    return dt.effectiveStartDate <= visualDate && visualDate <= end;
 }

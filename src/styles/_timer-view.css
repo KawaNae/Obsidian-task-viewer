@@ -83,7 +83,9 @@
     overflow: hidden;
 }
 
-/* ─── Progress Ring (TimerProgressUI overrides) ────────────── */
+/* ─── Progress Ring ──────────────────────────────────────────
+ * 輪と時刻と周の共有の宣言は _timer-widget.css。ここはビューの大きさだけ。
+ * 時刻は countup でも薄くしない。 */
 
 .timer-view__progress-container {
     position: relative;
@@ -98,37 +100,19 @@
     container-type: inline-size;
 }
 
-.timer-view .timer-widget__progress-ring {
+.timer-view__progress-ring {
     display: block;
     width: 100%;
     height: 100%;
 }
 
-.timer-view .timer-widget__time-display {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+.timer-view__time-display {
     font-size: min(2.5rem, 25cqw);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    color: var(--tv-text);
 }
 
-.timer-view .timer-widget__repeat-info {
-    position: absolute;
-    bottom: 12%;
-    left: 50%;
-    transform: translateX(-50%);
+.timer-view__repeat-info {
     font-size: min(0.9rem, 14cqw);
-    color: var(--tv-text-muted);
-    text-align: center;
-    white-space: normal;
     max-width: 70cqw;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
 }
 
 /* ─── Controls ─────────────────────────────────────────────── */
@@ -297,25 +281,6 @@
 .timer-view .timer-view__template-edit-btn {
     width: 24px;
     height: 24px;
-    padding: 0 !important;
-    appearance: none;
-    -webkit-appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent !important;
-    border: 1px solid transparent !important;
-    box-shadow: none;
-    color: var(--tv-text-muted);
-    cursor: pointer;
-    border-radius: var(--tv-radius-s);
-    flex-shrink: 0;
-}
-
-.timer-view .timer-view__template-edit-btn:hover {
-    color: var(--tv-text);
-    background-color: var(--tv-bg-hover) !important;
-    box-shadow: none;
 }
 
 .timer-view__template-edit-btn .svg-icon {
@@ -371,20 +336,6 @@
 .timer-view .timer-view__btn--disabled:hover {
     transform: none;
     box-shadow: none;
-}
-
-/* ─── Input Modal Styles ───────────────────────────────────── */
-
-.input-modal__input-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
-}
-
-.input-modal__label {
-    color: var(--tv-text-muted);
-    font-size: 0.9rem;
 }
 
 .timer-view__toolbar-host {

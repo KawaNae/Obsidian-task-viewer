@@ -8,19 +8,15 @@
  */
 export type DateTimeRule =
     | 'cross-midnight' | 'same-day-inversion' | 'end-before-start'
-    | 'end-time-without-start' | 'due-without-date' | 'frontmatter-time-only';
+    | 'end-time-without-start' | 'due-without-date';
 
-/**
- * Lang/flow diagnostic codes (Diagnostic.code): namespaced by layer.
- * The prefixes keep this space disjoint from DateTimeRule, which the
- * validation-freshness logic in TreeTaskExtractor relies on when clearing
- * stale flow-origin validations.
- */
+/** Lang/flow diagnostic codes (Diagnostic.code): namespaced by layer. */
 export type DiagnosticCode = `${'flow' | 'lex' | 'expr' | 'type'}.${string}`;
 
 /**
  * The three code spaces that may appear in Task.validation.rule:
- * date/time constraint rules, the @block parse error, and joined-flow
- * diagnostics.
+ * date/time constraint rules, the @block parse error, and the flow
+ * program's first diagnostic — in that order of precedence, decided once
+ * when the note is read (`NoteTasks`).
  */
 export type ValidationRule = DateTimeRule | 'parse-error' | DiagnosticCode;

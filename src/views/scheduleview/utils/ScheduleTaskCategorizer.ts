@@ -1,5 +1,6 @@
 import type { DisplayTask } from '../../../types';
 import { DateUtils } from '../../../utils/DateUtils';
+import { minutesOfSpan } from '../../../utils/DayWindow';
 import type { CategorizedTasks as BaseCategorizedTasks } from '../../../services/display/TaskDateCategorizer';
 import type { CategorizedTasks, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from './ScheduleGridCalculator';
@@ -19,14 +20,15 @@ export class ScheduleTaskCategorizer {
     }
 
     /**
-     * Convert base CategorizedTasks (from TaskReadService) to Schedule-specific format.
-     * Adds visualStartMinute/visualEndMinute to timed tasks and applies sorting.
+     * Convert base CategorizedTasks (from TaskDateCategorizer) to Schedule's
+     * format: each timed task gets its visualStartMinute/visualEndMinute.
+     * Every section keeps the canonical order it comes in (TaskRenderOrder),
+     * the one Timeline draws in too.
      */
     toScheduleFormat(base: BaseCategorizedTasks): CategorizedTasks {
         const categorized: CategorizedTasks = {
             allDay: [...base.allDay],
             timed: [],
-            dueOnly: [...base.dueOnly],
         };
 
         for (const dt of base.timed) {
@@ -39,48 +41,19 @@ export class ScheduleTaskCategorizer {
             }
         }
 
-        categorized.allDay.sort((a, b) => {
-            const fileDiff = a.file.localeCompare(b.file);
-            if (fileDiff !== 0) return fileDiff;
-            return a.line - b.line;
-        });
-
-        categorized.timed.sort((a, b) => {
-            if (a.visualStartMinute !== b.visualStartMinute) {
-                return a.visualStartMinute - b.visualStartMinute;
-            }
-            if (a.visualEndMinute !== b.visualEndMinute) {
-                return a.visualEndMinute - b.visualEndMinute;
-            }
-            const fileDiff = a.file.localeCompare(b.file);
-            if (fileDiff !== 0) return fileDiff;
-            return a.line - b.line;
-        });
-
-        categorized.dueOnly.sort((a, b) => {
-            const aDue = a.due || '';
-            const bDue = b.due || '';
-            if (aDue !== bDue) {
-                return aDue.localeCompare(bDue);
-            }
-            const fileDiff = a.file.localeCompare(b.file);
-            if (fileDiff !== 0) return fileDiff;
-            return a.line - b.line;
-        });
-
         return categorized;
     }
 
     private toTimedDisplayTask(dt: DisplayTask): TimedDisplayTask | null {
-        if (!dt.effectiveStartTime) {
-            return null;
-        }
+        if (!dt.drawn) return null;
 
+        // What the card is drawn over, in minutes from midnight of its visual day.
         const dayStart = this.gridCalculator.getDayStartMinute();
         const dayEnd = this.gridCalculator.getDayEndMinute();
-        const durationMinutes = this.calculateDurationMinutes(dt);
-        const rawStart = this.gridCalculator.timeToVisualMinute(dt.effectiveStartTime);
-        const rawEnd = rawStart + durationMinutes;
+        const minutes = minutesOfSpan(dt.drawn, this.getStartHour());
+        const rawStart = dayStart + minutes.start;
+        // A point is drawn with the default length, as before.
+        const rawEnd = dayStart + (minutes.end > minutes.start ? minutes.end : minutes.start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES);
 
         const visualStartMinute = Math.max(dayStart, Math.min(dayEnd - 1, rawStart));
         const visualEndMinute = Math.max(visualStartMinute + 1, Math.min(dayEnd, rawEnd));
@@ -90,25 +63,5 @@ export class ScheduleTaskCategorizer {
             visualStartMinute,
             visualEndMinute,
         };
-    }
-
-    private calculateDurationMinutes(dt: DisplayTask): number {
-        if (!dt.effectiveStartDate || !dt.effectiveStartTime) {
-            return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-        }
-
-        const durationMs = DateUtils.getTaskDurationMs(
-            dt.effectiveStartDate,
-            dt.effectiveStartTime,
-            dt.effectiveEndDate,
-            dt.effectiveEndTime,
-            this.getStartHour()
-        );
-
-        if (!Number.isFinite(durationMs) || durationMs <= 0) {
-            return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-        }
-
-        return Math.max(1, Math.round(durationMs / (1000 * 60)));
     }
 }

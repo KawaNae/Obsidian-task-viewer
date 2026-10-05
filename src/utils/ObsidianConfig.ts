@@ -6,7 +6,7 @@ import type { App } from 'obsidian';
  *
  * `Vault.getConfig` is not in Obsidian's typings: it is the app's reading of
  * `.obsidian/app.json`, which answers a setting's default when the file does
- * not hold it (`stages/sm0-measure/observation.md`: `useTab` true and
+ * not hold it (`archive/2026-09-stages/3-v058-2026-09-28.md`, sm0-measure: `useTab` true and
  * `tabSize` 4 on a vault whose file names neither). Being unpublished, it may
  * go or change its answers, so every reading of it is here, each with the
  * answer it falls back to — Obsidian's own default.
@@ -33,7 +33,7 @@ function configOf(app: App, key: string): unknown {
  * line nested one level deeper than any line there is gets — the first child
  * of a row that has none, a Tab in the source editor. A line written beside
  * one of the same depth takes that line's indentation instead
- * (`FileOperations.resolveChildIndent`).
+ * (`Placement.resolveChildIndent`).
  *
  * A tab when `useTab` is not a boolean, or `getConfig` answers nothing.
  * `tabSize` that is not a whole number is 4; one past 4 is 4, since a unit

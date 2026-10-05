@@ -2,8 +2,10 @@ import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import type { DefaultLeafPosition, TaskViewerSettings } from '../types';
 import { t } from '../i18n';
+import { SETTINGS_SCHEMA } from './SettingsSchema';
+import type { SettingFields } from './SettingFields';
 
-export function render(el: HTMLElement, plugin: PluginContext): void {
+export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
     // Navigation
     el.createEl('h3', { text: t('settings.views.navigation'), cls: 'setting-section-header' });
 
@@ -62,22 +64,15 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
                 await plugin.saveSettings();
             }));
 
-    new Setting(el)
+    fields.text(new Setting(el)
         .setName(t('settings.views.mobileTopOffset'))
-        .setDesc(t('settings.views.mobileTopOffsetDesc'))
-        .addText(text => {
-            text.inputEl.type = 'number';
-            text.inputEl.min = '0';
-            text
-                .setPlaceholder('32')
-                .setValue(plugin.settings.mobileTopOffset.toString())
-                .onChange(async (value) => {
-                    let offset = parseInt(value);
-                    if (isNaN(offset) || offset < 0) offset = 32;
-                    plugin.settings.mobileTopOffset = offset;
-                    await plugin.saveSettings();
-                });
-        });
+        .setDesc(t('settings.views.mobileTopOffsetDesc')), {
+        codec: SETTINGS_SCHEMA.mobileTopOffset.codec,
+        get: () => plugin.settings.mobileTopOffset,
+        put: (offset) => { plugin.settings.mobileTopOffset = offset; },
+        placeholder: '32',
+        inputMode: 'numeric',
+    });
 
     new Setting(el)
         .setName(t('settings.views.fixMobileGradientWidth'))

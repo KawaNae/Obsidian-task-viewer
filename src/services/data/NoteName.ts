@@ -1,5 +1,6 @@
 import { type App, type TFile, type TFolder, parseLinktext } from 'obsidian';
 import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
+import { MARKDOWN_LINK_SOURCE, WIKILINK_SOURCE } from '../parsing/utils/InlineNotation';
 
 /** What {@link NoteName} asks of the vault: its files and its folders. */
 export type NoteVault = Pick<App['vault'], 'getFiles' | 'getMarkdownFiles' | 'getAllFolders'>;
@@ -73,9 +74,11 @@ export const NoteName = {
      */
     fromText(text: string): string {
         const shown = text
-            .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, '$2')
-            .replace(/\[\[([^\]]*)\]\]/g, '$1')
-            .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+            .replace(new RegExp(WIKILINK_SOURCE, 'g'), (_, linktext: string) => {
+                const bar = linktext.indexOf('|');
+                return bar < 0 ? linktext : linktext.slice(bar + 1);
+            })
+            .replace(new RegExp(MARKDOWN_LINK_SOURCE, 'g'), '$1');
         return shown
             .split(/\s+/)
             .filter(word => !/^[#@^]/.test(word))
@@ -99,11 +102,12 @@ export const NoteName = {
             const { path } = parseLinktext(linktext.trim());
             if (path.trim() !== '') out.push(path.trim());
         };
-        for (const m of text.matchAll(/\[\[([^\]]*)\]\]|\[[^\]]*\]\(([^)]*)\)/g)) {
+        // Groups: 1 the wikilink's text; 2 the Markdown link's shown text, 3 its destination.
+        for (const m of text.matchAll(new RegExp(`${WIKILINK_SOURCE}|${MARKDOWN_LINK_SOURCE}`, 'g'))) {
             if (m[1] !== undefined) {
                 push(extractWikilinkTarget(m[1]));
-            } else if (!/^[a-z][a-z0-9+.-]*:/i.test(m[2].trim())) {
-                push(decoded(m[2].trim().replace(/^<(.*)>$/, '$1')));
+            } else if (!/^[a-z][a-z0-9+.-]*:/i.test(m[3].trim())) {
+                push(decoded(m[3].trim().replace(/^<(.*)>$/, '$1')));
             }
         }
         return out;

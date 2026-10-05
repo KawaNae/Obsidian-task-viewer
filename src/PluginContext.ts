@@ -1,9 +1,10 @@
 import type { App, Component, Plugin, PluginManifest } from 'obsidian';
 import type { TaskViewerSettings } from './types';
-import type { TaskIndex } from './services/core/TaskIndex';
+import type { IndexReads } from './services/core/TaskIndex';
 import type { TaskReadService } from './services/data/TaskReadService';
-import type { TaskWriteService } from './services/data/TaskWriteService';
+import type { Operations } from './services/operations/Operations';
 import type { NoteOps } from './services/data/NoteOps';
+import type { CreatePlaces } from './services/data/CreatePlaces';
 import type { MenuPresenter } from './interaction/menu/MenuPresenter';
 import type { LogManager } from './log/log-manager';
 
@@ -61,15 +62,18 @@ export interface PluginContext {
 
     readonly menuPresenter: MenuPresenter;
 
-    getTaskIndex(): TaskIndex;
+    /** The index as the read side sees it: its copies, its changes, the drag's hold. It writes nothing. */
+    getIndex(): IndexReads;
+    /** The display side of the read: DisplayTasks, date ranges, filters and sorts (`TaskReadService`). */
     getTaskReadService(): TaskReadService;
-    getTaskWriteService(): TaskWriteService;
+    /** The operations on the notes: the one way to write (`Operations`). */
+    getOperations(): Operations;
     /** The operations on notes: sending rows to a note (`NoteOps`). */
     getNoteOps(): NoteOps;
+    /** The places a new task line is made in: what one is, and the write there (`CreatePlaces`). */
+    getCreatePlaces(): CreatePlaces;
     getLogManager(): LogManager | null;
 
-    /** Re-apply the body classes that the global-style settings drive. */
-    updateGlobalStyles(): void;
     /** Tell the editor's inline task menu that its settings moved. */
     notifyEditorMenuSettingsChanged(): void;
 }

@@ -2,10 +2,9 @@
  * Renders one saved list as a collapsible section: a header carrying its name,
  * task count and sort / filter / more buttons, plus a body of task cards.
  *
- * Two places show the same thing. PinnedListRenderer stacks these down the
- * sidebar; KanbanView lays them out on a grid, one per cell. Before this file
- * each had its own copy of the header markup, the collapse toggle with its
- * lazy first-paint, and the inline rename lifecycle.
+ * `TaskListSections` builds every saved list with it: the pinned lists
+ * stacked down the sidebar (`PinnedListPanel`) and Kanban's cells on its
+ * grid, one per cell.
  *
  * The BEM block name is a parameter rather than something this module decides.
  * What genuinely differs between the two is how the section looks — a compact
@@ -18,6 +17,7 @@
 import { setIcon } from 'obsidian';
 import { hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { hasSortRules, type SortState } from '../../services/sort/SortTypes';
+import { onFormEnter } from '../../modals/form/formEnter';
 
 /** DOM class names for one variant of the section. */
 export interface ListSectionClasses {
@@ -161,9 +161,12 @@ export function startListSectionRename(
         if (input.parentElement) input.replaceWith(span);
     };
 
-    input.addEventListener('blur', () => commit(input.value.trim() || currentName));
+    // The form's Enter commits by itself: a blur does not come to a window
+    // that is not in front, and a name left in the field then is lost.
+    const commitTyped = () => commit(input.value.trim() || currentName);
+    input.addEventListener('blur', commitTyped);
+    onFormEnter(input, commitTyped);
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
         if (e.key === 'Escape') { e.preventDefault(); commit(currentName); }
     });
     // Keep the header's collapse handler out of it.
@@ -178,7 +181,7 @@ export function startListSectionRename(
  * inline-flex button, which is what these are.
  */
 function makeHeaderButton(header: HTMLElement, cls: string, icon: string): HTMLElement {
-    const btn = header.createEl('button', { cls });
+    const btn = header.createEl('button', { cls: `tv-icon-btn ${cls}` });
     setIcon(btn.createSpan(), icon);
     return btn;
 }

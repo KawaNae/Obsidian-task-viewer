@@ -2,19 +2,22 @@ import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { NoteOps, SendPreview, SendResult } from '../../services/data/NoteOps';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
-import { hostWindow } from '../../utils/HostWindow';
 import { indentUnit } from '../../utils/ObsidianConfig';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { createFormRow } from '../form/formRow';
-import { SourceEditor, type DraftEditor } from '../form/source/SourceEditor';
+import { IssueBoard } from '../form/FormIssue';
+import { editorOn, type DraftEditor } from '../form/source/SourceEditor';
+import { FormActions } from '../form/FormActions';
 import { DestinationField } from './DestinationField';
-import { SendDialog, initialAsk, type SendSurface, type SendViewState } from './SendDialog';
+import { SendDialog, initialAsk, type SendField, type SendSurface, type SendViewState } from './SendDialog';
 
 /**
- * The send dialog as it looks (note-ops-plan.md 4, 並び): the rows to send
+ * The send dialog as it looks (`archive/2026-09-send.md`, ダイアログ, 骨組みと並び): the rows to send
  * in the source editor, the destination's fields, what the send does, the
  * values offered for the note's frontmatter, what keeps a send from being
- * asked and what it is asked in spite of, and cancel and send. It draws
+ * asked and what it is asked in spite of, each said next to what it is of
+ * (`IssueBoard`: under the name, the heading or a row, or above the
+ * buttons), and cancel and send. It draws
  * what the dialog's state says (`SendViewState`) and does nothing of its
  * own; the dialog's logic is `SendDialog`.
  *
@@ -28,27 +31,21 @@ import { SendDialog, initialAsk, type SendSurface, type SendViewState } from './
  * It stands on an overlay (`OverlayShell`, centered), which keeps
  * Obsidian's hotkeys off the note behind while the focus is in it, and asks
  * the dialog before a close the user asks for (`beforeClose`). Asked
- * whether to throw the draft away, the row of buttons asks, as the hub's
- * source mode does: the question at its start, discard beside it, and
- * cancel reads back, which keeps the draft.
+ * whether to throw the draft away, the row of buttons asks, as every form's
+ * row does (`FormActions`).
  */
 export class SendModal implements SendSurface {
     private readonly overlay = new OverlayShell();
     private dialog: SendDialog | null = null;
     private field!: DestinationField;
     private rowsEl!: HTMLElement;
-    private destinationEl!: HTMLElement;
+    /** The line under each row, in the order of the rows. */
+    private readonly rowSays: HTMLElement[] = [];
     private candidatesLabel!: HTMLElement;
     private candidatesEl!: HTMLElement;
-    private errorEl!: HTMLElement;
-    private warningEl!: HTMLElement;
-    private messageEl!: HTMLElement;
-    private askEl!: HTMLElement;
-    private discardBtn!: HTMLButtonElement;
-    private cancelBtn!: HTMLButtonElement;
-    private sendBtn!: HTMLButtonElement;
-    /** Asked as last drawn: the cancel button is back then. */
-    private asking = false;
+    private formSays!: HTMLElement;
+    private issues!: IssueBoard<SendField>;
+    private actions!: FormActions;
 
     /**
      * @param sent what the caller does once the rows went, all or some: the
@@ -67,20 +64,16 @@ export class SendModal implements SendSurface {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog tv-send',
             keymap: this.app.keymap,
+            // The first draft; the note's name when no row opened in the editor.
+            initialFocus: () => this.dialog?.firstEditor() ?? this.field,
             build: (bodyEl) => this.build(bodyEl),
             onClose: () => {
                 this.dialog?.dispose();
                 this.dialog = null;
             },
-            beforeClose: () => this.dialog?.beforeClose() ?? true,
+            beforeClose: () => ((this.dialog?.beforeClose() ?? true) ? 'close' : 'stay'),
             yieldsEscape: () => this.dialog?.yieldsEscape() ?? false,
             takesBack: () => this.dialog?.takesBack() ?? false,
-        });
-        // The frame of the window the overlay stands in (popout aware), as the other dialogs focus.
-        hostWindow(this.overlay.getPanel()).requestAnimationFrame(() => {
-            const editor = this.dialog?.firstEditor();
-            if (editor) editor.focus();
-            else this.field.focus();
         });
     }
 
@@ -99,25 +92,23 @@ export class SendModal implements SendSurface {
             onChange: () => this.dialog?.fieldsChanged(this.field.ask()),
             onEnter: () => { void this.dialog?.send(); },
         });
-        this.destinationEl = destination.createDiv({ cls: 'tv-send__says' });
 
         // Put in and taken out rather than hidden (renderCandidates): the
         // last group in the form draws no divider under it.
         this.candidatesLabel = bodyEl.createEl('h4', { cls: 'tv-form__section-label', text: t('modal.send.frontmatter') });
         this.candidatesEl = bodyEl.createDiv({ cls: 'tv-form__group tv-send__candidates' });
 
-        this.errorEl = bodyEl.createDiv({ cls: 'tv-form__error' });
-        this.warningEl = bodyEl.createDiv({ cls: 'tv-form__warning' });
-        this.messageEl = bodyEl.createDiv({ cls: 'tv-form__error' });
+        this.formSays = bodyEl.createDiv({ cls: 'tv-form__says tv-form__says--form' });
+        this.issues = new IssueBoard<SendField>({
+            field: (at) => (at === 'name' || at === 'heading' ? this.field.slot(at) : this.rowSlot(at)),
+            form: this.formSays,
+        });
 
-        const actions = bodyEl.createDiv({ cls: 'tv-form__buttons' });
-        this.askEl = actions.createSpan({ cls: 'tv-form__ask', text: t('modal.send.discardAsk') });
-        this.discardBtn = actions.createEl('button', { cls: 'mod-warning tv-form__discard', text: t('modal.send.discard'), attr: { type: 'button' } });
-        this.discardBtn.addEventListener('click', () => this.dialog?.discard());
-        this.cancelBtn = actions.createEl('button', { attr: { type: 'button' } });
-        this.cancelBtn.addEventListener('click', () => (this.asking ? this.dialog?.keep() : this.overlay.requestClose()));
-        this.sendBtn = actions.createEl('button', { cls: 'mod-cta', text: t('modal.send.send'), attr: { type: 'button' } });
-        this.sendBtn.addEventListener('click', () => { void this.dialog?.send(); });
+        this.actions = new FormActions(bodyEl, {
+            cancel: { run: () => { void this.overlay.requestClose(); } },
+            actions: [{ label: t('modal.send.send'), busyLabel: t('modal.send.sending'), tone: 'cta', run: () => { void this.dialog?.send(); } }],
+            ask: { discardLabel: t('modal.draft.discard'), keepLabel: t('modal.draft.keep'), discard: () => this.dialog?.discard(), keep: () => this.dialog?.keep() },
+        });
 
         this.dialog = new SendDialog(this.preview, {
             facts: (ask) => this.ops.destinationFacts(this.preview, ask),
@@ -131,47 +122,36 @@ export class SendModal implements SendSurface {
     }
 
     openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor {
-        return new SourceEditor(this.rowsEl, {
-            parent: frame.parent,
-            children: frame.children,
-            indentUnit: frame.unit,
-            app: this.app,
-            onSubmit: hooks.submit,
-            onChange: hooks.edited,
-        });
+        const editor = editorOn(this.rowsEl, frame, this.app, hooks);
+        this.rowSays.push(this.rowsEl.createDiv({ cls: 'tv-form__says tv-send__row-says' }));
+        return editor;
     }
 
     showFixed(lines: readonly string[], why: string): void {
         const fixed = this.rowsEl.createDiv({ cls: 'tv-send__fixed' });
         fixed.createEl('pre', { cls: 'tv-form__line-preview', text: lines.join('\n') });
         fixed.createDiv({ cls: 'tv-form__info', text: why });
+        this.rowSays.push(this.rowsEl.createDiv({ cls: 'tv-form__says tv-send__row-says' }));
+    }
+
+    /** Where what is said of a row's draft goes: the line under it. */
+    private rowSlot(at: `row:${number}`): { input: null; message: HTMLElement } | null {
+        const message = this.rowSays[Number(at.slice('row:'.length))];
+        return message ? { input: null, message } : null;
     }
 
     render(state: SendViewState): void {
         this.rowsEl.toggleClass('tv-source-drafts--asking', state.asking);
 
-        this.destinationEl.empty();
-        this.destinationEl.removeClass('tv-form__info', 'tv-form__warning');
-        if (state.destination) {
-            this.destinationEl.setText(state.destination.text);
-            this.destinationEl.addClass(state.destination.tone === 'info' ? 'tv-form__info' : 'tv-form__warning');
-        }
-        this.destinationEl.toggle(state.destination !== null);
         this.field.offerHeadings(state.headings);
-        this.field.markInvalid(state.invalid);
-
         this.renderCandidates(state.candidates);
+        this.issues.set('dialog', state.issues);
 
-        lines(this.errorEl, state.errors);
-        lines(this.warningEl, state.warnings);
-        lines(this.messageEl, state.message === null ? [] : [state.message]);
-
-        this.askEl.toggle(state.asking);
-        this.discardBtn.toggle(state.asking);
-        this.cancelBtn.setText(state.asking ? t('modal.send.keep') : t('modal.cancel'));
-        this.sendBtn.disabled = !state.canSend;
-        this.sendBtn.setText(state.phase === 'sending' ? t('modal.send.sending') : t('modal.send.send'));
-        this.asking = state.asking;
+        this.actions.render({
+            busy: state.phase === 'sending',
+            ctaEnabled: state.canSend,
+            ask: state.asking ? t('modal.draft.discardAsk') : null,
+        });
     }
 
     /**
@@ -188,7 +168,7 @@ export class SendModal implements SendSurface {
             this.candidatesEl.detach();
             return;
         }
-        if (!this.candidatesEl.isConnected) this.errorEl.before(this.candidatesLabel, this.candidatesEl);
+        if (!this.candidatesEl.isConnected) this.formSays.before(this.candidatesLabel, this.candidatesEl);
         for (const one of candidates) {
             const { row } = createFormRow(this.candidatesEl, one.key, { alignStart: true });
             const label = row.createEl('label', { cls: 'tv-send__candidate' });
@@ -204,16 +184,7 @@ export class SendModal implements SendSurface {
 
     /** Asked, first or again: back takes the focus, where cancel was. */
     asked(): void {
-        this.cancelBtn.focus();
+        this.actions.focusKeep();
     }
 }
 
-/** Show `texts` in `el`, a line each, and `el` only when there are any. */
-function lines(el: HTMLElement, texts: readonly string[]): void {
-    el.empty();
-    texts.forEach((text, i) => {
-        if (i > 0) el.createEl('br');
-        el.appendText(text);
-    });
-    el.toggle(texts.length > 0);
-}

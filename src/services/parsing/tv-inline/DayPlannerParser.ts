@@ -1,4 +1,4 @@
-import type { Task } from '../../../types';
+import type { UnnamedTask } from '../TaskFactory';
 import { ReadOnlyParserBase } from './ReadOnlyParserBase';
 import { DateUtils } from '../../../utils/DateUtils';
 import { IN_LINE } from '../../../utils/LineBreak';
@@ -8,7 +8,7 @@ import { IN_LINE } from '../../../utils/LineBreak';
  * Parses: `- [ ] HH:MM - HH:MM content` or `- [ ] HH:MM content`
  *
  * Date is not encoded in the line. If a start date is needed, it comes from
- * the File→Section cascade (SectionPropertyResolver → TreeTaskExtractor's
+ * the File→Section cascade (SectionPropertyResolver → NoteTasks'
  * cascadeContext), same as any other inline task — there is no filename-based
  * date inheritance in the parse path.
  */
@@ -18,7 +18,7 @@ export class DayPlannerParser extends ReadOnlyParserBase {
     /** HH:MM[ - HH:MM] at start of content, followed by text. */
     private static readonly TIME_RANGE_REGEX = new RegExp(`^(\\d{2}:\\d{2})(?:\\s*-\\s*(\\d{2}:\\d{2}))?\\s+(${IN_LINE}+)$`);
 
-    parse(line: string, filePath: string, lineNumber: number): Task | null {
+    parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null {
         const classified = this.classify(line);
         if (!classified) return null;
 

@@ -1,92 +1,25 @@
-import type { Task, ChildEntry, ChildLine } from '../../types';
+import type { Task, ChildEntry } from '../../types';
 
 /**
- * Derives a Task's ordered ChildEntry[] from its parser-emitted fields:
- *   - childIds (independent child tasks)
- *   - childLines (raw lines under the parent, each carrying its absolute
- *     file line in ChildLine.bodyLine)
+ * A task's children in the note's order: its child tasks (`childIds`) and
+ * its own child lines (`childLines`), merged by the line each stands on.
  *
- * Guarantees:
- *   - Each entry carries an absolute `bodyLine`, so render/write layers
- *     never recompute line numbers.
- *   - Entries are sorted by `bodyLine` (body order).
- *   - A line owned by a sibling task's subtree is omitted from `line`
- *     entries — it surfaces as the descendant's own children. Enforces the
- *     "1 line = 1 owner across siblings" invariant relied on by the renderer.
+ * The extraction already gave every line of the note to one task at most
+ * (`NoteTasks`: a task's child lines leave out its child tasks' subtrees and
+ * its own `- ==>` lines), so this only merges; it takes nothing out.
  *
  * Pure: takes a `getTask` lookup so it composes with TaskReadService /
- * TaskIndex without coupling to either.
+ * TaskIndex without coupling to either. A child the lookup does not hold
+ * is left out.
  */
 export function buildChildEntries(
     parent: Task,
     getTask: (id: string) => Task | undefined
 ): ChildEntry[] {
-    const entries: ChildEntry[] = [];
-
-    for (const cl of parent.childLines) {
-        if (cl.bodyLine < 0) continue;
-        entries.push({ kind: 'line', line: cl, bodyLine: cl.bodyLine });
+    const entries: ChildEntry[] = parent.childLines.map(line => ({ kind: 'line', line, bodyLine: line.bodyLine }));
+    for (const taskId of parent.childIds) {
+        const child = getTask(taskId);
+        if (child) entries.push({ kind: 'task', taskId, bodyLine: child.line });
     }
-
-    for (const cid of parent.childIds) {
-        const c = getTask(cid);
-        if (!c || c.line < 0) continue;
-        entries.push({ kind: 'task', taskId: cid, bodyLine: c.line });
-    }
-
-    const siblingSubtrees = parent.childIds
-        .map(cid => {
-            const c = getTask(cid);
-            return c ? collectSubtreeLines(c, getTask) : null;
-        })
-        .filter((s): s is Set<string> => s !== null);
-
-    const filtered = entries.filter(e => {
-        if (e.kind === 'task') return true;
-        const key = `${parent.file}:${e.bodyLine}`;
-        for (const sub of siblingSubtrees) {
-            if (sub.has(key)) return false;
-        }
-        return true;
-    });
-
-    filtered.sort((a, b) => a.bodyLine - b.bodyLine);
-
-    return filtered;
-}
-
-/**
- * All body lines occupied by a task and its descendant subtree, as
- * file-qualified `file:line` keys. The parser never links across files, so
- * the qualification is a guard: a child from another file must not claim this
- * parent's line of the same number.
- */
-function collectSubtreeLines(
-    task: Task,
-    getTask: (id: string) => Task | undefined,
-    visited: Set<string> = new Set(),
-    depth: number = 0
-): Set<string> {
-    const out = new Set<string>();
-    if (depth > 10 || visited.has(task.id)) return out;
-    visited.add(task.id);
-
-    if (task.line >= 0) out.add(`${task.file}:${task.line}`);
-    for (const cl of task.childLines) {
-        if (cl.bodyLine >= 0) out.add(`${task.file}:${cl.bodyLine}`);
-    }
-    // Flow child lines (`- ==>`) are excluded from childLines by the
-    // extractor but are still body lines owned by this task — without
-    // them here, an ancestor would surface them as plain text child entries.
-    for (const seg of task.flow?.childSegments ?? []) {
-        if (seg.bodyLine >= 0) out.add(`${task.file}:${seg.bodyLine}`);
-    }
-    for (const cid of task.childIds) {
-        const c = getTask(cid);
-        if (!c) continue;
-        for (const key of collectSubtreeLines(c, getTask, visited, depth + 1)) {
-            out.add(key);
-        }
-    }
-    return out;
+    return entries.sort((a, b) => a.bodyLine - b.bodyLine);
 }

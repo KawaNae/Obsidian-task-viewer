@@ -1,7 +1,7 @@
 import type { App, TFile } from 'obsidian';
-import { processLines, type WriteChannel } from './FileLines';
+import { processLines, type RowRef, type WriteChannel } from './FileLines';
 import type { TaskRepository } from './TaskRepository';
-import type { PlannedTarget } from './TaskRefs';
+import { plannedOn } from './TaskRefs';
 import type { Task } from '../../types';
 
 /**
@@ -55,15 +55,26 @@ export function rowSignatureChecks(
 
     // A target without what it was planned from does not exist.
     // @ts-expect-error the basis is not optional
-    const unplanned: PlannedTarget = { file: task.file, line: task.line, subject: 'x' };
+    const unplanned: RowRef = { line: task.line, subject: 'x', in: { reading: 'k1.1' } };
     void unplanned;
+
+    // Nor does one whose line is a coordinate in no content: a line reading
+    // as its basis in some other content may be its twin.
+    // @ts-expect-error the content the line is in is not optional
+    const nowhere: RowRef = { line: task.line, subject: 'x', basis: { text: 'x' } };
+    void nowhere;
+
+    // A copy no reading of the index made names no content: there is no row
+    // to plan from it (`ReadCopy`).
+    // @ts-expect-error only a copy the index read is planned from
+    void plannedOn(task);
 
     // The index's copy is not a target: an update, a delete and a duplicate are
     // named with their plan.
     // @ts-expect-error an update names its row with a plan
-    void repository.updateTaskInFile(task, task);
+    void repository.write(task.file, task, [{ kind: 'update', text: task.originalText }]);
     // @ts-expect-error a delete names its row with a plan
-    void repository.applyToTask(task, [{ kind: 'remove' }]);
+    void repository.write(task.file, task, [{ kind: 'remove' }]);
     // @ts-expect-error a duplicate names its row with a plan
-    void repository.duplicateInlineTaskInPlace(task, { kind: 'verbatim', count: 1 });
+    void repository.write(task.file, task, [{ kind: 'copies', side: 'below', lines: { verbatim: 1 }, children: true }]);
 }

@@ -1,157 +1,125 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
+import { TimerBoard } from '../../../src/timer/TimerBoard';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { TimerRenderer } from '../../../src/timer/TimerRenderer';
-import type { TimerContext } from '../../../src/timer/TimerContext';
+import { TimerRuntime } from '../../../src/timer/TimerRuntime';
+import type { TimerRecorder } from '../../../src/timer/TimerRecorder';
 import type { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
-import type { CountupTimer, IntervalTimer, PendingRecord, TimerInstance } from '../../../src/timer/TimerInstance';
+import { freeze, restart } from '../../../src/timer/TimerClock';
+import { pomodoroGroups, START_CURSOR } from '../../../src/timer/IntervalMath';
+import { newTimerId, type Session, type TimerState } from '../../../src/timer/TimerState';
+import type { Measure } from '../../../src/timer/TimerProgress';
 import { t } from '../../../src/i18n';
 
 /**
- * 記録を書けずに残った走行の操作列。
+ * 操作列は記録の区切りだけで決まり、種類（countup、countdown、ポモドーロ）を問わない。
  *
- * - 1 秒未満で止めて書けなかった走行は経過が 0 でも「未開始」ではない。▶ 開始を
- *   出すと `pendingRecord` を持ったまま次の走行が始まり、後の記録が古い時刻で
- *   終わる。
- * - interval の自動終了を書けなかった走行は、続ける区間が無いので ■ だけ。▶ を
- *   出すと次の tick ですぐ満了し、押した時刻で終わる記録になる。
+ *   走行中   … [⏸ 中断][■ 終了]
+ *   記録待ち … [⏸ 中断][■ 終了]（固定した記録を書き直す。押した方が行き先）
+ *   中断中   … [▶ 再開][■ 終了]
+ *
+ * 1 秒未満で止めて書けなかった走行も、経過が 0 でも記録待ちであり、「開始」の
+ * ボタンは無い（未開始の状態は無い）。
  */
 (globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => 1, clearInterval: () => { },
+    setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
     addEventListener: () => { }, removeEventListener: () => { },
 };
 
-interface FakeEl {
-    labels: string[];
-    createEl(tag: string, options?: { cls?: string; text?: string }): FakeEl & { onclick?: () => void };
-    createSpan(options?: { cls?: string; text?: string }): FakeEl;
-}
-
-/** ボタンのラベルだけを集める器（createControlButton が使う createEl / createSpan だけ）。 */
-function fakeContainer(): FakeEl {
-    const labels: string[] = [];
-    const make = (): FakeEl => ({
-        labels,
-        createEl: () => make(),
-        createSpan: (options) => {
+/** ボタンのラベルだけを集める器（createControlButton が使う createEl と createSpan だけ）。 */
+function fakeContainer(labels: string[]): unknown {
+    return {
+        createEl: () => fakeContainer(labels),
+        createSpan: (options?: { text?: string }) => {
             if (options?.text) labels.push(options.text);
-            return make();
+            return fakeContainer(labels);
         },
-    });
-    return make();
+    };
 }
 
 function build(opts: { flushOk?: boolean; recordOk?: boolean } = {}) {
-    const results = { flush: opts.flushOk ?? true, record: opts.recordOk ?? true };
+    const board = new TimerBoard({ persist: () => { }, render: () => { } });
+    const runtime = new TimerRuntime();
     const recorder = {
-        recordSessionEnd: async (_timer: TimerInstance, _record: PendingRecord) => results.record,
+        recordSessionEnd: async () => opts.recordOk ?? true,
         extendRunningSession: async () => Date.now() + 3_600_000,
+        releaseAnchors: async () => { },
+    } as unknown as TimerRecorder;
+    const content = { flush: async () => opts.flushOk ?? true, discard: () => { }, release: () => { } };
+    const lifecycle = new TimerLifecycle({ board, runtime, recorder, content, renderTimes: () => { } });
+    const renderer = new TimerRenderer({
+        app: {} as never, plugin: {} as never, board, runtime, lifecycle,
+        contentBinding: {} as TimerContentBinding,
+        container: {} as never,
+        startTimer: () => { },
+    });
+    const controls = (timer: TimerState): string[] => {
+        const labels: string[] = [];
+        (renderer as unknown as { renderControls(c: unknown, t: TimerState): void }).renderControls(fakeContainer(labels), timer);
+        return labels;
     };
-    const ctx = {
-        timers: new Map<string, TimerInstance>(), recorder,
-        plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } }, app: {},
-        startTimer: () => { }, render: () => { }, renderTimerItem: () => { }, persistTimersToStorage: () => { },
-        onTimerClosed: () => { }, flushTimerContent: async () => results.flush, discardTimerContent: () => { },
-        ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
-        getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
-    } as unknown as TimerContext;
-    const creator = new TimerCreator(ctx);
-    const lifecycle = new TimerLifecycle(ctx, creator);
-    const renderer = new TimerRenderer(ctx, lifecycle, creator, {} as TimerContentBinding);
-    const controls = (timer: TimerInstance): string[] => {
-        const container = fakeContainer();
-        (renderer as unknown as { renderControls(c: unknown, t: TimerInstance): void }).renderControls(container, timer);
-        return container.labels;
+    return { board, lifecycle, controls };
+}
+
+function timerIn(board: TimerBoard, session: Session, measure: Measure = { type: 'countup' }): TimerState {
+    const now = Date.now();
+    const clock = restart(now);
+    const timer: TimerState = {
+        id: newTimerId(),
+        subject: { kind: 'task', anchor: 'box' },
+        file: 'notes/a.md', name: 'A', color: '', mode: 'child',
+        measure,
+        clock: session.kind === 'running' ? clock : freeze(clock, now),
+        session,
+        tail: 'tv-tail', owned: [], opening: null,
+        recorded: { seconds: 0, count: 0 }, priorStartMs: null, draft: null, expanded: true,
     };
-    return { ctx, lifecycle, controls, results };
+    board.add(timer);
+    return timer;
 }
 
-function countup(overrides: Partial<CountupTimer> = {}): CountupTimer {
-    return {
-        id: 'c1', taskId: 'tv-inline:notes/a.md:seq:1', taskName: 'A', taskOriginalText: '- [ ] A', taskFile: 'notes/a.md',
-        startTimeMs: Date.now(), pausedElapsedTime: 0, elapsedTime: 0, phase: 'work', isRunning: true, runState: 'running',
-        sessionCount: 0, recordedElapsedTime: 0, isExpanded: true, intervalId: null, recordMode: 'self',
-        parserId: 'tv-inline', taskColor: '', pendingRecord: null, timerType: 'countup',
-        ...overrides,
-    } as CountupTimer;
-}
+const POMODORO: Measure = { type: 'interval', source: 'pomodoro', groups: pomodoroGroups(25, 5), at: START_CURSOR };
+const RUN = [t('timer.suspend'), t('timer.finish')];
 
-function interval(overrides: Partial<IntervalTimer> = {}): IntervalTimer {
-    return {
-        id: 'i1', taskId: 'tv-inline:notes/a.md:seq:1', taskName: 'A', taskOriginalText: '- [ ] A', taskFile: 'notes/a.md',
-        startTimeMs: Date.now() - 300_000, pausedElapsedTime: 0, phase: 'break', isRunning: true, runState: 'running',
-        sessionCount: 0, recordedElapsedTime: 0, isExpanded: true, intervalId: null, recordMode: 'child',
-        parserId: 'tv-inline', taskColor: '', pendingRecord: null, timerType: 'interval', intervalSource: 'pomodoro',
-        groups: [{ repeatCount: 1, segments: [
-            { label: 'Work', durationSeconds: 1500, type: 'work' },
-            { label: 'Break', durationSeconds: 300, type: 'break' },
-        ] }],
-        currentGroupIndex: 0, currentSegmentIndex: 1, currentRepeatIndex: 0,
-        segmentTimeRemaining: 0, totalElapsedTime: 1800, totalDuration: 1800,
-        ...overrides,
-    } as IntervalTimer;
-}
+describe('the controls follow the session alone', () => {
+    it('running and waiting to record: ⏸ and ■, for every kind', () => {
+        const h = build();
+        for (const measure of [{ type: 'countup' } as Measure, { type: 'countdown', totalSeconds: 60 } as Measure, POMODORO]) {
+            expect(h.controls(timerIn(h.board, { kind: 'running', from: 0 }, measure))).toEqual(RUN);
+            expect(h.controls(timerIn(h.board,
+                { kind: 'pending', record: { endMs: 0, seconds: 0, then: 'close' } }, measure))).toEqual(RUN);
+        }
+    });
 
-describe('a run stopped under a second and not recorded is not "never started"', () => {
+    it('suspended: ▶ and ■, for every kind', () => {
+        const h = build();
+        for (const measure of [{ type: 'countup' } as Measure, POMODORO]) {
+            expect(h.controls(timerIn(h.board, { kind: 'suspended' }, measure))).toEqual([t('timer.resume'), t('timer.finish')]);
+        }
+    });
+});
+
+describe('a run stopped under a second and not recorded waits to record', () => {
     afterEach(() => vi.useRealTimers());
 
-    it('■ at 0.5 s whose name cannot be written: no ▶ Start, ■ is there to retry, ✕ asks first', async () => {
+    it('■ at 0.5 s whose name cannot be written: no start button, ■ is there to retry, ✕ asks first', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date(2026, 8, 21, 9, 0, 0));
         const h = build({ flushOk: false });
-        const timer = countup();
-        h.ctx.timers.set(timer.id, timer);
+        const timer = timerIn(h.board, { kind: 'running', from: 0 });
 
         vi.setSystemTime(new Date(2026, 8, 21, 9, 0, 0, 500));
-        await h.lifecycle.finishTimer(timer);
+        await h.lifecycle.stop(timer, 'close');
 
-        expect(h.ctx.timers.has(timer.id)).toBe(true);
-        expect(timer.pendingRecord?.endMs).toBe(new Date(2026, 8, 21, 9, 0, 0, 500).getTime());
-        expect(timer.pendingRecord?.then).toBe('close');
-        expect(timer.elapsedTime).toBe(0);
-        expect(timer.sessionCount).toBe(0);
+        expect(h.board.has(timer)).toBe(true);
+        expect(timer.session).toEqual({
+            kind: 'pending',
+            record: { endMs: new Date(2026, 8, 21, 9, 0, 0, 500).getTime(), seconds: 0, then: 'close' },
+        });
+        expect(timer.recorded).toEqual({ seconds: 0, count: 0 });
         const labels = h.controls(timer);
         expect(labels).not.toContain(t('timer.start'));
-        expect(labels).toContain(t('timer.finish'));
+        expect(labels).toEqual(RUN);
+        expect(h.lifecycle.close(timer, false)).toBe('confirm');
     });
-
-    it('a timer that has not run shows ▶ Start and holds nothing', () => {
-        const h = build();
-        const timer = countup({ isRunning: false, startTimeMs: 0 });
-        expect(h.controls(timer)).toEqual([t('timer.start')]);
-        expect(timer.pendingRecord).toBeNull();
-    });
-
-    // 'stoppedAtMs alone, with nothing elapsed, is an unrecorded run' を削除:
-    // stoppedAtMs は無くなり、記録待ちは常に pendingRecord（endMs と固定した
-    // seconds を持つ）で表す。「0 秒の走行でも未記録なら保持する」という同じ
-    // 意図は、上の '■ at 0.5 s...' が pendingRecord ごと既に固定している。
-});
-
-describe('an interval whose automatic end was not recorded offers only ■', () => {
-    afterEach(() => vi.useRealTimers());
-
-    it('the last segment ends, the record fails: the controls are ■ alone', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(new Date(2026, 8, 21, 9, 30, 0));
-        const h = build({ recordOk: false });
-        const timer = interval();
-        h.ctx.timers.set(timer.id, timer);
-
-        (h.lifecycle as unknown as { tick(id: string): void }).tick(timer.id);
-        await vi.waitFor(() => expect(timer.phase).toBe('break'));
-        await new Promise(r => setTimeout(r, 0));
-
-        expect(h.ctx.timers.has(timer.id)).toBe(true);
-        expect(timer.isRunning).toBe(false);
-        expect(timer.segmentTimeRemaining).toBe(0);
-        expect(timer.pendingRecord).not.toBeNull();
-        expect(h.controls(timer)).toEqual([t('timer.stop')]);
-    });
-
-    // 'a segment stopped with time left (restored from storage) still offers
-    // ▶ and ■' を削除: work/break で isRunning=false かつ pendingRecord 無しを
-    // 「一時停止として ▶+■ を出す」旧分岐は無くなった。renderIntervalControls は
-    // pendingRecord だけで [stop] を出し、無ければ phase（idle/prepare/それ以外）
-    // だけで分ける — isRunning は見ない。今は常に [pause] を返す。
 });

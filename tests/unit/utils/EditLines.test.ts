@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
-import { editLines } from '../../../src/services/persistence/FileLines';
-import type { NamedRow } from '../../../src/services/persistence/FileLines';
+import { editorRow, editLines, type RowRef } from '../../../src/services/persistence/FileLines';
 import { Block } from '../../../src/services/persistence/utils/Placement';
 
 /**
@@ -14,7 +13,7 @@ describe('editLines', () => {
     it('answers the lines the write left and its report, and leaves the lines handed in alone', () => {
         const handed = [...note];
         const edited = editLines('n.md', handed, '\n', (draft, _eol, session) => {
-            const at = session.row({ line: 1, text: '- [ ] a', key: contentKeyOf(note) });
+            const at = session.row(editorRow(1, '- [ ] a', contentKeyOf(note)));
             if (at === null) return false;
             draft.rewrite(at, '- [x] a');
             draft.put({ at: at + 1, parent: null, indent: '' }, Block.read(['- [ ] a next']));
@@ -30,7 +29,7 @@ describe('editLines', () => {
 
     it('refuses a line the editor showed otherwise, by the editor\'s text', () => {
         const edited = editLines('n.md', note, '\n', (draft, _eol, session) => {
-            const at = session.row({ line: 1, text: '  - [ ] b  ', key: contentKeyOf(note) });
+            const at = session.row(editorRow(1, '  - [ ] b  ', contentKeyOf(note)));
             if (at === null) return false;
             draft.rewrite(at, '- [x] b');
             return true;
@@ -44,7 +43,7 @@ describe('editLines', () => {
         const twins = ['# Note', '- [ ] a', '- [ ] a'];
         const shown = ['メモ', ...twins];
         const edited = editLines('n.md', twins, '\n', (draft, _eol, session) => {
-            const at = session.row({ line: 2, text: '- [ ] a', key: contentKeyOf(shown) });
+            const at = session.row(editorRow(2, '- [ ] a', contentKeyOf(shown)));
             if (at === null) return false;
             draft.rewrite(at, '- [x] a');
             return true;
@@ -54,7 +53,7 @@ describe('editLines', () => {
 
     it('finds no named row with nobody to ask, and tells whoever listens what it asked for', () => {
         const asked: string[] = [];
-        const row: NamedRow = { line: 2, subject: 'a', basis: { text: '- [ ] a' } };
+        const row: RowRef = { line: 2, subject: 'a', basis: { text: '- [ ] a' }, in: { reading: 'n.1' } };
         const edited = editLines('n.md', note, '\n', (_draft, _eol, session) => session.row(row) !== null, {
             asked: (subject) => asked.push(subject),
         });
@@ -64,7 +63,7 @@ describe('editLines', () => {
 
     it('refuses a write that would change what another line is', () => {
         const edited = editLines('n.md', ['- [ ] a', '    - [ ] child'], '\n', (draft, _eol, session) => {
-            const at = session.row({ line: 0, text: '- [ ] a', key: contentKeyOf(['- [ ] a', '    - [ ] child']) });
+            const at = session.row(editorRow(0, '- [ ] a', contentKeyOf(['- [ ] a', '    - [ ] child'])));
             if (at === null) return false;
             draft.rewrite(at, 'a');
             return true;

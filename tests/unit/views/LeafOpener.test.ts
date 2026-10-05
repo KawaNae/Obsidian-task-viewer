@@ -4,6 +4,7 @@ import {
     openLeafFromState, parseLeafPosition, defaultPositionFor,
 } from '../../../src/services/viewConfig/LeafOpener';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import { ALL_VIEWS } from '../../../src/views/ViewDescriptors';
 import type { TaskViewerSettings } from '../../../src/types';
 
 /**
@@ -63,8 +64,18 @@ describe('defaultPositionFor', () => {
         expect(defaultPositionFor(settings, 'timer-view')).toBe('right');
     });
 
+    it('reads every view of the table from a settings field of its own', () => {
+        // The field is the descriptor's; no two views share a home.
+        const fields = ALL_VIEWS.map(d => d.positionField);
+        expect(new Set(fields).size).toBe(fields.length);
+        expect([...fields].sort()).toEqual(Object.keys(DEFAULT_SETTINGS.defaultViewPositions).sort());
+        for (const d of ALL_VIEWS) {
+            expect(defaultPositionFor(settings, d.type), d.type).toBe(settings.defaultViewPositions[d.positionField]);
+        }
+    });
+
     it('puts a view with no configured home on the right', () => {
-        // The log view is the one outside the registry.
+        // The log view is the one outside the view table.
         expect(defaultPositionFor(settings, 'task-viewer-log-view')).toBe('right');
     });
 });

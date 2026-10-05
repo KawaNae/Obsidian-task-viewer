@@ -1,4 +1,4 @@
-import { ItemView, type View, type WorkspaceLeaf } from 'obsidian';
+import { ItemView, TFile, type App, type View, type WorkspaceLeaf } from 'obsidian';
 
 /**
  * The content element of a leaf's view, or undefined when the view has none.
@@ -13,15 +13,57 @@ export function viewContentEl(leaf: WorkspaceLeaf): HTMLElement | undefined {
 }
 
 /**
- * `refresh()` is this plugin's own convention for "redraw yourself", not an
- * Obsidian one, so no Obsidian type mentions it. Naming the shape says which
- * method we are reaching for; `as any` said only that we had given up.
+ * The note a control stands in: the file of the leaf whose view holds `el`
+ * (a note's editor, the Properties view beside it), in any window. Null
+ * when no leaf holds it (a hover preview) or its view shows no file. Not
+ * the active file: a control in the leaf beside the active one is about
+ * its own leaf's note.
  */
-interface RefreshableView extends View {
-    refresh?: () => void;
+export function fileOfElement(app: App, el: Node): TFile | null {
+    let found: TFile | null = null;
+    app.workspace.iterateAllLeaves((leaf) => {
+        if (found || !leaf.view.containerEl.contains(el)) return;
+        const file = (leaf.view as View & { file?: unknown }).file;
+        if (file instanceof TFile) found = file;
+    });
+    return found;
 }
 
-/** Ask a view to redraw, if it is one of ours. */
-export function refreshView(view: View): void {
-    (view as RefreshableView).refresh?.();
+/**
+ * The three events a view of ours hears from the plugin. Neither is an Obsidian
+ * convention, so no Obsidian type mentions them; naming the shape says which
+ * method we are reaching for.
+ *
+ * - `redraw()` — something the view draws from changed (settings saved). The
+ *   view keeps where it is: the dates it shows, its scroll.
+ * - `onDayRolled()` — the visual day changed. Each view decides what following
+ *   the new day means; one without its own answer just redraws.
+ * - `onMinute()` — a minute passed (the plugin's one clock, `MinuteClock`). A
+ *   view that draws the time of day (the now-line) moves it; others ignore it.
+ *
+ * They used to share one name, `refresh()`, whose meaning differed by view:
+ * Timeline and Schedule went back to today on it, so every settings save
+ * moved them off the day the user was looking at.
+ */
+interface TaskViewerView extends View {
+    redraw?: () => void;
+    onDayRolled?: () => void;
+    onMinute?: () => void;
+}
+
+/** Tell a view of ours that settings changed: redraw in place. */
+export function redrawView(view: View): void {
+    (view as TaskViewerView).redraw?.();
+}
+
+/** Tell a view of ours that the visual day changed. */
+export function notifyDayRolled(view: View): void {
+    const v = view as TaskViewerView;
+    if (v.onDayRolled) v.onDayRolled();
+    else v.redraw?.();
+}
+
+/** Tell a view of ours that a minute passed. */
+export function notifyMinute(view: View): void {
+    (view as TaskViewerView).onMinute?.();
 }

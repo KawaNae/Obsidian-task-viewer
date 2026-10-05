@@ -107,7 +107,7 @@
     width: 1px;
     background: var(--tv-border);
     pointer-events: none;
-    z-index: 0;
+    z-index: var(--z-base);
 }
 
 .cal-day-cell {

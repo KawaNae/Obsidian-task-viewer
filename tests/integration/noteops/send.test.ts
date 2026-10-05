@@ -40,7 +40,7 @@ interface Sent {
 function send(name: string, to: unknown, frontmatter: unknown[] = [], prelude = ''): Sent {
     const result = obsidianEval(`(async () => {
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         const before = new Set(document.querySelectorAll('.notice'));
         ${prelude}
@@ -149,16 +149,16 @@ function startTimer(name: string, mode: 'child' | 'sibling'): { id: string; targ
     const result = obsidianEval(`(async () => {
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
         const widget = plugin.getTimerWidget();
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
-        const before = new Set(widget.timers.keys());
-        widget.startTimer({ taskId: task.id, taskName: task.content, taskFile: task.file, taskOriginalText: task.originalText,
-            timerTargetId: task.anchor, timerType: 'countup', recordMode: ${JSON.stringify(mode)}, autoStart: true });
-        const timer = [...widget.timers.values()].find(t => t.timerType === 'countup' && !before.has(t.id));
+        const before = new Set(widget.board.values().map(t => t.id));
+        widget.startTimer(task, ${JSON.stringify(mode)}, { kind: 'countup' });
+        const timer = widget.board.values().find(t => t.measure.type === 'countup' && !before.has(t.id));
+        if (!timer) throw new Error('no timer started on ' + ${JSON.stringify(name)});
         const end = Date.now() + 5000;
-        while (Date.now() < end && !(timer.tailRecordBlockId && !timer.opening)) await new Promise(r => setTimeout(r, 50));
+        while (Date.now() < end && !(timer.tail && !timer.opening)) await new Promise(r => setTimeout(r, 50));
         await new Promise(r => setTimeout(r, 300));
-        return JSON.stringify({ id: timer.id, target: timer.timerTargetId, tail: timer.tailRecordBlockId });
+        return JSON.stringify({ id: timer.id, target: timer.subject.anchor, tail: timer.tail });
     })()`);
     if (result && typeof result === 'object' && 'error' in (result as object)) {
         throw new Error(`eval failed: ${(result as { error: string }).error}`);
@@ -168,7 +168,7 @@ function startTimer(name: string, mode: 'child' | 'sibling'): { id: string; targ
 
 /** The note the timer `id` finds its lines in, or null when it is closed. */
 function timerFile(id: string): string | null {
-    return obsidianEval(`JSON.stringify(app.plugins.plugins['obsidian-task-viewer'].getTimerWidget().timers.get(${JSON.stringify(id)})?.taskFile ?? null)`) as string | null;
+    return obsidianEval(`JSON.stringify(app.plugins.plugins['obsidian-task-viewer'].getTimerWidget().board.get(${JSON.stringify(id)})?.file ?? null)`) as string | null;
 }
 
 /**
@@ -186,11 +186,11 @@ function timerFileShown(id: string, expected: string | null): string | null {
 }
 
 /** Press ⏸ (record and suspend) on the timer `id`, or ■ (record and close), and wait for it. */
-function stopTimer(id: string, how: 'suspendTimer' | 'finishTimer'): void {
+function stopTimer(id: string, how: 'suspend' | 'close'): void {
     obsidianEval(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.timers.get(${JSON.stringify(id)});
-        if (timer) await widget.lifecycle.${how}(timer);
+        const timer = widget.board.get(${JSON.stringify(id)});
+        if (timer) await widget.lifecycle.stop(timer, ${JSON.stringify(how)});
         await new Promise(r => setTimeout(r, 500));
         return JSON.stringify(true);
     })()`);
@@ -200,7 +200,8 @@ function stopTimer(id: string, how: 'suspendTimer' | 'finishTimer'): void {
 function closeTimer(id: string): void {
     obsidianEval(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        if (widget.timers.has(${JSON.stringify(id)})) widget.lifecycle.closeTimer(${JSON.stringify(id)});
+        const timer = widget.board.get(${JSON.stringify(id)});
+        if (timer) widget.lifecycle.close(timer, true);
         await new Promise(r => setTimeout(r, 500));
         return JSON.stringify(true);
     })()`);
@@ -227,7 +228,7 @@ describe('sending a row a timer runs on (段 B4)', () => {
         expect(timerFileShown(timer.id, NEW)).toBe(NEW);
         expect(readTestFile(SRC)).toBe([`- [[${NEW}]]`, '- [ ] 残る', ''].join('\n'));
 
-        stopTimer(timer.id, 'suspendTimer');
+        stopTimer(timer.id, 'suspend');
         const made = readTestFile(`${NEW}.md`)!.split('\n');
         const record = made.find(line => line.includes(`^${timer.tail}`));
         expect(record).toMatch(/@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}>\d{2}:\d{2}/);
@@ -290,13 +291,18 @@ const viewOf = which => {
     const el = panel()?.querySelector('.tv-source-editor__' + which + ' .cm-content');
     return el ? (el.cmTile?.view ?? el.cmView?.rootView?.view ?? null) : null;
 };
+/** What is said under the row of \`input\`: its errors, or what is not an error. */
+const saidUnder = (input, errors) => {
+    const el = input?.closest('.tv-form__row')?.nextElementSibling;
+    return el ? [...el.children].filter(c => c.classList.contains('tv-form__error') === errors).map(c => c.textContent) : [];
+};
 const state = () => ({
     open: !!panel(),
     closing: !!document.querySelector('.tv-overlay.is-closing'),
     folder: inputs()[0]?.value ?? null,
     name: inputs()[1]?.value ?? null,
     heading: inputs()[2]?.value ?? null,
-    says: shown(panel()?.querySelector('.tv-send__says')) ? panel().querySelector('.tv-send__says').textContent : null,
+    says: saidUnder(inputs()[2], false).join(' ') || null,
     asking: shown(panel()?.querySelector('.tv-form__ask')),
     canSend: panel() ? !panel().querySelector('.tv-form__buttons .mod-cta').disabled : false,
     editors: panel()?.querySelectorAll('.tv-send__rows .cm-content').length ?? 0,
@@ -352,16 +358,16 @@ interface DialogState {
 /** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu (a card of the hub's). */
 function openDialog(name: string): DialogState {
     return onDialog<DialogState>(`
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         // The card menu the hub's cards open, made as a hub first opens.
-        if (!plugin.hubMenuHandler) {
+        if (!plugin.taskHub.cards) {
             plugin.openTaskHub(task.id);
             await until(() => document.querySelector('.task-hub'));
             document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
             await until(() => !document.querySelector('.task-hub'));
         }
-        await plugin.hubMenuHandler.showContextMenu(0, 0, task);
+        await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
         const menu = plugin.menuPresenter.currentMenu;
         const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
         if (!item) throw new Error('no send in the menu');
@@ -415,6 +421,43 @@ describe('the send dialog', () => {
         `);
         expect(sent).toEqual({ open: false, notices: 0 });
         expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす', '    - [ ] 子2', '- [x] 済み', ''].join('\n'));
+    });
+
+    it('says why each row\'s draft cannot be written under that row, two rows of the same reason each', async () => {
+        await writeIndexedTestFile(SRC, ['- [ ] 一つ目', '- [ ] 二つ目', ''].join('\n'));
+        const said = onDialog<{ rows: string[][]; canSend: boolean }>(`
+            // The menu sends one row; the dialog is asked for both, as a send of two rows is made.
+            const ops = plugin.getNoteOps();
+            const rows = ['一つ目', '二つ目'].map(name => plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === name));
+            const previewSend = ops.previewSend;
+            ops.previewSend = () => previewSend.call(ops, rows.map(row => row.id));
+            try {
+                if (!plugin.taskHub.cards) {
+                    plugin.openTaskHub(rows[0].id);
+                    await until(() => document.querySelector('.task-hub'));
+                    document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
+                    await until(() => !document.querySelector('.task-hub'));
+                }
+                await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, rows[0]);
+                const menu = plugin.menuPresenter.currentMenu;
+                const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
+                menu.hide();
+                item.callback(new MouseEvent('click'));
+                await until(() => panel() && panel().querySelectorAll('.tv-source-editor__parent .cm-content').length === 2);
+            } finally {
+                ops.previewSend = previewSend;
+            }
+            // Each row's first line made no task line.
+            for (const content of panel().querySelectorAll('.tv-source-editor__parent .cm-content')) {
+                const view = content.cmTile?.view ?? content.cmView?.rootView?.view;
+                view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'ただの行' } });
+            }
+            await sleep(200);
+            const rowSays = [...panel().querySelectorAll('.tv-send__row-says')].map(el => [...el.children].map(c => c.className + ': ' + c.textContent));
+            return JSON.stringify({ rows: rowSays, canSend: state().canSend });
+        `);
+        const notTask = 'tv-form__error: 1行目がタスクの行ではありません。';
+        expect(said).toEqual({ rows: [[notTask], [notTask]], canSend: false });
     });
 
     it('shows a subtree it cannot open in the editor as it stands, from the first column, and sends it so', async () => {

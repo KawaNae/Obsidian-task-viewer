@@ -30,7 +30,7 @@ function idOf(session: VaultSession, content: string): string {
 describe('rowSnapshot', () => {
     it('the copy and the lines of the disk, the copy on its own line of them', async () => {
         const { session } = await open();
-        const snapshot = await session.index.rowSnapshot(idOf(session, 'A'));
+        const snapshot = await session.ops.rowSnapshot(idOf(session, 'A'));
         expect(snapshot?.lines).toEqual(NOTE);
         expect(snapshot?.task.content).toBe('A');
         expect(snapshot?.lines[snapshot.task.line]).toBe(snapshot?.task.originalText);
@@ -39,7 +39,7 @@ describe('rowSnapshot', () => {
 
     it('what the row inherits is read off the snapshot, for a child row as well', async () => {
         const { session } = await open();
-        const snapshot = (await session.index.rowSnapshot(idOf(session, 'child')))!;
+        const snapshot = (await session.ops.rowSnapshot(idOf(session, 'child')))!;
         expect(inheritedAt(snapshot.lines, snapshot.task.line, DEFAULT_SETTINGS).map(v => v.yaml)).toEqual([['owner: me']]);
     });
 
@@ -48,10 +48,10 @@ describe('rowSnapshot', () => {
         const id = idOf(session, 'A');
         contents.set(FILE, OUTSIDE.join('\n'));
 
-        expect(await session.index.rowSnapshot(id)).toBeUndefined();
+        expect(await session.ops.rowSnapshot(id)).toBeUndefined();
         expect(Notice.messages).toEqual([t('notice.readAgain', { subject: 'A' })]);
 
-        const snapshot = await session.index.rowSnapshot(idOf(session, 'A'));
+        const snapshot = await session.ops.rowSnapshot(idOf(session, 'A'));
         expect(snapshot?.lines).toEqual(OUTSIDE);
         expect(snapshot?.task.line).toBe(5);
     });
@@ -59,9 +59,9 @@ describe('rowSnapshot', () => {
     it('a name from before a write of ours: the copy that write left, in the lines it left', async () => {
         const { contents, session } = await open();
         const id = idOf(session, 'A');
-        expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
 
-        const snapshot = await session.index.rowSnapshot(id);
+        const snapshot = await session.ops.rowSnapshot(id);
         expect(snapshot?.task.statusChar).toBe('x');
         expect(snapshot?.lines.join('\n')).toBe(contents.get(FILE));
     });
@@ -69,9 +69,9 @@ describe('rowSnapshot', () => {
     it('a row the index no longer holds: none', async () => {
         const { session } = await open();
         const id = idOf(session, 'A');
-        expect(await session.index.deleteTask(id)).toBe(true);
+        expect(await session.ops.deleteTask(id)).toBe(true);
         Notice.messages.length = 0;
-        expect(await session.index.rowSnapshot(id)).toBeUndefined();
+        expect(await session.ops.rowSnapshot(id)).toBeUndefined();
     });
 });
 
@@ -80,17 +80,17 @@ describe('rowSnapshot while the note is dragged', () => {
         const { session } = await open();
         const id = idOf(session, 'A');
         session.index.setDraggingFile(FILE);
-        expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(id, { statusChar: 'x' })).written).toBe(true);
         Notice.messages.length = 0;
 
         // The store still holds the reading from before the write, under its name.
         expect(session.index.getTask(id)?.id).toBe(id);
-        expect(await session.index.rowSnapshot(id)).toBeUndefined();
+        expect(await session.ops.rowSnapshot(id)).toBeUndefined();
         expect(Notice.messages).toEqual([]);
 
         session.index.setDraggingFile(null);
         await session.settle(FILE);
-        const snapshot = await session.index.rowSnapshot(idOf(session, 'A'));
+        const snapshot = await session.ops.rowSnapshot(idOf(session, 'A'));
         expect(snapshot?.task.statusChar).toBe('x');
     });
 });

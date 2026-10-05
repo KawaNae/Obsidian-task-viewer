@@ -23,6 +23,17 @@ describe('TagExtractor', () => {
             expect(TagExtractor.fromContent('plain text')).toEqual([]);
         });
 
+        it('takes no tag inside a link or code', () => {
+            expect(TagExtractor.fromContent('see [[報告書#見出し]] #work')).toEqual(['work']);
+            expect(TagExtractor.fromContent('see [[note#heading]]')).toEqual([]);
+            expect(TagExtractor.fromContent('run `#x` now')).toEqual([]);
+            expect(TagExtractor.fromContent('![[画像#部分]] [見出し](#anchor) [#t](u)')).toEqual([]);
+        });
+
+        it('takes a tag right after a link, as it always did', () => {
+            expect(TagExtractor.fromContent('[[x]]#after')).toEqual(['after']);
+        });
+
         it('does not match # at word start', () => {
             // \B requires non-word boundary before #
             expect(TagExtractor.fromContent('item #tag')).toEqual(['tag']);

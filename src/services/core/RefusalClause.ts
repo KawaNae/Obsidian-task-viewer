@@ -14,7 +14,7 @@ export type CheckReason =
     | { kind: 'unreadable' };
 
 /**
- * An operation the index did not make, as it is told (`TaskIndex.reportRefusal`):
+ * An operation the index did not make, as it is told (`Operations.reportRefusal`):
  * refused by the write, or given up by the check before it.
  */
 export type IndexRefusal = Omit<Refusal, 'reason'> & { reason: RefusalReason | CheckReason };
@@ -22,8 +22,8 @@ export type IndexRefusal = Omit<Refusal, 'reason'> & { reason: RefusalReason | C
 /**
  * Why a write was refused, as a clause: the one table of the reasons, which
  * every notice of a refusal gives in its own frame — a write not made
- * (`TaskIndex.reportRefusal`), a completion written without its flow
- * (`FlowExecutor.reportNotRun`).
+ * (`Operations.reportRefusal`), a completion written without its flow
+ * (`FlowNotices.firing`).
  */
 export function refusalClause(reason: RefusalReason): string {
     switch (reason.kind) {

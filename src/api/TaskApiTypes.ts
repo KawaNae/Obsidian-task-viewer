@@ -1,5 +1,7 @@
 import type { FilterState } from '../services/filter/FilterTypes';
 import type { SortProperty, SortDirection } from '../services/sort/SortTypes';
+import type { Issue } from '../utils/values/Read';
+import { issueText } from '../utils/values/IssueText';
 
 // ── Normalized task (public API surface) ──
 
@@ -39,12 +41,42 @@ export interface NormalizedTask {
 
 // ── Error ──
 
+/** How an error's text names a parameter: by the API's key, or by the CLI's flag for it (`toCliName`). */
+export type ParamNamer = (key: string) => string;
+
+/**
+ * An error the API answers with. One about a parameter carries the
+ * parameter's key (`param`) and words its text through a namer, so a caller
+ * that spells the parameters otherwise — the CLI's `parent-id` for
+ * `parentId` — tells it in its own spelling (`textFor`).
+ */
 export class TaskApiError extends Error {
+    /** The text in the API's spelling, without the pointer to api.help(). */
     readonly rawMessage: string;
-    constructor(message: string) {
-        super(`${message} — See api.help() for reference`);
+    /** The key of the parameter the error is about, when it is about one. */
+    readonly param?: string;
+    private readonly text: (name: ParamNamer) => string;
+
+    constructor(message: string);
+    constructor(message: (name: ParamNamer) => string, param: string);
+    constructor(message: string | ((name: ParamNamer) => string), param?: string) {
+        const text = typeof message === 'string' ? () => message : message;
+        const raw = text(key => key);
+        super(`${raw} — See api.help() for reference`);
         this.name = 'TaskApiError';
-        this.rawMessage = message;
+        this.rawMessage = raw;
+        this.text = text;
+        if (param !== undefined) this.param = param;
+    }
+
+    /** The text with every parameter named by `name`. */
+    textFor(name: ParamNamer): string {
+        return this.text(name);
+    }
+
+    /** The error a parameter's value gives when read: `issue` told of `param`, `given` quoted. */
+    static ofIssue(issue: Issue, param: string, given?: string): TaskApiError {
+        return new TaskApiError(name => issueText(issue, name(param), given), param);
     }
 }
 
@@ -61,38 +93,66 @@ export interface PaginationParams {
     limit?: number;    // default: 100, 0=count-only, Infinity=unlimited
 }
 
-// ── list ──
+// ── Filters ──
 
-export interface ListParams extends PaginationParams {
+/**
+ * The simple per-field filters every query takes: each is a condition of
+ * its own (`QueryShorthand`), taken together with the rest of the query.
+ */
+export interface SimpleFilterParams {
     file?: string;
     status?: string | string[];
     tag?: string | string[];
     content?: string;
-    date?: string;            // YYYY-MM-DD or preset
-    from?: string;
-    to?: string;
-    due?: string;
+    due?: string;             // YYYY-MM-DD or preset
     leaf?: boolean;
     property?: string;        // "key:value" — filter by custom property
     color?: string | string[];   // card color filter
     type?: string | string[];    // task notation (taskviewer, tasks, dayplanner)
     root?: boolean;              // root tasks only (no parent)
-    filter?: FilterState;     // overrides simple filter fields above
+}
+
+/** A query's FilterStates, taken together with each other and the shorthand. */
+export interface FilterSourceParams {
+    filter?: FilterState;
     filterFile?: string;      // vault file path (.json FilterState or .md view template)
     list?: string;            // pinned list name (when filterFile is a .md template)
+}
+
+/**
+ * The window shorthand: `date` is `period overlaps date`, `from` and `to`
+ * `period overlaps { from, to }` (open on a side left out). Each is a date,
+ * a date and a time, or a preset.
+ */
+export interface WindowParams {
+    date?: string;
+    from?: string;
+    to?: string;
+}
+
+/**
+ * The visual day boundary of one query, a whole number from 0 to 23: the
+ * copies' spans, the windows and the order are read with it. The setting's
+ * when absent; 0 asks by calendar days.
+ */
+export interface StartHourParams {
+    startHour?: number;
+}
+
+// ── list ──
+
+export interface ListParams extends PaginationParams, SimpleFilterParams, FilterSourceParams, WindowParams, StartHourParams {
     sort?: ApiSortRule[];
 }
 
 // ── today ──
 
-export interface TodayParams extends PaginationParams {
-    leaf?: boolean;
-    sort?: ApiSortRule[];
-}
+/** `list`'s params but the window: `today` is `date=today`. */
+export type TodayParams = Omit<ListParams, keyof WindowParams>;
 
 // ── get ──
 
-export interface GetParams {
+export interface GetParams extends StartHourParams {
     id: string;
 }
 
@@ -153,55 +213,26 @@ export interface DuplicateResult {
     duplicated: string;
 }
 
-export interface TasksForDateRangeParams extends PaginationParams {
-    /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
+export interface TasksForDateRangeParams extends PaginationParams, SimpleFilterParams, FilterSourceParams, StartHourParams {
+    /** The window's first day, as list's `from`: a date, a date and a time, or a preset. */
     from: string;
-    /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
+    /** The window's last day, as list's `to`: a date, a date and a time, or a preset. */
     to: string;
-    /** Simple filters, same format as `list` (no date/from/to — the window above is the only date judgment). */
-    file?: string;
-    status?: string | string[];
-    tag?: string | string[];
-    content?: string;
-    due?: string;
-    leaf?: boolean;
-    property?: string;        // "key:value" — filter by custom property
-    color?: string | string[];   // card color filter
-    type?: string | string[];    // task notation (taskviewer, tasks, dayplanner)
-    root?: boolean;              // root tasks only (no parent)
-    filter?: FilterState;     // overrides simple filter fields above
-    filterFile?: string;      // vault file path (.json FilterState or .md view template)
-    list?: string;            // pinned list name (when filterFile is a .md template)
     sort?: ApiSortRule[];
 }
 
 // ── categorizedTasksForDateRange ──
 
-export interface CategorizedTasksForDateRangeParams {
-    /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
+export interface CategorizedTasksForDateRangeParams extends SimpleFilterParams, FilterSourceParams, StartHourParams {
+    /** The window's first day, as list's `from`: a date, a date and a time, or a preset. */
     from: string;
-    /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
+    /** The window's last day, as list's `to`: a date, a date and a time, or a preset. */
     to: string;
-    /** Simple filters, same format as `list` (no date/from/to — the window above is the only date judgment). */
-    file?: string;
-    status?: string | string[];
-    tag?: string | string[];
-    content?: string;
-    due?: string;
-    leaf?: boolean;
-    property?: string;
-    color?: string | string[];
-    type?: string | string[];
-    root?: boolean;
-    filter?: FilterState;
-    filterFile?: string;
-    list?: string;
 }
 
 export interface CategorizedTasksResult {
     allDay: NormalizedTask[];
     timed: NormalizedTask[];
-    dueOnly: NormalizedTask[];
 }
 
 export type CategorizedTasksForDateRangeResult = Record<string, CategorizedTasksResult>;

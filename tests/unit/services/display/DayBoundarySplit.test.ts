@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { dayBoundaryAt } from '../../../../src/services/display/DayBoundary';
 import {
     shouldSplitDisplayTask,
     splitDisplayTaskAtBoundary,
@@ -11,7 +10,7 @@ import {
     categorizeTasksForDate,
 } from '../../../../src/services/display/TaskDateCategorizer';
 import { splitTasks } from '../../../../src/services/display/TaskSplitter';
-import { getTaskDateRange } from '../../../../src/services/display/VisualDateRange';
+import { dayStart, visualDaysOf } from '../../../../src/utils/DayWindow';
 import type { DisplayTask, Task } from '../../../../src/types';
 import { makeTask } from '../../helpers/makeTask';
 
@@ -41,64 +40,44 @@ function splitCrosser(startHour: number): [DisplayTask, DisplayTask] {
     return splitDisplayTaskAtBoundary(dt, startHour);
 }
 
-describe('dayBoundaryAt', () => {
-    it('the minute before midnight is on the previous date', () => {
-        expect(dayBoundaryAt('2026-08-18', 0)).toEqual({
-            date: '2026-08-18', time: '00:00',
-            beforeDate: '2026-08-17', beforeTime: '23:59',
-        });
+describe('visual-day split: the head belongs to the day it started on', () => {
+    it('startHour=0: a task crossing midnight is drawn up to midnight, then from it', () => {
+        const [head, tail] = splitCrosser(0);
+        const midnight = dayStart('2026-08-18', 0);
+        expect(head.drawn).toEqual({ startMs: head.span!.startMs, endMs: midnight });
+        expect(tail.drawn).toEqual({ startMs: midnight, endMs: head.span!.endMs });
     });
 
-    it('the minute before any other boundary is on the same date', () => {
-        expect(dayBoundaryAt('2026-08-18', 5)).toEqual({
-            date: '2026-08-18', time: '05:00',
-            beforeDate: '2026-08-18', beforeTime: '04:59',
-        });
-    });
-
-    it('boundary and the minute before it are always one minute apart', () => {
-        for (const startHour of ALL_START_HOURS) {
-            const b = dayBoundaryAt('2026-08-18', startHour);
-            const gap = Date.parse(`${b.date}T${b.time}`) - Date.parse(`${b.beforeDate}T${b.beforeTime}`);
-            expect({ startHour, gap }).toEqual({ startHour, gap: 60_000 });
+    it.each(ALL_START_HOURS)('startHour=%i: a segment keeps its line values and the whole span', (startHour) => {
+        const whole = toDisplayTask(makeTask(crosserFor(startHour)), startHour);
+        for (const seg of splitCrosser(startHour)) {
+            const { startDate, startTime, endDate, endTime } = seg;
+            expect({ startDate, startTime, endDate, endTime }).toEqual(crosserFor(startHour));
+            expect(seg.span).toEqual(whole.span);
+            expect(seg.stated).toEqual(whole.stated);
         }
     });
-});
 
-describe('visual-day split: the head belongs to the day it started on', () => {
-    it('startHour=0: a task crossing midnight ends at 23:59 of the day it began', () => {
-        const [head, tail] = splitCrosser(0);
-
-        expect(`${head.effectiveEndDate} ${head.effectiveEndTime}`).toBe('2026-08-17 23:59');
-        expect(`${tail.effectiveStartDate} ${tail.effectiveStartTime}`).toBe('2026-08-18 00:00');
-        // Same values on the raw fields, which the write-back layer reads.
-        expect(`${head.endDate} ${head.endTime}`).toBe('2026-08-17 23:59');
-    });
-
-    it('startHour=0: the head is a timed segment, not a 24-hour all-day one', () => {
-        // A head carried a day too far measured 24.5h, which is past the 23.5h
-        // all-day threshold. The timeline column only reads the timed bucket,
-        // so the segment was dropped from the grid entirely.
-        const [head] = splitCrosser(0);
-        expect(classifyForSection(head, 0)).toBe('timed');
+    it.each(ALL_START_HOURS)('startHour=%i: the head is a timed segment, not an all-day one', (startHour) => {
+        const [head, tail] = splitCrosser(startHour);
+        expect(classifyForSection(head)).toBe('timed');
+        expect(classifyForSection(tail)).toBe('timed');
     });
 
     it.each(ALL_START_HOURS)('startHour=%i: the head occupies exactly one visual day', (startHour) => {
         const [head] = splitCrosser(startHour);
-        const range = getTaskDateRange(head, startHour);
-        expect(range.effectiveStart).toBe(range.effectiveEnd);
+        const days = visualDaysOf(head.drawn!, startHour);
+        expect(days.first).toBe(days.last);
     });
 
     it.each(ALL_START_HOURS)(
         'startHour=%i: the head ends before the tail begins, on separate visual days',
         (startHour) => {
-            // The reason the head ends a minute short of the boundary rather
-            // than on it (0f754e3d): overlapping visual days send the two
-            // segments of one task to different tracks in the greedy layout.
+            // Overlapping visual days send the two segments of one task to
+            // different tracks in the greedy layout (0f754e3d). The head ends
+            // on the boundary, and the moment before it is its last day.
             const [head, tail] = splitCrosser(startHour);
-            const headRange = getTaskDateRange(head, startHour);
-            const tailRange = getTaskDateRange(tail, startHour);
-            expect(headRange.effectiveEnd! < tailRange.effectiveStart!).toBe(true);
+            expect(visualDaysOf(head.drawn!, startHour).last < visualDaysOf(tail.drawn!, startHour).first).toBe(true);
         });
 });
 
@@ -145,8 +124,8 @@ describe('date-range clipping (AllDay lane / Calendar path)', () => {
         const dt = toDisplayTask(makeTask(task), startHour);
         return splitTasks([dt], { type: 'date-range', startHour, ...RANGE })
             .map(s => {
-                const r = getTaskDateRange(s, startHour);
-                return { start: r.effectiveStart, end: r.effectiveEnd };
+                const r = visualDaysOf(s.drawn!, startHour);
+                return { start: r.first, end: r.last };
             });
     }
 

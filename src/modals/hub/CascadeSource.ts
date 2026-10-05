@@ -1,7 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { Task, ScopeKeys } from '../../types';
-import { FilePropertyResolver } from '../../services/parsing/FilePropertyResolver';
-import type { ExtractedProperties } from '../../services/parsing/tree/BuiltinPropertyExtractor';
+import { BuiltinPropertyExtractor, type ExtractedProperties } from '../../services/parsing/tree/BuiltinPropertyExtractor';
+import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
 
 export type CascadeSourceKind = 'file' | 'section';
 
@@ -9,7 +9,8 @@ export type CascadeSourceKind = 'file' | 'section';
  * cascade 値の出所（file frontmatter か section property block か）を導出する。
  *
  * cascadeContext は値のみで出所メタデータを持たない（保存しない方針）。
- * file 層の寄与は FilePropertyResolver.extract（純関数）を metadataCache の
+ * file 層の寄与は索引と同じ読み（`PropertyValues.fromFrontmatter` と
+ * `BuiltinPropertyExtractor.extract`、純関数）を metadataCache の
  * frontmatter に適用すれば再現できるので、cascade 値と比較して一致すれば
  * file 由来、不一致（= section が上書き / 追加）なら section 由来と判定する。
  * 見出し単位の特定はしない（ユーザー決定: file / section の粗い区別で十分）。
@@ -18,7 +19,8 @@ export class CascadeSource {
     static fileLayer(app: App, task: Task, keys: ScopeKeys): ExtractedProperties {
         const file = app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return { properties: {} };
-        return FilePropertyResolver.extract(app.metadataCache.getFileCache(file)?.frontmatter, keys);
+        const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+        return BuiltinPropertyExtractor.extract(PropertyValues.fromFrontmatter(frontmatter, keys), keys);
     }
 
     /** color / linestyle / mask の cascade 出所。cascade 値がなければ null */

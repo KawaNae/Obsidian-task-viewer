@@ -1,9 +1,25 @@
 import type { DisplayTask } from '../../types';
-import { DateUtils } from '../../utils/DateUtils';
+import { spanDates } from '../../utils/TaskDates';
 
-export type SectionKind = 'allDay' | 'timed' | 'dueOnly' | null;
+/** A span this long or longer is drawn as an all-day task. */
+const ALL_DAY_MS = 23.5 * 60 * 60 * 1000;
 
-/** バケツを持つ 3 セクション（null を除いた SectionKind）。バケツキーと kind の一致を型で保証する。 */
+/**
+ * Whether a task with a span is drawn as an all-day task: its start is a
+ * bare date (a start date with no start time, or with no start an end date
+ * with no end time, a due standing in for the end as `spanDates` reads it),
+ * or it lasts 23h30m or more. The bare date is asked first, so a bare date
+ * on a day the clock changes (23 hours) is still all day.
+ */
+export function isAllDay(dt: Pick<DisplayTask, 'stated' | 'span'>): boolean {
+    const { startDate, startTime, endTime } = spanDates(dt.stated);
+    if (startDate ? !startTime : !endTime) return true;
+    return !!dt.span && dt.span.endMs - dt.span.startMs >= ALL_DAY_MS;
+}
+
+export type SectionKind = 'allDay' | 'timed' | null;
+
+/** バケツを持つ 2 セクション（null を除いた SectionKind）。バケツキーと kind の一致を型で保証する。 */
 export type Section = Exclude<SectionKind, null>;
 
 /**
@@ -19,46 +35,26 @@ export type Section = Exclude<SectionKind, null>;
  * バケツ内の描画順は TaskRenderOrder が所有する。
  *
  * 戻り値:
- *   - 'allDay':  effectiveStartTime 不在 or duration ≥ 23.5h
- *   - 'timed':   startTime あり、duration < 23.5h
- *   - 'dueOnly': start/end 不在で due のみ
- *   - null:      どのセクションにも属さない
+ *   - 'allDay':  {@link isAllDay}（開始が日付だけ、または長さ ≥ 23.5h）
+ *   - 'timed':   開始時刻あり、長さ < 23.5h
+ *   - null:      期間が無い（日付も期限も無い）
+ *
+ * 期限だけのタスクは期限から補った期間（`spanDates`）を持つので、日付の
+ * 期限は allDay、時刻つきの期限は timed になる。
  */
-export function classifyForSection(dt: DisplayTask, startHour: number): SectionKind {
-    if (!dt.effectiveStartDate && !dt.startDate && !dt.endDate) {
-        return dt.due ? 'dueOnly' : null;
-    }
-    if (!dt.effectiveStartDate) return null;
-
-    if (DateUtils.isAllDayTask(
-        dt.effectiveStartDate,
-        dt.effectiveStartTime,
-        dt.effectiveEndDate,
-        dt.effectiveEndTime,
-        startHour,
-    )) {
-        return 'allDay';
-    }
-
-    if (!dt.effectiveStartTime) return null;
-    return 'timed';
+export function classifyForSection(dt: DisplayTask): SectionKind {
+    if (!dt.span) return null;
+    return isAllDay(dt) ? 'allDay' : 'timed';
 }
 
 /**
  * filteredTasks をセクション別に振り分ける。同一 task が 'allDay' と 'timed' の両方に
  * 入ることは起こり得ない（render burst 修正の主目的）。
- *
- * 注意: timeline view において dueOnly バケツは GridRenderer で timed と一緒に
- * timeline 側へ流すが、TimelineSectionRenderer が `effectiveStartTime` 不在を skip するため
- * **現状 timeline view では描画されない**（既知の既存挙動）。schedule view 側は別経路で描画。
  */
-export function bucketBySection(
-    tasks: DisplayTask[],
-    startHour: number,
-): Record<Section, DisplayTask[]> {
-    const buckets: Record<Section, DisplayTask[]> = { allDay: [], timed: [], dueOnly: [] };
+export function bucketBySection(tasks: DisplayTask[]): Record<Section, DisplayTask[]> {
+    const buckets: Record<Section, DisplayTask[]> = { allDay: [], timed: [] };
     for (const dt of tasks) {
-        const kind = classifyForSection(dt, startHour);
+        const kind = classifyForSection(dt);
         if (kind !== null) buckets[kind].push(dt);
     }
     return buckets;

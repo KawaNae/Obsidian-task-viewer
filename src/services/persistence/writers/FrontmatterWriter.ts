@@ -1,29 +1,17 @@
 import { type App, TFile } from 'obsidian';
-import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
-import { HeadingInserter } from '../../../utils/HeadingInserter';
-import type { Section } from '../Destination';
-import { fileGone, processLines, type WriteAt, type WriteChannels, type WriteOutcome } from '../FileLines';
+import { fileGone, processLines, type WriteChannels, type WriteOutcome } from '../FileLines';
 
 /**
- * frontmatter と見出しへの書き込みを担当するクラス。frontmatter はノートの
+ * frontmatter への書き込みを担当するクラス。frontmatter はノートの
  * スコープ属性（中のタスクに継承される既定値）で、タスクは作らない。
  * 下請けの YAML 操作には FrontmatterLineEditor を使用。
  */
 export class FrontmatterWriter {
     constructor(
         private app: App,
-        private fileOps: FileOperations,
-        private channelOf: WriteChannels = () => undefined,
+        private channelOf: WriteChannels,
     ) {}
-
-    /**
-     * 指定ファイルの見出しの節に行を挿入する（見出し付きのタスク作成に使う
-     * 汎用操作）。見出しが存在しない場合はファイル末尾に作成する。
-     */
-    async insertLineUnderHeading(filePath: string, lineContent: string, to: Section): Promise<WriteAt> {
-        return HeadingInserter.writeUnderHeading(this.app, filePath, this.channelOf(filePath), lineContent, to);
-    }
 
     /**
      * Task を介さずに frontmatter のキーを設定・削除する汎用経路。
@@ -46,8 +34,8 @@ export class FrontmatterWriter {
         const hasSet = Object.values(updates).some(v => v !== null);
 
         // Reported like any other write: every row below a key added or
-        // removed here moves, and without the report the next scan could not
-        // be told which is which (see `WriteClaims.stateFor`).
+        // removed here moves, and the landing tells the index where each
+        // went (`WriteChannel.landed`).
         return processLines(this.app, file, this.channelOf(filePath), (draft) => {
             // Nothing to delete from: the file already reads as asked, the way
             // a rewrite to the same bytes does. Written, and nothing changes.

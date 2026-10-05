@@ -22,17 +22,16 @@ export interface TempTaskFields {
 }
 
 /**
- * Builds a synthetic raw {@link Task} suitable for one of:
- * - feeding through `TaskParser.format()` for string serialization
- * - `toDisplayTask(t, startHour, NO_TASK_LOOKUP)` for modal placeholders
+ * Builds a synthetic raw {@link Task} for display only: the create dialog's
+ * preview, through `toDisplayTask(t, startHour, NO_TASK_LOOKUP)`. A new line
+ * is written from its fields with `formatTaskLine`, never through a Task.
  *
  * Centralizing the construction keeps the substrate fields
  * (`childIds`, `childLines`, `tags`, `properties`) consistent across
  * temp-task call sites and makes `parserId` defaulting explicit.
  */
 export function createTempTask(fields: TempTaskFields): Task {
-    return createBaseTask({
-        id: fields.id,
+    const task = createBaseTask({
         file: fields.file ?? '',
         line: fields.line ?? 0,
         content: fields.content ?? '',
@@ -47,4 +46,5 @@ export function createTempTask(fields: TempTaskFields): Task {
         endTime: fields.endTime,
         due: fields.due,
     });
+    return { id: fields.id, ...task };
 }

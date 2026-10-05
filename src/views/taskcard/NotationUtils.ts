@@ -1,23 +1,16 @@
-import type { DisplayTask, Task } from '../../types';
+import type { Task } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
+
+const LEADING_DATE_RE = new RegExp(`^(${DateUtils.DATE_PATTERN})`);
 
 /**
- * Polymorphic notation label input. Effective fields (DisplayTask) are
- * preferred when present; raw fields (Task) act as fallback.
- *
- * Defined structurally rather than as `Task | DisplayTask` so child Task
- * objects (resolved from TaskIndex without conversion) and DisplayTask
- * parents both pass without a cast.
- *
- * CONTRACT — the raw fallback is load-bearing, do not remove: child-task
- * notation labels are built from raw Tasks (ChildItemBuilder walks children
- * via TaskReadService.getTask, which never converts to DisplayTask). The
- * label intentionally shows what is WRITTEN on the line (raw notation),
- * not the resolved schedule; parent-side callers pass raw startDate for
- * the same reason (one coordinate system for parent and children).
+ * What a notation label reads: the values written on the line. Child tasks
+ * (raw `Task`s from the index) and display copies both pass. The label shows
+ * what is WRITTEN on the line, not the resolved schedule; parent-side
+ * callers pass the raw startDate for the same reason (one coordinate system
+ * for parent and children).
  */
-type NotationInput =
-    Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime'>
-    & Partial<Pick<DisplayTask, 'effectiveStartDate' | 'effectiveStartTime' | 'effectiveEndDate' | 'effectiveEndTime'>>;
+type NotationInput = Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime'>;
 
 /**
  * @notation の構築・フォーマットユーティリティ。
@@ -25,21 +18,16 @@ type NotationInput =
  */
 export class NotationUtils {
     /**
-     * タスクの日時フィールドから @notation ラベルを構築する。
-     * effective フィールドが利用可能なら優先（E/ED 型でも表示可能）、
-     * 未設定なら raw フィールドにフォールバック。
+     * タスクの行に書かれた日時フィールドから @notation ラベルを構築する。
      * 例: @2026-02-10T14:00>15:00
      */
     static buildNotationLabel(task: NotationInput): string | null {
-        const startDate = task.effectiveStartDate || task.startDate;
-        const startTime = task.effectiveStartTime ?? task.startTime;
+        const { startDate, startTime, endDate, endTime } = task;
         if (!startDate && !startTime) return null;
         const parts: string[] = [];
         if (startDate) parts.push(startDate);
         if (startTime) parts.push(startTime);
         let notation = '@' + parts.join('T');
-        const endDate = task.effectiveEndDate ?? task.endDate;
-        const endTime = task.effectiveEndTime ?? task.endTime;
         if (endDate || endTime) {
             notation += '>';
             const endParts: string[] = [];
@@ -61,7 +49,7 @@ export class NotationUtils {
             // Inherited time-only: @T10:00 → use parent startDate
             return parentStartDate ? `@${parentStartDate}…` : notation;
         }
-        const dateMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+        const dateMatch = raw.match(LEADING_DATE_RE);
         if (!dateMatch) return notation;
         const datePart = dateMatch[1];
         // If notation is exactly @YYYY-MM-DD, show as-is; otherwise truncate

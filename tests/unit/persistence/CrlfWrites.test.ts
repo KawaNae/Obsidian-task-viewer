@@ -54,7 +54,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.index.updateTask(a.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(a.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -66,7 +66,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const removed = await session.index.deleteTask(a.id);
+        const removed = await session.ops.deleteTask(a.id);
         await session.settle(FILE);
 
         expect(removed).toBe(true);
@@ -81,7 +81,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(TIMED);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.index.duplicateTask(a.id);
+        const written = await session.ops.duplicateTask(a.id);
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -97,7 +97,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.index.insertLine(a.id, '- [ ] 子タスク', 'firstChild');
+        const { written } = await session.ops.insertLine(a.id, '- [ ] 子タスク', 'firstChild');
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -111,7 +111,7 @@ describe('a note written in CRLF', () => {
         );
         const weekly = session.index.getTasks().find(task => task.content === '週報')!;
 
-        await session.index.updateTask(weekly.id, { statusChar: 'x' });
+        await session.ops.updateTask(weekly.id, { statusChar: 'x' });
         await vi.waitFor(() => expect(taskLines(contents)).toHaveLength(2));
         await session.settle(FILE);
 
@@ -137,7 +137,7 @@ describe('a note written in CRLF', () => {
         await live.scanAll();
         const moving = live.index.getTasks().find(task => task.content === '移すタスク')!;
 
-        await live.index.updateTask(moving.id, { statusChar: 'x' });
+        await live.ops.updateTask(moving.id, { statusChar: 'x' });
         await live.settle(FILE);
 
         expect(contents.get(FILE)!.split('\r\n')).toEqual([
@@ -157,7 +157,7 @@ describe('the writes that always landed, but landed in LF', () => {
             ['# crlf heading', '', '## 予定', '- [ ] 既存 @2026-09-21', ''].join('\r\n')
         );
 
-        const line = await session.index.createTask(FILE, '- [ ] 追加 @2026-09-21', '予定');
+        const line = await session.ops.createTask(FILE, '- [ ] 追加 @2026-09-21', '予定');
         await session.settle(FILE);
 
         expect(line).toBe(3);
@@ -170,7 +170,7 @@ describe('the writes that always landed, but landed in LF', () => {
             ['---', 'title: crlf', '---', '', '- [ ] タスクA @2026-09-21', ''].join('\r\n')
         );
 
-        await session.index.getRepository().setFrontmatterKeys(FILE, { 'tv-color': 'ff0000' });
+        await session.repository.setFrontmatterKeys(FILE, { 'tv-color': 'ff0000' });
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toContain('tv-color: ff0000');
@@ -187,7 +187,7 @@ describe('a note whose terminators disagree', () => {
         );
         const a = session.index.getTasks().find(task => task.content === '混在A')!;
 
-        const written = await session.index.updateTask(a.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(a.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -201,7 +201,7 @@ describe('a note whose terminators disagree', () => {
         );
         const b = session.index.getTasks().find(task => task.content === '混在B')!;
 
-        await session.index.updateTask(b.id, { statusChar: 'x' });
+        await session.ops.updateTask(b.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toContain('- [x] 混在B @2026-09-21');
@@ -225,7 +225,7 @@ describe('a note whose last line ends with a stray CR', () => {
         const { contents, session } = await openNote(STRAY);
         const beta = session.index.getTasks().find(task => task.content === 'beta')!;
 
-        const written = await session.index.updateTask(beta.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(beta.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -243,7 +243,7 @@ describe('a note whose last line ends with a stray CR', () => {
         // A write that cannot find its line must not rewrite the file just
         // because the read normalised it.
         contents.set(FILE, '# trailing\n');
-        await session.index.updateTask(beta.id, { statusChar: 'x' });
+        await session.ops.updateTask(beta.id, { statusChar: 'x' });
 
         expect(contents.get(FILE)).toBe('# trailing\n');
     });
@@ -256,7 +256,7 @@ describe('a note written in LF', () => {
         );
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.index.updateTask(a.id, { statusChar: 'x' });
+        const { written } = await session.ops.updateTask(a.id, { statusChar: 'x' });
         await session.settle(FILE);
 
         expect(written).toBe(true);

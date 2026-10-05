@@ -106,7 +106,7 @@ describe('API 経路の includeInvalid', () => {
         expect(withoutInvalid).toHaveLength(1);
     });
 
-    it('getTasksForDateRange に includeInvalid:true → error タスクも含まれる', () => {
+    it('tasksInWindow に includeInvalid:true → error タスクも含まれる', () => {
         const errorTask = {
             validation: { severity: 'error' as const, rule: 'end-before-start' as const, message: '', hint: '' },
         };

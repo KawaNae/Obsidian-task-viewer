@@ -7,7 +7,8 @@ import { HostFrameScheduler } from '../../utils/HostWindow';
  * render 冒頭で {@link save}、render 完了後に {@link restore} を呼ぶ。restore は
  * 同期で 1 回書き込み、さらに次フレームで再適用する（同期書き込みだけだと足場を
  * 全再構築するビューで最初の paint が scrollTop=0 になり 1 フレームちらつく。
- * 次フレームの再適用は残余の非同期レイアウト沈静化を吸収する）。その間は save を
+ * 次フレームの再適用は残余の非同期レイアウト沈静化を吸収する。カードの描画を待つ
+ * ためではない。カードは `TaskCardRenderer.render` が返った時点で描き終わっている）。その間は save を
  * 抑制する（自分が書き戻した scrollTop を保存し返さないため）。scrollToNow のような
  * 「保存位置の復元ではない」スクロールは {@link runGuarded} で同じ扱いにできる。
  *

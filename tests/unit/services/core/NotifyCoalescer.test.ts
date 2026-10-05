@@ -18,7 +18,11 @@ describe('NotifyCoalescer', () => {
     });
     afterEach(() => vi.useRealTimers());
 
-    const make = () => new NotifyCoalescer(emit, 16);
+    const make = () => {
+        const c = new NotifyCoalescer(16);
+        c.onChange(emit);
+        return c;
+    };
 
     it('joins two spans for the same task into one emission', () => {
         const c = make();
@@ -117,6 +121,40 @@ describe('NotifyCoalescer', () => {
         expect(vi.getTimerCount()).toBe(0);
 
         vi.advanceTimersByTime(100);
+        expect(emit).not.toHaveBeenCalled();
+    });
+
+    it('a staggered full emission tells each listener in a macrotask of its own', async () => {
+        vi.useRealTimers();
+        const c = new NotifyCoalescer(1);
+        const heard: string[] = [];
+        // A microtask the first listener queues runs before the second is
+        // told only when the second is told in a task of its own.
+        c.onChange((...args) => { heard.push(`first ${args.length}`); void Promise.resolve().then(() => heard.push('between')); });
+        c.onChange((...args) => { heard.push(`second ${args.length}`); });
+        c.schedule(undefined, undefined, { staggered: true });
+        c.schedule('t1', ['startTime']);
+
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        expect(heard).toEqual(['first 0', 'between', 'second 0']);
+    });
+
+    it('flushNow tells every listener in this task, staggered or not', () => {
+        const c = make();
+        c.schedule(undefined, undefined, { staggered: true });
+        c.flushNow();
+
+        expect(emit).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('stops telling a listener once it unsubscribes', () => {
+        const c = new NotifyCoalescer(16);
+        const off = c.onChange(emit);
+        off();
+        c.flushNow();
+
         expect(emit).not.toHaveBeenCalled();
     });
 });

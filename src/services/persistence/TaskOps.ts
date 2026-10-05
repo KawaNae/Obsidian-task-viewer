@@ -1,11 +1,13 @@
-import type { FlowInstanceInsert } from './FlowInstanceLines';
-import type { Refusal, WriteMade, WriteRefused } from './FileLines';
+import type { FlowInstance } from './FlowInstanceLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { InSection } from './utils/Placement';
 
+/** Where a new line goes beside the row (see {@link TaskOp} `insert`). */
+export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
+
 /**
  * One thing an operation does to the row it names, in a write that may do
- * several (see `InlineTaskWriter.applyToTask`).
+ * several (see `InlineTaskWriter.write`).
  *
  * Each carries finished text or a finished instance, never a task: what to
  * write is the caller's to decide, and where it goes is decided here, against
@@ -28,10 +30,14 @@ import type { InSection } from './utils/Placement';
  *   (`firstChild`), as its next sibling past its subtree (`afterSubtree`),
  *   or past the completed siblings that follow it (`afterCompletedRun`),
  *   spelled as the item next to it. A timer's record, the one insert every
- *   timer line takes (`TaskIndex.insertLine`).
- * - `copy`: `text` goes in as the row's next sibling, past its subtree,
- *   spelled as the row is (`Placement.copyOf`): the editor menu's duplicate
- *   of a line.
+ *   timer line takes (`Operations.insertLine`).
+ * - `copies`: copies of the row go in as its siblings, on `side`: just
+ *   above it, or past its subtree, spelled as the row is
+ *   (`Placement.copyOf`). `lines` are the copies' own lines, finished
+ *   ({@link CopyLines}); with `children`, each copy is followed by the row's
+ *   children, without their `^id`s and otherwise as they stand. A card's,
+ *   the API's and the CLI's duplicate of a row (`planDuplicate`), and the
+ *   editor menu's duplicate of a line (one line, no children).
  * - `update`: the row reads `text` (indentation kept from the file), and
  *   its own property lines change by `childOps`. A card's, the API's and a
  *   timer's rewrite of a row, and the editor menu's rewrite of a line.
@@ -41,52 +47,28 @@ import type { InSection } from './utils/Placement';
  *   Only a write that completes the row carries it (`completes`): a fire is
  *   what completing a task does, never what a later reading of it finds.
  */
-/** Where a new line goes beside the row (see {@link TaskOp} `insert`). */
-export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
-
 export type TaskOp =
-    | { kind: 'insert-instance'; insert: FlowInstanceInsert }
+    | { kind: 'insert-instance'; instance: FlowInstance }
     | { kind: 'strip-flow'; text: string }
     | { kind: 'move'; text: string; to: InSection }
     | { kind: 'remove' }
-    | { kind: 'copy'; text: string }
+    | { kind: 'copies'; side: 'above' | 'below'; lines: CopyLines; children: boolean }
     | { kind: 'insert'; place: InsertPlace; text: string }
     | { kind: 'update'; text: string; childOps?: readonly PropertyOp[] }
     | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
 
 /**
- * The fire of a write that completes a row, handed in with the op by the flow
- * layer (`FlowExecutor.fireOp`).
- *
- * The completion is the user's and the fire follows from it, so a fire that
- * writes lines never takes the completion down with it: a write refused with
- * the fire in it, whatever it was refused for, is tried without it, as the
- * editor writes the fire apart from the completion it follows
- * (`FlowFireExtension`). A refusal of the completion's own is met again
- * without the fire, and nothing is written. Where one write completes several
- * rows, each row's fire stands or is set aside on its own, as the editor's do
- * (`InlineTaskWriter.writeFiring`).
+ * The lines of a {@link TaskOp} `copies`, in file order: finished lines, or
+ * `verbatim`, that many repeats of the row's own line as the file holds it,
+ * without its `^id` (the id names the row, not a copy of it), so a copy that
+ * is not moved is not reworded either. Which to write is the caller's
+ * question, which needs the task's dates; this layer only puts them.
  */
-export interface CompletionFire {
-    op: Extract<TaskOp, { kind: 'fire' }>;
-    /** Whether the fire, as the write's last run planned it, writes lines. */
-    writes(): boolean;
-}
-
-/**
- * What came of a write that may complete rows: refused whole, and nothing
- * written; or made, with each fire of a row it completed, in the order the
- * rows stand, and the refusal the write met with that fire in it when it was
- * set aside (`setAside`: the completion is written without it, and the user
- * is owed a word of it), else null.
- */
-export type FiringOutcome<F extends CompletionFire = CompletionFire> =
-    | WriteRefused
-    | (WriteMade & { fires: ReadonlyArray<{ fire: F; setAside: Refusal | null }> });
+export type CopyLines = readonly string[] | { verbatim: number };
 
 /**
  * A row and its subtree written anew from a draft of their text: the hub's
- * source mode (`TaskIndex.replaceSubtree`). `text` is the row's line, its
+ * source mode (`Operations.replaceSubtree`). `text` is the row's line, its
  * indentation aside (the row keeps the file's). `children` are the lines of
  * its subtree, in order, each as the file is to read it, indentation
  * included, and each with the line of the subtree it was when the draft was

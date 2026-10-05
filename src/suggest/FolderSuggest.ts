@@ -1,10 +1,15 @@
 import type { App, TFolder } from 'obsidian';
 import { ShownSuggest } from './ShownSuggest';
 
+/**
+ * The vault's folders, suggested by their path. Picking one puts its path in
+ * the input, unless the caller says what picking does (`onPick`): a field
+ * that commits its value on a pick (the settings').
+ */
 export class FolderSuggest extends ShownSuggest<TFolder> {
     private textInputEl: HTMLInputElement;
 
-    constructor(app: App, inputEl: HTMLInputElement) {
+    constructor(app: App, inputEl: HTMLInputElement, private readonly onPick?: (folder: TFolder) => void) {
         super(app, inputEl);
         this.textInputEl = inputEl;
     }
@@ -20,10 +25,13 @@ export class FolderSuggest extends ShownSuggest<TFolder> {
         el.setText(folder.path);
     }
 
-    selectSuggestion(folder: TFolder, _evt: MouseEvent | KeyboardEvent): void {
-        const inputEl = this.textInputEl;
-        inputEl.value = folder.path;
-        inputEl.trigger('input');
+    protected pick(folder: TFolder, _evt: MouseEvent | KeyboardEvent): void {
+        if (this.onPick) {
+            this.onPick(folder);
+        } else {
+            this.textInputEl.value = folder.path;
+            this.textInputEl.trigger('input');
+        }
         this.close();
     }
 }

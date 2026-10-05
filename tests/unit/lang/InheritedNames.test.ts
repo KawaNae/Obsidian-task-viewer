@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseProgram } from '../../../src/services/lang/StmtParser';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 import type { Diagnostic } from '../../../src/services/lang/Diagnostic';
 

@@ -1,24 +1,20 @@
-import type { Task, TaskFlow } from '../../../types';
+import type { Task } from '../../../types';
+import type { UnnamedTask } from '../TaskFactory';
 import { t } from '../../../i18n';
-import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
-import { FLOW_SPLIT } from '../utils/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
-import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
-import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { validateDateTimeRules, type DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
-import { DATE_BLOCK_REGEX } from './DateBlockLocator';
-import { formatDateBlock } from './DateBlockFormat';
+import { readDateBlock, taskContentText, withoutDateBlocks, type DateBlockReading } from './DateBlock';
 
-interface DateBlockResult {
-    date: string;
-    startTime?: string;
-    endDate?: string;
-    endTime?: string;
-    due?: string;
-    validationWarning?: string; // parseDateBlock internal warning (excess separators)
+/**
+ * The blocks of `text` the dates are not read from, verbatim and in order:
+ * the first when it does not read, and every block after it.
+ */
+function unreadBlocks(text: string, dates: DateBlockReading): string[] {
+    const extras = dates.extraBlocks.map(extra => extra.text);
+    return dates.unread ? [text.slice(dates.block.start, dates.block.end), ...extras] : extras;
 }
 
 /**
@@ -28,64 +24,48 @@ interface DateBlockResult {
  * - With scheduling block: `- [ ] foo @start>end>due`
  * - Without scheduling block: `- [ ] foo` (catch-all for non-external checkboxes)
  *
- * Acts as the single inline format authority — `format()` correctly emits
- * either the bare line (no dates) or the @notation block (with dates),
- * so a task gaining or losing dates is handled by the same parser without
+ * Its lines are written by `formatTaskLine` (TaskLineFormat), which emits
+ * either the bare line (no dates) or the @notation block (with dates), so a
+ * task gaining or losing dates stays this parser's line without
  * promotion/demotion bookkeeping.
  */
 export class TVInlineParser implements LeafParserStrategy {
     readonly id = 'tv-inline';
-    readonly isReadOnly = false;
 
-    parse(line: string, filePath: string, lineNumber: number): Task | null {
+    parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null {
         const classified = TaskLineClassifier.classify(line);
         if (!classified) {
             return null;
         }
         const { statusChar } = classified;
 
-        // 1. The trailing block ID (^id) is the content's last part
-        const { text: body, blockId } = TaskLineClassifier.extractBlockId(classified.rawContent);
+        // 1. The trailing block ID (^id) is the content's last part, and the
+        // command (`==>` and what follows) is no part of the content: it is
+        // cut off here and read, with the task's `- ==>` lines, by `readFlow`
+        // when the note is read — the line alone does not say the whole
+        // program.
+        const { text, blockId } = taskContentText(classified.rawContent);
 
-        // Split flow commands (==>)
-        const flowSplit = body.split(FLOW_SPLIT);
-        const rawContent = flowSplit[0];
-        const flowPart = flowSplit[1] || '';
-
-        // 2. Parse the flow command. `raw` always carries the verbatim text
-        // so format() re-emits it losslessly even when parsing failed;
-        // `program` is non-null only when the command is executable.
-        // Line-level view only: `- ==>` child segments are merged (and the
-        // program re-parsed from the joined source) by TreeTaskExtractor.
-        const trimmedFlow = flowPart.trim();
-        const flow: TaskFlow | undefined = trimmedFlow
-            ? singleLineFlow(trimmedFlow)
-            : undefined;
-
-        // 3. Parse date block (@start>end>due)
-        let content = rawContent;
-        let date = '';
-        let startTime: string | undefined;
-        let endDate: string | undefined;
-        let endTime: string | undefined;
-        let due: string | undefined;
-        let parseWarning: string | undefined;
-
-        const dateBlock = this.parseDateBlock(rawContent);
-        if (dateBlock) {
-            ({ date, startTime, endDate, endTime, due,
-               validationWarning: parseWarning } = dateBlock.fields);
-            content = dateBlock.content;
-        }
+        // 2. The date block (@start>end>due): the first block is the dates,
+        // unless it names a day or a time that does not exist. The blocks the
+        // dates are not read from are kept verbatim, so that writing the row
+        // back keeps them (`formatTaskLine`). The content is the text without
+        // any.
+        const dates = readDateBlock(text);
+        const content = dates ? withoutDateBlocks(text, dates) : text;
+        const { startDate: date, startTime, endDate, endTime, due } = dates?.values ?? { startDate: '' };
+        const unreadDateBlocks = dates ? unreadBlocks(text, dates) : [];
 
         // No early return: TVInline accepts any classified checkbox line, with
         // or without a scheduling block. ParserChain order ensures external
         // notation parsers (tasks-plugin, day-planner) get first crack on lines
         // that match their syntax; everything else falls through to here.
 
-        // 4. Validate date/time constraints
+        // 3. Validate date/time constraints: the line's own verdict. The
+        // command's is the extraction's to add (`NoteTasks`), after these.
         let validation: Task['validation'];
         const ruleResult = this.validateDateBlock(date, startTime, endDate, endTime, due);
+        const parseWarning = dates ? this.blockWarning(text, dates) : undefined;
         if (ruleResult) {
             validation = ruleResult;
         } else if (parseWarning) {
@@ -95,17 +75,9 @@ export class TVInlineParser implements LeafParserStrategy {
                 message: parseWarning,
                 hint: '',
             };
-        } else if (flow) {
-            // Surface the first flow diagnostic through the existing
-            // validation channel so a typo'd command is not a silent no-op
-            // for users who never see editor decorations. May be superseded
-            // when TreeTaskExtractor merges `- ==>` child segments and
-            // re-validates the joined program.
-            validation = flowValidation(flow);
         }
 
         return createBaseTask({
-            id: TaskIdGenerator.provisionalId(this.id, filePath, lineNumber),
             file: filePath,
             line: lineNumber,
             content: content.trim(),
@@ -118,7 +90,7 @@ export class TVInlineParser implements LeafParserStrategy {
             endDate,
             endTime,
             due,
-            flow,
+            unreadDateBlocks: unreadDateBlocks.length > 0 ? unreadDateBlocks : undefined,
             tags: TagExtractor.fromContent(content.trim()),
             blockId,
             validation,
@@ -126,99 +98,23 @@ export class TVInlineParser implements LeafParserStrategy {
     }
 
     /**
-     * Parse the @start>end>due date block into structured fields.
-     * Returns null if no date block was found in the content.
+     * What the notation does not read in a line's blocks: a first block
+     * naming a day or a time that does not exist, separators past the
+     * second, and blocks past the first.
      */
-    private parseDateBlock(content: string): { fields: DateBlockResult; content: string } | null {
-        const dateBlockMatch = content.match(DATE_BLOCK_REGEX);
-        if (!dateBlockMatch) {
-            return null;
+    private blockWarning(text: string, dates: DateBlockReading): string | undefined {
+        const warnings: string[] = [];
+        if (dates.unread) {
+            const values = dates.unread.map(span => text.slice(span.start, span.end)).join(', ');
+            warnings.push(t('validation.noSuchDate', { values }));
         }
-
-        const fullDateBlock = dateBlockMatch[1]; // first block = canonical
-
-        // content は notation-free が不変条件。最初の date block を canonical と
-        // して採用し、content 中に残る全 date-like トークンを除去する。これが
-        // ないと format() の末尾再付与が次回 parse で先頭マッチを奪い、開始日が
-        // 化ける(round-trip 破壊)。除去で生じた連続スペースは単一に畳む。
-        const globalRe = new RegExp(DATE_BLOCK_REGEX.source, 'g');
-        let dateBlockCount = 0;
-        const cleanedContent = content
-            .replace(globalRe, (m) => {
-                if (m.length > 1) { dateBlockCount++; return ''; }
-                return m;
-            })
-            .replace(/\s{2,}/g, ' ')
-            .trim();
-
-        const rawBlock = fullDateBlock.substring(1); // Remove leading @
-        const parts = rawBlock.split('>');
-
-        let date = '';
-        let startTime: string | undefined;
-        let endDate: string | undefined;
-        let endTime: string | undefined;
-        let due: string | undefined;
-        let validationWarning: string | undefined;
-
-        // --- Start segment ---
-        const rawStart = parts[0];
-        if (rawStart !== '') {
-            const parsed = parseDateTimeField(rawStart);
-            if (parsed.date) {
-                date = parsed.date;
-            }
-            if (parsed.time) {
-                startTime = parsed.time;
-            }
+        if (dates.separators > 2) {
+            warnings.push(t('validation.tooManySeparators', { count: dates.separators }));
         }
-
-        // --- End segment ---
-        // endDate is only set when explicitly written (e.g. >2026-02-16T08:00).
-        // Time-only end (>08:00) or empty end (>>due) leave endDate undefined;
-        // DisplayTaskConverter resolves the implicit endDate at display time.
-        if (parts.length > 1) {
-            const rawEnd = parts[1];
-            if (!rawEnd) {
-                // Empty end (@start>>due): endDate stays undefined
-            } else {
-                const parsed = parseDateTimeField(rawEnd);
-                if (parsed.date) {
-                    endDate = parsed.date;
-                }
-                if (parsed.time) {
-                    endTime = parsed.time;
-                }
-            }
+        if (dates.extraBlocks.length > 0) {
+            warnings.push(t('validation.multipleDateBlocks', { count: dates.extraBlocks.length }));
         }
-
-        // --- Due segment ---
-        if (parts.length > 2 && parts[2]) {
-            const parsed = parseDateTimeField(parts[2]);
-            due = parsed.date;
-            if (parsed.date && parsed.time) {
-                due += `T${parsed.time}`;
-            }
-        }
-
-        // --- Excess separator check ---
-        if (parts.length > 3) {
-            validationWarning = t('validation.tooManySeparators', { count: parts.length - 1 });
-        }
-
-        // --- Multiple date blocks check ---
-        if (dateBlockCount > 1) {
-            const extra = t('validation.multipleDateBlocks', { count: dateBlockCount - 1 });
-            validationWarning = validationWarning ? `${validationWarning} ${extra}` : extra;
-        }
-
-        return {
-            fields: {
-                date, startTime, endDate, endTime, due,
-                validationWarning,
-            },
-            content: cleanedContent,
-        };
+        return warnings.length > 0 ? warnings.join(' ') : undefined;
     }
 
     /**
@@ -236,26 +132,5 @@ export class TVInlineParser implements LeafParserStrategy {
             startTime, endDate, endTime, due,
             endDateImplicit: !endDate,
         });
-    }
-
-    format(task: Task): string {
-        const statusChar = task.statusChar || ' ';
-        // The block itself is built where the `dates` built-in reads it from,
-        // so the notation a line is written in and the notation a generation
-        // block is handed are one implementation rather than two that agree
-        // until one of them is changed.
-        const dateBlock = formatDateBlock(task);
-
-        // Flow text is always re-emitted verbatim (round-trip safety, even
-        // for unparseable commands). Canonical re-serialization happens only
-        // when a fire generates the next instance (FlowPlanner). Only the
-        // task-line segment is emitted here — `- ==>` child segments are
-        // physical lines of their own and are never rewritten by format().
-        const flowStr = task.flow?.raw ? `==> ${task.flow.raw}` : '';
-
-        const blockIdStr = task.blockId ? `^${task.blockId}` : '';
-        const marker = TaskLineClassifier.extractMarker(task.originalText);
-        return TaskLineClassifier.formatPrefix(statusChar, '', marker)
-            + TaskLineClassifier.joinContent(task.content, dateBlock, flowStr, blockIdStr);
     }
 }

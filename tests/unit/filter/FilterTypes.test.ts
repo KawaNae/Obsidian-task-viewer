@@ -4,12 +4,9 @@ import {
     createFilterGroup,
     createDefaultCondition,
     hasConditions,
-    getAllConditions,
-    deepCloneNode,
     isFilterCondition,
-    isFilterGroup,
 } from '../../../src/services/filter/FilterTypes';
-import type { FilterCondition, FilterGroup, FilterState } from '../../../src/services/filter/FilterTypes';
+import type { FilterGroup, FilterState } from '../../../src/services/filter/FilterTypes';
 
 describe('FilterTypes utilities', () => {
     describe('createEmptyFilterState', () => {
@@ -58,52 +55,14 @@ describe('FilterTypes utilities', () => {
         });
     });
 
-    describe('getAllConditions', () => {
-        it('returns empty array for empty state', () => {
-            expect(getAllConditions(createEmptyFilterState())).toEqual([]);
-        });
-
-        it('flattens conditions from nested groups', () => {
-            const c1 = createDefaultCondition();
-            const c2 = createDefaultCondition();
-            const inner: FilterGroup = { filters: [c2], logic: 'and' };
-            const state: FilterState = { filters: [c1, inner], logic: 'and' };
-            const all = getAllConditions(state);
-            expect(all).toHaveLength(2);
-        });
-    });
-
-    describe('deepCloneNode', () => {
-        it('clones condition preserving all fields', () => {
-            const original = createDefaultCondition();
-            const cloned = deepCloneNode(original) as FilterCondition;
-            expect(cloned.property).toBe(original.property);
-            expect(cloned.operator).toBe(original.operator);
-            expect(cloned.value).toEqual(original.value);
-            // Verify it's a deep copy
-            expect(cloned).not.toBe(original);
-        });
-
-        it('clones group recursively', () => {
-            const c = createDefaultCondition();
-            const group: FilterGroup = { filters: [c], logic: 'or' };
-            const cloned = deepCloneNode(group) as FilterGroup;
-            expect(cloned.logic).toBe('or');
-            expect(cloned.filters).toHaveLength(1);
-            expect(cloned.filters[0]).not.toBe(c);
-        });
-    });
-
     describe('type guards', () => {
         it('isFilterCondition identifies conditions', () => {
             const c = createDefaultCondition();
             expect(isFilterCondition(c)).toBe(true);
-            expect(isFilterGroup(c)).toBe(false);
         });
 
-        it('isFilterGroup identifies groups', () => {
+        it('isFilterCondition rejects groups', () => {
             const g = createFilterGroup();
-            expect(isFilterGroup(g)).toBe(true);
             expect(isFilterCondition(g)).toBe(false);
         });
     });

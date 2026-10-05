@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import type { DecorationSet, EditorView } from '@codemirror/view';
 import { createDiagnosticsExtension } from '../../../src/editor/DiagnosticsExtension';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /**
  * A flow on a task line ends where the line's `^id` begins: the parser takes
@@ -15,7 +16,7 @@ function marksOn(lines: string[]): string[] {
     const state = EditorState.create({ doc: lines.join('\n') });
     const view = { state, visibleRanges: [{ from: 0, to: state.doc.length }] } as unknown as EditorView;
     // The plugin's own constructor, run on a view that has only what it reads.
-    const plugin = createDiagnosticsExtension() as unknown as { create: (view: EditorView, arg: undefined) => { decorations: DecorationSet } };
+    const plugin = createDiagnosticsExtension(() => DEFAULT_SETTINGS) as unknown as { create: (view: EditorView, arg: undefined) => { decorations: DecorationSet } };
     const { decorations } = plugin.create(view, undefined);
     const found: string[] = [];
     decorations.between(0, state.doc.length, (_from, _to, deco) => {

@@ -1,48 +1,29 @@
-import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
+import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
-import type { PluginContext } from '../../PluginContext';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
-import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, editViewFilter } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
-import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
-import type { AstronomyDisplay } from '../../types';
+import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './ScheduleSchema';
+import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { ScheduleState } from './ScheduleSchema';
+
+/** What Schedule does that is not a change of its state, or reads from more than it. */
+export interface ScheduleCommands {
+    /** Look at the day `n` days from the one looked at. */
+    navigate(n: number): void;
+    /** Follow today again and scroll to now. */
+    today(): void;
+    /** Look at `date`. */
+    jumpToDate(date: string): void;
+    /** The day drawn. */
+    viewedDay(): string;
+}
 
 export interface ScheduleToolbarDeps {
-    app: App;
-    leaf: WorkspaceLeaf;
-    plugin: PluginContext;
-    readService: TaskReadService;
-    filterMenu: FilterMenuComponent;
-    container: HTMLElement;
-
-    onNavigate: (days: number) => void;
-    onToday: () => void;
-    onJumpToDate: (date: string) => void;
-    onFilterChange: () => void;
-
-    getCustomName: () => string | undefined;
-    onRename: (newName: string | undefined) => void;
-
-    /** Snapshot the view's full persistable config for template-save / URI build. */
-    getCurrentConfig: () => Partial<ScheduleConfig>;
-    /** Apply a parsed config (from template load / URI / reset). */
-    applyConfig: (cfg: Partial<ScheduleConfig>) => void;
-    /** Trigger render + saveLayout side effects after applyConfig. */
-    onConfigApplied: () => void;
-
-    getMaskMode: () => boolean;
-    setMaskMode: (next: boolean) => void;
-
-    getAstronomyDisplay: () => Partial<AstronomyDisplay> | undefined;
-    setAstronomyDisplay: (next: Partial<AstronomyDisplay> | undefined) => void;
-
-    getCurrentDate: () => string;
+    host: ViewToolbarHost<ScheduleState>;
+    commands: ScheduleCommands;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
 }
@@ -50,33 +31,44 @@ export interface ScheduleToolbarDeps {
 /**
  * Persistent toolbar for ScheduleView. Re-attached on each render via mount/detach
  * so the filter button (and any open popover) survive container.empty().
+ * It reads and writes the view's store and mends itself when the store changes.
  */
 export class ScheduleToolbar extends ViewToolbarBase {
     private dateLabelHandle: { update: (year: number, month: number) => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
+    private readonly filterMenu: FilterMenuComponent;
 
     constructor(private deps: ScheduleToolbarDeps) {
         super();
+        this.filterMenu = new FilterMenuComponent(deps.host.app, () => deps.host.plugin.settings);
+        deps.host.store.subscribe(() => this.update());
     }
 
-    private get codec(): ViewConfigCodec<ScheduleConfig, ScheduleTransient> {
-        return codecFor(ScheduleSchema.viewType) as ViewConfigCodec<ScheduleConfig, ScheduleTransient>;
+    private get store() {
+        return this.deps.host.store;
+    }
+
+    /** Close the popovers the toolbar opened. */
+    override close(): void {
+        this.filterMenu.close();
+        super.close();
     }
 
     private getDateYearMonth(): { year: number; month: number } {
-        const d = this.deps.getCurrentDate();
+        const d = this.deps.commands.viewedDay();
         return { year: parseInt(d.substring(0, 4), 10), month: parseInt(d.substring(5, 7), 10) - 1 };
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { deps } = this;
+        const { host, commands } = this.deps;
 
         // Date Label (YYYY - MM)
         const dateLabelDeps = {
-            app: deps.app,
-            getSettings: () => deps.plugin.settings,
-            linkInteractionManager: deps.linkInteractionManager,
-            hoverParent: deps.hoverParent,
+            app: host.app,
+            getSettings: () => host.plugin.settings,
+            notes: host.plugin.getOperations(),
+            linkInteractionManager: this.deps.linkInteractionManager,
+            hoverParent: this.deps.hoverParent,
         };
         this.dateLabelHandle = DateLabel.render(toolbar, dateLabelDeps);
         const { year, month } = this.getDateYearMonth();
@@ -85,112 +77,63 @@ export class ScheduleToolbar extends ViewToolbarBase {
 
         DateNavigator.render(
             toolbar,
-            (days) => deps.onNavigate(days),
-            () => deps.onToday(),
+            (days) => commands.navigate(days),
+            () => commands.today(),
             {
                 dateJump: {
-                    getCurrentDate: () => deps.getCurrentDate(),
-                    onJump: (date) => deps.onJumpToDate(date),
+                    getCurrentDate: () => commands.viewedDay(),
+                    onJump: (date) => commands.jumpToDate(date),
                 },
             }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
 
-        // Action zone (expanded mode)
-        const actionZone = toolbar.createDiv('view-toolbar__action-zone');
+        // Action zone (folded into ⋮ when the row does not fit)
+        const actionZone = this.createActionZone(toolbar);
 
         const filterBtn = actionZone.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.addEventListener('click', (event: MouseEvent) => {
-            deps.filterMenu.showMenu(event, {
-                onFilterChange: () => {
-                    deps.onFilterChange();
-                    this.update();
-                },
-                getTasks: () => deps.readService.getTasks(),
-                getStartHour: () => deps.plugin.settings.startHour,
-            });
+            editViewFilter(this.filterMenu, { event }, this.store, () => host.plugin.getIndex().getTasks());
         });
 
         this.maskHandle = MaskToggleButton.render(actionZone, {
-            getMaskMode: () => deps.getMaskMode(),
-            setMaskMode: (next) => deps.setMaskMode(next),
+            getMaskMode: () => this.store.get().maskMode ?? false,
+            setMaskMode: (next) => this.store.update({ maskMode: next }),
         });
 
-        ViewSettingsMenu.renderButton(actionZone, this.getSettingsOptions());
+        ViewSettingsMenu.renderButton(actionZone, this.settingsOptions());
 
-        // More button (compact mode — ⋮)
+        // More button (⋮, shown while the action zone is folded)
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
         setIcon(moreBtn, 'more-vertical');
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
 
         moreBtn.onclick = (e) => {
-            deps.plugin.menuPresenter.present((menu) => {
-                this.appendCompactMenuItems(menu, moreBtn);
+            host.plugin.menuPresenter.present((menu) => {
+                appendCompactFilterAndMask(menu, moreBtn, {
+                    filterMenu: this.filterMenu,
+                    store: this.store,
+                    getTasks: () => host.plugin.getIndex().getTasks(),
+                });
                 menu.addSeparator();
-                ViewSettingsMenu.appendItems(menu, this.getSettingsOptions());
+                ViewSettingsMenu.appendItems(menu, this.settingsOptions());
             }, { kind: 'mouseEvent', event: e });
         };
     }
 
-    private getSettingsOptions(): ViewSettingsOptions {
-        const { deps } = this;
-        return {
-            app: deps.app,
-            leaf: deps.leaf,
-            getCustomName: () => deps.getCustomName(),
-            getDefaultName: () => VIEW_META_SCHEDULE.displayText,
-            onRename: (newName) => deps.onRename(newName),
-            buildUri: () => ({
-                configParams: this.codec.toUriParams(deps.getCurrentConfig()),
-            }),
-            viewType: VIEW_META_SCHEDULE.type,
-            getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
-            getViewTemplate: () => ({
-                filePath: '',
-                name: deps.getCustomName() || VIEW_META_SCHEDULE.displayText,
-                viewType: ScheduleSchema.shortName,
-                config: this.codec.serializeConfig(deps.getCurrentConfig()),
-            }),
-            getExportFolder: () => deps.plugin.settings.exportFolder,
-            onApplyTemplate: (template) => {
-                const cfg = this.codec.parseConfig(template.config ?? null);
-                deps.applyConfig(cfg);
-                if (template.name) deps.onRename(template.name);
-                deps.onConfigApplied();
-            },
-            onReset: () => {
-                deps.applyConfig({});
-                deps.onRename(undefined);
-                deps.onConfigApplied();
-            },
-            menuPresenter: deps.plugin.menuPresenter,
-            appendCustomItems: (menu) => {
-                appendAstronomyMenuSection(menu, {
-                    overlays: ['sunTimes', 'moonPhase'],
-                    settings: deps.plugin.settings.astronomy,
-                    instance: deps.getAstronomyDisplay(),
-                    onChange: (next) => deps.setAstronomyDisplay(next),
-                });
-            },
-        };
-    }
-
-    private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
-        const { deps } = this;
-        const compact: CompactMenuDeps = {
-            filterMenu: deps.filterMenu,
-            getTasks: () => deps.readService.getTasks(),
-            getStartHour: () => deps.plugin.settings.startHour,
-            onFilterChange: () => deps.onFilterChange(),
-            getMaskMode: () => deps.getMaskMode(),
-            setMaskMode: (next) => deps.setMaskMode(next),
-            onAfter: () => this.update(),
-        };
-        appendCompactFilterAndMask(menu, moreBtn, compact);
+    private settingsOptions() {
+        const { host } = this.deps;
+        return host.settingsOptions((menu) => {
+            appendAstronomyMenuSection(menu, {
+                overlays: ['sunTimes', 'moonPhase'],
+                settings: host.plugin.settings.astronomy,
+                instance: this.store.get().astronomyDisplay,
+                onChange: (next) => this.store.update({ astronomyDisplay: next }),
+            });
+        });
     }
 
     override update(): void {

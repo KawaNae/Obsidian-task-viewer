@@ -1,7 +1,7 @@
 import { type App, Notice } from 'obsidian';
 import type { Task } from '../../types';
-import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TouchLongPressBinder } from './TouchLongPressBinder';
@@ -42,7 +42,6 @@ export class MenuHandler {
     private validationMenuBuilder: ValidationMenuBuilder;
 
     private viewStartDate: string | null = null;
-    private taskHubOpener: TaskHubOpener | null = null;
 
     // 同じ要素に二度 bind しない (TouchLongPressBinder は dispose を返すが
     // call site が 1-shot 想定で受け取らないため、reconcile で要素を再利用
@@ -50,12 +49,20 @@ export class MenuHandler {
     // 振る舞いが変わらないので最初の bind だけ生かせば十分。
     private boundCards: WeakSet<HTMLElement> = new WeakSet();
 
+    /** The index's copies, looked up by name (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
+
+    /**
+     * @param taskHubOpener where the menu's Properties items open the hub
+     *   (the hub of the view the menu is in; `createCardRendering`)
+     */
     constructor(
         private app: App,
-        private readService: TaskReadService,
-        private writeService: TaskWriteService,
-        private plugin: PluginContext & TimerHost
+        private operations: Operations,
+        private plugin: PluginContext & TimerHost,
+        private readonly taskHubOpener: TaskHubOpener,
     ) {
+        this.index = plugin.getIndex();
         // Initialize services
         this.propertyCalculator = new PropertyCalculator();
         this.propertyFormatter = new PropertyFormatter();
@@ -63,13 +70,13 @@ export class MenuHandler {
         // Initialize builders
         this.propertiesMenuBuilder = new PropertiesMenuBuilder(
             app,
-            writeService,
+            operations,
             plugin,
             this.propertyCalculator,
             this.propertyFormatter
         );
         this.timerMenuBuilder = new TimerMenuBuilder(plugin);
-        this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, writeService, plugin);
+        this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, operations, plugin);
         this.validationMenuBuilder = new ValidationMenuBuilder();
     }
 
@@ -78,15 +85,6 @@ export class MenuHandler {
      */
     setViewStartDate(date: string | null) {
         this.viewStartDate = date;
-    }
-
-    /**
-     * メニューの Properties 項目からタスクハブモーダルを開くための opener を
-     * 登録する（ビューが自分のモーダル生成関数を束ねる — setDetailCallback と
-     * 同型の配線）。
-     */
-    setTaskHubOpener(opener: TaskHubOpener) {
-        this.taskHubOpener = opener;
     }
 
     /**
@@ -116,7 +114,7 @@ export class MenuHandler {
      * only the (always-original) task ID is available.
      */
     showMenuForTask(taskId: string, x: number, y: number): void {
-        const task = this.readService.getTask(taskId);
+        const task = this.index.getTask(taskId);
         if (!task) return;
         void this.showContextMenu(x, y, task);
     }
@@ -141,17 +139,17 @@ export class MenuHandler {
     private async showContextMenu(x: number, y: number, taskInput: Task, hooks?: TaskMenuHooks): Promise<void> {
         // Resolve the real task from the index
         const originalId = getOriginalTaskId(taskInput);
-        const task = this.readService.getTask(originalId);
+        const task = this.index.getTask(originalId);
 
         if (!task) {
             new Notice(t('notice.taskNotFoundInIndex'));
             return;
         }
         if (task.isReadOnly) return;
-        if (!(await this.writeService.confirmTask(task.id))) return;
+        if (!(await this.operations.confirmTask(task.id))) return;
 
         // Convert to DisplayTask for property display (implicit/explicit flags)
-        const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.readService.getTask(id));
+        const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.index.getTask(id));
 
         // Properties 項目の行き先: hub 内メニューなら自フォームへ focus、
         // それ以外はビュー登録の opener でタスクハブモーダルを開く。
@@ -160,7 +158,7 @@ export class MenuHandler {
                 hooks.onOpenPropertiesFocus(field);
                 return;
             }
-            this.taskHubOpener?.(task.id, { focusField: field });
+            this.taskHubOpener(task.id, { focusField: field });
         };
 
         this.plugin.menuPresenter.present((menu) => {

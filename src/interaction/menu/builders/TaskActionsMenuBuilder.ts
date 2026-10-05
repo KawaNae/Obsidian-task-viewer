@@ -1,19 +1,17 @@
 import type { App, Menu } from 'obsidian';
 import type { Task } from '../../../types';
-import type { TaskWriteService } from '../../../services/data/TaskWriteService';
+import type { Operations } from '../../../services/operations/Operations';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
-import { ConfirmModal } from '../../../modals/ConfirmModal';
-import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
+import { CreateModal } from '../../../modals/create/CreateModal';
+import { confirm } from '../../../modals/ask/askChoice';
+import { askFlowDelete } from '../../../modals/ask/flowDeleteChoice';
 import { SendModal } from '../../../modals/noteops/SendModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
-import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { openTaskInEditor } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
-import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 
 /**
  * Task操作メニューの構築
@@ -21,7 +19,7 @@ import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
 export class TaskActionsMenuBuilder {
     constructor(
         private app: App,
-        private writeService: TaskWriteService,
+        private operations: Operations,
         private plugin: PluginContext & TimerHost
     ) { }
 
@@ -64,52 +62,37 @@ export class TaskActionsMenuBuilder {
      * "Record as Child" サブメニュー（タイマー系のみ）
      */
     private addRecordAsChildSubmenu(menu: Menu, task: Task): void {
-        const displayName = getTaskDisplayName(task);
-
         menu.addItem((item) => {
             const subMenu = item
                 .setTitle(t('menu.trackAsChild'))
                 .setIcon('clock')
                 .setSubmenu();
 
-            const baseParams = {
-                taskId: task.id,
-                taskName: displayName,
-                taskOriginalText: task.originalText,
-                taskFile: task.file,
-                taskColor: getEffectiveColor(task) ?? '',
-                recordMode: 'child' as const,
-                parserId: task.parserId,
-                timerTargetId: task.anchor,
-                autoStart: false,
-            };
-
             // Countup
             subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.openCountup'))
+                sub.setTitle(t('menu.startChildCountup'))
                     .setIcon('play')
                     .onClick(() => {
                         menu.close();
-                        const widget = this.plugin.getTimerWidget();
-                        widget.startTimer({ ...baseParams, timerType: 'countup' });
+                        this.plugin.getTimerWidget().startTimer(task, 'child', { kind: 'countup' });
                     });
             });
 
             // Pomodoro
             subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.openPomodoro'))
+                sub.setTitle(t('menu.startChildPomodoro'))
                     .setIcon('timer')
                     .onClick(() => {
                         menu.close();
-                        const widget = this.plugin.getTimerWidget();
-                        widget.startTimer({ ...baseParams, timerType: 'pomodoro' });
+                        this.plugin.getTimerWidget().startTimer(task, 'child', { kind: 'pomodoro' });
                     });
             });
         });
     }
 
     /**
-     * "Add Child Task" 単独項目（CreateTaskModal）
+     * "Add Child Task": the create dialog on the head of the row's children
+     * (`CreatePlace` `childOf`).
      */
     private addChildTaskItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
@@ -117,10 +100,12 @@ export class TaskActionsMenuBuilder {
                 .setIcon('plus')
                 .onClick(() => {
                     menu.close();
-                    new CreateTaskModal(this.app, async (result) => {
-                        const taskLine = formatTaskLine(result);
-                        await this.writeService.insertLine(task.id, taskLine, 'firstChild');
-                    }, {}, { startHour: this.plugin.settings.startHour }).open();
+                    new CreateModal(
+                        this.app,
+                        this.plugin.getCreatePlaces(),
+                        () => this.plugin.settings.startHour,
+                        { kind: 'childOf', taskId: task.id },
+                    ).open();
                 });
         });
     }
@@ -177,7 +162,7 @@ export class TaskActionsMenuBuilder {
                     .setIcon('copy')
                     .onClick(async () => {
                         menu.close();
-                        await this.writeService.duplicateTask(task.id);
+                        await this.operations.duplicateTask(task.id);
                     });
             });
 
@@ -186,7 +171,7 @@ export class TaskActionsMenuBuilder {
                     .setIcon('calendar-plus')
                     .onClick(async () => {
                         menu.close();
-                        await this.writeService.duplicateTask(task.id, { dayOffset: 1 });
+                        await this.operations.duplicateTask(task.id, { dayOffset: 1 });
                     });
             });
 
@@ -195,7 +180,7 @@ export class TaskActionsMenuBuilder {
                     .setIcon('calendar-range')
                     .onClick(async () => {
                         menu.close();
-                        await this.writeService.duplicateTask(task.id, { dayOffset: 1, count: 7 });
+                        await this.operations.duplicateTask(task.id, { dayOffset: 1, count: 7 });
                     });
             });
         });
@@ -238,9 +223,7 @@ export class TaskActionsMenuBuilder {
             } else {
                 // → Timeline
                 const now = new Date();
-                const hh = now.getHours().toString().padStart(2, '0');
-                const mm = now.getMinutes().toString().padStart(2, '0');
-                const nowTime = `${hh}:${mm}`;
+                const nowTime = DateUtils.formatHHMM(now.getHours(), now.getMinutes());
 
                 if (showBothVariants) {
                     this.addSwitchToItem(subMenu, menu, task.id, t('menu.timelineModeKeepDate'), 'clock', {
@@ -261,23 +244,21 @@ export class TaskActionsMenuBuilder {
                 subMenu.addItem((sub) => {
                     sub.setTitle(t('menu.undated'))
                         .setIcon('calendar-x')
-                        .onClick(() => {
+                        .onClick(async () => {
                             menu.close();
-                            new ConfirmModal(
-                                this.app,
-                                t('menu.switchToUndated'),
-                                t('menu.switchToUndatedMessage'),
-                                async () => {
-                                    await this.writeService.updateTask(task.id, {
-                                        startDate: undefined,
-                                        startTime: undefined,
-                                        endDate: undefined,
-                                        endTime: undefined,
-                                        due: undefined,
-                                    });
-                                },
-                                { confirmLabel: t('modal.convert') }
-                            ).open();
+                            const confirmed = await confirm(this.app, {
+                                title: t('menu.switchToUndated'),
+                                body: [t('menu.switchToUndatedMessage')],
+                                confirmLabel: t('modal.convert'),
+                            });
+                            if (!confirmed) return;
+                            await this.operations.updateTask(task.id, {
+                                startDate: undefined,
+                                startTime: undefined,
+                                endDate: undefined,
+                                endTime: undefined,
+                                due: undefined,
+                            });
                         });
                 });
             }
@@ -291,7 +272,7 @@ export class TaskActionsMenuBuilder {
                 .setIcon(icon)
                 .onClick(async () => {
                     menu.close();
-                    await this.writeService.updateTask(taskId, updates);
+                    await this.operations.updateTask(taskId, updates);
                 });
         });
     }
@@ -311,36 +292,31 @@ export class TaskActionsMenuBuilder {
                 .setWarning(true)
                 .onClick(async () => {
                     menu.close();
-                    const { outlook, descendantFlows } = this.writeService.assessFlowDelete(task.id);
+                    const { outlook, descendantFlows } = this.operations.assessFlowDelete(task.id);
 
                     // 発火に失敗すると削除も中止される。そのときタスクはまだ
                     // ページ上にあるので、パネルを閉じる・選択を外すといった
                     // 「消えた前提」の後始末は走らせない。
                     const remove = async (fireFlow: boolean) => {
-                        if (await this.writeService.deleteTask(task.id, { fireFlow })) {
+                        if (await this.operations.deleteTask(task.id, { fireFlow })) {
                             onDestructive?.();
                         }
                     };
 
                     if (outlook.kind === 'creates') {
-                        new FlowDeleteChoiceModal(
-                            this.app,
-                            { previewLine: outlook.previewLine, descendantFlows },
-                            (choice) => {
-                                if (choice === 'cancel') return;
-                                void remove(choice === 'fireAndDelete');
-                            }
-                        ).open();
+                        const choice = await askFlowDelete(this.app, { previewLine: outlook.previewLine, descendantFlows });
+                        if (choice === 'cancel') return;
+                        await remove(choice === 'fireAndDelete');
                         return;
                     }
 
-                    new ConfirmModal(
-                        this.app,
-                        t('menu.deleteTaskTitle'),
-                        this.deleteMessage(outlook, descendantFlows),
-                        () => void remove(false),
-                        { confirmLabel: t('modal.delete'), warning: true }
-                    ).open();
+                    const confirmed = await confirm(this.app, {
+                        title: t('menu.deleteTaskTitle'),
+                        body: this.deleteMessage(outlook, descendantFlows),
+                        confirmLabel: t('modal.delete'),
+                        warning: true,
+                    });
+                    if (confirmed) await remove(false);
                 });
         });
     }

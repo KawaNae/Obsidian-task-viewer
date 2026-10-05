@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import type { PropertyValue, Task } from '../../types';
 
 /**
@@ -31,9 +32,7 @@ export class TaskUpdateBuilder {
     }
 
     static due(task: Task, date: string, time: string): Partial<Task> | null {
-        const d = date.trim();
-        const tm = time.trim();
-        const due = d ? (tm ? `${d}T${tm}` : d) : undefined;
+        const due = DateUtils.joinDateTime(date.trim(), time.trim());
         return due === task.due ? null : { due };
     }
 

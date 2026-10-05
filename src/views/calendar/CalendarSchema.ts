@@ -3,11 +3,10 @@
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';
-import { registerSchema } from '../../services/viewConfig/SchemaRegistry';
+import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
-import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 
 export interface CalendarConfig {
     customName?: string;
@@ -19,12 +18,21 @@ export interface CalendarConfig {
 }
 
 export interface CalendarTransient {
-    windowStart?: string;
+    /**
+     * The day looked at, as given (`ViewedDay`). Absent, the view follows
+     * today. The grid drawn is this day's month grid (`CalendarGrid`).
+     */
+    date?: string;
+    /** How many weeks the grid was moved from `date`'s month grid; absent is 0. */
+    weekOffset?: number;
     pinnedListCollapsed?: Record<string, boolean>;
 }
 
+/** The view's state: its config and transient fields as one value (`ViewStore`). */
+export type CalendarState = Partial<CalendarConfig> & Partial<CalendarTransient>;
+
 export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
-    viewType: VIEW_META_CALENDAR.type,
+    viewType: 'calendar-view',
     shortName: 'calendar',
     defaults: {
         showSidebar: true,
@@ -38,11 +46,15 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
         showSidebar:      F.boolean('showSidebar'),
         pinnedLists:      F.pinnedLists('pinnedLists'),
     },
-    anchorKey: 'windowStart',
+    anchorKey: 'date',
+    anchorOffsetKeys: ['weekOffset'],
+    listsOf: (config) => config.pinnedLists ?? [],
     transient: {
-        windowStart:         T.dateString('windowStart'),
+        date:                T.dateString('date'),
+        weekOffset:          T.int('weekOffset'),
         pinnedListCollapsed: T.collapsedKeys('pinnedListCollapsed', 'calendar'),
     },
 };
 
-registerSchema(CalendarSchema);
+/** The codec of this schema; the views, toolbars and the view table share this instance. */
+export const CalendarCodec = new ViewConfigCodec(CalendarSchema);

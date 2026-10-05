@@ -1,23 +1,19 @@
 import { type App, TFile } from 'obsidian';
-import type { Task } from '../../../types';
-import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { carryTo } from '../Carry';
-import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
-import { Block, Placement, type InSection, type PlacedLine, type Spot } from '../utils/Placement';
+import { Block, Placement, type InSection, type Spot } from '../utils/Placement';
 import { ListNumber } from '../utils/ListNumber';
-import type { PropertyOp } from '../PropertyUpdatePlanner';
-import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
+import { renderFlowInstance } from '../FlowInstanceLines';
 import {
-    UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines,
-    type DraftEdit, type EditTrials, type EditedLines, type EditorLine, type LineDraft, type NamedRow, type Refusal,
-    type RowTarget, type WriteAt, type WriteRefused, type WriteChannel, type WriteChannels, type WriteOutcome, type WriteSession,
+    UnfollowableDraft, fileGone, processLines, withRefused,
+    type LineDraft, type Refusal, type RowRef, type RowTarget, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
-import type { PlannedTarget } from '../TaskRefs';
-import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
+import { firingTrials, type CompletionFire, type FiringOutcome } from '../FiringTrials';
+import type { SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
+import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { indentUnit } from '../../../utils/ObsidianConfig';
 
 
@@ -28,43 +24,55 @@ import { indentUnit } from '../../../utils/ObsidianConfig';
 export class InlineTaskWriter {
     constructor(
         private app: App,
-        private fileOps: FileOperations,
         private channelOf: WriteChannels,
     ) { }
 
     /**
-     * Rewrite the row as `updatedTask`, and its property lines by `childOps`
-     * — and, with `fire`, fire its flow in the same write: a card's, the
-     * API's or a timer's completion of the row (`TaskIndex.writeUpdate`).
-     * A write refused with a fire that writes lines leaves the rewrite
-     * written alone, in the same attempt (`CompletionFire.writes`).
+     * Apply `ops` to the row `target` names, as one write: the one way a
+     * write of ops reaches a note. A card's, the API's and a timer's rewrite
+     * of a row (`update`), a delete, a duplicate, a timer's line, a fire's
+     * effects, and the editor menu's write once the editor no longer shows
+     * the file.
      *
-     * The line is made from the index's copy, so it is written only over a
-     * row that still reads as that copy (`target.basis`): a line edited since
-     * — by hand, by the editor's menu, by a fire — would otherwise be put back
-     * to what the copy says, the edit lost without a word.
+     * With `opts.fire`, the write completes the row, and its flow fires in the
+     * same write, after `ops`; a write refused with a fire that writes lines
+     * is made without it in the same attempt ({@link writeFiring}). Without
+     * one, `fires` is empty.
      *
-     * @returns the outcome. `written: false` means nothing was written at all,
-     * which the caller must not treat as a successful no-op: the index has
-     * already been updated optimistically, and an unwritten file leaves the two
-     * disagreeing until something else forces a rescan. A write made says
-     * what came of `fire` (`FiringOutcome`).
+     * The row is found once, and every op after the first takes its line
+     * from that answer, carried across the ops before it (`WriteSession.row`):
+     * either every op lands or none does, and a row that cannot be placed
+     * leaves the file as it was. A line planned from the index's copy is
+     * written only over a row that still reads as that copy (`target.basis`):
+     * a line edited since, by hand, by the editor's menu or by a fire, would
+     * otherwise be put back to what the copy says. A caller that tells a
+     * refusal in its own words hears it at `opts.refused` (`withRefused`).
+     *
+     * @returns the outcome. `written: false` means nothing was written at
+     * all, which the caller must not treat as a successful no-op: nothing
+     * comes in to the index as a new reading, and the caller that showed the
+     * new values of its own (the hub's draft) reads the copy again.
      */
-    async updateTaskInFile<F extends CompletionFire>(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return this.refusedGone(target);
-
-        // 子プロパティ行（- key:: value）の更新は同一 process 内で
-        // 連続適用する（別 process だと originalText 失効と行番号
-        // シフトが競合するため、タスク行と子行は1原子書き込み）。
-        const update: TaskOp = { kind: 'update', text: TaskParser.format(updatedTask), childOps };
-        return this.writeOps(file, this.channelOf(target.file), target, [update], fire);
+    async write<F extends CompletionFire = CompletionFire>(
+        path: string,
+        target: RowRef,
+        ops: readonly TaskOp[],
+        opts: { fire?: F; refused?: (refusal: Refusal) => void } = {},
+    ): Promise<FiringOutcome<F>> {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        const channel = withRefused(this.channelOf(path), opts.refused);
+        if (!(file instanceof TFile)) return fileGone(channel, path, target.subject);
+        const fire = opts.fire;
+        return this.writeFiring(file, channel, (draft, session) => {
+            if (!this.applyOps(draft, session, target, ops)) return false;
+            return fire ? [target] : [];
+        }, () => fire!);
     }
 
     /**
      * Replace the row `target` names and its subtree with `replacement`, as
      * one write, and fire each row the write completes, in the same write:
-     * the hub's source mode (`TaskIndex.replaceSubtree`). Which rows the
+     * the hub's source mode (`Operations.replaceSubtree`). Which rows the
      * write keeps and which it writes anew, and which of the kept ones it
      * completes, is `ReplaceSubtree`'s to answer; whether a row is completed
      * is `completing.completes`, handed in by the index, since it is the flow
@@ -75,17 +83,18 @@ export class InlineTaskWriter {
      * write is made only over a subtree that still reads so: a line written
      * into it since, by the form, a timer or by hand, refuses it as `changed`.
      * A caller that shows the refusal itself hears it at `opts.refused`
-     * ({@link channelHearing}).
+     * (`withRefused`).
      */
     async replaceSubtreeInFile<F extends CompletionFire>(
-        target: PlannedTarget,
+        path: string,
+        target: RowRef,
         replacement: SubtreeReplacement,
         completing: { completes(before: string, after: string): boolean; fire(): F },
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<FiringOutcome<F>> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        const channel = this.channelHearing(target.file, opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
+        const file = this.app.vault.getAbstractFileByPath(path);
+        const channel = withRefused(this.channelOf(path), opts.refused);
+        if (!(file instanceof TFile)) return fileGone(channel, path, target.subject);
         return this.writeFiring(file, channel, (draft, session) => {
             const line = session.row(target);
             if (line === null) return false;
@@ -96,27 +105,11 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Apply `ops` to the row `target` names, as one write, with `fire` after
-     * them when a fire goes with them ({@link writeFiring}).
-     */
-    private writeOps<F extends CompletionFire>(
-        file: TFile,
-        channel: WriteChannel | undefined,
-        target: NamedRow | EditorLine,
-        ops: readonly TaskOp[],
-        fire: F | undefined,
-    ): Promise<FiringOutcome<F>> {
-        return this.writeFiring(file, channel, (draft, session) => {
-            if (!this.applyOps(draft, session, target, ops)) return false;
-            return fire ? [target] : [];
-        }, () => fire!);
-    }
-
-    /**
      * One write of `base`, and of the fire of each row it completed, each
-     * fire kept or set aside on its own: as the editor fires the rows one
-     * transaction completed (`FlowFireExtension`), but in one write
-     * ({@link firingTrials}).
+     * fire kept or set aside on its own, by the one rule of it
+     * (`firingTrials`, over this writer's {@link applyOps}): the rule the
+     * editor writes the rows one transaction completed by
+     * (`FlowFireExtension`).
      *
      * A refusal says what the write was about by the row it asked for last,
      * else `about` (`processLines`): a write that may ask for no row of its
@@ -133,7 +126,7 @@ export class InlineTaskWriter {
         after?: (draft: LineDraft, session: WriteSession) => A | false,
         about?: string,
     ): Promise<FiringOutcome<F> & { after?: A }> {
-        const firing = this.firingTrials(base, fire, after);
+        const firing = firingTrials((draft, session, target, ops) => this.applyOps(draft, session, target, ops), base, fire, after);
         const outcome = await processLines(this.app, file, channel, firing.trials, about);
         if (!outcome.written) return outcome;
         const { fires, after: answered } = firing.settled();
@@ -141,181 +134,8 @@ export class InlineTaskWriter {
     }
 
     /**
-     * The edits one write of `base` and its fires tries, to settle on the one
-     * it writes (`EditTrials`): what {@link writeFiring} writes to its note,
-     * and what a send tries first on the lines of a note to learn what the
-     * write will leave of its rows (`SendWriter`). `settled` answers what the
-     * last settle chose: each fire and the refusal it was set aside with, and
-     * what `after` answered in the edit chosen.
-     *
-     * `base` does the write's own edit and answers the rows it completed,
-     * where its session finds them (the row the write names, a line it
-     * marked), in the order they stand; false when it gave the write up.
-     * Each row's fire is `fire()`, asked once per row in each run of the
-     * write, and applied after `base`, row by row, the ones above first, each
-     * planned from the lines the fires before it left. A fire that carries a
-     * row below it (a parent's move) carries it through the write's own
-     * report, and the row fires where it went, once.
-     *
-     * `after`, when given, is the rest of the write, done once the fires
-     * are: an edit of rows the fires may have changed or moved, which it
-     * finds through the session where they left them — a send carries the
-     * rows its draft completed once they fired where they stood
-     * (`SendWriter`). It is part of every try, the one without fires too;
-     * false gives the write up, as from `base`, and anything else is what it
-     * answers of the edit.
-     *
-     * The write is tried with every fire first, which is the one try when
-     * nothing is refused. Refused with a fire in it, it is tried with none:
-     * refused so too, the refusal is the write's own, and nothing is
-     * written. Otherwise the fires are put back one at a time, from the
-     * top, each kept if the write with it and the ones kept before it is
-     * made, and set aside, with the refusal it met, if not: the completion
-     * stands without it, its command stays on the row, and the user is owed a
-     * word of it (`FiringOutcome`). All of it is tried on the lines of one
-     * run of the write's callback (`EditTrials`).
-     */
-    firingTrials<F extends CompletionFire, A = true>(
-        base: (draft: LineDraft, session: WriteSession) => readonly RowTarget[] | false,
-        fire: () => F,
-        after?: (draft: LineDraft, session: WriteSession) => A | false,
-    ): { trials: EditTrials; settled(): { fires: ReadonlyArray<{ fire: F; setAside: Refusal | null }>; after: A | undefined } } {
-        // The last settle's fires, what came of them, and what `after`
-        // answered in the edit it chose.
-        let fires: F[] = [];
-        let setAside = new Map<number, Refusal>();
-        let chosen: A | undefined;
-        const settle = (tryEdit: (edit: DraftEdit) => EditedLines): EditedLines => {
-            fires = [];
-            setAside = new Map();
-            chosen = undefined;
-            const fireAt = (k: number): F => fires[k] ??= fire();
-            // How many rows `base` completed, as its last try answered.
-            let rows = 0;
-            // What `after` answered in each edit made.
-            const answers = new Map<EditedLines, A | undefined>();
-            // The write with the fires of the rows `kept` names (all of them
-            // for null), each after the ones above it.
-            const tryWith = (kept: readonly number[] | null): EditedLines => {
-                let answered: A | undefined;
-                const edited = tryEdit((draft, _eol, session) => {
-                    answered = undefined;
-                    const completed = base(draft, session);
-                    if (completed === false) return false;
-                    rows = completed.length;
-                    for (const k of kept ?? completed.keys()) {
-                        if (!this.applyOps(draft, session, completed[k], [fireAt(k).op])) return false;
-                    }
-                    if (!after) return true;
-                    const answer = after(draft, session);
-                    if (answer === false) return false;
-                    answered = answer;
-                    return true;
-                });
-                if (edited.written) answers.set(edited, answered);
-                return edited;
-            };
-            const choose = (edited: EditedLines): EditedLines => {
-                chosen = answers.get(edited);
-                return edited;
-            };
-            const all = tryWith(null);
-            if (all.written || rows === 0) return choose(all);
-            let made = tryWith([]);
-            if (!made.written) return made;
-            const kept: number[] = [];
-            for (let k = 0; k < rows; k++) {
-                // With every fire above it kept, the last is the first try again.
-                const withIt = kept.length === k && k === rows - 1 ? all : tryWith([...kept, k]);
-                if (withIt.written) {
-                    kept.push(k);
-                    made = withIt;
-                } else {
-                    setAside.set(k, withIt.refused);
-                }
-            }
-            return choose(made);
-        };
-        return {
-            trials: { settle },
-            settled: () => ({ fires: fires.map((one, k) => ({ fire: one, setAside: setAside.get(k) ?? null })), after: chosen }),
-        };
-    }
-
-    /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
-    private refusedGone(target: PlannedTarget): WriteRefused {
-        return fileGone(this.channelOf(target.file), target.file, target.subject);
-    }
-
-    /**
-     * The channel a write to `file` goes through: the index's, with a refusal
-     * handed to `refused` instead when the caller gives one. A caller that
-     * shows the refusal in a place of its own hears it there, and decides
-     * what else is done of it (the index still learns from it); telling it
-     * through the channel too would be the same news twice.
-     */
-    private channelHearing(file: string, refused: ((refusal: Refusal) => void) | undefined): WriteChannel | undefined {
-        const told = this.channelOf(file);
-        return told && refused ? { ...told, refused } : told;
-    }
-
-    /**
-     * Apply `ops` to the row at a line the editor pointed at, planned from the
-     * row, and its subtree when `at` holds one: the editor menu's write, when
-     * the editor it was opened in no longer shows the file, with `opts.fire`
-     * when it completes the line (see {@link updateTaskInFile}). A caller that
-     * tells a refusal in its own words has it from the outcome, as
-     * `applyToTask` does.
-     */
-    async applyToLine<F extends CompletionFire>(
-        filePath: string,
-        at: EditorLine,
-        ops: readonly TaskOp[],
-        opts: { refused?: (refusal: Refusal) => void; fire?: F } = {},
-    ): Promise<FiringOutcome<F>> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        const channel = this.channelHearing(filePath, opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, filePath, at.text.trim());
-        return this.writeOps(file, channel, at, ops, opts.fire);
-    }
-
-    /**
-     * Do everything one operation does to one row of one file, as one write.
-     *
-     * A fire used to write each of its effects on its own — the next
-     * instance, then the consumed command — and each write asked where the
-     * row stood. The second asked after the first had moved it, and found it
-     * only because the line just written read differently from the one that
-     * fired: held by value, not by construction. Here the row is located once,
-     * every effect after the first takes its line from that answer carried
-     * across the splices before it (see `WriteSession.row`), and nothing
-     * searches the file a second time.
-     *
-     * One write also settles what the separate ones could not: either every
-     * effect lands, or none does. A row that cannot be placed leaves the file
-     * byte-identical — no next instance beside a command that was not
-     * consumed, which would fire again.
-     *
-     * Where each line goes is read off the lines as they stand when the
-     * effect is applied: the sibling group, the subtree, the indentation. The
-     * separate writes did the same, each against the file the previous one
-     * left, so the lines written are the same.
-     */
-    async applyToTask(
-        target: PlannedTarget,
-        ops: readonly TaskOp[],
-        opts: { refused?: (refusal: Refusal) => void } = {},
-    ): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        const channel = this.channelHearing(target.file, opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
-
-        return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, target, ops));
-    }
-
-    /**
      * Apply `ops` in order to the row `target` names, inside a write: the
-     * one loop every write of ops runs, to a file (`applyToTask`) or to an
+     * one loop every write of ops runs, to a file ({@link write}) or to an
      * editor's lines (`editLines`). Answers false when the row has no line,
      * which the session has refused with its reason.
      *
@@ -357,7 +177,7 @@ export class InlineTaskWriter {
             case 'insert-instance': {
                 const outline = draft.reading();
                 const unit = indentUnit(this.app);
-                draft.put(Placement.groupHead(outline, line, flowInstanceHead(op.insert), unit), renderFlowInstance(outline, line, op.insert, unit));
+                draft.put(Placement.groupHead(outline, line, op.instance.head, unit), renderFlowInstance(outline, line, op.instance, unit));
                 return;
             }
             case 'strip-flow': {
@@ -384,8 +204,7 @@ export class InlineTaskWriter {
                 return;
             }
             case 'remove': {
-                const { childrenLines } = this.fileOps.collectChildrenFromLines(draft.reading(), line);
-                draft.splice(line, 1 + childrenLines.length);
+                draft.splice(line, draft.reading().subtreeEnd(line) - line);
                 return;
             }
             case 'insert': {
@@ -393,12 +212,8 @@ export class InlineTaskWriter {
                 draft.put(Placement[op.place](draft.reading(), line, op.text, indentUnit(this.app)), Block.line(op.text));
                 return;
             }
-            case 'copy': {
-                // Usually a copy of the row, word for word. Put just below
-                // it, the copy took the row's children for its own (P1's
-                // counterexample 5): it goes past the subtree, and the
-                // report says which of the two rows the write made.
-                draft.put(Placement.copyOf(draft.reading(), line, 'below', op.text), Block.line(op.text));
+            case 'copies': {
+                putCopies(draft, line, op);
                 return;
             }
         }
@@ -417,52 +232,40 @@ export class InlineTaskWriter {
         if (found.kind !== 'spot') throw new UnfollowableDraft(`a move to the heading '${to.heading}' finds ${found.kind === 'none' ? 'none' : found.count} where it was planned to find one`);
         return found.spot;
     }
+}
 
-    /**
-     * @returns the outcome.
-     *
-     * A note that does not exist yet is made of what the append writes to an
-     * empty note, held to the same check (`editLines`), and created whole
-     * (`createFile`): every row in it is new, and there is no report of lines
-     * to follow.
-     */
-    async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
-        // The appended text is built with LF; splitting it here lets the file's
-        // own terminator go back between every line, its own included. The
-        // lines are to read as they read by themselves.
-        return this.appendBlock(filePath, Block.read(splitLines(content).lines));
-    }
 
-    /** Append `block` to the note, or make the note of it (see {@link appendTaskToFile}). */
-    private async appendBlock(filePath: string, block: readonly PlacedLine[]): Promise<WriteAt> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        const subject = block[0].text.trim();
-        const channel = this.channelOf(filePath);
-        let inserted = -1;
-        const append = (draft: LineDraft) => {
-            const spot = Placement.end(draft.reading());
-            draft.put(spot, block);
-            inserted = spot.at;
-            return true;
-        };
+/**
+ * Put the copies of `op` beside the row at `line`: siblings of it, on the
+ * op's side, spelled as the row is (`Placement.copyOf`), each followed, when
+ * the op carries children, by the row's children with their `^id`s taken
+ * off.
+ *
+ * Children travel verbatim. A child's dates are its own, not an offset from
+ * its parent's, so nothing here rewrites them. Each copy is to read as the
+ * original's subtree reads (`Block.of`), and is not written where it would
+ * not.
+ *
+ * A fence among the children that never closes ends with the copy's item,
+ * as it ended with the original's (`Outline.read`): below a copy stands the
+ * original's own line, or whatever stood below the original.
+ */
+function putCopies(draft: LineDraft, line: number, op: Extract<TaskOp, { kind: 'copies' }>): void {
+    const lines = draft.lines;
+    const outline = draft.reading();
+    const indent = Outline.indentOf(lines[line]);
+    const heads = 'verbatim' in op.lines
+        ? Array.from({ length: op.lines.verbatim }, () => TaskLineClassifier.stripBlockIds([lines[line]])[0])
+        : op.lines.map(text => indent + Outline.dedent(text));
+    const end = op.children ? outline.subtreeEnd(line) : line + 1;
+    const rows: number[] = [];
+    for (let row = line; row < end; row++) rows.push(row);
+    const children = TaskLineClassifier.stripBlockIds(rows.slice(1).map(row => lines[row]));
 
-        if (!file) {
-            const edited = editLines(filePath, [], '\n', append, { about: subject });
-            if (!edited.written) {
-                channel?.refused(edited.refused);
-                return edited;
-            }
-            const created = await createFile(this.app, filePath, channel, subject, async () => {
-                await this.fileOps.ensureDirectoryExists(filePath);
-                return edited.lines.join('\n');
-            });
-            return created.written ? { ...created, line: inserted } : created;
-        }
-
-        // A folder by that name: there is no note to append to.
-        if (!(file instanceof TFile)) return fileGone(channel, filePath, subject);
-
-        const outcome = await processLines(this.app, file, channel, append, subject);
-        return outcome.written ? { ...outcome, line: inserted } : outcome;
-    }
+    // Through the draft rather than beside it: a copy is often worded exactly
+    // like the line it copies, so a position off by one would read the same
+    // and hand the original's identity to the copy. One number does both.
+    // Each copy's lines stand under lines of that copy.
+    draft.put(Placement.copyOf(outline, line, op.side, heads[0]), heads.flatMap((head, copy) => Block.of(outline, rows, [head, ...children])
+        .map(placed => (typeof placed.under === 'number' ? { ...placed, under: placed.under + copy * rows.length } : placed))));
 }

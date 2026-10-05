@@ -1,4 +1,4 @@
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { SelectionHost } from './SelectionHost';
 
 /**
@@ -8,9 +8,8 @@ import type { SelectionHost } from './SelectionHost';
  *   1. background-tap でタスク以外をタッチしたときの selection 解除
  *   2. UI 経由のタスク削除に追従した selection クリア
  *
- * selection state 自体は HandleManager が引き続き持つ — 本 controller は
- * その薄いファサード兼イベント窓口に徹する。HandleManager の責務分離は
- * 後続 PR で別途対応する。
+ * selection state とその表示（`.is-selected` とハンドル）は HandleManager
+ * だけが持つ — 本 controller はその薄いファサード兼イベント窓口に徹する。
  */
 export class SelectionController {
     constructor(private readonly handleManager: SelectionHost) {}
@@ -39,11 +38,12 @@ export class SelectionController {
     }
 
     /**
-     * 選択中タスクが UI 経由で削除されたら selection をクリアする。
+     * 選択中のタスクの名前が終わったら（索引の削除の通知。自分の削除、外の
+     * 編集、ノートの削除）selection をクリアする。
      * 戻り値は購読解除 callback (`view.unload` 等で呼ぶ)。
      */
-    attachDeleteListener(writeService: TaskWriteService): () => void {
-        return writeService.onTaskDeleted((deletedId) => {
+    attachDeleteListener(index: Pick<IndexReads, 'onTaskDeleted'>): () => void {
+        return index.onTaskDeleted((deletedId) => {
             if (this.handleManager.getSelectedTaskId() === deletedId) {
                 this.handleManager.selectTask(null);
             }

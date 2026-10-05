@@ -91,21 +91,6 @@ describe('DropReveal', () => {
         expect(applied.classes.has('is-drag-hidden')).toBe(false);
         expect(unapplied.classes.has('is-drag-hidden')).toBe(true);
     });
-
-    it('isRevealable mirrors what finish will do', () => {
-        const reveal = new DropReveal();
-        const applied = makeEl('is-drag-hidden');
-        const hidden = makeEl('is-drag-hidden');
-        const plain = makeEl('is-dragging');
-
-        expect(reveal.isRevealable(hidden)).toBe(true); // まだ gate されていない
-        reveal.gate();
-        reveal.markApplied(applied);
-
-        expect(reveal.isRevealable(applied)).toBe(true);
-        expect(reveal.isRevealable(hidden)).toBe(false);
-        expect(reveal.isRevealable(plain)).toBe(true);
-    });
 });
 
 // ---------------------------------------------------------------------------
@@ -158,12 +143,13 @@ class OrderProbeStrategy extends BaseDragStrategy {
 function makeContext(log: string[], onUpdate?: () => void, written = true): DragContext {
     return {
         plugin: { settings: { startHour: 5 } },
-        writeService: {
+        index: { getTask: () => undefined },
+        operations: {
             updateTask: async () => {
                 log.push('commit');
                 onUpdate?.();
                 await Promise.resolve();
-                return written;
+                return { written };
             },
         },
         onTaskClick: () => log.push('restoreSelection'),
@@ -176,7 +162,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
         const context = makeContext(strategy.log);
         const el = makeEl('is-drag-hidden');
         const plan: DragPlan = {
-            edits: { effectiveStartDate: '2026-08-13', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-13', startTime: '10:00' },
             baseTask: makeTask(),
         };
 
@@ -194,7 +180,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
         const el = makeEl('is-drag-hidden');
 
         await strategy.run(context, {
-            edits: { effectiveStartDate: '2026-08-13', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-13', startTime: '10:00' },
             baseTask: makeTask(),
         }, [el]);
 
@@ -211,7 +197,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
         });
 
         await strategy.run(context, {
-            edits: { effectiveStartDate: '2026-08-13', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-13', startTime: '10:00' },
             baseTask: makeTask(),
         }, [el]);
 
@@ -226,7 +212,7 @@ describe('BaseDragStrategy.commitAndReveal', () => {
 
         // 掴んだだけで値が変わっていない → updateTask は呼ばれない
         await strategy.run(context, {
-            edits: { effectiveStartDate: '2026-08-12', effectiveStartTime: '10:00' },
+            edits: { startDay: '2026-08-12', startTime: '10:00' },
             baseTask: makeTask(),
         }, [el]);
 

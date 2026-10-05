@@ -1,24 +1,34 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
+import { Notice } from 'obsidian';
 import { TimerPersistence } from '../../../src/timer/TimerPersistence';
-import { STORAGE_VERSION } from '../../../src/timer/TimerStorageUtils';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
-import type { TimerContext } from '../../../src/timer/TimerContext';
-import type { CountdownTimer, CountupTimer, TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
-import { agoLabel, canOffsetStart, readOffsetInput, rememberedStart, startLabel } from '../../../src/timer/TimerStartOffset';
+import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
+import type { TimerWidget } from '../../../src/timer/TimerWidget';
+import { readSeconds } from '../../../src/timer/TimerClock';
+import { progressOf } from '../../../src/timer/TimerProgress';
+import { agoLabel, canOffsetStart, OFFSET_FIELDS, offsetStart, rememberedStart, startLabel, type OffsetInputKind } from '../../../src/timer/TimerStartOffset';
+
+/** Where a shift typed in the dialog's field goes: read as the field reads it, then placed; null when it does not read. */
+function readOffsetInput(kind: OffsetInputKind, text: string, nowMs: number): number | null {
+    if (kind === 'minutes') {
+        const read = OFFSET_FIELDS.minutes.read(text);
+        return read.ok ? offsetStart({ kind, minutes: read.value }, nowMs) : null;
+    }
+    const read = OFFSET_FIELDS.time.read(text);
+    return read.ok ? offsetStart({ kind, time: read.value }, nowMs) : null;
+}
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { widgetOver } from '../helpers/timerRig';
 
 /**
  * 走っている区間の開始をずらす（かけ忘れたタイマーを、実際に始めた時刻から数える）。
  *
- * ずらした時点で走行の行の start を書き直し、書けてから `startTimeMs` を動かす。
- * 規則は mode で分けないので、self の 1 本目、child、sibling、⏸→▶ のあとの区間の
- * どれでも、止めたときの記録の start がずらした時刻になる。
+ * 先に走行の行の start を書き直し、書けてから時計を動かす（`TimerLifecycle.offsetStart`
+ * の `shifted`）。規則は mode で分けないので、self の 1 本目、child、sibling、⏸→▶ の
+ * あとの区間のどれでも、止めたときの記録の start がずらした時刻になる。
  */
 const store = new Map<string, string>();
 (globalThis as unknown as { window: unknown }).window = {
-    setInterval: () => 1, clearInterval: () => { },
+    setInterval: () => 1, clearInterval: () => { }, setTimeout, clearTimeout,
     addEventListener: () => { }, removeEventListener: () => { },
     localStorage: {
         getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
@@ -30,37 +40,6 @@ const store = new Map<string, string>();
 const FILE = 'notes/a.md';
 const DAY = '2026-09-30';
 const at = (h: number, m: number, day = 30) => new Date(2026, 8, day, h, m, 0);
-const keyFor = (version: number) => `task-viewer.active-timers.v${version}:vault-fp`;
-const storageUtils = {
-    deviceId: 'device-1',
-    vaultFingerprint: 'vault-fp',
-    getStorageKey: () => keyFor(STORAGE_VERSION),
-    getStorageKeyForVersion: (v: number) => keyFor(v),
-} as unknown as TimerStorageUtils;
-
-/** 1 回の plugin の読み込み: 索引、recorder、lifecycle、保存。 */
-function pluginOver(s: VaultSession) {
-    const ctx = {
-        timers: new Map<string, TimerInstance>(), recorder: s.recorder,
-        plugin: {
-            settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
-            getTaskReadService: () => ({ onChange: () => () => { } }),
-        },
-        app: s.app,
-        startTimer: () => { }, render: () => { }, renderTimerItem: () => { },
-        persistTimersToStorage: () => persistence.persistTimersToStorage(),
-        onTimerClosed: () => { }, discardTimerContent: () => { },
-        flushTimerContent: async () => true,
-        ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
-        getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
-    } as unknown as TimerContext;
-    s.onOpenTimers(() => ctx.timers.values());
-    s.onPersist(() => persistence.persistTimersToStorage());
-    const creator = new TimerCreator(ctx);
-    const lifecycle = new TimerLifecycle(ctx, creator);
-    const persistence = new TimerPersistence(ctx, creator, lifecycle, storageUtils);
-    return { ctx, lifecycle, persistence };
-}
 
 async function settleAll(s: VaultSession) {
     for (let i = 0; i < 3; i++) {
@@ -81,40 +60,40 @@ function failNextWrite(s: VaultSession) {
 }
 
 /** 保存に在るタイマー（1 本だけ）。 */
-function saved(): Record<string, unknown> | undefined {
-    const raw = store.get(keyFor(STORAGE_VERSION));
+function savedIn(persistence: TimerPersistence): Record<string, unknown> | undefined {
+    const raw = store.get(persistence.storageKey());
     return raw ? (JSON.parse(raw) as { timers: Record<string, unknown>[] }).timers[0] : undefined;
 }
 
-const busyOf = (lifecycle: TimerLifecycle) => (lifecycle as unknown as { busy: Set<string> }).busy;
 const lines = (contents: Map<string, string>) => contents.get(FILE)!.split('\n').filter(l => l.trim() !== '');
 /** 完了した記録の `start>end`（日付つき）。 */
 const records = (contents: Map<string, string>) =>
     lines(contents).map(l => /^\s*- \[x\] .*@(\S+>\S+)/.exec(l)?.[1]).filter(Boolean);
+const elapsed = (timer: TimerState) => readSeconds(timer.clock, Date.now());
 
-/** `name` の行で、今 `recordMode` の countup か countdown を始める。 */
+/** `name` の行で、今、開始の命令（`TimerWidget.startTimer`）で countup か 25 分の countdown を始め、1 本目の行を書き終える。 */
 async function started(
     note: string[],
     name: string,
-    recordMode: TimerRecordMode,
-    timerType: 'countup' | 'countdown' = 'countup',
-) {
+    mode: RecordMode,
+    kind: 'countup' | 'countdown' = 'countup',
+): Promise<{ contents: Map<string, string>; s: VaultSession; widget: TimerWidget; timer: TimerState }> {
     const contents = new Map([[FILE, [...note, ''].join('\n')]]);
     const s = vaultSession(contents);
     await s.scanAll();
-    const p = pluginOver(s);
+    const widget = widgetOver(s);
     const target = s.index.getTasks().find(t => t.content === name)!;
-    const timer = s.creator.createTimer({
-        taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-        timerType, recordMode, autoStart: true, countdownSeconds: 25 * 60,
-    }) as CountupTimer | CountdownTimer;
-    p.ctx.timers.set(timer.id, timer);
-    expect(await s.recorder.writeStart(timer)).toBe(true);
+    widget.startTimer(target, mode, kind === 'countup' ? { kind } : { kind, seconds: 25 * 60 });
+    const [timer] = widget.board.values();
+    await vi.waitFor(() => {
+        expect(timer.tail).not.toBeNull();
+        expect(widget.runtime.busy.has(timer.id)).toBe(false);
+    });
     await settleAll(s);
-    return { contents, s, timer, ...p };
+    return { contents, s, widget, timer };
 }
 
-describe('shifting the start of a running timer writes the running line, then moves the timer', () => {
+describe('shifting the start of a running timer writes the running line, then moves the clock', () => {
     beforeEach(() => {
         store.clear();
         vi.useFakeTimers({ toFake: ['Date'] });
@@ -123,78 +102,77 @@ describe('shifting the start of a running timer writes the running line, then mo
     afterEach(() => vi.useRealTimers());
 
     it('self: the start overwritten at the start is remembered, and shifting to it records from it', async () => {
-        const { contents, s, timer, lifecycle } = await started([`- [ ] 設計 @${DAY}T10:00>11:00`], '設計', 'self');
+        const { contents, s, widget, timer } = await started([`- [ ] 設計 @${DAY}T10:00>11:00`], '設計', 'self');
         expect(timer.priorStartMs).toBe(at(10, 0).getTime());
         expect(lines(contents)[0]).toContain(`@${DAY}T10:20>11:20`);
 
         vi.setSystemTime(at(10, 25));
         expect(rememberedStart(timer, Date.now(), 0)).toBe(at(10, 0).getTime());
-        await lifecycle.offsetStart(timer, at(10, 0).getTime());
+        await widget.lifecycle.offsetStart(timer, at(10, 0).getTime());
         await settleAll(s);
         // 走っている間の行も、ずらした start を示す。
         expect(lines(contents)[0]).toContain(`@${DAY}T10:00>11:20`);
-        expect(timer.startTimeMs).toBe(at(10, 0).getTime());
-        expect(timer.elapsedTime).toBe(25 * 60);
+        expect(timer.clock).toEqual({ kind: 'running', startMs: at(10, 0).getTime() });
+        expect(elapsed(timer)).toBe(25 * 60);
 
         vi.setSystemTime(at(10, 50));
-        await lifecycle.finishTimer(timer);
+        await widget.lifecycle.stop(timer, 'close');
         await settleAll(s);
         expect(records(contents)).toEqual([`${DAY}T10:00>10:50`]);
         s.dispose();
     });
 
     it('child: the line written at the start is shifted, and the record keeps the shifted start', async () => {
-        const { contents, s, timer, lifecycle } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
+        const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
         expect(timer.priorStartMs).toBeNull();
 
         vi.setSystemTime(at(10, 25));
-        await lifecycle.offsetStart(timer, Date.now() - 15 * 60_000);
+        await widget.lifecycle.offsetStart(timer, Date.now() - 15 * 60_000);
         await settleAll(s);
         expect(lines(contents)[1]).toMatch(new RegExp(`@${DAY}T10:10 \\^`));
 
         vi.setSystemTime(at(10, 40));
-        await lifecycle.finishTimer(timer);
+        await widget.lifecycle.stop(timer, 'close');
         await settleAll(s);
         expect(records(contents)).toEqual([`${DAY}T10:10>10:40`]);
         s.dispose();
     });
 
     it('sibling: the line added next to the completed run is shifted', async () => {
-        const { contents, s, timer, lifecycle } = await started(
+        const { contents, s, widget, timer } = await started(
             [`- [x] ⏱️ 対象 @${DAY}T09:00>09:30`], '⏱️ 対象', 'sibling');
         expect(timer.priorStartMs).toBeNull();
 
         vi.setSystemTime(at(10, 22));
-        await lifecycle.offsetStart(timer, at(10, 5).getTime());
+        await widget.lifecycle.offsetStart(timer, at(10, 5).getTime());
         await settleAll(s);
 
         vi.setSystemTime(at(10, 45));
-        await lifecycle.finishTimer(timer);
+        await widget.lifecycle.stop(timer, 'close');
         await settleAll(s);
         expect(records(contents)).toEqual([`${DAY}T09:00>09:30`, `${DAY}T10:05>10:45`]);
         s.dispose();
     });
 
     it('after ⏸ and ▶: only the running session moves, and the remembered start is not offered', async () => {
-        const { contents, s, timer, lifecycle } = await started([`- [ ] 設計 @${DAY}T10:00>11:00`], '設計', 'self');
+        const { contents, s, widget, timer } = await started([`- [ ] 設計 @${DAY}T10:00>11:00`], '設計', 'self');
 
         vi.setSystemTime(at(10, 50));
-        await lifecycle.suspendTimer(timer);
+        await widget.lifecycle.stop(timer, 'suspend');
         await settleAll(s);
         vi.setSystemTime(at(11, 10));
-        lifecycle.resumeSession(timer);
-        await vi.waitFor(() => expect(busyOf(lifecycle).has(timer.id)).toBe(false));
+        await widget.lifecycle.resume(timer);
         await settleAll(s);
-        expect(timer.runState).toBe('running');
+        expect(timer.session.kind).toBe('running');
         expect(rememberedStart(timer, Date.now(), 0)).toBeNull();
 
         // ▶ の押し忘れ: 前の区間の end より前へもずらせる（下限を置かない）。
         vi.setSystemTime(at(11, 12));
-        await lifecycle.offsetStart(timer, at(10, 45).getTime());
+        await widget.lifecycle.offsetStart(timer, at(10, 45).getTime());
         await settleAll(s);
 
         vi.setSystemTime(at(11, 30));
-        await lifecycle.finishTimer(timer);
+        await widget.lifecycle.stop(timer, 'close');
         await settleAll(s);
         expect(records(contents)).toEqual([`${DAY}T10:20>10:50`, `${DAY}T10:45>11:30`]);
         s.dispose();
@@ -202,70 +180,116 @@ describe('shifting the start of a running timer writes the running line, then mo
 
     it('a time later than now is read as the day before, and the line keeps its end date', async () => {
         vi.setSystemTime(at(0, 10));
-        const { contents, s, timer, lifecycle } = await started([`- [ ] 夜 @${DAY}T00:00>01:00`], '夜', 'self');
+        const { contents, s, widget, timer } = await started([`- [ ] 夜 @${DAY}T00:00>01:00`], '夜', 'self');
         expect(lines(contents)[0]).toContain(`@${DAY}T00:10>01:10`);
 
         vi.setSystemTime(at(0, 15));
         const startMs = readOffsetInput('time', '23:50', Date.now());
         expect(startMs).toBe(at(23, 50, 29).getTime());
-        await lifecycle.offsetStart(timer, startMs!);
+        await widget.lifecycle.offsetStart(timer, startMs!);
         await settleAll(s);
         expect(lines(contents)[0]).toContain(`@2026-09-29T23:50>${DAY}T01:10`);
-        expect(timer.elapsedTime).toBe(25 * 60);
+        expect(elapsed(timer)).toBe(25 * 60);
 
         vi.setSystemTime(at(0, 30));
-        await lifecycle.finishTimer(timer);
+        await widget.lifecycle.stop(timer, 'close');
         await settleAll(s);
         expect(records(contents)).toEqual([`2026-09-29T23:50>${DAY}T00:30`]);
         s.dispose();
     });
 
-    it('countdown: the time left shrinks by the shift', async () => {
-        const { s, timer, lifecycle } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child', 'countdown');
-        const countdown = timer as CountdownTimer;
+    it('countdown: the time left shrinks by the shift, and goes over past zero', async () => {
+        const { s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child', 'countdown');
 
         vi.setSystemTime(at(10, 21));
-        await lifecycle.offsetStart(timer, Date.now() - 10 * 60_000);
-        expect(countdown.elapsedTime).toBe(10 * 60);
-        expect(countdown.timeRemaining).toBe(15 * 60);
-        expect(countdown.phase).toBe('work');
+        await widget.lifecycle.offsetStart(timer, Date.now() - 10 * 60_000);
+        expect(elapsed(timer)).toBe(10 * 60);
+        expect(progressOf(timer.measure, elapsed(timer))).toMatchObject({ displaySeconds: 15 * 60, tone: 'work' });
 
-        await lifecycle.offsetStart(timer, Date.now() - 30 * 60_000);
-        expect(countdown.timeRemaining).toBe(-5 * 60);
-        expect(countdown.phase).toBe('idle');
+        await widget.lifecycle.offsetStart(timer, Date.now() - 30 * 60_000);
+        expect(progressOf(timer.measure, elapsed(timer))).toMatchObject({ displaySeconds: -5 * 60, tone: 'overtime' });
+        s.dispose();
+    });
+
+    it('countdown after ⏸ and ▶: the running session starts where it is moved to, and the time left goes on from the stop', async () => {
+        const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child', 'countdown');
+
+        vi.setSystemTime(at(10, 30));
+        await widget.lifecycle.stop(timer, 'suspend');
+        await settleAll(s);
+        vi.setSystemTime(at(10, 40));
+        await widget.lifecycle.resume(timer);
+        await settleAll(s);
+        expect(progressOf(timer.measure, elapsed(timer))).toMatchObject({ displaySeconds: 15 * 60 });
+
+        // 区間を 7 分前へ: 残りは止めた所の 15 分から、区間の 7 分を引いた 8 分。
+        vi.setSystemTime(at(10, 42));
+        await widget.lifecycle.offsetStart(timer, at(10, 35).getTime());
+        await settleAll(s);
+        expect(progressOf(timer.measure, elapsed(timer))).toMatchObject({ displaySeconds: 8 * 60 });
+
+        vi.setSystemTime(at(10, 45));
+        await widget.lifecycle.stop(timer, 'close');
+        await settleAll(s);
+        expect(records(contents)).toEqual([`${DAY}T10:20>10:30`, `${DAY}T10:35>10:45`]);
         s.dispose();
     });
 
     it('a shift whose line cannot be written moves nothing', async () => {
-        const { contents, s, timer, lifecycle } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
+        const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
         const before = contents.get(FILE);
-        const startTimeMs = timer.startTimeMs;
+        const clock = timer.clock;
 
         vi.setSystemTime(at(10, 25));
+        Notice.messages.length = 0;
         failNextWrite(s);
-        await lifecycle.offsetStart(timer, at(10, 0).getTime());
+        const answer = await widget.lifecycle.offsetStart(timer, at(10, 0).getTime());
         await settleAll(s);
+        expect(answer).toMatchObject({ written: false, refused: { reason: { kind: 'failed' } } });
+        expect(Notice.messages).toHaveLength(1);
         expect(contents.get(FILE)).toBe(before);
-        expect(timer.startTimeMs).toBe(startTimeMs);
+        expect(timer.clock).toEqual(clock);
+        s.dispose();
+    });
+
+    it('a shift asked with its refusal for the caller to tell (the dialog) answers why, with no notice', async () => {
+        const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
+        const before = contents.get(FILE);
+
+        vi.setSystemTime(at(10, 25));
+        Notice.messages.length = 0;
+        failNextWrite(s);
+        const answer = await widget.lifecycle.offsetStart(timer, at(10, 0).getTime(), { tellRefusal: false });
+        await settleAll(s);
+        expect(answer).toMatchObject({ written: false, refused: { reason: { kind: 'failed' } } });
+        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(before);
+
+        // Asked again, it is written, and the clock moves.
+        expect(await widget.lifecycle.offsetStart(timer, at(10, 0).getTime(), { tellRefusal: false })).toEqual({ written: true });
+        expect(timer.clock).toEqual({ kind: 'running', startMs: at(10, 0).getTime() });
         s.dispose();
     });
 
     it('a start in the future, or on a suspended timer, is not taken', async () => {
-        const { contents, s, timer, lifecycle } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
+        const { contents, s, widget, timer } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
         const before = contents.get(FILE);
-        const startTimeMs = timer.startTimeMs;
+        const clock = timer.clock;
 
-        await lifecycle.offsetStart(timer, at(10, 21).getTime());
-        expect(timer.startTimeMs).toBe(startTimeMs);
+        await widget.lifecycle.offsetStart(timer, at(10, 21).getTime());
+        expect(timer.clock).toEqual(clock);
+        expect(contents.get(FILE)).toBe(before);
 
         vi.setSystemTime(at(10, 30));
-        await lifecycle.suspendTimer(timer);
+        await widget.lifecycle.stop(timer, 'suspend');
         await settleAll(s);
         const suspended = contents.get(FILE);
+        const frozen = timer.clock;
         expect(suspended).not.toBe(before);
-        await lifecycle.offsetStart(timer, at(10, 0).getTime());
+        await widget.lifecycle.offsetStart(timer, at(10, 0).getTime());
         await settleAll(s);
         expect(contents.get(FILE)).toBe(suspended);
+        expect(timer.clock).toEqual(frozen);
         s.dispose();
     });
 });
@@ -282,50 +306,41 @@ describe('the remembered start is saved with the timer', () => {
         const contents = new Map([[FILE, [`- [ ] 設計 @${DAY}T10:00>11:00`, ''].join('\n')]]);
         const s = vaultSession(contents);
         await s.scanAll();
-        const p0 = pluginOver(s);
-        const target = s.index.getTasks().find(t => t.content === '設計')!;
-        const first = s.creator.createTimer({
-            taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
-            timerType: 'countup', recordMode: 'self', autoStart: true,
-        });
-        p0.ctx.timers.set(first.id, first);
+        const persistence = new TimerPersistence(s.app);
         const vault = (s.app as unknown as { vault: { process: (...a: unknown[]) => unknown } }).vault;
         const real = vault.process;
         let savedAtWrite: Record<string, unknown> | undefined;
-        vault.process = async (...a: unknown[]) => { savedAtWrite ??= saved(); return real(...a); };
-        expect(await s.recorder.writeStart(first)).toBe(true);
+        vault.process = async (...a: unknown[]) => { savedAtWrite ??= savedIn(persistence); return real(...a); };
+
+        const widget = widgetOver(s);
+        const target = s.index.getTasks().find(t => t.content === '設計')!;
+        widget.startTimer(target, 'self', { kind: 'countup' });
+        const [timer] = widget.board.values();
+        await vi.waitFor(() => expect(timer.tail).not.toBeNull());
         await settleAll(s);
         expect(savedAtWrite?.priorStartMs).toBe(at(10, 0).getTime());
-        p0.persistence.persistTimersToStorage();
+        widget.board.flush();
         s.dispose();
 
+        // 再読み込み: 同じ vault の保存を読む。
         const next = vaultSession(contents);
         await next.scanAll();
-        const p = pluginOver(next);
-        p.persistence.restoreTimersFromStorage();
-        const timer = [...p.ctx.timers.values()][0];
-        expect(timer.priorStartMs).toBe(at(10, 0).getTime());
+        const { timers } = new TimerPersistence(next.app).restore();
+        expect(timers).toHaveLength(1);
+        expect(timers[0].priorStartMs).toBe(at(10, 0).getTime());
         next.dispose();
     });
 
-    it('a v7 save is not read, and a save without priorStartMs is not read', async () => {
-        const { s, persistence } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
-        persistence.persistTimersToStorage();
-        const raw = JSON.parse(store.get(keyFor(STORAGE_VERSION))!) as { version: number; timers: Record<string, unknown>[] };
+    it('a timer saved without priorStartMs is not read', async () => {
+        const { s, widget } = await started([`- [ ] 対象 @${DAY}`], '対象', 'child');
+        widget.board.flush();
+        const persistence = new TimerPersistence(s.app);
+        const raw = JSON.parse(store.get(persistence.storageKey())!) as { timers: Record<string, unknown>[] };
         s.dispose();
 
-        store.clear();
-        store.set(keyFor(7), JSON.stringify({ ...raw, version: 7 }));
-        const v7 = pluginOver(vaultSession(new Map()));
-        v7.persistence.restoreTimersFromStorage();
-        expect(v7.ctx.timers.size).toBe(0);
-        expect(store.has(keyFor(7))).toBe(false);
-
         delete raw.timers[0].priorStartMs;
-        store.set(keyFor(STORAGE_VERSION), JSON.stringify(raw));
-        const missing = pluginOver(vaultSession(new Map()));
-        missing.persistence.restoreTimersFromStorage();
-        expect(missing.ctx.timers.size).toBe(0);
+        store.set(persistence.storageKey(), JSON.stringify(raw));
+        expect(new TimerPersistence(s.app).restore().timers).toHaveLength(0);
     });
 });
 
@@ -353,16 +368,16 @@ describe('where a shift goes (TimerStartOffset)', () => {
         expect(readOffsetInput('time', '', now)).toBeNull();
     });
 
-    it('the remembered start is offered in the first session only, and only when it is past', () => {
-        const timer = { sessionCount: 0, priorStartMs: at(10, 0).getTime() } as TimerInstance;
+    it('the remembered start is offered while nothing is recorded yet, and only when it is past', () => {
+        const timer = { recorded: { seconds: 0, count: 0 }, priorStartMs: at(10, 0).getTime() };
         expect(rememberedStart(timer, now, 0)).toBe(at(10, 0).getTime());
-        expect(rememberedStart({ ...timer, sessionCount: 1 } as TimerInstance, now, 0)).toBeNull();
-        expect(rememberedStart({ ...timer, priorStartMs: at(10, 30).getTime() } as TimerInstance, now, 0)).toBeNull();
-        expect(rememberedStart({ ...timer, priorStartMs: null } as TimerInstance, now, 0)).toBeNull();
+        expect(rememberedStart({ ...timer, recorded: { seconds: 600, count: 1 } }, now, 0)).toBeNull();
+        expect(rememberedStart({ ...timer, priorStartMs: at(10, 30).getTime() }, now, 0)).toBeNull();
+        expect(rememberedStart({ ...timer, priorStartMs: null }, now, 0)).toBeNull();
     });
 
     it('the remembered start is offered only within today, the day startHour divides', () => {
-        const prior = (ms: number) => ({ sessionCount: 0, priorStartMs: ms }) as TimerInstance;
+        const prior = (ms: number) => ({ recorded: { seconds: 0, count: 0 }, priorStartMs: ms });
         // 何か月も前の予定の start は出さない。
         expect(rememberedStart(prior(new Date(2026, 5, 1, 9, 0).getTime()), now, 0)).toBeNull();
         expect(rememberedStart(prior(at(23, 50, 29).getTime()), now, 0)).toBeNull();
@@ -375,14 +390,12 @@ describe('where a shift goes (TimerStartOffset)', () => {
     });
 
     it('only a running countup or countdown can be shifted', () => {
-        const running = { timerType: 'countup', runState: 'running', isRunning: true, pendingRecord: null } as TimerInstance;
+        const running = { measure: { type: 'countup' as const }, session: { kind: 'running' as const, from: 0 } };
         expect(canOffsetStart(running)).toBe(true);
-        expect(canOffsetStart({ ...running, timerType: 'countdown' } as TimerInstance)).toBe(true);
-        expect(canOffsetStart({ ...running, timerType: 'interval' } as TimerInstance)).toBe(false);
-        expect(canOffsetStart({ ...running, timerType: 'idle' } as TimerInstance)).toBe(false);
-        expect(canOffsetStart({ ...running, runState: 'suspended', isRunning: false } as TimerInstance)).toBe(false);
-        expect(canOffsetStart({ ...running, isRunning: false } as TimerInstance)).toBe(false);
-        expect(canOffsetStart({ ...running, pendingRecord: { endMs: now, seconds: 1, then: 'close' } } as TimerInstance)).toBe(false);
+        expect(canOffsetStart({ ...running, measure: { type: 'countdown', totalSeconds: 1500 } })).toBe(true);
+        expect(canOffsetStart({ ...running, measure: { type: 'interval', source: 'pomodoro', groups: [], at: { group: 0, repeat: 0, segment: 0, from: 0 } } })).toBe(false);
+        expect(canOffsetStart({ ...running, session: { kind: 'suspended' } })).toBe(false);
+        expect(canOffsetStart({ ...running, session: { kind: 'pending', record: { endMs: now, seconds: 1, then: 'close' } } })).toBe(false);
     });
 
     it('a start on another day says so: the day before by name, older ones by their date', () => {

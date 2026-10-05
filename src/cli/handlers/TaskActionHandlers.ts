@@ -1,25 +1,15 @@
 import type { CliData } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import type { ApiHost } from '../../api/TaskApi';
-import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, parseLimit, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
+import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, readIntFlag, readLimitFlag, type OutputFormat } from '../CliOutputFormatter';
 import { parseSortFlag } from '../CliFilterBuilder';
-import { cliDataToSimpleFilterFields } from './TaskQueryHandlers';
+import { cliDataToSimpleFilterParams } from './TaskQueryHandlers';
 
 export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params.id) return cliError('Missing required flag: --id');
-
         return wrapCliResult('duplicate task', async () => {
-            const dayOffset = params['day-offset'] ? parseInt(params['day-offset'], 10) : undefined;
-            const count = params.count ? parseInt(params.count, 10) : undefined;
-
-            if (dayOffset !== undefined && isNaN(dayOffset)) {
-                return cliError('--day-offset must be an integer');
-            }
-            if (count !== undefined && (isNaN(count) || count < 1)) {
-                return cliError('--count must be a positive integer');
-            }
-
+            const dayOffset = readIntFlag(params, 'dayOffset');
+            const count = readIntFlag(params, 'count');
             const result = await plugin.api.duplicate({ id: params.id, dayOffset, count });
             return cliOk({ duplicated: result.duplicated });
         });
@@ -28,16 +18,14 @@ export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
 
 export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params.from) return cliError('Missing required flag: --from');
-        if (!params.to) return cliError('Missing required flag: --to');
-
         return wrapCliResult('categorize tasks', async () => {
             const result = await plugin.api.categorizedTasksForDateRange({
                 from: params.from,
                 to: params.to,
-                ...cliDataToSimpleFilterFields(params),
-                filterFile: params['filter-file'] || undefined,
-                list: params.list || undefined,
+                ...cliDataToSimpleFilterParams(params),
+                filterFile: params['filter-file'],
+                list: params.list,
+                startHour: readIntFlag(params, 'startHour'),
             });
             return cliOk(result);
         });
@@ -46,9 +34,6 @@ export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext 
 
 export function createInsertChildTaskHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params['parent-id']) return cliError('Missing required flag: --parent-id');
-        if (!params.content) return cliError('Missing required flag: --content');
-
         return wrapCliResult('insert child task', async () => {
             const result = await plugin.api.insertChildTask({
                 parentId: params['parent-id'],
@@ -68,23 +53,21 @@ export function createGetStartHourHandler(plugin: PluginContext & ApiHost) {
 
 export function createTasksForDateRangeHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
-        if (!params.from) return cliError('Missing required flag: --from');
-        if (!params.to) return cliError('Missing required flag: --to');
-
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
         return wrapCliResult('query date range', async () => {
             const format = (params.format as OutputFormat) || 'json';
             const sort = params.sort ? parseSortFlag(params.sort) : undefined;
-            const limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
+            const limit = readLimitFlag(params, format);
 
             const result = await plugin.api.tasksForDateRange({
                 from: params.from,
                 to: params.to,
-                ...cliDataToSimpleFilterFields(params),
-                filterFile: params['filter-file'] || undefined,
-                list: params.list || undefined,
+                ...cliDataToSimpleFilterParams(params),
+                filterFile: params['filter-file'],
+                list: params.list,
+                startHour: readIntFlag(params, 'startHour'),
                 sort,
                 limit,
             });

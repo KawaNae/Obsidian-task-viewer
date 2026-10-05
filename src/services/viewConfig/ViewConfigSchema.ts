@@ -15,17 +15,33 @@
  * collapse maps); they are never written to templates or URIs.
  */
 
+import type { PinnedListDefinition } from '../../types';
+import type { ViewType } from '../../views/ViewDescriptors';
+
+/**
+ * Tells of a part of a value a field read but dropped (a filter condition, a
+ * sort rule), in an English sentence. A field reads what it can and reports
+ * the rest; a value it cannot read at all is undefined, as before.
+ */
+export type ReportIssue = (text: string) => void;
+
+/** A part of a config that was dropped on read: the field and what was dropped. */
+export interface ConfigIssue {
+    readonly field: string;
+    readonly text: string;
+}
+
 export interface ConfigField<T> {
     /** Canonical key. Same string is used in template JSON, workspace state, and URI params. */
     readonly key: string;
     /** Parse an `unknown` dict value (from any source) into the typed value, or undefined to skip. */
-    parse(raw: unknown): T | undefined;
+    parse(raw: unknown, report?: ReportIssue): T | undefined;
     /** Serialize the typed value to a JSON-able value. Returning undefined omits the key from output. */
     serialize(value: T | undefined): unknown;
     /** Encode the typed value to a URI query string value. Default: JSON.stringify ∘ serialize, base64'd if complex. */
     toUriParam?(value: T): string | undefined;
     /** Decode a URI query string value back to the typed value. Pairs with toUriParam. */
-    fromUriParam?(raw: string): T | undefined;
+    fromUriParam?(raw: string, report?: ReportIssue): T | undefined;
     /**
      * Legacy alternate keys (older versions used different names). Read-only:
      * parsing tries `key` first, then each legacyKey in order. Writes always use `key`.
@@ -42,16 +58,33 @@ export interface TransientField<T> {
 
 export interface ViewSchema<
     TConfig extends object,
-    TTransient extends object = Record<string, never>,
+    TTransient extends object = Record<never, never>,
 > {
-    /** Obsidian view type, e.g. 'timeline-view'. Used by SchemaRegistry. */
-    readonly viewType: string;
+    /** Obsidian view type, e.g. 'timeline-view'. The view table reads it from here. */
+    readonly viewType: ViewType;
     /** URI shortName for `&view=<short>`, e.g. 'timeline'. */
     readonly shortName: string;
-    /** Defaults applied on onReset and as the starting point for applyConfig. */
+    /** The config's defaults: what a reset gives, and what a state, a URI or a template is laid over. */
     readonly defaults: Partial<TConfig>;
     readonly config: { readonly [K in keyof TConfig]-?: ConfigField<NonNullable<TConfig[K]>> };
     readonly transient: { readonly [K in keyof TTransient]-?: TransientField<NonNullable<TTransient[K]>> };
-    /** Transient field key used as the date anchor (the "Today" button target). */
+    /**
+     * The transient field that holds the day the view looks at (absent:
+     * following today). The CLI's `anchor-date` is written to it.
+     */
     readonly anchorKey?: keyof TTransient & string;
+    /**
+     * The transient fields laid over the anchor that, with it, say where the
+     * view is (Calendar's `weekOffset`). A reset keeps them with the anchor,
+     * and a state that names the anchor or one of them sets them all: a field
+     * it lacks is cleared (`ViewConfigCodec.positionKeys`).
+     */
+    readonly anchorOffsetKeys?: readonly (keyof TTransient & string)[];
+    /**
+     * The pinned lists a config of this view holds, in the order the view
+     * shows them; a view without lists has none. A template's lists are read
+     * through here (`PinnedListQuery.fromTemplate`), so only the schema knows
+     * where they are kept (a flat list, or Kanban's grid).
+     */
+    readonly listsOf?: (config: Partial<TConfig>) => readonly PinnedListDefinition[];
 }

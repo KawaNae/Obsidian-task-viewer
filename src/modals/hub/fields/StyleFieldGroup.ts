@@ -1,43 +1,62 @@
 import { t } from '../../../i18n';
 import { VALID_LINE_STYLES } from '../../../constants/style';
-import { filterColors, renderColorSuggestion } from '../../../suggest/color/colorUtils';
-import { filterLineStyles, renderLineStyleSuggestion } from '../../../suggest/line/lineStyleUtils';
+import { COLOR_VALUES, LINE_STYLE_VALUES } from '../../../suggest/ScopeValues';
+import { ChoiceInput } from '../../../utils/values/ChoiceValues';
+import { ColorInput } from '../../../utils/values/ColorValues';
+import { optional, type FieldCodec } from '../../../utils/values/Read';
+import { TextInput } from '../../../utils/values/TextValues';
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
+import { bindField, type BoundField } from '../../form/bindField';
+import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { PickerTextField } from '../../form/PickerTextField';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
-import type { FieldGroupContext } from './FieldGroupContext';
+import { ValueSuggest } from '../../../suggest/ValueSuggest';
+import { cssColorToHex } from '../../../utils/ColorUtils';
+import type { ClosingPart, FieldGroupContext, UnsavedField } from './FieldGroupContext';
 
 type StyleField = 'color' | 'linestyle' | 'mask';
+const FIELDS: readonly StyleField[] = ['color', 'linestyle', 'mask'];
+const LABEL_KEYS: Record<StyleField, string> = { color: 'modal.hub.color', linestyle: 'modal.hub.linestyle', mask: 'modal.hub.mask' };
+
+/**
+ * How each field reads: a color (a hex value or a CSS name), one of the line
+ * styles in any case, a mask as typed. Empty, each takes the row's own value
+ * away, and the inherited one shows through.
+ */
+const CODECS: Record<StyleField, FieldCodec<string | undefined>> = {
+    color: optional(ColorInput),
+    linestyle: optional(ChoiceInput.of([...VALID_LINE_STYLES], { caseless: true })),
+    mask: optional(TextInput),
+};
 
 /**
  * color / linestyle / mask の 3 フィールド。color は native picker + swatch +
  * suggest が絡み合っているため 3 分割せず 1 グループにまとめている。
+ *
+ * 各欄は `bindField` で値に結ぶ。読めない値（`zigzag` の線種、色でない色）は
+ * 欄の下に理由を出して保存しない。
  */
-export class StyleFieldGroup {
+export class StyleFieldGroup implements ClosingPart {
     private colorField!: PickerTextField;
-    private colorInput!: HTMLInputElement;
     private colorSwatch!: HTMLElement;
     private nativeColorInput!: HTMLInputElement;
-    private linestyleInput!: HTMLInputElement;
-    private maskInput!: HTMLInputElement;
+    private readonly inputs = {} as Record<StyleField, HTMLInputElement>;
+    private readonly bound = {} as Record<StyleField, BoundField<string | undefined>>;
+    private readonly says = {} as Record<StyleField, HTMLElement>;
     private sourceEls: Partial<Record<StyleField, HTMLElement>> = {};
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
-        this.renderRow(container, 'color', 'modal.hub.color');
-        this.renderRow(container, 'linestyle', 'modal.hub.linestyle');
-        this.renderRow(container, 'mask', 'modal.hub.mask');
-    }
-
-    private inputFor(field: StyleField): HTMLInputElement {
-        return field === 'color' ? this.colorInput : field === 'linestyle' ? this.linestyleInput : this.maskInput;
+        for (const field of FIELDS) this.renderRow(container, field, LABEL_KEYS[field]);
     }
 
     private renderRow(container: HTMLElement, field: StyleField, labelKey: string): void {
-        const { row } = createFormRow(container, t(labelKey), { icon: PROPERTY_ICONS[field] });
+        const { row, says } = createFormRow(container, t(labelKey), { icon: PROPERTY_ICONS[field] });
+        this.says[field] = says;
 
         let input: HTMLInputElement;
+        let put: ((text: string) => void) | undefined;
 
         if (field === 'color') {
             // 日付/時刻の欄と同じ部品: 左端のピッカーのボタン + ネイティブの input + [色見本]テキスト
@@ -54,20 +73,26 @@ export class StyleFieldGroup {
             // 色見本はテキストの入力の中の左端に重ねる
             this.colorSwatch = this.colorField.el.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
             this.colorField.el.insertBefore(this.colorSwatch, input);
+            put = (text) => {
+                this.colorField.setText(text);
+                this.updateColorSwatch();
+            };
         } else {
             input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         }
+        this.inputs[field] = input;
         input.value = this.ctx.getTask()[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
         sourceEl.addEventListener('click', () => this.ctx.jumpToFile());
         this.sourceEls[field] = sourceEl;
 
-        const commit = () => this.commit(field);
+        // An item picked from the list is put in and committed; the field's
+        // own Enter (bindField) commits what is typed when no list is open.
+        let suggest: ValueSuggest | null = null;
         if (field === 'color') {
-            this.colorInput = input;
             const nci = this.nativeColorInput;
-            nci.value = this.resolveColorForPicker(input.value);
+            nci.value = cssColorToHex(input.value, nci.ownerDocument);
             // ドラッグ中は swatch とテキストだけ更新し、nci.value への
             // 書き戻し（updateColorSwatch 内）を避ける — 書き戻すと
             // ピッカーの内部状態が壊れるフィードバックループになる
@@ -79,50 +104,55 @@ export class StyleFieldGroup {
             });
             nci.addEventListener('change', () => {
                 this.updateColorSwatch();
-                commit();
+                this.bound.color.commit();
             });
-            this.ctx.attachSuggest(input, input, {
-                getCandidates: (q) => (q.trim() === '' ? filterColors('', 20) : filterColors(q)),
-                renderItem: (item, val) => renderColorSuggestion(val, item),
-                onPick: (val) => { input.value = val; this.updateColorSwatch(); commit(); },
+            suggest = new ValueSuggest(this.ctx.app, input, {
+                candidates: COLOR_VALUES.candidates,
+                render: COLOR_VALUES.render,
+                pick: (val) => { this.colorField.setText(val); this.updateColorSwatch(); this.bound.color.commit(); },
             });
             input.addEventListener('input', () => this.updateColorSwatch());
         } else if (field === 'linestyle') {
-            this.linestyleInput = input;
-            this.ctx.attachSuggest(input, input, {
-                getCandidates: (q) => filterLineStyles(q),
-                renderItem: (item, val) => renderLineStyleSuggestion(val, item),
-                onPick: (val) => { input.value = val; commit(); },
+            suggest = new ValueSuggest(this.ctx.app, input, {
+                candidates: LINE_STYLE_VALUES.candidates,
+                render: LINE_STYLE_VALUES.render,
+                pick: (val) => { input.value = val; this.bound.linestyle.commit(); },
             });
-        } else {
-            this.maskInput = input;
         }
 
-        input.addEventListener('blur', commit);
-        input.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.isComposing) commit();
+        this.bound[field] = bindField(input, {
+            codec: CODECS[field],
+            current: () => this.ctx.getTask()[field],
+            commit: (value) => this.commit(field, value),
+            issues: (issue) => this.ctx.issues.set(field, readIssue(field, issue)),
+            takesEnter: () => suggest?.listShown ?? false,
+            put,
         });
 
         this.updateDecoration(field);
     }
 
-    private commit(field: StyleField): void {
+    private commit(field: StyleField, value: string | undefined): Promise<boolean> | void {
         if (this.ctx.isShut()) return;
-        const input = this.inputFor(field);
-        const value = input.value.trim();
+        return this.ctx.queue(TaskUpdateBuilder.styleField(this.ctx.getTask(), field, value ?? ''));
+    }
 
-        input.classList.remove('tv-ctrl__text-input--invalid');
-        if (field === 'linestyle' && value && !VALID_LINE_STYLES.has(value.toLowerCase())) {
-            input.classList.add('tv-ctrl__text-input--invalid');
-            return;
-        }
+    unsaved(): UnsavedField[] {
+        return FIELDS.filter(field => this.bound[field].pending()?.ok === false)
+            .map(field => ({ label: t(LABEL_KEYS[field]), input: this.inputs[field] }));
+    }
 
-        this.ctx.queue(TaskUpdateBuilder.styleField(this.ctx.getTask(), field, value));
+    discardUnsaved(): void {
+        for (const field of FIELDS) if (this.bound[field].pending()?.ok === false) this.bound[field].discard();
+    }
+
+    save(): void {
+        for (const field of FIELDS) if (this.bound[field].pending()?.ok) this.bound[field].commit();
     }
 
     /** cascade placeholder + 出所ラベル + swatch の同期 */
     private updateDecoration(field: StyleField): void {
-        const input = this.inputFor(field);
+        const input = this.inputs[field];
         const sourceEl = this.sourceEls[field];
         if (!input || !sourceEl) return;
 
@@ -145,52 +175,39 @@ export class StyleFieldGroup {
 
     private updateColorSwatch(): void {
         if (!this.colorSwatch) return;
-        const value = this.colorInput.value.trim() || this.ctx.getTask().cascadeContext?.color || '';
+        const value = this.inputs.color.value.trim() || this.ctx.getTask().cascadeContext?.color || '';
         this.colorSwatch.style.backgroundColor = value
             ? (/^[0-9a-fA-F]{3,6}$/.test(value) ? `#${value}` : value)
             : 'transparent';
-        this.nativeColorInput.value = this.resolveColorForPicker(value);
+        this.nativeColorInput.value = cssColorToHex(value, this.nativeColorInput.ownerDocument);
     }
 
-    private resolveColorForPicker(raw: string): string {
-        const v = raw.trim();
-        if (!v) return '#000000';
-        if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v}`;
-        if (/^[0-9a-fA-F]{3}$/.test(v)) {
-            return `#${v[0]}${v[0]}${v[1]}${v[1]}${v[2]}${v[2]}`;
+    /** 外部変更（echo）の取り込み。打ちかけの欄は `BoundField.set` が守る。 */
+    refresh(): void {
+        const task = this.ctx.getTask();
+        for (const field of FIELDS) {
+            this.bound[field].set(task[field]);
+            this.updateDecoration(field);
         }
-        // CSS 色名 → canvas で正規化（'red' → '#ff0000'）
-        const ctx = document.createElement('canvas').getContext('2d');
-        if (ctx) {
-            ctx.fillStyle = '#000000';
-            ctx.fillStyle = v;
-            return ctx.fillStyle;
-        }
-        return '#000000';
-    }
-
-    /** 外部変更（echo）の取り込み。focus 中のフィールドは呼び出し側 setInputValue のガードで守られる。 */
-    refresh(fresh: { color?: string; linestyle?: string; mask?: string }, setInputValue: (input: HTMLInputElement, value: string) => void): void {
-        setInputValue(this.colorInput, fresh.color ?? '');
-        setInputValue(this.linestyleInput, fresh.linestyle ?? '');
-        setInputValue(this.maskInput, fresh.mask ?? '');
-        this.updateDecoration('color');
-        this.updateDecoration('linestyle');
-        this.updateDecoration('mask');
     }
 
     setEnabled(enabled: boolean): void {
         this.colorField?.setEnabled(enabled);
-        for (const input of [this.linestyleInput, this.maskInput]) {
+        for (const input of [this.inputs.linestyle, this.inputs.mask]) {
             if (input) input.disabled = !enabled;
         }
     }
 
     focus(field: StyleField): void {
-        this.inputFor(field)?.focus();
+        this.inputs[field]?.focus();
     }
 
     getInput(field: StyleField): HTMLInputElement {
-        return this.inputFor(field);
+        return this.inputs[field];
+    }
+
+    /** Where the field says its issues: its input and the line under its row. */
+    slot(field: StyleField): IssueSlot {
+        return { input: this.inputs[field], message: this.says[field] };
     }
 }

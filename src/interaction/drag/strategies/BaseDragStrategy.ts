@@ -1,9 +1,9 @@
 import type { DragStrategy, DragContext } from '../DragStrategy';
 import { DropReveal } from '../DropReveal';
 import type { Task } from '../../../types';
-import { materializeRawDates, NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
-import { getTaskDateRange } from '../../../services/display/VisualDateRange';
-import type { DragPlan } from '../DragPlan';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
+import { visualDaysOf } from '../../../utils/DayWindow';
+import { planUpdates, type DragPlan } from '../DragPlan';
 import { heldBy } from '../../../views/taskcard/CardHold';
 
 /**
@@ -23,9 +23,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected lastHighlighted: HTMLElement | null = null;
     protected hasMoved: boolean = false;
     protected currentContext: DragContext | null = null;
-
-    // ビュータイプ（Timeline or AllDay or Calendar）
-    protected viewType: 'timeline' | 'allday' | 'calendar' = 'timeline';
 
     // Grid 系 Gesture (Move/Resize) のみ使用。
     /** Calendar / AllDay どちらの Surface か。due-arrow・cross-view drop など
@@ -64,28 +61,29 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * 1 回の drag 完了で生じる write-back を 1 経路に集約。
      *
      * - `plan === null` → 変更なし、early return
-     * - そうでなければ visual edits を `materializeRawDates` で raw に変換し、
-     *   baseTask との diff だけを `updateTask` に渡す
+     * - そうでなければ `planUpdates` が visual edits を `materializeRawDates`
+     *   で raw に変換し（期限だけのタスクは期限から補った期間を書き起こした
+     *   値と合わせ）、索引の生のタスクとの diff だけを `updateTask` に渡す
      * - 書き戻しの後に selection を復元する（segment id が drag で再生成
      *   されるため、再 render 後にも同じ task が selected であるよう保証）
      *
      * 各 finish は visual edits の組み立てに専念し、raw `Partial<Task>` を
-     * 直接作らない。これにより endDate inclusive/exclusive の dual semantic を
-     * 1 箇所（materializeRawDates）に閉じ込める。
+     * 直接作らない。視覚日から行の日付への変換は 1 箇所
+     * （materializeRawDates）だけが持つ。
      *
      * @returns 実際に書き戻したか。false は「掴んだが値は変わっていない」か
      *          「書き込みが拒否された」＝ファイルは旧ジオメトリのままで、ソース
      *          カードの旧ジオメトリがそのまま正しい、を意味する
-     *          （{@link commitAndReveal} の再可視化判断に使う）。拒否の通知と
-     *          写しの巻き戻しは TaskIndex が行う。
+     *          （{@link commitAndReveal} の再可視化判断に使う）。拒否の通知は
+     *          書き込みの層が行い、索引の写しは書き込みで変わらない。
      */
     protected async commitPlan(context: DragContext, plan: DragPlan | null, taskId: string): Promise<boolean> {
         if (!plan) return false;
-        const { edits, baseTask } = plan;
         const startHour = context.plugin.settings.startHour;
-        const updates = this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask);
+        const raw = context.index.getTask(plan.baseTask.id) ?? plan.baseTask;
+        const updates = planUpdates(plan, raw, startHour);
         if (Object.keys(updates).length === 0) return false;
-        const written = await context.writeService.updateTask(taskId, updates);
+        const { written } = await context.operations.updateTask(taskId, updates);
         this.restoreSelection(context, taskId);
         return written;
     }
@@ -128,21 +126,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
         clearGhosts();
     }
 
-    /**
-     * baseTask と既に同じ値のキーを除外する。drag 完了時に「掴んだだけで
-     * 値は変わっていない」フィールドを送らないための薄いヘルパー。
-     */
-    private diffUpdates(updates: Partial<Task>, baseTask: Task): Partial<Task> {
-        const result: Partial<Task> = {};
-        const u = updates as unknown as Record<string, unknown>;
-        const b = baseTask as unknown as Record<string, unknown>;
-        for (const key of Object.keys(u)) {
-            if (u[key] !== b[key]) {
-                (result as unknown as Record<string, unknown>)[key] = u[key];
-            }
-        }
-        return result;
-    }
 
     /**
      * ドラッグ状態をクリーンアップする
@@ -160,34 +143,12 @@ export abstract class BaseDragStrategy implements DragStrategy {
             // 反映できなかった要素はここでも隠したままにする。
             this.dropReveal.finish([this.dragEl]);
             this.dragEl.style.transform = '';
-            // inline z は decorateLane が所有する lane z。可視に戻す要素では
-            // 消さない（1 フレームだけ重なり順が崩れるのを避ける）。隠したまま
-            // の要素は次 render で作り直されるのでどちらでもよい。
-            if (!this.dropReveal.isRevealable(this.dragEl)) {
-                this.dragEl.style.zIndex = '';
-            }
         }
 
         this.dragTask = null;
         this.dragEl = null;
         this.currentContext = null;
         this.hasMoved = false;
-    }
-
-    /**
-     * ビュータイプを判定する（要素の親コンテナから）
-     */
-    protected determineViewType(el: HTMLElement): 'timeline' | 'allday' | 'calendar' {
-        if (el.closest('.cal-week-row')) {
-            return 'calendar';
-        }
-        if (el.closest('.timeline-scroll-area__day-column')) {
-            return 'timeline';
-        }
-        if (el.closest('.allday-section')) {
-            return 'allday';
-        }
-        return 'timeline'; // デフォルト
     }
 
     /**
@@ -208,10 +169,18 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected getVisualDateRange(task: Task, startHour: number): { start: string; end: string } {
         // Date range only depends on the task's own dates; childEntries are irrelevant.
         const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
-        const range = getTaskDateRange(dt, startHour);
-        const start = range.effectiveStart || task.startDate || '';
-        const end = range.effectiveEnd || start;
-        return { start, end };
+        if (!dt.drawn) {
+            const start = task.startDate || '';
+            return { start, end: start };
+        }
+        const { first, last } = visualDaysOf(dt.drawn, startHour);
+        return { start: first, end: last };
+    }
+
+    /** The first visual day the card `el` is drawn over (a segment's own part), or null. */
+    protected drawnFirstDay(el: HTMLElement, startHour: number): string | null {
+        const drawn = heldBy(el)?.task.drawn;
+        return drawn ? visualDaysOf(drawn, startHour).first : null;
     }
 
     /**

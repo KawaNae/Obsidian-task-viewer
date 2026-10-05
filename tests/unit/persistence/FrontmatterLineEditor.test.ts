@@ -265,33 +265,6 @@ describe('FrontmatterLineEditor', () => {
         });
     });
 
-    // ── readRawScalar ──
-    describe('readRawScalar', () => {
-        const lines = ['---', 'plain: abc', 'quoted: "a: b"', 'empty:', 'list:', '  - x', '---'];
-        const fmEnd = 6;
-        const read = (key: string) => FrontmatterLineEditor.readRawScalar(lines, fmEnd, key);
-
-        it('returns the value as written', () => {
-            expect(read('plain')).toBe('abc');
-        });
-
-        it('keeps quotes rather than interpreting them', () => {
-            expect(read('quoted')).toBe('"a: b"');
-        });
-
-        it('returns an empty string for a key with no value', () => {
-            expect(read('empty')).toBe('');
-        });
-
-        it('returns null for a missing key', () => {
-            expect(read('nope')).toBeNull();
-        });
-
-        it('reads only the key line of a multi-line value', () => {
-            expect(read('list')).toBe('');
-        });
-    });
-
     // ── surgical edit が保つもの（processFrontMatter との差） ──
     describe('representation is preserved across a key write', () => {
         // processFrontMatter はここでコメントを落とし、引用符を外し、
@@ -339,5 +312,31 @@ describe('FrontmatterLineEditor', () => {
             );
             expect(back).toBe(source.join('\n'));
         });
+    });
+});
+
+describe('FrontmatterLineEditor.valueRange', () => {
+    const at = (line: string, key = 'tv-color') => {
+        const range = FrontmatterLineEditor.valueRange(line, key);
+        return range && line.slice(range.start, range.end);
+    };
+
+    it('is the value after the key, its colon and the spaces after them', () => {
+        expect(at('tv-color: red')).toBe('red');
+        expect(at('tv-color  :\tdark blue  ')).toBe('dark blue');
+        expect(at('tv-color: "red"')).toBe('"red"');
+    });
+
+    it('ends before a comment, and is empty when the line holds none', () => {
+        expect(at('tv-color: red # mine')).toBe('red');
+        expect(at('tv-color:')).toBe('');
+        expect(at('tv-color: # no value')).toBe('');
+        expect(FrontmatterLineEditor.valueRange('tv-color:', 'tv-color')).toEqual({ start: 9, end: 9 });
+    });
+
+    it('is null on a line of another key, or no key line', () => {
+        expect(at('tv-colors: red')).toBeNull();
+        expect(at('  tv-color: red')).toBeNull();
+        expect(at('- item')).toBeNull();
     });
 });

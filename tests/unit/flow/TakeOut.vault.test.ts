@@ -45,7 +45,7 @@ function idOf(session: VaultSession, content: string): string {
 }
 
 async function deleteMemo(session: VaultSession): Promise<void> {
-    await session.index.updateTask(idOf(session, 'T'), { properties: {} } as never);
+    await session.ops.updateTask(idOf(session, 'T'), { properties: {} } as never);
     await session.settle(FILE);
 }
 
@@ -78,7 +78,7 @@ describe('a command line stripped by a fire', () => {
         const before = contents.get(FILE)!;
         const sub = idOf(session, 'sub');
 
-        expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
@@ -93,7 +93,7 @@ describe('a move that leaves its command line behind', () => {
         const before = contents.get(FILE)!;
         const sub = idOf(session, 'sub');
 
-        expect(await session.index.updateTask(idOf(session, 'X'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, 'X'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] X', '- [x] X'));
@@ -105,13 +105,13 @@ describe('a property line added after one with a child', () => {
     it('goes past that child, which stays under its own line; deleting that line is then refused', async () => {
         const { contents, session } = await open(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '- [ ] U', '']);
 
-        await session.index.updateTask(idOf(session, 'T'),
+        await session.ops.updateTask(idOf(session, 'T'),
             { properties: { memo: { value: 'a', type: 'string' }, k2: { value: 'z', type: 'string' } } } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k2:: z', '- [ ] U', '']);
 
         const before = contents.get(FILE)!;
-        await session.index.updateTask(idOf(session, 'T'), { properties: { k2: { value: 'z', type: 'string' } } } as never);
+        await session.ops.updateTask(idOf(session, 'T'), { properties: { k2: { value: 'z', type: 'string' } } } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)).toBe(before);
     });
@@ -121,7 +121,7 @@ describe('a child written under a task with no children', () => {
     it('reaches the task\'s content column, however wide its marker', async () => {
         const { contents, session } = await open(['# note', '100. [ ] T', '']);
 
-        await session.index.insertLine(idOf(session, 'T'), '- [ ] c', 'firstChild');
+        await session.ops.insertLine(idOf(session, 'T'), '- [ ] c', 'firstChild');
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '100. [ ] T', '\t\t- [ ] c', '']);
@@ -136,7 +136,7 @@ describe('a line with a note bullet below it', () => {
     it('is stripped by a fire, and the series goes on', async () => {
         const { contents, session } = await open(['# note', '- [ ] T @2026-09-21', '  - ==> every mon', '    - why weekly', '- [ ] U', '']);
 
-        expect(await session.index.updateTask(idOf(session, 'T'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, 'T'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([
@@ -159,7 +159,7 @@ describe('a command line with a paragraph going on it', () => {
     it('is stripped by a fire, the paragraph going on the task instead', async () => {
         const { contents, session } = await open(['# note', '- [ ] 対象 @2026-09-21', '\t- ==> every mon', 'lazy', '- [ ] U', '']);
 
-        expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
+        expect((await session.ops.updateTask(idOf(session, '対象'), { statusChar: 'x' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([
