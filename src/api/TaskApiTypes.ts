@@ -96,11 +96,8 @@ export interface PaginationParams {
 // ── Filters ──
 
 /**
- * The simple per-field filters `list` and the date-range family share. No
- * `date`/`from`/`to`: those are `list`'s own query window, and the range
- * operations have their own required window — a range operation never also
- * applies a `list`-style window condition on top of its own, or a task would
- * have to satisfy two different date judgments to appear at all.
+ * The simple per-field filters every query takes: each is a condition of
+ * its own (`QueryShorthand`), taken together with the rest of the query.
  */
 export interface SimpleFilterParams {
     file?: string;
@@ -115,19 +112,27 @@ export interface SimpleFilterParams {
     root?: boolean;              // root tasks only (no parent)
 }
 
-/** Where a query's filter comes from instead of the simple fields. */
+/** A query's FilterStates, taken together with each other and the shorthand. */
 export interface FilterSourceParams {
-    filter?: FilterState;     // overrides the simple filter fields
-    filterFile?: string;      // vault file path (.json FilterState or .md view template); overrides `filter`
+    filter?: FilterState;
+    filterFile?: string;      // vault file path (.json FilterState or .md view template)
     list?: string;            // pinned list name (when filterFile is a .md template)
+}
+
+/**
+ * The window shorthand: `date` is `period overlaps date`, `from` and `to`
+ * `period overlaps { from, to }` (open on a side left out). Each is a date,
+ * a date and a time, or a preset.
+ */
+export interface WindowParams {
+    date?: string;
+    from?: string;
+    to?: string;
 }
 
 // ── list ──
 
-export interface ListParams extends PaginationParams, SimpleFilterParams, FilterSourceParams {
-    date?: string;            // YYYY-MM-DD or preset
-    from?: string;
-    to?: string;
+export interface ListParams extends PaginationParams, SimpleFilterParams, FilterSourceParams, WindowParams {
     sort?: ApiSortRule[];
 }
 

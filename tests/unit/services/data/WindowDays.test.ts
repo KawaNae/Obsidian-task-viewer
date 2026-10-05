@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TaskApi } from '../../../../src/api/TaskApi';
-import { filterOfParams } from '../../../../src/api/FilterParamsBuilder';
+import { shorthandConditions } from '../../../../src/api/QueryShorthand';
 import { compileFilter } from '../../../../src/services/filter/FilterExpr';
 import { TaskFilterEngine } from '../../../../src/services/filter/TaskFilterEngine';
 import { TaskReadService } from '../../../../src/services/data/TaskReadService';
@@ -86,7 +86,7 @@ describe.each(CASES)('$name', ({ task, days }) => {
         const [dt] = service.getAllDisplayTasks();
         const context = { startHour, weekStartDay: 1 as const, taskLookup: () => undefined, now: new Date() };
         const found = DAYS.filter(d =>
-            TaskFilterEngine.evaluate(dt, compileFilter(filterOfParams({}, { date: d })!), context));
+            TaskFilterEngine.evaluate(dt, compileFilter({ logic: 'and', filters: shorthandConditions({ date: d }) }), context));
         expect(found).toEqual(days);
     });
 
