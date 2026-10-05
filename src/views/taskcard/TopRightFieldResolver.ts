@@ -17,8 +17,9 @@ import { t } from '../../i18n';
 
 /**
  * What a piece of the top right is, which the card draws as its class
- * (`task-card__time-<role>`): the start and end of the times (`times`; a
- * narrow card hides the end), a separator, and any other text.
+ * (`task-card__time-<role>`): the start and end of the times (`times`; the
+ * end goes whole when it does not fit, `topRightUnits`), a separator, and any
+ * other text.
  */
 export type TopRightRole = 'start' | 'end' | 'sep' | 'seg';
 

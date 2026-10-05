@@ -9,6 +9,11 @@
  * opened on that day. A card is found by the name its text starts with, and
  * its top right read from `.task-card__time` (null when it has none).
  *
+ * How much of it shows is read by narrowing the view's own content to a width
+ * (its leaf is the test's, so no pane of the vault is resized): each unit
+ * of the top right (`task-card__time-unit`; the end, `>11:00`, is one) shows
+ * whole or not at all, and the end shows exactly when it fits.
+ *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault open, with the current build
  *     loaded (`npm run build`, then reload the plugin)
@@ -18,7 +23,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
-import { PRELUDE, SETTLE_MS, addDays, closeViews, ev, openView } from '../helpers/view-helper';
+import { PRELUDE, SETTLE_MS, addDays, closeViews, ev, openView, setViewState } from '../helpers/view-helper';
 
 const FILE = 'test-int-top-right.md';
 const DAY = '2027-04-14';
@@ -147,5 +152,112 @@ describe('the dated views show the stated times', () => {
         const r = tops('tr-sc');
         expect(r['tr-inherit']).toEqual(['06:00']);
         expect(r['tr-1011']).toEqual(['10:00>11:00']);
+    });
+});
+
+/** How the top right of one card shows: its box, and each unit's width and how much of it is in the box. */
+interface Fit {
+    name: string;
+    box: number;
+    units: Array<{ text: string; width: number; seen: 'whole' | 'none' | 'part' }>;
+}
+
+/**
+ * The top rights of the test's cards in `view`, with its content (or each of
+ * its cards, where the view keeps a least width) narrowed to `width` (null
+ * puts it back). A unit is seen whole when its box is inside
+ * the top right's, none when it is outside it (the second line), else part.
+ */
+function fits(view: string, width: number | null, narrow: 'content' | 'cards' = 'content'): Fit[] {
+    const w = width === null ? "''" : `'${width}px'`;
+    return ev<Fit[]>(`(async () => {
+        ${PRELUDE}
+        const el = V(${JSON.stringify(view)}).contentEl;
+        if (${JSON.stringify(narrow)} === 'content') el.style.width = ${w};
+        else for (const card of el.querySelectorAll('.task-card')) card.style.width = ${w};
+        await wait(${SETTLE_MS});
+        const out = [];
+        for (const box of el.querySelectorAll('.task-card > .task-card__time')) {
+            const name = (box.parentElement.querySelector('.task-card__content')?.textContent ?? '').match(/tr-[a-z0-9]+/)?.[0];
+            if (!name) continue;
+            const b = box.getBoundingClientRect();
+            const units = [...box.querySelectorAll(':scope > .task-card__time-unit')].map(u => {
+                const r = u.getBoundingClientRect();
+                const inside = r.left >= b.left - 0.5 && r.right <= b.right + 0.5 && r.top >= b.top - 0.5 && r.bottom <= b.bottom + 0.5;
+                const outside = r.top >= b.bottom - 0.5 || r.right <= b.left || r.left >= b.right;
+                return { text: u.textContent, width: r.width, seen: inside ? 'whole' : outside ? 'none' : 'part' };
+            });
+            out.push({ name, box: b.width, units });
+        }
+        return JSON.stringify(out);
+    })()`);
+}
+
+/**
+ * Each unit shows whole or not at all, the first always (cut when it alone
+ * is wider than the box); one after the first
+ * shows exactly when it and those before it fit in the box, and once one does
+ * not, none after it shows. Returns whether the end of `name` showed, per card.
+ */
+function expectFits(r: Fit[], name: string): boolean[] {
+    const ends: boolean[] = [];
+    for (const card of r) {
+        // The first stays on the line, cut only when it alone is wider than the box.
+        expect(card.units[0].seen, JSON.stringify(card)).toBe(card.units[0].width <= card.box + 0.5 ? 'whole' : 'part');
+        let used = card.units[0].width;
+        let dropped = false;
+        for (const unit of card.units.slice(1)) {
+            used += unit.width;
+            const shows = !dropped && used <= card.box + 0.5;
+            expect(unit.seen, JSON.stringify(card)).toBe(shows ? 'whole' : 'none');
+            if (!shows) dropped = true;
+        }
+        if (card.name === name) ends.push(card.units[1]?.seen === 'whole');
+    }
+    return ends;
+}
+
+describe('the end shows whenever it fits, and never cut', () => {
+    it('in Timeline, from two days wide to seven days narrow', () => {
+        openView('tr-fit-tl', 'timeline-view', { date: DAY, daysToShow: 2, showSidebar: false });
+        expect(expectFits(fits('tr-fit-tl', 400), 'tr-1011')).toEqual([true]);
+        setViewState('tr-fit-tl', { date: DAY, daysToShow: 7, showSidebar: false });
+        const seen = [1400, 900, 600, 400].map(w => expectFits(fits('tr-fit-tl', w), 'tr-1011')[0]);
+        // 10:00>11:00 needs about 70 px: a seventh of 900 px has it, of 400 px not.
+        expect(seen[1]).toBe(true);
+        expect(seen[3]).toBe(false);
+        fits('tr-fit-tl', null);
+    });
+
+    it("in Calendar's cards of a day, at a pane's width and a phone's", () => {
+        openView('tr-fit-cal', 'calendar-view', { date: DAY, showSidebar: false });
+        const seen = [900, 560, 412, 300].map(w => expectFits(fits('tr-fit-cal', w), 'tr-1011')[0]);
+        expect(seen[0]).toBe(true);
+        expect(seen[3]).toBe(false);
+        fits('tr-fit-cal', null);
+    });
+
+    it('in Schedule, beside another card and not', () => {
+        openView('tr-fit-sc', 'schedule-view', { date: DAY });
+        // At 300 px tr-1011 shares its hour with tr-at10, in half of it.
+        const seen = [null, 300].map(w => expectFits(fits('tr-fit-sc', w), 'tr-1011')[0]);
+        expect(seen).toEqual([true, false]);
+    });
+
+    it("in a Kanban cell, whose fields after the times go whole with the end", () => {
+        openView('tr-fit-kb', 'kanban-view', { grid: [[list('tr-fit-kb', ['times', 'tags'])]] });
+        const wide = fits('tr-fit-kb', 600).filter(c => c.name === 'tr-1011');
+        expect(wide.map(c => c.units.map(u => u.text))).toEqual([['10:00', '>11:00', `#${TAG}`]]);
+        expectFits(wide, 'tr-1011');
+        // A cell keeps a least width, so its cards are narrowed.
+        // At 110 px the times fit (67 px of 98) and the tag after them does not;
+        // at 70 px the end does not either.
+        const shown = [600, 110, 70].map(w => {
+            const r = fits('tr-fit-kb', w, 'cards');
+            expectFits(r, 'tr-1011');
+            return r.find(c => c.name === 'tr-1011')?.units.map(u => u.seen);
+        });
+        expect(shown).toEqual([['whole', 'whole', 'whole'], ['whole', 'whole', 'none'], ['whole', 'none', 'none']]);
+        fits('tr-fit-kb', null, 'cards');
     });
 });

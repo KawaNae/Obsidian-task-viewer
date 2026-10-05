@@ -236,35 +236,39 @@
     text-decoration: underline;
 }
 
-/* --- Time Display (topRight meta) --- */
+/* --- Time Display (topRight meta) ---
+   The top right has the card's top row to itself (the content starts below
+   it), from the accent bar's side to the right edge, and stands at the
+   right of it. It is one line high and wraps between its units
+   (`renderTopRight`): a unit after the first that does not fit goes whole to
+   the second line, which the box cuts away, with what follows it. So the end
+   (`>11:00`) shows whenever it fits and is never cut, in every view and at
+   whatever width, with no threshold to keep. The first unit (`10:00`) stays
+   on the line: when even it does not fit, it starts at the left (`safe`) and
+   is cut at the right. */
 .task-card__time {
+    --task-card-time-line: 1.3;
     position: absolute;
     top: 2px;
+    left: 6px;
     right: 6px;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: safe flex-end;
     align-items: baseline;
     font-family: var(--tv-font-mono);
     font-size: 0.75em;
+    line-height: var(--task-card-time-line);
+    height: calc(var(--task-card-time-line) * 1em);
     color: var(--tv-text-muted);
     opacity: 0.8;
     pointer-events: none;
-    white-space: nowrap;
-    max-width: 50%;
     overflow: hidden;
 }
 
-.task-card__time-start,
-.task-card__time-end,
-.task-card__time-seg,
-.task-card__time-sep {
+.task-card__time-unit {
     flex-shrink: 0;
     white-space: pre;
-}
-
-@container (max-width: 120px) {
-    .task-card__time-end {
-        display: none;
-    }
 }
 
 .task-card--split-continues-before .task-card__time {
