@@ -95,15 +95,27 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 
 ### today — 本日のタスク
 
-visual-date を考慮し、本日アクティブなタスク（日をまたぐタスクを含む）を取得します。
+visual-date を考慮し、本日アクティブなタスク（日をまたぐタスクを含む）を取得します。`list date=today` と同じで、`list` のフラグを `date`、`from`、`to` のほかは全て受けます。`date`、`from`、`to` を渡すと、窓が2つになるのでエラーです。
 
 ```bash
 obsidian obsidian-task-viewer:today output-fields=content,effectiveStartTime,effectiveEndTime
+obsidian obsidian-task-viewer:today tag=work
 ```
 
 | フラグ | 説明 |
 |-------|------|
+| `file` | ファイルパスで絞り込み |
+| `status` | ステータス文字（カンマ区切り） |
+| `tag` | タグ名（カンマ区切り） |
+| `content` | コンテンツの部分一致 |
+| `due` | 締切日 = 指定値 |
 | `leaf` | 子タスクを持たないタスクのみ |
+| `property` | カスタムプロパティ（`key:value` 形式） |
+| `color` | カード色で絞り込み（カンマ区切り） |
+| `type` | タスク notation で絞り込み |
+| `root` | 親タスクを持たないタスクのみ |
+| `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) |
+| `list` | ピン留めリスト名（`.md` テンプレート用） |
 | `sort` | ソートルール |
 | `limit` | 最大件数（デフォルト: json は 100、tsv と jsonl は all。0=件数のみ, all=無制限） |
 

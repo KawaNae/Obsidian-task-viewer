@@ -141,11 +141,23 @@ const result = api.today({
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 
-**TodayParams:**
+**TodayParams:** `ListParams` から `date`、`from`、`to` を除いたものです。`today` は `list` に `date: 'today'` を渡すのと同じで、ほかの引数も `list` と同じに読みます。`date`、`from`、`to` を渡すと、窓が2つになるのでエラーです（`Cannot use 'date' with today, which is date=today; use list date=2026-10-10`）。
 
 | パラメータ | 型 | 説明 |
 |-----------|-----|------|
+| `file` | `string` | ファイルパスで絞り込み（`.md` は補われる） |
+| `status` | `string \| string[]` | ステータス文字 |
+| `tag` | `string \| string[]` | タグ名（カンマ区切り文字列も可。下位のタグも含む） |
+| `content` | `string` | コンテンツ部分一致 |
+| `due` | `string` | 締切日 = 指定値 |
 | `leaf` | `boolean` | 子なしタスクのみ |
+| `property` | `string` | カスタムプロパティ（`key:value`） |
+| `color` | `string \| string[]` | カード色 |
+| `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
+| `root` | `boolean` | 親タスクを持たないタスクのみ |
+| `filter` | `FilterState` | 完全なフィルタ定義 |
+| `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
+| `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 

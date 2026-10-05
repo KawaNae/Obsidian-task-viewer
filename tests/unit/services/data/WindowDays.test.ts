@@ -65,7 +65,7 @@ describe.each(CASES)('$name', ({ task, days }) => {
         expect(on).toEqual(days);
     });
 
-    it('the API today answers it on the same days', () => {
+    it('the API today answers it on the same days', async () => {
         const api = new TaskApi({
             app: {},
             settings: { startHour, weekStartDay: 1 },
@@ -73,12 +73,13 @@ describe.each(CASES)('$name', ({ task, days }) => {
             getIndex: () => ({ getTask: () => undefined }),
             getOperations: () => ({}),
         } as any);
-        const found = DAYS.filter(d => {
+        const found: string[] = [];
+        for (const d of DAYS) {
             const [y, m, day] = d.split('-').map(Number);
             vi.useFakeTimers();
             vi.setSystemTime(new Date(y, m - 1, day + 1, 3, 0)); // 03:00 the next morning: still d
-            return api.today().total > 0;
-        });
+            if ((await api.today()).total > 0) found.push(d);
+        }
         expect(found).toEqual(days);
     });
 

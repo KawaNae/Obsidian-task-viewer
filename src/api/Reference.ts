@@ -37,7 +37,8 @@ import { DEFAULT_SORT_ORDER } from '../services/sort/TaskSorter';
  * How the CLI checks a command's flags before its handler runs.
  * `strict`: only the declared flags, a boolean one without a value.
  * `handler`: the handler checks its flags itself — `export-image` takes the
- * flags of the view it exports, which are known only once the view is.
+ * flags of the view it exports, which are known only once the view is, and
+ * `today` tells a window flag apart from an unknown one.
  */
 export type FlagCheck = 'strict' | 'handler';
 
@@ -125,8 +126,8 @@ export const OPERATIONS = {
 Today is the visual date of now. A task is active when its span overlaps
 today's visual day, as the views draw it. A task with only a due has the
 span read from its due, and matches by it.`,
-        api: { signature: 'today(params?: TodayParams): TaskListResult', returns: 'TaskListResult' },
-        cli: { output: true },
+        api: { signature: 'today(params?: TodayParams): Promise<TaskListResult>', returns: 'TaskListResult' },
+        cli: { output: true, flagCheck: 'handler' },
     },
     get: {
         summary: 'Get a single task by ID',

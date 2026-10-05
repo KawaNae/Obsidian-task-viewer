@@ -138,10 +138,8 @@ export interface ListParams extends PaginationParams, SimpleFilterParams, Filter
 
 // ── today ──
 
-export interface TodayParams extends PaginationParams {
-    leaf?: boolean;
-    sort?: ApiSortRule[];
-}
+/** `list`'s params but the window: `today` is `date=today`. */
+export type TodayParams = Omit<ListParams, keyof WindowParams>;
 
 // ── get ──
 

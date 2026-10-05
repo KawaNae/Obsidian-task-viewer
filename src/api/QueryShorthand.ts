@@ -1,4 +1,4 @@
-import type { FilterCondition, DateRangeValue, SingleDateValue } from '../services/filter/FilterTypes';
+import type { FilterCondition, DateFilterValue, DateRangeValue, SingleDateValue } from '../services/filter/FilterTypes';
 import { isReversedRange } from '../services/filter/FilterTypes';
 import { DATE_PRESET_SYNTAX, parseDatePreset } from '../services/filter/DatePreset';
 import { TaskApiError } from './TaskApiTypes';
@@ -52,14 +52,18 @@ export function refuseWindowOnToday(params: object): void {
     throw new TaskApiError(n => `Cannot use '${n(given)}' with today, which is ${n('date')}=today; use list ${n(given)}=${value}`, given);
 }
 
-function windowConditions(params: WindowParams): FilterCondition[] {
+/**
+ * The value the window params name: `date`'s, or the range of `from` and
+ * `to`; none when they name no window. The one reading of them, for the
+ * condition and for a caller that lays the window's days out
+ * (`categorizedTasksForDateRange`).
+ */
+export function windowValue(params: WindowParams): DateFilterValue | undefined {
     if (params.date && (params.from || params.to)) {
         throw new TaskApiError(n => `Cannot use '${n('date')}' together with '${n('from')}'/'${n('to')}'. Use either '${n('date')}' for a single-day window, or '${n('from')}'/'${n('to')}' for a range.`, 'date');
     }
-    if (params.date) {
-        return [{ property: 'period', operator: 'overlaps', value: readDateParam(params.date, 'date') }];
-    }
-    if (!params.from && !params.to) return [];
+    if (params.date) return readDateParam(params.date, 'date');
+    if (!params.from && !params.to) return undefined;
     const range: DateRangeValue = {
         ...(params.from ? { from: readDateParam(params.from, 'from') } : {}),
         ...(params.to ? { to: readDateParam(params.to, 'to') } : {}),
@@ -67,7 +71,12 @@ function windowConditions(params: WindowParams): FilterCondition[] {
     if (isReversedRange(range)) {
         throw new TaskApiError(n => `${n('from')} ${params.from} is after ${n('to')} ${params.to}`, 'from');
     }
-    return [{ property: 'period', operator: 'overlaps', value: range }];
+    return range;
+}
+
+function windowConditions(params: WindowParams): FilterCondition[] {
+    const value = windowValue(params);
+    return value === undefined ? [] : [{ property: 'period', operator: 'overlaps', value }];
 }
 
 function normalizeStringArray(value: string | string[] | undefined, stripHash = false): string[] {
