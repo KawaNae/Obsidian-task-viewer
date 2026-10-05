@@ -20,6 +20,7 @@ import { viewContentEl } from '../../utils/ObsidianView';
 import { createNativePicker } from './NativePicker';
 import type { TemplateNoteSaver } from '../../services/template/TemplateNote';
 import { refusalText } from '../../services/operations/WriteAnswer';
+import { ToolbarFold } from './ToolbarFold';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -33,11 +34,18 @@ import { refusalText } from '../../services/operations/WriteAnswer';
  * DOM depends on state that changes between renders (e.g. month labels in
  * mini-calendar, timer-mode controls). Such toolbars rebuild their content on
  * every mount; static toolbars rebuild only on first mount.
+ *
+ * A toolbar that puts its actions in an action zone ({@link createActionZone})
+ * folds the zone into its ⋮ button when its row does not fit
+ * ({@link ToolbarFold}); the view calls `close()` when it closes, which stops
+ * the watching.
  */
 export abstract class ViewToolbarBase {
     protected host: HTMLElement | null = null;
     protected rootEl: HTMLElement | null = null;
     private readonly dynamicContent: boolean;
+    /** Folds the action zone into ⋮; there when the toolbar has an action zone. */
+    private fold: ToolbarFold | null = null;
 
     constructor(options: { dynamicContent?: boolean } = {}) {
         this.dynamicContent = options.dynamicContent ?? false;
@@ -60,12 +68,14 @@ export abstract class ViewToolbarBase {
                 this.buildDom(this.rootEl);
             }
             this.update();
+            this.fold?.attach(this.rootEl);
             return;
         }
         this.host = host;
         this.rootEl = host.createDiv('view-toolbar');
         this.buildDom(this.rootEl);
         this.update();
+        this.fold?.attach(this.rootEl);
     }
 
     detach(): void {
@@ -75,10 +85,28 @@ export abstract class ViewToolbarBase {
         this.host = null;
     }
 
+    /**
+     * The view closes: stop watching the toolbar's width. Subclasses that
+     * close more (their popovers) call this too.
+     */
+    close(): void {
+        this.fold?.detach();
+    }
+
     /** Refresh dynamic UI without rebuilding DOM. Override in subclasses. */
     update(): void {}
 
     protected abstract buildDom(rootEl: HTMLElement): void;
+
+    /**
+     * The zone of the actions that fold into the ⋮ button
+     * (`view-toolbar__btn--more`, which the toolbar puts in its row) when the
+     * row does not fit. Making it is what makes the toolbar fold.
+     */
+    protected createActionZone(toolbar: HTMLElement): HTMLElement {
+        this.fold ??= new ToolbarFold();
+        return toolbar.createDiv('view-toolbar__action-zone');
+    }
 }
 
 /** What a view hands {@link DateNavigator} so the user can jump to any date. */

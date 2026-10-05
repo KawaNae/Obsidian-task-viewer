@@ -49,8 +49,9 @@ export class ScheduleToolbar extends ViewToolbarBase {
     }
 
     /** Close the popovers the toolbar opened. */
-    close(): void {
+    override close(): void {
         this.filterMenu.close();
+        super.close();
     }
 
     private getDateYearMonth(): { year: number; month: number } {
@@ -88,8 +89,8 @@ export class ScheduleToolbar extends ViewToolbarBase {
 
         toolbar.createDiv('view-toolbar__spacer');
 
-        // Action zone (expanded mode)
-        const actionZone = toolbar.createDiv('view-toolbar__action-zone');
+        // Action zone (folded into ⋮ when the row does not fit)
+        const actionZone = this.createActionZone(toolbar);
 
         const filterBtn = actionZone.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(filterBtn, 'filter');
@@ -105,7 +106,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
 
         ViewSettingsMenu.renderButton(actionZone, this.settingsOptions());
 
-        // More button (compact mode — ⋮)
+        // More button (⋮, shown while the action zone is folded)
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
         setIcon(moreBtn, 'more-vertical');
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));

@@ -69,8 +69,9 @@ export class TimelineToolbar extends ViewToolbarBase {
     }
 
     /** Close the popovers the toolbar opened. */
-    close(): void {
+    override close(): void {
         this.filterMenu.close();
+        super.close();
     }
 
     /** Synchronizes the sidebar toggle button with the view's sidebar state. */
@@ -130,8 +131,8 @@ export class TimelineToolbar extends ViewToolbarBase {
         // Push action zone to the right
         toolbar.createDiv('view-toolbar__spacer');
 
-        // Action zone (collapsed in compact mode)
-        const actionZone = toolbar.createDiv('view-toolbar__action-zone');
+        // Action zone (folded into ⋮ when the row does not fit)
+        const actionZone = this.createActionZone(toolbar);
         this.renderViewModeSwitch(actionZone);
         this.renderZoomControls(actionZone);
         this.renderFilterButton(actionZone);
@@ -143,7 +144,7 @@ export class TimelineToolbar extends ViewToolbarBase {
 
         ViewSettingsMenu.renderButton(actionZone, this.settingsOptions());
 
-        // More button (compact mode — ⋮)
+        // More button (⋮, shown while the action zone is folded)
         const moreBtn = toolbar.createEl('button', { cls: 'view-toolbar__btn--icon view-toolbar__btn--more' });
         setIcon(moreBtn, 'more-vertical');
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
