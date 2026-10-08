@@ -2,8 +2,8 @@ import { type App, type TFile, type TFolder, parseLinktext } from 'obsidian';
 import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
 import { MARKDOWN_LINK_SOURCE, WIKILINK_SOURCE } from '../parsing/utils/InlineNotation';
 
-/** What {@link NoteName} asks of the vault: its files and its folders. */
-export type NoteVault = Pick<App['vault'], 'getFiles' | 'getMarkdownFiles' | 'getAllFolders'>;
+/** What {@link NoteName} asks of the vault: its notes and its folders. */
+export type NoteVault = Pick<App['vault'], 'getMarkdownFiles' | 'getAllFolders'>;
 
 /**
  * The characters a note's name cannot hold: those a path or a file system
@@ -13,39 +13,72 @@ export type NoteVault = Pick<App['vault'], 'getFiles' | 'getMarkdownFiles' | 'ge
  */
 const UNUSABLE = /[/\\:*"<>?#^[\]|]/g;
 
-/** Whether a name can be the name of a note, and why not (see {@link NoteName.check}). */
+/**
+ * Whether a name or a path can be a new note's, and why not (see
+ * {@link NoteName.check}): `at` says whether it is the note's name or a
+ * folder on its path that cannot be one.
+ */
 export type NameCheck =
     | { ok: true }
-    | { ok: false; why: 'empty' }
+    | { ok: false; why: 'empty'; at: 'name' }
     /** `chars`: each character it cannot hold, once, in the order it holds them. */
-    | { ok: false; why: 'chars'; chars: string }
-    /** A name that opens with a dot names a note Obsidian does not show. */
-    | { ok: false; why: 'dot' };
+    | { ok: false; why: 'chars'; chars: string; at: 'name' | 'folder' }
+    /** A name that opens with a dot names a note (or a folder) Obsidian does not show. */
+    | { ok: false; why: 'dot'; at: 'name' | 'folder' };
 
 /**
- * The note a name and a folder point at (see {@link NoteName.at}): one of the
- * vault's, or a path no note is at, where one is made.
- *
- * `namesakes` are the vault's other notes by the same name, in other folders:
- * a link to the note then has to name its path, since Obsidian resolves a
- * name without one to one of them.
+ * What the send dialog's note field holds: the text typed, and the note a
+ * candidate picked from its list named, while the text is what the pick put
+ * in (`note-suggest/send-field.md`).
+ */
+export interface NoteAsk {
+    text: string;
+    /** The path of the note picked; null when none was, or the text changed since. */
+    picked: string | null;
+}
+
+/**
+ * The note a note field points at (see {@link NoteName.find}): one of the
+ * vault's; a path no note is at, where one is made; or more than one note,
+ * which the field does not tell apart.
  */
 export type NoteAt =
-    | { kind: 'new'; path: string; namesakes: readonly TFile[] }
     /**
-     * `file` may be spelt otherwise than the path asked, in its case: the
+     * `file` may be spelt otherwise than the text asked, in its case: the
      * vault's own spelling, which is what the user is shown.
      */
-    | { kind: 'existing'; file: TFile; namesakes: readonly TFile[] };
+    | { kind: 'existing'; file: TFile }
+    /**
+     * `by`: whether a name alone was typed (the note goes to the folder for
+     * new notes) or a path. `folderMade`: the first folder on the path the
+     * vault does not have, which the send makes with the note; null when
+     * every one is there. `namesakes`: the vault's notes by the same name,
+     * in other folders: a link to the note then has to name its path.
+     */
+    | { kind: 'new'; path: string; by: 'name' | 'path'; folderMade: string | null; namesakes: readonly TFile[] }
+    /** `name`: the text as read. `files`: the notes it points at, by their paths. */
+    | { kind: 'ambiguous'; name: string; files: readonly TFile[] };
 
 /**
- * A name as typed, as the name of the note: the spaces at its ends, and a
- * `.md` at its end in any case, left out. The note's name is without the
- * extension; one typed with it is taken to mean the same note, not a note
- * named `….md.md`.
+ * A note's name or path as typed: the spaces at its ends, and a `.md` at its
+ * end in any case, left out. The note's name is without the extension; one
+ * typed with it is taken to mean the same note, not a note named `….md.md`.
+ * A path is read as a link reads one: from the vault's root whether or not
+ * it opens with `/`, and a `//` as one `/`.
  */
-function typed(name: string): string {
-    return name.trim().replace(/\.md$/i, '').trim();
+function typed(text: string): string {
+    return text.trim().replace(/\.md$/i, '').trim().replace(/\/+/g, '/').replace(/^\//, '');
+}
+
+/** The characters a folder's name cannot hold: a name's, but the `/` that ends it. */
+const UNUSABLE_IN_FOLDER = /[\\:*"<>?#^[\]|]/g;
+
+/** Why `part`, by the characters in `unusable`, cannot be a name; null when it can. */
+function partCheck(part: string, unusable: RegExp, at: 'name' | 'folder'): Extract<NameCheck, { ok: false }> | null {
+    const chars = part.match(unusable);
+    if (chars) return { ok: false, why: 'chars', chars: [...new Set(chars)].join(''), at };
+    if (part.startsWith('.')) return { ok: false, why: 'dot', at };
+    return null;
 }
 
 /** A name or path as compared with another: case and normalization aside. */
@@ -55,8 +88,8 @@ function folded(text: string): string {
 
 /**
  * A note's name and where it goes, as a new note for a row is named: the
- * default name and folder, whether a name can be one, and which note a name
- * and a folder point at.
+ * default name and folder, whether a name or a path can be a new note's, and
+ * which note a note field points at.
  *
  * A path is compared with the vault's case aside. The file systems of macOS
  * and Windows do not tell `Note.md` from `note.md`: Obsidian does not find
@@ -121,33 +154,86 @@ export const NoteName = {
         return folderPath(app.fileManager.getNewFileParent(sourcePath));
     },
 
-    /** Whether `name`, as typed, can be a note's name (see {@link UNUSABLE}, {@link typed}). */
-    check(name: string): NameCheck {
-        const trimmed = typed(name);
-        if (trimmed === '') return { ok: false, why: 'empty' };
-        const unusable = trimmed.match(UNUSABLE);
-        if (unusable) return { ok: false, why: 'chars', chars: [...new Set(unusable)].join('') };
-        if (trimmed.startsWith('.')) return { ok: false, why: 'dot' };
-        return { ok: true };
+    /**
+     * Whether `text`, as typed ({@link typed}), can name a new note: its
+     * name (past the last `/`) a name a note can have (see
+     * {@link UNUSABLE}), and each folder before it one a folder can.
+     */
+    check(text: string): NameCheck {
+        const parts = typed(text).split('/');
+        const name = parts.pop() ?? '';
+        if (name.trim() === '') return { ok: false, why: 'empty', at: 'name' };
+        const wrong = partCheck(name, UNUSABLE, 'name') ?? parts.map(part => partCheck(part, UNUSABLE_IN_FOLDER, 'folder')).find(Boolean);
+        return wrong ?? { ok: true };
     },
 
     /**
-     * The note `name`, as typed ({@link typed}), in `folder` ('' for the root) points at:
-     * a note of the vault whose path is that one, case aside, or a new note
-     * at that path — spelt with the folders the vault has, case aside, so it
-     * goes into the folder there is rather than beside it.
+     * The note a note field points at, the rules taken in order
+     * (`note-suggest/send-field.md`, 行き先の決め方):
+     *
+     * 1. The note picked, while the vault has it.
+     * 2. The text, read as the text of a `[[link]]` is ({@link typed}). A
+     *    name (no `/`): the vault's notes by that name, case and
+     *    normalization aside. One is that note; none, a new note in
+     *    `newFolder` (the folder for new notes, '' for the root).
+     * 3. A path: the note at that path from the vault's root, case aside;
+     *    else the notes whose path ends in it, after a `/`, as a link finds
+     *    them. One is that note; none, a new note at the path, spelt with
+     *    the folders the vault has, case aside, so it goes into the folder
+     *    there is rather than beside it.
+     *
+     * More than one note by a name or by the end of a path is no note: the
+     * field does not tell them apart, and a send is not guessed at.
      */
-    at(vault: NoteVault, folder: string, name: string): NoteAt {
-        const base = typed(name);
-        const place = spelledAs(vault, folder);
-        const path = `${place === '' ? '' : `${place}/`}${base}.md`;
-        const key = folded(path);
-        const file = vault.getFiles().find(f => f.path === path) ?? vault.getFiles().find(f => folded(f.path) === key);
-        const named = folded(file?.basename ?? base);
-        const namesakes = vault.getMarkdownFiles().filter(f => f !== file && folded(f.basename) === named);
-        return file ? { kind: 'existing', file, namesakes } : { kind: 'new', path, namesakes };
+    find(vault: NoteVault, ask: NoteAsk, newFolder: string): NoteAt {
+        const notes = vault.getMarkdownFiles();
+        const picked = ask.picked === null ? undefined : notes.find(f => f.path === ask.picked);
+        if (picked) return { kind: 'existing', file: picked };
+        const text = typed(ask.text);
+        const cut = text.lastIndexOf('/');
+        if (cut < 0) {
+            const named = notes.filter(f => folded(f.basename) === folded(text));
+            if (named.length > 0) return oneOf(text, named);
+            return made(vault, `${newFolder === '' ? '' : `${newFolder}/`}${text}.md`, 'name');
+        }
+        const path = `${text}.md`;
+        const there = notes.find(f => f.path === path) ?? notes.find(f => folded(f.path) === folded(path));
+        if (there) return { kind: 'existing', file: there };
+        const tail = folded(`/${path}`);
+        const ending = notes.filter(f => folded(f.path).endsWith(tail));
+        if (ending.length > 0) return oneOf(text, ending);
+        return made(vault, `${spelledAs(vault, text.slice(0, cut))}/${text.slice(cut + 1)}.md`, 'path');
+    },
+
+    /** The vault's note at `path`, case aside, spelt as the vault spells it; the one spelt as asked first. Null when there is none. */
+    fileAt(vault: NoteVault, path: string): TFile | null {
+        const notes = vault.getMarkdownFiles();
+        return notes.find(f => f.path === path) ?? notes.find(f => folded(f.path) === folded(path)) ?? null;
     },
 };
+
+/** The one note of `files`, or, of more than one, none: the field does not tell them apart. */
+function oneOf(name: string, files: readonly TFile[]): NoteAt {
+    if (files.length === 1) return { kind: 'existing', file: files[0] };
+    return { kind: 'ambiguous', name, files: [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)) };
+}
+
+/** A new note at `path`: the first of its folders the vault does not have, and the notes by its name elsewhere. */
+function made(vault: NoteVault, path: string, by: 'name' | 'path'): NoteAt {
+    const folders = vault.getAllFolders(false);
+    const parts = path.split('/').slice(0, -1);
+    let folderMade: string | null = null;
+    for (let i = 1; i <= parts.length; i++) {
+        const folder = parts.slice(0, i).join('/');
+        if (!folders.some(f => f.path === folder)) {
+            folderMade = folder;
+            break;
+        }
+    }
+    const name = folded(path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, ''));
+    const namesakes = vault.getMarkdownFiles().filter(f => folded(f.basename) === name);
+    return { kind: 'new', path, by, folderMade, namesakes };
+}
 
 /** A Markdown link's path, its `%20`s and the like read back; as written when it does not decode. */
 function decoded(path: string): string {

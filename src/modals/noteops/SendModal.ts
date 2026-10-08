@@ -16,7 +16,7 @@ import { SendDialog, initialAsk, type SendField, type SendSurface, type SendView
  * in the source editor, the destination's fields, what the send does, the
  * values offered for the note's frontmatter, what keeps a send from being
  * asked and what it is asked in spite of, each said next to what it is of
- * (`IssueBoard`: under the name, the heading or a row, or above the
+ * (`IssueBoard`: under the note, the heading or a row, or above the
  * buttons), and cancel and send. It draws
  * what the dialog's state says (`SendViewState`) and does nothing of its
  * own; the dialog's logic is `SendDialog`.
@@ -64,7 +64,7 @@ export class SendModal implements SendSurface {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog tv-send',
             keymap: this.app.keymap,
-            // The first draft; the note's name when no row opened in the editor.
+            // The first draft; the note field when no row opened in the editor.
             initialFocus: () => this.dialog?.firstEditor() ?? this.field,
             build: (bodyEl) => this.build(bodyEl),
             onClose: () => {
@@ -100,7 +100,7 @@ export class SendModal implements SendSurface {
 
         this.formSays = bodyEl.createDiv({ cls: 'tv-form__says tv-form__says--form' });
         this.issues = new IssueBoard<SendField>({
-            field: (at) => (at === 'name' || at === 'heading' ? this.field.slot(at) : this.rowSlot(at)),
+            field: (at) => (at === 'note' || at === 'heading' ? this.field.slot(at) : this.rowSlot(at)),
             form: this.formSays,
         });
 

@@ -5,25 +5,25 @@ import { ShownSuggest } from '../../suggest/ShownSuggest';
 import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
 import type { IssueSlot } from '../form/FormIssue';
-import { NoteFields } from './NoteFields';
+import { NoteField } from './NoteField';
 
 /** What a {@link DestinationField} opens with, and whom it tells. */
 export interface DestinationFieldOptions {
-    /** The fields as they open: the note's name and folder, and the heading ('' for the default one). */
+    /** The fields as they open: the note, and the heading ('' for the default one). */
     initial: DestinationAsk;
     /** The heading the rows go under when the field is left empty, shown in its place. */
     defaultHeading: string;
-    /** A field was typed in, or a note, a folder or a heading was picked. */
+    /** A field was typed in, or a note or a heading was picked. */
     onChange: () => void;
     /** Enter in a field, when it is not picking from a list. */
     onEnter: () => void;
 }
 
 /**
- * Where lines go: a note, by its folder and name (`NoteFields`), and a
- * heading in it, the note's headings suggested: three form rows, each with
- * its icon, as the hub's rows are. Left empty, the heading
- * field stands for the default one, which it shows in its place.
+ * Where lines go: a note (`NoteField`), and a heading in it, the note's
+ * headings suggested: two form rows, each with its icon, as the hub's rows
+ * are. Left empty, the heading field stands for the default one, which it
+ * shows in its place.
  *
  * It holds what the user typed and nothing of the operation it is for:
  * what the note is, which headings it has and whether a field is wrong are
@@ -31,15 +31,14 @@ export interface DestinationFieldOptions {
  * field's row ({@link slot}).
  */
 export class DestinationField {
-    private readonly note: NoteFields;
+    private readonly note: NoteField;
     private readonly headingInput: HTMLInputElement;
     private readonly headingSays: HTMLElement;
     private readonly headingSuggest: HeadingSuggest;
 
     constructor(app: App, container: HTMLElement, opts: DestinationFieldOptions) {
-        this.note = new NoteFields(app, container, {
-            name: opts.initial.name,
-            folder: opts.initial.folder,
+        this.note = new NoteField(app, container, {
+            initial: opts.initial.note,
             onChange: opts.onChange,
             onEnter: opts.onEnter,
         });
@@ -59,7 +58,7 @@ export class DestinationField {
 
     /** What the fields hold now. */
     ask(): DestinationAsk {
-        return { folder: this.note.folder, name: this.note.name, heading: this.headingInput.value };
+        return { note: this.note.ask(), heading: this.headingInput.value };
     }
 
     /** The headings the heading field suggests: the note's, as the form found them. */
@@ -67,16 +66,16 @@ export class DestinationField {
         this.headingSuggest.headings = headings;
     }
 
-    /** Where what is said of the note's name, or of the heading, goes: its input and the line under its row. */
-    slot(at: 'name' | 'heading'): IssueSlot {
-        return at === 'name'
-            ? { input: this.note.nameInput, message: this.note.nameSays }
+    /** Where what is said of the note, or of the heading, goes: its input and the line under its row. */
+    slot(at: 'note' | 'heading'): IssueSlot {
+        return at === 'note'
+            ? { input: this.note.input, message: this.note.says }
             : { input: this.headingInput, message: this.headingSays };
     }
 
-    /** Focus the note's name. */
+    /** Focus the note field. */
     focus(options?: FocusOptions): void {
-        this.note.nameInput.focus(options);
+        this.note.input.focus(options);
     }
 }
 

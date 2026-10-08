@@ -19,14 +19,15 @@ import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logWarn } from '../../log/log';
 import { inheritedAt, type InheritedValue } from './InheritedValues';
 import type { Operations } from '../operations/Operations';
-import { NoteName, type NameCheck } from './NoteName';
+import { NoteName, type NameCheck, type NoteAsk } from './NoteName';
 import { anchorsIn, linksTo, type AnchorLink, type LineSpan } from './NoteRefs';
 
 export type { SendRow } from '../operations/Operations';
+export type { NoteAsk } from './NoteName';
 
-/** The note a send goes to: one to make, by its folder and name, or one there is, by its path. */
+/** The note a send goes to: one to make at its path, or one there is, by its path. */
 export type SendNote =
-    | { kind: 'new'; folder: string; name: string }
+    | { kind: 'new'; path: string }
     | { kind: 'existing'; path: string };
 
 /** Where a send goes: a note, and the section of it (`Section`). */
@@ -58,17 +59,15 @@ export interface SendRequest {
 export interface SendPreview {
     rows: readonly RowSnapshot[];
     /**
-     * The destination the dialog opens with, at the settings' section
-     * (`Destination.taskSection`). The note is the one the first row's text
-     * links to, when it links to exactly one: a note of the vault, or else a
-     * new note where the link spells it (its folder, or the settings' folder
-     * for new notes when it spells none). Otherwise a new note in the
-     * settings' folder for new notes, named after the row's text
-     * (`NoteName.fromText`). A new note that is one of the vault's once
-     * named — case aside — is that note, as the dialog's fields say
-     * (`NoteName.at`).
+     * What the dialog opens with: the note field, and the settings' section
+     * (`Destination.taskSection`). When the first row's text links to
+     * exactly one note, the note field names it: a note of the vault, by its
+     * name and picked; else the link's text, a new note where the link
+     * spells it. Otherwise the field holds a name made of the row's text
+     * (`NoteName.fromText`), which finds the vault's note by that name, or
+     * a new note in the folder for new notes (`NoteName.find`).
      */
-    defaults: SendDestination;
+    defaults: { note: NoteAsk; section: Section };
     /**
      * The values the rows inherit, each said as a frontmatter key
      * (`inheritedAt`), in the order the first row's are: the frontmatter the
@@ -88,34 +87,43 @@ export interface SendPreview {
 
 /** What the send dialog's fields say of the destination (`NoteOps.destinationFacts`), as typed. */
 export interface DestinationAsk {
-    folder: string;
-    name: string;
+    note: NoteAsk;
     /** The heading to go under; empty for the settings' (`taskHeading`). */
     heading: string;
 }
 
 /**
  * What the destination the fields name is, for the dialog to say before the
- * send (`NoteOps.destinationFacts`): a name no note can have, and why
- * (`NoteName.check`); or a note, and what a send there meets.
+ * send (`NoteOps.destinationFacts`): a new note a name or a path cannot
+ * make, and why (`NoteName.check`); more than one note the note field
+ * points at, which a send does not choose between (`NoteName.find`); or a
+ * note, and what a send there meets.
  */
 export type DestinationFacts =
     | { kind: 'unnamed'; why: Extract<NameCheck, { ok: false }> }
+    | { kind: 'ambiguous'; name: string; files: readonly TFile[] }
     | NoteFacts;
 
 /**
  * A note the fields name, as it stands now. Asked again whenever a field
  * changes; the note may change between the asking and the send, which reads
  * it again.
+ *
+ * `new`: no note is at the path, and the send makes one; `by` says whether
+ * a name alone was typed (the note goes to the folder for new notes) or a
+ * path, `folderMade` the first folder on its path the send makes with it,
+ * and `namesakes` the vault's other notes by its name, which a link to it
+ * has to tell it from (`NoteAt`). `existing`: one of the vault's, the rows'
+ * own note or not. `same`: the note every row stands in, where the rows are
+ * carried and nothing is written into the frontmatter.
  */
-export interface NoteFacts {
-    /**
-     * `new`: no note is at the path, and the send makes one. `existing`: one
-     * of the vault's, the rows' own note or not. `same`: the note every row
-     * stands in, where the rows are carried and nothing is written into the
-     * frontmatter.
-     */
-    kind: 'new' | 'existing' | 'same';
+export type NoteFacts = NoteFactsOf<
+    | { kind: 'new'; by: 'name' | 'path'; folderMade: string | null; namesakes: readonly TFile[] }
+    | { kind: 'existing' | 'same' }
+>;
+
+/** What every note the fields name has, beside what its kind has. */
+type NoteFactsOf<K> = K & {
     /** The note's path, spelt as the vault spells it when it has the note. */
     path: string;
     /** Where the send goes, as `SendRequest.to` takes it. */
@@ -128,8 +136,6 @@ export interface NoteFacts {
     present: readonly string[];
     /** The note is one the index does not read (`tv-ignore`): the rows are not seen there. */
     ignored: boolean;
-    /** The vault's other notes by the note's name, in other folders (`NoteAt.namesakes`). */
-    namesakes: readonly TFile[];
     /**
      * The `^id`s of rows from other notes that the note carries already: once
      * sent, neither line is the anchor. None for rows of the note itself.
@@ -143,7 +149,7 @@ export interface NoteFacts {
     unresolved: readonly UnresolvedReference[];
     /** How many lines of the note carry each `^id` (`TaskLineClassifier.blockIdCounts`); none for a note to make. */
     anchors: ReadonlyMap<string, number>;
-}
+};
 
 /**
  * A note rows are sent from, as the timers are asked about a send
@@ -274,25 +280,30 @@ export class NoteOps {
      * settings' level and side (`Destination.sectionNamed`).
      */
     async destinationFacts(preview: SendPreview, ask: DestinationAsk): Promise<DestinationFacts> {
-        const name = NoteName.check(ask.name);
-        if (!name.ok) return { kind: 'unnamed', why: name };
+        const rows = preview.rows;
+        const at = NoteName.find(this.app.vault, ask.note, NoteName.defaultFolder(this.app, rows[0].task.file));
+        if (at.kind === 'ambiguous') return at;
+        if (at.kind === 'new') {
+            const name = NoteName.check(at.path);
+            if (!name.ok) return { kind: 'unnamed', why: name };
+        }
         const settings = this.getSettings();
         const heading = ask.heading.trim();
         const section = Destination.sectionNamed(heading === '' ? settings.taskHeading : heading, settings);
-        const at = NoteName.at(this.app.vault, ask.folder, ask.name);
-        const rows = preview.rows;
         const sentTasks = byNote(rows).flatMap(({ rows: ofNote }) => withDescendants(ofNote, settings));
 
         if (at.kind === 'new') {
             return {
                 kind: 'new',
+                by: at.by,
+                folderMade: at.folderMade,
+                namesakes: at.namesakes,
                 path: at.path,
-                to: { note: { kind: 'new', folder: ask.folder, name: ask.name }, section },
+                to: { note: { kind: 'new', path: at.path }, section },
                 heading: { kind: 'none' },
                 headings: [],
                 present: [],
                 ignored: false,
-                namesakes: at.namesakes,
                 shared: [],
                 unresolved: unresolvedAt(sentTasks, [headingLine(section)]),
                 anchors: new Map(),
@@ -312,7 +323,6 @@ export class NoteOps {
             headings: outline.headings.map(h => h.text),
             present: preview.candidates.filter(one => FrontmatterLineEditor.hasKey(lines, one.key)).map(one => one.key),
             ignored: FileParsePipeline.resolveSections(lines, settings) === null,
-            namesakes: at.namesakes,
             shared: anchorsIn(rows.filter(row => row.task.file !== path).flatMap(row => row.task.subtreeLines ?? []))
                 .filter(id => inNote.has(id)),
             unresolved: unresolvedAt(sentTasks, found.kind === 'none' ? [...lines, headingLine(section)] : lines),
@@ -330,35 +340,33 @@ export class NoteOps {
         return this.deps.timers()?.refuse(sending) ?? null;
     }
 
-    /** The note a send of `task` goes to by default (see `SendPreview.defaults`). */
-    private defaultNote(task: Task): SendNote {
+    /**
+     * The note field a send of `task` opens with (see `SendPreview.defaults`):
+     * the note the one link of the row resolves to, picked, so that its
+     * namesakes do not make it ambiguous; the link's text when it resolves
+     * to none, read as a typed text is; else the name the row's text makes.
+     */
+    private defaultNote(task: Task): NoteAsk {
         const links = NoteName.linksIn(task.content);
         if (links.length === 1) {
             const linked = this.app.metadataCache.getFirstLinkpathDest(links[0], task.file);
-            if (!linked) {
-                const spelt = links[0].replace(/\.md$/i, '');
-                const cut = spelt.lastIndexOf('/');
-                return {
-                    kind: 'new',
-                    folder: cut < 0 ? NoteName.defaultFolder(this.app, task.file) : spelt.slice(0, cut),
-                    name: spelt.slice(cut + 1),
-                };
-            }
+            if (!linked) return { text: links[0].replace(/\.md$/i, ''), picked: null };
             // A link to an attachment names no note to send to.
-            if (linked.extension === 'md') return { kind: 'existing', path: linked.path };
+            if (linked.extension === 'md') return { text: linked.basename, picked: linked.path };
         }
-        return { kind: 'new', folder: NoteName.defaultFolder(this.app, task.file), name: NoteName.fromText(task.content) };
+        return { text: NoteName.fromText(task.content), picked: null };
     }
 
     /**
      * Send the rows `req` names to its destination (`Operations.send`), and
      * tell the user what came of it, once.
      *
-     * A new note is looked up again as the send is made (`NoteName.at`): a
-     * path a note has, in any case, is that note, and the rows go to it as to
-     * one there is. A send its caller asked wrongly — a name no note can
-     * have, a key given twice — is not made, and said in the log: the dialog
-     * does not ask it.
+     * A new note is looked up again as the send is made (`NoteName.fileAt`):
+     * a path a note has, in any case, is that note, and the rows go to it as
+     * to one there is. Its name is not looked for again: the rows go where
+     * the dialog said. A send its caller asked wrongly — a path no note can
+     * be made at, a key given twice — is not made, and said in the log: the
+     * dialog does not ask it.
      *
      * With `opts.tellRefusal` false, a send not made is not told: the caller
      * shows `why` itself, as the hub's source mode shows a draft it could
@@ -376,14 +384,14 @@ export class NoteOps {
         let path: string;
         let create = false;
         if (note.kind === 'new') {
-            const name = NoteName.check(note.name);
+            const name = NoteName.check(note.path);
             if (!name.ok) {
-                logWarn(`[NoteOps] send: not a name a note can have (${name.why}): ${note.name}`);
+                logWarn(`[NoteOps] send: not a path a note can be made at (${name.why}): ${note.path}`);
                 return wrongly;
             }
-            const at = NoteName.at(this.app.vault, note.folder, note.name);
-            path = at.kind === 'existing' ? at.file.path : at.path;
-            create = at.kind === 'new';
+            const there = NoteName.fileAt(this.app.vault, note.path);
+            path = there?.path ?? note.path;
+            create = there === null;
         } else {
             path = note.path;
         }
