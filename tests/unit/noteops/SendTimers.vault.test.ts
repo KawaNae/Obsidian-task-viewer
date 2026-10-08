@@ -28,7 +28,7 @@ const store = new Map<string, string>();
 };
 const at = (h: number, m: number) => new Date(2026, 8, 30, h, m, 0);
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
-const NEW = (name: string): SendDestination => ({ note: { kind: 'new', folder: '', name }, section: SECTION });
+const NEW = (name: string): SendDestination => ({ note: { kind: 'new', path: `${name}.md` }, section: SECTION });
 
 let live: VaultSession | undefined;
 afterEach(() => {

@@ -1,7 +1,7 @@
 /**
  * An element of a stand-in DOM for the form's pieces, which a unit test
- * builds in node: what `IssueBoard`, `bindField` and the candidates'
- * drawing (`candidateView`) touch, and no more.
+ * builds in node: what `IssueBoard`, `bindField`, the candidates'
+ * drawing (`candidateView`) and the send dialog's note field touch, and no more.
  */
 type Listener = (e: Event) => void;
 
@@ -29,6 +29,11 @@ export class FakeEl {
         const el = new FakeEl(o.cls);
         el.text = o.text ?? '';
         this.children.push(el);
+        return el;
+    }
+    createEl(_tag: string, o: { cls?: string; text?: string; type?: string; placeholder?: string } = {}): FakeEl {
+        const el = this.createDiv(o);
+        if (o.placeholder !== undefined) el.setAttribute('placeholder', o.placeholder);
         return el;
     }
     createSpan(o: { cls?: string; text?: string; attr?: Record<string, string> } = {}): FakeEl {

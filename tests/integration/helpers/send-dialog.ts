@@ -27,10 +27,11 @@ const saidUnder = (input, errors) => {
 const state = () => ({
     open: !!panel(),
     closing: !!document.querySelector('.tv-overlay.is-closing'),
-    folder: inputs()[0]?.value ?? null,
-    name: inputs()[1]?.value ?? null,
-    heading: inputs()[2]?.value ?? null,
-    says: saidUnder(inputs()[2], false).join(' ') || null,
+    note: inputs()[0]?.value ?? null,
+    heading: inputs()[1]?.value ?? null,
+    noteSays: saidUnder(inputs()[0], false).join(' ') || null,
+    noteErrors: saidUnder(inputs()[0], true).join(' ') || null,
+    says: saidUnder(inputs()[1], false).join(' ') || null,
     asking: shown(panel()?.querySelector('.tv-form__ask')),
     canSend: panel() ? !panel().querySelector('.tv-form__buttons .mod-cta').disabled : false,
     editors: panel()?.querySelectorAll('.tv-send__rows .cm-content').length ?? 0,
@@ -85,9 +86,11 @@ export function onDialog<T>(body: string): T {
 export interface DialogState {
     open: boolean;
     closing: boolean;
-    name: string | null;
-    folder: string | null;
+    /** The note field, the heading field, and what is said under each. */
+    note: string | null;
     heading: string | null;
+    noteSays: string | null;
+    noteErrors: string | null;
     says: string | null;
     asking: boolean;
     canSend: boolean;
@@ -96,7 +99,10 @@ export interface DialogState {
     why: string | null;
 }
 
-/** Open the dialog on the row of the note `file` whose text is `name`, from its card's menu (a card of the hub's). */
+/**
+ * Open the dialog on the row of the note `file` whose text is `name`, from
+ * its card's menu (a card of the hub's), once the destination is answered.
+ */
 export function openDialog(file: string, name: string): DialogState {
     return onDialog<DialogState>(`
         const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(file)} && t.content === ${JSON.stringify(name)});
@@ -114,7 +120,7 @@ export function openDialog(file: string, name: string): DialogState {
         if (!item) throw new Error('no send in the menu');
         menu.hide();
         item.callback(new MouseEvent('click'));
-        await until(() => panel() && state().canSend);
+        await until(() => panel() && (state().canSend || state().noteErrors));
         return JSON.stringify(state());
     `);
 }

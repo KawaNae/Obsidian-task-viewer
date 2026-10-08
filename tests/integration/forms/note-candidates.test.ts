@@ -6,7 +6,8 @@
  * it at 12px with a `/` at its end, nothing under a note at the root); with
  * nothing typed the most recently modified come first; a note whose name
  * holds what is typed comes above one whose folder alone does; a list of
- * notes holds no image; picking a template puts its path in.
+ * notes holds no image, the send dialog's holds an alias with its mark;
+ * picking a template puts its path in.
  *
  * The notes are made through Obsidian (`app.vault.create`), one after
  * another, so their times of change are in the order they were made, and
@@ -91,11 +92,11 @@ interface Item { title: string; note: string | null }
 describe('the send dialog\'s note', () => {
     afterEach(() => { closeDialog(); });
 
-    it('lists the notes as Obsidian\'s items: the name, the folder under it, nothing under a note at the root; no image, no alias', () => {
+    it('lists the notes as Obsidian\'s items: the name, the folder under it, nothing under a note at the root; an alias with its mark; no image', () => {
         openDialog(SRC, '候補を見る');
-        const listed = onDialog<{ items: (Item & { complex: boolean; noteEl: boolean; noteSize: string; titleSize: string; marked: boolean })[] }>(`
-            typeIn(inputs()[1], ${JSON.stringify(`${DIR} `)});
-            typeIn(inputs()[1], ${JSON.stringify(DIR)});
+        const listed = onDialog<{ items: (Item & { complex: boolean; noteEl: boolean; noteSize: string; titleSize: string; marked: boolean; flair: string | null })[] }>(`
+            typeIn(inputs()[0], ${JSON.stringify(`${DIR} `)});
+            typeIn(inputs()[0], ${JSON.stringify(DIR)});
             await until(() => items().length > 0 && items().every(el => el.querySelector('.suggestion-title')));
             await sleep(100);
             return JSON.stringify({ items: items().map(el => ({
@@ -105,6 +106,7 @@ describe('the send dialog\'s note', () => {
                 noteSize: getComputedStyle(el.querySelector('.suggestion-note')).fontSize,
                 titleSize: getComputedStyle(el.querySelector('.suggestion-title')).fontSize,
                 marked: !!el.querySelector('.suggestion-highlight'),
+                flair: el.querySelector('.suggestion-aux .suggestion-flair')?.getAttribute('aria-label') ?? null,
             })) });
         `);
         const ours = listed.items.filter(one => `${one.note}${one.title}`.startsWith('test-int-nc'));
@@ -115,8 +117,15 @@ describe('the send dialog\'s note', () => {
             ['test-int-nc-root', ''],
         ]));
         expect(listed.items.every(one => one.complex && one.noteEl)).toBe(true);
-        expect(listed.items.some(one => one.title === '画像.png' || one.title === '別名アルファ')).toBe(false);
+        expect(listed.items.some(one => one.title === '画像.png')).toBe(false);
         expect(ours.every(one => one.marked)).toBe(true);
+        // The alias matches by itself, not by its note's path: typed in full, it is listed with its mark.
+        const alias = onDialog<(Item & { flair: string | null })[]>(`
+            typeIn(inputs()[0], '別名アルファ');
+            await until(() => items().some(el => itemOf(el).title === '別名アルファ'));
+            return JSON.stringify(items().map(el => ({ ...itemOf(el), flair: el.querySelector('.suggestion-aux .suggestion-flair')?.getAttribute('aria-label') ?? null })));
+        `);
+        expect(alias).toContainEqual({ title: '別名アルファ', note: `${DIR}/別名元`, flair: 'エイリアス' });
         const sizes = new Set(listed.items.map(one => one.noteSize));
         expect([...sizes]).toEqual(['12px']);
         expect(parseFloat(listed.items[0].titleSize)).toBeGreaterThan(12);
@@ -125,21 +134,22 @@ describe('the send dialog\'s note', () => {
     it('with nothing typed, the most recently modified first; typed, a name\'s match above a folder\'s', () => {
         openDialog(SRC, '候補を見る');
         const lists = onDialog<{ empty: [string, number][]; qqx: Item[] }>(`
-            typeIn(inputs()[1], '');
+            typeIn(inputs()[0], '');
             await until(() => items().length > 0 && items().every(el => el.querySelector('.suggestion-title')));
             await sleep(100);
+            // A note by its folder and name, an alias by its note's path; an unresolved link has no time.
             const mtime = el => {
                 const { title, note } = itemOf(el);
-                return [note + title, app.vault.getAbstractFileByPath(note + title + '.md')?.stat.mtime ?? -1];
+                const path = el.querySelector('.suggestion-flair') ? note : note + title;
+                return [path, app.vault.getAbstractFileByPath(path + '.md')?.stat.mtime ?? -1];
             };
-            const empty = items().map(mtime);
-            typeIn(inputs()[1], 'qqx');
+            const empty = items().map(mtime).filter(([, time]) => time >= 0);
+            typeIn(inputs()[0], 'qqx');
             await until(() => items().some(el => itemOf(el).title === 'inner'));
             await sleep(100);
             return JSON.stringify({ empty, qqx: items().map(itemOf) });
         `);
         expect(lists.empty.length).toBeGreaterThan(5);
-        expect(lists.empty.every(([, mtime]) => mtime > 0)).toBe(true);
         expect(lists.empty).toEqual([...lists.empty].sort((a, b) => b[1] - a[1]));
         const titles = lists.qqx.map(one => one.title);
         expect(titles.indexOf('qqx-name')).toBeGreaterThanOrEqual(0);

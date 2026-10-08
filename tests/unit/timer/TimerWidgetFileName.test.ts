@@ -125,7 +125,7 @@ describe('the file name a timer\'s header shows follows its file', () => {
         const timer = await note.start('計る');
         expect(note.shown(timer)).toBe('a');
 
-        const sent = await note.ops.send({ rows: [note.row('計る')], to: { note: { kind: 'new', folder: '', name: 'X' }, section: SECTION }, frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('計る')], to: { note: { kind: 'new', path: 'X.md' }, section: SECTION }, frontmatter: [] });
         await note.settle();
 
         expect(sent.kind).toBe('done');
@@ -149,7 +149,7 @@ describe('the file name a timer\'s header shows follows its file', () => {
         const timer = await note.start('X');
         expect(note.shown(timer)).toBe('a');
 
-        await note.ops.send({ rows: [note.row('X')], to: { note: { kind: 'new', folder: '', name: 'X' }, section: SECTION }, frontmatter: [] });
+        await note.ops.send({ rows: [note.row('X')], to: { note: { kind: 'new', path: 'X.md' }, section: SECTION }, frontmatter: [] });
         await note.settle();
 
         expect(timer.file).toBe('X.md');
