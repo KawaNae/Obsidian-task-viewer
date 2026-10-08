@@ -553,7 +553,7 @@
       "note": "Note",
       "notePlaceholder": "Search by name or folder",
       "noteExisting": "The existing note {{note}}",
-      "noteSame": "This note {{note}}",
+      "noteSame": "The note the rows are in: {{note}}",
       "noteNewByName": "No note matches. Makes a new note {{note}}",
       "noteNew": "Makes a new note {{note}}",
       "noteFolderMade": "Makes the folder {{folder}} too",
