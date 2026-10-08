@@ -22,7 +22,7 @@ class FakeEditor implements DraftEditor {
     completing = false;
     destroyed = false;
     focused = 0;
-    constructor(private readonly frame: SubtreeFrame, private readonly hooks: { edited(): void }) {
+    constructor(private readonly frame: SubtreeFrame, readonly hooks: { edited(): void; linkSource(): string }) {
         this.parent = frame.parent;
         this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
     }
@@ -105,6 +105,8 @@ describe('entering the source', () => {
         expect(h.lockForm).toHaveBeenCalledWith(true);
         expect(h.editor().draft()).toEqual({ parent: '- [ ] P', children: [{ text: '- [ ] a', was: 1 }, { text: '- [ ] b', was: 2 }] });
         expect(h.editor().focused).toBe(1);
+        // A link typed under the row is written in the row's note.
+        expect(h.editor().hooks.linkSource()).toBe(rowOf().file);
     });
 
     it('stays on the card when the index\'s copy is not the row on the disk', async () => {

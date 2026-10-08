@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { attachBracketPairing } from '../../../src/modals/form/bracketPairing';
 import { TaskNameSuggest } from '../../../src/suggest/TaskNameSuggest';
+import { linkApp } from '../helpers/linkApp';
 
 /**
  * The task name field pairs brackets and completes links as Obsidian's editor
@@ -84,25 +85,21 @@ function field(initial = '|') {
 }
 
 /**
- * A TaskNameSuggest over the fake input, without the popup DOM. The suggest
- * reads files and headings from a stub metadata cache.
+ * A TaskNameSuggest over the fake input, without the popup DOM, in a vault
+ * (`linkApp`) of the note its links are written in (`src.md`) and a newer
+ * note with one heading, listed first, and one tag.
  */
 function suggestOn(input: FakeInput) {
-    const note = { basename: 'ノート', parent: { path: 'notes' } };
-    const app = {
-        vault: { getMarkdownFiles: () => [note] },
-        metadataCache: {
-            getFirstLinkpathDest: (p: string) => (p === 'ノート' ? note : null),
-            getFileCache: () => ({
-                headings: [{ heading: '見出し', level: 2, position: { start: { line: 3 } } }],
-            }),
-            getTags: () => ({ '#tag': 1 }),
-        },
-    };
+    const app = linkApp({
+        files: ['src.md', 'notes/ノート.md'],
+        headings: { 'notes/ノート.md': [{ heading: '見出し', level: 2 }] },
+        tags: ['tag'],
+    });
     const s = Object.create(TaskNameSuggest.prototype) as any;
     Object.assign(s, {
         app,
         inputEl: input,
+        linkSource: () => 'src.md',
         currentMode: null,
         setValue(v: string) { input.value = v; },
         close() {},

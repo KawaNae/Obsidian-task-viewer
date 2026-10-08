@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { noteItem, renderComplex, within, type ComplexItem } from '../../../src/suggest/candidateView';
+import { headingItem, linkTagView, noteItem, renderComplex, renderLinkTag, within, type ComplexItem } from '../../../src/suggest/candidateView';
+import type { LinkTagCandidate } from '../../../src/suggest/LinkTagCandidates';
 import type { NoteCandidate } from '../../../src/suggest/NoteCandidates';
 import { t } from '../../../src/i18n';
 import { FakeEl, asEl } from '../helpers/fakeDom';
@@ -78,5 +79,46 @@ describe('renderComplex: Obsidian\'s DOM', () => {
         const el = draw({ title: '本', titleMatches: null, note: 'Book', noteMatches: null, flair: { icon: 'forward', label: 'エイリアス' }, downranked: true });
         expect(el.classes.has('mod-downranked')).toBe(true);
         expect(el.find('suggestion-flair')?.attrs.get('aria-label')).toBe('エイリアス');
+    });
+});
+
+describe('renderLinkTag: a candidate of [[ or #, as Obsidian draws it', () => {
+    const draw = (candidate: LinkTagCandidate) => {
+        const el = new FakeEl('suggestion-item');
+        renderLinkTag(asEl(el), candidate);
+        return el;
+    };
+    const heading: LinkTagCandidate = { kind: 'heading', file: tfile('a/Plan.md'), linkpath: 'Plan', heading: '見出し', level: 2, matches: [[0, 1]] };
+
+    it('a heading: the heading, nothing under it, its level beside it', () => {
+        expect(headingItem(heading as Extract<LinkTagCandidate, { kind: 'heading' }>)).toEqual({
+            title: '見出し', titleMatches: [[0, 1]], note: '', noteMatches: null, flair: { text: 'H2' }, downranked: false,
+        });
+        const el = draw(heading);
+        expect(el.classes.has('mod-complex')).toBe(true);
+        expect(el.find('suggestion-aux')?.find('suggestion-flair')?.textContent).toBe('H2');
+    });
+
+    it('a note as noteItem draws it; an excluded file faded', () => {
+        const el = draw({ kind: 'note', note: { kind: 'file', file: tfile('zz/Plan.md'), linkpath: 'zz/Plan', score: -11, matches: null, downranked: true } });
+        expect([...el.classes]).toEqual(['suggestion-item', 'mod-complex', 'mod-downranked']);
+        expect(el.find('suggestion-title')?.textContent).toBe('Plan');
+        expect(el.find('suggestion-note')?.textContent).toBe('zz/');
+    });
+
+    it('a tag: its text alone, not a complex item', () => {
+        const el = draw({ kind: 'tag', tag: 'project' });
+        expect([...el.classes]).toEqual(['suggestion-item']);
+        expect(el.textContent).toBe('project');
+        expect(linkTagView({ kind: 'tag', tag: 'project' }).classes).toEqual([]);
+    });
+
+    it('the classes apart from what is drawn, for an item another widget makes (the source editor\'s)', () => {
+        const view = linkTagView(heading);
+        expect(view.classes).toEqual(['mod-complex']);
+        const el = new FakeEl();
+        view.draw(asEl(el));
+        expect(el.classes.size).toBe(0);
+        expect(el.children.map(c => [...c.classes][0])).toEqual(['suggestion-content', 'suggestion-aux']);
     });
 });

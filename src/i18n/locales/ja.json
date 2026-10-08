@@ -484,7 +484,7 @@
     "openTimePicker": "時刻ピッカーを開く",
     "openColorPicker": "カラーピッカーを開く",
     "taskNameHint": {
-      "file": "#を入力すると 見出しにリンクできます　^を入力すると ブロックにリンクできます",
+      "file": "#を入力すると 見出しにリンクできます",
       "heading": "↵ で確定"
     },
     "sourceChildren": "子の行",

@@ -58,8 +58,9 @@ const PROBE = '- [ ] _';
 
 /**
  * The places a new task line is made in, as the create dialog asks of them:
- * what a place is and what a line there inherits ({@link facts}), and the
- * write of the line there ({@link create}). Beside `NoteOps`, which answers
+ * what a place is and what a line there inherits ({@link facts}), the
+ * note a line put there is in ({@link noteOf}), and the write of the line
+ * there ({@link create}). Beside `NoteOps`, which answers
  * the same of a send's destination.
  */
 export class CreatePlaces {
@@ -69,6 +70,16 @@ export class CreatePlaces {
         private readonly getSettings: () => TaskViewerSettings,
         private readonly getTask: (taskId: string) => Task | undefined,
     ) { }
+
+    /**
+     * The path of the note a line put in `place` is in: the day's note,
+     * there or not yet; the note of the row it goes under. Null when the row
+     * is no longer in the index.
+     */
+    noteOf(place: CreatePlace): string | null {
+        if (place.kind === 'childOf') return this.getTask(place.taskId)?.file ?? null;
+        return notePath(dailyNotes(this.app), place.date);
+    }
 
     /**
      * What `place` is, read as the vault holds it now (see

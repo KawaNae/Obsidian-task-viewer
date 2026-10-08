@@ -6,7 +6,7 @@ import { indentUnit } from '../../utils/ObsidianConfig';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { createFormRow } from '../form/formRow';
 import { IssueBoard } from '../form/FormIssue';
-import { editorOn, type DraftEditor } from '../form/source/SourceEditor';
+import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/SourceEditor';
 import { FormActions } from '../form/FormActions';
 import { DestinationField } from './DestinationField';
 import { SendDialog, initialAsk, type SendField, type SendSurface, type SendViewState } from './SendDialog';
@@ -121,7 +121,7 @@ export class SendModal implements SendSurface {
         }, this);
     }
 
-    openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor {
+    openEditor(frame: SubtreeFrame, hooks: EditorOnHooks): DraftEditor {
         const editor = editorOn(this.rowsEl, frame, this.app, hooks);
         this.rowSays.push(this.rowsEl.createDiv({ cls: 'tv-form__says tv-send__row-says' }));
         return editor;

@@ -47,3 +47,13 @@ export function indentUnit(app: App): string {
     const width = typeof size === 'number' && Number.isInteger(size) ? Math.min(Math.max(size, 1), 4) : 4;
     return ' '.repeat(width);
 }
+
+/**
+ * Whether a link Obsidian writes is a Markdown link (`[text](path.md)`)
+ * rather than a wikilink (setting `useMarkdownLinks`). A wikilink when the
+ * setting is not a boolean, or `getConfig` answers nothing: Obsidian's
+ * default.
+ */
+export function useMarkdownLinks(app: App): boolean {
+    return configOf(app, 'useMarkdownLinks') === true;
+}

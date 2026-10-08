@@ -161,7 +161,8 @@ export class TaskHubForm {
         });
         this.nameInput.value = this.task.content ?? '';
         this.nameSays = nameSection.createDiv({ cls: 'tv-form__says' });
-        const nameSuggest = new TaskNameSuggest(this.deps.app, this.nameInput);
+        // A link typed in the name is written in the row's note.
+        const nameSuggest = new TaskNameSuggest(this.deps.app, this.nameInput, () => this.task.file);
         attachBracketPairing(this.nameInput, () => { /* 値取り込みは commit 時 */ });
         this.nameField = bindField(this.nameInput, {
             codec: TaskContentInput,

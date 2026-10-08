@@ -92,7 +92,8 @@ export class CreateModal implements CreateSurface {
             field: (at) => (at === 'name' ? { input: this.nameInput, message: nameSays } : this.dateGroup?.slot(at) ?? null),
             form: formSays,
         });
-        const nameSuggest = new TaskNameSuggest(this.app, this.nameInput);
+        // A link typed in the name is written in the note the line goes in.
+        const nameSuggest = new TaskNameSuggest(this.app, this.nameInput, () => this.places.noteOf(this.place) ?? '');
         attachBracketPairing(this.nameInput, () => { this.readName(false); });
         // An Enter that picks from the name's list is the list's.
         onFormEnter(this.nameInput, () => this.submit(), { takesEnter: () => nameSuggest.listShown });
