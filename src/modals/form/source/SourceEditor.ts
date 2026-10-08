@@ -1,4 +1,4 @@
-import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, closeCompletion, completionStatus } from '@codemirror/autocomplete';
+import { acceptCompletion, closeBrackets, closeBracketsKeymap, closeCompletion, completionStatus } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
@@ -13,7 +13,7 @@ import {
     breakParent, indentMoreRestartingLists, listNumbering, moveLineDownKeepingNumbers, moveLineUpKeepingNumbers,
     newlineContinuingList,
 } from './ListMarkup';
-import { linkTagCompletionSource } from './SourceCompletion';
+import { linkTagCompletion, type LinkCompletion } from './SourceCompletion';
 
 /**
  * The source editor: a row's line and the lines under it, as text to edit,
@@ -35,7 +35,8 @@ import { linkTagCompletionSource } from './SourceCompletion';
  *   ArrowUp on the children's first row goes to the parent. A completion
  *   list open takes the keys first.
  * - Both pair brackets as the task name field does (`BracketRules`), and
- *   complete links and tags as its suggest does (`LinkTagCandidates`).
+ *   complete links and tags as its suggest does (`SourceCompletion`), a
+ *   link spelt from the note the caller names.
  * - Obsidian's hotkeys are not the editors' to keep out: the surface they
  *   are in keeps them out while the focus is in it (`HotkeyShield`, which an
  *   overlay given the keymap holds). Let in, they would act on the note of
@@ -61,8 +62,8 @@ export interface SourceEditorOptions {
     children: readonly string[];
     /** What Tab indents a child line by: spaces, or tabs. */
     indentUnit: string;
-    /** Where link and tag completions come from; none without it. */
-    app?: App;
+    /** Where link and tag completions come from, and the note a link is written in; none without it. */
+    links?: LinkCompletion;
     /** Mod+Enter in either editor: the caller's apply. */
     onSubmit?: () => void;
     /** Either editor's text changed. */
@@ -120,12 +121,12 @@ function spaceAboveKeyboard(view: EditorView): Rect {
     return { left: 0, top: 0, right: win.innerWidth, bottom: Math.min(win.innerHeight, keyboardTop(win)) };
 }
 
-function common(app: App | undefined, hooks: EditorHooks): Extension[] {
+function common(links: LinkCompletion | undefined, hooks: EditorHooks): Extension[] {
     return [
         history(),
         tooltips({ tooltipSpace: spaceAboveKeyboard }),
         bracketPairing,
-        app ? autocompletion({ override: [linkTagCompletionSource(app)], icons: false }) : [],
+        links ? linkTagCompletion(links) : [],
         EditorState.tabSize.of(TAB_SIZE),
         EditorView.lineWrapping,
         hooks.onSubmit ? Prec.high(keymap.of([{ key: 'Mod-Enter', run: () => { hooks.onSubmit?.(); return true; } }])) : [],
@@ -141,7 +142,7 @@ export const singleLine: Extension = EditorState.transactionFilter.of((tr) => (t
 type Handoff = (view: EditorView) => boolean;
 
 export function parentState(
-    text: string, app: App | undefined,
+    text: string, links: LinkCompletion | undefined,
     hooks: EditorHooks & { onEnter?: Handoff; onDown?: Handoff },
 ): EditorState {
     return EditorState.create({
@@ -152,13 +153,13 @@ export function parentState(
                 { key: 'Enter', run: (view) => hooks.onEnter?.(view) ?? true },
                 { key: 'ArrowDown', run: (view) => hooks.onDown?.(view) ?? false },
             ])),
-            common(app, hooks),
+            common(links, hooks),
         ],
     });
 }
 
 export function childrenState(
-    lines: readonly string[], unit: string, app: App | undefined,
+    lines: readonly string[], unit: string, links: LinkCompletion | undefined,
     hooks: EditorHooks & { onUp?: Handoff } = {},
 ): EditorState {
     return EditorState.create({
@@ -177,7 +178,7 @@ export function childrenState(
                 { key: 'Alt-ArrowUp', run: moveLineUpKeepingNumbers },
                 { key: 'Alt-ArrowDown', run: moveLineDownKeepingNumbers },
             ])),
-            common(app, hooks),
+            common(links, hooks),
         ],
     });
 }
@@ -205,6 +206,16 @@ export function indentColumns(unit: string): number {
     return columns;
 }
 
+/** What an editor a draft is opened in tells its opener, and asks of it. */
+export interface EditorOnHooks {
+    /** Mod+Enter in either editor. */
+    submit(): void;
+    /** Either editor's text changed. */
+    edited(): void;
+    /** The path of the note a link typed in it is written in, asked at each completion. */
+    linkSource(): string;
+}
+
 /** Each editor's box: an input field's, as the fields draw it (_controls.css),
  *  with a block's corners, since the text in it runs to many lines. */
 const FIELD_BOX = 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow tv-ctrl__input-wrap--block';
@@ -213,15 +224,16 @@ const FIELD_BOX = 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow tv-ctrl__input-
  * An editor in `container` on the text a subtree opened as (`SubtreeFrame`):
  * the one way a draft of a subtree is opened, for the hub's source mode and
  * each row of the send dialog. Mod+Enter in it is `submit`, a change of its
- * text is told to `edited`. Whether a draft would lose anything is not the
+ * text is told to `edited`; a link typed in it is spelt from the note
+ * `linkSource` names. Whether a draft would lose anything is not the
  * editor's to say: it is what the frame makes of it (`SubtreeFrame.check`).
  */
-export function editorOn(container: HTMLElement, frame: SubtreeFrame, app: App, hooks: { submit(): void; edited(): void }): SourceEditor {
+export function editorOn(container: HTMLElement, frame: SubtreeFrame, app: App, hooks: EditorOnHooks): SourceEditor {
     return new SourceEditor(container, {
         parent: frame.parent,
         children: frame.children,
         indentUnit: frame.unit,
-        app,
+        links: { app, source: hooks.linkSource },
         onSubmit: hooks.submit,
         onChange: hooks.edited,
     });
@@ -237,7 +249,7 @@ export class SourceEditor implements DraftEditor {
         trackKeyboard(container.ownerDocument.defaultView ?? window);
         const hooks: EditorHooks = { onSubmit: options.onSubmit, onChange: options.onChange };
         this.parentView = new EditorView({
-            state: parentState(options.parent, options.app, {
+            state: parentState(options.parent, options.links, {
                 ...hooks,
                 onEnter: () => this.breakParent(),
                 onDown: (view) => this.downToChildren(view),
@@ -245,7 +257,7 @@ export class SourceEditor implements DraftEditor {
             parent: this.dom.createDiv({ cls: `tv-source-editor__parent ${FIELD_BOX}` }),
         });
         this.childrenView = new EditorView({
-            state: childrenState(options.children, options.indentUnit, options.app, {
+            state: childrenState(options.children, options.indentUnit, options.links, {
                 ...hooks,
                 onUp: (view) => this.upToParent(view),
             }),

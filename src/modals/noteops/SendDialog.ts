@@ -11,7 +11,7 @@ import type { UnresolvedReference } from '../../services/flow/FlowReferences';
 import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { Outline } from '../../services/parsing/utils/Outline';
 import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/SubtreeFrame';
-import type { DraftEditor } from '../form/source/SourceEditor';
+import type { DraftEditor, EditorOnHooks } from '../form/source/SourceEditor';
 import type { FormIssue, Tone } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
 
@@ -99,8 +99,12 @@ export interface SendViewState {
 }
 
 export interface SendSurface {
-    /** Open an editor on a row's subtree, in the order of the rows: `submit` on Mod+Enter, `edited` on a change of its text. */
-    openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor;
+    /**
+     * Open an editor on a row's subtree, in the order of the rows: `submit`
+     * on Mod+Enter, `edited` on a change of its text; a link typed in it is
+     * spelt from the note `linkSource` names.
+     */
+    openEditor(frame: SubtreeFrame, hooks: EditorOnHooks): DraftEditor;
     /** Show a row the editor cannot open, in the order of the rows: its lines as they go, and why. */
     showFixed(lines: readonly string[], why: string): void;
     render(state: SendViewState): void;
@@ -165,6 +169,7 @@ export class SendDialog {
                 const editor = surface.openEditor(opening.frame, {
                     submit: () => { void this.send(); },
                     edited: () => this.edited(),
+                    linkSource: () => this.linkSource(row.task.file),
                 });
                 this.rows.push({ kind: 'editor', taskId: row.task.id, frame: opening.frame, editor });
             } else {
@@ -333,6 +338,15 @@ export class SendDialog {
     /** Whether the destination answered is the one the fields name now. */
     private caughtUp(): boolean {
         return this.answer !== null && this.answer.seq === this.asked;
+    }
+
+    /**
+     * The note a link typed in a row's editor is written in: the note the
+     * fields name now, where the row goes; while they name none, the note
+     * the row is in (`rowFile`).
+     */
+    private linkSource(rowFile: string): string {
+        return oneNote(this.answer?.facts ?? null)?.path ?? rowFile;
     }
 
     /** A draft's text changed: what it says is drawn again, and, asked whether to throw it away, the question is withdrawn. */

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { t } from '../../../src/i18n';
 import { SendDialog, initialAsk, yamlValue, type SendHost, type SendViewState } from '../../../src/modals/noteops/SendDialog';
-import type { DraftEditor, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
+import type { DraftEditor, EditorOnHooks, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { InheritedValue } from '../../../src/services/data/InheritedValues';
 import type {
@@ -27,7 +27,7 @@ class FakeEditor implements DraftEditor {
     completing = false;
     focused = 0;
     destroyed = false;
-    constructor(private readonly frame: SubtreeFrame, readonly hooks: { submit(): void; edited(): void }) {
+    constructor(private readonly frame: SubtreeFrame, readonly hooks: EditorOnHooks) {
         this.parent = frame.parent;
         this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
     }
@@ -166,6 +166,16 @@ describe('opening', () => {
 
         await h.answer(facts());
         expect(h.state().canSend).toBe(true);
+    });
+
+    it('spells a link typed in a row from the note the fields name; from the row\'s own note while they name none', async () => {
+        const h = setUp();
+        expect(h.editor().hooks.linkSource()).toBe('note.md');
+        await h.answer(facts({ kind: 'existing', path: 'Projects/Plan.md' }));
+        expect(h.editor().hooks.linkSource()).toBe('Projects/Plan.md');
+        h.dialog.fieldsChanged({ note: typed('本'), heading: '' });
+        await h.answer({ kind: 'ambiguous', name: '本', files: [] });
+        expect(h.editor().hooks.linkSource()).toBe('note.md');
     });
 
     it('opens the note field as the preview says, a note picked kept picked', () => {

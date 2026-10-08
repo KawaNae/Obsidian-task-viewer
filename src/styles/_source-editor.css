@@ -124,8 +124,9 @@
     color: var(--text-normal);
 }
 
-.tv-source-editor .cm-completionDetail {
-    margin-left: 0.8em;
-    color: var(--text-muted);
-    font-style: normal;
+/* 項目は本体の `[[` と同じ形に描く（SourceCompletion、candidateView）。
+ * `suggestion-item mod-complex` の並びと、名前の下のフォルダの大きさは本体の
+ * CSS が決める。CodeMirror の label は名前を繰り返すので見せない。 */
+.tv-source-editor .cm-tooltip-autocomplete > ul > li.suggestion-item .cm-completionLabel {
+    display: none;
 }

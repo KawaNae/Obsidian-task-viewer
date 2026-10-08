@@ -1,8 +1,8 @@
 /**
  * Bracket rules for plain text inputs that pair brackets and complete links,
  * matched to Obsidian's editor (CodeMirror 6 closeBrackets). A leaf utility:
- * the pairing widget (modals/form/bracketPairing) and the link/tag suggest
- * (suggest/TaskNameSuggest) both read it, so the two agree on what a closer
+ * the pairing widget (modals/form/bracketPairing) and the link completion
+ * (suggest/LinkTagCandidates) both read it, so the two agree on what a closer
  * after the caret means.
  */
 
@@ -28,17 +28,12 @@ export function shouldAutoClose(nextChar: string | undefined): boolean {
 }
 
 /**
- * How many characters after the caret a completion takes over, when its
- * replacement ends with closers (`[[note]]`, `[[note#heading]]`). The
- * closers already after the caret, as pairing left them, are the leading
- * part of the replacement's closing run; the completion writes its own, so
- * it takes over that part (`]]`, or `]` alone) and leaves any other text.
+ * How many characters after the caret close the `[[` a link completion
+ * writes over: the `]]` pairing left (`[[|]]`), or a `]` alone. The
+ * completion writes a whole link of its own (`[[note]]`, or `[note](note.md)`
+ * with Markdown links), so it takes them over and leaves any other text.
  */
-export function closersToTakeOver(replacement: string, afterCaret: string): number {
-    let run = 0;
-    while (run < replacement.length && BRACKET_CLOSERS.has(replacement[replacement.length - 1 - run])) run++;
-    const closing = replacement.slice(replacement.length - run);
-    let n = 0;
-    while (n < closing.length && afterCaret[n] === closing[n]) n++;
-    return n;
+export function linkClosersAfter(afterCaret: string): number {
+    if (afterCaret.startsWith(']]')) return 2;
+    return afterCaret.startsWith(']') ? 1 : 0;
 }

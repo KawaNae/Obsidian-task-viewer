@@ -1,7 +1,7 @@
 import { Notice, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
-import { editorOn, type DraftEditor } from '../form/source/SourceEditor';
+import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/SourceEditor';
 import { FormActions } from '../form/FormActions';
 import { IssueBoard } from '../form/FormIssue';
 import type { SourceSurface, SourceViewState } from './TaskHubSource';
@@ -89,7 +89,7 @@ export class TaskHubSourceView implements SourceSurface {
         });
     }
 
-    openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor {
+    openEditor(frame: SubtreeFrame, hooks: EditorOnHooks): DraftEditor {
         return editorOn(this.editorHost, frame, this.app, hooks);
     }
 

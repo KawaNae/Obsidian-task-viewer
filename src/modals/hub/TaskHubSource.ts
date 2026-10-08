@@ -3,7 +3,7 @@ import type { Task } from '../../types';
 import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import type { SubtreeReplacement } from '../../services/persistence/TaskOps';
 import { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
-import type { DraftEditor } from '../form/source/SourceEditor';
+import type { DraftEditor, EditorOnHooks } from '../form/source/SourceEditor';
 import type { FormIssue } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
 
@@ -58,8 +58,8 @@ export interface SourceViewState {
 }
 
 export interface SourceSurface {
-    /** Open the editor on `frame`'s text: `submit` on Mod+Enter, `edited` on a change of its text. */
-    openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor;
+    /** Open the editor on `frame`'s text: `submit` on Mod+Enter, `edited` on a change of its text, a link spelt from the note `linkSource` names. */
+    openEditor(frame: SubtreeFrame, hooks: EditorOnHooks): DraftEditor;
     render(state: SourceViewState): void;
     /**
      * The question whether to throw the draft away was put, first or again
@@ -166,6 +166,8 @@ export class TaskHubSource {
         const editor = this.surface.openEditor(frame, {
             submit: () => { void this.apply(); },
             edited: () => this.edited(),
+            // The row's note: a link typed under the row is written there.
+            linkSource: () => fresh.file,
         });
         this.opened = { frame, editor };
         this.current = fresh;

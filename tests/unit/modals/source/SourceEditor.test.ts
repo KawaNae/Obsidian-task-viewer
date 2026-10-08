@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CompletionContext, insertBracket, type CompletionResult } from '@codemirror/autocomplete';
+import { CompletionContext, insertBracket, type Completion, type CompletionResult } from '@codemirror/autocomplete';
 import { indentLess, indentMore } from '@codemirror/commands';
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import {
@@ -8,6 +8,8 @@ import {
 import { newlineContinuingList } from '../../../../src/modals/form/source/ListMarkup';
 import { linkTagCompletionSource } from '../../../../src/modals/form/source/SourceCompletion';
 import { BRACKET_PAIRS } from '../../../../src/utils/BracketRules';
+import type { LinkTagCandidate } from '../../../../src/suggest/LinkTagCandidates';
+import { linkApp } from '../../helpers/linkApp';
 
 /**
  * The source editor's behavior at the level of its states: what the parent
@@ -154,18 +156,12 @@ describe('bracket pairing: as BracketRules says', () => {
 });
 
 describe('link and tag completion', () => {
-    const note = { basename: 'ノート', parent: { path: 'notes' } };
-    const app = {
-        vault: { getMarkdownFiles: () => [note, { basename: 'other', parent: { path: '' } }] },
-        metadataCache: {
-            getFirstLinkpathDest: (p: string) => (p === 'ノート' ? note : null),
-            getFileCache: () => ({
-                headings: [{ heading: '見出し', level: 2, position: { start: { line: 3 } } }],
-            }),
-            getTags: () => ({ '#tag': 1, '#other': 2 }),
-        },
-    } as any;
-    const source = linkTagCompletionSource(app);
+    const app = linkApp({
+        files: ['other.md', 'src.md', 'notes/ノート.md'],
+        headings: { 'notes/ノート.md': [{ heading: '見出し', level: 2 }] },
+        tags: ['tag', 'other'],
+    });
+    const source = linkTagCompletionSource({ app, source: () => 'src.md' });
 
     function complete(state: EditorState): CompletionResult | null {
         return source(new CompletionContext(state, state.selection.main.head, false)) as CompletionResult | null;
@@ -194,7 +190,8 @@ describe('link and tag completion', () => {
     });
 
     it('offers headings after [[note#, and tags after #', () => {
-        expect(complete(stateWith('[[ノート#|]]'))!.options.map(o => [o.label, o.detail])).toEqual([['見出し', 'H2']]);
+        const headings = complete(stateWith('[[ノート#|]]'))!.options as (Completion & { candidate: LinkTagCandidate })[];
+        expect(headings.map(o => [o.label, o.candidate.kind === 'heading' && o.candidate.level])).toEqual([['見出し', 2]]);
         const tags = complete(stateWith('a #t|'))!;
         expect(tags.from).toBe(2);
         expect(tags.options.map(o => o.label)).toEqual(['tag', 'other']);
@@ -215,6 +212,16 @@ describe('link and tag completion', () => {
         expect(shown(pick(stateWith('- a [[|]]'), 'ノート'))).toBe('- a [[ノート]]|');
         expect(shown(pick(stateWith('[[ノート#見|]] rest'), '見出し'))).toBe('[[ノート#見出し]]| rest');
         expect(shown(pick(stateWith('[[|]]\nnext'), 'ノート'))).toBe('[[ノート]]|\nnext');
+    });
+
+    it('takes over the closers of the [[ with a Markdown link too', () => {
+        const markdown = linkTagCompletionSource({ app: linkApp({ files: ['notes/ノート.md'], markdown: true }), source: () => 'src.md' });
+        const state = stateWith('- a [[ノ|]]');
+        const result = markdown(new CompletionContext(state, state.selection.main.head, false)) as CompletionResult;
+        let now = state;
+        const view = { get state() { return now; }, dispatch: (spec: any) => { now = now.update(spec).state; } };
+        (result.options[0].apply as (...args: unknown[]) => void)(view, result.options[0], result.from, result.to);
+        expect(shown(now)).toBe('- a [ノート](ノート.md)|');
     });
 
     it('leaves text after the caret that is not its closers', () => {

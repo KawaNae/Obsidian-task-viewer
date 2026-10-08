@@ -484,7 +484,7 @@
     "openTimePicker": "Open time picker",
     "openColorPicker": "Open color picker",
     "taskNameHint": {
-      "file": "Type # to link to a heading, ^ to link to a block",
+      "file": "Type # to link to a heading",
       "heading": "↵ to confirm"
     },
     "sourceChildren": "Child lines",
