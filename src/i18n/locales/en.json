@@ -243,7 +243,8 @@
     "taskMenu": "Task menu",
     "openDailyNote": "Open daily note: {{label}}",
     "openWeeklyNote": "Open weekly note: {{label}}",
-    "due": "Due: {{date}}"
+    "due": "Due: {{date}}",
+    "alias": "Alias"
   },
   "command": {
     "openTimeline": "Open Timeline View",

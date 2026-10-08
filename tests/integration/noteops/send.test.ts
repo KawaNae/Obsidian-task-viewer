@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { isObsidianRunning, obsidianEval, sleep } from '../helpers/cli-helper';
+import { closeDialog, onDialog, openDialog as openDialogOn, type DialogState } from '../helpers/send-dialog';
 import { deleteTestFile, readTestFile, vaultAbsolute, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 
 const SRC = 'test-int-send-src.md';
@@ -276,117 +277,9 @@ describe('sending a row a timer runs on (段 B4)', () => {
     });
 });
 
-/**
- * What every snippet on the dialog starts with: the plugin, the dialog as it
- * is drawn, and a press of the pointer as a mouse makes one.
- */
-const DIALOG = `
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
-const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-send');
-const inputs = () => [...(panel()?.querySelectorAll('.tv-send__destination input') ?? [])];
-const shown = el => !!el && getComputedStyle(el).display !== 'none';
-const viewOf = which => {
-    const el = panel()?.querySelector('.tv-source-editor__' + which + ' .cm-content');
-    return el ? (el.cmTile?.view ?? el.cmView?.rootView?.view ?? null) : null;
-};
-/** What is said under the row of \`input\`: its errors, or what is not an error. */
-const saidUnder = (input, errors) => {
-    const el = input?.closest('.tv-form__row')?.nextElementSibling;
-    return el ? [...el.children].filter(c => c.classList.contains('tv-form__error') === errors).map(c => c.textContent) : [];
-};
-const state = () => ({
-    open: !!panel(),
-    closing: !!document.querySelector('.tv-overlay.is-closing'),
-    folder: inputs()[0]?.value ?? null,
-    name: inputs()[1]?.value ?? null,
-    heading: inputs()[2]?.value ?? null,
-    says: saidUnder(inputs()[2], false).join(' ') || null,
-    asking: shown(panel()?.querySelector('.tv-form__ask')),
-    canSend: panel() ? !panel().querySelector('.tv-form__buttons .mod-cta').disabled : false,
-    editors: panel()?.querySelectorAll('.tv-send__rows .cm-content').length ?? 0,
-    fixed: panel()?.querySelector('.tv-send__fixed pre')?.textContent ?? null,
-    why: panel()?.querySelector('.tv-send__fixed .tv-form__info')?.textContent ?? null,
-});
-const press = el => {
-    const r = el.getBoundingClientRect();
-    const at = { bubbles: true, cancelable: true, composed: true, clientX: r.left + 4, clientY: r.top + 4, button: 0, pointerId: 1, isPrimary: true, pointerType: 'mouse' };
-    el.dispatchEvent(new PointerEvent('pointerdown', at));
-    el.dispatchEvent(new MouseEvent('mousedown', at));
-    el.dispatchEvent(new PointerEvent('pointerup', at));
-    el.dispatchEvent(new MouseEvent('mouseup', at));
-    el.dispatchEvent(new MouseEvent('click', at));
-};
-/** Type \`text\` into the field \`i\` (folder, name, heading), and press the item of its list that reads \`pick\`. */
-const pickFrom = async (i, text, pick) => {
-    const input = inputs()[i];
-    input.focus();
-    input.value = text;
-    input.setSelectionRange(text.length, text.length);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    const item = () => [...document.querySelectorAll('.suggestion-container .suggestion-item')].find(el => el.textContent === pick);
-    if (!(await until(() => item()))) throw new Error('no ' + pick + ' in the list of ' + text);
-    press(item());
-    await sleep(100);
-};
-`;
-
-/** Run `body` (statements, ending in a `return`) in Obsidian after the dialog's prelude. */
-function onDialog<T>(body: string): T {
-    const result = obsidianEval(`(async () => { ${DIALOG}\n${body}\n})()`);
-    if (result && typeof result === 'object' && 'error' in (result as object)) {
-        throw new Error(`eval failed: ${(result as { error: string }).error}`);
-    }
-    return result as T;
-}
-
-interface DialogState {
-    open: boolean;
-    closing: boolean;
-    name: string | null;
-    folder: string | null;
-    heading: string | null;
-    says: string | null;
-    asking: boolean;
-    canSend: boolean;
-    editors: number;
-    fixed: string | null;
-    why: string | null;
-}
-
-/** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu (a card of the hub's). */
+/** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu. */
 function openDialog(name: string): DialogState {
-    return onDialog<DialogState>(`
-        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
-        if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
-        // The card menu the hub's cards open, made as a hub first opens.
-        if (!plugin.taskHub.cards) {
-            plugin.openTaskHub(task.id);
-            await until(() => document.querySelector('.task-hub'));
-            document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
-            await until(() => !document.querySelector('.task-hub'));
-        }
-        await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
-        const menu = plugin.menuPresenter.currentMenu;
-        const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
-        if (!item) throw new Error('no send in the menu');
-        menu.hide();
-        item.callback(new MouseEvent('click'));
-        await until(() => panel() && state().canSend);
-        return JSON.stringify(state());
-    `);
-}
-
-/** Close the dialog if it is open, throwing its draft away if it asks. */
-function closeDialog(): void {
-    onDialog(`
-        panel()?.querySelector('.tv-overlay__close')?.click();
-        await sleep(100);
-        panel()?.querySelector('.tv-form__discard')?.click();
-        await until(() => !panel());
-        return 'ok';
-    `);
+    return openDialogOn(SRC, name);
 }
 
 describe('the send dialog', () => {
@@ -402,7 +295,7 @@ describe('the send dialog', () => {
         const picked = onDialog<DialogState & { draft: string }>(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.line(1).to, insert: '2' } });
-            await pickFrom(1, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC)});
+            await pickFrom(1, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC.slice(0, -3))});
             await until(() => state().says?.includes('このノート'));
             await pickFrom(2, 'Do', 'Done');
             await until(() => state().says?.includes('Done') && state().canSend);

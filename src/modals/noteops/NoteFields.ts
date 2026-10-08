@@ -1,7 +1,7 @@
 import type { App, TFile } from 'obsidian';
 import { t } from '../../i18n';
-import { FileSuggest } from '../../suggest/FileSuggest';
 import { FolderSuggest } from '../../suggest/FolderSuggest';
+import { NoteSuggest } from '../../suggest/NoteSuggest';
 import type { ShownSuggest } from '../../suggest/ShownSuggest';
 import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
@@ -28,7 +28,7 @@ export class NoteFields {
     readonly folderInput: HTMLInputElement;
     /** The line under the name's row, where what is said of the name goes. */
     readonly nameSays: HTMLElement;
-    private readonly fileSuggest: FileSuggest;
+    private readonly noteSuggest: NoteSuggest;
     private readonly folderSuggest: FolderSuggest;
 
     constructor(app: App, container: HTMLElement, opts: NoteFieldsOptions) {
@@ -47,14 +47,18 @@ export class NoteFields {
         this.nameInput = nameRow.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         this.nameInput.value = opts.name;
         this.nameInput.addEventListener('input', () => opts.onChange());
-        this.fileSuggest = new FileSuggest(app, this.nameInput, (file) => {
-            this.pick(file);
-            opts.onChange();
+        this.noteSuggest = new NoteSuggest(app, this.nameInput, {
+            kinds: { attachments: false, aliases: false, unresolved: false },
+            pick: (note) => {
+                if (note.kind !== 'file') return;
+                this.pick(note.file);
+                opts.onChange();
+            },
         });
 
         const lists: [HTMLInputElement, ShownSuggest<unknown>][] = [
             [this.folderInput, this.folderSuggest],
-            [this.nameInput, this.fileSuggest],
+            [this.nameInput, this.noteSuggest],
         ];
         for (const [input, suggest] of lists) {
             onFormEnter(input, () => opts.onEnter(), { takesEnter: () => suggest.listShown });

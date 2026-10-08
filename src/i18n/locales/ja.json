@@ -243,7 +243,8 @@
     "taskMenu": "タスクメニュー",
     "openDailyNote": "デイリーノートを開く: {{label}}",
     "openWeeklyNote": "週次ノートを開く: {{label}}",
-    "due": "期限: {{date}}"
+    "due": "期限: {{date}}",
+    "alias": "エイリアス"
   },
   "command": {
     "openTimeline": "タイムラインビューを開く",

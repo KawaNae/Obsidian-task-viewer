@@ -16,7 +16,7 @@ export interface TextSettingSpec<T> {
     /** The keyboard a phone shows: digits for a whole number, digits and a point for a decimal. */
     inputMode?: 'numeric' | 'decimal';
     /**
-     * A list of candidates under the field (`FolderSuggest`, `FileSuggest`),
+     * A list of candidates under the field (`FolderSuggest`, `NoteSuggest`),
      * made on its input: `picked` puts the text of the item picked in the
      * field and commits it.
      */
