@@ -303,7 +303,7 @@ describe('the send dialog', () => {
         `);
         // A press on either list neither closed the dialog nor asked to throw the draft away.
         expect(picked).toMatchObject({ open: true, closing: false, asking: false, note: SRC.slice(0, -3), heading: 'Done', canSend: true, draft: '- [ ] 子2' });
-        expect(picked.noteSays).toBe(`このノート ${SRC}`);
+        expect(picked.noteSays).toBe(`送る行と同じノート ${SRC}`);
         expect(picked.says).toBe('見出し Done の先頭へ移します');
 
         const sent = onDialog<{ open: boolean; notices: number }>(`

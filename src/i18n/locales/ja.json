@@ -553,7 +553,7 @@
       "note": "ノート",
       "notePlaceholder": "名前かフォルダで検索",
       "noteExisting": "既存のノート {{note}}",
-      "noteSame": "このノート {{note}}",
+      "noteSame": "送る行と同じノート {{note}}",
       "noteNewByName": "一致するノートがありません。新しいノート {{note}} を作ります",
       "noteNew": "新しいノート {{note}} を作ります",
       "noteFolderMade": "フォルダ {{folder}} も作ります",
