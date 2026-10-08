@@ -13,7 +13,7 @@ import { firingTrials, type CompletionFire, type FiringOutcome } from '../Firing
 import type { SubtreeReplacement } from '../TaskOps';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { ListNumber } from '../utils/ListNumber';
-import { noteLink } from '../utils/NoteLink';
+import { noteLink } from '../../../utils/NoteLink';
 import { Placement, type PlacedLine, type Spot } from '../utils/Placement';
 import type { InlineTaskWriter } from './InlineTaskWriter';
 
@@ -411,7 +411,8 @@ export class SendWriter {
         const file = this.app.vault.getAbstractFileByPath(path);
         const channel = withRefused(this.channelOf(path), 'quiet');
         if (!(file instanceof TFile)) return fileGone(channel, path, rows[0]?.target.subject ?? path);
-        const link = noteLink(this.app.fileManager, note, path);
+        // The note's name shown, whether or not its path is needed (`noteLink`).
+        const link = noteLink(this.app.fileManager, note, path, { display: note.basename });
         let sent: RowTarget[] = [];
         return this.inline.writeFiring(file, channel, (draft, session) => {
             const drafted = writeDrafts(draft, session, rows, completing);
