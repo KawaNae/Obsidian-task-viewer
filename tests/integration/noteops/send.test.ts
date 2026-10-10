@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { isObsidianRunning, obsidianEval, sleep } from '../helpers/cli-helper';
+import { closeDialog, onDialog, openDialog as openDialogOn, type DialogState } from '../helpers/send-dialog';
 import { deleteTestFile, readTestFile, vaultAbsolute, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 
 const SRC = 'test-int-send-src.md';
@@ -80,7 +81,7 @@ describe('sending a row', () => {
         deleteTestFile(`${NEW}.md`);
         await writeIndexedTestFile(SRC, ['# 送り元', '- [ ] 設計 @2026-09-29 ^e2e', '    - [ ] 下書き', '    メモ', '- [ ] 残る', ''].join('\n'));
 
-        const sent = send('設計', { note: { kind: 'new', folder: '', name: NEW }, section: SECTION },
+        const sent = send('設計', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION },
             [{ key: 'tv-color', yaml: ['tv-color: "blue"'], from: [], obsidian: false }]);
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
@@ -121,7 +122,7 @@ describe('sending a row', () => {
 
         // The note the row came from is saved from outside at the moment
         // its write comes, after the new note is made.
-        const sent = send('取り消す', { note: { kind: 'new', folder: '', name: NEW }, section: SECTION }, [], `
+        const sent = send('取り消す', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION }, [], `
             const process = app.vault.process;
             app.vault.process = async function (file, fn, ...rest) {
                 if (file.path === ${JSON.stringify(SRC)}) {
@@ -221,7 +222,7 @@ describe('sending a row a timer runs on (段 B4)', () => {
         open = timer.id;
         expect(readTestFile(SRC)).toContain(`^${timer.tail}`);
 
-        const sent = send('計る', { note: { kind: 'new', folder: '', name: NEW }, section: SECTION });
+        const sent = send('計る', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION });
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
         expect(timerFile(timer.id)).toBe(`${NEW}.md`);
@@ -244,7 +245,7 @@ describe('sending a row a timer runs on (段 B4)', () => {
         open = timer.id;
         const before = readTestFile(SRC);
 
-        const sent = send('続き', { note: { kind: 'new', folder: '', name: NEW }, section: SECTION });
+        const sent = send('続き', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION });
 
         expect(sent.result.kind).toBe('not-done');
         expect(sent.notices).toHaveLength(1);
@@ -276,117 +277,9 @@ describe('sending a row a timer runs on (段 B4)', () => {
     });
 });
 
-/**
- * What every snippet on the dialog starts with: the plugin, the dialog as it
- * is drawn, and a press of the pointer as a mouse makes one.
- */
-const DIALOG = `
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
-const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-send');
-const inputs = () => [...(panel()?.querySelectorAll('.tv-send__destination input') ?? [])];
-const shown = el => !!el && getComputedStyle(el).display !== 'none';
-const viewOf = which => {
-    const el = panel()?.querySelector('.tv-source-editor__' + which + ' .cm-content');
-    return el ? (el.cmTile?.view ?? el.cmView?.rootView?.view ?? null) : null;
-};
-/** What is said under the row of \`input\`: its errors, or what is not an error. */
-const saidUnder = (input, errors) => {
-    const el = input?.closest('.tv-form__row')?.nextElementSibling;
-    return el ? [...el.children].filter(c => c.classList.contains('tv-form__error') === errors).map(c => c.textContent) : [];
-};
-const state = () => ({
-    open: !!panel(),
-    closing: !!document.querySelector('.tv-overlay.is-closing'),
-    folder: inputs()[0]?.value ?? null,
-    name: inputs()[1]?.value ?? null,
-    heading: inputs()[2]?.value ?? null,
-    says: saidUnder(inputs()[2], false).join(' ') || null,
-    asking: shown(panel()?.querySelector('.tv-form__ask')),
-    canSend: panel() ? !panel().querySelector('.tv-form__buttons .mod-cta').disabled : false,
-    editors: panel()?.querySelectorAll('.tv-send__rows .cm-content').length ?? 0,
-    fixed: panel()?.querySelector('.tv-send__fixed pre')?.textContent ?? null,
-    why: panel()?.querySelector('.tv-send__fixed .tv-form__info')?.textContent ?? null,
-});
-const press = el => {
-    const r = el.getBoundingClientRect();
-    const at = { bubbles: true, cancelable: true, composed: true, clientX: r.left + 4, clientY: r.top + 4, button: 0, pointerId: 1, isPrimary: true, pointerType: 'mouse' };
-    el.dispatchEvent(new PointerEvent('pointerdown', at));
-    el.dispatchEvent(new MouseEvent('mousedown', at));
-    el.dispatchEvent(new PointerEvent('pointerup', at));
-    el.dispatchEvent(new MouseEvent('mouseup', at));
-    el.dispatchEvent(new MouseEvent('click', at));
-};
-/** Type \`text\` into the field \`i\` (folder, name, heading), and press the item of its list that reads \`pick\`. */
-const pickFrom = async (i, text, pick) => {
-    const input = inputs()[i];
-    input.focus();
-    input.value = text;
-    input.setSelectionRange(text.length, text.length);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    const item = () => [...document.querySelectorAll('.suggestion-container .suggestion-item')].find(el => el.textContent === pick);
-    if (!(await until(() => item()))) throw new Error('no ' + pick + ' in the list of ' + text);
-    press(item());
-    await sleep(100);
-};
-`;
-
-/** Run `body` (statements, ending in a `return`) in Obsidian after the dialog's prelude. */
-function onDialog<T>(body: string): T {
-    const result = obsidianEval(`(async () => { ${DIALOG}\n${body}\n})()`);
-    if (result && typeof result === 'object' && 'error' in (result as object)) {
-        throw new Error(`eval failed: ${(result as { error: string }).error}`);
-    }
-    return result as T;
-}
-
-interface DialogState {
-    open: boolean;
-    closing: boolean;
-    name: string | null;
-    folder: string | null;
-    heading: string | null;
-    says: string | null;
-    asking: boolean;
-    canSend: boolean;
-    editors: number;
-    fixed: string | null;
-    why: string | null;
-}
-
-/** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu (a card of the hub's). */
+/** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu. */
 function openDialog(name: string): DialogState {
-    return onDialog<DialogState>(`
-        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
-        if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
-        // The card menu the hub's cards open, made as a hub first opens.
-        if (!plugin.taskHub.cards) {
-            plugin.openTaskHub(task.id);
-            await until(() => document.querySelector('.task-hub'));
-            document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
-            await until(() => !document.querySelector('.task-hub'));
-        }
-        await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
-        const menu = plugin.menuPresenter.currentMenu;
-        const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
-        if (!item) throw new Error('no send in the menu');
-        menu.hide();
-        item.callback(new MouseEvent('click'));
-        await until(() => panel() && state().canSend);
-        return JSON.stringify(state());
-    `);
-}
-
-/** Close the dialog if it is open, throwing its draft away if it asks. */
-function closeDialog(): void {
-    onDialog(`
-        panel()?.querySelector('.tv-overlay__close')?.click();
-        await sleep(100);
-        panel()?.querySelector('.tv-form__discard')?.click();
-        await until(() => !panel());
-        return 'ok';
-    `);
+    return openDialogOn(SRC, name);
 }
 
 describe('the send dialog', () => {
@@ -397,20 +290,21 @@ describe('the send dialog', () => {
     it('picks the note and the heading from their lists with the pointer, a draft kept, and moves the draft to the heading of its own note', async () => {
         await writeIndexedTestFile(SRC, ['- [ ] 動かす', '    - [ ] 子', '## Done', '- [x] 済み', ''].join('\n'));
         const opened = openDialog('動かす');
-        expect(opened).toMatchObject({ open: true, name: '動かす', editors: 2, asking: false });
+        expect(opened).toMatchObject({ open: true, note: '動かす', editors: 2, asking: false });
 
         const picked = onDialog<DialogState & { draft: string }>(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.line(1).to, insert: '2' } });
-            await pickFrom(1, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC)});
-            await until(() => state().says?.includes('このノート'));
-            await pickFrom(2, 'Do', 'Done');
+            await pickFrom(0, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC.slice(0, -3))});
+            await until(() => state().noteSays?.includes('このノート'));
+            await pickFrom(1, 'Do', 'Done');
             await until(() => state().says?.includes('Done') && state().canSend);
             return JSON.stringify({ ...state(), draft: children.state.doc.toString() });
         `);
         // A press on either list neither closed the dialog nor asked to throw the draft away.
-        expect(picked).toMatchObject({ open: true, closing: false, asking: false, name: SRC.slice(0, -3), folder: '', heading: 'Done', canSend: true, draft: '- [ ] 子2' });
-        expect(picked.says).toContain('このノートの見出し Done');
+        expect(picked).toMatchObject({ open: true, closing: false, asking: false, note: SRC.slice(0, -3), heading: 'Done', canSend: true, draft: '- [ ] 子2' });
+        expect(picked.noteSays).toBe(`送る行と同じノート ${SRC}`);
+        expect(picked.says).toBe('見出し Done の先頭へ移します');
 
         const sent = onDialog<{ open: boolean; notices: number }>(`
             const before = new Set(document.querySelectorAll('.notice'));
@@ -467,9 +361,9 @@ describe('the send dialog', () => {
         expect(opened.why).toContain('1 行目');
 
         const sent = onDialog<DialogState>(`
-            const [, name, heading] = inputs();
-            name.value = ${JSON.stringify(SRC.slice(0, -3))};
-            name.dispatchEvent(new Event('input', { bubbles: true }));
+            const [note, heading] = inputs();
+            note.value = ${JSON.stringify(SRC.slice(0, -3))};
+            note.dispatchEvent(new Event('input', { bubbles: true }));
             heading.value = 'Done';
             heading.dispatchEvent(new Event('input', { bubbles: true }));
             await until(() => state().says?.includes('Done') && state().canSend);
@@ -479,5 +373,160 @@ describe('the send dialog', () => {
         `);
         expect(sent.open).toBe(false);
         expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 浅い', '  続き', '    - [ ] 子', '- [x] 済み', ''].join('\n'));
+    });
+});
+
+/**
+ * The note field (`note-suggest/send-field.md`): which note a name, a path
+ * or a pick points at, and what is said of it under the field. The notes
+ * are made through Obsidian in a folder of their own and taken away at the
+ * end; the row is written anew for each send, which takes it away.
+ */
+describe('the send dialog\'s note field', () => {
+    const DIR = 'test-int-send-nf';
+    const ROW = '送り先を選ぶ';
+    const UNRESOLVED = 'test-int-send-nf-未解決';
+
+    const vaultDo = (body: string) => onDialog(`${body}\nreturn 'ok';`);
+    const makeNotes = () => vaultDo(`
+        const notes = ${JSON.stringify([
+            [`${DIR}/a/同名.md`, ''],
+            [`${DIR}/b/同名.md`, ''],
+            [`${DIR}/唯一.md`, ''],
+            [`${DIR}/別名元.md`, '---\naliases: [送り先の別名]\n---\n'],
+            [`${DIR}/links.md`, `[[${UNRESOLVED}]]\n`],
+        ])};
+        for (const [path, text] of notes) {
+            const folder = path.split('/').slice(0, -1).join('/');
+            if (!app.vault.getAbstractFileByPath(folder)) await app.vault.createFolder(folder);
+            if (!app.vault.getAbstractFileByPath(path)) await app.vault.create(path, text);
+        }
+        await until(() => Object.values(app.metadataCache.unresolvedLinks).some(links => ${JSON.stringify(UNRESOLVED)} in links));
+    `);
+    const takeAway = () => vaultDo(`
+        for (const path of ${JSON.stringify([DIR, `${UNRESOLVED}.md`])}) {
+            if (!path.startsWith('test-int-send-nf')) throw new Error('not ours: ' + path);
+            const f = app.vault.getAbstractFileByPath(path);
+            if (f) await app.vault.delete(f, true);
+        }
+    `);
+    /** The row, written anew, and the dialog opened on it. */
+    const openOnRow = async () => {
+        await writeIndexedTestFile(SRC, [`- [ ] ${ROW}`, ''].join('\n'));
+        return openDialog(ROW);
+    };
+    /** Type `text` in the note field, and the state once the destination is answered for it. */
+    const typeNote = (text: string) => onDialog<DialogState>(`
+        typeIn(inputs()[0], ${JSON.stringify(text)});
+        document.activeElement?.blur();
+        await sleep(100);
+        await until(() => state().noteSays || state().noteErrors);
+        await sleep(200);
+        return JSON.stringify(state());
+    `);
+    /** Press send, and wait for the dialog to close. */
+    const sendNow = () => onDialog<DialogState>(`
+        panel().querySelector('.tv-form__buttons .mod-cta').click();
+        await until(() => !panel());
+        await sleep(300);
+        return JSON.stringify(state());
+    `);
+    const lines = (path: string) => (exists(path) ? readTestFile(path) : null);
+
+    beforeAll(() => {
+        if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
+        takeAway();
+        makeNotes();
+    });
+    afterEach(() => { closeDialog(); });
+    afterAll(() => { takeAway(); });
+
+    it('a name one note has: that note, in whatever folder, and the row goes to it', async () => {
+        await openOnRow();
+        const s = typeNote('唯一');
+        expect(s).toMatchObject({ noteSays: `既存のノート ${DIR}/唯一.md`, noteErrors: null, canSend: true });
+        expect(sendNow().open).toBe(false);
+        expect(lines(`${DIR}/唯一.md`)).toContain(`- [ ] ${ROW}`);
+    });
+
+    it('a name no note has: a new note in the folder for new notes, said in a warning', async () => {
+        await openOnRow();
+        const s = onDialog<DialogState & { tone: string | null }>(`
+            typeIn(inputs()[0], 'test-int-send-nf-無い名前');
+            document.activeElement?.blur();
+            await until(() => state().noteSays?.includes('無い名前'));
+            const line = inputs()[0].closest('.tv-form__row').nextElementSibling.firstElementChild;
+            return JSON.stringify({ ...state(), tone: line?.className ?? null });
+        `);
+        expect(s.noteSays).toMatch(/^一致するノートがありません。新しいノート .*test-int-send-nf-無い名前\.md を作ります$/);
+        expect(s.tone).toBe('tv-form__warning');
+        expect(s.says).toBe('見出し Tasks を作り、その下に置きます');
+        expect(s.canSend).toBe(true);
+    });
+
+    it('a name two notes have: no send, both paths said; picked from the list, the one picked', async () => {
+        await openOnRow();
+        const s = typeNote('同名');
+        expect(s.canSend).toBe(false);
+        expect(s.noteErrors).toBe(`「同名」に当たるノートが 2 件あります（${DIR}/a/同名.md, ${DIR}/b/同名.md）。候補から選んでください`);
+
+        const picked = onDialog<DialogState>(`
+            await pickFrom(0, '同名', '同名', ${JSON.stringify(`${DIR}/b/`)});
+            await until(() => state().canSend);
+            return JSON.stringify(state());
+        `);
+        expect(picked).toMatchObject({ note: '同名', noteSays: `既存のノート ${DIR}/b/同名.md`, noteErrors: null, canSend: true });
+        sendNow();
+        expect(lines(`${DIR}/b/同名.md`)).toContain(`- [ ] ${ROW}`);
+        expect(lines(`${DIR}/a/同名.md`)).not.toContain(ROW);
+    });
+
+    it('a pick let go once the text changes: the text read on its own again', async () => {
+        await openOnRow();
+        const s = onDialog<DialogState>(`
+            await pickFrom(0, '同名', '同名', ${JSON.stringify(`${DIR}/a/`)});
+            await until(() => state().canSend);
+            typeIn(inputs()[0], '同名x');
+            typeIn(inputs()[0], '同名');
+            document.activeElement?.blur();
+            await until(() => state().noteErrors);
+            return JSON.stringify(state());
+        `);
+        expect(s.canSend).toBe(false);
+        expect(s.noteErrors).toContain('「同名」に当たるノートが 2 件あります');
+    });
+
+    it('a path whose folder is not there: the note and the folder made, and the row goes to it', async () => {
+        await openOnRow();
+        const s = typeNote(`${DIR}/新しい/作る`);
+        expect(s.noteSays).toBe(`新しいノート ${DIR}/新しい/作る.md を作ります フォルダ ${DIR}/新しい も作ります`);
+        expect(s.canSend).toBe(true);
+        sendNow();
+        expect(lines(`${DIR}/新しい/作る.md`)).toContain(`- [ ] ${ROW}`);
+    });
+
+    it('an alias picked: its note named in the field, and the row goes to that note', async () => {
+        await openOnRow();
+        const s = onDialog<DialogState>(`
+            await pickFrom(0, '送り先の別名', '送り先の別名');
+            await until(() => state().canSend);
+            return JSON.stringify(state());
+        `);
+        expect(s).toMatchObject({ note: '別名元', noteSays: `既存のノート ${DIR}/別名元.md` });
+        sendNow();
+        expect(lines(`${DIR}/別名元.md`)).toContain(`- [ ] ${ROW}`);
+    });
+
+    it('an unresolved link picked: a new note by its name, made as the row goes to it', async () => {
+        await openOnRow();
+        const s = onDialog<DialogState>(`
+            await pickFrom(0, ${JSON.stringify(UNRESOLVED)}, ${JSON.stringify(UNRESOLVED)});
+            await until(() => state().canSend && state().noteSays);
+            return JSON.stringify(state());
+        `);
+        expect(s.note).toBe(UNRESOLVED);
+        expect(s.noteSays).toContain(`新しいノート ${UNRESOLVED}.md を作ります`);
+        sendNow();
+        expect(lines(`${UNRESOLVED}.md`)).toContain(`- [ ] ${ROW}`);
     });
 });

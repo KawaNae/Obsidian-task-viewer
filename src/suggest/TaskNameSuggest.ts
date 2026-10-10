@@ -1,7 +1,10 @@
 /**
  * TaskNameSuggest - AbstractInputSuggest for task name input.
  * Provides [[wikilink]], [[file#heading]], and #tag suggestions on a plain <input>.
- * What to suggest and over which range is LinkTagCandidates'; this shows it.
+ * What to suggest, over which range and what a pick writes is
+ * LinkTagCandidates'; how a candidate is drawn is candidateView's; this
+ * shows them. A link is written as Obsidian writes it from the note the
+ * task is or goes in, which the field's owner names (`linkSource`).
  * It says whether its list is open (`ShownSuggest`): an Enter then picks
  * from the list, and the form the field is in does not take it.
  */
@@ -9,8 +12,10 @@
 import type { App } from 'obsidian';
 import { ShownSuggest } from './ShownSuggest';
 import { t } from '../i18n';
+import { renderLinkTag } from './candidateView';
+import { NOTE_CANDIDATE_LIMIT } from './NoteCandidates';
 import {
-    linkTagCandidates, linkTagTrigger, replacedRange,
+    linkTagCandidates, linkTagTrigger, linkTagWrite, replacedRange,
     type LinkTagCandidate, type LinkTagMode,
 } from './LinkTagCandidates';
 
@@ -18,28 +23,22 @@ export class TaskNameSuggest extends ShownSuggest<LinkTagCandidate> {
     private inputEl: HTMLInputElement;
     private currentMode: LinkTagMode | null = null;
 
-    constructor(app: App, inputEl: HTMLInputElement) {
+    /** `linkSource`: the path of the note a link typed here is written in, asked when it is needed. */
+    constructor(app: App, inputEl: HTMLInputElement, private readonly linkSource: () => string) {
         super(app, inputEl);
         this.inputEl = inputEl;
-        this.limit = 30;
+        this.limit = NOTE_CANDIDATE_LIMIT;
     }
 
     protected getSuggestions(query: string): LinkTagCandidate[] {
         const pos = this.inputEl.selectionStart ?? query.length;
-        const found = linkTagCandidates(this.app, query.substring(0, pos));
+        const found = linkTagCandidates(this.app, query.substring(0, pos), this.linkSource());
         this.currentMode = found?.mode ?? null;
         return found?.candidates ?? [];
     }
 
     renderSuggestion(item: LinkTagCandidate, el: HTMLElement): void {
-        const titleEl = el.createDiv({ cls: 'suggestion-title' });
-        titleEl.createSpan({ text: item.label });
-        if (item.detail) {
-            titleEl.createSpan({ text: `  ${item.detail}`, cls: 'suggestion-flair' });
-        }
-        if (item.folder) {
-            el.createDiv({ text: item.folder, cls: 'suggestion-note' });
-        }
+        renderLinkTag(el, item);
     }
 
     protected pick(item: LinkTagCandidate, evt: MouseEvent | KeyboardEvent): void {
@@ -47,13 +46,14 @@ export class TaskNameSuggest extends ShownSuggest<LinkTagCandidate> {
         const pos = this.inputEl.selectionStart ?? value.length;
         const trigger = linkTagTrigger(value.substring(0, pos));
         if (!trigger) return;
-        // The replacement writes its own closers; the ones pairing left after
-        // the caret are taken over (LinkTagCandidates.replacedRange).
-        const { from, to } = replacedRange(value, pos, trigger.start, item.replacement);
-        const newValue = value.substring(0, from) + item.replacement + value.substring(to);
+        const replacement = linkTagWrite(this.app, item, this.linkSource());
+        // A link is written whole; the closers pairing left after the caret
+        // are taken over (LinkTagCandidates.replacedRange).
+        const { from, to } = replacedRange(value, pos, trigger.start);
+        const newValue = value.substring(0, from) + replacement + value.substring(to);
         this.setValue(newValue);
 
-        const newPos = from + item.replacement.length;
+        const newPos = from + replacement.length;
         this.inputEl.setSelectionRange(newPos, newPos);
         this.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -99,18 +99,20 @@ export class TaskNameSuggest extends ShownSuggest<LinkTagCandidate> {
         const triggerIdx = trigger.start;
 
         // Measure pixel offset of triggerIdx within the input using a mirror span
+        // In the input's own document: the field may stand in a popout window.
+        const doc = this.inputEl.ownerDocument;
         const textBefore = value.substring(0, triggerIdx);
-        const mirror = document.createElement('span');
-        const style = getComputedStyle(this.inputEl);
+        const mirror = doc.createElement('span');
+        const style = (doc.defaultView ?? window).getComputedStyle(this.inputEl);
         mirror.style.font = style.font;
         mirror.style.letterSpacing = style.letterSpacing;
         mirror.style.visibility = 'hidden';
         mirror.style.position = 'absolute';
         mirror.style.whiteSpace = 'pre';
         mirror.textContent = textBefore;
-        document.body.appendChild(mirror);
+        doc.body.appendChild(mirror);
         const textWidth = mirror.offsetWidth;
-        document.body.removeChild(mirror);
+        doc.body.removeChild(mirror);
 
         // Calculate left position relative to input
         const inputRect = this.inputEl.getBoundingClientRect();

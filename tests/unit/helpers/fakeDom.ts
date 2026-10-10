@@ -1,6 +1,7 @@
 /**
  * An element of a stand-in DOM for the form's pieces, which a unit test
- * builds in node: what `IssueBoard` and `bindField` touch, and no more.
+ * builds in node: what `IssueBoard`, `bindField`, the candidates'
+ * drawing (`candidateView`) and the send dialog's note field touch, and no more.
  */
 type Listener = (e: Event) => void;
 
@@ -29,6 +30,36 @@ export class FakeEl {
         el.text = o.text ?? '';
         this.children.push(el);
         return el;
+    }
+    createEl(_tag: string, o: { cls?: string; text?: string; type?: string; placeholder?: string } = {}): FakeEl {
+        const el = this.createDiv(o);
+        if (o.placeholder !== undefined) el.setAttribute('placeholder', o.placeholder);
+        return el;
+    }
+    createSpan(o: { cls?: string; text?: string; attr?: Record<string, string> } = {}): FakeEl {
+        const el = this.createDiv(o);
+        for (const [k, v] of Object.entries(o.attr ?? {})) el.setAttribute(k, v);
+        return el;
+    }
+    /** A text node, as a child that has no class. */
+    appendText(text: string): void {
+        const node = new FakeEl();
+        node.text = text;
+        this.children.push(node);
+    }
+    addClass(...cls: string[]): void { cls.forEach(c => this.classes.add(c)); }
+    /** Its text and its children's, in order. */
+    get textContent(): string {
+        return this.text + this.children.map(c => c.textContent).join('');
+    }
+    /** The first descendant with the class `cls`. */
+    find(cls: string): FakeEl | null {
+        for (const child of this.children) {
+            if (child.classes.has(cls)) return child;
+            const deeper = child.find(cls);
+            if (deeper) return deeper;
+        }
+        return null;
     }
     empty(): void { this.children.length = 0; }
     setAttribute(k: string, v: string): void { this.attrs.set(k, v); }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { t } from '../../../src/i18n';
 import { SendDialog, initialAsk, yamlValue, type SendHost, type SendViewState } from '../../../src/modals/noteops/SendDialog';
-import type { DraftEditor, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
+import type { DraftEditor, EditorOnHooks, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { InheritedValue } from '../../../src/services/data/InheritedValues';
 import type {
@@ -27,7 +27,7 @@ class FakeEditor implements DraftEditor {
     completing = false;
     focused = 0;
     destroyed = false;
-    constructor(private readonly frame: SubtreeFrame, readonly hooks: { submit(): void; edited(): void }) {
+    constructor(private readonly frame: SubtreeFrame, readonly hooks: EditorOnHooks) {
         this.parent = frame.parent;
         this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
     }
@@ -53,32 +53,42 @@ function previewOf(opts: { subtree?: string[]; candidates?: InheritedValue[]; li
     const task = makeTask({ id: 'row-1', file: 'note.md', line: 0, content: 'A', subtreeLines: subtree });
     return {
         rows: [{ task, lines: [...subtree, ''] }],
-        defaults: opts.defaults ?? { note: { kind: 'new', folder: 'Inbox', name: 'A' }, section: SECTION },
+        defaults: opts.defaults ?? { note: { text: 'A', picked: null }, section: SECTION },
         candidates: opts.candidates ?? [],
         links: opts.links ?? [],
     };
 }
 
-function facts(overrides: Partial<NoteFacts> = {}): NoteFacts {
+/** What every note's facts hold, beside its kind's. */
+type CommonFacts = Omit<Extract<NoteFacts, { kind: 'existing' }>, 'kind'>;
+
+/** The facts of a note: a new one by a name in `Inbox` unless `overrides` say otherwise. */
+function facts(overrides: Partial<CommonFacts> & (
+    | { kind?: 'new'; by?: 'name' | 'path'; folderMade?: string | null; namesakes?: TFile[] }
+    | { kind: 'existing' | 'same' }
+) = {}): NoteFacts {
     const kind = overrides.kind ?? 'new';
     const path = overrides.path ?? 'Inbox/A.md';
-    return {
-        kind,
+    const common: CommonFacts = {
         path,
-        to: {
-            note: kind === 'new' ? { kind: 'new', folder: 'Inbox', name: 'A' } : { kind: 'existing', path },
-            section: SECTION,
-        },
+        to: { note: { kind: kind === 'new' ? 'new' : 'existing', path }, section: SECTION },
         heading: kind === 'new' ? { kind: 'none' } : { kind: 'one', heading: { level: 2, text: 'Tasks', line: 0 } as never },
         headings: [],
         present: [],
         ignored: false,
-        namesakes: [],
         shared: [],
         unresolved: [],
         anchors: new Map(),
-        ...overrides,
     };
+    if (overrides.kind === undefined || overrides.kind === 'new') {
+        return { by: 'name', folderMade: null, namesakes: [], ...common, ...overrides, kind: 'new' };
+    }
+    return { ...common, ...overrides, kind: overrides.kind };
+}
+
+/** A note field holding `text`, nothing picked. */
+function typed(text: string) {
+    return { text, picked: null };
 }
 
 function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (sending: SendingLines) => string | null } = {}) {
@@ -133,11 +143,16 @@ function said(state: SendViewState, opts: { at?: string; tone?: 'error' | 'warni
     return state.issues.filter(one => (opts.at === undefined || one.at === opts.at) && (opts.tone === undefined || one.tone === opts.tone)).map(one => one.text);
 }
 const errors = (state: SendViewState) => said(state, { tone: 'error' });
-const warnings = (state: SendViewState) => said(state, { tone: 'warning', at: 'form' }).concat(said(state, { tone: 'warning', at: 'name' }));
-/** What the send does: what is said under the heading that is no error. */
+const warnings = (state: SendViewState) => said(state, { tone: 'warning', at: 'form' });
+/** Where in the note the send puts the rows: what is said under the heading that is no error. */
 function destination(state: SendViewState): { text: string; tone: string } | null {
     const one = state.issues.find(issue => issue.at === 'heading' && issue.tone !== 'error');
     return one ? { text: one.text, tone: one.tone } : null;
+}
+
+/** Which note the send goes to: what is said under the note field. */
+function noteSays(state: SendViewState): { text: string; tone: string }[] {
+    return state.issues.filter(issue => issue.at === 'note').map(issue => ({ text: issue.text, tone: issue.tone }));
 }
 
 describe('opening', () => {
@@ -145,7 +160,7 @@ describe('opening', () => {
         const h = setUp();
 
         expect(h.editor().draft()).toEqual({ parent: '- [ ] A', children: [{ text: '- [ ] a', was: 1 }] });
-        expect(h.asks.map(one => one.ask)).toEqual([{ folder: 'Inbox', name: 'A', heading: '' }]);
+        expect(h.asks.map(one => one.ask)).toEqual([{ note: typed('A'), heading: '' }]);
         expect(h.state().canSend).toBe(false);
         expect(destination(h.state())).toBeNull();
 
@@ -153,11 +168,19 @@ describe('opening', () => {
         expect(h.state().canSend).toBe(true);
     });
 
-    it('names a note there is by its folder and name', () => {
-        const preview = previewOf({ defaults: { note: { kind: 'existing', path: 'Projects/Plan.md' }, section: SECTION } });
-        expect(initialAsk(preview)).toEqual({ folder: 'Projects', name: 'Plan', heading: '' });
-        const atRoot = previewOf({ defaults: { note: { kind: 'existing', path: 'Plan.md' }, section: SECTION } });
-        expect(initialAsk(atRoot)).toEqual({ folder: '', name: 'Plan', heading: '' });
+    it('spells a link typed in a row from the note the fields name; from the row\'s own note while they name none', async () => {
+        const h = setUp();
+        expect(h.editor().hooks.linkSource()).toBe('note.md');
+        await h.answer(facts({ kind: 'existing', path: 'Projects/Plan.md' }));
+        expect(h.editor().hooks.linkSource()).toBe('Projects/Plan.md');
+        h.dialog.fieldsChanged({ note: typed('本'), heading: '' });
+        await h.answer({ kind: 'ambiguous', name: '本', files: [] });
+        expect(h.editor().hooks.linkSource()).toBe('note.md');
+    });
+
+    it('opens the note field as the preview says, a note picked kept picked', () => {
+        const preview = previewOf({ defaults: { note: { text: 'Plan', picked: 'Projects/Plan.md' }, section: SECTION } });
+        expect(initialAsk(preview)).toEqual({ note: { text: 'Plan', picked: 'Projects/Plan.md' }, heading: '' });
     });
 
     it('shows a subtree it cannot open as it stands, from the first column, and sends it so', async () => {
@@ -172,35 +195,61 @@ describe('opening', () => {
     });
 });
 
-describe('what the send does', () => {
+describe('which note the send goes to, said under the note field', () => {
+    const says = async (f: NoteFacts) => noteSays((await answered(f)).state());
+    const note = (path: string) => ({ note: path });
+
+    it('a note there is: a warning, as the send writes into another note', async () => {
+        expect(await says(facts({ kind: 'existing', path: 'Plan.md' }))).toEqual([{ text: t('modal.send.noteExisting', note('Plan.md')), tone: 'warning' }]);
+    });
+
+    it('the rows\' own note', async () => {
+        expect(await says(facts({ kind: 'same', path: 'note.md' }))).toEqual([{ text: t('modal.send.noteSame', note('note.md')), tone: 'info' }]);
+    });
+
+    it('a new note: a warning, by a name that no note has, or by a path', async () => {
+        expect(await says(facts())).toEqual([{ text: t('modal.send.noteNewByName', note('Inbox/A.md')), tone: 'warning' }]);
+        expect(await says(facts({ by: 'path', path: 'P/A.md' }))).toEqual([{ text: t('modal.send.noteNew', note('P/A.md')), tone: 'warning' }]);
+    });
+
+    it('a new note in a folder the vault does not have: the folder it makes too', async () => {
+        expect(await says(facts({ by: 'path', path: 'P/Q/A.md', folderMade: 'P' }))).toEqual([
+            { text: t('modal.send.noteNew', note('P/Q/A.md')), tone: 'warning' },
+            { text: t('modal.send.noteFolderMade', { folder: 'P' }), tone: 'warning' },
+        ]);
+    });
+});
+
+describe('where in the note the send puts the rows, said under the heading', () => {
     const says = async (f: NoteFacts) => destination((await answered(f)).state());
-    const vars = (path: string) => ({ note: path, heading: 'Tasks' });
+    const vars = { heading: 'Tasks' };
 
     it('a new note', async () => {
-        expect(await says(facts())).toEqual({ text: t('modal.send.toNew', vars('Inbox/A.md')), tone: 'info' });
+        expect(await says(facts())).toEqual({ text: t('modal.send.toNew', vars), tone: 'info' });
     });
 
     it('a note there is: to the top or the end of its heading, or under one it makes', async () => {
         const existing = facts({ kind: 'existing', path: 'Plan.md' });
-        expect(await says(existing)).toEqual({ text: t('modal.send.toHead', vars('Plan.md')), tone: 'warning' });
+        expect(await says(existing)).toEqual({ text: t('modal.send.toHead', vars), tone: 'warning' });
         expect(await says({ ...existing, to: { ...existing.to, section: { ...SECTION, side: 'end' } } }))
-            .toEqual({ text: t('modal.send.toEnd', vars('Plan.md')), tone: 'warning' });
-        expect(await says({ ...existing, heading: { kind: 'none' } })).toEqual({ text: t('modal.send.toMade', vars('Plan.md')), tone: 'warning' });
+            .toEqual({ text: t('modal.send.toEnd', vars), tone: 'warning' });
+        expect(await says({ ...existing, heading: { kind: 'none' } })).toEqual({ text: t('modal.send.toMade', vars), tone: 'warning' });
     });
 
     it('the rows\' own note: moved within it', async () => {
         const same = facts({ kind: 'same', path: 'note.md' });
-        expect(await says(same)).toEqual({ text: t('modal.send.withinHead', vars('note.md')), tone: 'info' });
-        expect(await says({ ...same, heading: { kind: 'none' } })).toEqual({ text: t('modal.send.withinMade', vars('note.md')), tone: 'info' });
+        expect(await says(same)).toEqual({ text: t('modal.send.withinHead', vars), tone: 'info' });
+        expect(await says({ ...same, heading: { kind: 'none' } })).toEqual({ text: t('modal.send.withinMade', vars), tone: 'info' });
     });
 
     it('follows the fields: asked again as they change', async () => {
         const h = await answered();
-        h.dialog.fieldsChanged({ folder: '', name: 'note', heading: 'Done' });
+        h.dialog.fieldsChanged({ note: typed('note'), heading: 'Done' });
 
-        expect(h.asks[1].ask).toEqual({ folder: '', name: 'note', heading: 'Done' });
+        expect(h.asks[1].ask).toEqual({ note: typed('note'), heading: 'Done' });
         await h.answer(facts({ kind: 'same', path: 'note.md' }));
-        expect(destination(h.state())?.text).toBe(t('modal.send.withinHead', vars('note.md')));
+        expect(destination(h.state())?.text).toBe(t('modal.send.withinHead', vars));
+        expect(noteSays(h.state())[0].text).toBe(t('modal.send.noteSame', { note: 'note.md' }));
     });
 });
 
@@ -239,7 +288,7 @@ describe('the values offered for the frontmatter', () => {
         const h = await answered(facts(), { preview: previewOf({ candidates }) });
         h.dialog.check('project', false);
         h.dialog.check('aliases', true);
-        h.dialog.fieldsChanged({ folder: '', name: 'Plan', heading: '' });
+        h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
         await h.answer(facts({ kind: 'existing', path: 'Plan.md' }));
 
         expect(h.state().candidates?.map(one => [one.key, one.checked])).toEqual([['project', false], ['aliases', true], ['cssclasses', false]]);
@@ -282,19 +331,43 @@ describe('the values offered for the frontmatter', () => {
 });
 
 describe('what keeps a send from being asked', () => {
-    it('a name no note can have: said, the name field wrong', async () => {
-        const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|' } });
+    it('a name no note can have: said, the note field wrong', async () => {
+        const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|', at: 'name' } });
 
         expect(h.state().canSend).toBe(false);
-        expect(h.state().issues).toEqual([{ at: 'name', tone: 'error', text: t('modal.send.nameChars', { chars: '|' }) }]);
+        expect(h.state().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.send.nameChars', { chars: '|' }) }]);
         expect(h.dialog.request()).toBeNull();
+    });
+
+    it('a folder no folder can be: said as the folder\'s', async () => {
+        const chars = await answered({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: ':', at: 'folder' } });
+        expect(errors(chars.state())).toEqual([t('modal.send.folderChars', { chars: ':' })]);
+        const dot = await answered({ kind: 'unnamed', why: { ok: false, why: 'dot', at: 'folder' } });
+        expect(errors(dot.state())).toEqual([t('modal.send.folderDot')]);
+    });
+
+    it('more than one note the field points at: said with their paths, to pick one from the list, and nothing asked of the timers', async () => {
+        const timers = vi.fn(() => 'kept');
+        const files = ['a/本.md', 'b/本.md'].map(path => Object.assign(new TFile(), { path }));
+        const h = await answered({ kind: 'ambiguous', name: '本', files }, { timers });
+
+        expect(h.state().canSend).toBe(false);
+        expect(h.state().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.send.noteAmbiguous', { name: '本', count: '2', notes: 'a/本.md, b/本.md' }) }]);
+        expect(h.state().headings).toEqual([]);
+        expect(h.dialog.request()).toBeNull();
+        expect(timers).not.toHaveBeenCalled();
+        await h.dialog.send();
+        expect(h.send).not.toHaveBeenCalled();
     });
 
     it('two headings of the name in the note: said, the heading field wrong', async () => {
         const h = await answered(facts({ kind: 'existing', path: 'Plan.md', heading: { kind: 'many', count: 2 } }));
 
         expect(h.state().canSend).toBe(false);
-        expect(h.state().issues).toEqual([{ at: 'heading', tone: 'error', text: t('modal.send.headings', { note: 'Plan.md', heading: 'Tasks', count: '2' }) }]);
+        expect(h.state().issues.filter(one => one.tone === 'error')).toEqual([{ at: 'heading', tone: 'error', text: t('modal.send.headings', { note: 'Plan.md', heading: 'Tasks', count: '2' }) }]);
+        // The note is said all the same; where in it, not.
+        expect(noteSays(h.state())).toEqual([{ text: t('modal.send.noteExisting', { note: 'Plan.md' }), tone: 'warning' }]);
+        expect(destination(h.state())).toBeNull();
     });
 
     it('a draft that cannot be written: said as it is edited', async () => {
@@ -357,7 +430,7 @@ describe('what keeps a send from being asked', () => {
         const timers = vi.fn(() => 'kept');
         const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'empty' } }, { timers });
         expect(timers).not.toHaveBeenCalled();
-        await h.dialog.fieldsChanged({ folder: '', name: 'Plan', heading: '' });
+        await h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
         await h.answer(facts());
         expect(errors(h.state())).toEqual(['kept']);
         h.editor().type('plain');
@@ -366,39 +439,46 @@ describe('what keeps a send from being asked', () => {
 
     it('an answer for fields that changed since: not taken, and no send until the last is answered', async () => {
         const h = await answered();
-        h.dialog.fieldsChanged({ folder: '', name: 'Plan', heading: '' });
+        h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
         expect(h.state().canSend).toBe(false);
-        h.dialog.fieldsChanged({ folder: '', name: 'a|b', heading: '' });
+        h.dialog.fieldsChanged({ note: typed('a|b'), heading: '' });
 
-        await h.asks[2].answer({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|' } });
+        await h.asks[2].answer({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|', at: 'name' } });
         await h.asks[1].answer(facts({ kind: 'existing', path: 'Plan.md' }));
 
         expect(h.state().canSend).toBe(false);
-        expect(said(h.state(), { at: 'name', tone: 'error' })).toEqual([t('modal.send.nameChars', { chars: '|' })]);
+        expect(said(h.state(), { at: 'note', tone: 'error' })).toEqual([t('modal.send.nameChars', { chars: '|' })]);
         await h.dialog.send();
         expect(h.send).not.toHaveBeenCalled();
     });
 });
 
 describe('what the send tells', () => {
-    it('the links that break, not for the rows\' own note; the ^ids the note shares; a note the views skip; namesakes', async () => {
+    it('the links that break, not for the rows\' own note; the ^ids the note shares; a note the views skip', async () => {
         const links = [
             { anchor: 'x', from: 'a.md', line: 1 }, { anchor: 'x', from: 'a.md', line: 5 }, { anchor: 'x', from: 'b.md', line: 0 },
         ];
-        const namesake = Object.assign(new TFile(), { path: 'Old/A.md' });
-        const h = await answered(facts({ shared: ['y'], ignored: true, namesakes: [namesake] }), { preview: previewOf({ links }) });
+        const h = await answered(facts({ kind: 'existing', shared: ['y'], ignored: true }), { preview: previewOf({ links }) });
 
         expect(said(h.state(), { at: 'form', tone: 'warning' })).toEqual([
             t('modal.send.links', { anchor: 'x', count: '2', notes: 'a.md, b.md' }),
             t('modal.send.shared', { anchor: 'y', note: 'Inbox/A.md' }),
             t('modal.send.ignored', { note: 'Inbox/A.md' }),
         ]);
-        // Of the name: other notes have it.
-        expect(said(h.state(), { at: 'name', tone: 'warning' })).toEqual([t('modal.send.namesakes', { notes: 'Old/A.md' })]);
         expect(h.state().canSend).toBe(true);
 
         const within = await answered(facts({ kind: 'same', path: 'note.md' }), { preview: previewOf({ links }) });
         expect(warnings(within.state())).toEqual([]);
+    });
+
+    it('the notes by the name of a note made at a path typed, under the note field; none for a note made by a name alone', async () => {
+        const namesakes = [Object.assign(new TFile(), { path: 'Old/A.md' })];
+        const byPath = await answered(facts({ by: 'path', path: 'New/A.md', namesakes }));
+        expect(said(byPath.state(), { at: 'note', tone: 'warning' })).toContain(t('modal.send.namesakes', { notes: 'Old/A.md' }));
+        expect(byPath.state().canSend).toBe(true);
+
+        const byName = await answered(facts({ by: 'name', namesakes }));
+        expect(said(byName.state(), { at: 'note', tone: 'warning' })).not.toContain(t('modal.send.namesakes', { notes: 'Old/A.md' }));
     });
 
     it('the commands the note does not resolve', async () => {

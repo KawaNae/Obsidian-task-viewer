@@ -11,7 +11,7 @@ import type { UnresolvedReference } from '../../services/flow/FlowReferences';
 import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { Outline } from '../../services/parsing/utils/Outline';
 import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/SubtreeFrame';
-import type { DraftEditor } from '../form/source/SourceEditor';
+import type { DraftEditor, EditorOnHooks } from '../form/source/SourceEditor';
 import type { FormIssue, Tone } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
 
@@ -41,12 +41,16 @@ import { DraftGuard } from '../form/DraftGuard';
  *   dialog is open (an interval's record) is seen at the next showing; the
  *   send asks again as it is made.
  * - What the dialog says is of a field, a row or the form (`FormIssue`):
- *   why the note's name is no name, under the name; what the send does or
- *   why the heading names no one place, under the heading; why a row's
- *   draft cannot be written, under that row; the rest (the timers, what a
- *   send is asked in spite of, the last send's answer) of the form. A send
- *   is asked only while no error is said of what the dialog holds; the
- *   answer to the last send keeps none from being asked again.
+ *   under the note, which note the rows go to, always: the note there is,
+ *   the rows' own note, or the note the send makes (and its folder), or why
+ *   the field names none — a name or a path no note can be made at, or more
+ *   than one note it does not tell apart (`note-suggest/send-field.md`,
+ *   欄の下の行); under the heading, where in the note they go, or why the
+ *   heading names no one place; why a row's draft cannot be written, under
+ *   that row; the rest (the timers, what a send is asked in spite of, the
+ *   last send's answer) of the form. A send is asked only while no error is
+ *   said of what the dialog holds; the answer to the last send keeps none
+ *   from being asked again.
  * - A send not made keeps the draft and says why under it; a send made
  *   closes the dialog. A send made for some rows only says why too, and
  *   offers no send again: the rows that went are no longer where the
@@ -72,8 +76,8 @@ export interface CandidateView {
     shut: string | null;
 }
 
-/** What the dialog's issues are said of: the note's name, the heading, a row's draft (`row:<i>`, in the order of the rows). */
-export type SendField = 'name' | 'heading' | `row:${number}`;
+/** What the dialog's issues are said of: the note, the heading, a row's draft (`row:<i>`, in the order of the rows). */
+export type SendField = 'note' | 'heading' | `row:${number}`;
 
 /** What the surface shows. */
 export interface SendViewState {
@@ -95,8 +99,12 @@ export interface SendViewState {
 }
 
 export interface SendSurface {
-    /** Open an editor on a row's subtree, in the order of the rows: `submit` on Mod+Enter, `edited` on a change of its text. */
-    openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor;
+    /**
+     * Open an editor on a row's subtree, in the order of the rows: `submit`
+     * on Mod+Enter, `edited` on a change of its text; a link typed in it is
+     * spelt from the note `linkSource` names.
+     */
+    openEditor(frame: SubtreeFrame, hooks: EditorOnHooks): DraftEditor;
     /** Show a row the editor cannot open, in the order of the rows: its lines as they go, and why. */
     showFixed(lines: readonly string[], why: string): void;
     render(state: SendViewState): void;
@@ -161,6 +169,7 @@ export class SendDialog {
                 const editor = surface.openEditor(opening.frame, {
                     submit: () => { void this.send(); },
                     edited: () => this.edited(),
+                    linkSource: () => this.linkSource(row.task.file),
                 });
                 this.rows.push({ kind: 'editor', taskId: row.task.id, frame: opening.frame, editor });
             } else {
@@ -185,30 +194,34 @@ export class SendDialog {
 
     state(): SendViewState {
         const facts = this.answer?.facts ?? null;
+        const note = oneNote(facts);
         const held: FormIssue<SendField>[] = [];
         const error = (at: SendField | 'form', text: string) => held.push({ at, tone: 'error', text });
 
         if (facts?.kind === 'unnamed') {
-            error('name', nameError(facts.why));
-        } else if (facts && facts.heading.kind === 'many') {
-            error('heading', t('modal.send.headings', { note: facts.path, heading: facts.to.section.heading, count: String(facts.heading.count) }));
+            error('note', nameError(facts.why));
+        } else if (facts?.kind === 'ambiguous') {
+            error('note', t('modal.send.noteAmbiguous', { name: facts.name, count: String(facts.files.length), notes: facts.files.map(file => file.path).join(', ') }));
+        } else if (note && note.heading.kind === 'many') {
+            error('heading', t('modal.send.headings', { note: note.path, heading: note.to.section.heading, count: String(note.heading.count) }));
         }
         this.drafts().forEach(({ check }, i) => {
             if (check?.kind === 'refused') error(`row:${i}`, draftError(check.reason));
         });
-        const timers = this.timersRefuse(facts);
+        const timers = this.timersRefuse(note);
         if (timers !== null) error('form', timers);
-        if (facts && facts.kind !== 'unnamed') {
-            const says = destinationText(facts);
+        if (note) {
+            held.push(...noteText(note).map(says => ({ at: 'note' as const, ...says })));
+            const says = headingText(note);
             if (says) held.push({ at: 'heading', ...says });
-            held.push(...this.warningsOf(facts));
+            held.push(...this.warningsOf(note));
         }
         const canSend = this.phase === 'open' && this.caughtUp() && !held.some(issue => issue.tone === 'error');
 
         return {
             phase: this.phase,
-            headings: facts && facts.kind !== 'unnamed' ? facts.headings : [],
-            candidates: this.candidatesOf(facts),
+            headings: note?.headings ?? [],
+            candidates: this.candidatesOf(note),
             issues: this.message === null ? held : [...held, { at: 'form', tone: 'error', text: this.message }],
             canSend,
             asking: this.guard.asking !== null,
@@ -245,12 +258,12 @@ export class SendDialog {
      * What a send asks now (see {@link SendRequest}): each row as the dialog
      * opened it, with its draft when its editor holds one; where the fields
      * name, as last answered; and the values checked the note has none of,
-     * none for the rows' own note. Null while the fields name no note, or a
-     * draft cannot be written.
+     * none for the rows' own note. Null while the fields name no one note,
+     * or a draft cannot be written.
      */
     request(): SendRequest | null {
-        const facts = this.answer?.facts;
-        if (!facts || facts.kind === 'unnamed') return null;
+        const facts = oneNote(this.answer?.facts ?? null);
+        if (!facts) return null;
         const rows: SendRow[] = [];
         for (const { row, check } of this.drafts()) {
             if (check?.kind === 'refused') return null;
@@ -327,6 +340,15 @@ export class SendDialog {
         return this.answer !== null && this.answer.seq === this.asked;
     }
 
+    /**
+     * The note a link typed in a row's editor is written in: the note the
+     * fields name now, where the row goes; while they name none, the note
+     * the row is in (`rowFile`).
+     */
+    private linkSource(rowFile: string): string {
+        return oneNote(this.answer?.facts ?? null)?.path ?? rowFile;
+    }
+
     /** A draft's text changed: what it says is drawn again, and, asked whether to throw it away, the question is withdrawn. */
     private edited(): void {
         if (!this.guard.withdraw()) this.render();
@@ -350,9 +372,8 @@ export class SendDialog {
     }
 
     /** The values offered, as the note the fields name has them; none for the rows' own note. */
-    private candidatesOf(facts: DestinationFacts | null): CandidateView[] | null {
-        if (facts?.kind === 'same' || this.preview.candidates.length === 0) return null;
-        const present = facts && facts.kind !== 'unnamed' ? facts : null;
+    private candidatesOf(present: NoteFacts | null): CandidateView[] | null {
+        if (present?.kind === 'same' || this.preview.candidates.length === 0) return null;
         return this.preview.candidates.map((one): CandidateView => {
             const has = present?.present.includes(one.key) ?? false;
             return {
@@ -368,17 +389,22 @@ export class SendDialog {
     /**
      * Why the open timers keep a send to the note `facts` names from being
      * made, the rows as their editors hold them; null when nothing keeps it,
-     * or the fields name no note, or a draft cannot be written (said
+     * or the fields name no one note, or a draft cannot be written (said
      * already).
      */
-    private timersRefuse(facts: DestinationFacts | null): string | null {
+    private timersRefuse(facts: NoteFacts | null): string | null {
         const req = this.request();
-        if (!req || !facts || facts.kind === 'unnamed') return null;
+        if (!req || !facts) return null;
         const rows = req.rows.map((row, i) => ({ ...row, file: this.preview.rows[i].task.file }));
         return this.host.timers(sendingOf(rows, facts.path, facts.anchors));
     }
 
-    /** What a send to `facts` can be asked in spite of: of the form, but the namesakes, which are of the name. */
+    /**
+     * What a send to `facts` can be asked in spite of: of the form, but the
+     * namesakes of a note made at a path typed, which are of the note: once
+     * made, neither note is told from the other by its name alone. A note
+     * made by a name alone has none, as no note has its name.
+     */
     private warningsOf(facts: NoteFacts): FormIssue<SendField>[] {
         const out: FormIssue<SendField>[] = [];
         const warn = (at: SendField | 'form', text: string) => out.push({ at, tone: 'warning', text });
@@ -390,7 +416,9 @@ export class SendDialog {
         }
         for (const anchor of facts.shared) warn('form', t('modal.send.shared', { anchor, note: facts.path }));
         if (facts.ignored) warn('form', t('modal.send.ignored', { note: facts.path }));
-        if (facts.namesakes.length > 0) warn('name', t('modal.send.namesakes', { notes: facts.namesakes.map(file => file.path).join(', ') }));
+        if (facts.kind === 'new' && facts.by === 'path' && facts.namesakes.length > 0) {
+            warn('note', t('modal.send.namesakes', { notes: facts.namesakes.map(file => file.path).join(', ') }));
+        }
         return out;
     }
 
@@ -401,24 +429,42 @@ export class SendDialog {
 }
 
 /**
- * The fields as a dialog on `preview` opens: the default note's name and
- * folder, and the heading field empty, which stands for the settings'
- * heading (`SendPreview.defaults`).
+ * The fields as a dialog on `preview` opens: the note field as the preview
+ * says (`SendPreview.defaults`), and the heading field empty, which stands
+ * for the settings' heading.
  */
 export function initialAsk(preview: SendPreview): DestinationAsk {
-    const { note } = preview.defaults;
-    if (note.kind === 'new') return { folder: note.folder, name: note.name, heading: '' };
-    const cut = note.path.lastIndexOf('/');
-    return {
-        folder: cut < 0 ? '' : note.path.slice(0, cut),
-        name: note.path.slice(cut + 1).replace(/\.md$/i, ''),
-        heading: '',
-    };
+    return { note: { ...preview.defaults.note }, heading: '' };
 }
 
-/** What a send to `facts` does, in one sentence, by where the rows go in the section (its side). */
-export function destinationText(facts: NoteFacts): { text: string; tone: Tone } | null {
-    const vars = { note: facts.path, heading: facts.to.section.heading };
+/** The facts of the one note the fields name; null while they name none, or more than one. */
+function oneNote(facts: DestinationFacts | null): NoteFacts | null {
+    return facts && facts.kind !== 'unnamed' && facts.kind !== 'ambiguous' ? facts : null;
+}
+
+/**
+ * Which note the rows go to, said under the note field: the note there is,
+ * a warning, since the send writes into another note; the rows' own note;
+ * or the note the send makes, a warning, so that a text typed to search
+ * with is not sent to a new note unseen — and the folder it makes with it.
+ */
+export function noteText(facts: NoteFacts): { text: string; tone: Tone }[] {
+    const vars = { note: facts.path };
+    switch (facts.kind) {
+        case 'existing':
+            return [{ text: t('modal.send.noteExisting', vars), tone: 'warning' }];
+        case 'same':
+            return [{ text: t('modal.send.noteSame', vars), tone: 'info' }];
+        case 'new': {
+            const made = { text: t(facts.by === 'name' ? 'modal.send.noteNewByName' : 'modal.send.noteNew', vars), tone: 'warning' as const };
+            return facts.folderMade === null ? [made] : [made, { text: t('modal.send.noteFolderMade', { folder: facts.folderMade }), tone: 'warning' }];
+        }
+    }
+}
+
+/** Where in the note a send to `facts` puts the rows, in one sentence, by where they go in the section (its side). */
+export function headingText(facts: NoteFacts): { text: string; tone: Tone } | null {
+    const vars = { heading: facts.to.section.heading };
     const end = facts.to.section.side === 'end';
     switch (facts.kind) {
         case 'new':
@@ -437,8 +483,8 @@ export function destinationText(facts: NoteFacts): { text: string; tone: Tone } 
 function nameError(why: Extract<DestinationFacts, { kind: 'unnamed' }>['why']): string {
     switch (why.why) {
         case 'empty': return t('modal.send.nameEmpty');
-        case 'chars': return t('modal.send.nameChars', { chars: why.chars });
-        case 'dot': return t('modal.send.nameDot');
+        case 'chars': return t(why.at === 'name' ? 'modal.send.nameChars' : 'modal.send.folderChars', { chars: why.chars });
+        case 'dot': return t(why.at === 'name' ? 'modal.send.nameDot' : 'modal.send.folderDot');
     }
 }
 

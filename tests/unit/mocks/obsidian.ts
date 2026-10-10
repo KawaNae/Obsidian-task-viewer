@@ -208,6 +208,79 @@ export function parseLinktext(linktext: string): { path: string; subpath: string
     return hash < 0 ? { path: linktext, subpath: '' } : { path: linktext.slice(0, hash), subpath: linktext.slice(hash) };
 }
 
+/** The aliases a frontmatter names, as Obsidian reads them: a list, or one string; null for none. */
+export function parseFrontMatterAliases(frontmatter: any | null): string[] | null {
+    const raw = frontmatter?.aliases ?? frontmatter?.alias;
+    if (raw === undefined || raw === null) return null;
+    const list = (Array.isArray(raw) ? raw : String(raw).split(',')).map((one: unknown) => String(one).trim()).filter(Boolean);
+    return list.length > 0 ? list : null;
+}
+
+/**
+ * A stand-in for Obsidian's fuzzy search: the query's characters, spaces
+ * aside, in order in the text, case aside, each taken at its first place.
+ * The ranges are the runs of matched characters; the fewer the runs, and
+ * the earlier the first, the higher the score, which is below 0 as
+ * Obsidian's is. Not Obsidian's numbers: a unit test asserts the order its
+ * rules make, not the score.
+ */
+export function prepareFuzzySearch(query: string): (text: string) => { score: number; matches: [number, number][] } | null {
+    const wanted = query.toLowerCase().replace(/\s+/g, '');
+    return (text: string) => {
+        const lower = text.toLowerCase();
+        const matches: [number, number][] = [];
+        let at = 0;
+        for (const ch of wanted) {
+            const found = lower.indexOf(ch, at);
+            if (found < 0) return null;
+            const last = matches[matches.length - 1];
+            if (last && last[1] === found) last[1] = found + 1;
+            else matches.push([found, found + 1]);
+            at = found + 1;
+        }
+        if (matches.length === 0) return null;
+        return { score: -(matches.length - 1) - matches[0][0] / 1000 - text.length / 10000 - 0.001, matches };
+    };
+}
+
+/** A stand-in for Obsidian's simple search: each space-separated word a substring, case aside. */
+export function prepareSimpleSearch(query: string): (text: string) => { score: number; matches: [number, number][] } | null {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return (text: string) => {
+        const lower = text.toLowerCase();
+        const matches: [number, number][] = [];
+        for (const word of words) {
+            const found = lower.indexOf(word);
+            if (found < 0) return null;
+            matches.push([found, found + word.length]);
+        }
+        return { score: -matches.length, matches: matches.sort((a, b) => a[0] - b[0]) };
+    };
+}
+
+/**
+ * Obsidian's `renderMatches`, as Obsidian 1.13.7 writes it: the text, each
+ * range moved by `offset` and drawn as a `suggestion-highlight` span.
+ */
+export function renderMatches(el: any, text: string, matches: [number, number][] | null, offset = 0): void {
+    if (!matches || matches.length === 0) {
+        el.appendText(text);
+        return;
+    }
+    let at = 0;
+    for (const [from, to] of matches) {
+        let start = from + offset;
+        const end = to + offset;
+        if (end <= 0) continue;
+        if (start >= text.length) break;
+        if (start < 0) start = 0;
+        if (start !== at) el.appendText(text.substring(at, start));
+        el.createSpan({ cls: 'suggestion-highlight', text: text.substring(start, end) });
+        at = end;
+    }
+    if (at < text.length) el.appendText(text.substring(at));
+}
+
 /**
  * A bare `2026-09-21` in frontmatter comes back as a `Date`, not a string —
  * `DateTimeFieldParser.normalizeYamlDate` exists specifically to turn that

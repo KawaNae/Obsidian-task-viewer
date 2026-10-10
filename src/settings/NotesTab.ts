@@ -1,7 +1,7 @@
 import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
-import { FileSuggest } from '../suggest/FileSuggest';
+import { NoteSuggest } from '../suggest/NoteSuggest';
 import type { SectionSide } from '../services/persistence/utils/Placement';
 import { SETTINGS_SCHEMA } from './SettingsSchema';
 import type { SettingFields } from './SettingFields';
@@ -22,7 +22,11 @@ export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFi
         get: () => plugin.settings[key],
         put: (value) => { plugin.settings[key] = value; },
         placeholder: shown.placeholder,
-        list: shown.notes ? (input, picked) => new FileSuggest(plugin.app, input, (f) => picked(f.path)) : undefined,
+        // The notes alone, as Obsidian's `[[` lists them; a pick puts in its path.
+        list: shown.notes ? (input, picked) => new NoteSuggest(plugin.app, input, {
+            kinds: { attachments: false, aliases: false, unresolved: false },
+            pick: (note) => { if (note.kind === 'file') picked(note.file.path); },
+        }) : undefined,
     });
 
     // Tasks in notes: where a new line goes in a note, whichever note it is
