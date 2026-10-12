@@ -27,6 +27,11 @@ describe('CascadeSource', () => {
         '- [ ] row',
         '- [ ] own',
         '    - tv-mask:: ---',
+        '### Hidden',
+        '- tv-color::',
+        '- [ ] under hidden',
+        '- [ ] own none',
+        '    - tv-color::',
     ].join('\n'));
 
     it('says a tag is the file\'s when the frontmatter adds it, the topmost layer that does', () => {
@@ -40,6 +45,13 @@ describe('CascadeSource', () => {
         expect(CascadeSource.forStyleField(task('row'), 'mask')).toBe('section');
         expect(CascadeSource.forStyleField(task('row'), 'linestyle')).toBeNull();
         expect(CascadeSource.forStyleField(task('own'), 'mask')).toBeNull();
+    });
+
+    it('says an inherited no value is the layer\'s that hid it, and none for a row\'s own no value', () => {
+        expect(task('under hidden').cascadeContext?.color).toBeUndefined();
+        expect(CascadeSource.forStyleField(task('under hidden'), 'color')).toBe('section');
+        expect(CascadeSource.lineOfStyleField(task('under hidden'), 'color', 'tv-color')).toEqual({ line: 13 });
+        expect(CascadeSource.forStyleField(task('own none'), 'color')).toBeNull();
     });
 
     it('says a property is the layer\'s that won it', () => {

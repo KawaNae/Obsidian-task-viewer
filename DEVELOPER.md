@@ -387,6 +387,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - タグは和集合で、隠す操作がない。値のない `- tags::` は何も足さず、上の層のタグも残る
 - カスタムプロパティのリストは1つの値で、近い層のリストが上の層のリストを丸ごと置き換える
 - 節が隠した組み込みの値は、タスクの `cascadeContext` に入らない。どの層が隠したかは出所に残る。値なしを書いた層も、値を書いた層と同じく出所になる（`resolvedSources`、`Task.inheritedFrom`）
+- ハブは受け継いだ値なしを、組み込みのキー（色、線種、マスク）でもカスタムプロパティでも、空の欄と「値なし」の placeholder、出所のラベル（隠した層の行を開ける）で出す。組み込みのキーの出所は `inheritedFrom` から言う（`CascadeSource.forStyleField`）。自分の値なしは出所のラベルの代わりに × を出し、× は自分の行を消す。どちらの欄も、打った値は自分の値として書く
 - frontmatter の出所（`ValueSource` の `frontmatter`）は、そのキーの行を持つ（`frontmatterKeyRange`。書き込みが編集する行と同じ答え）。キーの行を読めないときは null である
 - API は値なしを `null` で出す。frontmatter の `key:` も同じである
 

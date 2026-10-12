@@ -3,7 +3,9 @@
  * that inherits a value and does not hide it offers to hide it, which
  * writes its own line with no value (`- key::`); a row's own no value shows
  * as an empty field that says so, and its × takes the line out, so the
- * value above comes through. The style fields do the same.
+ * value above comes through. The style fields do the same, and show a no
+ * value a section above wrote as the property fields do: an empty field
+ * that says so, with the line it is written on to open.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
@@ -27,6 +29,10 @@ const LINES = [
     '\t- area::',
     '\t- tv-mask::',
     '- [ ] 次',
+    '## 隠す節',
+    '- tv-color::',
+    '- tv-mask::',
+    '- [ ] 節の下',
     '',
 ];
 
@@ -38,6 +44,8 @@ const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent.trim() === label);
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
+const colorRow = () => hub().querySelector('.tv-form__input-with-picker--color').closest('.tv-form__row');
+const noteView = () => app.workspace.getLeavesOfType('markdown').map(l => l.view).find(v => v.file?.path === ${JSON.stringify(TEST_FILE)});
 `;
 
 function run<T>(body: string): T {
@@ -81,7 +89,10 @@ beforeAll(() => {
 });
 
 beforeEach(async () => { await writeIndexedTestFile(TEST_FILE, LINES.join('\n')); });
-afterEach(() => { closeHub(); });
+afterEach(() => {
+    closeHub();
+    run(`app.workspace.getLeavesOfType('markdown').filter(l => l.view.file?.path === ${JSON.stringify(TEST_FILE)}).forEach(l => l.detach()); return 'ok';`);
+});
 
 afterAll(async () => {
     deleteTestFile(TEST_FILE);
@@ -133,5 +144,42 @@ describe('the hub hides an inherited value', () => {
             return 'ok';
         `);
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 8));
+    });
+
+    it('shows a style\'s inherited no value as the property fields do, its source to open and no ×', () => {
+        openHub('節の下');
+        const shownRows = run<Record<string, unknown>>(`
+            const look = row => ({
+                placeholder: row.querySelector('input[type=text]').placeholder,
+                source: shown(row.querySelector('.task-hub__source')) ? row.querySelector('.task-hub__source').textContent : null,
+                remove: shown(row.querySelector('.task-hub__prop-remove')),
+                hide: shown(row.querySelector('.task-hub__hide')),
+            });
+            return JSON.stringify({ color: look(colorRow()), mask: look(rowOf(${JSON.stringify(tr('modal.hub.mask'))})) });
+        `);
+        const inheritedNone = { placeholder: tr('modal.hub.noValue'), source: tr('modal.hub.inheritedFromSection'), remove: false, hide: false };
+        expect(shownRows).toEqual({ color: inheritedNone, mask: inheritedNone });
+
+        const line = run<number>(`
+            colorRow().querySelector('.task-hub__source').click();
+            await until(() => noteView() && !hub());
+            await sleep(300);
+            return noteView().editor.getCursor().line;
+        `);
+        expect(line).toBe(10);
+    });
+
+    it('writes a value typed in a style\'s inherited no value as the row\'s own', () => {
+        openHub('節の下');
+        run(`
+            const input = rowOf(${JSON.stringify(tr('modal.hub.mask'))}).querySelector('input');
+            input.focus();
+            input.value = '***';
+            input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+            input.dispatchEvent(new FocusEvent('blur'));
+            await sleep(600);
+            return 'ok';
+        `);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(13, 13, '\t- tv-mask:: ***'));
     });
 });
