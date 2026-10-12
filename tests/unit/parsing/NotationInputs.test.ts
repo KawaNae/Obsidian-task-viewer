@@ -59,6 +59,13 @@ describe('a property key typed to add', () => {
         expect(keys.read('tv-start')).toEqual({ ok: false, issue: { code: 'reserved' } });
         expect(keys.read('tags')).toEqual({ ok: false, issue: { code: 'reserved' } });
     });
+
+    it('refuses a key the plugin keeps in another case, and takes a full-width one as another key', () => {
+        for (const key of ['Tags', 'TV-COLOR', 'Position', 'TV-Status']) {
+            expect(keys.read(key), key).toEqual({ ok: false, issue: { code: 'reserved' } });
+        }
+        expect(keys.read('ｔａｇｓ')).toEqual({ ok: true, value: 'ｔａｇｓ' });
+    });
 });
 
 describe('a scope key typed in the settings', () => {
@@ -77,6 +84,12 @@ describe('a scope key typed in the settings', () => {
         expect(ScopeKeyInput.read('tags', others)).toEqual({ ok: false, issue: { code: 'reserved' } });
         expect(ScopeKeyInput.read('tv-status', others)).toEqual({ ok: false, issue: { code: 'reserved' } });
         expect(ScopeKeyInput.read('tv-end', others)).toEqual({ ok: false, issue: { code: 'duplicate' } });
+    });
+
+    it('refuses them in another case too, and takes a full-width key as another key', () => {
+        expect(ScopeKeyInput.read('TAGS', others)).toEqual({ ok: false, issue: { code: 'reserved' } });
+        expect(ScopeKeyInput.read('TV-END', others)).toEqual({ ok: false, issue: { code: 'duplicate' } });
+        expect(ScopeKeyInput.read('ｔｖ-ｅｎｄ', others)).toEqual({ ok: true, value: 'ｔｖ-ｅｎｄ' });
     });
 
     it('reads the others as they are when it reads', () => {

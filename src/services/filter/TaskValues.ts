@@ -1,4 +1,5 @@
 import type { DisplayTask } from '../../types';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { PropertyValues } from '../parsing/utils/PropertyValues';
 import type { FilterProperty } from './FilterTypes';
 import { getTaskNotation } from './parserTaxonomy';
@@ -127,11 +128,12 @@ export const TaskValues = {
 
     /**
      * The value of a property (`key:: value`), the section's when the task
-     * has none of its own, as it is shown (`PropertyValues.display`).
+     * has none of its own, as it is shown (`PropertyValues.display`). The
+     * key is matched its case aside (`PropertyKey`): `area` finds `Area::`.
      */
     property(task: DisplayTask, key: string): TextValue {
-        const value = getEffectiveProperties(task)[key];
-        return text(value ? PropertyValues.display(value) : undefined);
+        const property = PropertyKey.get(getEffectiveProperties(task), key);
+        return text(property ? PropertyValues.display(property.value) : undefined);
     },
 
     /**

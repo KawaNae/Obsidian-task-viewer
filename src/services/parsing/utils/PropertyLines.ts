@@ -1,7 +1,8 @@
-import type { PropertyScalar, PropertyValue, ScopeKeys } from '../../../types';
+import type { Properties, PropertyScalar, PropertyValue, ScopeKeys } from '../../../types';
 import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
+import { PropertyKey } from './PropertyKey';
 import { PropertyValues } from './PropertyValues';
 import { TaskLineClassifier } from './TaskLineClassifier';
 
@@ -32,8 +33,9 @@ export type PropertyOwner =
  * reading found it. An error leaves the key unread; a warning says how a
  * line was read, or that it was not.
  *
- * - `duplicate-key` (error): the owner writes the key on two lines or more;
- *   the key is read on none of them, and the value above comes through
+ * - `duplicate-key` (error): the owner writes the key on two lines or more,
+ *   its case aside (`Area::` and `area::`); the key is read on none of
+ *   them, and the value above comes through
  * - `date-key-under-task` (warning): a date key (`tv-start` and the others
  *   the settings name) under a task, which takes its dates from its own
  *   line's `@` only; not read
@@ -99,17 +101,12 @@ export interface OwnPropertyLines {
 
 /** What an owner's property lines say. */
 export interface PropertyReading {
-    /** The value of each key read, in the order the lines write them. */
-    values: Record<string, PropertyValue>;
-    /** The line each key read is written on. */
+    /** The value of each key read, in the order the lines write them, by key folded (`PropertyKey`). */
+    values: Properties;
+    /** The line each key read is written on, by key folded. */
     lineOf: ReadonlyMap<string, number>;
     /** Every finding, in the order of the lines they are on. */
     findings: readonly PropertyFinding[];
-}
-
-/** Two keys name the same property. */
-function sameKey(a: string, b: string): boolean {
-    return a === b;
 }
 
 /**
@@ -158,8 +155,8 @@ export const PropertyLines = {
     },
 
     /**
-     * What `own` says, key by key. A key the owner writes twice is read on
-     * neither line (`duplicate-key`): the owner says nothing of it, and the
+     * What `own` says, key by key, a key's case aside (`PropertyKey`). A
+     * key the owner writes twice is read on neither line (`duplicate-key`): the owner says nothing of it, and the
      * value above comes through. A task's date keys are not read
      * (`date-key-under-task`): a task's dates are its own line's `@`. A
      * line not read has one finding, which covers the lines under it too
@@ -170,23 +167,24 @@ export const PropertyLines = {
         const dateKeys = own.owner.kind === 'task' ? [keys.start, keys.end, keys.due] : [];
         const considered: PropertyLine[] = [];
         for (const line of own.lines) {
-            if (dateKeys.some(key => sameKey(key, line.key))) {
+            if (dateKeys.some(key => PropertyKey.same(key, line.key))) {
                 findings.push(finding('date-key-under-task', line.line, line.end, line, own.owner));
             } else {
                 considered.push(line);
             }
         }
 
-        const values: Record<string, PropertyValue> = {};
+        const values: Properties = {};
         const lineOf = new Map<string, number>();
         for (const line of considered) {
-            const twins = considered.filter(other => sameKey(other.key, line.key));
+            const twins = considered.filter(other => PropertyKey.same(other.key, line.key));
             if (twins.length > 1) {
                 findings.push(finding('duplicate-key', line.line, line.end, line, own.owner));
                 continue;
             }
-            values[line.key] = line.value;
-            lineOf.set(line.key, line.line);
+            const key = PropertyKey.fold(line.key);
+            values[key] = { key: line.key, value: line.value };
+            lineOf.set(key, line.line);
             findings.push(...line.findings);
         }
         findings.sort((a, b) => a.line - b.line);

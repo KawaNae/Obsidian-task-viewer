@@ -1,5 +1,6 @@
 import type { Task, ScopeKeys } from '../../types';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { PropertyValues } from '../parsing/utils/PropertyValues';
 import { reservedPropertyKeys } from '../parsing/utils/FrontmatterPolicy';
 import { logWarn } from '../../log/log';
@@ -7,8 +8,8 @@ import { logWarn } from '../../log/log';
 /**
  * 非時刻プロパティ（color/linestyle/mask/tags/custom）の書き込み操作。
  * `key` は物理的な宣言キー（tv-color 等の設定キー名 / リテラル 'tags' /
- * カスタムキー名）に解決済み。writer はこのキーをそのまま子プロパティ行の
- * キーとして使う。
+ * カスタムキー名）に解決済み。writer は既存の行を大文字と小文字を区別せずに
+ * このキーで探し（`PropertyKey`）、行を新しく足すときだけこの綴りで書く。
  */
 export interface PropertyOp {
     key: string;
@@ -60,25 +61,25 @@ export class PropertyUpdatePlanner {
 
         if ('properties' in updates) {
             // updates.properties は own record の望ましい全体像。per-key diff で
-            // set / delete に分解する。
+            // set / delete に分解する。キーは折りたたんだ形で突き合わせる。
             const after = updates.properties ?? {};
             const beforeProps = before.properties ?? {};
             const reserved = reservedPropertyKeys(keys);
 
-            for (const [key, pv] of Object.entries(after)) {
-                if (reserved.has(key)) {
+            for (const { key, value } of Object.values(after)) {
+                if (reserved.has(PropertyKey.fold(key))) {
                     logWarn(`[PropertyUpdatePlanner] custom key "${key}" collides with a reserved key — skipped`);
                     continue;
                 }
-                const spelling = PropertyValues.spelling(pv);
-                const was = beforeProps[key];
-                if (!was || PropertyValues.spelling(was) !== spelling) {
+                const spelling = PropertyValues.spelling(value);
+                const was = PropertyKey.get(beforeProps, key);
+                if (!was || PropertyValues.spelling(was.value) !== spelling) {
                     ops.push({ key, op: 'set', value: spelling });
                 }
             }
-            for (const key of Object.keys(beforeProps)) {
-                if (reserved.has(key)) continue;
-                if (!(key in after)) ops.push({ key, op: 'delete' });
+            for (const { key } of Object.values(beforeProps)) {
+                if (reserved.has(PropertyKey.fold(key))) continue;
+                if (!PropertyKey.get(after, key)) ops.push({ key, op: 'delete' });
             }
         }
 

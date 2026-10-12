@@ -10,6 +10,7 @@ import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
     getEffectiveTags, getEffectiveProperties,
 } from '../../../../src/services/data/EffectiveProperties';
+import { PropertyKey } from '../../../../src/services/parsing/utils/PropertyKey';
 
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
@@ -115,8 +116,8 @@ describe('NoteTasks', () => {
                 '    - note:: something',
                 '    - priority:: 1',
             ]);
-            expect(tasks[0].properties['note']).toEqual({ type: 'text', text: 'something', spelling: 'something' });
-            expect(tasks[0].properties['priority']).toEqual({ type: 'number', number: 1, spelling: '1' });
+            expect(tasks[0].properties['note']?.value).toEqual({ type: 'text', text: 'something', spelling: 'something' });
+            expect(tasks[0].properties['priority']?.value).toEqual({ type: 'number', number: 1, spelling: '1' });
         });
 
         it('子行の日付のキーは読まない: 日付にもカスタムプロパティにもならず、節の日付が通る', () => {
@@ -163,8 +164,8 @@ describe('NoteTasks', () => {
                 '- [ ] task @2026-03-24',
             ]);
             expect(tasks[0].properties['category']).toBeUndefined();
-            expect(tasks[0].cascadeContext?.properties?.['category']).toEqual({ type: 'text', text: 'work', spelling: 'work' });
-            expect(getEffectiveProperties(tasks[0])['category']).toEqual({ type: 'text', text: 'work', spelling: 'work' });
+            expect(tasks[0].cascadeContext?.properties?.['category']?.value).toEqual({ type: 'text', text: 'work', spelling: 'work' });
+            expect(getEffectiveProperties(tasks[0])['category']?.value).toEqual({ type: 'text', text: 'work', spelling: 'work' });
         });
 
         it('タスクの子行プロパティがセクションプロパティをオーバーライド', () => {
@@ -174,7 +175,7 @@ describe('NoteTasks', () => {
                 '- [ ] task @2026-03-24',
                 '    - priority:: 5',
             ]);
-            expect(tasks[0].properties['priority']).toEqual({ type: 'number', number: 5, spelling: '5' });
+            expect(tasks[0].properties['priority']?.value).toEqual({ type: 'number', number: 5, spelling: '5' });
         });
     });
 
@@ -273,9 +274,9 @@ describe('NoteTasks', () => {
             expect(getEffectiveColor(b4)).toBe('ff6b6b');
 
             // customProp が全タスクに cascade 経由で継承
-            expect(getEffectiveProperties(b1)['customProp']).toEqual({ type: 'text', text: 'section-B', spelling: 'section-B' });
-            expect(getEffectiveProperties(b3)['customProp']).toEqual({ type: 'text', text: 'section-B', spelling: 'section-B' });
-            expect(b1.properties['customProp']).toBeUndefined();
+            expect(PropertyKey.get(getEffectiveProperties(b1), 'customProp')?.value).toEqual({ type: 'text', text: 'section-B', spelling: 'section-B' });
+            expect(PropertyKey.get(getEffectiveProperties(b3), 'customProp')?.value).toEqual({ type: 'text', text: 'section-B', spelling: 'section-B' });
+            expect(PropertyKey.get(b1.properties, 'customProp')).toBeUndefined();
         });
 
         it('日付なしの子チェックボックスは子タスクになり childLines に残らない', () => {

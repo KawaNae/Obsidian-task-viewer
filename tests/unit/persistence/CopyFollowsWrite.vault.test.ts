@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
+import { byKey } from '../helpers/properties';
 
 /**
  * A card's update brings the index's copy of the row up to what it
@@ -70,7 +71,7 @@ describe('after a card\'s update, before any scan', () => {
         const id = idOf(session, 'A');
         session.holdScans();
 
-        expect((await session.ops.updateTask(id, { properties: { memo: { type: 'text', text: 'new', spelling: 'new' } } } as never)).written).toBe(true);
+        expect((await session.ops.updateTask(id, { properties: byKey({ memo: { type: 'text', text: 'new', spelling: 'new' } }) } as never)).written).toBe(true);
         expect(contents.get(FILE)).toContain('\t- memo:: new');
         expect(await session.ops.deleteTask(id)).toBe(true);
 

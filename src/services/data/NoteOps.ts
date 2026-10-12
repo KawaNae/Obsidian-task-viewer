@@ -10,6 +10,7 @@ import { unresolvedAt, type UnresolvedReference } from '../flow/FlowReferences';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../core/RowNames';
 import { Outline } from '../parsing/utils/Outline';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { Destination, type Section } from '../persistence/Destination';
 import { splitLines } from '../persistence/FileLines';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
@@ -396,7 +397,8 @@ export class NoteOps {
             path = note.path;
         }
         const keys = req.frontmatter.map(one => one.key);
-        if (new Set(keys).size !== keys.length) {
+        // `Area` and `area` are one key (`PropertyKey`).
+        if (new Set(keys.map(PropertyKey.fold)).size !== keys.length) {
             logWarn(`[NoteOps] send: a frontmatter key is given twice: ${keys.join(', ')}`);
             return wrongly;
         }

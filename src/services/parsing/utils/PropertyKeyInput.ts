@@ -2,6 +2,7 @@ import type { ScopeKeys } from '../../../types';
 import type { FieldCodec, Read } from '../../../utils/values/Read';
 import { readFail, readOk } from '../../../utils/values/Read';
 import { KEYS_NOT_SCOPE, reservedPropertyKeys } from './FrontmatterPolicy';
+import { PropertyKey } from './PropertyKey';
 
 /**
  * The characters a property's key cannot hold: the property line
@@ -14,7 +15,8 @@ const NOT_IN_KEY = /[:[\]]/g;
  * A property's key typed in a field (the hub's new property): the space
  * around it taken off, and refused when the property line would not read it
  * as the key (`:`, `[`, `]`), or when the plugin keeps it for itself
- * (`reservedPropertyKeys`: the scope keys, `tags`).
+ * (`reservedPropertyKeys`: the scope keys, `tags`), its case aside
+ * (`PropertyKey`): `Tags` and `TV-COLOR` are refused as `tags` is.
  */
 export const PropertyKeyInput = {
     of(scopeKeys: ScopeKeys): FieldCodec<string> {
@@ -23,7 +25,7 @@ export const PropertyKeyInput = {
             read(text: string): Read<string> {
                 const key = readKey(text);
                 if (!key.ok) return key;
-                return reserved.has(key.value) ? readFail({ code: 'reserved' }) : key;
+                return reserved.has(PropertyKey.fold(key.value)) ? readFail({ code: 'reserved' }) : key;
             },
             show: (key) => key,
         };
@@ -35,14 +37,16 @@ export const PropertyKeyInput = {
  * reads (as {@link PropertyKeyInput}), none of the keys reserved apart from
  * the scope keys (`KEYS_NOT_SCOPE`: `tags`, `position`, the file task's), and
  * none of the other scope keys (`others`), which it would stand for too.
+ * Keys are compared their case aside (`PropertyKey`): `Tags`, and `TV-END`
+ * beside `tv-end`, are refused.
  */
 export const ScopeKeyInput = {
     read(text: string, others: Iterable<string>): Read<string> {
         const key = readKey(text);
         if (!key.ok) return key;
-        if (KEYS_NOT_SCOPE.has(key.value)) return readFail({ code: 'reserved' });
+        if (KEYS_NOT_SCOPE.has(PropertyKey.fold(key.value))) return readFail({ code: 'reserved' });
         for (const other of others) {
-            if (other === key.value) return readFail({ code: 'duplicate' });
+            if (PropertyKey.same(other, key.value)) return readFail({ code: 'duplicate' });
         }
         return key;
     },

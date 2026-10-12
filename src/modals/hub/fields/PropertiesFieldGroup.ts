@@ -1,7 +1,8 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
-import type { PropertyValue } from '../../../types';
+import type { Properties } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
+import { PropertyKey } from '../../../services/parsing/utils/PropertyKey';
 import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
 import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
@@ -21,6 +22,9 @@ import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './F
  * - own キー: value 編集可 + 行削除ボタン
  * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格
  *
+ * 行はキーを大文字と小文字を区別せずに1つずつ出し（`PropertyKey`）、キーは
+ * 効いている値を書いた層の綴りで出す。
+ *
  * 追加行のキーは `PropertyKeyInput` で読み（`:`、`[`、`]` と予約されたキーを
  * 拒む）、読めないキーは欄の下に理由を出して足さない。理由は打ち直すと
  * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
@@ -30,7 +34,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     private sectionEl: HTMLElement;
     private addKeyInput: HTMLInputElement | null = null;
     private addSays: HTMLElement | null = null;
-    /** custom プロパティ行の value input（focus('<key>') 用）と、その行の文の枠 */
+    /** custom プロパティ行の value input（focus('<key>') 用）と、その行の文の枠。キーは折りたたんだ形 */
     private valueInputs = new Map<string, HTMLInputElement>();
     private valueSays = new Map<string, HTMLElement>();
     /** Each property's value field, bound: what a close saves. */
@@ -66,17 +70,17 @@ export class PropertiesFieldGroup implements ClosingPart {
         const own = task.properties ?? {};
         const effective = getEffectiveProperties(task);
 
-        for (const [key, pv] of Object.entries(effective)) {
-            const isOwn = key in own;
+        for (const [folded, { key, value: pv }] of Object.entries(effective)) {
+            const isOwn = PropertyKey.get(own, key) !== undefined;
 
             const { row, says } = createFormRow(this.sectionEl, key);
             if (!isOwn) row.addClass('task-hub__row--cascade');
-            this.valueSays.set(key, says);
+            this.valueSays.set(folded, says);
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
             valueInput.value = PropertyValues.display(pv);
             valueInput.disabled = shut;
-            this.valueInputs.set(key, valueInput);
+            this.valueInputs.set(folded, valueInput);
 
             const suggest = this.offer(valueInput, {
                 candidates: (q) => FilterValueCollector
@@ -89,14 +93,16 @@ export class PropertiesFieldGroup implements ClosingPart {
             const value = bindField(valueInput, {
                 codec: FreeText,
                 current: () => {
-                    const shown = isOwn ? this.ctx.getTask().properties?.[key] : pv;
+                    const shown = isOwn ? PropertyKey.get(this.ctx.getTask().properties, key)?.value : pv;
                     return shown ? PropertyValues.display(shown) : '';
                 },
-                commit: (raw) => this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: PropertyValues.fromText(raw) }),
+                // An own line keeps its key as written; an inherited value made
+                // the task's own is written under the key it was inherited by.
+                commit: (raw) => this.set(key, raw),
                 issues: () => { /* any text is a value */ },
                 takesEnter: () => suggest.listShown,
             });
-            this.valueBound.set(key, value);
+            this.valueBound.set(folded, value);
 
             if (isOwn) {
                 const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
@@ -105,7 +111,7 @@ export class PropertiesFieldGroup implements ClosingPart {
                 removeBtn.disabled = shut;
                 removeBtn.addEventListener('click', () => {
                     const next = { ...(this.ctx.getTask().properties ?? {}) };
-                    delete next[key];
+                    delete next[folded];
                     this.commit(next);
                     // 構造コミット: 楽観 model から行を即時再構築
                     this.render(true);
@@ -153,9 +159,8 @@ export class PropertiesFieldGroup implements ClosingPart {
         // キーを選ぶと値の欄へ移り、値を選ぶと行を足す。
         const keySuggest = this.offer(keyInput, {
             candidates: (q) => {
-                const used = new Set(Object.keys(effective));
                 return FilterValueCollector.collectPropertyKeys(this.ctx.index.getTasks())
-                    .filter(k => !used.has(k))
+                    .filter(k => !PropertyKey.get(effective, k))
                     .filter(k => !q || k.toLowerCase().includes(q.toLowerCase()));
             },
             pick: (val) => {
@@ -181,7 +186,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             if (!key?.ok) return;
             const raw = valueInput.value;
             const typed = { key: keyInput.value, value: raw };
-            const write = this.commit({ ...(this.ctx.getTask().properties ?? {}), [key.value]: PropertyValues.fromText(raw) });
+            const write = this.set(key.value, raw);
             this.draft = { key: '', value: '' };
             this.render(true);
             // Refused: what was typed is the add row's again, unless something was typed since.
@@ -220,7 +225,18 @@ export class PropertiesFieldGroup implements ClosingPart {
         return suggest;
     }
 
-    private commit(props: Record<string, PropertyValue>): Promise<boolean> | undefined {
+    /**
+     * Write `raw` as the task's own value of the property `key`, its case
+     * aside: a line the task has keeps its key as written, and a new line
+     * takes `key`.
+     */
+    private set(key: string, raw: string): Promise<boolean> | undefined {
+        const own = this.ctx.getTask().properties ?? {};
+        const written = PropertyKey.get(own, key)?.key ?? key;
+        return this.commit({ ...own, [PropertyKey.fold(key)]: { key: written, value: PropertyValues.fromText(raw) } });
+    }
+
+    private commit(props: Properties): Promise<boolean> | undefined {
         if (this.ctx.isShut()) return undefined;
         return this.ctx.queue(TaskUpdateBuilder.customProperties(this.ctx.getTask(), props));
     }
@@ -266,7 +282,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     /** Where the add row's key (`propKey`) or a property's value (`prop:<key>`) says its issues. */
     slot(at: HubField): IssueSlot | null {
         if (at === 'propKey') return this.addKeyInput && this.addSays ? { input: this.addKeyInput, message: this.addSays } : null;
-        const key = at.slice('prop:'.length);
+        const key = PropertyKey.fold(at.slice('prop:'.length));
         const input = this.valueInputs.get(key);
         const message = this.valueSays.get(key);
         return input && message ? { input, message } : null;
@@ -274,6 +290,6 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     /** The value field of the property `key`; the new property's key field when there is none, or no key is named. */
     fieldElement(key?: string): HTMLElement | null {
-        return (key ? this.valueInputs.get(key) : undefined) ?? this.addKeyInput ?? null;
+        return (key ? this.valueInputs.get(PropertyKey.fold(key)) : undefined) ?? this.addKeyInput ?? null;
     }
 }

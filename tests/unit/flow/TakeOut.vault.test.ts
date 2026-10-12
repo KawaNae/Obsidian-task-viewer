@@ -3,6 +3,7 @@ import { Notice } from 'obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
+import { byKey } from '../helpers/properties';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
@@ -105,12 +106,12 @@ describe('a property line added after one with a child', () => {
         const { contents, session } = await open(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '- [ ] U', '']);
 
         await session.ops.updateTask(idOf(session, 'T'),
-            { properties: { memo: { type: 'text', text: 'a', spelling: 'a' }, k2: { type: 'text', text: 'z', spelling: 'z' } } } as never);
+            { properties: byKey({ memo: { type: 'text', text: 'a', spelling: 'a' }, k2: { type: 'text', text: 'z', spelling: 'z' } }) } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k2:: z', '- [ ] U', '']);
 
         const before = contents.get(FILE)!;
-        await session.ops.updateTask(idOf(session, 'T'), { properties: { k2: { type: 'text', text: 'z', spelling: 'z' } } } as never);
+        await session.ops.updateTask(idOf(session, 'T'), { properties: byKey({ k2: { type: 'text', text: 'z', spelling: 'z' } }) } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)).toBe(before);
     });

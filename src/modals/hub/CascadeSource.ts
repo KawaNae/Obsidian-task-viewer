@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
 import type { ValueSource } from '../../services/parsing/tree/Sections';
+import { PropertyKey } from '../../services/parsing/utils/PropertyKey';
 
 export type CascadeSourceKind = 'file' | 'section';
 
@@ -25,9 +26,9 @@ export class CascadeSource {
         return kindOf(task.inheritedFrom?.tags.find(layer => layer.tags.includes(tag))?.from);
     }
 
-    /** cascade 由来カスタムプロパティ 1 件の出所 */
+    /** cascade 由来カスタムプロパティ 1 件の出所。キーは大文字と小文字を区別しない */
     static forProperty(task: Task, key: string): CascadeSourceKind {
-        return kindOf(task.inheritedFrom?.properties[key]);
+        return kindOf(task.inheritedFrom?.properties[PropertyKey.fold(key)]);
     }
 }
 

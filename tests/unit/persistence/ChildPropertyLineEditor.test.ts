@@ -280,7 +280,7 @@ describe('ChildPropertyLineEditor', () => {
                     ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0).map(line => [line.key, line.value]),
                 );
                 const read = Object.fromEntries(
-                    Object.entries(task.properties).map(([key, value]) => [key, PropertyValues.spelling(value)]),
+                    Object.values(task.properties).map(({ key, value }) => [key, PropertyValues.spelling(value)]),
                 );
                 expect(read).toEqual(written);
                 expect(written).toEqual(expected);

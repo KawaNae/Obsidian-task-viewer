@@ -9,6 +9,7 @@ import { nameOf, namesOfReading, readName } from './RowNames';
 import { splitLines, type Landing, type ReadMark } from '../persistence/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { TagRule } from '../parsing/utils/TagRule';
 import { logDebug, logError, logInfo } from '../../log/log';
 
@@ -113,12 +114,10 @@ export class TaskScanner {
 
         const fm = cache.frontmatter;
         if (fm) {
-            // tags キーは Obsidian と同じく大文字と小文字を区別しない (TagRule)
+            // キーは Obsidian と同じく大文字と小文字を区別しない (PropertyKey)
             if (Object.keys(fm).some(TagRule.isFrontmatterKey)) return true;
-            const keys = this.settings.scopeKeys;
-            if (keys.start in fm || keys.end in fm || keys.due in fm ||
-                keys.color in fm || keys.linestyle in fm || keys.mask in fm ||
-                keys.ignore in fm) return true;
+            const scope = new Set(Object.values(this.settings.scopeKeys).map(PropertyKey.fold));
+            if (Object.keys(fm).some(key => scope.has(PropertyKey.fold(key)))) return true;
         }
 
         if (cache.listItems && cache.listItems.length > 0) return true;

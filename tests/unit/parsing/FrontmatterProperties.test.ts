@@ -1,12 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { BuiltinPropertyExtractor } from '../../../src/services/parsing/tree/BuiltinPropertyExtractor';
 import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
+import { valuesOf } from '../helpers/properties';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
-/** The frontmatter as the sections' base reads it: normalized, then its built-ins put apart. */
-const frontmatterLayer = (fm: Record<string, unknown> | undefined, k: typeof keys) =>
-    BuiltinPropertyExtractor.fromFrontmatter(fm, k);
+/**
+ * The frontmatter as the sections' base reads it: normalized, then its
+ * built-ins put apart; its custom properties under their keys as written.
+ */
+const frontmatterLayer = (fm: Record<string, unknown> | undefined, k: typeof keys) => {
+    const result = BuiltinPropertyExtractor.fromFrontmatter(fm, k);
+    return { ...result, properties: valuesOf(result.properties) };
+};
 
 describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () => {
     describe('builtin keys', () => {
