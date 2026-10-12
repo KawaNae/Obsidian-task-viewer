@@ -1,6 +1,7 @@
+import { stringifyYaml } from 'obsidian';
 import { Outline } from '../../parsing/utils/Outline';
 import { PropertyKey } from '../../parsing/utils/PropertyKey';
-import { frontmatterKeyRange } from '../../parsing/utils/FrontmatterKeyLines';
+import { frontmatterKeyLine, frontmatterKeyRange } from '../../parsing/utils/FrontmatterKeyLines';
 import type { LineDraft } from '../FileLines';
 
 /**
@@ -44,9 +45,9 @@ export class FrontmatterLineEditor {
      * stay as they are spelled, and so does a comment.
      */
     static valueRange(line: string, key: string): { start: number; end: number } | null {
-        const head = line.match(/^([^:\s]+)\s*:[ \t]*/);
-        if (!head || !PropertyKey.same(head[1], key)) return null;
-        const start = head[0].length;
+        const head = frontmatterKeyLine(line);
+        if (!head || !PropertyKey.same(head.key, key)) return null;
+        const start = head.valueStart;
         const rest = line.slice(start);
         const comment = rest.search(/(^|\s)#/);
         const value = (comment < 0 ? rest : rest.slice(0, comment)).replace(/\s+$/, '');
@@ -108,7 +109,7 @@ export class FrontmatterLineEditor {
                 }
             } else {
                 // An existing line keeps its key as written (`TV-COLOR:` stays).
-                const written = range ? result[range[0]].match(/^([^:\s]+)\s*:/)![1] : key;
+                const written = range ? frontmatterKeyLine(result[range[0]])!.written : key;
                 const newLines = Array.isArray(value)
                     ? value
                     : [value === '' ? `${written}:` : `${written}: ${value}`];
@@ -127,39 +128,18 @@ export class FrontmatterLineEditor {
     }
 
     /**
-     * Converts an arbitrary string into a safe single-line YAML scalar.
-     * The single canonical authority shared by every frontmatter write surface
-     * (FrontmatterWriter.setKeys + applyUpdates)
-     * so no value silently corrupts the block on write.
-     *
-     * Allowlist policy: emit a plain (unquoted) scalar ONLY for values that are
-     * provably safe and would round-trip as the same string. Everything else is
-     * double-quoted with full escaping. A misjudgement therefore degrades to a
-     * harmless extra pair of quotes rather than YAML corruption / data loss.
+     * `value` as a single-line YAML scalar that reads back as the same text:
+     * as Obsidian writes a text into the frontmatter (`stringifyYaml`), plain
+     * where YAML 1.2 reads it plain as that text (`yes`, `on`, `2026-06-09`,
+     * `a, b`) and quoted where it would read otherwise (`"123"`, `"true"`,
+     * `"null"`, `"a: b"`, `""`). A text Obsidian would write on more lines
+     * than one (one holding a line break) is double-quoted with its escapes,
+     * so the value stays on its key's line. The one way every frontmatter
+     * write spells a text (`FrontmatterWriter.setKeys`, a send's values).
      */
     static escapeYamlScalar(value: string): string {
-        if (value === '') return '""';
-        return this.isSafePlainScalar(value) ? value : this.toDoubleQuotedYaml(value);
-    }
-
-    /**
-     * True only when `value` can be emitted unquoted and re-parses verbatim as
-     * the identical string. Conservative on purpose — anything uncertain returns
-     * false so the caller quotes it.
-     */
-    private static isSafePlainScalar(value: string): boolean {
-        // Surrounding whitespace would be trimmed away by the YAML parser.
-        if (value !== value.trim()) return false;
-        // Alphanumerics / spaces / underscore only, and must not lead with a
-        // space-class char. This rejects every YAML indicator and leading sigil
-        // (`-`, `~`, `` ` ``, `:`, `#`, `[`, `{`, `@`, `*`, `&`, `!`, `|`, `>`, …),
-        // colons, and control chars (newline/CR/tab) outright.
-        if (!/^[A-Za-z0-9_][A-Za-z0-9 _]*$/.test(value)) return false;
-        // Pure numbers would be re-typed as a number on read.
-        if (/^[0-9]+(?:\.[0-9]+)?$/.test(value)) return false;
-        // YAML 1.1 keywords would be re-typed as boolean/null on read.
-        if (/^(?:true|false|null|yes|no|on|off|~)$/i.test(value)) return false;
-        return true;
+        const written = stringifyYaml(value).replace(/\n$/, '');
+        return written.includes('\n') ? this.toDoubleQuotedYaml(value) : written;
     }
 
     /**

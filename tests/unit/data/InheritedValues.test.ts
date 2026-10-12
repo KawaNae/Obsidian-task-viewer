@@ -61,7 +61,7 @@ describe('inheritedAt', () => {
         expect(task.cascadeContext?.startDate).toBeUndefined();
 
         const values = byKey(inheritedAt(lines, child, DEFAULT_SETTINGS));
-        expect(values['tv-start'].yaml).toEqual(['tv-start: "2026-09-01"']);
+        expect(values['tv-start'].yaml).toEqual(['tv-start: 2026-09-01']);
         expect(values['tv-color']).toMatchObject({
             yaml: ['tv-color: ff0000'],
             from: [{ kind: 'section', line: 4, heading: { text: 'Work' } }],
@@ -78,7 +78,7 @@ describe('inheritedAt', () => {
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, 5, DEFAULT_SETTINGS));
-        expect(values['tv-start'].yaml).toEqual(['tv-start: "2026-09-28T11:00"']);
+        expect(values['tv-start'].yaml).toEqual(['tv-start: 2026-09-28T11:00']);
         expect(values['tv-start'].from).toEqual([
             { kind: 'frontmatter', line: 1 },
             { kind: 'section', line: 4, heading: expect.objectContaining({ text: 'Morning' }) },
@@ -95,7 +95,7 @@ describe('inheritedAt', () => {
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, 5, DEFAULT_SETTINGS));
-        expect(values.tags.yaml).toEqual(['tags:', '  - project', '  - "出/クレカ"']);
+        expect(values.tags.yaml).toEqual(['tags:', '  - project', '  - 出/クレカ']);
         expect(values.tags.from).toHaveLength(2);
     });
 
@@ -125,13 +125,14 @@ describe('inheritedAt', () => {
         expect(values.priority.yaml).toEqual(['priority: 3']);
         expect(values.code.yaml).toEqual(['code: 007']);
         expect(values.note.yaml).toEqual(['note: "a: b # c"']);
-        expect(values.day.yaml).toEqual(['day: "2026-09-29"']);
+        expect(values.day.yaml).toEqual(['day: 2026-09-29']);
         expect(values.done.yaml).toEqual(['done: true']);
         expect(values.off.yaml).toEqual(['off: false']);
         // `true` is a boolean on a line as in YAML, and is written as one.
         expect(values.word.yaml).toEqual(['word: true']);
-        // A line writes no list: `,` and brackets are text, which YAML is told by quotes.
-        expect(values.area.yaml).toEqual(['area: "lab, desk"']);
+        // A line writes no list: `,` and brackets are text, which YAML reads
+        // plain or is told by quotes, as Obsidian writes them.
+        expect(values.area.yaml).toEqual(['area: lab, desk']);
         expect(values.pair.yaml).toEqual(['pair: "[x, y]"']);
         expect(values.link.yaml).toEqual(['link: "[[x]]"']);
         expect(values.links.yaml).toEqual(['links: "[[a]], [[b|B, c]]"']);
