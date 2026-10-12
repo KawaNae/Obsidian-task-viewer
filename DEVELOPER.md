@@ -225,7 +225,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Assembles the writers and the index's channel; its ports: `write(file, target, ops, { fire?, refused? })` (the one write of ops to a row, duplicates included as a `copies` op), `applyOps`, `replaceSubtree`, `send`, `putInNote`, `setFrontmatterKeys` |
 | **Notes** | `services/persistence/Notes.ts` | The one way a block is put in a note's section or at its end, the note made when the caller gives its seed (`putInNote`), the one way a note is made of lines (`createNote`, over `createFile`, the only `vault.create`), and daily / periodic notes made from their template (`openPeriodicNote`, `putInPeriodicNote`, called by `Operations`). Writes to one path run one at a time |
 | **PeriodicNotes** | `utils/PeriodicNotes.ts` | The description of a daily or periodic note (`PeriodicNote`) and the pure answers of which note a date names: `notePath`, `linkTarget`, `label`, `dateOfPath` (formats with `/` included), `findNote` |
-| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) |
+| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the Properties view's color / line-style suggests and its color picker) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
 | **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`), the text a sort rule compares (`sortKey`) and each value in words for the references (`words`). The API's `leaf` (`list` and `today`) is its `children`. A flow's expression is not read through it: `start`, `end` and `due` in `at(due+7d)` are the row's own, since the value is written to the next instance's line and an inherited due would be written out onto it (`FlowPlanner`) |
@@ -313,7 +313,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
 | **File** | `BuiltinPropertyExtractor.fromFrontmatter` | Frontmatter object | Read every key as a `PropertyValue` (`PropertyValues.fromFrontmatter`), then put the builtin keys apart with the same extractor a section and a task use; the tags are read off the YAML as Obsidian reads them (`TagRule.ofFrontmatter`). Used as the cascade root by `SectionPropertyResolver`. |
-| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`, and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds). |
+| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for the dates (a date and its time each on its own), `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`, and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds). |
 
 **Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass.
 
@@ -327,7 +327,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
 
-**Builtin vs custom properties.** Builtin (`color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both inherit with child-wins precedence at every layer; the only structural difference is type-level (separate Task fields vs `Record`).
+**Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both are read on the frontmatter, a section and a task by the one `BuiltinPropertyExtractor`, and inherit by the merge rules above; the structural difference is type-level (separate Task fields vs `Record`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is read by the extractor and dropped (`NoteTasks.fill` takes no date from it); being reserved it is no custom property either, so the section's date still shows through, and no diagnostic tells of it.
 
 ### プロパティの値
 
@@ -335,7 +335,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 
 - 行の値（`- key:: value`、節の `- properties::` の項目、ハブの入力）は `fromText` で読む。数は数字と小数、配列は `[` `]` の中か `,` 区切り、ほかは文字列である
 - 真偽値の綴りは `true` `True` `TRUE` `false` `False` `FALSE` の6つだけで、Obsidian の YAML と同じである。`tRue`、`yes`、`on` は文字列、`1` は数である
-- frontmatter は `fromFrontmatter` で読む。型は YAML のパーサが決めたもので、引用符の付いた `"true"` は文字列である。日付のキー（`tv-start` など）の YAML の `Date` と一日の分の数（`10:30` を YAML 1.1 が読んだ 630）は、ここで日付の文字列にする
+- frontmatter は `fromFrontmatter` で読む。型は YAML のパーサが決めたもので、引用符の付いた `"true"` は文字列である。日付のキー（`tv-start` など）の値は、ここで日付の文字列にする（`normalizeYamlDate`）。YAML の `Date` は日付（0:00 でなければ時刻も）に、0 以上 1440 未満の数は一日の分として時刻にし（`tv-end: 630` は `10:30`）、ほかの数は値にしない。Obsidian の `parseYaml` は YAML 1.2 で読み、`10:30` を文字列で返すので、数になるのは `630` のように数で書いた値である
 - `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 
@@ -1121,7 +1121,7 @@ State-transition-based sound mapping. All sounds use Web Audio API scheduling (n
 
 | Builder | Role |
 |---------|------|
-| `PropertiesMenuBuilder` | Date/time property editing |
+| `PropertiesMenuBuilder` | The task's values (file, name, dates, length, tags, color, line style, mask, custom properties); an item opens the hub on its field, none edits in place |
 | `TimerMenuBuilder` | Timer launch shortcuts |
 | `TaskActionsMenuBuilder` | Complete, delete, and move/clone actions |
 | `CheckboxMenuBuilder` | Checkbox status menu |
@@ -1149,7 +1149,7 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 
 ### Write dispatch
 
-Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is written only through `setFrontmatterKeys` (scope keys from the property suggests), never on a task's behalf.
+Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is never written on a task's behalf. It is written in three places, each touching only the key's lines (`FrontmatterLineEditor`): `setFrontmatterKeys` (`FrontmatterWriter.setKeys`; the scope keys from the Properties view's suggests and color picker), a send (`SendWriter.placeInNote` adds the keys the destination lacks, within the send's write), and the editor's `FrontmatterValueSuggest` (a picked value replaces the value on the key's line through `editor.replaceRange`, the editor's change, not a vault write).
 
 - Every task has a real body line. A new line (the API's `create` and `insertChildTask`, the create dialog, the timer's records) is written from its fields with `formatTaskLine`, never through a temporary Task; `createTempTask` is only for the create dialog's preview.
 
@@ -1181,7 +1181,7 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 | Parse (NoteTasks) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
 | Effective merge | `statedDates` → `DisplayTask.stated` via `\|\|` fallback, then `resolveSpan` → `span`, `dueMs` | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
 | `formatTaskLine` / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
-| Explicit edit (drag / resize / future property edit) | Raw fields set explicitly → cascade no longer contributes | Same principle |
+| Explicit edit (drag / resize / the hub) | Raw fields set explicitly → cascade no longer contributes | Same principle |
 
 ---
 
