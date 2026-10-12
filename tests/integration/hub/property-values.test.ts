@@ -128,8 +128,74 @@ describe('the hub writes a custom property back as it is spelled', () => {
             await leave(key);
             return 'ok';
         `);
+        // A key with no value is a property with none: it hides the value above.
         const lines = [...LINES];
-        lines.splice(8, 0, '\t- 場所:: ');
+        lines.splice(8, 0, '\t- 場所::');
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
+    });
+
+    it('takes the line out when its value is emptied', () => {
+        openHub('親');
+        run(`type(valueInput('memo'), ''); await leave(valueInput('memo')); return 'ok';`);
+        const lines = [...LINES];
+        lines.splice(7, 1);
+        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
+    });
+});
+
+describe('the hub writes a property as its block', () => {
+    const BLOCK = [
+        '# 見出し',
+        '- area:: lab',
+        '- [ ] 親 @2026-10-01',
+        '\t- k::',
+        '\t\t- a',
+        '\t\t- b',
+        '\t- dup:: 1',
+        '\t- DUP:: 2',
+        '- [ ] 次',
+        '',
+    ];
+
+    beforeEach(async () => { await writeIndexedTestFile(TEST_FILE, BLOCK.join('\n')); });
+
+    it('writes an inherited value typed again as the row\'s own, and nothing when it is left alone', () => {
+        openHub('親');
+        run(`const input = valueInput('area'); input.focus(); await leave(input); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(BLOCK.join('\n'));
+        run(`type(valueInput('area'), 'lab'); await leave(valueInput('area')); return 'ok';`);
+        const lines = [...BLOCK];
+        lines.splice(8, 0, '\t- area:: lab');
+        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
+    });
+
+    it('writes a value over a list, taking its items out', () => {
+        openHub('親');
+        run(`type(valueInput('k'), 'x'); await leave(valueInput('k')); return 'ok';`);
+        const lines = [...BLOCK];
+        lines.splice(3, 3, '\t- k:: x');
+        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
+    });
+
+    it('takes a list\'s line out with its items', () => {
+        openHub('親');
+        run(`rowOf('k').querySelector('.tv-ctrl__pill-remove').click(); await sleep(600); return 'ok';`);
+        const lines = [...BLOCK];
+        lines.splice(3, 3);
+        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
+    });
+
+    it('writes nothing over a key written twice, and says so at the form\'s end', () => {
+        openHub('親');
+        const said = run<string>(`
+            const key = hub().querySelector('.task-hub__prop-add .tv-form__label input');
+            type(key, 'dup');
+            const value = hub().querySelector('.task-hub__prop-add input.tv-form__control');
+            type(value, '3');
+            await leave(value);
+            return hub().textContent;
+        `);
+        expect(readTestFile(TEST_FILE)).toBe(BLOCK.join('\n'));
+        expect(said).toContain('dup');
     });
 });
