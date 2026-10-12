@@ -118,6 +118,20 @@ describe('NoteTasks', () => {
             expect(tasks[0].properties['note']).toEqual({ value: 'something', type: 'string' });
             expect(tasks[0].properties['priority']).toEqual({ value: '1', type: 'number', number: 1 });
         });
+
+        it('子行の日付のキーは読まない: 日付にもカスタムプロパティにもならず、節の日付が通る', () => {
+            const tasks = extractTasks([
+                '## A',
+                '- tv-start:: 2026-03-20',
+                '- [ ] task',
+                '    - tv-start:: 2026-03-24',
+                '    - tv-due:: 2026-03-30',
+            ]);
+            expect(tasks[0].startDate).toBeFalsy();
+            expect(tasks[0].due).toBeFalsy();
+            expect(tasks[0].properties).toEqual({});
+            expect(tasks[0].cascadeContext?.startDate).toBe('2026-03-20');
+        });
     });
 
     describe('セクションプロパティの継承', () => {
