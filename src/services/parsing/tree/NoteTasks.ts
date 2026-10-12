@@ -74,8 +74,7 @@ export class NoteTasks {
      */
     static extract(outline: OutlineReading, sections: readonly SectionNode[], ctx: TaskExtractionContext): Task[] {
         const rows = new Map<number, Task>();
-        for (let line = outline.bodyStart; line < outline.lines.length; line++) {
-            if (!TaskLineClassifier.opensTask(outline, line)) continue;
+        for (const line of this.taskLines(outline)) {
             // The chain ends in tv-inline, which reads every task line: no
             // line that opens a task is refused.
             const read = ctx.parsers.parse(outline.lines[line], ctx.filePath, line);
@@ -92,6 +91,15 @@ export class NoteTasks {
             this.fill(task, outline, NoteSections.at(sections, line)!, rows, ctx.scopeKeys);
         }
         return [...rows.values()];
+    }
+
+    /** The lines of the note's body that open a task (`TaskLineClassifier.opensTask`), top to bottom: each is a row. */
+    static taskLines(outline: OutlineReading): number[] {
+        const lines: number[] = [];
+        for (let line = outline.bodyStart; line < outline.lines.length; line++) {
+            if (TaskLineClassifier.opensTask(outline, line)) lines.push(line);
+        }
+        return lines;
     }
 
     /** What the row reads of the lines under it and of its section. */
