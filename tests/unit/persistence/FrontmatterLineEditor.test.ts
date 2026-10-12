@@ -72,8 +72,24 @@ describe('FrontmatterLineEditor', () => {
 
         it('returns null for missing key', () => {
             expect(FrontmatterLineEditor.findKeyRange(lines, fmEnd, 'nonexistent')).toBeNull();
-            expect(FrontmatterLineEditor.findKeyRange(['---', '"my key": 1', 'two words: 2', '---'], 3, 'my key')).toBeNull();
-            expect(FrontmatterLineEditor.findKeyRange(['---', '"my key": 1', 'two words: 2', '---'], 3, 'two words')).toBeNull();
+        });
+
+        it('finds a quoted key and a plain key with spaces or a colon in it, as YAML reads them', () => {
+            const keys = ['---', '"my key": 1', "'it''s': 2", 'two words: 3', 'a:b: 4', 'url: http://x', '- item', '# c: 5', '---'];
+            expect(FrontmatterLineEditor.findKeyRange(keys, 8, 'my key')).toEqual([1, 2]);
+            expect(FrontmatterLineEditor.findKeyRange(keys, 8, "it's")).toEqual([2, 3]);
+            expect(FrontmatterLineEditor.findKeyRange(keys, 8, 'two words')).toEqual([3, 4]);
+            expect(FrontmatterLineEditor.findKeyRange(keys, 8, 'a:b')).toEqual([4, 5]);
+            // An item and a comment open no key: they go on the value above.
+            expect(FrontmatterLineEditor.findKeyRange(keys, 8, 'url')).toEqual([5, 8]);
+            expect(FrontmatterLineEditor.findKeyRange(keys, 8, '# c')).toBeNull();
+        });
+
+        it('keeps a quoted key as written when it rewrites its line', () => {
+            const lines = ['---', '"My Key": 1', '---'];
+            const { draft } = draftOver(lines);
+            FrontmatterLineEditor.applyUpdates(draft, 2, { 'my key': '2' });
+            expect(lines).toEqual(['---', '"My Key": 2', '---']);
         });
 
         it('handles key with continuation lines (block scalar)', () => {
@@ -188,10 +204,11 @@ describe('FrontmatterLineEditor', () => {
             expect(esc('`foo')).toBe('"`foo"');
         });
 
-        it('quotes flow / colon indicators', () => {
+        it('quotes flow / colon indicators, as Obsidian writes them', () => {
             expect(esc('a: b')).toBe('"a: b"');
             expect(esc('[a]')).toBe('"[a]"');
-            expect(esc('a, b')).toBe('"a, b"');
+            // A comma inside a block value reads as text.
+            expect(esc('a, b')).toBe('a, b');
             expect(esc('# heading')).toBe('"# heading"');
         });
 
@@ -200,15 +217,23 @@ describe('FrontmatterLineEditor', () => {
             expect(esc('3.14')).toBe('"3.14"');
         });
 
-        it('quotes YAML boolean keywords (case-insensitive)', () => {
+        it('quotes the YAML 1.2 booleans, and leaves the YAML 1.1 words plain, as Obsidian does', () => {
             expect(esc('true')).toBe('"true"');
             expect(esc('False')).toBe('"False"');
-            expect(esc('yes')).toBe('"yes"');
-            expect(esc('off')).toBe('"off"');
+            expect(esc('yes')).toBe('yes');
+            expect(esc('off')).toBe('off');
+            expect(esc('on')).toBe('on');
         });
 
-        it('quotes date-shaped strings (would re-type as Date)', () => {
-            expect(esc('2026-06-09')).toBe('"2026-06-09"');
+        it('leaves a date and a time plain: YAML 1.2 reads them as text', () => {
+            expect(esc('2026-06-09')).toBe('2026-06-09');
+            expect(esc('10:30')).toBe('10:30');
+        });
+
+        it('quotes a number in any of YAML\'s spellings', () => {
+            expect(esc('0x1F')).toBe('"0x1F"');
+            expect(esc('.inf')).toBe('".inf"');
+            expect(esc('1_000')).toBe('1_000');
         });
 
         it('quotes surrounding whitespace', () => {
@@ -216,15 +241,16 @@ describe('FrontmatterLineEditor', () => {
             expect(esc('hi ')).toBe('"hi "');
         });
 
-        it('escapes control characters inside a double-quoted scalar', () => {
+        it('keeps a line break on the key\'s line, escaped in a double-quoted scalar', () => {
             expect(esc('a\nb')).toBe('"a\\nb"');
-            expect(esc('a\tb')).toBe('"a\\tb"');
             expect(esc('a\rb')).toBe('"a\\rb"');
+            expect(esc('quote"x\ny')).toBe('"quote\\"x\\ny"');
         });
 
-        it('escapes backslash and double-quote', () => {
-            expect(esc('quote"x')).toBe('"quote\\"x"');
-            expect(esc('back\\slash')).toBe('"back\\\\slash"');
+        it('leaves a tab, a backslash and a double quote inside a plain text plain', () => {
+            expect(esc('a\tb')).toBe('a\tb');
+            expect(esc('quote"x')).toBe('quote"x');
+            expect(esc('back\\slash')).toBe('back\\slash');
         });
     });
 
