@@ -1,6 +1,6 @@
 import type { ChildLine } from '../../../types';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
-import { INDENT_SOURCE, Outline } from './Outline';
+import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 import { FLOW_LINE_RE } from './FlowLineScanner';
 import { TaskLineClassifier } from './TaskLineClassifier';
@@ -47,16 +47,23 @@ export class ChildLineClassifier {
     }
 
     /**
-     * Whether the plugin reads a meaning from `text` when it opens a list
-     * item: a task, a `==>` line, a property or a wikilink child. Such an
-     * item means what it does by where it stands (the task it belongs to),
-     * so a write that takes lines out must leave it standing where it was
-     * (`checkWrite`). Any other item is a note.
+     * Whether the plugin reads a meaning from the item on `line` of
+     * `reading`: a task, a `==>` line, a property, a wikilink child, or an
+     * item of a property's list (an item directly under a property line
+     * with no value, `PropertyLines`). Such an item means what it does by
+     * where it stands (the task it belongs to, the property it is an item
+     * of), so a write that takes lines out must leave it standing where it
+     * was (`checkWrite`): a list's line taken out from above its items
+     * would leave them notes of another item. Any other item is a note.
      */
-    static carriesMeaning(text: string): boolean {
-        return TaskLineClassifier.isTaskLine(text)
+    static carriesMeaning(reading: OutlineReading, line: number): boolean {
+        const text = reading.lines[line];
+        if (TaskLineClassifier.isTaskLine(text)
             || FLOW_LINE_RE.test(text)
             || PROPERTY_LINE.test(text)
-            || this.WIKILINK_CHILD.test(text);
+            || this.WIKILINK_CHILD.test(text)) return true;
+        const parent = reading.item(line)?.parent ?? null;
+        if (parent === null || reading.inCode(parent)) return false;
+        return reading.lines[parent].match(PROPERTY_LINE)?.[2].trim() === '';
     }
 }

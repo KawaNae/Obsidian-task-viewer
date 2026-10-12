@@ -175,9 +175,20 @@ describe('ChildLineClassifier', () => {
     });
 
     describe('carriesMeaning', () => {
-        it('reads a meaning from a line\'s shape alone: an item of a property\'s list is a note', () => {
-            expect(ChildLineClassifier.carriesMeaning('\t- k:: v')).toBe(true);
-            expect(ChildLineClassifier.carriesMeaning('\t\t- a')).toBe(false);
+        const means = (lines: string[], line: number) => ChildLineClassifier.carriesMeaning(Outline.read(lines), line);
+
+        it('reads a meaning from an item of a property\'s list, by the line it stands under', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t- v:: 1', '\t\t- note', '\t- memo', '\t\t- b'];
+            expect(means(lines, 1)).toBe(true);
+            expect(means(lines, 2)).toBe(true);
+            // Under a line with a value, or under a note: a note.
+            expect(means(lines, 4)).toBe(false);
+            expect(means(lines, 6)).toBe(false);
+        });
+
+        it('reads none from an item under a property line in code', () => {
+            const lines = ['- [ ] task', '\t```', '\t- k::', '\t\t- a', '\t```'];
+            expect(means(lines, 3)).toBe(false);
         });
     });
 });
