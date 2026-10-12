@@ -257,7 +257,7 @@ describe('what an update reports', () => {
 
         it('leaves a declaration inside a fence out of the report', async () => {
             // A `- key:: value` in a code block is a sample, not a property.
-            // `findOwnPropertyLines` skips it, so the write must not claim it
+            // `PropertyLines.ofTask` skips it, so the write must not claim it
             // either — and must not touch it.
             const fenced = [TASK, CHILD, '\t```', '\t- 金額:: 999', '\t```', ''];
             const b = await writeBench(fenced.join('\n'));

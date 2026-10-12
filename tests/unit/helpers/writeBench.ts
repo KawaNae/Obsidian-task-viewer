@@ -148,7 +148,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
 }
 
 /**
- * The row rewritten as `task`, its property lines by `childOps`, with `fire`
+ * The row rewritten as `task`, its property lines by `childOps` (`ChildPropertyLineEditor`), with `fire`
  * when the rewrite completes it: the `update` a card's write hands the
  * write layer (`TaskIndex.writeUpdate`), through `writer`'s `write`.
  */

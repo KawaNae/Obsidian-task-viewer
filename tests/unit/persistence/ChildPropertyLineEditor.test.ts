@@ -36,7 +36,7 @@ const ownLines = (lines: string[], task: number) => PropertyLines.ofTask(Outline
     .map(line => ({ lineIdx: line.line, key: line.key, value: line.written }));
 
 describe('ChildPropertyLineEditor', () => {
-    describe('findOwnPropertyLines', () => {
+    describe('the task\'s own property lines', () => {
         it('空値プロパティ行 (`- key ::`) を own として検出する', () => {
             const lines = [
                 '- [ ] task @2026-07-18T10:00',
