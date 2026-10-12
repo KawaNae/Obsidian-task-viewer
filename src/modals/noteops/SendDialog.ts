@@ -540,20 +540,8 @@ export function yamlValue(yaml: readonly string[]): string {
 /** A YAML scalar as its value reads; null for a list or a mapping. */
 function scalarText(value: unknown): string | null {
     if (value === null || value === undefined) return '';
-    if (value instanceof Date) return dateText(value);
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
     return null;
-}
-
-/**
- * A YAML timestamp as it was written: YAML reads one without a zone as UTC,
- * so its UTC fields are the written ones. A date alone when the time is
- * midnight, else to the minute.
- */
-function dateText(date: Date): string {
-    if (Number.isNaN(date.getTime())) return '';
-    const iso = date.toISOString();
-    return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.slice(0, 16);
 }
 
 /** A YAML list of scalars as its items joined; null for anything else. */
