@@ -42,6 +42,8 @@ export type Issue =
     | { readonly code: 'notation'; readonly kind: NotationKind }
     /** Characters the value cannot hold, each once, in the order they come. */
     | { readonly code: 'chars'; readonly chars: string }
+    /** A word of digits alone where a tag is wanted (`123`): Obsidian takes `#123` for no tag. */
+    | { readonly code: 'digitsOnly' }
     /** A name the plugin keeps for itself (a property key that is a scope key, `tags`). */
     | { readonly code: 'reserved' }
     /** A value that must differ from the others of its set and is one of them (a scope key, a status's character). */

@@ -16,6 +16,7 @@ describe('issueWords', () => {
         { code: 'dateRequired' },
         ...(['dateBlock', 'command', 'blockId', 'headingMark'] as const).map(kind => ({ code: 'notation', kind }) as const),
         { code: 'chars', chars: ': [' },
+        { code: 'digitsOnly' },
         { code: 'reserved' },
         { code: 'duplicate' },
     ];

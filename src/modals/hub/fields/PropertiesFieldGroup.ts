@@ -65,7 +65,6 @@ export class PropertiesFieldGroup implements ClosingPart {
         // ctx.getTask().properties を発火時に読む（tags と同じ規則）。
         const own = task.properties ?? {};
         const effective = getEffectiveProperties(task);
-        const keys = this.ctx.plugin.settings.scopeKeys;
 
         for (const [key, pv] of Object.entries(effective)) {
             const isOwn = key in own;
@@ -108,7 +107,7 @@ export class PropertiesFieldGroup implements ClosingPart {
                     this.render(true);
                 });
             } else if (!isOwn) {
-                const source = CascadeSource.forProperty(this.ctx.app, task, keys, key, pv.value);
+                const source = CascadeSource.forProperty(task, key);
                 const sourceEl = row.createSpan({ cls: 'task-hub__source', text: this.ctx.sourceLabel(source) });
                 sourceEl.addEventListener('click', () => this.ctx.jumpToFile());
             }

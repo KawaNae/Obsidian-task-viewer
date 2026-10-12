@@ -90,7 +90,7 @@ describe('inheritedAt', () => {
             'tags: [project]',
             '---',
             '## S',
-            '- tags:: 出/クレカ',
+            '- tags:: #出/クレカ',
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, 5, DEFAULT_SETTINGS));

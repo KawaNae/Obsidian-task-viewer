@@ -20,6 +20,7 @@ export function issueWords(issue: Issue): string {
         case 'dateRequired': return t('issue.dateRequired');
         case 'notation': return notationWords(issue.kind);
         case 'chars': return t('issue.chars', { chars: issue.chars });
+        case 'digitsOnly': return t('issue.digitsOnly');
         case 'reserved': return t('issue.reserved');
         case 'duplicate': return t('issue.duplicate');
     }

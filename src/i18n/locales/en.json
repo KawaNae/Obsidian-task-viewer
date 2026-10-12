@@ -616,6 +616,7 @@
       "headingMark": "Leave out the heading mark (#). Enter the heading's name alone."
     },
     "chars": "These characters cannot be used: {{chars}}",
+    "digitsOnly": "A word of digits alone is not a tag.",
     "reserved": "This key is reserved.",
     "duplicate": "This value is already used."
   },

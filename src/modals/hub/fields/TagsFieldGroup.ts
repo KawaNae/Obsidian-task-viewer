@@ -9,6 +9,7 @@ import { createFormRow } from '../../form/formRow';
 import { bindField, type BoundField } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { TagInput } from '../../../services/parsing/utils/TagInput';
+import { TagRule } from '../../../services/parsing/utils/TagRule';
 import { optional } from '../../../utils/values/Read';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 import { ValueSuggest } from '../../../suggest/ValueSuggest';
@@ -51,7 +52,6 @@ export class TagsFieldGroup implements ClosingPart {
         const shut = this.ctx.isShut();
         const contentTags = new Set(TagExtractor.fromContent(task.content ?? ''));
         const ownTags = new Set(task.tags);
-        const keys = this.ctx.plugin.settings.scopeKeys;
 
         // pills（フル幅、行の外）
         const effectiveTags = getEffectiveTags(task);
@@ -70,7 +70,7 @@ export class TagsFieldGroup implements ClosingPart {
                     removeBtn.disabled = shut;
                     removeBtn.addEventListener('click', () => this.commit(task.tags.filter(x => x !== tag)));
                 } else {
-                    const source = CascadeSource.forTag(this.ctx.app, task, keys, tag);
+                    const source = CascadeSource.forTag(task, tag);
                     chip.addClass('task-hub__tag-chip--locked');
                     chip.addClass('task-hub__tag-chip--cascade');
                     chip.setAttribute('aria-label', t('modal.hub.cascadeTagLocked', { source: this.ctx.sourceLabel(source) }));
@@ -109,9 +109,9 @@ export class TagsFieldGroup implements ClosingPart {
         this.suggest = new ValueSuggest(this.ctx.app, input, {
             candidates: (query) => {
                 const q = query.trim().toLowerCase().replace(/^#/, '');
-                const selected = new Set(getEffectiveTags(this.ctx.getTask()));
+                const selected = new Set(getEffectiveTags(this.ctx.getTask()).map(TagRule.key));
                 return FilterValueCollector.collectTags(this.ctx.index.getTasks())
-                    .filter(v => !selected.has(v))
+                    .filter(v => !selected.has(TagRule.key(v)))
                     .filter(v => !q || v.toLowerCase().includes(q));
             },
             render: (val, el) => el.setText(`#${val}`),

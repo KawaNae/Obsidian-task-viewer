@@ -334,7 +334,7 @@ describe('SectionPropertyResolver の出所', () => {
         const sources = doc.sections[0].resolvedSources;
         expect(sources.fields).toEqual({ color: fm, startDate: fm });
         expect(sources.properties).toEqual({ owner: fm });
-        expect(sources.tags).toEqual([fm]);
+        expect(sources.tags).toEqual([{ from: fm, tags: ['a'] }]);
     });
 
     it('見出しのプロパティ行が上書きした値は、その行から', () => {
@@ -384,12 +384,15 @@ describe('SectionPropertyResolver の出所', () => {
     it('tags の出所が2つ: 和集合に加えた層を上から順に', () => {
         const doc = buildAndResolve([
             '## Section',
-            '- tags:: sectionTag',
+            '- tags:: #sectionTag',
             '- [ ] task',
         ], { tags: ['project'] });
         const section = doc.sections[0];
         expect(section.resolvedTags).toEqual(['project', 'sectionTag']);
-        expect(section.resolvedSources.tags).toEqual([fm, at(1, 'Section')]);
+        expect(section.resolvedSources.tags).toEqual([
+            { from: fm, tags: ['project'] },
+            { from: at(1, 'Section'), tags: ['sectionTag'] },
+        ]);
     });
 
     it('最初の見出しより上の節は heading が null', () => {

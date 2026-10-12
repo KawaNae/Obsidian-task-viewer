@@ -99,6 +99,15 @@ describe('ChildPropertyLineEditor', () => {
             expect(lines[1]).toBe('\t- 金額:: 200');
         });
 
+        it('writes tags as #tags, over a line written with commas, which Obsidian reads no tag from', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- tags:: a, b',
+            ];
+            apply(lines, 0, [{ key: 'tags', op: 'set', value: ['a', 'b', 'c'] }]);
+            expect(lines[1]).toBe('\t- tags:: #a #b #c');
+        });
+
         it('edits the property line the parser reads under any bullet, keeping its bullet (論点14b)', () => {
             const lines = [
                 '- [ ] task',

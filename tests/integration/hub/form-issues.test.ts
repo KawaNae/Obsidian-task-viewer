@@ -175,6 +175,40 @@ describe('the hub\'s form', () => {
         expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 
+    it('refuses a tag Obsidian would not read as one (foo.bar, 123), saving nothing, and writes one it reads as #tags', async () => {
+        openHub('親');
+        const tagInput = `hub().querySelector('.task-hub__tag-add-wrap input')`;
+        const said = run<Record<string, unknown>>(`
+            const out = {};
+            for (const text of ['foo.bar', '123']) {
+                type(${tagInput}, text);
+                await leave(${tagInput});
+                // The tags field marks its wrap, not the input.
+                const wrap = ${tagInput}.closest('.tv-ctrl__input-wrap');
+                out[text] = { says: says(${tagInput}), invalid: wrap.classList.contains('tv-ctrl__input-wrap--invalid'), text: ${tagInput}.value };
+            }
+            return JSON.stringify(out);
+        `);
+        expect(said).toEqual({
+            'foo.bar': { says: [`${ERROR}: ${tr('issue.chars', { chars: '.' })}`], invalid: true, text: 'foo.bar' },
+            '123': { says: [`${ERROR}: ${tr('issue.digitsOnly')}`], invalid: true, text: '123' },
+        });
+        expect(readTestFile(TEST_FILE)).toBe(NOTE);
+
+        run(`
+            type(${tagInput}, '#12/34 出/りそな');
+            await leave(${tagInput});
+            return 'ok';
+        `);
+        expect(readTestFile(TEST_FILE)).toBe([
+            '# 見出し',
+            '- [ ] 親 @2026-10-01',
+            '\t- tags:: #12/34 #出/りそな',
+            '- [ ] 次',
+            '',
+        ].join('\n'));
+    });
+
     it('refuses a name that holds a date block, keeping the text, and saves nothing', async () => {
         openHub('親');
         const said = run<Record<string, unknown>>(`

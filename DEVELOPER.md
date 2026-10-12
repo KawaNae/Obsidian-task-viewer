@@ -123,7 +123,7 @@ src/
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
-│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagExtractor, TaskLineClassifier)
+│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagRule, TagExtractor, TagInput, TaskLineClassifier)
 │   ├── persistence/           # Write layer (FileLines: one target type `RowRef`, `createFile`; Notes: a block put in a note, a note made; FiringTrials: which fires of a completion are written; TaskRepository, InlineTaskWriter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
@@ -296,7 +296,7 @@ Quick reference for locating the right layer when implementing a feature.
 0. Outline.read(lines)                 — the note's one reading (items, subtrees, code, headings, body start)
 1. Frontmatter → tv-ignore check
 2. NoteSections.read(outline)          — sections from outline.headings, each with its own property lines
-3. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (the frontmatter read by PropertyValues.fromFrontmatter, then BuiltinPropertyExtractor)
+3. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (the frontmatter read by BuiltinPropertyExtractor.fromFrontmatter)
 4. NoteTasks.extract()                 — every line that opens a task, read once, with its section's values attached
 ```
 
@@ -312,8 +312,8 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
-| **File** | `PropertyValues.fromFrontmatter` + `BuiltinPropertyExtractor` | Frontmatter object | Read every key as a `PropertyValue`, then put the builtin keys apart with the same extractor a section and a task use. Used as the cascade root by `SectionPropertyResolver`. |
-| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`. |
+| **File** | `BuiltinPropertyExtractor.fromFrontmatter` | Frontmatter object | Read every key as a `PropertyValue` (`PropertyValues.fromFrontmatter`), then put the builtin keys apart with the same extractor a section and a task use; the tags are read off the YAML as Obsidian reads them (`TagRule.ofFrontmatter`). Used as the cascade root by `SectionPropertyResolver`. |
+| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`, and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds). |
 
 **Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass. (Task-scope inheritance — `TaskPropertyResolver` BFS + `parentStyle` propagation — was removed 2026-07-03.)
 
@@ -322,7 +322,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | Layer | Dates | Properties / tags / style | Written by | Read by |
 |-------|-------|---------------------------|------------|---------|
 | **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `formatTaskLine`, all writers (round-trip fidelity) |
-| **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `NoteTasks`, from `SectionNode.resolvedX` | Merge step below |
+| **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `NoteTasks`, from `SectionNode.resolvedX`; where each came from as `task.inheritedFrom` (the section's `resolvedSources`) | Merge step below; the hub's source labels (`CascadeSource`) read `inheritedFrom`, never the metadata cache |
 | **effective** | `DisplayTask.stated` (merged), `span` and `dueMs` (resolved — needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
 Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
@@ -339,7 +339,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 
-組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず `value` を読む。ただしタグは、配列ならその項目、文字列なら `#tag` か `,` 区切りとして読む。
+組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず `value` を読む。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。大文字と小文字を区別しないのは Obsidian のキーである `tags` だけで、プラグインのキー（`tv-color` など）は設定の綴りのとおりに読む。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` を探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。どちらの層かは入口が決める。
 
 ### Inline child line extraction
 
@@ -380,7 +380,15 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 
 #### 本文の記法
 
-本文の中の記法は `scanNotation(text)`（`parsing/utils/InlineNotation.ts`）が一度に切る。切るものは、コード（`` ` ``）、wikilink と Markdown のリンク（`!` が付けば埋め込み）、タグである。記法の中の記法は数えない。そのため `[[報告書#見出し]]` やコードの中の `#x` はタグにならない。`TagExtractor.fromContent` はこの結果のタグを読む。
+本文の中の記法は `scanNotation(text)`（`parsing/utils/InlineNotation.ts`）が一度に読む。読み方は Obsidian がメタデータを作るパーサ（remark-parse 8 に Obsidian の記法を足したもの）の行内の読み方を写したもので、各位置で記法を Obsidian と同じ順に試し、どれも取らなければ次にどれかの記法が始まりうる位置までを平文とする。記法は、エスケープ、自動リンク、裸の URL とメールアドレス、HTML のタグ、wikilink、Markdown のリンクと参照、脚注、強調（`**` `*` `_` `~~` `==`）、コード、数式（`$` `$$`）、タグ、ブロック ID、コメント（`%%`）である。返すのはコード、リンク（`!` が付けば埋め込み）、タグで、文字を持つ記法の中（強調、リンクの表示文字列、参照、行内脚注、コメント）のタグも返す。コード、リンクの行き先、数式、HTML のタグの中は読まない。そのため `[[報告書#見出し]]` やコードの中の `#x` はタグにならず、`[#x](u)` と `**#x**` はタグになる。`TagExtractor.fromContent` はこの結果のタグを読む。タスクの内容が行頭でブロックを始める形（`<div>`、`<!--`、フェンス、`$$`）は Obsidian がそのブロックとして読むが、`scanNotation` は行内だけを読むのでこれに合わない。
+
+タグの規則は Obsidian 1.14 のもので、`TagRule`（`parsing/utils/TagRule.ts`）の1か所に置く。本文の読み（`scanNotation`）、frontmatter の読み（`TagExtractor.fromFrontmatter`）、ハブのタグ欄の判定（`TagInput`）、候補の収集（`FilterValueCollector.collectTags`）、フィルタの一致（`TaskFilterEngine`）がこれを参照する。
+
+- タグの語: 空白、`-` `/` `_` 以外の ASCII の記号、U+2000〜206F と U+2E00〜2E7F の句読点のどれかで終わる。日本語の約物、`＃`、絵文字はタグの一部になる。ASCII の数字だけの語（`#123`）はタグにならない
+- 本文で `#` がタグを始める位置: 読みが止まる位置である。つまり、本文か記法の中身の先頭、空白（全角空白と NBSP を含む）の直後、直前の記法の終わり（`#a#b`、`[[x]]#y`、`**b**#c`、`$x$#d`、`<b>#e`、`\##f`）。平文の文字や閉じない記号の後はタグにならない（`日本語の#x`、`(#x`、`*#x`）。記法の中身の終わりはタグを終える（`_#a_` は `#a`）
+- 一致の検査: E2E（`tests/integration/scanning/tag-rule.test.ts`）が Dev vault に文字ごとの表、始まりの位置、強調、数式、HTML、ほかの記法、frontmatter の各形を置き、行のタグを Obsidian の `cache.tags` に、ノートのタグを Obsidian の `getTags()` がそのノートについて数えるものに突き合わせる。Obsidian の版が上がって規則が変われば、ここで落ちる
+- 大文字と小文字は区別しない。`a/b` は `a` の下のタグである。候補は `getTags()` と同じく1つにまとめ、親のタグも入れる。綴りは最も多く書かれたもの（下のタグの分を含む）、同数なら先に出たものを選ぶ
+- 書く側: ハブのタグ欄はタグの語にならない語を拒む（`chars` か `digitsOnly`）。`tags::` の行は常に `#a #b` で書く
 
 リンクの正規表現は同じ断片（`WIKILINK_SOURCE`、`MARKDOWN_LINK_SOURCE`）から組む。使う所は `ChildLineClassifier` の wikilink の子行と配列の項目、`NoteName`、カードの埋め込みの除去（`withoutEmbeds`）である。wikilink の中身は `[` `]` と改行を含まない。
 

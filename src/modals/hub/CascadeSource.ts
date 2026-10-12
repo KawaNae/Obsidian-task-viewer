@@ -1,47 +1,37 @@
-import { type App, TFile } from 'obsidian';
-import type { Task, ScopeKeys } from '../../types';
-import { BuiltinPropertyExtractor, type ExtractedProperties } from '../../services/parsing/tree/BuiltinPropertyExtractor';
-import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
+import type { Task } from '../../types';
+import type { ValueSource } from '../../services/parsing/tree/Sections';
 
 export type CascadeSourceKind = 'file' | 'section';
 
 /**
- * cascade 値の出所（file frontmatter か section property block か）を導出する。
+ * cascade 値の出所（file frontmatter か section property block か）。
  *
- * cascadeContext は値のみで出所メタデータを持たない（保存しない方針）。
- * file 層の寄与は索引と同じ読み（`PropertyValues.fromFrontmatter` と
- * `BuiltinPropertyExtractor.extract`、純関数）を metadataCache の
- * frontmatter に適用すれば再現できるので、cascade 値と比較して一致すれば
- * file 由来、不一致（= section が上書き / 追加）なら section 由来と判定する。
+ * 出所は解決が値と一緒に記録したもの（`SectionNode.resolvedSources`、タスクには
+ * `inheritedFrom` として載る）をそのまま言い直す。値を決めた層を決めるのは
+ * 解決だけであり、ここで層をたどり直したり metadataCache の frontmatter を
+ * 読み直したりしない。キャッシュはタスクを読んだ版より古いことがあり、
+ * 読み直せば別の版の出所を言うことになる（structure の「読みの鮮度」）。
  * 見出し単位の特定はしない（ユーザー決定: file / section の粗い区別で十分）。
  */
 export class CascadeSource {
-    static fileLayer(app: App, task: Task, keys: ScopeKeys): ExtractedProperties {
-        const file = app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return { properties: {} };
-        const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-        return BuiltinPropertyExtractor.extract(PropertyValues.fromFrontmatter(frontmatter, keys), keys);
+    /** color / linestyle / mask の cascade 出所。cascade 値がない、または自身の値があれば null */
+    static forStyleField(task: Task, field: 'color' | 'linestyle' | 'mask'): CascadeSourceKind | null {
+        if (task.cascadeContext?.[field] === undefined || task[field] !== undefined) return null;
+        return kindOf(task.inheritedFrom?.fields[field]);
     }
 
-    /** color / linestyle / mask の cascade 出所。cascade 値がなければ null */
-    static forStyleField(
-        app: App, task: Task, keys: ScopeKeys,
-        field: 'color' | 'linestyle' | 'mask',
-    ): CascadeSourceKind | null {
-        const cascadeValue = task.cascadeContext?.[field];
-        if (cascadeValue === undefined || task[field] !== undefined) return null;
-        return this.fileLayer(app, task, keys)[field] === cascadeValue ? 'file' : 'section';
-    }
-
-    /** cascade 由来タグ 1 件の出所 */
-    static forTag(app: App, task: Task, keys: ScopeKeys, tag: string): CascadeSourceKind {
-        const fileTags = this.fileLayer(app, task, keys).tags ?? [];
-        return fileTags.includes(tag) ? 'file' : 'section';
+    /** cascade 由来タグ 1 件の出所: そのタグを最初に加えた層 */
+    static forTag(task: Task, tag: string): CascadeSourceKind {
+        return kindOf(task.inheritedFrom?.tags.find(layer => layer.tags.includes(tag))?.from);
     }
 
     /** cascade 由来カスタムプロパティ 1 件の出所 */
-    static forProperty(app: App, task: Task, keys: ScopeKeys, key: string, value: string): CascadeSourceKind {
-        const fileProps = this.fileLayer(app, task, keys).properties;
-        return fileProps[key]?.value === value ? 'file' : 'section';
+    static forProperty(task: Task, key: string): CascadeSourceKind {
+        return kindOf(task.inheritedFrom?.properties[key]);
     }
+}
+
+/** 記録がない値は節の値として言う（記録はすべての継承値にあるので、起きるのは記録を持たないタスクだけ）。 */
+function kindOf(source: ValueSource | undefined): CascadeSourceKind {
+    return source?.kind === 'frontmatter' ? 'file' : 'section';
 }

@@ -18,6 +18,7 @@ describe('issueText', () => {
         [{ code: 'notation', kind: 'command' }, 'start must not hold a command (==>)'],
         [{ code: 'notation', kind: 'blockId' }, 'start must not hold a block ID (^id) at its end'],
         [{ code: 'chars', chars: ': [' }, 'start must not hold: : ['],
+        [{ code: 'digitsOnly' }, 'start must not be digits alone'],
         [{ code: 'reserved' }, 'start is reserved'],
         [{ code: 'duplicate' }, 'start is already used'],
         [{ code: 'shape', kind: 'statusChar' }, 'start must be one character that is not a line break'],

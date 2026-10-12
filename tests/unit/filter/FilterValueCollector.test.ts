@@ -32,6 +32,26 @@ describe('FilterValueCollector', () => {
         it('returns empty for no tasks', () => {
             expect(FilterValueCollector.collectTags([])).toEqual([]);
         });
+
+        it('lists a tag once whatever its case, and the tags above one', () => {
+            const tasks = [
+                makeTask({ tags: ['ok/nested', 'a/'] }),
+                makeTask({ tags: ['OK'] }),
+            ];
+            expect(FilterValueCollector.collectTags(tasks)).toEqual(['a', 'ok', 'ok/nested']);
+        });
+
+        it('spells a tag as getTags() does: as most often written, a tag below it counted, and as first met on a tie', () => {
+            expect(FilterValueCollector.collectTags([
+                makeTask({ tags: ['CaseTag'] }),
+                makeTask({ tags: ['casetag'] }),
+            ])).toEqual(['CaseTag']);
+            expect(FilterValueCollector.collectTags([
+                makeTask({ tags: ['CaseTag'] }),
+                makeTask({ tags: ['casetag'] }),
+                makeTask({ tags: ['casetag/x'] }),
+            ])).toEqual(['casetag', 'casetag/x']);
+        });
     });
 
     describe('collectFiles', () => {
