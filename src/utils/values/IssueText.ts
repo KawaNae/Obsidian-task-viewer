@@ -16,7 +16,7 @@ const SHAPE: Record<ShapeKind, string> = {
     int: 'a whole number',
     number: 'a number',
     bool: 'true or false',
-    color: 'a hex color (ff0000) or a color name (red)',
+    color: 'a color: a hex value (ff0000), a color name (red) or a CSS color (rgb(255 0 0))',
     statusChar: 'one character that is not a line break',
     text: 'text',
 };

@@ -608,7 +608,7 @@
       "int": "Enter a whole number.",
       "number": "Enter a number.",
       "bool": "Enter true or false.",
-      "color": "Enter a hex color (ff0000) or a color name (red).",
+      "color": "Enter a color: a hex value (ff0000), a color name (red) or a CSS color (rgb(255 0 0)).",
       "statusChar": "Enter one character that is not a line break.",
       "text": "Enter text."
     },
