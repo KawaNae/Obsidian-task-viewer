@@ -283,8 +283,8 @@ Quick reference for locating the right layer when implementing a feature.
 | **NoteCandidates / candidateView** | `suggest/` | The notes a list suggests, in one place, as Obsidian's `[[` suggests them: the vault's notes, and what the caller chooses besides (`NoteCandidateKinds`: other files, aliases, unresolved links); matched fuzzily on the name first and the path a point lower, the most recently modified first when nothing is typed, a hundred at most (`noteCandidates`, a copy of Obsidian's unpublished `getFileSuggestions`). `ObsidianFiles` is the one reader of Obsidian's unpublished `isSupportedFile` and `isUserIgnored`, each with the answer it falls back to. `candidateView` draws a candidate as Obsidian's complex item (`mod-complex`: the name, its folder under it, an alias's mark, a heading's level), so Obsidian's CSS sizes it, in a field's list and in the source editor's completion alike. `NoteSuggest` is the list of a field that names a note (the settings' templates, the send dialog's note). |
 | **LinkTagCandidates / NoteLink** | `suggest/`, `utils/NoteLink.ts` | The `[[`, `[[note#` and `#` of the task name (`TaskNameSuggest`) and of the source editor (`SourceCompletion`), answered in one place: the trigger before the caret and the range a pick replaces, the candidates (a `[[` holds every kind `NoteCandidates` holds, as Obsidian's does; a note's headings matched fuzzily; tags), and what a pick writes (`linkTagWrite`). A link is written as Obsidian's `[[` writes it (`NoteLink.pickedLink`, a copy of its unpublished writer: a file named by `fileToLinktext`, its name shown when a path names it but for an image, an alias shown, a heading's characters a link cannot hold as spaces, a Markdown link when `useMarkdownLinks`), from the note the link is written in, which the field's owner names (`linkSource`): the row's note in the hub and its source mode, the note the line goes in for the create dialog (`CreatePlaces.noteOf`), the note the send dialog's fields name for its editors, the row's while they name none. `NoteLink.noteLink` is the link a sent row leaves where it stood (`generateMarkdownLink`) |
 | **FrontmatterValueSuggest / PropertyValueSuggest** | `suggest/` | A frontmatter color's and line style's values (`ScopeValueKind`: the key, the candidates, the drawing), in the editor on the key's line where the reading finds the frontmatter, writing the value alone (`FrontmatterLineEditor.valueRange`), and in the Properties view with its color picker (`WindowAttachment`), writing to the note of the leaf the field is in (`fileOfElement`), not the active one |
-| **PropertyUpdatePlanner** | `services/persistence/PropertyUpdatePlanner.ts` | Pure diff: `Partial<Task>` updates → normalized PropertyOp[] for non-time properties (canonical-location / clear semantics) |
-| **ChildPropertyLineEditor** | `services/persistence/utils/ChildPropertyLineEditor.ts` | Surgical CRUD for inline child property lines (`- key:: value`), representation-preserving |
+| **PropertyUpdatePlanner** | `services/persistence/PropertyUpdatePlanner.ts` | Pure diff: `Partial<Task>` updates → `PropertyOp[]` (`set` a text or a list's items, `hide`, `delete`) for non-time properties, against the task's own (「プロパティの書き込み」) |
+| **ChildPropertyLineEditor** | `services/persistence/utils/ChildPropertyLineEditor.ts` | Writes a task's property as its block (its line, a list's items under it), keeping what is written before each value; refuses a block the reading finds wrong (「プロパティの書き込み」) |
 | **TaskParser** | `services/parsing/TaskParser.ts` | `lineParsers(settings)`: the ParserChain the settings read lines with, built by whoever reads (FileParsePipeline, editor diagnostics); no chain is held. `lineParsersFingerprint` says when settings read lines differently |
 | **TaskLineFormat** | `services/parsing/TaskLineFormat.ts` | `formatTaskLine(fields)`: the one spelling of a task line the plugin writes (new or rewritten); `formatRow(task)`: a read row written back (tv-inline via `formatTaskLine`, read-only notations return `originalText`) |
 
@@ -390,6 +390,34 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - frontmatter の出所（`ValueSource` の `frontmatter`）は、そのキーの行を持つ（`frontmatterKeyRange`。書き込みが編集する行と同じ答え）。キーの行を読めないときは null である
 - API は値なしを `null` で出す。frontmatter の `key:` も同じである
 
+### プロパティの書き込み
+
+タスクのプロパティを書くのは、ハブ、API、カードの更新（`updateTask`）である。`PropertyUpdatePlanner` が更新とタスク自身の値（own）の差から操作（`PropertyOp`）を作り、書き込みの `update`（`TaskOps`）の中で `ChildPropertyLineEditor` が行に書く。書く行は、パーサがタスクのものと読む行（`PropertyLines.ofTask`）で、プロパティはそのブロック（プロパティ行と、値のない行の下のリストの項目）を単位に書く。
+
+- 操作は3つで、キーは大文字と小文字を区別せずに行を探す（「プロパティのキー」）
+    - `set`: 値を書く。テキスト（`{ text }`）は入力された綴りのまま行に書き、型は行と同じ規則で綴りから決まる（`123` は数、`"123"` はテキスト）。引用符を足すのは、型が分かっている値を写すときだけで、frontmatter のテキスト `123` をタスクの値にするなら、その綴り（`"123"`）を書く。リスト（`{ items }`）は、値のないプロパティ行の下に1項目1行で書く
+    - `hide`: 値のない行（`- key::`、下に項目なし）を書き、上の層の値を隠す
+    - `delete`: 自分の行を下の項目ごと消し、上の層の値が届くようにする
+- プランナーの規則
+    - 色、線種、マスクは、文字が `set`、null が `hide`、undefined か空の文字が `delete` である
+    - タグは、本文の `#tag` を除いた残りを `#a #b` で `set` し、残りが無ければ `delete` する。下にリストを持つ `- tags::` には、`- #a` の項目で書く
+    - カスタムプロパティは、綴りが空の null が `hide`、項目のあるリストが項目の `set`、ほかの値が綴りの `set`、無くなったキーが `delete` である。項目の無いリストは行に書けないので `delete` になる
+    - own と比べるので、受け継いだ値と同じ値も、確定すれば自分の行として書く。ハブの受け継いだ値の欄は、同じ文字を打ち直して確定すれば書く（`bindField` の `takesSame`）。触れただけでは書かない
+    - ハブで値を空にして確定すると `delete` になる。追加の行でキーだけを確定すると `hide` になる
+- 書き方
+    - 既にある行は、値の前（字下げ、記号、キー、`::`）を書かれたまま保ち、値だけを書き換える。リストの項目も記号と字下げを保つ
+    - リストは項目を上から1対1で書き換え、余った項目を消し、足りない項目を最後の項目の後ろに足す。並べ替えは行の順序の書き換えになる。値のある行にリストを書くと、行の値を消して下に項目を置く。リストの行にテキストを書くと、項目を消して行に値を書く
+    - 新しい行は、タスクの最後のプロパティ行の部分木の後ろか、タスクの最初の子に置く（`Placement`）。リストの項目は、その行の最初の子と同じ字下げの規則で1段下に置く
+- 所見のあるブロックには書かない。`PropertyLines.read` がそのキーの行に所見（重複したキー、値のある行の下の行、リストの項目として読めない行、組み込みのキーの読めない値など）を出していれば、操作を書かず、書き込み全体を `property` の拒否で終える（通知に、キーと所見の行が出る）。ほかの操作も書かない。重複したキーを1行にまとめることもしない。利用者がエディタで直す
+- リストの項目は、書き込みの検査（`checkWrite`）で意味のある行として扱う（`ChildLineClassifier.carriesMeaning`）。リストの行だけを消して項目を残す書き込みは `disturbs` で拒否される
+- フローの次のインスタンスには、子の行を写さない（プロパティ行も写さない）。次のインスタンスが持つ子の行は、生成ブロック（`use`）に書く。複製は部分木の全行を写す
+
+送る処理（`InheritedValues`）は、行が受け継いだ値を送り先の frontmatter のキーとして書く。
+
+- 行の値は、行が付けた型を frontmatter が読み返す形で書く。行が引用符で囲んだテキストは、YAML が同じテキストに読み返すかぎり引用符ごと書く（`'abc'`、`"123"`）。ほかのテキストは YAML が別の型に読むときだけ引用符で囲む（`escapeYamlScalar`）
+- 値なし（節の `- area::`、`- area:: null`、隠した組み込みのキー）は、値のないキー（`area:`）で書く。送り先でも上の層の値を隠す
+- 節の行のリストは YAML のリストで書き、項目はテキストと同じ規則で書く
+
 ### プロパティの値
 
 プロパティの値は `PropertyValues`（`parsing/utils/PropertyValues.ts`）の1か所で `PropertyValue` に読む。`PropertyValue` は型で分かれる判別共用体で、テキスト、数、真偽値（この3つがスカラー）、値なし（`null`）、スカラーのリストのどれかである。スカラーと値なしは `spelling` に行で書く綴りを持ち、型ごとの値（`text`、`number`、`boolean`）を別の欄に持つ。読み手は型の欄を読み、綴りから真偽や数を決め直さない。
@@ -405,11 +433,13 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 連想配列の値はプロパティにしない。リストは、スカラーの項目だけを項目にする。値なし、入れ子のリスト、連想配列の項目は読まない。テキストの項目は前後の空白を除き、空なら捨てる
     - 日付のキー（`tv-start` など）も同じ規則で読み、組み込みとして表示の文字から日付を読む。数（`tv-end: 630`）は日付として読めない値で、その層の値にならない
 - 表示は `display` が決める。テキストは引用符を外した中身、数、真偽値、値なしは書かれた綴り（`0x1F`、`True`）、リストは項目の表示を `, ` でつないだものである。カード、ハブ、メニュー、候補はこれを出す。フィルタは型で比べ、この文字は `contains` が数と真偽値を探すときに使う（「プロパティの条件」）
-- 書き戻しは `spelling` を書くので、利用者の綴りは変わらない。ハブとプランナーは綴りで差を取る。書き戻しはまだリストを入れ子の項目で書かないので、リストの綴りは項目の綴りを `, ` でつないだもの（行は1つのテキストに読む）である
+- 書き戻しはスカラーの `spelling` を書くので、利用者の綴りは変わらない。リストは項目ごとの綴りを入れ子の項目に書く（「プロパティの書き込み」）。ハブとプランナーは型と綴りで差を取る（`PropertyUpdatePlanner.sameWritten`）
 - API は型どおりに出す。数は `number`、値なしは `null`、リストは項目ごとに同じ型の配列である。CLI の出力は、JSON の数で書けない数を YAML の綴りの文字列（`".inf"`）にする
 - `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
 - frontmatter として読むのは、YAML が連想配列に読むブロックだけである。Obsidian の metadata worker と同じく、リスト（`- a`）やテキストに読むブロックは frontmatter ではない
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
+- frontmatter に書くテキストは、Obsidian の `stringifyYaml` と同じ綴りにする（`FrontmatterLineEditor.escapeYamlScalar`）。YAML 1.2 がテキストに読む `yes`、`on`、`2026-06-09`、`a, b` は引用符なしで、別の型に読む `123`、`true`、`null` や、YAML の記号で始まる値は引用符で囲む。改行を含むテキストは、キーの行に収まるようにエスケープした二重引用符で書く
+- frontmatter のキーの行は、YAML がブロックの連想配列のキーを読むとおりに探す（`frontmatterKeyLine`）。二重引用符と一重引用符のキー（`"my key":`）と、空白や `:` を含む引用符なしのキー（`two words:`、`a:b:`）も読む。書き換えはキーの綴りを引用符ごと保つ
 
 組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みの値の読みは `readBuiltin`（`parsing/utils/BuiltinValues.ts`）の1か所にあり、値、値なし、読めない値のどれかを返す（「継承と値のない値」）。値は型によらず表示の文字（`display`）から読み、引用符で囲んだ `"red"` は `red` である。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。プラグインのキー（`tv-color` など）も、ほかのキーと同じく大文字と小文字を区別しない（「プロパティのキー」）。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` と設定のキーを探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
 
