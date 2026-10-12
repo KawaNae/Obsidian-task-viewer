@@ -29,7 +29,7 @@ export type NameCheck =
 /**
  * What the send dialog's note field holds: the text typed, and the note a
  * candidate picked from its list named, while the text is what the pick put
- * in (`structure/dialogs.md`, 候補の一覧とメニュー).
+ * in.
  */
 export interface NoteAsk {
     text: string;

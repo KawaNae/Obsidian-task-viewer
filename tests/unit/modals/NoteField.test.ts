@@ -6,7 +6,7 @@ import { FakeEl, asEl } from '../helpers/fakeDom';
 
 /**
  * The send dialog's note field (`NoteField`): what it holds as the user
- * picks and types (`structure/dialogs.md`, 候補の一覧とメニュー). A pick is
+ * picks and types. A pick is
  * made as Obsidian's list makes one, by its `selectSuggestion`.
  */
 

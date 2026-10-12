@@ -91,7 +91,7 @@ export interface RowSnapshot {
 
 /**
  * The operations on the notes: the one way a consumer — a view, a menu, the
- * hub, a timer, the API, the CLI, the editor — writes (structure/layers.md).
+ * hub, a timer, the API, the CLI, the editor — writes.
  *
  * Each operation that names a row plans from the index's copy of it, once
  * the copy is known to be the row on the disk (`planCopy`), and in order
@@ -433,7 +433,7 @@ export class Operations {
      * A copy the disk no longer reads as (`checkCopy`: a change the index was
      * never told of) is not planned from: it is refused as `stale`, the note
      * is read again, and the user is asked to do it again, from the new
-     * reading (structure/layers.md, 読みの鮮度). Every write that plans from a copy
+     * reading. Every write that plans from a copy
      * comes through here, and so do the drag and the card's menu before the
      * user puts work in (`confirmTask`).
      *

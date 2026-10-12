@@ -101,7 +101,7 @@ type Rehearsed = ReadonlyArray<{ lines: readonly string[]; block: readonly Place
 
 /**
  * The writes of a send: rows and their subtrees taken to a section of a note
- * (`structure/writes.md`: the order of the writes, and what is taken back).
+ * (the order of the writes, and what is taken back: `send`).
  */
 export class SendWriter {
     constructor(

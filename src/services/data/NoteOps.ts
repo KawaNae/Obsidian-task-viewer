@@ -172,7 +172,7 @@ export interface SendingLines {
 }
 
 /**
- * The open timers, as a send asks them (`structure/writes.md`). A timer
+ * The open timers, as a send asks them. A timer
  * finds its lines by their `^id`s in its note; the timers are not the
  * send's to know, so they answer here.
  */
@@ -231,7 +231,7 @@ export type SendResult =
 
 /**
  * The operations on notes the UI asks for: sending rows and their subtrees
- * to a section of a note (`structure/writes.md`). Each takes
+ * to a section of a note. Each takes
  * what the dialog holds as its arguments; what is told the user, the
  * operation tells, and the dialog only decides from the result whether it
  * closes.

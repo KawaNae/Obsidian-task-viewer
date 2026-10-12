@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
- * Every write that adds lines, one row each (`structure/placement.md`):
+ * Every write that adds lines, one row each:
  * where the line goes (`Placement`), and
  * the check the write is held to (`checkWrite`) — the line put in is a
  * task under the item meant, outside code, and every task already there

@@ -4,7 +4,7 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A date block naming a day or a time that does not exist is not read, and a
- * write of the row keeps it on the line as written (`structure/dates.md`): a
+ * write of the row keeps it on the line as written: a
  * status toggle, a rename or a duplicate does not drop it, and does not guess
  * a date for it.
  */

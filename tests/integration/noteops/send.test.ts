@@ -377,7 +377,7 @@ describe('the send dialog', () => {
 });
 
 /**
- * The note field (`structure/dialogs.md`): which note a name, a path
+ * The note field: which note a name, a path
  * or a pick points at, and what is said of it under the field. The notes
  * are made through Obsidian in a folder of their own and taken away at the
  * end; the row is written anew for each send, which takes it away.

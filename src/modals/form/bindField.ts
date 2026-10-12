@@ -55,7 +55,7 @@ export interface BindFieldOptions<T> {
 }
 
 /**
- * Bind a text field to a value of `codec` (`structure/dialogs.md`, 欄の確定と保存).
+ * Bind a text field to a value of `codec`.
  *
  * - While typing, the text is read and what it reads as wrong is said
  *   (`issues`), but nothing is written and the text is left as typed. A

@@ -196,7 +196,7 @@ CSS / DOM クラス名の付け方を 4 層 + state/modifier 規則で固定す�
 
 ### 参考: 過去のリファクタ
 
-`memory/project_dom_naming_audit.md` (2026-05-03) に統合リファクタ前の負債列挙。代表的な解消:
+統合リファクタで解消した命名の負債の代表:
 
 - `view-sidebar-{layout, main, backdrop, panel}` 5 ブロック分裂 → `tv-sidebar` 1 ブロックに統合
 - `section-toggle-btn` + `schedule-section__toggle` 二系統 → `tv-section-toggle` + `--axis`/`--header` modifier

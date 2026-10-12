@@ -22,7 +22,7 @@ export interface AskHands<A> {
 
 /** What the body of a question tells the shell once drawn. */
 export interface AskBody {
-    /** The first focus: cancel in a dialog of buttons, the field in one of text (`structure/dialogs.md`, 初めのフォーカスと Enter). */
+    /** The first focus: cancel in a dialog of buttons, the field in one of text, so an Enter pressed at once writes nothing. */
     focus: Focusable | null;
     /** Whether a close asked for may go on (one waiting for a write). */
     beforeClose?: () => CloseAnswer;

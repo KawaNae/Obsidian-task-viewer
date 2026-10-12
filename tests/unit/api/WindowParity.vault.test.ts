@@ -6,7 +6,7 @@ import { daysWindow, dayStart, type TimeWindow } from '../../../src/utils/DayWin
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
- * The API's windows are the views' window (`structure/queries.md`): the same FilterState
+ * The API's windows are the views' window: the same FilterState
  * and the same days give the same tasks from `list` (`date`, `from`/`to`),
  * `today`, `tasksForDateRange` and a view's `tasksInWindow`. startHour 5;
  * D is 2026-10-04, a Sunday (the week from Monday 09-28).

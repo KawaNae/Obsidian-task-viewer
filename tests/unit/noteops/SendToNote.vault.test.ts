@@ -12,8 +12,7 @@ import { Outline } from '../../../src/services/parsing/utils/Outline';
  * A send to another note (`TaskIndex.send`): the note written first —
  * made, or written in one write — then each note the rows came from, each
  * row's subtree replaced by a link to the note; and, when a note the rows
- * came from refuses, what went of its rows taken out of the note again
- * (`structure/writes.md`).
+ * came from refuses, what went of its rows taken out of the note again.
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));

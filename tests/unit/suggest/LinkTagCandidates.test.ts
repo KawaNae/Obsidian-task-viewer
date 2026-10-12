@@ -3,7 +3,7 @@ import { linkTagCandidates, linkTagWrite, replacedRange, type LinkTagCandidate }
 import { linkApp } from '../helpers/linkApp';
 
 /**
- * Link and tag completion as Obsidian's `[[` completes (`structure/dialogs.md`):
+ * Link and tag completion as Obsidian's `[[` completes:
  * what a `[[` lists (every kind `NoteCandidates` holds), a note's headings
  * matched fuzzily, and what a pick writes, spelt from the note the link is
  * written in. The fuzzy search is the mock's, so what is asserted is the
