@@ -210,9 +210,10 @@ describe('the hub edits a list item by item', () => {
         expect(said[0]).toMatch(/^tv-form__error/);
     });
 
-    it('makes an inherited list the row\'s own from a copy, written by the first edit', () => {
+    it('makes an inherited list the row\'s own from a copy, written by the first edit, leaving the focus out of its inputs', () => {
         openHub('親');
-        run(`rowOf('area').querySelector('.task-hub__make-own').click(); await sleep(300); return 'ok';`);
+        const inInput = run<boolean>(`rowOf('area').querySelector('.task-hub__make-own').click(); await sleep(300); return document.activeElement instanceof HTMLInputElement;`);
+        expect(inInput).toBe(false);
         expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
         const shown = run<string[]>(`return JSON.stringify(items('area').map(i => i.value));`);
         expect(shown).toEqual(['lab', 'home']);

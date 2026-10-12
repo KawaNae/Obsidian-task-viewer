@@ -334,9 +334,9 @@ export class PropertiesFieldGroup implements ClosingPart {
         this.hideButton(row, key, shut || locked);
         if (shut || locked) return;
         const makeOwn = row.createEl('button', { cls: 'task-hub__make-own', text: t('modal.hub.makeOwnList'), attr: { type: 'button' } });
+        // The focus is not put in the draft: a tap on the button brings up no keyboard.
         makeOwn.addEventListener('click', () => {
             this.drafts.set(folded, [...items]);
-            this.focusAfter = { folded, focus: 'add' };
             this.render(true);
         });
     }
