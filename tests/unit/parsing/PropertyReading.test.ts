@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
-import { DEFAULT_SETTINGS } from '../../../src/types';
+import { DEFAULT_SETTINGS, type DisplayTask } from '../../../src/types';
+import { getEffectiveProperties } from '../../../src/services/data/EffectiveProperties';
+import { TaskValues } from '../../../src/services/filter/TaskValues';
 
 const read = (lines: string[]) => FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('n.md'));
 const task = (lines: string[]) => read(lines).tasks[0];
@@ -54,5 +56,32 @@ describe('property values in a note', () => {
         expect(task(['---', 'tags: work', '---', '- [ ] t']).cascadeContext?.tags).toEqual(['work']);
         expect(task(['---', 'tags: "#a #b"', '---', '- [ ] t']).cascadeContext?.tags).toBeUndefined();
         expect(task(['---', 'tags: a, b', '---', '- [ ] t']).cascadeContext?.tags).toBeUndefined();
+    });
+});
+
+/** What a filter and the hub read of a property: whether the task has it, and its text. */
+describe('a property with no value written', () => {
+    const shown = (lines: string[], key: string) => {
+        const t = task(lines);
+        return key in getEffectiveProperties(t) ? TaskValues.property(t as DisplayTask, key).text : undefined;
+    };
+
+    it('on a line, is a value that hides the one above it', () => {
+        expect(shown(['---', 'k: x', '---', '- k::', '- [ ] t'], 'k')).toBe('');
+        expect(shown(['- k:: x', '- [ ] t', '    - k::'], 'k')).toBe('');
+        expect(shown(['---', 'k: x', '---', '- k:: null', '- [ ] t'], 'k')).toBe('null');
+    });
+
+    it('in the frontmatter, is no property', () => {
+        for (const spelling of ['', 'null', '~']) {
+            expect(shown(['---', `k: ${spelling}`, '---', '- [ ] t'], 'k'), spelling).toBeUndefined();
+        }
+        expect(shown(['---', 'k: ""', '---', '- [ ] t'], 'k')).toBe('');
+    });
+
+    it('under a built-in key, lets the value above it through', () => {
+        expect(task(['---', 'tv-color: red', '---', '- tv-color::', '- [ ] t']).cascadeContext?.color).toBe('red');
+        expect(task(['- tv-color:: red', '- [ ] t', '    - tv-color::']).color).toBeUndefined();
+        expect(task(['- tv-color:: red', '- [ ] t', '    - tv-color::']).cascadeContext?.color).toBe('red');
     });
 });
