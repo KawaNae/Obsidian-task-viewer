@@ -167,10 +167,25 @@ describe('ChildPropertyLineEditor', () => {
             expect(lines).toEqual(['- [ ] task', '\t- other:: 1', '\t- k::']);
         });
 
-        it('writes a new list as its line and its items a level under it', () => {
+        it('writes a new list as its line and its items a level under it, the level spelled as the line stands under the task', () => {
             const lines = ['- [ ] task', '    - other:: 1', ''];
             apply(lines, 0, [{ key: 'k', op: 'set', value: { items: ['a', '"12"'] } }]);
-            expect(lines).toEqual(['- [ ] task', '    - other:: 1', '    - k::', '    \t- a', '    \t- "12"', '']);
+            expect(lines).toEqual(['- [ ] task', '    - other:: 1', '    - k::', '        - a', '        - "12"', '']);
+        });
+
+        it('writes a new list under a task with no child a level and a level under it', () => {
+            const top = ['- [ ] task'];
+            apply(top, 0, [{ key: 'k', op: 'set', value: { items: ['a'] } }]);
+            expect(top).toEqual(['- [ ] task', '\t- k::', '\t\t- a']);
+            const nested = ['- [ ] P', '    - [ ] task'];
+            apply(nested, 1, [{ key: 'k', op: 'set', value: { items: ['a'] } }]);
+            expect(nested).toEqual(['- [ ] P', '    - [ ] task', '        - k::', '            - a']);
+        });
+
+        it('writes a list over a value in a note indented with spaces, its items as the levels above them are', () => {
+            const lines = ['- [ ] task', '    - k:: x'];
+            apply(lines, 0, [{ key: 'k', op: 'set', value: { items: ['a'] } }]);
+            expect(lines).toEqual(['- [ ] task', '    - k::', '        - a']);
         });
 
         it('writes a list over a value: the line says none, and the items go under it', () => {

@@ -290,7 +290,11 @@ export class Placement {
      * past the lines in `except` (the ones the write takes away) where it has
      * another, carried under `parent` as far past it as it stood past the
      * task (`Outline.shiftedIndent`). A task with no children has its first
-     * one a level deeper: `parent`'s indentation and `unit`, repeated until
+     * one a level deeper, the level spelled as the task stands past the item
+     * it is under ({@link stepPast}: four spaces more under a task four
+     * spaces in, where Obsidian's editor would put a tab before or after
+     * them); a task at the top, or one whose level does not land where a
+     * child opens, takes `parent`'s indentation and `unit`, repeated until
      * the line reaches the parent's content column (`Outline.childIndent`,
      * the one rule for a child's indentation). How the rest of the file is
      * indented does not decide it, as it does not in the editor: a
@@ -307,10 +311,39 @@ export class Placement {
     ): string {
         const lines = outline.lines;
         const first = Placement.firstChildIndent(outline, taskLineIndex, except)
-            ?? (except.size > 0 ? Placement.firstChildIndent(outline, taskLineIndex) : null);
+            ?? (except.size > 0 ? Placement.firstChildIndent(outline, taskLineIndex) : null)
+            ?? Placement.stepPast(outline, taskLineIndex);
         const sample = first === null ? null
             : Outline.shiftedIndent(first, Outline.indentOf(lines[taskLineIndex]), Outline.indentOf(parent));
         return Outline.childIndent(parent, sample, unit);
+    }
+
+    /**
+     * The indentation a level under `row` takes when `row` has no child to
+     * spell it: `row`'s own line as far past it as `row` stands past the item
+     * it is under, so the subtree keeps the one spelling its levels have
+     * (four spaces under four spaces, not a tab after them). Null for a row
+     * at the top, which has no level above it to go by.
+     */
+    private static stepPast(outline: OutlineReading, row: number): string | null {
+        return this.levelPast(outline, outline.item(row)?.parent ?? null, Outline.indentOf(outline.lines[row]));
+    }
+
+    /** `indent` as far past itself as it stands past the line `above`; null with none above. */
+    private static levelPast(outline: OutlineReading, above: number | null, indent: string): string | null {
+        if (above === null) return null;
+        return Outline.shiftedIndent(indent, Outline.indentOf(outline.lines[above]), indent);
+    }
+
+    /**
+     * The indentation of a first child of `head`, a line not yet written
+     * that goes at `spot`: a level under it spelled as it stands past the
+     * spot's parent, as a row with no child has its first one
+     * ({@link resolveChildIndent}). The items of a list a write adds with
+     * its property line.
+     */
+    static childOfPut(outline: OutlineReading, spot: Spot, head: string, unit: string): string {
+        return Outline.childIndent(spot.indent + Outline.dedent(head), this.levelPast(outline, spot.parent, spot.indent), unit);
     }
 
     /**

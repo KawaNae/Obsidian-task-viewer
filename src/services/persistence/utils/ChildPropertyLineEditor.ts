@@ -99,9 +99,9 @@ export class ChildPropertyLineEditor {
             return;
         }
         // The items a level under the new line, as the first child of a line
-        // with none is (`Placement.resolveChildIndent`), written from the
-        // line's own column so that the block reads by itself (`Block.read`).
-        const under = Outline.shiftedIndent(Outline.childIndent(spot.indent + head, null, unit), spot.indent, '');
+        // with none is (`Placement.childOfPut`), written from the line's own
+        // column so that the block reads by itself (`Block.read`).
+        const under = Outline.shiftedIndent(Placement.childOfPut(reading, spot, head, unit), spot.indent, '');
         draft.put(spot, Block.read([head, ...list.map(item => `${under}- ${item}`)]));
     }
 
