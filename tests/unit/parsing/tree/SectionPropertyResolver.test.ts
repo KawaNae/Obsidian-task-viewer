@@ -454,3 +454,87 @@ describe('SectionPropertyResolver の出所', () => {
         });
     });
 });
+
+describe('値のない値と読めない値', () => {
+    const fm = { kind: 'frontmatter' };
+
+    it('見出しの値のない組み込みのキーは、frontmatter の値を通す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-color::',
+            '- tv-linestyle::',
+            '- tv-mask::',
+            '- [ ] task',
+        ], { 'tv-color': 'red', 'tv-linestyle': 'dashed', 'tv-mask': '***' });
+        const section = doc.sections[0];
+        expect(section.resolvedColor).toBe('red');
+        expect(section.resolvedLinestyle).toBe('dashed');
+        expect(section.resolvedMask).toBe('***');
+        expect(section.resolvedSources.fields.color).toEqual(fm);
+    });
+
+    it('見出しの値のない tv-start は、frontmatter の日付と時刻を通す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-start::',
+            '- [ ] task',
+        ], { 'tv-start': '2026-09-28T10:00' });
+        const section = doc.sections[0];
+        expect(section.resolvedStartDate).toBe('2026-09-28');
+        expect(section.resolvedStartTime).toBe('10:00');
+    });
+
+    it('見出しの値のないカスタムのキーは、frontmatter の値を隠す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- area::',
+            '- [ ] task',
+        ], { area: 'lab' });
+        const section = doc.sections[0];
+        expect(section.resolvedProperties.area?.value).toEqual({ type: 'null', spelling: '' });
+        expect(section.resolvedSources.properties.area).toMatchObject({ kind: 'section', line: 1 });
+    });
+
+    it('frontmatter の値のないキーは読まない', () => {
+        const doc = buildAndResolve(['## Section', '- [ ] task'], { area: null, 'tv-color': null });
+        const section = doc.sections[0];
+        expect(section.resolvedProperties.area).toBeUndefined();
+        expect(section.resolvedColor).toBeUndefined();
+        expect(section.resolvedSources.fields.color).toBeUndefined();
+    });
+
+    it('見出しの読めない線種は、frontmatter の値を通す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-linestyle:: wavy',
+            '- [ ] task',
+        ], { 'tv-linestyle': 'dashed' });
+        expect(doc.sections[0].resolvedLinestyle).toBe('dashed');
+    });
+
+    it('見出しの組み込みのキーのリストは、項目を `, ` でつないだ値になる', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-color::',
+            '    - red',
+            '- tv-mask::',
+            '    - a',
+            '    - b',
+            '- [ ] task',
+        ], { 'tv-color': 'blue' });
+        const section = doc.sections[0];
+        expect(section.resolvedColor).toBe('red');
+        expect(section.resolvedMask).toBe('a, b');
+    });
+
+    it('値のない tags は何も足さない', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tags::',
+            '- [ ] task',
+        ], { tags: ['a'] });
+        const section = doc.sections[0];
+        expect(section.resolvedTags).toEqual(['a']);
+        expect(section.resolvedSources.tags).toEqual([{ from: fm, tags: ['a'] }]);
+    });
+});
