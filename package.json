@@ -26,6 +26,7 @@
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "builtin-modules": "^3.3.0",
+    "commonmark": "0.31.2",
     "esbuild": "^0.27.2",
     "js-yaml": "^4.1.1",
     "obsidian": "^1.12.3",

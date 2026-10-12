@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { Outline, type OutlineReading } from '../../../src/services/parsing/utils/Outline';
-import fixture from './fixtures/l3-commonmark.json';
+import fixture from './fixtures/commonmark-outline.json';
 
 /**
  * `Outline.read` against CommonMark (commonmark.js 0.31.2) on the shapes
  * measured in Obsidian 1.12.4 (235 shapes) and a
  * few more for the readings made CommonMark's. The fixture is written by
- * `C:/VScode/obsidian-task-viewer-worktrees/verify-scripts/l3-cm-fixture.js`,
- * outside the repository; its head names the generator and the
- * version it read with.
+ * `tests/tools/commonmark-outline-fixture.mjs` from each shape's `lines`;
+ * its head names the generator and the version it read with. To write it
+ * again: `node tests/tools/commonmark-outline-fixture.mjs`.
  *
  * An item is `[line, end, parent]`: `end` just past its last line that is
  * not blank. `owners` gives, per line that is not blank, the innermost item
@@ -58,8 +58,8 @@ const SPACE_BEFORE_TAB = new Set([
  * line, and the closing delimiter closes the fence rather than opening one.
  */
 const FENCE_EXCEPTION: Record<string, Pick<Shape, 'items' | 'owners'>> = {
-    'X-L2-bk1': { items: [[0, 4, null], [4, 5, null]], owners: [0, 0, 0, 0, 4] },
-    'X-L2-quote-in-fence': { items: [[0, 4, null], [4, 5, null]], owners: [0, 0, 0, 0, 4] },
+    'X-fence-shallow-line': { items: [[0, 4, null], [4, 5, null]], owners: [0, 0, 0, 0, 4] },
+    'X-fence-shallow-quote': { items: [[0, 4, null], [4, 5, null]], owners: [0, 0, 0, 0, 4] },
 };
 
 function expectCommonMark(name: string, shape: Shape): void {
