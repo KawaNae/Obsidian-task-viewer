@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /**
  * The plugin's own writes through the editor's API cannot change a status
- * character (R0's lead decision: counted whole in stage X). Of the four, two
+ * character. Of the four that write through it, two
  * write a line — the color and the line-style suggests, `editor.replaceRange`
  * of the value of `key:` — and two only dispatch effects (`TaskMenuExtension`). The two
  * that write are offered only on a frontmatter line of their key, which is no

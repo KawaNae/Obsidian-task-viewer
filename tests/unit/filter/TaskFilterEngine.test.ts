@@ -706,7 +706,7 @@ describe('TaskFilterEngine', () => {
         });
 
         // A negative operator with the parent target asks that no ancestor
-        // answers yes (`not(ancestors(positive))`, decided 2026-09-30). It
+        // answers yes (`not(ancestors(positive))`). It
         // used to ask that some ancestor answered no, so a parent holding the
         // excluded tag passed when the grandparent did not, and a task
         // without ancestors failed.

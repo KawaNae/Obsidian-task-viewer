@@ -268,7 +268,7 @@ describe('FrontmatterLineEditor', () => {
     // ── surgical edit が保つもの（processFrontMatter との差） ──
     describe('representation is preserved across a key write', () => {
         // processFrontMatter はここでコメントを落とし、引用符を外し、
-        // フロー配列をブロックリストへ変える（2026-08-14 実測）。
+        // フロー配列をブロックリストへ変える（実測）。
         const source = [
             '---',
             '# why this file exists',

@@ -9,8 +9,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
- * A task's subtree goes on past a blank line inside it (decided
- * 2026-09-21), for the
+ * A task's subtree goes on past a blank line inside it, for the
  * parser and for every write alike.
  *
  * The subtree used to stop at the first blank line. A deeper line below one

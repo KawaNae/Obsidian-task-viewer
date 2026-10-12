@@ -10,8 +10,7 @@
  * What genuinely differs between the two is how the section looks — a compact
  * sidebar row versus a card with its own background and border — and the block
  * name is the handle for that. Unifying the names would mean rewriting both
- * stylesheets to no benefit; the 2026-05-03 DOM naming audit reviewed
- * `kanban-view__cell-*` and passed it.
+ * stylesheets to no benefit, so `kanban-view__cell-*` keeps its name.
  */
 
 import { setIcon } from 'obsidian';

@@ -23,7 +23,7 @@ import type { FormIssue, Tone } from '../form/FormIssue';
  *   show it, and a time with no date reads as having one only where a date
  *   is inherited. A daily note's day is no such value: the reading gives a
  *   line no date of the note's name, so a time typed with no date is no
- *   start there (the decision of 2026-10-04).
+ *   start there.
  * - A create waits for the write: written, the dialog closes; not, it
  *   stays as it was, and says why above its buttons once, with no notice.
  *   A refusal that comes after the dialog was closed is told by a notice.

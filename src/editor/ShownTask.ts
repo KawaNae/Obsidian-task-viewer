@@ -21,7 +21,7 @@ export interface ShownTaskLookup {
  * is in, so the task is looked up only when the index last read what the
  * editor shows. When it has not — an edit not saved yet, a scan not come —
  * the editor is saved, the index made to read the file, and the task looked
- * up again (the user's decision (a), 2026-09-25 15:12).
+ * up again.
  *
  * @returns the task, undefined when no task stands on the line, or null when
  * the index still reads another content, or the editor changed while it was

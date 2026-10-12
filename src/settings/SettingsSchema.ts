@@ -139,7 +139,7 @@ export const SETTINGS_SCHEMA = {
     taskHeading: text(HeadingInput),
     taskHeadingLevel: int({ min: 1, max: 6 }),
     sectionSide: oneOf(['head', 'end']),
-    // The work and the break take any length of a minute or more (decided 2026-10-04).
+    // The work and the break take any length of a minute or more.
     pomodoroWorkMinutes: int({ min: 1 }),
     pomodoroBreakMinutes: int({ min: 1 }),
     countdownMinutes: int({ min: 1 }),

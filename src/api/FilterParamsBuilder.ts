@@ -45,8 +45,8 @@ export interface ApiQuery {
  * taken together — a task answers when it passes every one. `list`,
  * `today` and the date-range family all resolve their query here.
  *
- * A filter file is a saved query, and is answered as the UI answers it
- * (decided 2026-10-01): with the tasks a view shows, so not those with a
+ * A filter file is a saved query, and is answered as the UI answers it:
+ * with the tasks a view shows, so not those with a
  * validation error, and in the pinned list's own order unless the call
  * names a `sort` — whatever else the call adds to it.
  */

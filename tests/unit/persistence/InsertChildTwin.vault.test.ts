@@ -11,8 +11,7 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A child added from a card's menu, the API or the CLI is written only where
- * the row the name was read in stands (the twins decision of 2026-09-25
- * 10:42): the check `WriteSession.row` makes of every write planned from the
+ * the row the name was read in stands: the check `WriteSession.row` makes of every write planned from the
  * index's copy (`plannedOn`), the reading's key included. A timer's record
  * takes the same check.
  *

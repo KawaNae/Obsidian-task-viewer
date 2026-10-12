@@ -21,8 +21,7 @@ export interface ValueSuggestOptions {
  * a list. One kind of list for every field, Obsidian's (`ShownSuggest`), as
  * the name's links and tags are: the first item is selected as it
  * opens, an Enter puts it in, and a value that is no item is put in by
- * closing the list (Escape) and pressing Enter, as the editor's lists do
- * (decided 2026-10-04).
+ * closing the list (Escape) and pressing Enter, as the editor's lists do.
  *
  * The field's own Enter (`onFormEnter`, `bindField`) never sees an Enter
  * the list takes: Obsidian's keymap takes it before the field does. What

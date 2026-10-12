@@ -40,7 +40,7 @@ function ownersOf(outline: OutlineReading): (number | null)[] {
 /**
  * The shapes both views read otherwise than CommonMark, the same way: a line
  * indented with a space before a tab (`  \t- [ ] T`). The outline reads
- * them as CommonMark does (2026-09-24): the one rule that says what both
+ * them as CommonMark does: the one rule that says what both
  * views show also moves shapes only Live Preview reads so, and the reading
  * view agrees for a reason of its own (a tab is four columns to it).
  */
@@ -98,7 +98,7 @@ describe('Outline.read reads a space before a tab as CommonMark does, where both
 });
 
 /**
- * The outline's second exception (L2; kept 2026-09-25): a line of only NBSP
+ * The outline's second exception: a line of only NBSP
  * or U+3000 is blank, where CommonMark reads it as text. Both views read it
  * blank in every shape where that changes a task, a parent or a subtree
  * (12 shapes, measured in Obsidian 1.12.4). What it changes and they do not show the

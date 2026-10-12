@@ -19,7 +19,7 @@ import type { OutlineReading } from './Outline';
  * Read off the same reading every other question of the note is asked of,
  * never a second walk of the lines. The other shapes where one view alone
  * parts from CommonMark are not warned on: the plugin reads them as
- * CommonMark does (2026-09-24).
+ * CommonMark does.
  */
 export function outlineDiagnostics(outline: OutlineReading): LocatedDiagnostic[] {
     const diagnostics: LocatedDiagnostic[] = [];

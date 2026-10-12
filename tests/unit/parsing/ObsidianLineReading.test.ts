@@ -11,9 +11,8 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 
 /**
- * What a line is and how deep it stands, read as Obsidian 1.12.4 reads it
- * (the R0 probe, 2026-09-21). The cases are the
- * R0 probe's, byte for byte; the expectations are Obsidian's metadata
+ * What a line is and how deep it stands, read as Obsidian 1.12.4 reads it.
+ * The cases are the ones measured in Obsidian, byte for byte; the expectations are Obsidian's metadata
  * (`listItems`) rather than the plugin's reading at the time.
  */
 

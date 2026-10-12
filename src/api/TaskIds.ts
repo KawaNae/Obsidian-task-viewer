@@ -3,8 +3,7 @@ import { mapRow } from '../services/display/SegmentIds';
 import { BLOCK_ID_SOURCE } from '../services/parsing/utils/TaskLineClassifier';
 
 /**
- * The public API's and the CLI's task IDs (the names and IDs decision,
- * 2026-09-25). One ID per row, in one of two shapes:
+ * The public API's and the CLI's task IDs. One ID per row, in one of two shapes:
  *
  * - `path#^id` for a row its file anchors (`Task.anchor`: the `^id` no other
  *   line of the file carries). It lasts across edits from outside and

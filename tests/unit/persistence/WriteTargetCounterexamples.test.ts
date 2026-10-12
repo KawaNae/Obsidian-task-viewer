@@ -19,7 +19,7 @@ import { planDuplicate } from '../../../src/services/operations/DuplicateShift';
  * Where the copy's line reads otherwise, the basis refuses it. Where it reads
  * the same — a twin moved onto it — nothing on the line tells the twins
  * apart, so the line counts only in the content the copy was read in, or one
- * our own writes carried it to (`NamedRow.read`, 2026-09-25): after any edit
+ * our own writes carried it to (`NamedRow.read`): after any edit
  * from outside, the write waits for a scan.
  */
 

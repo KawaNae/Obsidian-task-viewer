@@ -7,7 +7,7 @@ import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
- * The API's and the CLI's task IDs (the names and IDs decision, 2026-09-25).
+ * The API's and the CLI's task IDs.
  * An anchored row — its line's `^id` carried by no other line of the file —
  * goes out as `path#^id`, and that ID lasts across edits from outside. Any
  * other row goes out under its name, which lasts until its file changes other

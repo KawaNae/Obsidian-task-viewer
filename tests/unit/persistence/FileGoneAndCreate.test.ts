@@ -164,8 +164,8 @@ describe('creating a note', () => {
 
         expect(outcome.written).toBe(true);
         // Made of the lines of an empty note, `['']`: it was once made of
-        // none, and ended without a terminator (decided 2026-09-30: one way
-        // to make a note, so one shape).
+        // none, and ended without a terminator (one way to make a
+        // note, so one shape).
         expect(b.text(NEW)).toBe(CONTENT + '\n');
         expect(b.refused).toEqual([]);
     });

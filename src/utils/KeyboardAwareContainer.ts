@@ -38,7 +38,7 @@ import { trackKeyboard, nativeKeyboardHeight, keyboardTop } from './KeyboardStat
  * - Capacitor Keyboard events (`keyboardWillShow` 等の window イベント、
  *   `keyboardHeight` 付き) — Obsidian mobile (Android/iOS)。WebView が
  *   リサイズされず visualViewport が一切変化しないため、ネイティブ側の
- *   通知が唯一の検知源（実機観測 2026-07-08: ih=vvH のまま、
+ *   通知が唯一の検知源（実機観測: ih=vvH のまま、
  *   keyboardWillShow h=336 のみ発火）
  */
 export class KeyboardAwareContainer {

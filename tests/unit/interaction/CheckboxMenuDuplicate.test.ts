@@ -5,7 +5,7 @@ import { t } from '../../../src/i18n';
 
 /**
  * The editor's checkbox menu duplicates a line without its `^id`, as every
- * other duplicate does (the names and IDs decision, 2026-09-25): two lines
+ * other duplicate does: two lines
  * with one `^id` would anchor neither, and the original would lose the ID the
  * API gives it as `path#^id`.
  */

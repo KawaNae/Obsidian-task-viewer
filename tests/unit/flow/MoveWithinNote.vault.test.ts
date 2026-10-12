@@ -9,13 +9,13 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { SectionSide } from '../../../src/services/persistence/utils/Placement';
 
 /**
- * A move stays in its note (F8, the decision of 2026-09-26): `move([[#name]])`
+ * A move stays in its note: `move([[#name]])`
  * carries the completed row and its subtree to that heading's section, at
- * the side the settings say (`sectionSide`, the head unless set; the
- * decision of 2026-09-28). A heading that is not there, or is there twice,
+ * the side the settings say (`sectionSide`, the head unless
+ * set). A heading that is not there, or is there twice,
  * fires nothing: the completion is written, the command stays, and the user
  * is told. A move that names no heading of the note — another note, or
- * nothing at all, `move()` — is a syntax error (2026-10-01): the command does
+ * nothing at all, `move()` — is a syntax error: the command does
  * not read, so nothing fires and nothing is said; the editor marks it. The
  * same on every path that completes a row — a card, the API, the editor.
  */

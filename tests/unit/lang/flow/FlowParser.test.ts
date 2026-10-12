@@ -113,8 +113,7 @@ describe('FlowParser', () => {
             expect(headingOf('move([[#Done later|later]])')).toEqual({ heading: 'Done later', codes: [] });
         });
 
-        // Retired 2026-09-28 with a warning, and an error since 2026-10-01:
-        // a move that names no heading of the note cannot move the task, and
+        // An error: a move that names no heading of the note cannot move the task, and
         // the command that holds it does not run at all.
         it.each([
             'move()',
@@ -165,8 +164,7 @@ describe('FlowParser', () => {
             expect(errors('use("週報")')).toContain('flow.orphan-modifier');
         });
 
-        // Retired 2026-08-16 with a warning, and an error since 2026-10-01:
-        // `nochildren` is no clause, so the command that holds it does not run.
+        // An error: `nochildren` is no clause (it once was), so the command that holds it does not run.
         it('reads nochildren as an unknown clause, and the whole command with it', () => {
             for (const raw of ['every mon nochildren', 'nochildren', 'nochildren every mon x3']) {
                 const { program, diagnostics } = parseFlow(raw);

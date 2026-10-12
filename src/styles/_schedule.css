@@ -211,7 +211,7 @@
        left:8px, i.e. its glyphs start 12px from the grid's left edge. This
        chip's own left:8px plus its padding:0 4px puts its glyphs at the same
        12px — the opaque chip background is then allowed to overhang 4px to
-       the left of the label column. Measured on real render (2026-08-22). */
+       the left of the label column. Measured on real render. */
     left: 8px;
     padding: 0 4px;
     border-radius: 3px;

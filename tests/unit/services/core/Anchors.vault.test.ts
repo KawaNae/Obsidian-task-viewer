@@ -3,7 +3,7 @@ import { Notice } from 'obsidian';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../../helpers/vaultSession';
 
 /**
- * N1 (2026-09-25, the names and IDs decision): a row whose `^id` no other
+ * A row whose `^id` no other
  * line of its file carries has an anchor. The anchor outlives readings — an
  * edit from outside, a reload — where a name does not. The index looks it up
  * in one place (`TaskIndex.getTaskByAnchor`), and a write to the row it finds

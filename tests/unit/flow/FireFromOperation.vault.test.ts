@@ -401,7 +401,7 @@ describe('a copy of a parent that holds a completed row (counterexample 3)', () 
 });
 
 describe('a flow\'s own completed child', () => {
-    // G1's decision (2026-09-21): a generated child that reads completed and
+    // A generated child that reads completed and
     // carries a command of its own is let through. Written by the flow, it
     // does not fire; checked again by the user, it fires once.
     const GEN_NOTE = [

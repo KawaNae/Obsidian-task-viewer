@@ -8,7 +8,7 @@ export interface LinkSettings {
 
 /**
  * A stand-in for `fileManager.generateMarkdownLink`, spelling links as
- * Obsidian 1.13.7 was measured to (Dev vault, 2026-09-28):
+ * Obsidian 1.13.7 was measured to:
  *
  * - shortest: the note's name when it is the one note of the vault by that
  *   name, case aside; its path without `.md` when another has it, or when

@@ -30,7 +30,7 @@ export type Inherits = NonNullable<Task['cascadeContext']>;
  * (`CreatePlaces.facts`), and what a line put there inherits (`inherits`):
  * what the read layer gives the line once it is written, and nothing else.
  * A daily note's day is not one of them: the reading gives a line no date of
- * the note's name (the decision of 2026-10-04).
+ * the note's name.
  *
  * - `dailyNote`: the note of the day (`path`), there (`existing`) or made of
  *   its template (`new`), and the heading of the settings' section in it as
