@@ -25,7 +25,7 @@ describe('inheritedAt', () => {
         const values = byKey(inheritedAt(lines, 6, DEFAULT_SETTINGS));
         expect(values.aliases.yaml).toEqual(['aliases:', '  - 別名', '  - "two: words"']);
         expect(values.aliases.obsidian).toBe(true);
-        expect(values.aliases.from).toEqual([{ kind: 'frontmatter' }]);
+        expect(values.aliases.from).toEqual([{ kind: 'frontmatter', line: 1 }]);
         expect(values.owner).toMatchObject({ yaml: ['owner: me'], obsidian: false });
     });
 
@@ -80,7 +80,7 @@ describe('inheritedAt', () => {
         const values = byKey(inheritedAt(lines, 5, DEFAULT_SETTINGS));
         expect(values['tv-start'].yaml).toEqual(['tv-start: "2026-09-28T11:00"']);
         expect(values['tv-start'].from).toEqual([
-            { kind: 'frontmatter' },
+            { kind: 'frontmatter', line: 1 },
             { kind: 'section', line: 4, heading: expect.objectContaining({ text: 'Morning' }) },
         ]);
     });
@@ -144,7 +144,7 @@ describe('inheritedAt', () => {
         expect(values['tv-color'].yaml).toEqual(['tv-color: "007700"']);
     });
 
-    it('見出しのプロパティ行のリストは YAML のリストで、組み込みのキーは表示の文字で書く。最初のタスクより下の行も節の値', () => {
+    it('見出しのプロパティ行のリストは YAML のリストで、組み込みのキーのリストは読めない値なので送らない。最初のタスクより下の行も節の値', () => {
         const lines = [
             '## S',
             '- [ ] task',
@@ -158,10 +158,10 @@ describe('inheritedAt', () => {
         ];
         const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
         expect(values.list.yaml).toEqual(['list:', '  - a', '  - 12', '  - "12"']);
-        expect(values['tv-mask'].yaml).toEqual(['tv-mask: "x, y"']);
+        expect(values['tv-mask']).toBeUndefined();
     });
 
-    it('見出しの値のない組み込みのキーは frontmatter の値を送り、frontmatter の値のないキーは送らない', () => {
+    it('値のない値は値のない値として送る: 見出しの行は値のない行と同じ形で、frontmatter の行はそのまま', () => {
         const lines = [
             '---',
             'tv-color: red',
@@ -170,13 +170,15 @@ describe('inheritedAt', () => {
             '---',
             '## S',
             '- tv-color::',
+            '- tv-mask:: null',
             '- tv-start::',
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
-        expect(values['tv-color'].yaml).toEqual(['tv-color: red']);
-        expect(values['tv-start'].yaml).toEqual(['tv-start: "2026-09-01"']);
-        expect(values.area).toBeUndefined();
+        expect(values['tv-color']).toMatchObject({ yaml: ['tv-color: ""'], from: [{ kind: 'section', line: 6 }] });
+        expect(values['tv-mask'].yaml).toEqual(['tv-mask: "null"']);
+        expect(values['tv-start']).toMatchObject({ yaml: ['tv-start: ""'], from: [{ kind: 'section', line: 8 }] });
+        expect(values.area).toMatchObject({ yaml: ['area:'], from: [{ kind: 'frontmatter', line: 3 }] });
     });
 
     it('tv-ignore のノートは行を持たないので、何も答えない', () => {

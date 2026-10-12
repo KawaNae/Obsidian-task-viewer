@@ -4,14 +4,14 @@ import { BuiltinPropertyExtractor, fieldKey, type ExtractedProperties } from './
 import { TagExtractor } from '../utils/TagExtractor';
 import { PropertyKey } from '../utils/PropertyKey';
 import { PropertyLines } from '../utils/PropertyLines';
+import { frontmatterKeyRange } from '../utils/FrontmatterKeyLines';
+import type { OutlineReading } from '../utils/Outline';
 
 /** What one layer hands the sections below it: its resolved values, and where each came from. */
 interface Resolved {
     values: ExtractedProperties;
     sources: ResolvedSources;
 }
-
-const FRONTMATTER: ValueSource = Object.freeze({ kind: 'frontmatter' });
 
 /**
  * Section-scope property resolver.
@@ -21,33 +21,43 @@ const FRONTMATTER: ValueSource = Object.freeze({ kind: 'frontmatter' });
  * by the same extractor as a section's, its built-ins put apart from its
  * custom properties (`BuiltinPropertyExtractor.fromFrontmatter`).
  *
+ * The nearest layer that says a value wins, and a layer that says it has
+ * none (`- area::`, `tv-color:`) wins as one with a value does: it hides
+ * the value above it, a built-in's as a custom property's. A key a layer
+ * does not read (one written twice, a built-in's value it cannot read)
+ * says nothing, and the value above comes through. Tags are a union, which
+ * nothing hides.
+ *
  * Beside each resolved value it records the layer that won it
- * (`SectionNode.resolvedSources`): the frontmatter, or the property line of a
- * section. Which layer wins is decided here and nowhere else; a reader that
- * has to write a value again goes back to that layer's line
- * (`InheritedValues`), and never walks the cascade itself.
+ * (`SectionNode.resolvedSources`): the frontmatter's key line, or the
+ * property line of a section. Which layer wins is decided here and nowhere
+ * else; a reader that has to write a value again goes back to that layer's
+ * line (`InheritedValues`), and never walks the cascade itself.
  */
 export class SectionPropertyResolver {
     static resolve(
+        outline: OutlineReading,
         sections: readonly SectionNode[],
         frontmatter: Record<string, any> | undefined,
         keys: ScopeKeys
     ): void {
         const values = BuiltinPropertyExtractor.fromFrontmatter(frontmatter, keys);
-        const root: Resolved = { values, sources: this.frontmatterSources(values) };
+        const root: Resolved = { values, sources: this.frontmatterSources(outline, values, keys) };
 
         for (const section of sections) {
             this.resolveSection(section, root, keys);
         }
     }
 
-    /** Every value the frontmatter sets is the frontmatter's. */
-    private static frontmatterSources(values: ExtractedProperties): ResolvedSources {
+    /** Every value the frontmatter says is the frontmatter's, by the line of its key. */
+    private static frontmatterSources(outline: OutlineReading, values: ExtractedProperties, keys: ScopeKeys): ResolvedSources {
+        const fmEnd = outline.bodyStart - 1;
+        const at = (key: string): ValueSource => ({ kind: 'frontmatter', line: frontmatterKeyRange(outline.lines, fmEnd, key)?.[0] ?? null });
         const fields: Partial<Record<ScalarField, ValueSource>> = {};
-        for (const field of SCALAR_FIELDS) if (values[field] !== undefined) fields[field] = FRONTMATTER;
+        for (const field of SCALAR_FIELDS) if (values[field] !== undefined) fields[field] = at(fieldKey(field, keys));
         const properties: Record<string, ValueSource> = {};
-        for (const key of Object.keys(values.properties)) properties[key] = FRONTMATTER;
-        return { fields, tags: values.tags ? [{ from: FRONTMATTER, tags: values.tags }] : [], properties };
+        for (const [folded, { key }] of Object.entries(values.properties)) properties[folded] = at(key);
+        return { fields, tags: values.tags ? [{ from: at(fieldKey('tags', keys)), tags: values.tags }] : [], properties };
     }
 
     private static resolveSection(
@@ -60,13 +70,14 @@ export class SectionPropertyResolver {
         const own = BuiltinPropertyExtractor.extract(raw, keys);
         const here = (key: string): ValueSource => ({ kind: 'section', line: lineOf.get(PropertyKey.fold(key))!, heading: section.heading });
 
-        // 親プロパティ + 自身のプロパティを child-wins マージ。
+        // 親プロパティ + 自身のプロパティを child-wins マージ。値なし (null) も
+        // 自身の値として勝ち、上の層の値を隠す。
         // Partial merge: date と time は独立に継承（別の field）。
         const values: ExtractedProperties = { properties: parent.values.properties };
         const fields: Partial<Record<ScalarField, ValueSource>> = {};
         for (const field of SCALAR_FIELDS) {
             const mine = own[field];
-            values[field] = mine ?? parent.values[field];
+            values[field] = mine !== undefined ? mine : parent.values[field];
             const from = mine !== undefined ? here(fieldKey(field, keys)) : parent.sources.fields[field];
             if (from) fields[field] = from;
         }

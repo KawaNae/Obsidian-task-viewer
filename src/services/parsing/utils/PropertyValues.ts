@@ -86,16 +86,18 @@ export const PropertyValues = {
      * The frontmatter as property values, by key folded
      * (`PropertyKey.ofMapping`), before any key is told apart as a built-in
      * (`BuiltinPropertyExtractor` does that, for every layer). A key written
-     * twice, its case aside (`Area` and `area`), is read on neither. A key
-     * with no value (`key:`, `key: null`) is left out, as is one whose value
-     * no property holds (`fromYaml`).
+     * twice, its case aside (`Area` and `area`), is read on neither, with
+     * no value or not. A key with no value (`key:`, `key: null`) is one with
+     * the value null, which hides the value above it as a line's `- key::`
+     * does. A key whose value no property holds (a mapping, `fromYaml`) is
+     * left out.
      */
     fromFrontmatter(frontmatter: Record<string, unknown> | undefined): Properties {
         const out: Properties = {};
         if (!frontmatter) return out;
         for (const [folded, { key, value: raw }] of PropertyKey.ofMapping(frontmatter)) {
             const value = this.fromYaml(raw);
-            if (value && value.type !== 'null') out[folded] = { key, value };
+            if (value) out[folded] = { key, value };
         }
         return out;
     },

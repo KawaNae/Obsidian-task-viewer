@@ -68,13 +68,14 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     };
     /**
      * A key one layer set, said as that layer said it: a property line's
-     * value as `typed` says it, or else as a string.
+     * value as `typed` says it, or else as a string; no value as no value.
      */
     const asWritten = (key: string, from: ValueSource, typed?: PropertyValue) => {
         if (from.kind === 'section') {
-            push(key, typed
-                ? propertyYaml(key, typed)
-                : [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(PropertyValues.display(propertyLines.get(from.line)!.value))}`], [from]);
+            const written = typed ?? propertyLines.get(from.line)!.value;
+            push(key, typed || written.type === 'null'
+                ? propertyYaml(key, written)
+                : [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(PropertyValues.display(written))}`], [from]);
             return;
         }
         const range = FrontmatterLineEditor.findKeyRange(lines, fmEnd, key);
@@ -82,10 +83,18 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
         push(key, written ?? stringifyYaml({ [key]: read.frontmatter?.[key] }).trimEnd().split('\n'), [from]);
     };
 
-    const when = (key: string, date: string | undefined, time: string | undefined, sources: readonly (ValueSource | undefined)[]) => {
-        const value = date && time ? `${date}T${time}` : date ?? time;
-        if (value === undefined) return;
-        push(key, [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(value)}`], distinct(sources));
+    /**
+     * A date key put together from its date and time. A key whose date and
+     * time a layer hides with no value goes as no value is said of a
+     * property line (`propertyYaml`).
+     */
+    const when = (key: string, date: string | null | undefined, time: string | null | undefined, sources: readonly (ValueSource | undefined)[]) => {
+        const value = date && time ? `${date}T${time}` : date || time;
+        if (value) {
+            push(key, [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(value)}`], distinct(sources));
+        } else if (date === null) {
+            push(key, propertyYaml(key, NO_VALUE), distinct(sources));
+        }
     };
     when(keys.start, section.resolvedStartDate, section.resolvedStartTime, [fields.startDate, fields.startTime]);
     when(keys.end, section.resolvedEndDate, section.resolvedEndTime, [fields.endDate, fields.endTime]);
@@ -107,6 +116,8 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     return out;
 }
 
+const NO_VALUE: PropertyValue = { type: 'null', spelling: '' };
+
 /**
  * A property line's value as frontmatter lines the frontmatter reads back
  * as the same type (`PropertyValues.fromYaml`): a number as spelled (every
@@ -116,9 +127,7 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
  * back as written but where the YAML type has its own spelling: `True` as
  * `true`, `"123"` as YAML quotes it.
  *
- * No value goes as the text it is spelled (`""` for an empty line): the
- * frontmatter's key with no value is no property, and would not hide the
- * value above it as the line does.
+ * No value goes as the text it is spelled (`""` for an empty line).
  */
 function propertyYaml(key: string, property: PropertyValue): string[] {
     const head = `${yamlKey(key)}:`;

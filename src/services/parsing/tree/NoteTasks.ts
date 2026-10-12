@@ -1,6 +1,6 @@
 import type { ParserId, Task, ScopeKeys } from '../../../types';
 import { isTvInline } from '../../../types';
-import { SCALAR_FIELDS, type ScalarField, type SectionNode } from './Sections';
+import { SCALAR_FIELDS, type ResolvedSources, type ScalarField, type SectionNode } from './Sections';
 import { NoteSections } from './NoteSections';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
@@ -136,26 +136,28 @@ export class NoteTasks {
         if (extracted.tags && extracted.tags.length > 0) task.tags = TagExtractor.merge(extracted.tags, task.tags);
 
         // What the section gives. Dates and style are the section's only
-        // where the row says none (they override); tags and properties go
-        // through in part (a union; child-wins per key), so they are kept
+        // where the row says nothing of them (they override, and a style the
+        // row says it has none of hides the section's); tags and properties
+        // go through in part (a union; child-wins per key), so they are kept
         // whole.
         const cc = this.inheritance(section);
-        for (const field of SCALAR_FIELDS) if (task[field]) delete cc[field];
-        if (Object.keys(cc).length > 0) {
-            task.cascadeContext = cc;
-            task.inheritedFrom = section.resolvedSources;
-        }
+        // A row says a field with a value, or with none (null); an empty
+        // date is a line with no `@` block, which says none of them.
+        for (const field of SCALAR_FIELDS) if (task[field] !== undefined && task[field] !== '') delete cc[field];
+        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+        if (hasSources(section.resolvedSources)) task.inheritedFrom = section.resolvedSources;
     }
 
     /**
      * What a row standing in `section` inherits of it, the row saying
-     * nothing itself: every value the section resolves to. A row that says
+     * nothing itself: every value the section resolves to. A built-in the
+     * section hides with no value is none to inherit. A row that says
      * a date or a style itself keeps its own (`fill`); a row not yet
      * written (the create dialog's) is shown what it would inherit.
      */
     static inheritance(section: SectionNode): NonNullable<Task['cascadeContext']> {
         const cc: NonNullable<Task['cascadeContext']> = {};
-        const given: Record<ScalarField, string | undefined> = {
+        const given: Record<ScalarField, string | null | undefined> = {
             startDate: section.resolvedStartDate,
             startTime: section.resolvedStartTime,
             endDate: section.resolvedEndDate,
@@ -203,4 +205,9 @@ export class NoteTasks {
         }
         return ChildLineClassifier.classifyLines(texts, numbers);
     }
+}
+
+/** Whether a section's sources name any layer: a value, or no value, said above the row. */
+function hasSources(sources: ResolvedSources): boolean {
+    return Object.keys(sources.fields).length > 0 || sources.tags.length > 0 || Object.keys(sources.properties).length > 0;
 }

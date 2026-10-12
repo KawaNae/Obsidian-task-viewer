@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, type DisplayTask } from '../../../src/types';
-import { getEffectiveProperties } from '../../../src/services/data/EffectiveProperties';
+import { getEffectiveColor, getEffectiveProperties } from '../../../src/services/data/EffectiveProperties';
 import { TaskValues } from '../../../src/services/filter/TaskValues';
+import { taskToRecord } from '../../../src/api/TaskNormalizer';
 import { valuesOf } from '../helpers/properties';
 
 const read = (lines: string[]) => FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('n.md'));
@@ -77,16 +78,22 @@ describe('a property with no value written', () => {
         expect(shown(['---', 'k: x', '---', '- k:: null', '- [ ] t'], 'k')).toBe('null');
     });
 
-    it('in the frontmatter, is no property', () => {
+    it('in the frontmatter, is a value too, whatever its spelling', () => {
         for (const spelling of ['', 'null', '~']) {
-            expect(shown(['---', `k: ${spelling}`, '---', '- [ ] t'], 'k'), spelling).toBeUndefined();
+            expect(shown(['---', `k: ${spelling}`, '---', '- [ ] t'], 'k'), spelling).toBe('');
         }
         expect(shown(['---', 'k: ""', '---', '- [ ] t'], 'k')).toBe('');
     });
 
-    it('under a built-in key, lets the value above it through', () => {
-        expect(task(['---', 'tv-color: red', '---', '- tv-color::', '- [ ] t']).cascadeContext?.color).toBe('red');
-        expect(task(['- tv-color:: red', '- [ ] t', '    - tv-color::']).color).toBeUndefined();
-        expect(task(['- tv-color:: red', '- [ ] t', '    - tv-color::']).cascadeContext?.color).toBe('red');
+    it('goes out of the API as null, from the frontmatter as from a line', () => {
+        const record = (lines: string[]) => taskToRecord(task(lines) as DisplayTask, ['properties'], () => undefined).properties;
+        expect(record(['---', 'area:', 'k: ~', '---', '- [ ] t'])).toEqual({ area: null, k: null });
+        expect(record(['---', 'area: lab', '---', '- area::', '- [ ] t'])).toEqual({ area: null });
+    });
+
+    it('under a built-in key, hides the value above it as well', () => {
+        expect(getEffectiveColor(task(['---', 'tv-color: red', '---', '- tv-color::', '- [ ] t']))).toBeUndefined();
+        expect(task(['- tv-color:: red', '- [ ] t', '    - tv-color::']).color).toBeNull();
+        expect(getEffectiveColor(task(['- tv-color:: red', '- [ ] t', '    - tv-color::']))).toBeUndefined();
     });
 });

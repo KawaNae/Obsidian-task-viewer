@@ -122,7 +122,8 @@ export class StyleFieldGroup implements ClosingPart {
 
         this.bound[field] = bindField(input, {
             codec: CODECS[field],
-            current: () => this.ctx.getTask()[field],
+            // A row's own no value (`- tv-color::`) shows as no value of its own.
+            current: () => this.ctx.getTask()[field] ?? undefined,
             commit: (value) => this.commit(field, value),
             issues: (issue) => this.ctx.issues.set(field, readIssue(field, issue)),
             takesEnter: () => suggest?.listShown ?? false,
@@ -185,7 +186,7 @@ export class StyleFieldGroup implements ClosingPart {
     refresh(): void {
         const task = this.ctx.getTask();
         for (const field of FIELDS) {
-            this.bound[field].set(task[field]);
+            this.bound[field].set(task[field] ?? undefined);
             this.updateDecoration(field);
         }
     }

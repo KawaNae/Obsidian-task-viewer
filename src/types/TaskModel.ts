@@ -198,6 +198,11 @@ export interface Task {
      * (`resolveSpan`). Properties/tags/style close over
      * the Task alone, so they merge via the `getEffective*` derived helpers
      * (`services/data/EffectiveProperties.ts`).
+     *
+     * It holds the values the row inherits: a built-in a section hides with
+     * no value (`- tv-color::`) is not here, as one no layer says is not
+     * (where it was hidden is `inheritedFrom`). A custom property hidden so
+     * is here with its value null, which the API puts out as null.
      */
     cascadeContext?: {
         startDate?: string;
@@ -290,12 +295,14 @@ export interface Task {
      * Raw styling: the task's own child lines / own frontmatter only.
      * Section-inherited style lives in `cascadeContext`; consumers read the
      * merged view via `getEffectiveColor()` / `getEffectiveLinestyle()`.
+     * Undefined where the row says nothing of it, null where its line says
+     * it has none (`- tv-color::`), which hides the section's.
      */
-    color?: string;
-    linestyle?: string;
+    color?: string | null;
+    linestyle?: string | null;
 
     /** Raw mask (own declaration only; merged view via `getEffectiveMask()`). */
-    mask?: string;
+    mask?: string | null;
 
     /** True when parsed by a read-only parser (no writeback support). */
     isReadOnly?: boolean;
