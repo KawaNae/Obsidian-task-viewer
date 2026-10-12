@@ -538,7 +538,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
 | `effectiveDue` | `string \| null` | 受け継ぎを含む締切。行に無ければ見出しやノートの締切（フィルタと並べ替えの `due` はこの値） |
 | `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（フィルタの `length` と同じ。`@2026-10-04` と `@>>2026-10-04` は 1440）。日付も締切も無いタスクは `null` |
-| `properties` | `Record<string, unknown>` | カスタムプロパティ。値は型に従う: 数は `number`、真偽値（`true` `True` `TRUE` `false` `False` `FALSE`。行でも frontmatter でも同じ）は `boolean`、配列は `string[]`、ほかは `string` |
+| `properties` | `Record<string, unknown>` | カスタムプロパティ。値は型に従う。型は行でも frontmatter でも、引用符のない YAML と同じ綴りで決まる。数は `number`（`0x1F` は 31）、真偽値（`true` `True` `TRUE` と、その false の3つ）は `boolean`、値なし（`- key::`、`null`、`~`）は `null`、frontmatter のリストは項目ごとに同じ型の配列、ほかは `string`。`"123"` のように値全体を引用符で囲んだ値は、引用符を外した `string` |
 | `flow` | `string \| null` | `==>` に続くフローのコマンドを正規の形で1行にしたもの（例: `every tue,fri`、[コマンド](commands.md)）。子の `- ==>` 行も含む。無ければ `null` |
 
 ## DataviewJS 使用例
