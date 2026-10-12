@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readBuiltin } from '../../../src/services/parsing/utils/BuiltinValues';
 import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
+import { ColorCheck } from '../../../src/utils/ColorUtils';
 
 const line = (spelling: string) => PropertyValues.fromText(spelling);
 const list = (...items: string[]) => ({ type: 'list' as const, items: items.map(item => PropertyValues.fromText(item) as never) });
@@ -35,6 +36,26 @@ describe('readBuiltin', () => {
         expect(readBuiltin('start', line('11:00'))).toEqual({ builtin: 'start', date: undefined, time: '11:00' });
         expect(readBuiltin('end', line('2026-01-01T10:00'))).toEqual({ builtin: 'end', date: '2026-01-01', time: '10:00' });
         expect(readBuiltin('due', line('2026-01-01T10:00'))).toEqual({ builtin: 'due', due: '2026-01-01T10:00' });
+    });
+
+    it('reads a color CSS does not read as one as a value it cannot read', () => {
+        expect(readBuiltin('color', line('rde'))).toBeUndefined();
+        expect(readBuiltin('color', line('ff00'))).toBeUndefined();
+        expect(readBuiltin('color', line('Red'))).toEqual({ builtin: 'color', text: 'Red' });
+        expect(readBuiltin('color', line('#f80'))).toEqual({ builtin: 'color', text: 'f80' });
+    });
+
+    it('asks CSS whether a text is a color, a hex value aside', () => {
+        const asked: string[] = [];
+        ColorCheck.use((text) => { asked.push(text); return text.startsWith('rgb('); });
+        try {
+            expect(readBuiltin('color', line('rgb(1, 2, 3)'))).toEqual({ builtin: 'color', text: 'rgb(1, 2, 3)' });
+            expect(readBuiltin('color', line('red'))).toBeUndefined();
+            expect(readBuiltin('color', line('336699'))).toEqual({ builtin: 'color', text: '336699' });
+            expect(asked).toEqual(['rgb(1, 2, 3)', 'red']);
+        } finally {
+            ColorCheck.reset();
+        }
     });
 
     it('reads a value as its text shown, whatever its type', () => {

@@ -1,6 +1,6 @@
 import type { PropertyValue, ScopeKeys } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
-import { normalizeColor } from '../../../utils/ColorUtils';
+import { ColorCheck, normalizeColor } from '../../../utils/ColorUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { parseDateTimeField } from './DateTimeFieldParser';
 import { PropertyKey } from './PropertyKey';
@@ -47,7 +47,8 @@ export type BuiltinValue =
  *   neither a date nor a time.
  * - A value the built-in cannot read is undefined: the layer is read as
  *   saying nothing, and the value above comes through. That is a list (but
- *   for tags), an empty text, a line style not known, and for a date key a
+ *   for tags), an empty text, a color CSS does not read as one
+ *   (`ColorCheck`: a misspelt `rde`), a line style not known, and for a date key a
  *   text naming neither a date nor a time, or a day or a time that does not
  *   exist (`parseDateTimeField`; one part not read reads neither), and a
  *   due with no date.
@@ -70,7 +71,7 @@ export function readBuiltin(builtin: Builtin, value: PropertyValue): BuiltinValu
     const text = PropertyValues.display(value).trim();
     if (text === '') return undefined;
     switch (builtin) {
-        case 'color': return { builtin, text: normalizeColor(text) };
+        case 'color': return ColorCheck.isColor(text) ? { builtin, text: normalizeColor(text) } : undefined;
         case 'linestyle': {
             const style = text.toLowerCase();
             return VALID_LINE_STYLES.has(style) ? { builtin, text: style } : undefined;
