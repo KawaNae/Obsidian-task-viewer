@@ -5,16 +5,10 @@ import { KEYS_NOT_SCOPE, reservedPropertyKeys } from './FrontmatterPolicy';
 import { PropertyKey } from './PropertyKey';
 
 /**
- * The characters a property's key cannot hold: the property line
- * (`- key:: value`, `PROPERTY_LINE`) reads a key up to
- * its first `:`, and none with `[` or `]`.
- */
-const NOT_IN_KEY = /[:[\]]/g;
-
-/**
  * A property's key typed in a field (the hub's new property): the space
  * around it taken off, and refused when the property line would not read it
- * as the key (`:`, `[`, `]`), or when the plugin keeps it for itself
+ * as the key (`PROPERTY_KEY_SOURCE`: empty, `:`, `[`, `]`, a backquote), or
+ * when the plugin keeps it for itself
  * (`reservedPropertyKeys`: the scope keys, `tags`), its case aside
  * (`PropertyKey`): `Tags` and `TV-COLOR` are refused as `tags` is.
  */
@@ -56,10 +50,13 @@ export const ScopeKeyInput = {
     },
 };
 
-/** A key a property line reads: the space around it taken off, not empty, none of `:`, `[`, `]`. */
+/**
+ * A key a property line reads (`PROPERTY_KEY_SOURCE`): the space around it
+ * taken off, not empty, none of `:`, `[`, `]` or a backquote.
+ */
 function readKey(text: string): Read<string> {
     const key = text.trim();
     if (key === '') return readFail({ code: 'empty' });
-    const bad = [...new Set(key.match(NOT_IN_KEY) ?? [])];
+    const bad = PropertyKey.charsNotIn(key);
     return bad.length > 0 ? readFail({ code: 'chars', chars: bad.join(' ') }) : readOk(key);
 }

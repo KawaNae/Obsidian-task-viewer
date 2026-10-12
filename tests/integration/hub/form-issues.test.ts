@@ -139,6 +139,17 @@ describe('the hub\'s form', () => {
         ].join('\n'));
     });
 
+    it('refuses a new property\'s key the property line would not read as the key (a backquote), writing nothing', async () => {
+        openHub('親');
+        const said = run<Record<string, unknown>>(`
+            type(keyInput(), '\`k\`');
+            await leave(keyInput());
+            return JSON.stringify({ says: says(keyInput()), invalid: invalid(keyInput()) });
+        `);
+        expect(said).toEqual({ says: [`${ERROR}: ${tr('issue.chars', { chars: '`' })}`], invalid: true });
+        expect(readTestFile(TEST_FILE)).toBe(NOTE);
+    });
+
     it('reads a date in full width with a long vowel mark and a time of one digit, shown and saved in the form the note writes', async () => {
         openHub('親');
         const shown = run<Record<string, unknown>>(`

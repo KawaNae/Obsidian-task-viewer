@@ -43,6 +43,36 @@ describe('PropertyLines', () => {
         });
     });
 
+    describe('a key', () => {
+        const keysOf = (lines: string[]) => ofRoot(lines).own.lines.map(line => [line.key, line.written]);
+
+        it('is what stands between the gap after the bullet and the first `::`, the space around it taken off', () => {
+            expect(keysOf(['- area:: lab', '-   a b \t:: 1', '* x::', '1. y:: 2'])).toEqual([['area', 'lab'], ['a b', '1'], ['x', ''], ['y', '2']]);
+        });
+
+        it('is read as written, emphasis and a tag\'s `#` included', () => {
+            expect(keysOf(['- **k**:: 1', '- #tag:: 2'])).toEqual([['**k**', '1'], ['#tag', '2']]);
+        });
+
+        it('ends at the first `::`: `- k::: v` is the key `k` with the value `: v`', () => {
+            expect(keysOf(['- k::: v'])).toEqual([['k', ': v']]);
+        });
+
+        it('holds no `:`, `[`, `]` or backquote: such a line is no property line', () => {
+            expect(keysOf(['- a:b:: 1', '- [ ] t:: 1', '- [[x]]:: 1', '- a]:: 1', '- `k`:: 1', '- 見出し直下のプロパティ行（`- tv-color:: `）でも'])).toEqual([]);
+        });
+
+        it('is not empty: a line with none, or with space alone, is no property line', () => {
+            expect(keysOf(['- :: x', '-  :: x', '- \t ::', '- 　:: x'])).toEqual([]);
+        });
+
+        it('a line that is no property line is an item of a list above it', () => {
+            const { read } = ofRoot(['- list::', '    -  :: x', '    - `k`:: v']);
+            expect(valuesOf(read.values)).toEqual({ list: { type: 'list', items: [text(':: x'), text('`k`:: v')] } });
+            expect(read.findings).toEqual([]);
+        });
+    });
+
     describe('a value', () => {
         it('a line with a value reads it as written, and its items are notes, found on the item\'s line', () => {
             const { own, read } = ofTask(['- [ ] t', '    - area:: lab', '        - a', '            - deep', '        - b']);

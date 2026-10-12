@@ -2,7 +2,7 @@ import type { Properties, PropertyScalar, PropertyValue, ScopeKeys } from '../..
 import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
-import { PropertyKey } from './PropertyKey';
+import { PROPERTY_KEY_SOURCE, PropertyKey } from './PropertyKey';
 import { PropertyValues } from './PropertyValues';
 import { builtinsByKey, readBuiltin } from './BuiltinValues';
 import { TaskLineClassifier } from './TaskLineClassifier';
@@ -10,12 +10,12 @@ import { TaskLineClassifier } from './TaskLineClassifier';
 /**
  * `- key:: value`, with any list bullet as a `==>` line takes one (`*`,
  * `+`, `1.`), the marker followed by spaces and tabs as a list item's is
- * (`Outline.read`). A key holds no `:`, `[` or `]`, so a checkbox line and a
- * wikilink line are never property lines. The value may be empty
- * (`- key::`): `(.*)`, not `(.+)`, so that a space after `::` does not
- * decide whether the line is one.
+ * (`Outline.read`). The key (group 1, the space around it to be taken off)
+ * is read as `PROPERTY_KEY_SOURCE` says: no `:`, `[`, `]` or backquote, and
+ * not empty. The value may be empty (`- key::`): `(.*)`, not `(.+)`, so
+ * that a space after `::` does not decide whether the line is one.
  */
-export const PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
+export const PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+(${PROPERTY_KEY_SOURCE})::\\s*(${IN_LINE}*)$`);
 
 /** A list item's text: what follows its marker and the gap after it. */
 export const ITEM_TEXT = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}(?:${SPACE_OR_TAB_SOURCE}+(${IN_LINE}*))?$`);

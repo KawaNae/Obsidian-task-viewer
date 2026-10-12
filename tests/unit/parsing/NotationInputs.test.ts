@@ -5,6 +5,8 @@ import { TagInput } from '../../../src/services/parsing/utils/TagInput';
 import { PropertyKeyInput, ScopeKeyInput } from '../../../src/services/parsing/utils/PropertyKeyInput';
 import { StatusCharInput } from '../../../src/services/parsing/utils/StatusCharInput';
 import { HeadingInput } from '../../../src/services/parsing/utils/HeadingInput';
+import { PropertyLines } from '../../../src/services/parsing/utils/PropertyLines';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 
 describe('a task name typed in a field', () => {
@@ -54,6 +56,17 @@ describe('a property key typed to add', () => {
     it('refuses what the property line would not read as the key', () => {
         expect(keys.read('a:b')).toEqual({ ok: false, issue: { code: 'chars', chars: ':' } });
         expect(keys.read('[a]')).toEqual({ ok: false, issue: { code: 'chars', chars: '[ ]' } });
+        expect(keys.read('`a`')).toEqual({ ok: false, issue: { code: 'chars', chars: '`' } });
+        expect(keys.read(' \u3000 ')).toEqual({ ok: false, issue: { code: 'empty' } });
+    });
+
+    it('takes a key exactly when the property line reads it as written', () => {
+        const typed = ['area', '**k**', '#tag', 'a b', ' 場所 ', '', ' ', 'a:b', 'a]', '[a', '`a`', 'a`b', '\u3000'];
+        for (const text of typed) {
+            const [line] = PropertyLines.ofSection(Outline.read([`- ${text}:: v`]), null, 0, 1).lines;
+            const read = keys.read(text);
+            expect(read.ok ? read.value : null, JSON.stringify(text)).toBe(line?.key ?? null);
+        }
     });
 
     it('refuses a key the plugin keeps for itself', () => {
