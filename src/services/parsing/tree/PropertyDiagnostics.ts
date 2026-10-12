@@ -31,6 +31,10 @@ const MESSAGES: Record<PropertyFindingKind, string> = {
     'not-a-list-item':
         'This line is not read as an item of the list `{{key}}`. An item of the list is a `- value` one level under `{{key}}::`; '
         + 'a task, an item with no value (`-`, `- null`), a line under an item and a line that is no item are left out',
+    'unreadable-value':
+        'The value of `{{key}}::` is not one `{{key}}` can read (a list is none), so the line is read as if it were not written. '
+        + 'A value the task or section inherits from a section or the frontmatter is used instead. '
+        + 'Write a value `{{key}}` reads, or leave `{{key}}::` empty with nothing under it to have no value',
 };
 
 /**

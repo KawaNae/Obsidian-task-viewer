@@ -42,6 +42,10 @@ const KINDS: Record<string, { lines: string[]; expected: (string | number)[][] }
         lines: ['- [ ] t', '    - list::', '        - a', '        - [ ] sub', '        -'],
         expected: [['property.not-a-list-item', 'warning', 3], ['property.not-a-list-item', 'warning', 4]],
     },
+    'unreadable-value': {
+        lines: ['## S', '- tv-linestyle:: wavy', '- tv-color::', '    - red', '- [ ] t', '    - tv-mask::'],
+        expected: [['property.unreadable-value', 'warning', 1], ['property.unreadable-value', 'warning', 2]],
+    },
 };
 
 describe('propertyDiagnostics', () => {
@@ -113,6 +117,13 @@ describe('propertyDiagnostics', () => {
 
         it('names the key as the line writes it', () => {
             expect(diagnose(['- [ ] t', '    - Area:: 1', '    - area:: 2']).map(d => d.params?.key)).toEqual(['Area', 'area']);
+        });
+
+        it('says of a built-in\'s value it cannot read that the line is read as not written', () => {
+            const [d] = diagnose(KINDS['unreadable-value'].lines);
+            expect(d.params).toEqual({ key: 'tv-linestyle', text: 'tv-linestyle:: wavy' });
+            expect(d.message).toContain('`tv-linestyle::`');
+            expect(d.message).toContain('read as if it were not written');
         });
 
         it('says it in Japanese, every kind, with nothing left to fill', () => {
