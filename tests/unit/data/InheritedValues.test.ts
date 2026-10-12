@@ -138,11 +138,11 @@ describe('inheritedAt', () => {
         expect(values.links.yaml).toEqual(['links: "[[a]], [[b|B, c]]"']);
         expect(values.none.yaml).toEqual(['none: ","']);
         expect(values.hex.yaml).toEqual(['hex: 0x1F']);
-        // A quoted line value is text, and YAML is told so by its own quotes.
+        // A quoted line value is text, and goes with its quotes as written.
         expect(values.id.yaml).toEqual(['id: "123"']);
-        expect(values.sq.yaml).toEqual(['sq: abc']);
-        // No value goes as an empty text: the frontmatter's `empty:` would be no property.
-        expect(values.empty.yaml).toEqual(['empty: ""']);
+        expect(values.sq.yaml).toEqual(["sq: 'abc'"]);
+        // No value goes as no value, which hides the value above there too.
+        expect(values.empty.yaml).toEqual(['empty:']);
         // The plugin's own keys are read as text: a color is not a number.
         expect(values['tv-color'].yaml).toEqual(['tv-color: "007700"']);
     });
@@ -155,12 +155,15 @@ describe('inheritedAt', () => {
             '  - a',
             '  - 12',
             '  - "12"',
+            "  - 'x y'",
+            '  - "a\\b"',
             '- tv-mask::',
             '  - x',
             '  - y',
         ];
         const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
-        expect(values.list.yaml).toEqual(['list:', '  - a', '  - 12', '  - "12"']);
+        // A quoted item goes with its quotes, unless YAML would read them otherwise (a backslash).
+        expect(values.list.yaml).toEqual(['list:', '  - a', '  - 12', '  - "12"', "  - 'x y'", '  - a\\b']);
         expect(values['tv-mask']).toBeUndefined();
     });
 
@@ -178,9 +181,9 @@ describe('inheritedAt', () => {
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
-        expect(values['tv-color']).toMatchObject({ yaml: ['tv-color: ""'], from: [{ kind: 'section', line: 6 }] });
-        expect(values['tv-mask'].yaml).toEqual(['tv-mask: "null"']);
-        expect(values['tv-start']).toMatchObject({ yaml: ['tv-start: ""'], from: [{ kind: 'section', line: 8 }] });
+        expect(values['tv-color']).toMatchObject({ yaml: ['tv-color:'], from: [{ kind: 'section', line: 6 }] });
+        expect(values['tv-mask'].yaml).toEqual(['tv-mask:']);
+        expect(values['tv-start']).toMatchObject({ yaml: ['tv-start:'], from: [{ kind: 'section', line: 8 }] });
         expect(values.area).toMatchObject({ yaml: ['area:'], from: [{ kind: 'frontmatter', line: 3 }] });
     });
 
