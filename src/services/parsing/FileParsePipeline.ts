@@ -110,7 +110,10 @@ export class FileParsePipeline {
             try {
                 const yamlContent = lines.slice(1, bodyStart - 1).join('\n');
                 const parsed: unknown = parseYaml(yamlContent);
-                if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
+                // A block that reads as anything but a mapping (a list, a
+                // text) is no frontmatter: Obsidian's metadata worker keeps a
+                // block only when it reads as one.
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) frontmatterObj = parsed as Record<string, any>;
             } catch {
                 // A malformed block reads as no frontmatter, as metadataCache
                 // reads it.
