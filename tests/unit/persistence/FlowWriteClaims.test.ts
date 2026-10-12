@@ -215,7 +215,7 @@ describe('what an update reports', () => {
         it('names the child line it rewrote as a rewrite', async () => {
             const b = await writeBench([TASK, CHILD, ''].join('\n'));
             await updateRow(b.writer, b.taskAt(0).file, plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
-                { key: '金額', op: 'set', value: '200' },
+                { key: '金額', op: 'set', value: { text: '200' } },
             ]);
 
             // The task line first, then the child: `applyOps` only ever
@@ -231,7 +231,7 @@ describe('what an update reports', () => {
         it('names a child line it added as an insert', async () => {
             const b = await writeBench([TASK, ''].join('\n'));
             await updateRow(b.writer, b.taskAt(0).file, plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
-                { key: '金額', op: 'set', value: '200' },
+                { key: '金額', op: 'set', value: { text: '200' } },
             ]);
 
             expect(only(b.filed).edits).toEqual([
@@ -241,21 +241,18 @@ describe('what an update reports', () => {
             expect(b.lines()).toEqual([DONE, '\t- 金額:: 200', '']);
         });
 
-        it('names each removed declaration where it stood', async () => {
-            // Two declarations of one key, removed from the bottom up so each
-            // index is the one that line had — the same arithmetic stripFlow
-            // relies on.
+        it('writes nothing over a key written twice, and says which line', async () => {
+            // The key is read on neither line: what was meant is the user's to
+            // say in the editor, and no line of it is taken out or merged.
             const b = await writeBench([TASK, CHILD, '\t- 金額:: 300', ''].join('\n'));
-            await updateRow(b.writer, b.taskAt(0).file, plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
+            const written = (await updateRow(b.writer, b.taskAt(0).file, plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
                 { key: '金額', op: 'delete' },
-            ]);
+            ])).written;
 
-            expect(only(b.filed).edits).toEqual([
-                { kind: 'replaced', at: 0 },
-                { kind: 'removed', at: 2, count: 1 },
-                { kind: 'removed', at: 1, count: 1 },
-            ]);
-            expect(b.lines()).toEqual([DONE, '']);
+            expect(written).toBe(false);
+            expect(b.filed).toEqual([]);
+            expect(b.lines()).toEqual([TASK, CHILD, '\t- 金額:: 300', '']);
+            expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'property', key: '金額', line: 1 }, subject: 'ポモドーロ' }]);
         });
 
         it('leaves a declaration inside a fence out of the report', async () => {
@@ -265,7 +262,7 @@ describe('what an update reports', () => {
             const fenced = [TASK, CHILD, '\t```', '\t- 金額:: 999', '\t```', ''];
             const b = await writeBench(fenced.join('\n'));
             await updateRow(b.writer, b.taskAt(0).file, plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
-                { key: '金額', op: 'set', value: '200' },
+                { key: '金額', op: 'set', value: { text: '200' } },
             ]);
 
             expect(only(b.filed).edits).toEqual([

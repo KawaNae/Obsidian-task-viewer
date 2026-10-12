@@ -233,7 +233,8 @@ export class Operations {
 
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作。写しと更新の
         // diff から導く。
-        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.scopeKeys);
+        const keys = this.settings.scopeKeys;
+        const propertyOps = PropertyUpdatePlanner.plan(task, updates, keys);
 
         // 書く行は写しに更新を重ねた姿から作る。行の探索は写しで行う:
         // ファイルに書かれているのは写しの行なので、更新後の日付や時刻で
@@ -248,7 +249,7 @@ export class Operations {
         const target = plannedOn(task, { subtree: propertyOps.length > 0 });
         const answer = await this.writeCompleting(
             completes(task.originalText, text, this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, childOps: propertyOps }], { fire, refused: heard(hear) }));
+            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, properties: { ops: propertyOps, keys } }], { fire, refused: heard(hear) }));
 
         // Not written: why has been told once (see reportRefusal), or is the caller's to tell.
         if (!answer.written) logWarn(`[Operations] update was not written: id=${taskId} fields=[${Object.keys(updates)}]`);

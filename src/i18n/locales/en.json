@@ -817,6 +817,7 @@
     "refusedUnplaceableInFence": "a new line would read inside the code block that never closes (line {{line}})",
     "refusedDisturbsInFence": "writing it would make another line read inside the code block that never closes (line {{line}})",
     "refusedHeadings": "the note has {{count}} headings named \"{{name}}\", so there is no telling which one it goes under",
+    "refusedProperty": "the lines of property \"{{key}}\" (line {{line}}) hold a key written twice or something the plugin does not read; mend them in the editor",
     "refusedFailed": "an error occurred reading or writing the note; see the console for details",
     "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed.",
     "timerAnchorShared": "Another line carries this line's ^{{id}} too. The timer could not find its task again, so it did not start.",

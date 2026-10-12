@@ -47,6 +47,13 @@ export interface BindFieldOptions<T> {
     /** Whether a list open on the field takes an Enter (`onFormEnter`). */
     takesEnter?: () => boolean;
     /**
+     * Whether a commit of a text typed over the field is handed on even when
+     * it reads as the current value: a field that shows a value the row
+     * inherits, where typing it again makes it the row's own. A field left
+     * as it was shown (focused and left, nothing typed) commits nothing.
+     */
+    takesSame?: () => boolean;
+    /**
      * How a text is put in the field: the field's own way when it shows the
      * text elsewhere too (`PickerTextField.setText` keeps its clear button
      * and its picker in step). By default, the input's value.
@@ -76,6 +83,8 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     let given = input.value;
     /** The write a commit is waiting for: what it decides, the field holds as typed till then. */
     let writing: Promise<boolean> | null = null;
+    /** Whether anything was typed since the field was last given its text (`takesSame`). */
+    let typedOver = false;
     // The field's composition is followed from now on.
     composingIn(input);
 
@@ -88,7 +97,9 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     };
 
     const commit = () => {
-        const read = pending();
+        const same = typedOver && (opts.takesSame?.() ?? false);
+        typedOver = false;
+        const read = pending() ?? (same ? codec.read(input.value) : null);
         if (read === null) {
             // The field shows its value: nothing typed over it.
             given = input.value;
@@ -98,7 +109,7 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
         opts.issues(null);
         const text = codec.show(read.value);
         if (input.value !== text) put(text);
-        if (text === shownValue()) {
+        if (text === shownValue() && !same) {
             given = text;
             return;
         }
@@ -118,6 +129,7 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     };
 
     input.addEventListener('input', (e) => {
+        typedOver = true;
         if (!(e as InputEvent).isComposing) check();
     });
     input.addEventListener('compositionend', check);
@@ -132,11 +144,13 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
             const text = codec.show(value);
             if (input.value !== text) put(text);
             given = text;
+            typedOver = false;
             opts.issues(null);
         },
         commit,
         discard(): void {
             writing = null;
+            typedOver = false;
             const text = shownValue();
             if (input.value !== text) put(text);
             given = text;

@@ -119,11 +119,11 @@ export const PropertyValues = {
 
     /**
      * The value as a property line writes it, which reads back as the same
-     * value (`fromText`). A line holds no list yet: a list is its items'
-     * spellings joined by `, `, which a line reads as one text.
+     * value (`fromText`). A list is no line's value: its items are each
+     * written so, one item each under a line with no value
+     * (`ChildPropertyLineEditor`).
      */
-    spelling(value: PropertyValue): string {
-        if (value.type === 'list') return value.items.map(item => item.spelling).join(', ');
+    spelling(value: Exclude<PropertyValue, { type: 'list' }>): string {
         return value.spelling;
     },
 

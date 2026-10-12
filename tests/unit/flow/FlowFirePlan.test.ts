@@ -1,3 +1,4 @@
+import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
@@ -122,7 +123,7 @@ describe('the fire and update ops, in one write', () => {
         const lines = ['- [ ] P', '    - [ ] T', '        - color:: red'];
         const after = written(lines, 1, [{
             kind: 'update', text: '- [x] T',
-            childOps: [{ key: 'color', op: 'set', value: 'blue' }],
+            properties: { ops: [{ key: 'color', op: 'set', value: { text: 'blue' } }], keys: DEFAULT_SCOPE_KEYS },
         }]);
         expect(after).toEqual(['- [ ] P', '    - [x] T', '        - color:: blue']);
     });

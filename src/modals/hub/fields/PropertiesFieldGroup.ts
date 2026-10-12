@@ -86,10 +86,15 @@ export class PropertiesFieldGroup implements ClosingPart {
                 candidates: (q) => FilterValueCollector
                     .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
-                pick: (val) => { valueInput.value = val; value.commit(); },
+                // A value picked is one typed: the inherited value picked is made the row's own.
+                pick: (val) => { valueInput.value = val; valueInput.dispatchEvent(new Event('input')); value.commit(); },
             });
-            // The value the row shows: its own, or the inherited one (left as it is, no own value is made).
-            // What is typed is written as typed, and reads as a line reads it (`PropertyValues.fromText`).
+            // The value the row shows: its own, or the inherited one. Left as
+            // it is, no own value is made; typed again, the inherited value is
+            // written as the row's own (`takesSame`). What is typed is written
+            // as typed, and reads as a line reads it (`PropertyValues.fromText`);
+            // nothing typed takes the row's own line out, and the value above
+            // comes through.
             const value = bindField(valueInput, {
                 codec: FreeText,
                 current: () => {
@@ -98,9 +103,10 @@ export class PropertiesFieldGroup implements ClosingPart {
                 },
                 // An own line keeps its key as written; an inherited value made
                 // the task's own is written under the key it was inherited by.
-                commit: (raw) => this.set(key, raw),
+                commit: (raw) => raw.trim() === '' ? this.remove(key) : this.set(key, raw),
                 issues: () => { /* any text is a value */ },
                 takesEnter: () => suggest.listShown,
+                takesSame: () => !isOwn,
             });
             this.valueBound.set(folded, value);
 
@@ -110,9 +116,7 @@ export class PropertiesFieldGroup implements ClosingPart {
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
                 removeBtn.disabled = shut;
                 removeBtn.addEventListener('click', () => {
-                    const next = { ...(this.ctx.getTask().properties ?? {}) };
-                    delete next[folded];
-                    this.commit(next);
+                    this.remove(key);
                     // 構造コミット: 楽観 model から行を即時再構築
                     this.render(true);
                 });
@@ -204,7 +208,8 @@ export class PropertiesFieldGroup implements ClosingPart {
         for (const [input, suggest] of [[keyInput, keySuggest], [valueInput, valueSuggest]] as const) {
             onFormEnter(input, commitAdd, { takesEnter: () => suggest.listShown });
         }
-        // blur 確定ルール: key があれば value 空でも確定（空値プロパティは有効）。
+        // blur 確定ルール: key があれば value 空でも確定。値のないプロパティ
+        // （`- key::`）として書き、上の層の値を隠す。
         // value だけでは書き込み先がないので確定しない。
         // ただし key⇔value 間のフォーカス移動は入力継続中なので確定を保留する。
         const blurCommit = (e: FocusEvent) => {
@@ -234,6 +239,13 @@ export class PropertiesFieldGroup implements ClosingPart {
         const own = this.ctx.getTask().properties ?? {};
         const written = PropertyKey.get(own, key)?.key ?? key;
         return this.commit({ ...own, [PropertyKey.fold(key)]: { key: written, value: PropertyValues.fromText(raw) } });
+    }
+
+    /** Take the task's own line of the property `key` out, its case aside: the value above comes through. */
+    private remove(key: string): Promise<boolean> | undefined {
+        const next = { ...(this.ctx.getTask().properties ?? {}) };
+        delete next[PropertyKey.fold(key)];
+        return this.commit(next);
     }
 
     private commit(props: Properties): Promise<boolean> | undefined {

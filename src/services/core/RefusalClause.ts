@@ -32,6 +32,7 @@ export function refusalClause(reason: RefusalReason): string {
         case 'unplaceable': return reason.fence === null ? t('notice.refusedUnplaceable') : t('notice.refusedUnplaceableInFence', { line: reason.fence + 1 });
         case 'disturbs': return reason.fence === null ? t('notice.refusedDisturbs') : t('notice.refusedDisturbsInFence', { line: reason.fence + 1 });
         case 'headings': return t('notice.refusedHeadings', { name: reason.name, count: reason.count });
+        case 'property': return t('notice.refusedProperty', { key: reason.key, line: reason.line + 1 });
         case 'failed': return t('notice.refusedFailed');
     }
 }

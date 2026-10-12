@@ -178,14 +178,14 @@ describe('a property key, its case aside', () => {
     it('of a task\'s line is found by a write in any case, which keeps it as written', () => {
         const lines = ['- [ ] t', '    - Area:: lab', '    - ZONE:: n'];
         const { draft } = draftOver([...lines]);
-        ChildPropertyLineEditor.applyOps(draft, 0, [{ key: 'area', op: 'set', value: 'desk' }, { key: 'zone', op: 'delete' }], '\t');
+        ChildPropertyLineEditor.applyOps(draft, 0, { ops: [{ key: 'area', op: 'set', value: { text: 'desk' } }, { key: 'zone', op: 'delete' }], keys: DEFAULT_SCOPE_KEYS }, '\t');
         expect(draft.lines).toEqual(['- [ ] t', '    - Area:: desk']);
     });
 
     it('is planned against the task\'s own in any case: a new value is set, the same value is no write, one left out is deleted', () => {
         const [t] = read(['- [ ] t', '    - Area:: lab']).tasks;
         const ops = PropertyUpdatePlanner.plan(t, { properties: byKey({ area: PropertyValues.fromText('desk'), Zone: PropertyValues.fromText('n') }) }, DEFAULT_SCOPE_KEYS);
-        expect(ops).toEqual([{ key: 'area', op: 'set', value: 'desk' }, { key: 'Zone', op: 'set', value: 'n' }]);
+        expect(ops).toEqual([{ key: 'area', op: 'set', value: { text: 'desk' } }, { key: 'Zone', op: 'set', value: { text: 'n' } }]);
         expect(PropertyUpdatePlanner.plan(t, { properties: byKey({ AREA: PropertyValues.fromText('lab') }) }, DEFAULT_SCOPE_KEYS)).toEqual([]);
         expect(PropertyUpdatePlanner.plan(t, { properties: {} }, DEFAULT_SCOPE_KEYS)).toEqual([{ key: 'Area', op: 'delete' }]);
     });

@@ -511,7 +511,7 @@ export class TaskIndex implements IndexReads {
                 break;
             default:
                 logWarn(`[TaskIndex] refused: file=${file} reason=${reason.kind} subject=${subject}`);
-                // `gone`, `unplaceable`, `disturbs`, `headings`: the note read as the index read it.
+                // `gone`, `unplaceable`, `disturbs`, `headings`, `property`: the note read as the index read it.
                 if (reason.kind !== 'changed' && reason.kind !== 'failed') return;
         }
         this.reconciler?.request('refusal', file);

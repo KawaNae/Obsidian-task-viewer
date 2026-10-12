@@ -59,7 +59,8 @@ describe('a property line deleted', () => {
 
         expect(contents.get(FILE)).toBe(before);
         expect(session.index.getTask(sub)?.content).toBe('sub');
-        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedDisturbs'), subject: 'T' })]);
+        // A line under a value is a finding of the property's block, which no write goes over.
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedProperty', { key: 'memo', line: 4 }), subject: 'T' })]);
     });
 
     it('is taken out when it stands alone', async () => {
@@ -69,6 +70,25 @@ describe('a property line deleted', () => {
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] T', '\t- [ ] sub', '- [ ] U', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
+    });
+});
+
+describe('a list\'s line', () => {
+    it('is taken out with its items', async () => {
+        const { contents, session } = await open(['# note', '- [ ] T', '\t- memo::', '\t\t- a', '\t\t- b', '\t- [ ] sub', '- [ ] U', '']);
+        await deleteMemo(session);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] T', '\t- [ ] sub', '- [ ] U', ''].join('\n'));
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('takes a value as its items, reordered as written', async () => {
+        const { contents, session } = await open(['# note', '- [ ] T', '\t- memo::', '\t\t- a', '\t\t- b', '- [ ] U', '']);
+        const task = session.index.getTask(idOf(session, 'T'))!;
+        const memo = task.properties.memo.value;
+        if (memo.type !== 'list') throw new Error('no list');
+        await session.ops.updateTask(task.id, { properties: { memo: { key: 'memo', value: { type: 'list', items: [...memo.items].reverse() } } } });
+        await session.settle(FILE);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] T', '\t- memo::', '\t\t- b', '\t\t- a', '- [ ] U', ''].join('\n'));
     });
 });
 
@@ -145,13 +165,14 @@ describe('a line with a note bullet below it', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('is deleted as a property line, the note going under the task', async () => {
+    it('is not deleted as a property line: a note under a value is a finding of its block', async () => {
         const { contents, session } = await open(['# note', '- [ ] T', '  - memo:: a', '    - detail', '- [ ] U', '']);
+        const before = contents.get(FILE)!;
 
         await deleteMemo(session);
 
-        expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', '    - detail', '- [ ] U', '']);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(before);
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedProperty', { key: 'memo', line: 4 }), subject: 'T' })]);
     });
 });
 

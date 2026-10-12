@@ -72,7 +72,7 @@ describe('updateTask: which task resolves the line', () => {
         expect(target.line).toBe(task.line);
         expect(target.basis).toEqual({ text: '- [ ] ⏱️ 設計 @2026-08-14T10:00' });
         // The line is rewritten from the updated values.
-        expect(op).toEqual({ kind: 'update', text: '- [x] ⏱️ 設計 @2026-08-14T11:00>11:30', childOps: [] });
+        expect(op).toMatchObject({ kind: 'update', text: '- [x] ⏱️ 設計 @2026-08-14T11:00>11:30', properties: { ops: [] } });
     });
 
     it('writes the copy with the updates laid over it, planned from the copy', async () => {

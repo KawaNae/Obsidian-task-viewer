@@ -3,6 +3,8 @@ import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { draftOver, type LineEdit } from '../../../src/services/persistence/FileLines';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
+import { PropertyLines } from '../../../src/services/parsing/utils/PropertyLines';
+import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
@@ -18,9 +20,20 @@ import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValu
  */
 function apply(lines: string[], taskLineIdx: number, ops: PropertyOp[]): LineEdit[] {
     const { draft, reported } = draftOver(lines);
-    ChildPropertyLineEditor.applyOps(draft, taskLineIdx, ops, '\t');
+    const refused = ChildPropertyLineEditor.applyOps(draft, taskLineIdx, { ops, keys: DEFAULT_SCOPE_KEYS }, '\t');
+    if (refused) throw new Error(`refused: ${JSON.stringify(refused)}`);
     return reported;
 }
+
+/** What `applyOps` answers over `lines`, which it leaves as they were when it refuses. */
+function refusal(lines: string[], taskLineIdx: number, ops: PropertyOp[]) {
+    const { draft } = draftOver(lines);
+    return ChildPropertyLineEditor.applyOps(draft, taskLineIdx, { ops, keys: DEFAULT_SCOPE_KEYS }, '\t');
+}
+
+/** The task's own property lines as the writer reads them (`PropertyLines.ofTask`). */
+const ownLines = (lines: string[], task: number) => PropertyLines.ofTask(Outline.read(lines), task).lines
+    .map(line => ({ lineIdx: line.line, key: line.key, value: line.written }));
 
 describe('ChildPropertyLineEditor', () => {
     describe('findOwnPropertyLines', () => {
@@ -30,7 +43,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key ::',
                 '    - key2 :: value2',
             ];
-            const own = ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0);
+            const own = ownLines(lines, 0);
             expect(own).toEqual([
                 { lineIdx: 1, key: 'key', value: '' },
                 { lineIdx: 2, key: 'key2', value: 'value2' },
@@ -48,7 +61,7 @@ describe('ChildPropertyLineEditor', () => {
                 '        - key:: of-tabbed',
                 '    - key:: own',
             ];
-            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0)).toEqual([
+            expect(ownLines(lines, 0)).toEqual([
                 { lineIdx: 5, key: 'key', value: 'own' },
             ]);
         });
@@ -67,14 +80,14 @@ describe('ChildPropertyLineEditor', () => {
         ];
 
         it('is found as the task\'s own', () => {
-            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines()), 0)).toEqual([
+            expect(ownLines(lines(), 0)).toEqual([
                 { lineIdx: 3, key: 'key', value: 'old' },
             ]);
         });
 
         it('is updated in place, not declared again', () => {
             const edited = lines();
-            apply(edited, 0, [{ op: 'set', key: 'key', value: 'new' }]);
+            apply(edited, 0, [{ op: 'set', key: 'key', value: { text: 'new' } }]);
             expect(edited).toEqual([
                 '- [ ] task @2026-07-18T10:00', '    - [ ] child', '', '    - key:: new', '', '- [ ] next',
             ]);
@@ -87,7 +100,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task @2026-07-18T10:00',
                 '    - key ::',
             ];
-            apply(lines, 0, [{ key: 'key', op: 'set', value: 'v1' }]);
+            apply(lines, 0, [{ key: 'key', op: 'set', value: { text: 'v1' } }]);
             expect(lines[1]).toBe('    - key :: v1');
         });
 
@@ -96,7 +109,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task',
                 '\t- 金額:: 100',
             ];
-            apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            apply(lines, 0, [{ key: '金額', op: 'set', value: { text: '200' } }]);
             expect(lines[1]).toBe('\t- 金額:: 200');
         });
 
@@ -105,7 +118,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task',
                 '\t- tags:: a, b',
             ];
-            apply(lines, 0, [{ key: 'tags', op: 'set', value: ['a', 'b', 'c'] }]);
+            apply(lines, 0, [{ key: 'tags', op: 'set', value: { tags: ['a', 'b', 'c'] } }]);
             expect(lines[1]).toBe('\t- tags:: #a #b #c');
         });
 
@@ -115,37 +128,108 @@ describe('ChildPropertyLineEditor', () => {
                 '    * a:: 1',
                 '    1. b:: 2',
             ];
-            apply(lines, 0, [{ key: 'a', op: 'set', value: '3' }, { key: 'b', op: 'delete' }]);
+            apply(lines, 0, [{ key: 'a', op: 'set', value: { text: '3' } }, { key: 'b', op: 'delete' }]);
             expect(lines).toEqual(['- [ ] task', '    * a:: 3']);
         });
 
-        it('値を空に設定すると空値プロパティ行として残る', () => {
+        it('writes no value with hide, the spaces after `::` dropped', () => {
             const lines = [
                 '- [ ] task',
                 '    - key:: v1',
             ];
-            apply(lines, 0, [{ key: 'key', op: 'set', value: '' }]);
-            expect(lines[1]).toBe('    - key:: ');
+            apply(lines, 0, [{ key: 'key', op: 'hide' }]);
+            expect(lines[1]).toBe('    - key::');
         });
     });
 
-    describe('a property line\'s block, as the lines under it are no part of the write', () => {
-        it('rewrites the last of two lines of one key, and the key stays unread', () => {
-            const lines = ['- [ ] task', '\t- a:: 1', '\t- A:: 2'];
-            apply(lines, 0, [{ key: 'a', op: 'set', value: '3' }]);
-            expect(lines).toEqual(['- [ ] task', '\t- a:: 1', '\t- A:: 3']);
+    describe('a property\'s block: its line and the items of its list', () => {
+        it('writes a value over a list, taking its items out', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t\t- b', '\t- other:: 1'];
+            apply(lines, 0, [{ key: 'k', op: 'set', value: { text: 'x' } }]);
+            expect(lines).toEqual(['- [ ] task', '\t- k:: x', '\t- other:: 1']);
         });
 
-        it('writes a value on a list\'s line, leaving its items under it as notes', () => {
-            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t\t- b'];
-            apply(lines, 0, [{ key: 'k', op: 'set', value: 'x' }]);
-            expect(lines).toEqual(['- [ ] task', '\t- k:: x', '\t\t- a', '\t\t- b']);
-        });
-
-        it('takes a list\'s line out, leaving its items', () => {
-            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t- other:: 1'];
+        it('takes a list\'s line out with its items', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '', '\t\t- b', '\t- other:: 1'];
             apply(lines, 0, [{ key: 'k', op: 'delete' }]);
-            expect(lines).toEqual(['- [ ] task', '\t\t- a', '\t- other:: 1']);
+            expect(lines).toEqual(['- [ ] task', '\t- other:: 1']);
+        });
+
+        it('hides with a line of no value, taking a list\'s items out', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t- other:: 1'];
+            apply(lines, 0, [{ key: 'k', op: 'hide' }]);
+            expect(lines).toEqual(['- [ ] task', '\t- k::', '\t- other:: 1']);
+        });
+
+        it('hides with a new line of no value', () => {
+            const lines = ['- [ ] task', '\t- other:: 1'];
+            apply(lines, 0, [{ key: 'k', op: 'hide' }]);
+            expect(lines).toEqual(['- [ ] task', '\t- other:: 1', '\t- k::']);
+        });
+
+        it('writes a new list as its line and its items a level under it', () => {
+            const lines = ['- [ ] task', '    - other:: 1', ''];
+            apply(lines, 0, [{ key: 'k', op: 'set', value: { items: ['a', '"12"'] } }]);
+            expect(lines).toEqual(['- [ ] task', '    - other:: 1', '    - k::', '    \t- a', '    \t- "12"', '']);
+        });
+
+        it('writes a list over a value: the line says none, and the items go under it', () => {
+            const lines = ['- [ ] task', '\t- k:: x', '\t- other:: 1'];
+            apply(lines, 0, [{ key: 'k', op: 'set', value: { items: ['a', 'b'] } }]);
+            expect(lines).toEqual(['- [ ] task', '\t- k::', '\t\t- a', '\t\t- b', '\t- other:: 1']);
+        });
+
+        it('rewrites a list\'s items one for one, keeping each bullet, and takes the ones past the new list out', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t* a', '\t\t- b', '\t\t- c', '\t- other:: 1'];
+            const reported = apply(lines, 0, [{ key: 'k', op: 'set', value: { items: ['c', 'a'] } }]);
+            // Reordered: the lines read in the new order.
+            expect(lines).toEqual(['- [ ] task', '\t- k::', '\t\t* c', '\t\t- a', '\t- other:: 1']);
+            expect(reported).toEqual([{ kind: 'removed', at: 4, count: 1 }, { kind: 'replaced', at: 2 }, { kind: 'replaced', at: 3 }]);
+        });
+
+        it('adds items past the last, spelled as it is', () => {
+            const lines = ['- [ ] task', '  - k::', '    - a', '- [ ] next'];
+            apply(lines, 0, [{ key: 'k', op: 'set', value: { items: ['a', 'b', 'c'] } }]);
+            expect(lines).toEqual(['- [ ] task', '  - k::', '    - a', '    - b', '    - c', '- [ ] next']);
+        });
+
+        it('writes tags as items under a line that writes them as a list, and as `#a #b` on any other', () => {
+            const list = ['- [ ] task', '\t- tags::', '\t\t- #a'];
+            apply(list, 0, [{ key: 'tags', op: 'set', value: { tags: ['a', 'b'] } }]);
+            expect(list).toEqual(['- [ ] task', '\t- tags::', '\t\t- #a', '\t\t- #b']);
+            const none = ['- [ ] task'];
+            apply(none, 0, [{ key: 'tags', op: 'set', value: { tags: ['a', 'b'] } }]);
+            expect(none).toEqual(['- [ ] task', '\t- tags:: #a #b']);
+        });
+    });
+
+    describe('a block the reading finds wrong is written over by no op', () => {
+        const CASES: Array<[string, string[], string, number]> = [
+            ['a key written twice, its case aside', ['- [ ] task', '\t- a:: 1', '\t- A:: 2'], 'a', 1],
+            ['a line under a value', ['- [ ] task', '\t- k:: x', '\t\t- note'], 'k', 2],
+            ['a task under a list\'s line', ['- [ ] task', '\t- k::', '\t\t- [ ] sub'], 'k', 2],
+            ['an item nested in an item', ['- [ ] task', '\t- k::', '\t\t- a', '\t\t\t- deep'], 'k', 3],
+            ['a built-in\'s value it cannot read', ['- [ ] task', '\t- tv-linestyle:: wavy'], 'tv-linestyle', 1],
+        ];
+        for (const [name, lines, key, line] of CASES) {
+            it(name, () => {
+                const before = [...lines];
+                for (const op of [
+                    { key, op: 'set', value: { text: 'v' } },
+                    { key, op: 'set', value: { items: ['v'] } },
+                    { key, op: 'hide' },
+                    { key, op: 'delete' },
+                ] as PropertyOp[]) {
+                    expect(refusal(lines, 0, [op])).toEqual({ kind: 'property', key: expect.any(String), line });
+                    expect(lines).toEqual(before);
+                }
+            });
+        }
+
+        it('writes the other keys of the task', () => {
+            const lines = ['- [ ] task', '\t- a:: 1', '\t- A:: 2', '\t- b:: 3'];
+            apply(lines, 0, [{ key: 'b', op: 'set', value: { text: '4' } }, { key: 'c', op: 'hide' }]);
+            expect(lines).toEqual(['- [ ] task', '\t- a:: 1', '\t- A:: 2', '\t- b:: 4', '\t- c::']);
         });
     });
 
@@ -155,7 +239,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task @2026-07-18T10:00',
                 '    - [ ] sub',
             ];
-            apply(lines, 0, [{ key: 'key2', op: 'set', value: 'value2' }]);
+            apply(lines, 0, [{ key: 'key2', op: 'set', value: { text: 'value2' } }]);
             expect(lines).toEqual([
                 '- [ ] task @2026-07-18T10:00',
                 '    - key2:: value2',
@@ -168,7 +252,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task @2026-07-18T10:00',
                 '',
             ];
-            apply(lines, 0, [{ key: 'key2', op: 'set', value: 'value2' }]);
+            apply(lines, 0, [{ key: 'key2', op: 'set', value: { text: 'value2' } }]);
             expect(lines[1]).toBe('\t- key2:: value2');
         });
 
@@ -178,7 +262,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key ::',
                 '    - [ ] sub',
             ];
-            apply(lines, 0, [{ key: 'key2', op: 'set', value: 'v2' }]);
+            apply(lines, 0, [{ key: 'key2', op: 'set', value: { text: 'v2' } }]);
             expect(lines).toEqual([
                 '- [ ] task',
                 '    - key ::',
@@ -216,7 +300,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key:: 例',
                 '    ```',
             ];
-            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0)).toEqual([]);
+            expect(ownLines(lines, 0)).toEqual([]);
         });
 
         it('フェンス内の同名宣言を更新の対象にしない', () => {
@@ -227,7 +311,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    ```',
                 '    - key:: 本物',
             ];
-            apply(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
+            apply(lines, 0, [{ key: 'key', op: 'set', value: { text: '新' } }]);
             expect(lines).toEqual([
                 '- [ ] task',
                 '    ```md',
@@ -261,7 +345,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key:: 例',
                 '    ```',
             ];
-            apply(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
+            apply(lines, 0, [{ key: 'key', op: 'set', value: { text: '新' } }]);
             // No item to copy: a new level, the unit handed in (a tab).
             expect(lines[1]).toBe('\t- key:: 新');
             expect(lines.slice(2)).toEqual([
@@ -297,7 +381,7 @@ describe('ChildPropertyLineEditor', () => {
                 if (parsed.ignored) throw new Error('ignored');
                 const task = parsed.tasks.find(candidate => candidate.line === 0)!;
                 const written = Object.fromEntries(
-                    ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0).map(line => [line.key, line.value]),
+                    ownLines(lines, 0).map(line => [line.key, line.value]),
                 );
                 const read = Object.fromEntries(
                     Object.values(task.properties).map(({ key, value }) => [key, PropertyValues.spelling(value)]),
@@ -318,7 +402,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task',
                 '\t- 金額:: 100',
             ];
-            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: { text: '200' } }]);
             expect(reported).toEqual([{ kind: 'replaced', at: 1 }]);
             expect(lines[1]).toBe('\t- 金額:: 200');
         });
@@ -328,7 +412,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task',
                 '',
             ];
-            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: { text: '200' } }]);
             expect(reported).toEqual([{ kind: 'inserted', at: 1, count: 1 }]);
         });
 
@@ -342,19 +426,15 @@ describe('ChildPropertyLineEditor', () => {
             expect(reported).toEqual([{ kind: 'removed', at: 1, count: 1 }]);
         });
 
-        it('同じキーの宣言行が複数あるとき、各行が立っていた座標で申告する', () => {
-            // 逆順に消すので、どの at もその行が在った位置のまま。上から
-            // 消すと残りがずれ、2件目の申告が1つ上の行を指してしまう。
+        it('takes a list\'s line and its items out as one removal', () => {
             const lines = [
                 '- [ ] task',
-                '\t- 金額:: 100',
-                '\t- 金額:: 300',
+                '\t- 金額::',
+                '\t\t- 100',
+                '\t\t- 300',
             ];
             const reported = apply(lines, 0, [{ key: '金額', op: 'delete' }]);
-            expect(reported).toEqual([
-                { kind: 'removed', at: 2, count: 1 },
-                { kind: 'removed', at: 1, count: 1 },
-            ]);
+            expect(reported).toEqual([{ kind: 'removed', at: 1, count: 3 }]);
             expect(lines).toEqual(['- [ ] task']);
         });
 
@@ -366,7 +446,7 @@ describe('ChildPropertyLineEditor', () => {
             ];
             const reported = apply(lines, 0, [
                 { key: 'a', op: 'delete' },
-                { key: 'c', op: 'set', value: '3' },
+                { key: 'c', op: 'set', value: { text: '3' } },
             ]);
             expect(reported).toEqual([
                 { kind: 'removed', at: 1, count: 1 },
@@ -383,7 +463,7 @@ describe('ChildPropertyLineEditor', () => {
                 '\t- 金額:: 999',
                 '\t```',
             ];
-            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: { text: '200' } }]);
             expect(reported).toEqual([{ kind: 'replaced', at: 1 }]);
             expect(lines[3]).toBe('\t- 金額:: 999');
         });
