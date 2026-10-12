@@ -3,7 +3,8 @@
  * back as it is spelled. Editing one property rewrites that line alone, so
  * the other lines keep their spelling (`007`, `True`, `0x1F`, a quoted
  * `"123"`, a line with no value), and a value typed is written as typed. A
- * value is shown as spelled, a quoted text without its quotes.
+ * value is shown as its line spells it, a quoted text with its quotes, and
+ * the values offered are spelled so.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
@@ -91,12 +92,26 @@ afterAll(async () => {
 });
 
 describe('the hub writes a custom property back as it is spelled', () => {
-    it('shows a number and a boolean as written, and a quoted text without its quotes', () => {
+    it('shows a number, a boolean and a quoted text as written', () => {
         openHub('親');
         const shown = run<Record<string, string>>(`
             return JSON.stringify(Object.fromEntries(['n', 'flag', 'hex', 'id', 'e', 'memo'].map(k => [k, valueInput(k).value])));
         `);
-        expect(shown).toEqual({ n: '007', flag: 'True', hex: '0x1F', id: '123', e: '', memo: 'a' });
+        expect(shown).toEqual({ n: '007', flag: 'True', hex: '0x1F', id: '"123"', e: '', memo: 'a' });
+    });
+
+    it('offers the values as spelled: a quoted text apart from the number', () => {
+        openHub('次');
+        const offered = run<string[]>(`
+            const key = hub().querySelector('.task-hub__prop-add .tv-form__label input');
+            type(key, 'id');
+            const value = hub().querySelector('.task-hub__prop-add input.tv-form__control');
+            type(value, '12');
+            await sleep(300);
+            return JSON.stringify([...document.querySelectorAll('.suggestion-container .suggestion-item')].map(el => el.textContent));
+        `);
+        expect(offered).toEqual(expect.arrayContaining(['"123"']));
+        expect(offered).not.toContain('123');
     });
 
     it('edits one property, leaving every other line as written', () => {

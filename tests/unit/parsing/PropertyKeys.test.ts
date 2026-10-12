@@ -54,7 +54,7 @@ describe('a property key', () => {
     it('is offered by the filter menus as written, with its values', () => {
         const all = tasks(note);
         expect(FilterValueCollector.collectPropertyKeys(all)).toEqual(['Area', 'weight', 'zone']);
-        expect(FilterValueCollector.collectPropertyValuesForKey(all, 'Area')).toEqual(['lab']);
+        expect(FilterValueCollector.collectPropertySpellingsForKey(all, 'Area')).toEqual(['lab']);
     });
 
     it('of a task overrides the same key above it, written the same way', () => {
@@ -172,7 +172,7 @@ describe('a property key, its case aside', () => {
             ...tasks(['- [ ] c', '    - Area:: z']),
         ];
         expect(FilterValueCollector.collectPropertyKeys(all)).toEqual(['Area']);
-        expect(FilterValueCollector.collectPropertyValuesForKey(all, 'AREA')).toEqual(['x', 'y', 'z']);
+        expect(FilterValueCollector.collectPropertySpellingsForKey(all, 'AREA')).toEqual(['x', 'y', 'z']);
     });
 
     it('of a task\'s line is found by a write in any case, which keeps it as written', () => {

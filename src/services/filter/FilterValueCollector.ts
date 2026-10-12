@@ -102,14 +102,23 @@ export class FilterValueCollector {
         return Array.from(chosen.values(), c => c.key).sort();
     }
 
-    /** The values the tasks show for the property `key`, its case aside. */
-    static collectPropertyValuesForKey(tasks: Task[], key: string): string[] {
+    /**
+     * The values the hub's field for the property `key` offers, its case
+     * aside: each as a line spells it (`PropertyValues.spelling`), since the
+     * field holds what is written (`"123"` a text, `123` a number, two
+     * values); each item of a list on its own, as a list's item is written
+     * alone; no value left out, as an empty field writes none.
+     */
+    static collectPropertySpellingsForKey(tasks: Task[], key: string): string[] {
         if (!key) return [];
         const set = new Set<string>();
         for (const task of tasks) {
-            const property = PropertyKey.get(getEffectiveProperties(task), key);
-            const v = property ? PropertyValues.display(property.value) : '';
-            if (v !== '') set.add(v);
+            const value = PropertyKey.get(getEffectiveProperties(task), key)?.value;
+            if (!value || value.type === 'null') continue;
+            for (const item of value.type === 'list' ? value.items : [value]) {
+                const spelled = PropertyValues.spelling(item);
+                if (spelled !== '') set.add(spelled);
+            }
         }
         return Array.from(set).sort();
     }

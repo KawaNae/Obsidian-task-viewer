@@ -1,6 +1,6 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
-import type { Properties } from '../../../types';
+import type { Properties, PropertyValue } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
 import { PropertyKey } from '../../../services/parsing/utils/PropertyKey';
 import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
@@ -80,18 +80,18 @@ export class PropertiesFieldGroup implements ClosingPart {
             this.valueSays.set(folded, says);
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
-            valueInput.value = PropertyValues.display(pv);
+            valueInput.value = shownText(pv);
             valueInput.disabled = shut || locked;
             this.valueInputs.set(folded, valueInput);
 
             const suggest = this.offer(valueInput, {
                 candidates: (q) => FilterValueCollector
-                    .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
+                    .collectPropertySpellingsForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
                 // A value picked is one typed: the inherited value picked is made the row's own.
                 pick: (val) => { valueInput.value = val; valueInput.dispatchEvent(new Event('input')); value.commit(); },
             });
-            // The value the row shows: its own, or the inherited one. Left as
+            // The value the row shows, as a line spells it: its own, or the inherited one. Left as
             // it is, no own value is made; typed again, the inherited value is
             // written as the row's own (`takesSame`). What is typed is written
             // as typed, and reads as a line reads it (`PropertyValues.fromText`);
@@ -101,7 +101,7 @@ export class PropertiesFieldGroup implements ClosingPart {
                 codec: FreeText,
                 current: () => {
                     const shown = isOwn ? PropertyKey.get(this.ctx.getTask().properties, key)?.value : pv;
-                    return shown ? PropertyValues.display(shown) : '';
+                    return shown ? shownText(shown) : '';
                 },
                 // An own line keeps its key as written; an inherited value made
                 // the task's own is written under the key it was inherited by.
@@ -196,7 +196,7 @@ export class PropertiesFieldGroup implements ClosingPart {
                 const key = keyInput.value.trim();
                 if (!key) return [];
                 return FilterValueCollector
-                    .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
+                    .collectPropertySpellingsForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
             },
             pick: (val) => { valueInput.value = val; commitAdd(); },
@@ -321,4 +321,13 @@ export class PropertiesFieldGroup implements ClosingPart {
     fieldElement(key?: string): HTMLElement | null {
         return (key ? this.valueInputs.get(PropertyKey.fold(key)) : undefined) ?? this.addKeyInput ?? null;
     }
+}
+
+/**
+ * A value as its field shows it: as the line spells it (`"123"` a text,
+ * `123` a number), since what the field holds is what is written. A list
+ * shows its items as shown (`display`), joined.
+ */
+function shownText(value: PropertyValue): string {
+    return value.type === 'list' ? PropertyValues.display(value) : PropertyValues.spelling(value);
 }
