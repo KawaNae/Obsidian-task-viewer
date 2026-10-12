@@ -100,8 +100,13 @@ afterAll(async () => {
 });
 
 describe('the hub hides an inherited value', () => {
-    it('hides an inherited property, and then shows the row\'s no value with its ×', () => {
+    it('hides an inherited property by its icon, and then shows the row\'s no value with its ×', () => {
         openHub('親');
+        const button = run<Record<string, unknown>>(`
+            const hide = rowOf('area').querySelector('.task-hub__hide');
+            return JSON.stringify({ text: hide.textContent, icon: !!hide.querySelector('svg.lucide-ban'), label: hide.getAttribute('aria-label') });
+        `);
+        expect(button).toEqual({ text: '', icon: true, label: tr('modal.hub.hideInherited', { key: 'area' }) });
         const after = run<Record<string, unknown>>(`
             rowOf('area').querySelector('.task-hub__hide').click();
             await sleep(600);
