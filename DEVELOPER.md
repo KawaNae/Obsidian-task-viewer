@@ -123,7 +123,7 @@ src/
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
-│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagRule, TagExtractor, TagInput, TaskLineClassifier)
+│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, PropertyLines, TagRule, TagExtractor, TagInput, TaskLineClassifier)
 │   ├── persistence/           # Write layer (FileLines: one target type `RowRef`, `createFile`; Notes: a block put in a note, a note made; FiringTrials: which fires of a completion are written; TaskRepository, InlineTaskWriter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
@@ -248,6 +248,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
 | **NoteSections** | `services/parsing/tree/NoteSections.ts` | A note's sections from `outline.headings`, each with its own property lines (the section scope of the cascade) |
+| **PropertyLines** | `services/parsing/utils/PropertyLines.ts` | The one reading of property lines: which lines are a task's or a section's (`ofTask`, `ofSection`), what they say and what is wrong with them (`read`: values, the line of each, `PropertyFinding`); see "プロパティ行" |
 | **NoteTasks** | `services/parsing/tree/NoteTasks.ts` | A note's rows: every line that opens a task, its parent, child lines, flow, properties and section cascade, read once |
 | **FlowLineScanner** | `services/parsing/utils/FlowLineScanner.ts` | `readFlow(outline, taskLine)`: the one place a flow program is read from a note (the task line's tail and its own `- ==>` lines); the extraction and the editor diagnostics both use it |
 | **DayPlannerParser** | `services/parsing/tv-inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
@@ -313,7 +314,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
 | **File** | `BuiltinPropertyExtractor.fromFrontmatter` | Frontmatter object | Read every key as a `PropertyValue` (`PropertyValues.fromFrontmatter`), then put the builtin keys apart with the same extractor a section and a task use; the tags are read off the YAML as Obsidian reads them (`TagRule.ofFrontmatter`). Used as the cascade root by `SectionPropertyResolver`. |
-| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for the dates (a date and its time each on its own), `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`, and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds). |
+| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + each section's property lines (`PropertyLines`) | FM → root section → nested sections, child-wins cascade for the dates (a date and its time each on its own), `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`, and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds). |
 
 **Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass.
 
@@ -327,30 +328,55 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
 
-**Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both are read on the frontmatter, a section and a task by the one `BuiltinPropertyExtractor`, and inherit by the merge rules above; the structural difference is type-level (separate Task fields vs `Record`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is read by the extractor and dropped (`NoteTasks.fill` takes no date from it); being reserved it is no custom property either, so the section's date still shows through, and no diagnostic tells of it.
+**Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both are read on the frontmatter, a section and a task by the one `BuiltinPropertyExtractor`, and inherit by the merge rules above; the structural difference is type-level (separate Task fields vs `Record`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is not read (`PropertyLines.read`, a `date-key-under-task` finding), so the section's date still shows through.
+
+### プロパティ行
+
+節とタスクのプロパティ行は `PropertyLines`（`parsing/utils/PropertyLines.ts`）の1か所で読む。どの行が誰のものかを `ofTask` と `ofSection` が決め、何を言っているかを `read` が決める。パーサ（`NoteTasks`、`SectionPropertyResolver`）、書き込み（`ChildPropertyLineEditor`）、送る処理（`InheritedValues`）は、どれもこの答えを使う。
+
+- プロパティ行は、持ち主の直下にある `- key:: value` の項目である（`PROPERTY_LINE`）。記号はフロー行と同じく、すべての箇条書きの記号（`LIST_BULLET_SOURCE`: `-` `*` `+` と番号）を受ける。コードの中の行はならない
+    - タスク: 読みがタスクの項目の直下と読む項目（`directItems`）
+    - 節: 節の自分の行（入れ子の節を除く）の最上位の項目。節の中のどこに書いてもよく、最初のタスクより下でもよい
+    - それより深い `- key:: value` は、どの層のプロパティにもならない
+    - 最初の見出しより上は見出しのない節（根の節）で、その値はそこのタスクにだけ届く
+- `- properties::` は、ふつうのプロパティ行である。節の下の行をまとめて読む形は無い
+- 値のある行（`- key:: value`）の値は `fromText` で読む。下の行は読まず、メモとして残す
+- 値のない行（`- key::`）は、直下の項目をリストとして読む。各項目の文字は行の値と同じく `fromText` で型を決める
+    - チェックボックスの項目はタスクとして読み（`TaskLineClassifier.opensTask`）、リストの項目にしない
+    - 項目の下に入れ子にした行は読まず、上の項目は読む
+    - プロパティ行の形をした項目（`- name:: Kawa`）は、テキスト `name:: Kawa` の項目になる
+    - 空の項目と値なしの項目（`- null`）、項目でない行（本文の続き、引用、コード）はリストに入れない
+    - 読める項目が1つも無ければ値なし（`null`）である。frontmatter の `key: []` に当たる空のリストは、行では書けない
+- 同じ持ち主が同じキーを2行以上に書いたら、そのキーをどの行でも読まない。上の層の値が届く。ほかのキーは読む。別の層に同じキーがあるのは継承の上書きである
+- タスクの下の日付のキー（設定 `scopeKeys` の start、end、due）は読まない。タスクの日付はタスク行の `@` だけが決める
+- プロパティ行の下の行は、プロパティの一部として読むか、所見（`PropertyFinding`）になる。所見は、出す行、関わる行の範囲（`end`）、キー、プロパティ行、持ち主を持つ
+    - エラー: `duplicate-key`（同じ持ち主の重複したキー）
+    - 警告: `date-key-under-task`、`lines-under-value`（値のある行の下の行）、`property-shaped-item`、`not-a-list-item`（リストの項目として読めない行）
+    - 所見はまだ表示しない。エディタの診断とハブは、この所見を出す
+- 節の頭（`SectionNode.head`）は、最初のタスクより上にあるプロパティ行の部分木の後ろである。見出しの下に行を足す書き込み（`Placement.into` の `head`）はそこに置く。プロパティ行を見出しの直下にまとめて書く形を保つためで、読みは位置に依らない。最初のタスクより下のプロパティ行は頭を動かさない
 
 ### プロパティの値
 
 プロパティの値は `PropertyValues`（`parsing/utils/PropertyValues.ts`）の1か所で `PropertyValue` に読む。`PropertyValue` は型で分かれる判別共用体で、テキスト、数、真偽値（この3つがスカラー）、値なし（`null`）、スカラーのリストのどれかである。スカラーと値なしは `spelling` に行で書く綴りを持ち、型ごとの値（`text`、`number`、`boolean`）を別の欄に持つ。読み手は型の欄を読み、綴りから真偽や数を決め直さない。
 
-- 行の値（`- key:: value`、節の `- properties::` の項目、ハブの入力）は `fromText` で読む。型は、同じ綴りを引用符なしの YAML 1.2 の core スキーマ（Obsidian が frontmatter を読む規則）が読む型である
+- 行の値（`- key:: value`、プロパティ行の下のリストの項目、ハブの入力）は `fromText` で読む。型は、同じ綴りを引用符なしの YAML 1.2 の core スキーマ（Obsidian が frontmatter を読む規則）が読む型である
     - 数: `-5`、`+5`、`.5`、`5.`、`1e3`、`0x1F`、`0o17`、`.inf`、`-.inf`、`.nan`。`017` は10進の 17
     - 真偽値: `true` `True` `TRUE` と、その false の3つ
     - 値なし: 空、`null` `Null` `NULL`、`~`
-    - それ以外はテキストである。YAML 1.1 の `1_000`、`1,000`、`10:30`、`yes`、`on` もテキストになる。行はリストを書かないので、`[a, b]`、`a, b`、`[[x]]` もテキストである
+    - それ以外はテキストである。YAML 1.1 の `1_000`、`1,000`、`10:30`、`yes`、`on` もテキストになる。行のリストは入れ子の項目だけで書くので（「プロパティ行」）、`[a, b]`、`a, b`、`[[x]]` もテキストである
     - 値全体を `"` か `'` で囲めば、中身のテキストになる（`"123"`）。エスケープは読まない。全角の引用符と、値の一部だけを囲む引用符は文字のまま残る
 - frontmatter は `fromFrontmatter` で読む。型は YAML のパーサが決めたもので、引用符の付いた `"true"` はテキストである。値の綴りは行がそのまま読み返せる形にする。テキストは行が別の型に読むなら引用符で囲み（`"123"`）、数は YAML が書く形にする（`.inf`、`.nan`）
     - 値のないキー（`key:`、`key: null`）は、今はプロパティにしない
     - 連想配列の値はプロパティにしない。リストは、スカラーの項目だけを項目にする。値なし、入れ子のリスト、連想配列の項目は読まない。テキストの項目は前後の空白を除き、空なら捨てる
     - 日付のキー（`tv-start` など）も同じ規則で読み、組み込みとして表示の文字から日付を読む。数（`tv-end: 630`）は日付として読めない値で、その層の値にならない
 - 表示は `display` が決める。テキストは引用符を外した中身、数、真偽値、値なしは書かれた綴り（`0x1F`、`True`）、リストは項目の表示を `, ` でつないだものである。カード、ハブ、メニュー、候補はこれを出し、フィルタはこの文字で比べる
-- 書き戻しは `spelling` を書くので、利用者の綴りは変わらない。ハブとプランナーは綴りで差を取る。行はまだリストを書かないので、リストの綴りは項目の綴りを `, ` でつないだもの（行は1つのテキストに読む）である
+- 書き戻しは `spelling` を書くので、利用者の綴りは変わらない。ハブとプランナーは綴りで差を取る。書き戻しはまだリストを入れ子の項目で書かないので、リストの綴りは項目の綴りを `, ` でつないだもの（行は1つのテキストに読む）である
 - API は型どおりに出す。数は `number`、値なしは `null`、リストは項目ごとに同じ型の配列である。CLI の出力は、JSON の数で書けない数を YAML の綴りの文字列（`".inf"`）にする
 - `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
 - frontmatter として読むのは、YAML が連想配列に読むブロックだけである。Obsidian の metadata worker と同じく、リスト（`- a`）やテキストに読むブロックは frontmatter ではない
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 
-組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず表示の文字（`display`）を読む。引用符で囲んだ `"red"` は `red`、値なしは値を持たない。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。大文字と小文字を区別しないのは Obsidian のキーである `tags` だけで、プラグインのキー（`tv-color` など）は設定の綴りのとおりに読む。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` を探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。どちらの層かは入口が決める。
+組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず表示の文字（`display`）を読む。引用符で囲んだ `"red"` は `red`、値なしは値を持たない。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。大文字と小文字を区別しないのは Obsidian のキーである `tags` だけで、プラグインのキー（`tv-color` など）は設定の綴りのとおりに読む。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` を探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
 
 ### Inline child line extraction
 
@@ -360,7 +386,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 2. 親は、祖先の項目（`itemsAbove`）のうち最も近いタスクである。インデント幅（2 スペース、4 スペース、タブ）にも、間に挟まる非タスク行（`- メモ` など）にも依らない。孫は子の `childIds` に入り、祖父のには入らない。トップレベルの非タスク行の下のチェックボックスは、所有者のいない独立したタスクになる
 3. `childLines` は、部分木の行から、子タスクの部分木と自分のフロー行を除いたものである。除外はこの1回で済み、ノートの各行はたかだか1つのタスクのものになる。字下げは部分木の空でない行の最小の字下げで揃える
 4. 各 `ChildLine.bodyLine` に絶対行番号を格納する
-5. プロパティは自分のプロパティ行（`ChildLineClassifier.ownPropertyLines`: `directItems` のうち `- key:: value` の形の行）から読む。記号はフロー行と同じく、すべての箇条書きの記号（`LIST_BULLET_SOURCE`: `-` `*` `+` と番号）を受ける。書き込み（`ChildPropertyLineEditor`）が編集する行と同じ集合である
+5. プロパティは自分のプロパティ行（`PropertyLines.ofTask`: `directItems` のうち `- key:: value` の形の行）から読む（「プロパティ行」）。書き込み（`ChildPropertyLineEditor`）が編集する行と同じ集合である
 
 フェンスの中の `- [ ]` はタスクにならず、`childLines` に普通の行として残る。カードではコードブロックの一部として描かれ、チェックボックスにはならない。
 
