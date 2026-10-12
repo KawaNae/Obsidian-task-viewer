@@ -48,7 +48,7 @@ describe('a line put in reads as its block says, or the write is unplaceable', (
         expect(checked(lines, putLine(Placement.end(Outline.read(lines)), '- [ ] c'))).toBe('sound');
     });
 
-    it('is unplaceable where the line goes on the item\'s own fence that never closes (R5)', () => {
+    it('is unplaceable where the line goes on the item\'s own fence that never closes', () => {
         const lines = ['- [ ] T', '    ```', '    code', '- [ ] U', ''];
         // Past the fence, the line goes on it.
         expect(checked(lines, putLine({ at: 3, parent: 0, indent: '    ' }, '- [ ] c'))).toBe('unplaceable');
@@ -204,13 +204,13 @@ describe('a line placed past what it would take in, as the reading with it in sa
         return { spot, check: checked(lines, (draft) => draft.put(spot, Block.line(text))) };
     };
 
-    it('goes past a closed fence under a heading that a line put above would take in (the second run\'s H1)', () => {
+    it('goes past a closed fence under a heading that a line put above would take in', () => {
         const lines = ['## H', '  ```', '  x', '  ```', '- [ ] A'];
         expect(put(lines, text => headOf(lines, text), '- [ ] n'))
             .toEqual({ spot: { at: 4, parent: null, indent: '' }, check: 'sound' });
     });
 
-    it('goes past a task\'s closed fence past the new child\'s content column (H2, H3)', () => {
+    it('goes past a task\'s closed fence past the new child\'s content column', () => {
         const lines = ['1. [ ] T', '      ```', '      x', '      ```', '   - [ ] c'];
         expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text, '\t'), '- [ ] n'))
             .toEqual({ spot: { at: 4, parent: 0, indent: '   ' }, check: 'sound' });
@@ -218,7 +218,7 @@ describe('a line placed past what it would take in, as the reading with it in sa
             .toEqual({ spot: { at: 4, parent: 0, indent: '   ' }, check: 'sound' });
     });
 
-    it('goes past a paragraph a copy would take in below the task\'s closed fence (D1)', () => {
+    it('goes past a paragraph a copy would take in below the task\'s closed fence', () => {
         const lines = ['- [ ] T', '  ```', '  x', '  ```', 'para', ''];
         expect(put(lines, text => Placement.copyOf(Outline.read(lines), 0, 'below', text), '- [ ] T'))
             .toEqual({ spot: { at: 5, parent: null, indent: '' }, check: 'sound' });
@@ -238,7 +238,7 @@ describe('a line placed past what it would take in, as the reading with it in sa
         expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text, '\t'), '10. [ ] n').spot.at).toBe(1);
     });
 
-    it('takes for a new line the indentation of the sibling it goes above: a sibling of `1.` over a `- ` at two (the first run\'s B)', () => {
+    it('takes for a new line the indentation of the sibling it goes above: a sibling of `1.` over a `- ` at two', () => {
         const lines = ['1. [ ] T', '  - [ ] U'];
         expect(put(lines, text => Placement.afterSubtree(Outline.read(lines), 0, text, '\t'), '- [x] n'))
             .toEqual({ spot: { at: 1, parent: null, indent: '  ' }, check: 'sound' });

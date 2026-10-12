@@ -100,7 +100,7 @@ export function renderFlowInstance(
  * indentation, with its list marker and the gap after it
  * (`TaskLineClassifier.extractMarker`), and the rest as `head` reads. The
  * instance is written from a task that has no line of its own, so `head`
- * opens with `- ` whatever the row wrote (L2's H2): `*`, `+` and `1)` came
+ * opens with `- ` whatever the row wrote: `*`, `+` and `1)` came
  * back as `- `, and a row whose content opens far from its marker
  * (`10.   [ ] T`) got a next instance whose content opens two columns in.
  * Spelled as the row, the instance opens its content where the row did, and

@@ -91,7 +91,7 @@ describe('an anchored ID', () => {
         expect(contents.get(FILE)).toBe(['メモ', '- [x] A ^keep', '- [ ] A', ''].join('\n'));
     });
 
-    // The anchor outlives readings (contract 3): a note the index was never
+    // The anchor outlives readings: a note the index was never
     // told changed is read again first (`freshByAnchor`), and the write goes
     // to the row the anchor finds there.
     it('reads the note again when the file holds an edit no scan has read, and writes the row its anchor finds', async () => {

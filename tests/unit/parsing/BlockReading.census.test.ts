@@ -5,10 +5,11 @@ import { join, relative } from 'path';
 /**
  * Where a list item or a subtree ends, what a task's parent and children
  * are, and whether a line is code are answered by one reading of the note,
- * `Outline.read` (stage L2). A reading of its own — a delimiter matched by a
+ * `Outline.read`. A reading of its own — a delimiter matched by a
  * pattern, a line dedented to look for a fence, a walk that compares depths
  * to find where a subtree ends — is a second answer, and the parser, the
- * writes and the editor read one note two ways (BK1, R5, the F4 exceptions).
+ * writes and the editor read one note two ways (a fence that
+ * takes a shallower line, a fence that never closes).
  *
  * This walks the source for the idioms those readings were written in.
  */

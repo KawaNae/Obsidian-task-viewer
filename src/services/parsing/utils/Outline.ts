@@ -7,7 +7,7 @@ import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
  * Only these two, because only these two nest a list item in Obsidian. A line
  * opened with a full-width space (U+3000) or a no-break space (U+00A0) is not
  * a list item to it at all: its metadata reads the line as the item above
- * going on (R0). `\s` took both for indentation, and U+2028 and a byte order
+ * going on (measured in Obsidian 1.12.4). `\s` took both for indentation, and U+2028 and a byte order
  * mark besides, so such a line was read as a child the note does not have.
  *
  * Every reading of a line's indentation — the task, child, flow and property
@@ -136,7 +136,7 @@ export class Outline {
      * it stands, so taking a parent's characters off a line that mixes tabs
      * and spaces can move it by other than the parent's columns — under a
      * tab, eight spaces less one are seven, a paragraph line past the moved
-     * task's content (G3). A line shallower than its parent (a lazy one) is
+     * task's content. A line shallower than its parent (a lazy one) is
      * written at the new parent's indentation. A blank line is left as it is,
      * and so is a line carried to where it stands (`from` and `to` the same).
      */
@@ -276,7 +276,7 @@ export class OutlineReading {
         /**
          * The note's headings, top to bottom: CommonMark's, at the top of
          * the note only — not in an item, a quote, a fence or indented code,
-         * none of which Obsidian links a heading to (F8's Dev measurement).
+         * none of which Obsidian links a heading to (measured in Obsidian).
          * Every reader of a heading asks this: the sections of the note
          * (`NoteSections`), and where lines go in a heading's
          * section (`Placement.into`: a move, a task made under a heading).
@@ -562,7 +562,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
         || started !== null;
     // Whether the line ends an open fence that it would otherwise go on
     // lazily: a fence, a heading, a thematic break or an item. A `>` does
-    // not (L2, q16) — the one place the outline keeps from CommonMark.
+    // not (q16 in `OutlineRead.test.ts`) — the one place the outline keeps from CommonMark.
     const startsBlock = (col: number, text: string, started: ItemStart | null, matched: number) =>
         withinReach(col, matched) && startsLeafOrItem(text, started);
     // Whether the line interrupts the open paragraph, which it would

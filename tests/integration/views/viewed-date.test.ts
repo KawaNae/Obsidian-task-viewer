@@ -342,7 +342,7 @@ describe('a day roll', () => {
     });
 });
 
-describe('the oldest overdue pull (S2)', () => {
+describe('the oldest overdue pull', () => {
     const FILE = 'test-int-viewed-date-overdue.md';
     let overdue: string;
     const filterState = () => ({ logic: 'and', filters: [{ property: 'file', operator: 'includes', value: [FILE] }] });

@@ -56,7 +56,7 @@ const HEADING_MARKS_RE = /[!"#$%&()*+,./:;<=>?@[\\\]^`{|}~]/g;
 
 /**
  * A heading's name as Obsidian compares it when it resolves a link to a
- * heading (F8's Dev measurement, as the API's `stripHeading` describes it):
+ * heading (measured in Obsidian, as the API's `stripHeading` describes it):
  * the ASCII marks but `'`, `-` and `_` read as a space, spaces run together
  * and trimmed off, and case aside. `**bold**` is `bold`, `[[Other]]` is
  * `other`, `a:b` is `a b`. Other characters (full-width ones) are compared

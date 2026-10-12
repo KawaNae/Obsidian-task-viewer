@@ -23,7 +23,7 @@ describe('Outline.depthOf', () => {
     });
 
     it('reads only tabs and spaces as indentation, as Obsidian nests a list', () => {
-        // A full-width or a no-break space does not nest a list item (R0).
+        // A full-width or a no-break space does not nest a list item (measured in Obsidian 1.12.4).
         expect(Outline.indentOf(' \t\u00A0x')).toBe(' \t');
         expect(Outline.depthOf('\u3000\u3000- [ ] x')).toBe(0);
         expect(Outline.dedent(' \t\u00A0x')).toBe('\u00A0x');
@@ -166,9 +166,9 @@ describe('the write and the parser agree on every subtree', () => {
         // on, not a fence: `- [ ] x` is text too.
         ['a fence indented four columns past the content', ['- [ ] T', '      ```', '      - [ ] x', '      ```', '    - [ ] C', '- [ ] U', '']],
         // (Obsidian, `OutlineRead.test.ts` q2)
-        ['a fence that never closes at the end of a subtree, and a sibling (R5)', ['- [ ] root', '    ```', '    body', '- [ ] sibling', '']],
+        ['a fence that never closes at the end of a subtree, and a sibling', ['- [ ] root', '    ```', '    body', '- [ ] sibling', '']],
         // (Obsidian, `OutlineRead.test.ts` q1)
-        ['a fence that takes a line at column 0 (BK1)', ['- [ ] task', '    ```', 'shallow at column 0', '    ```', '- [ ] sibling', '']],
+        ['a fence that takes a line at column 0', ['- [ ] task', '    ```', 'shallow at column 0', '    ```', '- [ ] sibling', '']],
         // (Obsidian, `OutlineRead.test.ts` q5)
         ['a U+3000-led and an NBSP-led line between a parent and its tab child', ['- [ ] P', '　memo', '\t- [ ] c', '- [ ] Q', ' memo', '\t- [ ] d', '']],
         // (Obsidian, `OutlineRead.test.ts` q5, q9)

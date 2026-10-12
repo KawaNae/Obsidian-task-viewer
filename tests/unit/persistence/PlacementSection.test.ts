@@ -120,7 +120,7 @@ describe('Placement.into, at the head', () => {
         expect(headOf(['## H'], 'H')).toEqual({ at: 1, parent: null, indent: '' });
     });
 
-    it('is at the indentation of the first item at the top below it, blank lines aside, as its sibling (P1)', () => {
+    it('is at the indentation of the first item at the top below it, blank lines aside, as its sibling', () => {
         expect(headOf(['## H', '', '  - [ ] a', '\t- [ ] b'], 'H')).toEqual({ at: 1, parent: null, indent: '  ' });
     });
 

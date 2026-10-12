@@ -100,7 +100,7 @@ describe('CliOutputFormatter', () => {
         });
 
         it('keeps a tsv row on one line when the content holds U+2028 or U+2029', () => {
-            // A note keeps them inside a line (L1), but a reader of tsv may
+            // A note keeps them inside a line, but a reader of tsv may
             // split its rows there, as at a newline.
             const content = ['a', 'b', 'c'].join(String.fromCharCode(0x2028)) + String.fromCharCode(0x2029) + 'd';
             const row = formatOutput([makeNormalized({ content })], 'tsv', ['content']).split('\n')[1];

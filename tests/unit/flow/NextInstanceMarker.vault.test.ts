@@ -5,7 +5,7 @@ import { freezeDate } from '../helpers/fakeDate';
 
 /**
  * The next instance is spelled as the row that fired: its list marker and
- * the gap after it (L2's H2, handed to stage X). It used to be written from a
+ * the gap after it. It used to be written from a
  * task with no line of its own (`formatRow` over `originalText: ''`),
  * so `*`, `+` and `1)` came back as `- `; and a row whose content opens far
  * from its marker (`10.   [ ] T`) got a next instance whose content opens
@@ -39,7 +39,7 @@ async function complete(lines: string[], content = 'T'): Promise<{ lines: string
 describe('the next instance keeps the marker of the row that fired', () => {
     // A bullet is the row's own; an ordered row's instance is numbered 1,
     // with the row's delimiter: the marker has to be one that can interrupt
-    // a paragraph (see the R8 cases below).
+    // a paragraph (see the cases below).
     for (const [marker, next] of [['*', '*'], ['+', '+'], ['1)', '1)'], ['2.', '1.'], ['3)', '1)']]) {
         it(`${marker}`, async () => {
             const { lines } = await complete(['# note', `${marker} [ ] T @2026-09-21 ==> every mon`, '']);
@@ -73,7 +73,7 @@ describe('the next instance keeps the marker of the row that fired', () => {
 });
 
 /**
- * R8: an ordered row whose instance goes in just past the text of the item
+ * An ordered row whose instance goes in just past the text of the item
  * above. An ordered item that does not start at 1 cannot interrupt a
  * paragraph, so an instance numbered as the row read as that text going on,
  * and the write was refused: the completion stood alone, the series cut.

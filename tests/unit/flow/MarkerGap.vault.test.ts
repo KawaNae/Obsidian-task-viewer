@@ -8,8 +8,7 @@ import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vault
  * (`TaskLineClassifier.extractMarker`). The gap sets the
  * item's content column, and a child reaches the item by it: under `-\t[ ] T`
  * a child two spaces past a tab is T's, under `- [ ] T` it goes on T's
- * paragraph, and its task and ID were gone after T was only checked off (the
- * fourth L2 counterexample run, G2).
+ * paragraph, and its task and ID were gone after T was only checked off.
  */
 
 const FILE = 'note.md';
@@ -99,9 +98,9 @@ describe('a task line written over', () => {
  * A tab's width is the column it stands at. Kept as a tab on a task moved to
  * column 0, `  -\t[ ] T` put its content four past its marker, not two, while
  * its children moved two to the left: siblings at the top, T's property a
- * note bullet, and a child deep enough a paragraph line (the fifth L2
- * counterexample run, H1). Kept as the spaces it was wide, the content stands
- * as far past the marker wherever the line goes.
+ * note bullet, and a child deep enough a paragraph line. Kept as the spaces
+ * it was wide, the content stands as far past the marker wherever the line
+ * goes.
  */
 describe('a task moved to another indentation', () => {
     async function openNotes(files: Record<string, string[]>) {

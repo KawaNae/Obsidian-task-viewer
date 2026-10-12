@@ -16,7 +16,7 @@ import { freezeDate } from '../helpers/fakeDate';
  * between the refused fire and the completion; and one notice, which says the
  * row was completed and the flow was not run.
  *
- * The shape is F8's (R2): `Para` / `- [ ] A ==> move([[#Done]])` / `---` —
+ * The shape: `Para` / `- [ ] A ==> move([[#Done]])` / `---` —
  * taking the row out would make the paragraph and the rule a setext heading.
  */
 

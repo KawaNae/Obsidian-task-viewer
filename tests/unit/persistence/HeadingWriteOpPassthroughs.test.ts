@@ -24,7 +24,7 @@ function heading_harness(initial: string) {
 describe('TaskRepository.putInNote', () => {
     it('delegates to the shared heading-write op and returns insertedLine', async () => {
         const h = heading_harness('## Tasks\nexisting');
-        // Past the paragraph under the heading, which a line put above it would take in (P1).
+        // Past the paragraph under the heading, which a line put above it would take in.
         const at = await h.repo.putInNote('note.md', { heading: 'Tasks', level: 2, side: 'head' }, Block.line('- [ ] child'));
         expect(at.written && at.line).toBe(2);
         expect(h.text().split('\n')).toEqual(['## Tasks', 'existing', '- [ ] child']);

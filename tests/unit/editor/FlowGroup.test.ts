@@ -20,7 +20,7 @@ const SHAPES: Array<[string, string[]]> = [
     ]],
     // (Obsidian, `OutlineRead.test.ts` q1) the shallow line goes on the fence, and
     // the task with it, to the closing line.
-    ['a fence that takes a shallower line (BK1)', [
+    ['a fence that takes a shallower line', [
         `- [ ] a ${D} ==> every mon`, '    ```', 'shallow at column 0', '    ```', '    - ==> x3', `- [ ] b ${D}`, '',
     ]],
     // (Obsidian, `OutlineRead.test.ts` q6) one column in after a blank line is an

@@ -10,13 +10,11 @@ import { freezeDate } from '../helpers/fakeDate';
 
 /**
  * A completion fires from the operation that completed it, once, and from
- * nothing else (contract 2). Stage X closes
- * with this every shape in which firing was answered from two readings of a
- * file — the rows of the table of defects and limits for "a completion
- * undone and redone" and "a completion that arrived by sync" — and each is
- * pinned here, on the paths that remain: the editor's transaction, a card's
- * write, and the readings (a scan, an outside `modify`) that have no way to
- * fire at all.
+ * nothing else. Firing was once answered from two readings of a file, and
+ * the shapes that went wrong so — "a completion undone and redone" and "a
+ * completion that arrived by sync" among them — are each pinned here, on
+ * the paths that remain: the editor's transaction, a card's write, and the
+ * readings (a scan, an outside `modify`) that have no way to fire at all.
  */
 
 // `every` lands on the first grid point after the later of today and the
@@ -116,7 +114,7 @@ describe('the editor: which transactions fire, and how many rows', () => {
     }
 });
 
-describe('a completion undone and redone (N1)', () => {
+describe('a completion undone and redone', () => {
     it('fires once: the undo and the redo are no operation', async () => {
         const note = await open(['# note', WEEKLY, '- [ ] U', '']);
         const before = note.editor.text();
@@ -135,7 +133,7 @@ describe('a completion undone and redone (N1)', () => {
     });
 });
 
-describe('rows that read alike (N2, Q2)', () => {
+describe('rows that read alike', () => {
     it('fires each of two rows alike completed in one transaction, with a next instance for each', async () => {
         const note = await open(['# note', WEEKLY, WEEKLY, '']);
 
@@ -313,7 +311,7 @@ describe('the editor menu\'s rewrite of a line, in the editor', () => {
     });
 });
 
-describe('readings of a flow\'s own writes (R3, F-b, L, F-a)', () => {
+describe('readings of a flow\'s own writes', () => {
     it('fire nothing: the save of the editor and a sync of the note after them', async () => {
         const note = await open(['# note', WEEKLY, '- [ ] U', '']);
 
@@ -338,7 +336,7 @@ describe('readings of a flow\'s own writes (R3, F-b, L, F-a)', () => {
     });
 });
 
-describe('a completion that arrived from outside (L1, a sync, H1)', () => {
+describe('a completion that arrived from outside (a sync)', () => {
     it('fires nothing', async () => {
         const note = await open(['# note', WEEKLY, '- [ ] 日報 @2026-09-21 ==> every 1d', '']);
 

@@ -46,7 +46,7 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
     return new TaskApi(mockPlugin as any);
 }
 
-describe('C1: read-only タスクの mutation 拒否', () => {
+describe('read-only タスクの mutation 拒否', () => {
     const readOnlyTask = makeTask({ isReadOnly: true, parserId: 'tasks-plugin' });
 
     it('update は read-only タスクを拒否し parserId を含むエラーを返す', async () => {
@@ -93,7 +93,7 @@ describe('C1: read-only タスクの mutation 拒否', () => {
     });
 });
 
-describe('C2: status 単一文字検証', () => {
+describe('status 単一文字検証', () => {
     it('create: 多文字 status を拒否', async () => {
         const api = createMockApi(undefined);
         await expect(api.create({ file: 'test.md', content: 'task', status: 'done' }))
@@ -138,7 +138,7 @@ describe('C2: status 単一文字検証', () => {
     });
 });
 
-describe('C5: update due の time-only 拒否', () => {
+describe('update due の time-only 拒否', () => {
     it('due="14:00" は拒否', async () => {
         const task = makeTask({ isReadOnly: false });
         const api = createMockApi(task);
@@ -167,7 +167,7 @@ describe('C5: update due の time-only 拒否', () => {
     });
 });
 
-describe('C8: 数値パラメータ検証', () => {
+describe('数値パラメータ検証', () => {
     it('duplicate: NaN dayOffset を拒否', async () => {
         const task = makeTask({ isReadOnly: false });
         const api = createMockApi(task);
@@ -254,7 +254,7 @@ describe('C8: 数値パラメータ検証', () => {
     });
 });
 
-describe('C11: list= を filterFile なしで渡すとエラー', () => {
+describe('list= を filterFile なしで渡すとエラー', () => {
     it('list に filterFile なしで list= を渡すとエラー', async () => {
         const api = createMockApi(undefined);
         await expect(api.list({ list: 'urgent' }))
@@ -272,7 +272,7 @@ describe('C11: list= を filterFile なしで渡すとエラー', () => {
     });
 });
 
-describe('C17: content の改行注入拒否', () => {
+describe('content の改行注入拒否', () => {
     it('create: 改行入り content を拒否', async () => {
         const api = createMockApi(undefined);
         await expect(api.create({ file: 'test.md', content: 'line1\nline2' }))
@@ -310,7 +310,7 @@ describe('C17: content の改行注入拒否', () => {
  * had already been reverted, and delete and duplicate returned nothing at all
  * to check. The API is the CLI's only story about what happened, so it says so.
  */
-describe('C18: 書けなかった変更系はエラーになる', () => {
+describe('書けなかった変更系はエラーになる', () => {
     it('update: 書けなかったら失敗を返す', async () => {
         const api = createMockApi(makeTask(), { writesLand: false });
         await expect(api.update({ id: 'test-1', status: 'x' }))
@@ -336,7 +336,7 @@ describe('C18: 書けなかった変更系はエラーになる', () => {
     });
 });
 
-describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由を添えて拒否する', () => {
+describe('1要素1行。改行を含む値は、書き込みの前に理由を添えて拒否する', () => {
     // The write layer refuses such a line whole (LineBreakInLine); the API
     // says which parameter it was before anything is written.
     it('create: CR だけの content を拒否', async () => {
@@ -412,7 +412,7 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
             .rejects.toThrow(/status must be a single character a checkbox can hold/);
     });
 
-    it('U+2028 と U+2029 は行の中身として通し、そのまま書き込みへ渡す（L1。Obsidian も読み手も行の区切りにしない）', async () => {
+    it('U+2028 と U+2029 は行の中身として通し、そのまま書き込みへ渡す（Obsidian も読み手も行の区切りにしない）', async () => {
         for (const sep of ['\u2028', '\u2029']) {
             const created = createMockApi(undefined);
             const existing = createMockApi(makeTask({ isReadOnly: false }));

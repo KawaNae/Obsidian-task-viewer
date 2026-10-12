@@ -3,9 +3,9 @@ import { Outline, type OutlineReading } from '../../../src/services/parsing/util
 import fixture from './fixtures/l3-commonmark.json';
 
 /**
- * `Outline.read` against CommonMark (commonmark.js 0.31.2) on the shapes L3
+ * `Outline.read` against CommonMark (commonmark.js 0.31.2) on the shapes
  * measured in Obsidian 1.12.4 (235 shapes) and a
- * few more for the readings L3 changed. The fixture is written by
+ * few more for the readings made CommonMark's. The fixture is written by
  * `C:/VScode/obsidian-task-viewer-worktrees/verify-scripts/l3-cm-fixture.js`,
  * outside the repository; its head names the generator and the
  * version it read with.
@@ -14,7 +14,7 @@ import fixture from './fixtures/l3-commonmark.json';
  * not blank. `owners` gives, per line that is not blank, the innermost item
  * it stands in.
  *
- * The outline keeps two exceptions from CommonMark, both from L2 and both
+ * The outline keeps two exceptions from CommonMark, both
  * the way the reading view and Live Preview read: a fence opened in an item
  * goes on over shallower lines, and a line of only NBSP or U+3000 is blank.
  * Each has a describe of its own below.
@@ -53,7 +53,7 @@ const SPACE_BEFORE_TAB = new Set([
 ]);
 
 /**
- * The shapes the fence exception (L2) reads otherwise than CommonMark, and
+ * The shapes the fence exception reads otherwise than CommonMark, and
  * what the outline reads: the fence and the item go on over the shallower
  * line, and the closing delimiter closes the fence rather than opening one.
  */
@@ -68,14 +68,14 @@ function expectCommonMark(name: string, shape: Shape): void {
     expect(ownersOf(outline), name).toEqual(shape.owners);
 }
 
-describe('Outline.read reads what CommonMark reads (L3)', () => {
+describe('Outline.read reads what CommonMark reads', () => {
     for (const [name, shape] of Object.entries(SHAPES)) {
         if (SPACE_BEFORE_TAB.has(name) || name in FENCE_EXCEPTION || shape.blank) continue;
         it(`${name}: ${JSON.stringify(shape.lines)}`, () => expectCommonMark(name, shape));
     }
 });
 
-describe('Outline.read keeps its one exception from CommonMark (L2)', () => {
+describe('Outline.read keeps its one exception from CommonMark', () => {
     for (const [name, read] of Object.entries(FENCE_EXCEPTION)) {
         it(name, () => {
             const shape = SHAPES[name];
@@ -110,7 +110,7 @@ const BLANK_READS_AS_CODE: Record<string, number> = {
     'NB-n-item-6sp': 2, 'NB-i-item-6sp': 2, 'NB-n-top-code': 2, 'NB-i-top-code': 2,
 };
 
-describe('Outline.read reads a line of only NBSP or U+3000 as blank, where CommonMark reads text (L2)', () => {
+describe('Outline.read reads a line of only NBSP or U+3000 as blank, where CommonMark reads text', () => {
     const shapes = Object.entries(SHAPES).filter(([, shape]) => shape.blank);
 
     it('has the shapes, with NBSP and U+3000 each', () => {

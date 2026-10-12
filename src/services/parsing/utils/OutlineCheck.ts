@@ -69,8 +69,8 @@ export interface WriteFinding {
  *   went on it, an item it made its child. Else `disturbs`
  * - A line spliced in without a block is in the frontmatter. Else `loose`
  *
- * The first two are what a line taken out was held to (the L2 `canTakeOut`)
- * and the two a line put in is: one question, whether the lines written are
+ * The first two are what a line taken out is held to, and the two a line
+ * put in is: one question, whether the lines written are
  * what the write says they are and every other line is what it was.
  *
  * The third asks of every line an item put in takes in, where the first asks

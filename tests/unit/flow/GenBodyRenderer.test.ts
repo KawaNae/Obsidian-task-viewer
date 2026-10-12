@@ -151,9 +151,9 @@ describe('renderGenBody', () => {
 
 describe('a line that is only an interpolation', () => {
     it('takes the depth its value carries, as the canonical sample writes it', () => {
-        // 設計のサンプル 4 の形。差し込み行はカラム 0 に置かれ、階層は
-        // 文字列の中に書かれる（LLM が実際に書いた形で、R1 が verbatim に
-        // なった理由そのもの）
+        // 差し込み行はカラム 0 に置かれ、階層は文字列の中に書かれる。LLM が
+        // 実際に書いた形で、差し込みの値をそのまま（verbatim）書くのはこの形の
+        // ためである
         const result = render([
             '- [ ] 週次レビュー',
             '${["    - [ ] 仕事", "    - [ ] 健康"].join("\n")}',

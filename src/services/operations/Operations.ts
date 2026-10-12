@@ -538,7 +538,7 @@ export class Operations {
      * way the index was never told of, or that the index has not read yet,
      * is read first. For a caller that names its row by `^id` — the API's
      * `path#^id`, a timer — whose anchor outlives readings, so it goes on
-     * with the row it finds (contract 3), where one that named a reading is
+     * with the row it finds, where one that named a reading is
      * asked to try again. Nothing is told the user here: the caller goes on,
      * or says why it does not.
      *

@@ -6,8 +6,8 @@ import { Outline } from '../../../src/services/parsing/utils/Outline';
  * (`OutlineReading.headings`): CommonMark's, at the top of the note only —
  * an ATX heading indented up to three columns, and a paragraph a line of `=`
  * or `-` underlines. Not a heading in an item, a fence, indented code, a
- * quote or the frontmatter (Obsidian links to none of those, F8's Dev
- * measurement).
+ * quote or the frontmatter (Obsidian links to none of those,
+ * measured in Obsidian).
  */
 const headingsOf = (text: string) => Outline.read(text.split('\n')).headings
     .map(h => ({ line: h.line, end: h.end, level: h.level, text: h.text }));

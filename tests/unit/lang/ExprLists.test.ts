@@ -81,8 +81,8 @@ describe('lists in the block profile', () => {
     });
 
     it('says what to use instead of push', () => {
-        // 除外した構文は一般的な型エラーで返さない。代替はこの PR で動く
-        // ものだけを名指しする（スプレッドは A4-2b）
+        // 除外した構文は一般的な型エラーで返さない。代替は動くものだけを
+        // 名指しする
         const { diagnostics } = check('["a"].push("b")');
         expect(codes(diagnostics)).toContain('type.list-immutable');
         expect(diagnostics[0].message).toContain('concat');

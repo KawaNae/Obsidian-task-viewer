@@ -60,7 +60,7 @@ function createMockApiForCreate(opts: {
     return { api: new TaskApi(mockPlugin as any), readService, operations };
 }
 
-describe('G4: create の行番号ベース再特定', () => {
+describe('create の行番号ベース再特定', () => {
     it('通常の create (append) で getTaskByFileLine が insertedLine で呼ばれる', async () => {
         const created = makeFullTask({ line: 10 });
         const { api, readService } = createMockApiForCreate({

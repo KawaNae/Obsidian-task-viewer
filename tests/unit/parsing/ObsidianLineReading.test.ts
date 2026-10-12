@@ -154,7 +154,7 @@ describe('line breaks, as Obsidian ends a line', () => {
     it('reads an ordered marker of any number of digits, as the outline reads an item (Obsidian)', () => {
         // One definition of the marker for the task line and the outline's
         // items. Obsidian 1.12.4 reads the ten-digit one as a task, in
-        // `listItems` and the reading view, past CommonMark's nine (the L2 gate).
+        // `listItems` and the reading view, past CommonMark's nine.
         for (const line of ['123456789. [ ] x', '1234567890. [ ] x', '12345678901234567890) [ ] x']) {
             expect(TaskLineClassifier.isTaskLine(line), line).toBe(true);
             expect(Outline.read([line]).item(0), line).not.toBeNull();

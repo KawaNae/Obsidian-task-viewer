@@ -14,8 +14,8 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  *
  * The subtree used to stop at the first blank line. A deeper line below one
  * was the parser's orphan and every write's too: a delete left it behind, a
- * move within the file left it where it was while the row went to the end
- * (C-3), a move to another file archived the half above the blank line.
+ * move within the file left it where it was while the row went to the end,
+ * a move to another file archived the half above the blank line.
  */
 
 const FILE = 'note.md';
@@ -47,7 +47,7 @@ async function complete(session: VaultSession, content: string, ...paths: string
 }
 
 describe('a subtree with a blank line inside it', () => {
-    it('moves whole within the file, every row keeping its ID (C-3)', async () => {
+    it('moves whole within the file, every row keeping its ID', async () => {
         const { contents, session } = await open({
             [FILE]: ['# note', '- [ ] 対象 @2026-09-21 ==> move([[#Done]])', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [ ] 下', '## Done', '- [x] old', ''],
         });
@@ -101,7 +101,7 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
     // of its own, which ends T and its fence and opens a fence that never
     // closes and holds U. U is code, not a task, before any write, as
     // Obsidian draws it. Under the old depth reading the subtree took the
-    // fence whole and U was a task (found by the F4 counterexample run).
+    // fence whole and U was a task.
     const NOTE = ['# note', '- [ ] T @2026-09-21', '', '  ```js', 'code', '```', '- [ ] U', ''];
 
     it('reads U as code', async () => {
@@ -154,8 +154,8 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
 
 describe('a checkbox indented by full-width spaces', () => {
     // Obsidian does not nest it: its metadata reads the line as P going on,
-    // not as a list item (R0), so it is no task here either (L1). F4's B4 was
-    // a write that took such a line's full-width spaces off; whatever the
+    // not as a list item (measured in Obsidian 1.12.4), so it is no task here
+    // either. A write once took such a line's full-width spaces off; whatever the
     // line is read as, no write may do that.
     it('is no task and no child, and a write to its parent leaves it as it was', async () => {
         const { contents, session } = await open({ [FILE]: ['# note', '- [ ] P', '\u3000\u3000- [ ] 子', ''] });

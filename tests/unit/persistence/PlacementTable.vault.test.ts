@@ -142,7 +142,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         expect(parents(session)).toEqual([['N', null], ['A', null]]);
     });
 
-    // A heading is a bound, as for a move to a heading's section (F8's R1):
+    // A heading is a bound, as for a move to a heading's section:
     // the new task goes past no heading, and leaves each one reading as it did.
     it.each([
         ['an indented heading', ['## H', '   ## Next', '- [x] b']],
@@ -218,7 +218,7 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
 });
 
 describe('the next instance (insert-instance, groupHead)', () => {
-    it('writes the next instance spelled as the row, its command its child, so the series goes on (H2)', async () => {
+    it('writes the next instance spelled as the row, its command its child, so the series goes on', async () => {
         const { contents, session } = await open(['# n', '1.    [ ] 対象 @2026-09-21', '      - ==> every mon', '']);
 
         expect((await session.ops.updateTask(only(session, '対象').id, { statusChar: 'x' })).written).toBe(true);
@@ -259,7 +259,7 @@ describe('a move within the note (a move to a heading)', () => {
 });
 
 describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)', () => {
-    // The first run's B1: a new line, spelled as the item next to it. At
+    // A new line, spelled as the item next to it. At
     // T's spelling, `- ` at the top, it would take U in.
     it('is spelled as the sibling below it, not as the row', async () => {
         const { contents, session } = await open(['# n', '1. [ ] T', '  - [ ] U', '']);
@@ -295,7 +295,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     });
 });
 
-describe('siblings spelled at different columns (the P1 counterexample run\'s C)', () => {
+describe('siblings spelled at different columns', () => {
     it('put a record past the run at the last one\'s indentation, not under it', async () => {
         // T and U are both P's children, four and two columns in; c is U's.
         const { contents, session } = await open(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '']);
@@ -320,7 +320,7 @@ describe('siblings spelled at different columns (the P1 counterexample run\'s C)
     });
 });
 
-describe('text past a blank line that a line put above would take in (the P1 counterexample run\'s A)', () => {
+describe('text past a blank line that a line put above would take in', () => {
     it('puts a first child past the task\'s code below a blank line', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '', '\t\tcode', '- [ ] U', '']);
 
@@ -403,7 +403,7 @@ describe('an append (createTask without a heading, at the end)', () => {
 
 describe('a delete (deleteTask), held to the same check', () => {
     it('writes nothing when a task below would stand under another', async () => {
-        // The P1 probe's shape B: without ` - [ ] t`, `  1. [ ] u` is a's child.
+        // Without ` - [ ] t`, `  1. [ ] u` is a's child.
         const { contents, session } = await open(['# n', '- [x] a', ' - [ ] t', '  1. [ ] u', '']);
         expect(parents(session)).toEqual([['a', null], ['t', null], ['u', null]]);
         const before = contents.get(FILE);
@@ -416,8 +416,8 @@ describe('a delete (deleteTask), held to the same check', () => {
     });
 });
 
-describe('the two readings L3 made CommonMark\'s: a quote after an item, an ordered line in a paragraph', () => {
-    // `> quote` ends T (G): T's subtree is its own line, and c is at the top.
+describe('the two readings made CommonMark\'s: a quote after an item, an ordered line in a paragraph', () => {
+    // `> quote` ends T: T's subtree is its own line, and c is at the top.
     const QUOTE = ['# n', '- [ ] T', '> quote', '  - [ ] c', ''];
 
     it('deletes a task a quote ends as its own line, and leaves the quote and the line below', async () => {

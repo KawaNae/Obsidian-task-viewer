@@ -191,7 +191,7 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('its twin without an anchor, named by a reading from before the edit, is not written (contract 3)', async () => {
+    it('its twin without an anchor, named by a reading from before the edit, is not written', async () => {
         const { contents, session } = await open(['- [ ] A ^keep', '- [ ] A', '']);
         const twin = session.index.getTasks().find(row => row.line === 1)!.id;
         const edited = ['- [ ] A', '- [ ] A ^keep', ''].join('\n');

@@ -1,9 +1,9 @@
 /**
- * Sending a row and its subtree to a note (`NoteOps.send`, 段 B3), in the
+ * Sending a row and its subtree to a note (`NoteOps.send`), in the
  * running Dev vault: to a new note, to a note there is, to a heading of the
  * row's own note, and a send whose note the row came from refuses once the
  * new note is written, which takes the new note away again. Then the send
- * dialog (段 B5), opened from a card's menu: the note and the heading picked
+ * dialog, opened from a card's menu: the note and the heading picked
  * from their lists with the pointer while the rows' editor holds a draft,
  * and a subtree it cannot open in the editor, shown as it stands. The
  * notes' bytes are read back from the disk.
@@ -208,7 +208,7 @@ function closeTimer(id: string): void {
     })()`);
 }
 
-describe('sending a row a timer runs on (段 B4)', () => {
+describe('sending a row a timer runs on', () => {
     let open: string | null = null;
     afterEach(() => {
         if (open) closeTimer(open);

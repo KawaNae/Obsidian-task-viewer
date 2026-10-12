@@ -10,7 +10,7 @@ import { editorRow } from '../../../src/services/persistence/FileLines';
 
 /**
  * The editor's ⋯ menu, on one of two twin lines, when the editor and the file
- * part ways: N1's known limit, closed in E1.
+ * part ways.
  *
  * The menu points at a line by the editor's line number and text
  * (`editorRow`). Checked by its text alone, the line passed on a twin that

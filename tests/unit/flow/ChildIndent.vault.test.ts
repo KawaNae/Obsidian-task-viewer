@@ -12,11 +12,11 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  * child: the first list item the outline reads under the task's item.
  *
  * It used to take the first line of the subtree that was not blank. Since the
- * subtree is read as Obsidian reads an item (stage L2), that line can be a
+ * subtree is read as Obsidian reads an item, that line can be a
  * paragraph going on at column 0 or indented four columns past the task's
  * content: a child written at its indentation was a sibling at the top, or a
  * paragraph line, and the next instance of a series lost its `==>` line and
- * stopped (the L2 counterexample run).
+ * stopped.
  */
 
 const FILE = 'note.md';
@@ -62,7 +62,7 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit, confi
         await session.settle(FILE);
 
         // Past the task's text that goes on, which a child put above it would
-        // take in as its own (P1).
+        // take in as its own.
         expect(contents.get(FILE)!.split('\n').slice(0, 4)).toEqual(['# note', '- [ ] T', line, `${unit}- [ ] c`]);
         expect(taskWorded(session, 'c').parentId).toBe(taskWorded(session, 'T').id);
     });
@@ -97,7 +97,7 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit, confi
  * (`Outline.shiftIndent`). It used to lose as many characters as the task's
  * own indentation: from under a tab-indented task, eight spaces lost one and
  * landed seven past the task's new row, four past its content, a paragraph
- * line (the fourth L2 counterexample run, G3, M14).
+ * line.
  */
 describe('a child carried by a move within the note', () => {
     // Tab and spaces mixed both ways, to a heading's section: the child is

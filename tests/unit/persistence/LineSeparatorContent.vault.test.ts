@@ -4,12 +4,12 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A value holding U+2028 or U+2029 goes into a note and comes back out as the
- * same task with the same value (L1).
+ * same task with the same value.
  *
- * Obsidian keeps both inside a line and shows the line as one checkbox (R0).
- * Before L1 every line pattern here read `.`, which refuses them, so such a
+ * Obsidian keeps both inside a line and shows the line as one checkbox (measured
+ * in Obsidian 1.12.4). Every line pattern here used to read `.`, which refuses them, so such a
  * value took its task out of the index; the API and the flows refused it for
- * that reason (F5). Now the readers take them as text, and the inputs let
+ * that reason. Now the readers take them as text, and the inputs let
  * them through. Inside the content they are whitespace, as a space is: at an
  * edge of the content they go, next to a space they fold into one, as an
  * extra space does.

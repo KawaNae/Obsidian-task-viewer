@@ -505,7 +505,7 @@ export interface RowRef {
  * editor showed it, in the content whose key is `key`; with `subtree`, the
  * line and every line of its subtree as the editor showed them, for a write
  * that takes them away, made only if the file still reads them so, as a
- * delete that names its row is (F5).
+ * delete that names its row is.
  */
 export function editorRow(line: number, text: string, key: ContentKey, subtree?: readonly string[]): RowRef {
     return { line, subject: text.trim(), basis: { text, ...(subtree ? { subtree } : {}) }, in: { key } };
@@ -981,7 +981,7 @@ export function editLines(
     // lines it put in read as put, and every other line as it did
     // (`checkWrite`). A write that reported nothing is not asked: one
     // that changed lines behind the draft is written with the chain
-    // marked broken (W1's contract, `ChainMarks.vault.test.ts`).
+    // marked broken (`ChainMarks.vault.test.ts`).
     let readings: { read: OutlineReading; left: OutlineReading } | undefined;
     if (reported.length > 0) {
         const written = writtenLines(before.length, reported, placedBy);

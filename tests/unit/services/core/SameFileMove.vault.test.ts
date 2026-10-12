@@ -10,8 +10,7 @@ import { vaultSession, type VaultSession } from '../../helpers/vaultSession';
  * The move used to be three writes — the status, the append, the delete — and
  * only the delete claimed nothing. Its scan fell to the ladder, which pairs by
  * how near the rows are: the moved line kept its ID with at most one task row
- * between the original and the copy, and took the copy's otherwise (observed
- * in O2 and O3). The move is one write now, and its claim says the moved line
+ * between the original and the copy, and took the copy's otherwise. The move is one write now, and its claim says the moved line
  * is the row that fired, so the distance no longer enters into it.
  *
  * A file's every row is named from a hash of the whole file's content, so any

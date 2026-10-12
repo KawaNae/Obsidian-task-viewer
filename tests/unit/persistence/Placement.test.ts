@@ -32,7 +32,7 @@ describe('Placement.groupHead', () => {
             expect(Placement.groupHead(Outline.read(['- [ ] only task']), 0, '- [ ] n', '\t').at).toBe(0);
         });
 
-        // CY1: the rows the walk used to take for siblings.
+        // The rows the walk used to take for siblings.
         it('does not go into the fence just above it', () => {
             const lines = ['# note', '```', '- [ ] sample', '```', '- [ ] current'];
             expect(Placement.groupHead(Outline.read(lines), 4, '- [ ] n', '\t').at).toBe(4);
@@ -143,7 +143,7 @@ describe('Placement.firstChild', () => {
         expect(Placement.firstChild(Outline.read(['- [ ] a', '\t- b']), 0, '- [ ] n', '\t')).toEqual({ at: 1, parent: 0, indent: '\t' });
     });
 
-    it('is past the row\'s text that goes on, which a child put above it would take in (P1)', () => {
+    it('is past the row\'s text that goes on, which a child put above it would take in', () => {
         // A paragraph going on (a lazy line), and one indented past the
         // content; both are the row's own text.
         expect(Placement.firstChild(Outline.read(['- [ ] a', 'lazy', '- [ ] b']), 0, '- [ ] n', '\t').at).toBe(2);
@@ -155,7 +155,7 @@ describe('Placement.firstChild', () => {
         expect(Placement.firstChild(Outline.read(['- [ ] a', 'text', '  - b']), 0, '- [ ] n', '\t').at).toBe(2);
     });
 
-    it('is past the lines that go on the row\'s paragraph, and its underline, not past a block of its own (L3)', () => {
+    it('is past the lines that go on the row\'s paragraph, and its underline, not past a block of its own', () => {
         // An empty item and an ordered one not starting at 1 go on the text;
         // a lone `-` underlines it. Each would open an item below a child.
         expect(Placement.firstChild(Outline.read(['- [ ] a', '  2. [ ] u', '- [ ] b']), 0, '- [ ] n', '\t').at).toBe(2);

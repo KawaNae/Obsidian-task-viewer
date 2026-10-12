@@ -38,7 +38,7 @@ describe('isCompleteStatusChar', () => {
     ];
 
     it('never treats blank as complete, even when a definition says so', () => {
-        // G1: a flow's next instance is always written as `[ ]`. If blank
+        // A flow's next instance is always written as `[ ]`. If blank
         // could read as complete, every instance would read as done the
         // moment it lands (see isCompleteStatusChar).
         expect(isCompleteStatusChar(' ', defsWithBlankMarkedComplete)).toBe(false);

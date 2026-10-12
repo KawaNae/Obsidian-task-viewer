@@ -100,7 +100,7 @@ describe('FlowParser', () => {
         });
     });
 
-    // F8: a move stays in its note. The heading it goes to is read off how
+    // A move stays in its note. The heading it goes to is read off how
     // the clause is written, before anything is evaluated, once, here.
     describe('where move goes', () => {
         const headingOf = (raw: string) => {

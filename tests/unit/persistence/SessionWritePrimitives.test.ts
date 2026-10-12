@@ -373,7 +373,7 @@ describe('completed-run walk across mixed indentation', () => {
         );
 
         // At the indentation of the sibling it goes next to, the last of the
-        // run (P1: siblings spelled at other columns would take it under them).
+        // run (siblings spelled at other columns would take it under them).
         expect(text.split('\n')).toEqual(['- [ ] parent', first, second, '\t' + NEW_SESSION]);
     });
 

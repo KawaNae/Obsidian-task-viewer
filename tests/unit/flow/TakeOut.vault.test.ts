@@ -17,8 +17,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  *
  * Taken out alone, the line left its child standing under the task, too deep
  * for the task's item: Obsidian reads it as a paragraph going on, and so does
- * the outline, and the child's task and ID were gone (the L2 counterexample
- * run, PR3 and SF1).
+ * the outline, and the child's task and ID were gone.
  */
 
 const FILE = 'note.md';
@@ -131,7 +130,7 @@ describe('a child written under a task with no children', () => {
 
 describe('a line with a note bullet below it', () => {
     // The note goes under the task: no task, command or property changes
-    // (the fourth L2 counterexample run, U1 and U2). Refused, the series
+    // Refused, the series
     // stopped when a `==>` line had a word of explanation under it.
     it('is stripped by a fire, and the series goes on', async () => {
         const { contents, session } = await open(['# note', '- [ ] T @2026-09-21', '  - ==> every mon', '    - why weekly', '- [ ] U', '']);

@@ -134,9 +134,9 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
         expect(h.lines()[5]).toBe('- [ ] next');
     });
 
-    // The first run's B: a new line, spelled as the item next to it, not as
+    // A new line, spelled as the item next to it, not as
     // the task. Spelled `- ` at the top, it would take U in as its child.
-    it('writes the new record as the sibling below it is spelled (P1\'s B1)', async () => {
+    it('writes the new record as the sibling below it is spelled', async () => {
         const h = await writeBench(['1. [ ] T @2026-08-15', '  - [ ] U'].join('\n'));
 
         const { written } = await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
