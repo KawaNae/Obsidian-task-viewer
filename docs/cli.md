@@ -401,6 +401,8 @@ abc	Meeting	 	2026-03-15
 def	Review	x	2026-03-14
 ```
 
+値の中のタブと改行は空白で書きます。`tags` と `childIds` は `;` でつなぎ、`properties` は json と同じ値を JSON で書きます（`{"area":"lab","n":3}`）。
+
 **jsonl**:
 ```
 {"id":"abc","content":"Meeting","status":" ","startDate":"2026-03-15"}
