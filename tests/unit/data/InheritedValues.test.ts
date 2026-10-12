@@ -116,6 +116,7 @@ describe('inheritedAt', () => {
             '- none:: ,',
             '- hex:: 0x1F',
             '- id:: "123"',
+            "- sq:: 'abc'",
             '- empty::',
             '- tv-color:: 007700',
             '- [ ] task',
@@ -138,6 +139,7 @@ describe('inheritedAt', () => {
         expect(values.hex.yaml).toEqual(['hex: 0x1F']);
         // A quoted line value is text, and YAML is told so by its own quotes.
         expect(values.id.yaml).toEqual(['id: "123"']);
+        expect(values.sq.yaml).toEqual(['sq: abc']);
         // No value goes as an empty text: the frontmatter's `empty:` would be no property.
         expect(values.empty.yaml).toEqual(['empty: ""']);
         // The plugin's own keys are read as text: a color is not a number.

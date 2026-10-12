@@ -129,6 +129,26 @@ describe('ChildPropertyLineEditor', () => {
         });
     });
 
+    describe('a property line\'s block, as the lines under it are no part of the write', () => {
+        it('rewrites the last of two lines of one key, and the key stays unread', () => {
+            const lines = ['- [ ] task', '\t- a:: 1', '\t- A:: 2'];
+            apply(lines, 0, [{ key: 'a', op: 'set', value: '3' }]);
+            expect(lines).toEqual(['- [ ] task', '\t- a:: 1', '\t- A:: 3']);
+        });
+
+        it('writes a value on a list\'s line, leaving its items under it as notes', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t\t- b'];
+            apply(lines, 0, [{ key: 'k', op: 'set', value: 'x' }]);
+            expect(lines).toEqual(['- [ ] task', '\t- k:: x', '\t\t- a', '\t\t- b']);
+        });
+
+        it('takes a list\'s line out, leaving its items', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t- other:: 1'];
+            apply(lines, 0, [{ key: 'k', op: 'delete' }]);
+            expect(lines).toEqual(['- [ ] task', '\t\t- a', '\t- other:: 1']);
+        });
+    });
+
     describe('applyOps: insert (own プロパティ行なし)', () => {
         it('既存子行のインデント表現を踏襲する（スペース系ファイルで tab 混在させない）', () => {
             const lines = [
