@@ -249,6 +249,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
 | **NoteSections** | `services/parsing/tree/NoteSections.ts` | A note's sections from `outline.headings`, each with its own property lines (the section scope of the cascade) |
 | **PropertyLines** | `services/parsing/utils/PropertyLines.ts` | The one reading of property lines: which lines are a task's or a section's (`ofTask`, `ofSection`), what they say and what is wrong with them (`read`: values, the line of each, `PropertyFinding`); see "プロパティ行" |
+| **PropertyDiagnostics** | `services/parsing/tree/PropertyDiagnostics.ts` | The editor's diagnostics on property lines: every section's and task's `PropertyFinding` as a diagnostic on its line, with one sentence per kind; see "プロパティ行" |
 | **NoteTasks** | `services/parsing/tree/NoteTasks.ts` | A note's rows: every line that opens a task, its parent, child lines, flow, properties and section cascade, read once |
 | **FlowLineScanner** | `services/parsing/utils/FlowLineScanner.ts` | `readFlow(outline, taskLine)`: the one place a flow program is read from a note (the task line's tail and its own `- ==>` lines); the extraction and the editor diagnostics both use it |
 | **DayPlannerParser** | `services/parsing/tv-inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
@@ -352,7 +353,11 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - プロパティ行の下の行は、プロパティの一部として読むか、所見（`PropertyFinding`）になる。所見は、出す行、関わる行の範囲（`end`）、キー、プロパティ行、持ち主を持つ
     - エラー: `duplicate-key`（同じ持ち主の重複したキー）
     - 警告: `date-key-under-task`、`lines-under-value`（値のある行の下の行）、`property-shaped-item`、`not-a-list-item`（リストの項目として読めない行）
-    - 所見はまだ表示しない。エディタの診断とハブは、この所見を出す
+- 所見はエディタの診断になる（`propertyDiagnostics`、`parsing/tree/PropertyDiagnostics.ts`）。`DiagnosticsExtension` が、日付のブロックやフローの診断と同じ波線で出す
+    - 文書の内容から、すべての節（根の節を含む、`NoteSections.read`）とすべてのタスク（`NoteTasks.taskLines`）のプロパティ行を、パーサと同じ `read` で読む。設定の日付のキーが変われば、文書が同じでも読み直す
+    - 波線は所見の行（`line`）に、字下げの後ろから行末まで引く。値のある行の下の項目なら、プロパティ行でなく項目の行である。所見が覆う下の行（`end` まで）には引かない
+    - 文は所見の種類ごとに1つで、プラグインがしたことと直し方を書き、意図を推測しない。英語は `PropertyDiagnostics.ts` の表に、日本語は `ja.json` の `flowDiag.property.<種類>` に置く（`diagnosticText`）。文の材料はどの種類も同じで、キーの綴り（`key`）と、所見の行の字下げと記号を除いた文字（`text`）である。種類を足すときは、表と `ja.json` に文を足すだけでよい
+- タスク自身の所見は `Task.propertyFindings` に載る（無ければ欠ける）。ハブのように、ノートを開かずにタスクを見せる所が使う。所見がどのプロパティのものかはキー（`PropertyKey.same` で照合する）とプロパティ行で引く。行番号はタスクの `line` と同じく、その読みの中の座標である
 - 節の頭（`SectionNode.head`）は、最初のタスクより上にあるプロパティ行の部分木の後ろである。見出しの下に行を足す書き込み（`Placement.into` の `head`）はそこに置く。プロパティ行を見出しの直下にまとめて書く形を保つためで、読みは位置に依らない。最初のタスクより下のプロパティ行は頭を動かさない
 
 ### プロパティのキー
