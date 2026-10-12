@@ -3,6 +3,7 @@ import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeli
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
+import { PropertyLines } from '../../../src/services/parsing/utils/PropertyLines';
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
 import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
@@ -75,7 +76,7 @@ describe('indentation, as Obsidian nests a list', () => {
             // `nests` plus that second, depth condition.
             const outline = Outline.read(['- [ ] task', `${lead}- k:: v`]);
             const contentColumn = outline.item(0)!.contentColumn;
-            expect(ChildLineClassifier.ownPropertyLines(outline, 0).includes(1), label).toBe(nests && Outline.depthOf(indent) >= contentColumn);
+            expect(PropertyLines.ofTask(outline, 0).lines.some(line => line.line === 1), label).toBe(nests && Outline.depthOf(indent) >= contentColumn);
             expect(matchFlowLine(`${lead}- ==> next`) !== null, label).toBe(nests);
             expect(Outline.dedent(`${lead}- [ ] x`), label).toBe(`${lead}- [ ] x`.slice(indent.length));
         }

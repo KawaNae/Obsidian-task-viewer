@@ -1,4 +1,4 @@
-import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
+import { PROPERTY_LINE, PropertyLines } from '../../parsing/utils/PropertyLines';
 import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../FileLines';
@@ -20,23 +20,22 @@ interface OwnPropertyLine {
  *   を保存して値部分のみ置換
  * - tags は既存値が #hashtag 形式ならその形式、カンマ区切りならその形式で
  *   書き戻す（新規は #hashtag が正準）
- * - set は「最後の own 宣言行」を対象（パースが後勝ちのため）、delete は
- *   全 own 宣言行を除去（先行の重複が透け戻るのを防ぐ）
+ * - set は「最後の own 宣言行」を書き換え、delete は全 own 宣言行を除去
+ *   する。同じキーが2行以上あれば読みはそのキーを読まない
+ *   （`PropertyLines.read`）ので、set では重複が残り、値は読まれないまま
+ *   である
  */
 export class ChildPropertyLineEditor {
     /**
      * タスク直下の own プロパティ行を列挙する。どの行が own かはパーサと
-     * 同じ1か所（`ChildLineClassifier.ownPropertyLines`）が決める: ノート
-     * 全体の読み（`Outline.read`）でタスクの項目を親に持つ項目のうち、
-     * コードでない `- key:: value` 行。子タスクやメモの下、コードブロック
-     * の中の行は own でない。
+     * 同じ1か所（`PropertyLines.ofTask`）が決める: ノート全体の読み
+     * （`Outline.read`）でタスクの項目を親に持つ項目のうち、コードでない
+     * `- key:: value` 行。子タスクやメモの下、コードブロックの中の行は
+     * own でない。読まれない行（同じキーの2行目、日付のキー）も含む。
      */
     static findOwnPropertyLines(outline: OutlineReading, taskLineIdx: number): OwnPropertyLine[] {
-        const { lines } = outline;
-        return ChildLineClassifier.ownPropertyLines(outline, taskLineIdx).map(lineIdx => {
-            const m = lines[lineIdx].match(ChildLineClassifier.PROPERTY_LINE)!;
-            return { lineIdx, key: m[1].trim(), value: m[2].trim() };
-        });
+        return PropertyLines.ofTask(outline, taskLineIdx).lines
+            .map(line => ({ lineIdx: line.line, key: line.key, value: line.written }));
     }
 
     /**
@@ -72,7 +71,7 @@ export class ChildPropertyLineEditor {
                 // 値の前まで（字下げ、記号、キー、`::` とその後の空白）。own の行は
                 // PROPERTY_LINE に合うので、値の捕捉を除いた残りがそれである。
                 const line = draft.lines[target.lineIdx];
-                const prefix = line.slice(0, line.length - line.match(ChildLineClassifier.PROPERTY_LINE)![2].length);
+                const prefix = line.slice(0, line.length - line.match(PROPERTY_LINE)![2].length);
                 const value = this.formatValue(op.value);
                 // 空値行 (`- key ::`) はプレフィックスが `::` で終わるため、
                 // 値を書き込むときはセパレータの空白を補う

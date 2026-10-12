@@ -26,7 +26,7 @@ describe('SectionPropertyResolver', () => {
         expect(section.resolvedProperties['tv-color']).toBeUndefined(); // 分離済み
     });
 
-    it('セクションプロパティを解決（グループ形式）', () => {
+    it('`- properties::` はまとめの形でなく、キー properties のリスト', () => {
         const doc = buildAndResolve([
             '## Section',
             '- properties::',
@@ -35,8 +35,12 @@ describe('SectionPropertyResolver', () => {
             '- [ ] task @2026-03-24',
         ]);
         const section = doc.sections[0];
-        expect(section.resolvedColor).toBe('333333');
-        expect(section.resolvedProperties['note']).toEqual({ type: 'text', text: 'something', spelling: 'something' });
+        expect(section.resolvedColor).toBeUndefined();
+        expect(section.resolvedProperties['note']).toBeUndefined();
+        expect(section.resolvedProperties['properties']).toEqual({ type: 'list', items: [
+            { type: 'text', text: 'tv-color:: 333333', spelling: 'tv-color:: 333333' },
+            { type: 'text', text: 'note:: something', spelling: 'note:: something' },
+        ] });
     });
 
     it('frontmatter → セクションのカスケード（child-wins）', () => {
@@ -406,16 +410,19 @@ describe('SectionPropertyResolver の出所', () => {
         expect(doc.sections[1].resolvedSources.properties).toEqual({});
     });
 
-    it('同じキーが2度あれば、値と同じく後の行', () => {
+    it('同じキーが2度あれば、そのキーを読まず、上の層の値が届く。ほかのキーは読む', () => {
         const doc = buildAndResolve([
             '## Section',
             '- owner:: first',
             '- owner:: second',
+            '- area:: lab',
             '- [ ] task',
-        ]);
+        ], { owner: 'fm' });
         const section = doc.sections[0];
-        expect(section.resolvedProperties.owner).toMatchObject({ text: 'second' });
-        expect(section.resolvedSources.properties.owner).toEqual(at(2, 'Section'));
+        expect(section.resolvedProperties.owner).toMatchObject({ text: 'fm' });
+        expect(section.resolvedSources.properties.owner).toEqual({ kind: 'frontmatter' });
+        expect(section.resolvedProperties.area).toMatchObject({ text: 'lab' });
+        expect(section.resolvedSources.properties.area).toEqual(at(3, 'Section'));
     });
 
     // 実在しない日や時刻を指す値は、日付も時刻も読まない。その層は日付を

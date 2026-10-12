@@ -161,7 +161,7 @@ describe('OutlineReading', () => {
 
     it('opens no item on a line in code, in every shape measured', () => {
         // The readers that ask for an item under a task ask nothing more of
-        // code (ownPropertyLines, collectFlowLineIndices, opensTask).
+        // code (PropertyLines.ofTask, collectFlowLineIndices, opensTask).
         for (const shape of MEASURED) {
             const outline = Outline.read(shape.lines);
             const both = shape.lines.map((_, i) => i).filter(i => outline.item(i) !== null && outline.inCode(i));

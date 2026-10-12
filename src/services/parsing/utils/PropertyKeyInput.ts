@@ -5,7 +5,7 @@ import { KEYS_NOT_SCOPE, reservedPropertyKeys } from './FrontmatterPolicy';
 
 /**
  * The characters a property's key cannot hold: the property line
- * (`- key:: value`, `ChildLineClassifier.PROPERTY_LINE`) reads a key up to
+ * (`- key:: value`, `PROPERTY_LINE`) reads a key up to
  * its first `:`, and none with `[` or `]`.
  */
 const NOT_IN_KEY = /[:[\]]/g;

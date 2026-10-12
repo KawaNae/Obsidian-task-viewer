@@ -56,6 +56,7 @@ const BUILTINS: readonly Builtin[] = ['color', 'linestyle', 'mask', 'tags', 'sta
  * number (`tv-end: 630`) reads as no date. Tags are read where Obsidian
  * reads them: a line's are the `#tag`s
  * its value holds (`TagExtractor.fromContent`; `tags:: a, b` holds none),
+ * or each item of its list holds (`- tags::` / `  - #a`),
  * and the frontmatter's are Obsidian's `tags` key, read off the YAML before
  * its values are made text ({@link BuiltinPropertyExtractor.fromFrontmatter}).
  */
@@ -124,7 +125,10 @@ export class BuiltinPropertyExtractor {
                 if (text) result.mask = text;
                 return;
             case 'tags': {
-                const tags = TagExtractor.fromContent(shown);
+                // A list's items each read as a line's value does: `- #a` is
+                // the tag a, `- b` none.
+                const texts = pv.type === 'list' ? pv.items.map(item => PropertyValues.display(item)) : [shown];
+                const tags = TagExtractor.merge(...texts.map(text => TagExtractor.fromContent(text)));
                 if (tags.length > 0) result.tags = tags;
                 return;
             }

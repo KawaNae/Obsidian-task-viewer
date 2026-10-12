@@ -3,8 +3,8 @@ import type { PropertyScalar, PropertyValue, TaskViewerSettings } from '../../ty
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { ValueSource } from '../parsing/tree/Sections';
 import { NoteSections } from '../parsing/tree/NoteSections';
-import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
 import { PropertyValues } from '../parsing/utils/PropertyValues';
+import type { PropertyLine } from '../parsing/utils/PropertyLines';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
 
 /**
@@ -59,6 +59,8 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     const keys = settings.scopeKeys;
     const { fields, tags, properties } = section.resolvedSources;
     const fmEnd = FrontmatterLineEditor.findEnd(lines);
+    const propertyLines = new Map<number, PropertyLine>();
+    for (const node of NoteSections.all(read.sections)) for (const line of node.properties.lines) propertyLines.set(line.line, line);
     const out: InheritedValue[] = [];
     const push = (key: string, yaml: readonly string[], from: readonly ValueSource[]) => {
         out.push({ key, yaml, from, obsidian: OBSIDIAN_KEYS.has(key) });
@@ -71,7 +73,7 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
         if (from.kind === 'section') {
             push(key, typed
                 ? propertyYaml(key, typed)
-                : [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(propertyValueAt(lines, from.line))}`], [from]);
+                : [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(PropertyValues.display(propertyLines.get(from.line)!.value))}`], [from]);
             return;
         }
         const range = FrontmatterLineEditor.findKeyRange(lines, fmEnd, key);
@@ -101,14 +103,6 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
         if (from) asWritten(key, from, value);
     }
     return out;
-}
-
-/**
- * The value a section's property line says, as the sections read it
- * (`NoteSections`) and as a built-in reads it (`PropertyValues.display`).
- */
-function propertyValueAt(lines: readonly string[], line: number): string {
-    return PropertyValues.display(PropertyValues.fromText(lines[line].match(ChildLineClassifier.PROPERTY_LINE)?.[2].trim() ?? ''));
 }
 
 /**

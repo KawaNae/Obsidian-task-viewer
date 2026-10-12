@@ -143,6 +143,23 @@ describe('inheritedAt', () => {
         expect(values['tv-color'].yaml).toEqual(['tv-color: "007700"']);
     });
 
+    it('見出しのプロパティ行のリストは YAML のリストで、組み込みのキーは表示の文字で書く。最初のタスクより下の行も節の値', () => {
+        const lines = [
+            '## S',
+            '- [ ] task',
+            '- list::',
+            '  - a',
+            '  - 12',
+            '  - "12"',
+            '- tv-mask::',
+            '  - x',
+            '  - y',
+        ];
+        const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
+        expect(values.list.yaml).toEqual(['list:', '  - a', '  - 12', '  - "12"']);
+        expect(values['tv-mask'].yaml).toEqual(['tv-mask: "x, y"']);
+    });
+
     it('tv-ignore のノートは行を持たないので、何も答えない', () => {
         expect(inheritedAt(['---', 'tv-ignore: true', 'x: 1', '---', '- [ ] task'], 4, DEFAULT_SETTINGS)).toEqual([]);
     });

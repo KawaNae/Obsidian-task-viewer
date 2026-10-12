@@ -49,6 +49,11 @@ function view(doc: Read, task: Task): RowView {
     };
 }
 
+/** A section's own property lines, as `[key, written value]`. */
+function entries(section: SectionNode): [string, string][] {
+    return section.properties.lines.map(line => [line.key, line.written]);
+}
+
 /** The top-level rows whose innermost section is `section`. */
 function blocksOf(doc: Read, section: SectionNode): RowView[] {
     return doc.tasks
@@ -267,7 +272,7 @@ describe('NoteSections', () => {
                 '- [ ] real task @2026-03-24',
             ]);
             const section = doc.sections[0];
-            expect(section.propertyBlock!.entries.map(e => e.key)).toEqual(['tv-color', 'tags']);
+            expect(entries(section).map(([key]) => key)).toEqual(['tv-color', 'tags']);
             expect(blocksOf(doc, section)).toHaveLength(1);
         });
 
@@ -316,16 +321,11 @@ describe('NoteSections', () => {
                 '- custom-prop:: 2000',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(doc.sections[0].propertyBlock).not.toBeNull();
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(2);
-            expect(pb.entries[0].key).toBe('tv-color');
-            expect(pb.entries[0].value).toBe('ffffff');
-            expect(pb.entries[1].key).toBe('custom-prop');
-            expect(pb.entries[1].value).toBe('2000');
+            expect(entries(doc.sections[0])).toEqual([['tv-color', 'ffffff'], ['custom-prop', '2000']]);
+            expect(doc.sections[0].head).toBe(3);
         });
 
-        it('グループ形式のプロパティブロックを検出', () => {
+        it('`- properties::` はまとめの形でなく、ふつうのプロパティ行で、下の項目はそのリストの項目', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- properties::',
@@ -333,47 +333,33 @@ describe('NoteSections', () => {
                 '    - custom-prop:: 2000',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(doc.sections[0].propertyBlock).not.toBeNull();
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(2);
-            expect(pb.entries[0].key).toBe('tv-color');
-            expect(pb.entries[0].value).toBe('ffffff');
+            const [line] = doc.sections[0].properties.lines;
+            expect(entries(doc.sections[0])).toEqual([['properties', '']]);
+            expect(line.value).toEqual({ type: 'list', items: [
+                { type: 'text', text: 'tv-color:: ffffff', spelling: 'tv-color:: ffffff' },
+                { type: 'text', text: 'custom-prop:: 2000', spelling: 'custom-prop:: 2000' },
+            ] });
+            expect(doc.sections[0].head).toBe(4);
         });
 
-        it('混合形式（フラット + グループ）', () => {
-            const doc = buildFromBody([
-                '## Section',
-                '- tv-color:: ffffff',
-                '- properties::',
-                '    - custom-prop:: 2000',
-                '    - tv-linestyle:: dashed',
-                '- [ ] task @2026-03-24',
-            ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(3);
-            expect(pb.entries[0].key).toBe('tv-color');
-            expect(pb.entries[1].key).toBe('custom-prop');
-            expect(pb.entries[2].key).toBe('tv-linestyle');
-        });
-
-        it('プロパティなしのセクション → propertyBlock = null', () => {
+        it('プロパティなしのセクション → プロパティ行なし、頭は見出しのすぐ下', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(doc.sections[0].propertyBlock).toBeNull();
+            expect(entries(doc.sections[0])).toEqual([]);
+            expect(doc.sections[0].head).toBe(1);
         });
 
-        it('最初のタスク行で property 収集が打ち切られる (タスク後の property は section に昇格しない)', () => {
+        it('最初のタスクより下のプロパティ行も節のもの。頭は最初のタスクより上の行の後ろ', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- tv-color:: red',
                 '- [ ] task @2026-03-24',
                 '- custom:: after-task',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(1);
-            expect(pb.entries[0].key).toBe('tv-color');
+            expect(entries(doc.sections[0])).toEqual([['tv-color', 'red'], ['custom', 'after-task']]);
+            expect(doc.sections[0].head).toBe(2);
             // text/property 行は block にしない: タスクのみ
             expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
         });
@@ -386,10 +372,7 @@ describe('NoteSections', () => {
                 '- custom:: after-blank',
                 '- [ ] task @2026-03-24',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(2);
-            expect(pb.entries[0].key).toBe('tv-color');
-            expect(pb.entries[1].key).toBe('custom');
+            expect(entries(doc.sections[0])).toEqual([['tv-color', 'red'], ['custom', 'after-blank']]);
         });
 
         it('見出し直後の空行を挟んでも property block を検出', () => {
@@ -400,23 +383,8 @@ describe('NoteSections', () => {
                 '- custom:: value',
                 '- [ ] task @2026-03-24',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb).not.toBeNull();
-            expect(pb.entries).toHaveLength(2);
-        });
-
-        it('見出し直後の空行 + group form でも検出', () => {
-            const doc = buildFromBody([
-                '## Section',
-                '',
-                '- properties::',
-                '    - tv-color:: red',
-                '    - custom:: value',
-                '- [ ] task @2026-03-24',
-            ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb).not.toBeNull();
-            expect(pb.entries).toHaveLength(2);
+            expect(entries(doc.sections[0])).toHaveLength(2);
+            expect(doc.sections[0].head).toBe(4);
         });
 
         it('連続する複数空行を許容', () => {
@@ -430,8 +398,7 @@ describe('NoteSections', () => {
                 '- custom:: value',
                 '- [ ] task @2026-03-24',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(2);
+            expect(entries(doc.sections[0])).toHaveLength(2);
         });
 
         it('wikilink 行を挟んだ property も拾う', () => {
@@ -442,10 +409,7 @@ describe('NoteSections', () => {
                 '- custom:: still-collected',
                 '- [ ] task @2026-03-24',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(2);
-            expect(pb.entries[0].key).toBe('tv-color');
-            expect(pb.entries[1].key).toBe('custom');
+            expect(entries(doc.sections[0]).map(([key]) => key)).toEqual(['tv-color', 'custom']);
         });
 
         it('plain text を挟んだ property も拾う', () => {
@@ -456,33 +420,28 @@ describe('NoteSections', () => {
                 '- custom:: still-collected',
                 '- [ ] task @2026-03-24',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(2);
-            expect(pb.entries[0].key).toBe('tv-color');
-            expect(pb.entries[1].key).toBe('custom');
+            expect(entries(doc.sections[0]).map(([key]) => key)).toEqual(['tv-color', 'custom']);
         });
 
-        it('テキスト行のみのセクション → block も propertyBlock も作らない', () => {
+        it('テキスト行のみのセクション → block もプロパティ行も作らない', () => {
             const doc = buildFromBody([
                 '## Section',
                 'Some paragraph text',
                 'More text',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(doc.sections[0].propertyBlock).toBeNull();
+            expect(entries(doc.sections[0])).toEqual([]);
             // text 行は block 化しない: タスクのみ
             expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
         });
 
-        it('暗黙ルートで末尾の property は拾わない (タスク以降は遡及しない)', () => {
+        it('暗黙ルートの末尾の property も根の節のもの', () => {
             const doc = buildFromBody([
                 '- root_tag:: alpha',
                 '- [ ] preTask @2026-05-27T10:00',
                 '- post_tag:: beta',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(1);
-            expect(pb.entries[0].key).toBe('root_tag');
+            expect(entries(doc.sections[0]).map(([key]) => key)).toEqual(['root_tag', 'post_tag']);
         });
 
         it('インデントされた property 行は section に昇格しない (indent 0 のみ)', () => {
@@ -493,9 +452,7 @@ describe('NoteSections', () => {
                 '- tv-color:: red',
                 '- [ ] task @2026-03-24',
             ]);
-            const pb = doc.sections[0].propertyBlock!;
-            expect(pb.entries).toHaveLength(1);
-            expect(pb.entries[0].key).toBe('tv-color');
+            expect(entries(doc.sections[0])).toEqual([['tv-color', 'red']]);
         });
 
         it('ネストセクションのブロックが正しく分離', () => {
@@ -533,28 +490,26 @@ describe('NoteSections', () => {
             const special = epos.children[1];
             const risona = expenses.children[1];
 
-            // Expenses 自身は 1 タスクのみ、propertyBlock なし
+            // Expenses 自身は 1 タスクのみ、プロパティ行なし
             expect(blocksOf(doc, expenses)).toHaveLength(1);
             expect(blocksOf(doc, expenses)[0].rawLine).toContain('expense');
-            expect(expenses.propertyBlock).toBeNull();
+            expect(entries(expenses)).toEqual([]);
 
             // EPOS 自身はタスクなし・プロパティなし
             expect(blocksOf(doc, epos)).toHaveLength(0);
-            expect(epos.propertyBlock).toBeNull();
+            expect(entries(epos)).toEqual([]);
 
             // #### 普通 に 1 タスク
             expect(blocksOf(doc, normal)).toHaveLength(1);
             expect(blocksOf(doc, normal)[0].rawLine).toContain('normal');
 
             // #### 特殊 に tags プロパティ + 1 タスク
-            expect(special.propertyBlock).not.toBeNull();
-            expect(special.propertyBlock!.entries[0].key).toBe('tags');
+            expect(entries(special)).toEqual([['tags', '#出/クレカ/EPOS']]);
             expect(blocksOf(doc, special)).toHaveLength(1);
             expect(blocksOf(doc, special)[0].rawLine).toContain('special');
 
             // ### りそな に tags プロパティ + 1 タスク
-            expect(risona.propertyBlock).not.toBeNull();
-            expect(risona.propertyBlock!.entries[0].key).toBe('tags');
+            expect(entries(risona)).toEqual([['tags', '#出/りそな']]);
             expect(blocksOf(doc, risona)).toHaveLength(1);
             expect(blocksOf(doc, risona)[0].rawLine).toContain('risona');
         });
