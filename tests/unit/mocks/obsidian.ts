@@ -2,7 +2,7 @@
  * Lightweight obsidian module stub for unit tests.
  * Only the symbols actually imported by source code are stubbed here.
  */
-import { dump as dumpYaml, load as loadYaml } from 'js-yaml';
+import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 import { StateField } from '@codemirror/state';
 
 // --- Core classes ---
@@ -282,22 +282,20 @@ export function renderMatches(el: any, text: string, matches: [number, number][]
 }
 
 /**
- * A bare `2026-09-21` in frontmatter comes back as a `Date`, not a string —
- * `DateTimeFieldParser.normalizeYamlDate` exists specifically to turn that
- * back into text, and js-yaml's default schema does the same implicit-typing
- * for a plain date-like scalar. This stub used to be missing entirely, so
- * every call from `FileParsePipeline`'s raw-block fallback
- * (`FileParsePipeline.ts:54`) threw `TypeError: parseYaml is not a
- * function`, caught and swallowed by the `catch {}` right after it. Every
- * frontmatter read through that fallback silently produced nothing.
+ * Obsidian reads YAML with eemeli/yaml 2.x and these exact calls:
+ * `parseYaml(text)` is `parse(text, null, {})` and `stringifyYaml(obj)` is
+ * `stringify(obj, null, { nullStr: '', lineWidth: 0, aliasDuplicateObjects: false })`.
+ * The defaults are YAML 1.2's core schema with unique keys, so a bare
+ * `2026-09-21` stays a string, `1_000` and `10:30` are strings, and a key
+ * written twice throws. The metadata cache's worker parses the same way and
+ * drops the whole frontmatter when it throws.
  */
 export function parseYaml(yaml: string): any {
-    return loadYaml(yaml);
+    return yamlParse(yaml, null, {});
 }
 
-/** Obsidian's writes the block style too; js-yaml's dump is the nearest. */
 export function stringifyYaml(obj: any): string {
-    return dumpYaml(obj);
+    return yamlStringify(obj, null, { nullStr: '', lineWidth: 0, aliasDuplicateObjects: false });
 }
 
 // --- CodeMirror integration stubs ---
