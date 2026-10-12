@@ -8,6 +8,7 @@
 import type { ValidationRule } from './Validation';
 import type { TaskFlow } from './Flow';
 import type { ResolvedSources } from '../services/parsing/tree/Sections';
+import type { PropertyFinding } from '../services/parsing/utils/PropertyLines';
 
 export interface StatusDefinition {
     char: string;
@@ -219,6 +220,23 @@ export interface Task {
      * where an inherited value is written (`CascadeSource`).
      */
     inheritedFrom?: ResolvedSources;
+
+    /**
+     * What is wrong with the row's own property lines and the lines under
+     * them, as the reading found it (`PropertyLines.read`), in the order of
+     * the lines they are on; absent when nothing is. Set by NoteTasks, never
+     * serialized. The editor says the same on the lines themselves
+     * (`propertyDiagnostics`); this is for a view that shows the row without
+     * the note.
+     *
+     * A finding names the property it is about by its key as written
+     * (`PropertyFinding.key`), matched to a property as every key is
+     * (`PropertyKey.same`), and the line of that property
+     * (`propertyLine`). Its lines are the row's reading's, as `line` is:
+     * they say where it is in the note only while the note reads as it did
+     * then (`reading`).
+     */
+    propertyFindings?: readonly PropertyFinding[];
 
     // Original parsed text and stable IDs.
     originalText: string;

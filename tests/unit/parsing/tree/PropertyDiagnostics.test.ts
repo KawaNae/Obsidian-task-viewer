@@ -5,7 +5,9 @@ import ja from '../../../../src/i18n/locales/ja.json';
 import { diagnosticText } from '../../../../src/services/lang/flow/diagnosticText';
 import { Outline } from '../../../../src/services/parsing/utils/Outline';
 import { propertyDiagnostics } from '../../../../src/services/parsing/tree/PropertyDiagnostics';
-import { DEFAULT_SCOPE_KEYS, type ScopeKeys } from '../../../../src/types';
+import { FileParsePipeline } from '../../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../../src/services/core/RowNames';
+import { DEFAULT_SCOPE_KEYS, DEFAULT_SETTINGS, type ScopeKeys } from '../../../../src/types';
 
 /**
  * The editor's diagnostics on property lines: each finding of the reading
@@ -137,3 +139,20 @@ describe('propertyDiagnostics', () => {
     });
 });
 
+describe('Task.propertyFindings', () => {
+    const tasksOf = (lines: string[]) => FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('n.md')).tasks;
+
+    it('holds the findings of the task\'s own lines, with the key and the property line each is about', () => {
+        const [t, u] = tasksOf(['- area:: x', '  - note', '- [ ] t', '    - author::', '        - name:: Kawa', '    - [ ] u', '        - a:: 1', '        - A:: 2']);
+        expect(t.propertyFindings?.map(f => [f.kind, f.line, f.key, f.propertyLine])).toEqual([['property-shaped-item', 4, 'author', 3]]);
+        expect(u.propertyFindings?.map(f => [f.kind, f.line, f.key, f.propertyLine])).toEqual([
+            ['duplicate-key', 6, 'a', 6],
+            ['duplicate-key', 7, 'A', 7],
+        ]);
+    });
+
+    it('is absent on a task whose lines have none', () => {
+        const [t] = tasksOf(['- [ ] t', '    - area:: lab']);
+        expect(t.propertyFindings).toBeUndefined();
+    });
+});
