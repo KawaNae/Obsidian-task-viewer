@@ -67,7 +67,8 @@ export class NoteTasks {
      *   read as notation.
      * - Its properties are those of its own property lines
      *   (`PropertyLines.ofTask`), the lines the writer edits, as they read
-     *   (`PropertyLines.read`: no date key, no key written twice).
+     *   (`PropertyLines.read`: no date key, no key written twice), and what
+     *   is wrong with them goes to `propertyFindings`.
      * - What its section gives it goes to `cascadeContext`, beside what the
      *   row says itself (`getEffective*` puts the two together), and where
      *   each value of it came from to `inheritedFrom`.
@@ -124,7 +125,9 @@ export class NoteTasks {
 
         task.childLines = this.childLines(outline, line, rows, flow?.childSegments.map(segment => segment.bodyLine) ?? []);
 
-        const extracted = BuiltinPropertyExtractor.extract(PropertyLines.read(PropertyLines.ofTask(outline, line), keys).values, keys);
+        const reading = PropertyLines.read(PropertyLines.ofTask(outline, line), keys);
+        const extracted = BuiltinPropertyExtractor.extract(reading.values, keys);
+        if (reading.findings.length > 0) task.propertyFindings = reading.findings;
         // Raw is the row's own say: its property lines and its content's tags.
         task.properties = extracted.properties;
         task.color = extracted.color;
