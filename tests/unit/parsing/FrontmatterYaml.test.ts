@@ -4,6 +4,7 @@ import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeli
 import { BuiltinPropertyExtractor } from '../../../src/services/parsing/tree/BuiltinPropertyExtractor';
 import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 import { DEFAULT_SCOPE_KEYS, DEFAULT_SETTINGS } from '../../../src/types';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 
 /**
  * The frontmatter as Obsidian's YAML reads it: YAML 1.2's core schema, with a
@@ -61,6 +62,13 @@ describe('the frontmatter as Obsidian reads its YAML', () => {
 
     it('reads no frontmatter at all when a key is written twice', () => {
         expect(frontmatterOf(['before: 1', 'bkey: lab', 'bkey: desk', 'after: 2'])).toBeUndefined();
+    });
+
+    it('reads no frontmatter from a block that reads as a list or a text, as Obsidian\'s worker keeps a mapping alone', () => {
+        expect(frontmatterOf(['- a', '- b'])).toBeUndefined();
+        expect(frontmatterOf(['just text'])).toBeUndefined();
+        const task = FileParsePipeline.parse('n.md', ['---', '- tv-color: red', '---', '- [ ] t'], DEFAULT_SETTINGS, namesOutsideIndex('n.md')).tasks[0];
+        expect(task.cascadeContext).toBeUndefined();
     });
 
     it('keeps keys that differ only in case apart', () => {
