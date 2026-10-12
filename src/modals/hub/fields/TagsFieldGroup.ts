@@ -49,7 +49,8 @@ export class TagsFieldGroup implements ClosingPart {
         this.sectionEl.empty();
 
         const task = this.ctx.getTask();
-        const shut = this.ctx.isShut();
+        // A finding in the tags' block locks them as the form's shut does.
+        const shut = this.ctx.isShut() || this.ctx.locked('tags');
         const contentTags = new Set(TagExtractor.fromContent(task.content ?? ''));
         const ownTags = new Set(task.tags);
 
@@ -139,7 +140,7 @@ export class TagsFieldGroup implements ClosingPart {
     }
 
     private commit(tags: string[]): Promise<boolean> | undefined {
-        if (this.ctx.isShut()) return undefined;
+        if (this.ctx.isShut() || this.ctx.locked('tags')) return undefined;
         const write = this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。

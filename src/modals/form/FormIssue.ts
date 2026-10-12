@@ -16,6 +16,14 @@ export interface FormIssue<F extends string> {
     readonly at: F | 'form';
     readonly tone: Tone;
     readonly text: string;
+    /** What the user can do about it, offered as a button after the text (open the line it is on). */
+    readonly action?: IssueAction;
+}
+
+/** A button an issue offers: its label, and what a click does. */
+export interface IssueAction {
+    readonly label: string;
+    run(): void;
 }
 
 /** Where a field's issues go: its control, marked when one is an error, and the line under its row. */
@@ -98,12 +106,21 @@ export class IssueBoard<F extends string> {
         }
 
         for (const [el, issues] of messages) {
-            for (const issue of issues) el.createDiv({ cls: `tv-form__${issue.tone}`, text: issue.text });
+            for (const issue of issues) {
+                const line = el.createDiv({ cls: `tv-form__${issue.tone}`, text: issue.text });
+                if (issue.action) drawAction(line, issue.action);
+            }
         }
         for (const el of inputs) mark(el, true);
         this.drawnMessages = new Set(messages.keys());
         this.drawnInputs = inputs;
     }
+}
+
+/** An issue's button, after its text. */
+function drawAction(line: HTMLElement, action: IssueAction): void {
+    const button = line.createEl('button', { cls: 'tv-form__issue-action', text: action.label, attr: { type: 'button' } });
+    button.addEventListener('click', () => action.run());
 }
 
 /** An error's mark on a control: the red border of a text input, or of a box that holds one. */

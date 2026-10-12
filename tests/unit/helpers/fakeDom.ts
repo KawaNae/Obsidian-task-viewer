@@ -31,9 +31,10 @@ export class FakeEl {
         this.children.push(el);
         return el;
     }
-    createEl(_tag: string, o: { cls?: string; text?: string; type?: string; placeholder?: string } = {}): FakeEl {
+    createEl(_tag: string, o: { cls?: string; text?: string; type?: string; placeholder?: string; attr?: Record<string, string> } = {}): FakeEl {
         const el = this.createDiv(o);
         if (o.placeholder !== undefined) el.setAttribute('placeholder', o.placeholder);
+        for (const [k, v] of Object.entries(o.attr ?? {})) el.setAttribute(k, v);
         return el;
     }
     createSpan(o: { cls?: string; text?: string; attr?: Record<string, string> } = {}): FakeEl {

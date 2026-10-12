@@ -507,6 +507,7 @@
       "removeTag": "タグ {{tag}} を削除",
       "propertyKey": "キー",
       "propertyValue": "値",
+      "openLine": "行を開く",
       "removeProperty": "プロパティ {{key}} を削除",
       "inheritedFromFile": "継承: ファイル",
       "inheritedFromSection": "継承: セクション",

@@ -49,6 +49,7 @@ export class StyleFieldGroup implements ClosingPart {
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
         for (const field of FIELDS) this.renderRow(container, field, LABEL_KEYS[field]);
+        this.showEnabled();
     }
 
     private renderRow(container: HTMLElement, field: StyleField, labelKey: string): void {
@@ -134,7 +135,7 @@ export class StyleFieldGroup implements ClosingPart {
     }
 
     private commit(field: StyleField, value: string | undefined): Promise<boolean> | void {
-        if (this.ctx.isShut()) return;
+        if (this.ctx.isShut() || this.ctx.locked(field)) return;
         return this.ctx.queue(TaskUpdateBuilder.styleField(this.ctx.getTask(), field, value ?? ''));
     }
 
@@ -189,12 +190,20 @@ export class StyleFieldGroup implements ClosingPart {
             this.bound[field].set(task[field] ?? undefined);
             this.updateDecoration(field);
         }
+        this.showEnabled();
     }
 
-    setEnabled(enabled: boolean): void {
-        this.colorField?.setEnabled(enabled);
-        for (const input of [this.inputs.linestyle, this.inputs.mask]) {
-            if (input) input.disabled = !enabled;
+    setEnabled(_enabled: boolean): void {
+        this.showEnabled();
+    }
+
+    /** Each field takes edits unless the form is shut or a finding locks it (`FieldGroupContext.locked`). */
+    private showEnabled(): void {
+        const shut = this.ctx.isShut();
+        this.colorField?.setEnabled(!shut && !this.ctx.locked('color'));
+        for (const field of ['linestyle', 'mask'] as const) {
+            const input = this.inputs[field];
+            if (input) input.disabled = shut || this.ctx.locked(field);
         }
     }
 
