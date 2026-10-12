@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveFields, pickFields, formatOutput, cliOk, cliError } from '../../../src/cli/CliOutputFormatter';
+import { resolveFields, pickFields, formatOutput, formatSingleTask, cliOk, cliError } from '../../../src/cli/CliOutputFormatter';
 import { taskToRecord } from '../../../src/api/TaskNormalizer';
 import { normalizeTask } from '../../../src/api/TaskNormalizer';
 import { makeTask } from '../helpers/makeTask';
@@ -105,6 +105,26 @@ describe('CliOutputFormatter', () => {
             const content = ['a', 'b', 'c'].join(String.fromCharCode(0x2028)) + String.fromCharCode(0x2029) + 'd';
             const row = formatOutput([makeNormalized({ content })], 'tsv', ['content']).split('\n')[1];
             expect(row).toBe('a b c d');
+        });
+
+        it('writes properties in a tsv cell as the JSON the json format holds for them', () => {
+            const task = makeNormalized({
+                properties: {
+                    area: PropertyValues.fromText('lab'),
+                    n: PropertyValues.fromText('3'),
+                    who: PropertyValues.fromText('a, b'),
+                },
+            });
+            const row = formatOutput([task], 'tsv', ['properties']).split('\n')[1];
+            expect(row).toBe('{"area":"lab","n":3,"who":["a","b"]}');
+            expect(JSON.parse(row)).toEqual(JSON.parse(formatOutput([task], 'json', ['properties'])).tasks[0].properties);
+            expect(formatSingleTask(task, 'tsv', ['properties']).split('\n')[1]).toBe(row);
+        });
+
+        it('keeps a tsv row on one line when a property value holds a tab or a line break', () => {
+            const task = makeNormalized({ properties: { note: PropertyValues.fromYaml('a\tb\nc')! } });
+            const row = formatOutput([task], 'tsv', ['properties']).split('\n')[1];
+            expect(JSON.parse(row)).toEqual({ note: 'a\tb\nc' });
         });
 
         it('formats as jsonl with one line per task', () => {

@@ -113,12 +113,20 @@ function formatTsvRow(record: Record<string, unknown>, fields: string[]): string
     return fields.map(field => tsvValue(record[field])).join('\t');
 }
 
+/**
+ * A field's value in a tsv cell. A list of IDs or tags is joined with `;`.
+ * `properties` (a key to a number, a boolean, a string or a list) is written
+ * as the JSON the json format holds for it: a `;` joined pair would not tell
+ * a list in a value from the next key, nor `3` from `"3"`.
+ */
 function tsvValue(value: unknown): string {
     if (value === null || value === undefined) return '';
-    if (Array.isArray(value)) return value.join(';');
+    const text = Array.isArray(value) ? value.join(';')
+        : typeof value === 'object' ? JSON.stringify(value)
+        : String(value);
     // U+2028 and U+2029 too: a note keeps them inside a line, but a reader
     // of this output may split its rows at them.
-    return String(value).replace(/[\t\n\r\u2028\u2029]/g, ' ');
+    return text.replace(/[\t\n\r\u2028\u2029]/g, ' ');
 }
 
 // ── Shared CLI validation ──

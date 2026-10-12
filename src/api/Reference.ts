@@ -625,7 +625,8 @@ ${renderFlagTable(CLI_OUTPUT_SCHEMA)}
       json:  "truncated": true and "total": N in the response
       tsv:   a trailing line: # truncated: showing N of M
       jsonl: a trailing record: {"_truncated":true,"showing":N,"total":M}
-    TSV: tabs and line breaks in values are written as spaces.
+    TSV: tabs and line breaks in values are written as spaces. A list
+    (tags, childIds) is joined with ';'; properties is written as JSON.
 
 ${fieldsSection('Output Fields')}
 
