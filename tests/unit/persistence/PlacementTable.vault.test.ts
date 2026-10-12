@@ -369,9 +369,9 @@ describe('a first child (insertLine, firstChild)', () => {
         expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
-        // No child item to copy: T's indentation and the file's unit (four
-        // spaces, its first indented line's).
-        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  - [ ] T', '      - [ ] c', '    ```', '    x', '    ```', '- [ ] U', '']);
+        // No child item to copy: a level under T spelled as T stands under P
+        // (two spaces), not T's indentation and the file's unit.
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  - [ ] T', '    - [ ] c', '    ```', '    x', '    ```', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
     });
 });

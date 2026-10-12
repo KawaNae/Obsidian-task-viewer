@@ -41,6 +41,14 @@ describe('Placement', () => {
             expect(resolve(['- [ ] parent', '  - [ ] child'],0, undefined, undefined, '\t')).toBe('  ');
         });
 
+        it('spells the new level under a task with no children as the task stands under its parent', () => {
+            expect(resolve(['- [ ] top', '    - [ ] parent'], 1)).toBe('        ');
+            expect(resolve(['- [ ] top', '  - [ ] parent'], 1)).toBe('    ');
+            expect(resolve(['- [ ] a', '\t- [ ] top', '\t\t- [ ] parent'], 2, undefined, undefined, '    ')).toBe('\t\t\t');
+            // Two columns past `  10. [ ] parent` land short of its content: the settings' level is taken.
+            expect(resolve(['- [ ] top', '  10. [ ] parent'], 1)).toBe('  \t\t');
+        });
+
         it('nests below an already indented parent', () => {
             const lines = ['- [ ] top', '\t- [ ] parent', '\t\t- [ ] child'];
             expect(resolve(lines,1)).toBe('\t\t');
