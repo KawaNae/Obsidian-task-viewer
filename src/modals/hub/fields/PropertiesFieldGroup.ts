@@ -232,6 +232,8 @@ export class PropertiesFieldGroup implements ClosingPart {
 
         const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         valueInput.value = shownText(pv);
+        // No value written as none (`- key::`): the field is empty, and says so.
+        if (pv.type === 'null') valueInput.placeholder = t('modal.hub.noValue');
         valueInput.disabled = shut || locked;
         this.valueInputs.set(folded, valueInput);
 
@@ -261,8 +263,27 @@ export class PropertiesFieldGroup implements ClosingPart {
         });
         this.valueBound.set(folded, value);
 
-        if (isOwn) this.removeButton(row, key, shut || locked, () => { this.remove(key); });
-        else this.sourceLabel(row, task, key);
+        if (isOwn) {
+            this.removeButton(row, key, shut || locked, () => { this.remove(key); });
+            return;
+        }
+        this.sourceLabel(row, task, key);
+        if (pv.type !== 'null') this.hideButton(row, key, shut || locked);
+    }
+
+    /**
+     * The button that hides an inherited value: the row's own line with no
+     * value (`- key::`), which the value above does not come through. Its
+     * × takes the line out again.
+     */
+    private hideButton(row: HTMLElement, key: string, disabled: boolean): void {
+        const hide = row.createEl('button', { cls: 'task-hub__hide', text: t('modal.hub.hide'), attr: { type: 'button' } });
+        hide.setAttribute('aria-label', t('modal.hub.hideInherited', { key }));
+        hide.disabled = disabled;
+        hide.addEventListener('click', () => {
+            void this.setValue(key, { type: 'null', spelling: '' });
+            this.render(true);
+        });
     }
 
     /**
@@ -307,6 +328,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             return;
         }
         this.sourceLabel(row, task, key);
+        this.hideButton(row, key, shut || locked);
         if (shut || locked) return;
         const makeOwn = row.createEl('button', { cls: 'task-hub__make-own', text: t('modal.hub.makeOwnList'), attr: { type: 'button' } });
         makeOwn.addEventListener('click', () => {

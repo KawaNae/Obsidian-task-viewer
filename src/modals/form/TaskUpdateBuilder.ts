@@ -44,6 +44,11 @@ export class TaskUpdateBuilder {
         return task[field] === v ? null : { [field]: v };
     }
 
+    /** The row's own no value of the style field (`- tv-color::`), which hides the value it inherits. */
+    static styleHidden(task: Task, field: 'color' | 'linestyle' | 'mask'): Partial<Task> | null {
+        return task[field] === null ? null : { [field]: null };
+    }
+
     /** own tags 全体（content 由来含む）の望ましい姿を渡す */
     static tags(task: Task, tags: string[]): Partial<Task> | null {
         const next = [...new Set(tags)].sort();
