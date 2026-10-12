@@ -182,3 +182,11 @@ describe('the values a property condition offers', () => {
         }
     });
 });
+
+describe('the values the hub offers for a property', () => {
+    it('are the items the tasks write, one by one, as spelled, without no value: a quoted text apart from the number', () => {
+        expect(FilterValueCollector.collectPropertySpellingsForKey(TASKS, 'K')).toEqual(
+            ['""', '"123"', '0x1F', '1', '1.0', '10', '123', '2', 'Bee', 'Lab', 'True', 'a', 'desk', 'true', 'x'],
+        );
+    });
+});
