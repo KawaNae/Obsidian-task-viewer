@@ -110,6 +110,20 @@ describe('the hub edits a list item by item', () => {
         expect(shown).toEqual({ own: ['a', 'b'], add: true, inherited: ['lab', 'home'], inheritedInputs: 0, makeOwn: true });
     });
 
+    it('shows no × that takes the row\'s own list out whole, as a value\'s row and the inherited list keep theirs', () => {
+        openHub('親');
+        const shown = run<Record<string, unknown>>(`
+            const removes = row => row.querySelectorAll('.task-hub__prop-remove').length;
+            return JSON.stringify({
+                own: removes(rowOf('k')),
+                itemRemoves: rowOf('k').querySelectorAll('.task-hub__list-item .tv-ctrl__pill-remove:not(.is-placeholder)').length,
+                value: removes(rowOf('memo')),
+                inherited: [removes(rowOf('area')), !!rowOf('area').querySelector('.task-hub__hide')],
+            });
+        `);
+        expect(shown).toEqual({ own: 0, itemRemoves: 2, value: 1, inherited: [0, true] });
+    });
+
     it('writes an item typed over in its place', () => {
         openHub('親');
         run(`type(items('k')[0], 'c'); await leave(items('k')[0]); return 'ok';`);
@@ -168,5 +182,17 @@ describe('the hub edits a list item by item', () => {
         expect(shown).toEqual(['lab', 'home']);
         run(`type(addItem('area'), 'desk'); await enter(addItem('area')); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(9, 9, '\t- area::', '\t\t- lab', '\t\t- home', '\t\t- desk'));
+    });
+
+    it('throws a draft of an inherited list away by its ×, writing nothing', () => {
+        openHub('親');
+        run(`rowOf('area').querySelector('.task-hub__make-own').click(); await sleep(300); return 'ok';`);
+        const shown = run<Record<string, unknown>>(`
+            rowOf('area').querySelector('.task-hub__prop-remove').click();
+            await sleep(300);
+            return JSON.stringify({ inputs: rowOf('area').querySelectorAll('input').length, makeOwn: !!rowOf('area').querySelector('.task-hub__make-own') });
+        `);
+        expect(shown).toEqual({ inputs: 0, makeOwn: true });
+        expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
     });
 });
