@@ -80,83 +80,105 @@ async function which(row: Row): Promise<string[]> {
 }
 
 describe('a property condition', () => {
-    it('isSet: a task whose property has a value', async () => {
+    it('isSet: a task whose property has a value, the empty text and the empty list among them', async () => {
         expect(await which({ operator: 'isSet', key: 'k' })).toEqual([
             'one', 'oneDot', 'ten', 'hex', 'num123', 'text123', 'trueCap', 'trueLow', 'lab', 'upperKey',
-            'emptyText', 'noValue', 'nullWord', 'list', 'fmList', 'fmEmptyList', 'fmNoValue', 'hidden',
+            'emptyText', 'list', 'fmList', 'fmEmptyList',
         ]);
     });
 
-    it('isNotSet: a task whose property has no value, or which has none', async () => {
-        expect(await which({ operator: 'isNotSet', key: 'k' })).toEqual(['missing']);
+    it('isNotSet: a task whose property has no value (a line\'s, the frontmatter\'s, one hiding the value above), or which has none', async () => {
+        expect(await which({ operator: 'isNotSet', key: 'k' }))
+            .toEqual(['noValue', 'nullWord', 'fmNoValue', 'hidden', 'missing']);
     });
 
-    it('equals a number: the text as spelt', async () => {
-        expect(await which({ operator: 'equals', key: 'k', value: '1' })).toEqual(['one']);
-        expect(await which({ operator: 'equals', key: 'k', value: '1.0' })).toEqual(['oneDot']);
-        expect(await which({ operator: 'equals', key: 'k', value: '31' })).toEqual([]);
-        expect(await which({ operator: 'equals', key: 'k', value: '2' })).toEqual([]);
+    it('equals a number: by its value, whatever its spelling', async () => {
+        expect(await which({ operator: 'equals', key: 'k', value: '1' })).toEqual(['one', 'oneDot']);
+        expect(await which({ operator: 'equals', key: 'k', value: '1.0' })).toEqual(['one', 'oneDot']);
+        expect(await which({ operator: 'equals', key: 'k', value: '31' })).toEqual(['hex']);
+        expect(await which({ operator: 'equals', key: 'k', value: '+10' })).toEqual(['ten']);
     });
 
-    it('equals 123 and "123"', async () => {
+    it('equals 123: the number and the text; "123" in quotes: the text alone', async () => {
         expect(await which({ operator: 'equals', key: 'k', value: '123' })).toEqual(['num123', 'text123']);
-        expect(await which({ operator: 'equals', key: 'k', value: '"123"' })).toEqual([]);
+        expect(await which({ operator: 'equals', key: 'k', value: '"123"' })).toEqual(['text123']);
+        expect(await which({ operator: 'equals', key: 'k', value: '\'123\'' })).toEqual(['text123']);
     });
 
-    it('equals a boolean: the text as spelt', async () => {
-        expect(await which({ operator: 'equals', key: 'k', value: 'true' })).toEqual(['trueLow']);
-        expect(await which({ operator: 'equals', key: 'k', value: 'TRUE' })).toEqual([]);
+    it('equals a boolean: by its value, whatever its spelling', async () => {
+        expect(await which({ operator: 'equals', key: 'k', value: 'true' })).toEqual(['trueCap', 'trueLow']);
+        expect(await which({ operator: 'equals', key: 'k', value: 'TRUE' })).toEqual(['trueCap', 'trueLow']);
+        expect(await which({ operator: 'equals', key: 'k', value: '"true"' })).toEqual([]);
     });
 
-    it('equals a text: its case told apart', async () => {
-        expect(await which({ operator: 'equals', key: 'k', value: 'Lab' })).toEqual(['lab']);
-        expect(await which({ operator: 'equals', key: 'k', value: 'lab' })).toEqual([]);
+    it('equals a text: its case aside, the whole of it', async () => {
+        expect(await which({ operator: 'equals', key: 'k', value: 'lab' })).toEqual(['lab']);
+        expect(await which({ operator: 'equals', key: 'k', value: '"LAB"' })).toEqual(['lab']);
+        expect(await which({ operator: 'equals', key: 'k', value: 'la' })).toEqual([]);
     });
 
-    it('equals a list\'s items: the items joined', async () => {
-        expect(await which({ operator: 'equals', key: 'k', value: 'a' })).toEqual([]);
-        expect(await which({ operator: 'equals', key: 'k', value: 'a, Bee' })).toEqual(['list']);
-        expect(await which({ operator: 'equals', key: 'k', value: 'x' })).toEqual([]);
-        expect(await which({ operator: 'equals', key: 'k', value: '2' })).toEqual([]);
+    it('equals one of a list\'s items', async () => {
+        expect(await which({ operator: 'equals', key: 'k', value: 'a' })).toEqual(['list']);
+        expect(await which({ operator: 'equals', key: 'k', value: 'bee' })).toEqual(['list']);
+        expect(await which({ operator: 'equals', key: 'k', value: 'a, Bee' })).toEqual([]);
+        expect(await which({ operator: 'equals', key: 'k', value: 'x' })).toEqual(['fmList']);
+        expect(await which({ operator: 'equals', key: 'k', value: '2.0' })).toEqual(['fmList']);
     });
 
-    it('equals the empty text', async () => {
-        expect(await which({ operator: 'equals', key: 'k', value: '' }))
-            .toEqual(['emptyText', 'noValue', 'fmEmptyList', 'fmNoValue', 'hidden']);
+    it('equals nothing with no value: an empty value finds the empty text alone', async () => {
+        expect(await which({ operator: 'equals', key: 'k', value: '' })).toEqual(['emptyText']);
+        expect(await which({ operator: 'equals', key: 'k', value: 'null' })).toEqual([]);
     });
 
-    it('contains a text, its case aside', async () => {
+    it('contains a text, its case aside, in the value as shown', async () => {
         expect(await which({ operator: 'contains', key: 'k', value: 'AB' })).toEqual(['lab']);
-        expect(await which({ operator: 'contains', key: 'k', value: 'bee' })).toEqual(['list']);
-        expect(await which({ operator: 'contains', key: 'k', value: 'a, b' })).toEqual(['list']);
-        expect(await which({ operator: 'contains', key: 'k', value: 'ul' })).toEqual(['nullWord']);
+        expect(await which({ operator: 'contains', key: 'k', value: '"ab"' })).toEqual(['lab']);
+        expect(await which({ operator: 'contains', key: 'k', value: 'ul' })).toEqual([]);
     });
 
-    it('contains a number: the spelling', async () => {
+    it('contains in one of a list\'s items', async () => {
+        expect(await which({ operator: 'contains', key: 'k', value: 'EE' })).toEqual(['list']);
+        expect(await which({ operator: 'contains', key: 'k', value: 'a, b' })).toEqual([]);
+    });
+
+    it('contains in a number\'s or a boolean\'s spelling; quoted, in a text alone', async () => {
         expect(await which({ operator: 'contains', key: 'k', value: '1' }))
             .toEqual(['one', 'oneDot', 'ten', 'hex', 'num123', 'text123']);
-        expect(await which({ operator: 'contains', key: 'k', value: '"1"' })).toEqual([]);
         expect(await which({ operator: 'contains', key: 'k', value: 'x1f' })).toEqual(['hex']);
+        expect(await which({ operator: 'contains', key: 'k', value: '"1"' })).toEqual(['text123']);
         expect(await which({ operator: 'contains', key: 'k', value: 'ru' })).toEqual(['trueCap', 'trueLow']);
+        expect(await which({ operator: 'contains', key: 'k', value: '"ru"' })).toEqual([]);
     });
 
-    it('notContains: not contains, a task without the property too', async () => {
+    it('notContains: contains in none of the items, a task with no value or without the property too', async () => {
         expect(await which({ operator: 'notContains', key: 'k', value: 'a' })).toEqual([
             'one', 'oneDot', 'ten', 'hex', 'num123', 'text123', 'trueCap', 'trueLow', 'upperKey',
             'emptyText', 'noValue', 'nullWord', 'fmList', 'fmEmptyList', 'fmNoValue', 'hidden', 'missing',
         ]);
+        expect(await which({ operator: 'notContains', key: 'k', value: 'ul' })).toHaveLength(Object.keys(NOTES).length);
     });
 
     it('names its key in any case', async () => {
         expect(await which({ operator: 'equals', key: 'k', value: 'desk' })).toEqual(['upperKey']);
         expect(await which({ operator: 'contains', key: 'K', value: 'des' })).toEqual(['upperKey']);
+        expect(await which({ operator: 'isSet', key: 'OTHER' })).toEqual(['missing']);
     });
 });
 
 describe('the values a property condition offers', () => {
-    it('are the values the tasks show', () => {
-        expect(FilterValueCollector.collectPropertyValuesForKey(TASKS, 'k')).toEqual([
-            '0x1F', '1', '1.0', '10', '123', 'Lab', 'True', 'a, Bee', 'desk', 'null', 'true', 'x, 2',
-        ]);
+    const offered = FilterValueCollector.collectPropertyItemsForKey(TASKS, 'K');
+
+    it('are the items the tasks show, one by one, without no value', () => {
+        expect(offered).toEqual(['0x1F', '1', '1.0', '10', '123', '2', 'Bee', 'Lab', 'True', 'a', 'desk', 'true', 'x']);
+    });
+
+    it('each find, as `equals`, the tasks that show them', async () => {
+        for (const value of offered) {
+            const found = await which({ operator: 'equals', key: 'k', value });
+            const showing = TASKS
+                .filter(t => FilterValueCollector.collectPropertyItemsForKey([t], 'k').includes(value))
+                .map(t => t.content);
+            expect(found).toEqual(expect.arrayContaining(showing));
+        }
     });
 });

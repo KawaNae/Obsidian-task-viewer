@@ -46,7 +46,10 @@ describe('compileFilter', () => {
         expect(compiled({ property: 'length', operator: 'lessThan', value: 2 }))
             .toEqual(all({ kind: 'length', op: 'lessThan', value: 2, unit: 'hours' }));
         expect(compiled({ property: 'property', operator: 'equals', key: 'k' }))
-            .toEqual(all({ kind: 'propertyEquals', key: 'k', value: '' }));
+            .toEqual(all({ kind: 'propertyEquals', key: 'k', value: { type: 'null', spelling: '' } }));
+        // A property's value is typed as a line types it: `"123"` is the text 123.
+        expect(compiled({ property: 'property', operator: 'contains', key: 'k', value: '"123"' }))
+            .toEqual(all({ kind: 'propertyContains', key: 'k', value: { type: 'text', text: '123', spelling: '"123"' } }));
     });
 
     // Mapping an unfinished excludes to not(includes []) would match nothing;

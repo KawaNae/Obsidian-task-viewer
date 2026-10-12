@@ -4,6 +4,7 @@ import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, type DisplayTask } from '../../../src/types';
 import { getEffectiveColor, getEffectiveProperties } from '../../../src/services/data/EffectiveProperties';
 import { TaskValues } from '../../../src/services/filter/TaskValues';
+import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 import { taskToRecord } from '../../../src/api/TaskNormalizer';
 import { valuesOf } from '../helpers/properties';
 
@@ -69,7 +70,8 @@ describe('property values in a note', () => {
 describe('a property with no value written', () => {
     const shown = (lines: string[], key: string) => {
         const t = task(lines);
-        return key in getEffectiveProperties(t) ? TaskValues.property(t as DisplayTask, key).text : undefined;
+        const value = key in getEffectiveProperties(t) ? TaskValues.property(t as DisplayTask, key) : undefined;
+        return value && PropertyValues.display(value);
     };
 
     it('on a line, is a value that hides the one above it', () => {

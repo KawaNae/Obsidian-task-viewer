@@ -126,7 +126,7 @@ export class FilterConditionRenderer {
             placeholder: t('filter.typePropertyValue'),
             wrapClass: 'filter-popover__property-value-wrap',
             inputClass: 'tv-ctrl__text-input',
-            getCandidates: () => key ? FilterValueCollector.collectPropertyValuesForKey(tasks, key) : [],
+            getCandidates: () => FilterValueCollector.collectPropertyItemsForKey(tasks, key),
             onCommit: (val) => {
                 edit.update(c => ({ ...c, value: val }), 'keep');
             },

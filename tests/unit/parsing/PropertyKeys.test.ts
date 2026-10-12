@@ -24,6 +24,11 @@ const read = (lines: string[]) => FileParsePipeline.parse('n.md', lines, DEFAULT
 const shown = (task: Task): DisplayTask => toDisplayTask(task, 5, NO_TASK_LOOKUP);
 const tasks = (lines: string[]) => read(lines).tasks.map(shown);
 const noRow = () => undefined;
+/** The value the filter compares for `key`, as it is shown; none when no layer writes the key. */
+const shownBy = (t: DisplayTask, key: string) => {
+    const value = TaskValues.property(t, key);
+    return value && PropertyValues.display(value);
+};
 
 /** How a property's key is read, matched and shown, layer by layer and reader by reader. */
 describe('a property key', () => {
@@ -39,9 +44,9 @@ describe('a property key', () => {
 
     it('is matched by the filter, the top right and the API as each layer writes it', () => {
         const [t] = tasks(note);
-        expect(TaskValues.property(t, 'Area').text).toBe('lab');
-        expect(TaskValues.property(t, 'zone').text).toBe('north');
-        expect(TaskValues.property(t, 'weight').text).toBe('3');
+        expect(shownBy(t, 'Area')).toBe('lab');
+        expect(shownBy(t, 'zone')).toBe('north');
+        expect(shownBy(t, 'weight')).toBe('3');
         expect(resolveTopRightField(t, 'prop.Area', DEFAULT_SETTINGS)).toBe('lab');
         expect(normalizeTask(t, noRow).properties).toEqual({ zone: 'north', Area: 'lab', weight: 3 });
     });
@@ -54,7 +59,7 @@ describe('a property key', () => {
 
     it('of a task overrides the same key above it, written the same way', () => {
         const [t] = tasks(['---', 'area: desk', '---', '- [ ] t', '    - area:: lab']);
-        expect(TaskValues.property(t, 'area').text).toBe('lab');
+        expect(shownBy(t, 'area')).toBe('lab');
         expect(Object.keys(normalizeTask(t, noRow).properties)).toEqual(['area']);
     });
 
@@ -95,8 +100,8 @@ describe('a property key, its case aside', () => {
 
     it('is one property across the layers: the nearer layer wins, shown as that layer writes it', () => {
         const [t] = tasks(['---', 'area: desk', 'zone: north', '---', '# A', '- ZONE:: south', '- [ ] t', '    - Area:: lab']);
-        expect(TaskValues.property(t, 'area').text).toBe('lab');
-        expect(TaskValues.property(t, 'zone').text).toBe('south');
+        expect(shownBy(t, 'area')).toBe('lab');
+        expect(shownBy(t, 'zone')).toBe('south');
         expect(normalizeTask(t, noRow).properties).toEqual({ ZONE: 'south', Area: 'lab' });
         expect(CascadeSource.forProperty(t, 'Zone')).toBe('section');
     });
@@ -121,15 +126,15 @@ describe('a property key, its case aside', () => {
         const lines = ['- [ ] t', '    - Area:: a', '    - area:: b', '    - other:: c'];
         expect(findings(lines, 0)).toEqual([['duplicate-key', 1, 'Area'], ['duplicate-key', 2, 'area']]);
         const [t] = tasks(['---', 'area: fm', '---', ...lines]);
-        expect(TaskValues.property(t, 'area').text).toBe('fm');
-        expect(TaskValues.property(t, 'other').text).toBe('c');
+        expect(shownBy(t, 'area')).toBe('fm');
+        expect(shownBy(t, 'other')).toBe('c');
         const [s] = tasks(['# A', '- Tags:: #a', '- tags:: #b', '- [ ] s']);
         expect(s.cascadeContext?.tags).toBeUndefined();
     });
 
     it('written twice by the frontmatter, in two cases, is read on neither; its other keys are read', () => {
         const [t] = tasks(['---', 'Area: lab', 'area: desk', 'TV-COLOR: red', 'tv-color: blue', 'zone: north', '---', '- [ ] t']);
-        expect(TaskValues.property(t, 'area').text).toBeUndefined();
+        expect(shownBy(t, 'area')).toBeUndefined();
         expect(t.cascadeContext?.color).toBeUndefined();
         expect(normalizeTask(t, noRow).properties).toEqual({ zone: 'north' });
     });
@@ -142,10 +147,10 @@ describe('a property key, its case aside', () => {
 
     it('keeps the width of its characters: a full-width key is another key, and `ｔａｇｓ` no tags', () => {
         const [t] = tasks(['---', 'area: half', '---', '- [ ] t', '    - ａｒｅａ:: full', '    - 担当１:: x', '    - ｔａｇｓ:: #a']);
-        expect(TaskValues.property(t, 'area').text).toBe('half');
-        expect(TaskValues.property(t, 'ａｒｅａ').text).toBe('full');
-        expect(TaskValues.property(t, 'ＡＲＥＡ').text).toBe('full');
-        expect(TaskValues.property(t, '担当1').text).toBeUndefined();
+        expect(shownBy(t, 'area')).toBe('half');
+        expect(shownBy(t, 'ａｒｅａ')).toBe('full');
+        expect(shownBy(t, 'ＡＲＥＡ')).toBe('full');
+        expect(shownBy(t, '担当1')).toBeUndefined();
         expect(t.tags).toEqual([]);
         expect(normalizeTask(t, noRow).properties).toMatchObject({ area: 'half', 'ａｒｅａ': 'full', '担当１': 'x', 'ｔａｇｓ': '#a' });
     });

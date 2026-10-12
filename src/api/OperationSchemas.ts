@@ -89,7 +89,7 @@ export const SIMPLE_FILTER_SCHEMA = {
     content:  { value: '<text>',          description: 'Filter by content (contains)' },
     due:      { value: '<date|preset>',   description: 'Due date equals' },
     leaf:     { boolean: true,            description: 'Only leaf tasks (no children)' },
-    property: { value: '<key:value>',     description: 'Filter by custom property (e.g. "優先度:高")' },
+    property: { value: '<key:value>',     description: 'Filter by custom property: the value contains the text, as a property condition\'s contains (e.g. "優先度:高")' },
     color:    { value: '<colors>',        description: 'Filter by color(s), comma-separated' },
     type:     { value: '<types>',         description: 'Filter by task notation (taskviewer, tasks, dayplanner)' },
     root:     { boolean: true,            description: 'Only root tasks (no parent)' },

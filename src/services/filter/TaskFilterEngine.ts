@@ -7,6 +7,7 @@ import { overlaps, within } from '../../utils/SpanRelation';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskValues, type InstantValue } from './TaskValues';
 import { TagRule } from '../parsing/utils/TagRule';
+import { PropertyMatch } from './PropertyMatch';
 
 /**
  * Evaluates whether a task passes a compiled filter tree ({@link FilterExpr},
@@ -78,13 +79,11 @@ export class TaskFilterEngine {
                 return this.compareLength(ms / (expr.unit === 'minutes' ? 60_000 : 3_600_000), expr.op, expr.value);
             }
             case 'propertySet':
-                return TaskValues.property(task, expr.key).text !== undefined;
+                return PropertyMatch.isSet(TaskValues.property(task, expr.key));
             case 'propertyEquals':
-                return TaskValues.property(task, expr.key).text === expr.value;
-            case 'propertyContains': {
-                const actual = TaskValues.property(task, expr.key).text;
-                return actual !== undefined && actual.toLowerCase().includes(expr.value.toLowerCase());
-            }
+                return PropertyMatch.equals(TaskValues.property(task, expr.key), expr.value);
+            case 'propertyContains':
+                return PropertyMatch.contains(TaskValues.property(task, expr.key), expr.value);
         }
     }
 

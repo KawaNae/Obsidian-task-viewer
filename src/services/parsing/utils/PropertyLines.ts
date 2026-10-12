@@ -240,7 +240,7 @@ function readLine(outline: OutlineReading, line: number, end: number, owner: Pro
         if (TaskLineClassifier.opensTask(outline, from)) return found('not-a-list-item', from, to);
         const text = outline.lines[from].match(ITEM_TEXT)?.[1]?.trim() ?? '';
         const value = PropertyValues.fromText(text);
-        if (value.type === 'null' || value.type === 'list') return found('not-a-list-item', from, to);
+        if (value.type === 'null') return found('not-a-list-item', from, to);
         if (PROPERTY_LINE.test(outline.lines[from])) found('property-shaped-item', from, from + 1);
         items.push(from);
         scalars.push(value);
