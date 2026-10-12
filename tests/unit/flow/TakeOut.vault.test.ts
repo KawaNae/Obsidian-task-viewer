@@ -105,12 +105,12 @@ describe('a property line added after one with a child', () => {
         const { contents, session } = await open(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '- [ ] U', '']);
 
         await session.ops.updateTask(idOf(session, 'T'),
-            { properties: { memo: { value: 'a', type: 'string' }, k2: { value: 'z', type: 'string' } } } as never);
+            { properties: { memo: { type: 'text', text: 'a', spelling: 'a' }, k2: { type: 'text', text: 'z', spelling: 'z' } } } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k2:: z', '- [ ] U', '']);
 
         const before = contents.get(FILE)!;
-        await session.ops.updateTask(idOf(session, 'T'), { properties: { k2: { value: 'z', type: 'string' } } } as never);
+        await session.ops.updateTask(idOf(session, 'T'), { properties: { k2: { type: 'text', text: 'z', spelling: 'z' } } } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)).toBe(before);
     });

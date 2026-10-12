@@ -56,21 +56,21 @@ describe('EffectiveProperties', () => {
     describe('properties: キー単位 child-wins', () => {
         it('cascade を raw が上書きし、非衝突キーは合流する', () => {
             const t = makeTask({
-                properties: { priority: { value: '5', type: 'number', number: 5 } },
+                properties: { priority: { type: 'number', number: 5, spelling: '5' } },
                 cascadeContext: {
                     properties: {
-                        priority: { value: '1', type: 'number', number: 1 },
-                        category: { value: 'work', type: 'string' },
+                        priority: { type: 'number', number: 1, spelling: '1' },
+                        category: { type: 'text', text: 'work', spelling: 'work' },
                     },
                 },
             });
             const props = getEffectiveProperties(t);
-            expect(props['priority']).toEqual({ value: '5', type: 'number', number: 5 });
-            expect(props['category']).toEqual({ value: 'work', type: 'string' });
+            expect(props['priority']).toEqual({ type: 'number', number: 5, spelling: '5' });
+            expect(props['category']).toEqual({ type: 'text', text: 'work', spelling: 'work' });
         });
 
         it('cascade が無ければ raw オブジェクトをそのまま返す（新規割当なし）', () => {
-            const t = makeTask({ properties: { note: { value: 'x', type: 'string' } } });
+            const t = makeTask({ properties: { note: { type: 'text', text: 'x', spelling: 'x' } } });
             expect(getEffectiveProperties(t)).toBe(t.properties);
         });
     });

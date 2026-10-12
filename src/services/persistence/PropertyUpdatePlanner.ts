@@ -1,5 +1,6 @@
 import type { Task, ScopeKeys } from '../../types';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
+import { PropertyValues } from '../parsing/utils/PropertyValues';
 import { reservedPropertyKeys } from '../parsing/utils/FrontmatterPolicy';
 import { logWarn } from '../../log/log';
 
@@ -69,8 +70,10 @@ export class PropertyUpdatePlanner {
                     logWarn(`[PropertyUpdatePlanner] custom key "${key}" collides with a reserved key — skipped`);
                     continue;
                 }
-                if (beforeProps[key]?.value !== pv.value) {
-                    ops.push({ key, op: 'set', value: pv.value });
+                const spelling = PropertyValues.spelling(pv);
+                const was = beforeProps[key];
+                if (!was || PropertyValues.spelling(was) !== spelling) {
+                    ops.push({ key, op: 'set', value: spelling });
                 }
             }
             for (const key of Object.keys(beforeProps)) {

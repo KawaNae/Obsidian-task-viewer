@@ -6,6 +6,7 @@ import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdat
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 
 /**
  * `applyOps` over a draft, the way `processLines` hands it one.
@@ -279,7 +280,7 @@ describe('ChildPropertyLineEditor', () => {
                     ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0).map(line => [line.key, line.value]),
                 );
                 const read = Object.fromEntries(
-                    Object.entries(task.properties).map(([key, value]) => [key, value.value]),
+                    Object.entries(task.properties).map(([key, value]) => [key, PropertyValues.spelling(value)]),
                 );
                 expect(read).toEqual(written);
                 expect(written).toEqual(expected);

@@ -1,89 +1,124 @@
-import type { PropertyValue, ScopeKeys } from '../../../types';
-import { IN_LINE } from '../../../utils/LineBreak';
-import { normalizeYamlDate } from './DateTimeFieldParser';
-import { WIKILINK_SOURCE } from './InlineNotation';
+import type { PropertyScalar, PropertyValue } from '../../../types';
 
 /**
- * The spellings of a boolean, and what each means: YAML's (as Obsidian reads
- * frontmatter), so that a property line and the frontmatter say `true` the
- * same way. `yes`, `on`, `1` and `tRue` are text.
+ * The spellings that are not text, as YAML 1.2's core schema reads a plain
+ * scalar (Obsidian reads the frontmatter so). A property line reads its value
+ * by the same spellings, so `- key:: 0x1F` and `key: 0x1F` are one number.
+ * `1_000`, `1,000`, `10:30`, `yes` and `on` are YAML 1.1's, and text here.
  */
+const NULL_SPELLING = /^(?:~|[Nn]ull|NULL)?$/;
 const BOOLEAN_SPELLINGS: ReadonlyMap<string, boolean> = new Map([
     ['true', true], ['True', true], ['TRUE', true],
     ['false', false], ['False', false], ['FALSE', false],
 ]);
+const OCTAL = /^0o[0-7]+$/;
+const HEX = /^0x[0-9a-fA-F]+$/;
+const DECIMAL = /^[-+]?(?:[0-9]+|\.[0-9]+|[0-9]+\.[0-9]*)(?:[eE][-+]?[0-9]+)?$/;
+const INFINITY = /^[-+]?\.(?:inf|Inf|INF)$/;
+const NAN = /^\.(?:nan|NaN|NAN)$/;
 
-const NUMBER_TEXT = /^\d+(\.\d+)?$/;
-const BRACKET_LIST_TEXT = new RegExp(`^\\[${IN_LINE}*\\]$`);
+/** The number a spelling of the core schema's names; null for text. */
+function numberOf(spelling: string): number | null {
+    if (OCTAL.test(spelling)) return parseInt(spelling.slice(2), 8);
+    if (HEX.test(spelling)) return parseInt(spelling.slice(2), 16);
+    if (DECIMAL.test(spelling)) return Number(spelling);
+    if (INFINITY.test(spelling)) return spelling.startsWith('-') ? -Infinity : Infinity;
+    if (NAN.test(spelling)) return NaN;
+    return null;
+}
 
-/** A wikilink or embed, which an array value holds as one item. */
-const ARRAY_ITEM_LINK = new RegExp(`!?${WIKILINK_SOURCE}`, 'g');
+/** Whether `spelling` is the whole of a value in `"` or `'`, which makes it text. */
+function isQuoted(spelling: string): boolean {
+    if (spelling.length < 2) return false;
+    const quote = spelling[0];
+    return (quote === '"' || quote === '\'') && spelling[spelling.length - 1] === quote;
+}
 
 /**
  * The one reading of a property's value (`PropertyValue`), on a line and in
- * the frontmatter. Every reader of a property's truth, number or items asks
- * the value read here.
+ * the frontmatter, and the one way to show it and to write it on a line.
+ * Every reader of a property's truth, number or items asks the value read
+ * here.
  */
 export const PropertyValues = {
     /**
      * A value written as text: a property line's (`- key:: value`, already
-     * trimmed), or one typed into the hub. A number is digits with an
-     * optional fraction; a boolean is one of YAML's six spellings; an array
-     * is a list in `[` `]` or a list `,` separates ({@link arrayItems}).
-     * Anything else is a string.
+     * trimmed), or one typed into the hub. Its type is the one YAML gives the
+     * same spelling unquoted: nothing, `null` or `~` is no value; `true` and
+     * `false` (also `True`, `TRUE`, ...) a boolean; the core schema's numbers
+     * (`-5`, `.5`, `1e3`, `0x1F`, `0o17`, `.inf`, `.nan`) a number. The
+     * whole value in `"` or `'` is the text inside, as written (no escape is
+     * read). Anything else is text, `[a, b]` and `[[x]]` included: a line
+     * writes no list in brackets.
      */
-    fromText(text: string): PropertyValue {
-        if (NUMBER_TEXT.test(text)) return { type: 'number', value: text, number: Number(text) };
-        const boolean = BOOLEAN_SPELLINGS.get(text);
-        if (boolean !== undefined) return { type: 'boolean', value: text, boolean };
-        if (BRACKET_LIST_TEXT.test(text) || text.includes(',')) {
-            return { type: 'array', value: text, items: arrayItems(text) };
-        }
-        return { type: 'string', value: text };
+    fromText(spelling: string): PropertyValue {
+        if (isQuoted(spelling)) return { type: 'text', text: spelling.slice(1, -1), spelling };
+        if (NULL_SPELLING.test(spelling)) return { type: 'null', spelling };
+        const boolean = BOOLEAN_SPELLINGS.get(spelling);
+        if (boolean !== undefined) return { type: 'boolean', boolean, spelling };
+        const number = numberOf(spelling);
+        if (number !== null) return { type: 'number', number, spelling };
+        return { type: 'text', text: spelling, spelling };
     },
 
     /**
-     * A value the frontmatter's YAML gave: its type is the one YAML read
-     * (so a quoted `"true"` is a string), and `value` is its text. A list is
-     * its items, joined by `, ` for the text. A date YAML read as a `Date`
-     * is its date text. Null for a key with no value.
+     * A value the frontmatter's YAML gave: its type is the one YAML read (so
+     * a quoted `"true"` is text). A list holds its scalar items, a text one
+     * trimmed and dropped when empty; an item that is no value, a list or a
+     * mapping is not one of them. Null for a value no property holds (a
+     * mapping).
      */
     fromYaml(value: unknown): PropertyValue | null {
-        if (value === null || value === undefined) return null;
-        if (typeof value === 'boolean') return { type: 'boolean', value: String(value), boolean: value };
-        if (typeof value === 'number') return { type: 'number', value: String(value), number: value };
+        if (value === null || value === undefined) return { type: 'null', spelling: '' };
         if (Array.isArray(value)) {
-            const texts = value.map(yamlText);
-            return {
-                type: 'array',
-                value: texts.join(', '),
-                items: texts.map(item => item.trim()).filter(item => item !== ''),
-            };
+            const items: PropertyScalar[] = [];
+            for (const item of value) {
+                const scalar = scalarOfYaml(typeof item === 'string' ? item.trim() : item);
+                if (scalar && !(scalar.type === 'text' && scalar.text === '')) items.push(scalar);
+            }
+            return { type: 'list', items };
         }
-        return { type: 'string', value: yamlText(value) };
+        return scalarOfYaml(value);
     },
 
     /**
      * The frontmatter as property values, key by key, before any key is told
      * apart as a built-in (`BuiltinPropertyExtractor` does that, for every
-     * layer). A date key's value is read as a date here, where the YAML is
-     * still at hand: a `Date` is its date text, and a number is minutes of
-     * the day (YAML 1.1 reads `10:30` as 630). Keys with no value are left out.
+     * layer). A key with no value (`key:`, `key: null`) is left out, as is
+     * one whose value no property holds (`fromYaml`).
      */
-    fromFrontmatter(frontmatter: Record<string, unknown> | undefined, keys: ScopeKeys): Record<string, PropertyValue> {
+    fromFrontmatter(frontmatter: Record<string, unknown> | undefined): Record<string, PropertyValue> {
         const out: Record<string, PropertyValue> = {};
         if (!frontmatter) return out;
-        const dateKeys = new Set([keys.start, keys.end, keys.due]);
         for (const [key, raw] of Object.entries(frontmatter)) {
-            if (dateKeys.has(key)) {
-                const text = normalizeYamlDate(raw);
-                if (text !== null) out[key] = { type: 'string', value: text };
-                continue;
-            }
             const value = this.fromYaml(raw);
-            if (value) out[key] = value;
+            if (value && value.type !== 'null') out[key] = value;
         }
         return out;
+    },
+
+    /**
+     * The value as a card, the hub and a list of candidates show it: a text
+     * without the quotes it was written in, a number and a boolean as spelled
+     * (`0x1F`, `True`), no value as spelled (empty for `- key::`), and a
+     * list's items shown so, joined by `, `. A filter compares this text.
+     */
+    display(value: PropertyValue): string {
+        switch (value.type) {
+            case 'text': return value.text;
+            case 'list': return value.items.map(item => this.display(item)).join(', ');
+            default: return value.spelling;
+        }
+    },
+
+    /**
+     * The value as a property line writes it, which reads back as the same
+     * value (`fromText`). A line holds no list yet: a list is its items'
+     * spellings joined by `, `, which a line reads as one text.
+     */
+    spelling(value: PropertyValue): string {
+        if (value.type === 'list') return value.items.map(item => item.spelling).join(', ');
+        return value.spelling;
     },
 
     /**
@@ -96,37 +131,26 @@ export const PropertyValues = {
     },
 };
 
-/** A YAML scalar as text: a `Date` as its date text, anything else as `String` says it. */
-function yamlText(value: unknown): string {
-    if (value instanceof Date) return normalizeYamlDate(value) ?? '';
-    if (value === null || value === undefined) return '';
-    return String(value);
+/**
+ * A YAML scalar as a property's scalar, its spelling the line text that
+ * reads back as it: a number as YAML writes it (`.inf`, `.nan`), a text
+ * quoted when a line would read it as something else (`"123"`). Null for a
+ * value that is no scalar (no value, a list, a mapping).
+ */
+function scalarOfYaml(value: unknown): PropertyScalar | null {
+    if (typeof value === 'boolean') return { type: 'boolean', boolean: value, spelling: String(value) };
+    if (typeof value === 'number') return { type: 'number', number: value, spelling: numberSpelling(value) };
+    if (typeof value === 'string') {
+        const asLine = PropertyValues.fromText(value);
+        const readsBack = asLine.type === 'text' && asLine.text === value;
+        return { type: 'text', text: value, spelling: readsBack ? value : `"${value}"` };
+    }
+    return null;
 }
 
-/**
- * The items of a list written as text: the two forms {@link PropertyValues.fromText}
- * reads as an array, a list in `[` `]` and a list `,` separates. A wikilink
- * is one item whatever brackets and commas it holds (`[[x]]`,
- * `[[a|b, c]]`), so the brackets `[` `]` strips are a list's only when a
- * link's are not all there is. Items are trimmed and an empty one is none.
- */
-function arrayItems(raw: string): string[] {
-    // Links masked to same-length filler, so the list's brackets and
-    // commas are found by position in `masked` and cut out of `raw`.
-    const masked = raw.replace(ARRAY_ITEM_LINK, link => '_'.repeat(link.length));
-    let from = 0;
-    let to = raw.length;
-    if (masked.startsWith('[') && masked.endsWith(']') && masked.length >= 2) {
-        from = 1;
-        to = raw.length - 1;
-    }
-    const items: string[] = [];
-    let start = from;
-    for (let i = from; i <= to; i++) {
-        if (i < to && masked[i] !== ',') continue;
-        const item = raw.slice(start, i).trim();
-        if (item !== '') items.push(item);
-        start = i + 1;
-    }
-    return items;
+function numberSpelling(value: number): string {
+    if (Number.isNaN(value)) return '.nan';
+    if (value === Infinity) return '.inf';
+    if (value === -Infinity) return '-.inf';
+    return String(value);
 }

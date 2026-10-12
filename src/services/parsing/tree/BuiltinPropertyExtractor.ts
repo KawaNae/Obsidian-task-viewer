@@ -50,8 +50,11 @@ const BUILTINS: readonly Builtin[] = ['color', 'linestyle', 'mask', 'tags', 'sta
  * task's alike, so a key means one thing on every layer. Which key is which
  * built-in is {@link fieldKey}'s table.
  *
- * A built-in reads the value as written (`value`), whatever its type, but
- * tags, which are read where Obsidian reads them: a line's are the `#tag`s
+ * A built-in reads the value's text as shown (`PropertyValues.display`),
+ * whatever its type: a quoted `"red"` is `red`, no value is none, and a
+ * frontmatter number is its text (`tv-color: 336699`), so a date key's
+ * number (`tv-end: 630`) reads as no date. Tags are read where Obsidian
+ * reads them: a line's are the `#tag`s
  * its value holds (`TagExtractor.fromContent`; `tags:: a, b` holds none),
  * and the frontmatter's are Obsidian's `tags` key, read off the YAML before
  * its values are made text ({@link BuiltinPropertyExtractor.fromFrontmatter}).
@@ -69,7 +72,7 @@ export class BuiltinPropertyExtractor {
         frontmatter: Record<string, unknown> | undefined,
         keys: ScopeKeys
     ): ExtractedProperties {
-        const values = PropertyValues.fromFrontmatter(frontmatter, keys);
+        const values = PropertyValues.fromFrontmatter(frontmatter);
         for (const key of Object.keys(values)) if (TagRule.isFrontmatterKey(key)) delete values[key];
         const result = this.extract(values, keys);
         const tags = TagExtractor.fromFrontmatter(frontmatter);
@@ -106,7 +109,8 @@ export class BuiltinPropertyExtractor {
     }
 
     private static readBuiltin(field: Builtin, pv: PropertyValue, result: ExtractedProperties): void {
-        const text = pv.value.trim();
+        const shown = PropertyValues.display(pv);
+        const text = shown.trim();
         switch (field) {
             case 'color':
                 if (text) result.color = normalizeColor(text);
@@ -120,7 +124,7 @@ export class BuiltinPropertyExtractor {
                 if (text) result.mask = text;
                 return;
             case 'tags': {
-                const tags = TagExtractor.fromContent(pv.value);
+                const tags = TagExtractor.fromContent(shown);
                 if (tags.length > 0) result.tags = tags;
                 return;
             }

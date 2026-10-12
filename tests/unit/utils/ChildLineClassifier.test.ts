@@ -128,8 +128,8 @@ describe('ChildLineClassifier', () => {
             ], [1, 2, 3]);
             const props = ChildLineClassifier.collectProperties(lines);
             expect(props).toEqual({
-                '金額': { value: '2000', type: 'number', number: 2000 },
-                '優先度': { value: '高', type: 'string' },
+                '金額': { type: 'number', number: 2000, spelling: '2000' },
+                '優先度': { type: 'text', text: '高', spelling: '高' },
             });
         });
 

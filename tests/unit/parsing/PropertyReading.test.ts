@@ -11,9 +11,9 @@ const task = (lines: string[]) => read(lines).tasks[0];
 /** A note's properties as the index reads them, across the layers. */
 describe('property values in a note', () => {
     it('reads a line\'s true as a boolean, as the frontmatter does', () => {
-        expect(task(['- [ ] t', '    - f:: true']).properties!.f).toEqual({ type: 'boolean', value: 'true', boolean: true });
-        expect(task(['- [ ] t', '    - f:: True']).properties!.f).toEqual({ type: 'boolean', value: 'True', boolean: true });
-        expect(task(['- [ ] t', '    - f:: yes']).properties!.f.type).toBe('string');
+        expect(task(['- [ ] t', '    - f:: true']).properties!.f).toEqual({ type: 'boolean', boolean: true, spelling: 'true' });
+        expect(task(['- [ ] t', '    - f:: True']).properties!.f).toEqual({ type: 'boolean', boolean: true, spelling: 'True' });
+        expect(task(['- [ ] t', '    - f:: yes']).properties!.f.type).toBe('text');
     });
 
     it('ignores a note only for tv-ignore\'s YAML boolean true', () => {
@@ -32,8 +32,8 @@ describe('property values in a note', () => {
     });
 
     it('reads a property line and a properties group under any list bullet', () => {
-        expect(task(['- [ ] t', '    * f:: x']).properties).toEqual({ f: { type: 'string', value: 'x' } });
-        expect(task(['- [ ] t', '    1. f:: x']).properties).toEqual({ f: { type: 'string', value: 'x' } });
+        expect(task(['- [ ] t', '    * f:: x']).properties).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
+        expect(task(['- [ ] t', '    1. f:: x']).properties).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
         expect(task(['* tv-color:: red', '- [ ] t']).cascadeContext?.color).toBe('red');
         expect(task(['+ properties::', '    - tv-color:: red', '- [ ] t']).cascadeContext?.color).toBe('red');
     });

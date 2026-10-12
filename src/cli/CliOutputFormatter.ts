@@ -41,8 +41,31 @@ export function resolveFields(outputFields: string | undefined): string[] {
 
 export function pickFields(record: NormalizedTask, fields: string[]): Record<string, unknown> {
     const result: Record<string, unknown> = {};
-    for (const f of fields) result[f] = record[f as keyof NormalizedTask] ?? null;
+    for (const f of fields) {
+        result[f] = f === 'properties' ? jsonProperties(record.properties) : record[f as keyof NormalizedTask] ?? null;
+    }
     return result;
+}
+
+/**
+ * The properties as the output's JSON holds them. A number JSON cannot write
+ * (infinity, NaN) is its YAML spelling as a string (`".inf"`, `"-.inf"`,
+ * `".nan"`): `JSON.stringify` would make it `null`, which is a property with
+ * no value.
+ */
+function jsonProperties(properties: Record<string, unknown> | undefined): Record<string, unknown> | null {
+    if (!properties) return null;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(properties)) {
+        out[key] = Array.isArray(value) ? value.map(jsonNumber) : jsonNumber(value);
+    }
+    return out;
+}
+
+function jsonNumber(value: unknown): unknown {
+    if (typeof value !== 'number' || Number.isFinite(value)) return value;
+    if (Number.isNaN(value)) return '.nan';
+    return value > 0 ? '.inf' : '-.inf';
 }
 
 // ── Output formatters ──
@@ -115,7 +138,7 @@ function formatTsvRow(record: Record<string, unknown>, fields: string[]): string
 
 /**
  * A field's value in a tsv cell. A list of IDs or tags is joined with `;`.
- * `properties` (a key to a number, a boolean, a string or a list) is written
+ * `properties` (a key to a number, a boolean, a string, null or a list) is written
  * as the JSON the json format holds for it: a `;` joined pair would not tell
  * a list in a value from the next key, nor `3` from `"3"`.
  */

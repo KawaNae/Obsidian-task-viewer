@@ -11,38 +11,6 @@ const TIME_IN_TEXT_RE = new RegExp(`(${DateUtils.TIME_PATTERN})`);
  */
 
 /**
- * Normalize a raw YAML value into a string that `parseDateTimeField` can
- * consume.  Handles `Date` objects (Obsidian YAML parser output),
- * numbers 0–1439 (sexagesimal minutes → `HH:MM`), and plain strings.
- */
-export function normalizeYamlDate(value: unknown): string | null {
-    if (value === null || value === undefined) return null;
-
-    if (value instanceof Date) {
-        const date = DateUtils.getLocalDateString(value);
-        const h = value.getHours();
-        const min = value.getMinutes();
-        return h === 0 && min === 0 ? date : `${date}T${DateUtils.formatHHMM(h, min)}`;
-    }
-
-    if (typeof value === 'number') {
-        if (value >= 0 && value < 1440) {
-            const hours = Math.floor(value / 60);
-            const minutes = value % 60;
-            return DateUtils.formatHHMM(hours, minutes);
-        }
-        return null;
-    }
-
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        return trimmed.length > 0 ? trimmed : null;
-    }
-
-    return String(value).trim() || null;
-}
-
-/**
  * Extract date (`YYYY-MM-DD`) and/or time (`HH:mm`) fragments from a
  * normalized string: the components that are present.
  *

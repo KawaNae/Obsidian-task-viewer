@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeYamlDate, parseDateTimeField } from '../../../src/services/parsing/utils/DateTimeFieldParser';
+import { parseDateTimeField } from '../../../src/services/parsing/utils/DateTimeFieldParser';
 
 describe('DateTimeFieldParser', () => {
     describe('parseDateTimeField', () => {
@@ -32,24 +32,6 @@ describe('DateTimeFieldParser', () => {
             expect(parseDateTimeField('2026-13-01T14:30')).toBeNull();
             expect(parseDateTimeField('2026-02-30T14:30')).toBeNull();
             expect(parseDateTimeField('2026-07-15T99:99')).toBeNull();
-        });
-    });
-
-    describe('normalizeYamlDate', () => {
-        it('formats Date objects', () => {
-            expect(normalizeYamlDate(new Date(2026, 6, 15))).toBe('2026-07-15');
-            expect(normalizeYamlDate(new Date(2026, 6, 15, 9, 5))).toBe('2026-07-15T09:05');
-        });
-
-        it('converts sexagesimal minutes to HH:MM', () => {
-            expect(normalizeYamlDate(570)).toBe('09:30');
-            expect(normalizeYamlDate(1440)).toBeNull();
-        });
-
-        it('trims strings and nullifies empties', () => {
-            expect(normalizeYamlDate('  2026-07-15 ')).toBe('2026-07-15');
-            expect(normalizeYamlDate('')).toBeNull();
-            expect(normalizeYamlDate(null)).toBeNull();
         });
     });
 });

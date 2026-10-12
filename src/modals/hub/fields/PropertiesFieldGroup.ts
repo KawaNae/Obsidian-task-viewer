@@ -74,7 +74,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             this.valueSays.set(key, says);
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
-            valueInput.value = pv.value;
+            valueInput.value = PropertyValues.display(pv);
             valueInput.disabled = shut;
             this.valueInputs.set(key, valueInput);
 
@@ -85,9 +85,13 @@ export class PropertiesFieldGroup implements ClosingPart {
                 pick: (val) => { valueInput.value = val; value.commit(); },
             });
             // The value the row shows: its own, or the inherited one (left as it is, no own value is made).
+            // What is typed is written as typed, and reads as a line reads it (`PropertyValues.fromText`).
             const value = bindField(valueInput, {
                 codec: FreeText,
-                current: () => (isOwn ? this.ctx.getTask().properties?.[key]?.value ?? '' : pv.value),
+                current: () => {
+                    const shown = isOwn ? this.ctx.getTask().properties?.[key] : pv;
+                    return shown ? PropertyValues.display(shown) : '';
+                },
                 commit: (raw) => this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: PropertyValues.fromText(raw) }),
                 issues: () => { /* any text is a value */ },
                 takesEnter: () => suggest.listShown,

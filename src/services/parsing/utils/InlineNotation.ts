@@ -14,8 +14,7 @@ import { TAG_CHAR_SOURCE, TagRule } from './TagRule';
 /**
  * A character of a wikilink's text, between `[[` and `]]`: no bracket and no
  * line break. Obsidian's link text holds no `[` or `]` (a note's name cannot
- * either), and leaving `[` out keeps `[[[a]], b]` a list whose first item is
- * `[[a]]` rather than a link to `[a`.
+ * either).
  */
 export const WIKILINK_TEXT_SOURCE = String.raw`[^\[\]\r\n]`;
 

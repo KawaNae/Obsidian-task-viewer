@@ -180,7 +180,7 @@ describe('line breaks, as Obsidian ends a line', () => {
 
         const property = ChildLineClassifier.classify(`    - k:: a${LS}b`, 0);
         expect([property.propertyKey, property.propertyValue]).toEqual(['k', `a${LS}b`]);
-        expect(PropertyValues.fromText(`[a${LS}b]`).type).toBe('array');
+        expect(PropertyValues.fromText(`"a${LS}b"`)).toMatchObject({ type: 'text', text: `a${LS}b` });
 
         expect(matchFlowLine(`    - ==> next${LS}more`)?.tail).toBe(`next${LS}more`);
         expect(Outline.read([`## a${LS}b`]).headings[0].text).toBe(`a${LS}b`);

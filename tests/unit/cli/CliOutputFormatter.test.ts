@@ -112,13 +112,29 @@ describe('CliOutputFormatter', () => {
                 properties: {
                     area: PropertyValues.fromText('lab'),
                     n: PropertyValues.fromText('3'),
-                    who: PropertyValues.fromText('a, b'),
+                    who: PropertyValues.fromYaml(['a', 'b'])!,
                 },
             });
             const row = formatOutput([task], 'tsv', ['properties']).split('\n')[1];
             expect(row).toBe('{"area":"lab","n":3,"who":["a","b"]}');
             expect(JSON.parse(row)).toEqual(JSON.parse(formatOutput([task], 'json', ['properties'])).tasks[0].properties);
             expect(formatSingleTask(task, 'tsv', ['properties']).split('\n')[1]).toBe(row);
+        });
+
+        it('writes a number JSON cannot write as its YAML spelling, and no value as null', () => {
+            const task = makeNormalized({
+                properties: {
+                    inf: PropertyValues.fromText('.inf'),
+                    neg: PropertyValues.fromText('-.Inf'),
+                    nan: PropertyValues.fromText('.nan'),
+                    list: PropertyValues.fromYaml([1, Infinity])!,
+                    none: PropertyValues.fromText(''),
+                    hex: PropertyValues.fromText('0x1F'),
+                },
+            });
+            const expected = { inf: '.inf', neg: '-.inf', nan: '.nan', list: [1, '.inf'], none: null, hex: 31 };
+            expect(JSON.parse(formatOutput([task], 'json', ['properties'])).tasks[0].properties).toEqual(expected);
+            expect(JSON.parse(formatOutput([task], 'tsv', ['properties']).split('\n')[1])).toEqual(expected);
         });
 
         it('keeps a tsv row on one line when a property value holds a tab or a line break', () => {

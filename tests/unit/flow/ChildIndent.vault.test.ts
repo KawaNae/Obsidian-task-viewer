@@ -71,11 +71,11 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit, confi
         const { contents, session } = await open(NOTE, config);
 
         await session.ops.updateTask(taskWorded(session, 'T').id,
-            { properties: { memo: { value: 'new', type: 'string' } } } as never);
+            { properties: { memo: { type: 'text', text: 'new', spelling: 'new' } } } as never);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toContain(`${unit}- memo:: new`);
-        expect(taskWorded(session, 'T').properties?.memo?.value).toBe('new');
+        expect(taskWorded(session, 'T').properties?.memo).toMatchObject({ spelling: 'new' });
     });
 
     it('lends no indentation to the next instance\'s command, which keeps the series going', async () => {

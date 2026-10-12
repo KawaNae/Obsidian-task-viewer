@@ -22,7 +22,7 @@ describe('SectionPropertyResolver', () => {
         ]);
         const section = doc.sections[0];
         expect(section.resolvedColor).toBe('ff0000');
-        expect(section.resolvedProperties['custom']).toEqual({ value: 'hello', type: 'string' });
+        expect(section.resolvedProperties['custom']).toEqual({ type: 'text', text: 'hello', spelling: 'hello' });
         expect(section.resolvedProperties['tv-color']).toBeUndefined(); // 分離済み
     });
 
@@ -36,7 +36,7 @@ describe('SectionPropertyResolver', () => {
         ]);
         const section = doc.sections[0];
         expect(section.resolvedColor).toBe('333333');
-        expect(section.resolvedProperties['note']).toEqual({ value: 'something', type: 'string' });
+        expect(section.resolvedProperties['note']).toEqual({ type: 'text', text: 'something', spelling: 'something' });
     });
 
     it('frontmatter → セクションのカスケード（child-wins）', () => {
@@ -50,7 +50,7 @@ describe('SectionPropertyResolver', () => {
         // セクションの color がfrontmatter を上書き
         expect(section.resolvedColor).toBe('00ff00');
         // frontmatter のカスタムプロパティが継承
-        expect(section.resolvedProperties['custom-fm']).toEqual({ value: 'from-fm', type: 'string' });
+        expect(section.resolvedProperties['custom-fm']).toEqual({ type: 'text', text: 'from-fm', spelling: 'from-fm' });
     });
 
     it('frontmatter プロパティのみ（セクションプロパティなし）', () => {
@@ -96,7 +96,7 @@ describe('SectionPropertyResolver', () => {
 
         const section = doc.sections[0];
         expect(section.resolvedProperties['position']).toBeUndefined();
-        expect(section.resolvedProperties['real']).toEqual({ value: 'kept', type: 'string' });
+        expect(section.resolvedProperties['real']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
     });
 
     it('ネストセクションのカスケード: 親 → 子', () => {
@@ -113,7 +113,7 @@ describe('SectionPropertyResolver', () => {
 
         expect(parent.resolvedColor).toBe('red');
         expect(child.resolvedColor).toBe('red'); // 親から継承
-        expect(child.resolvedProperties['custom']).toEqual({ value: 'parent-value', type: 'string' });
+        expect(child.resolvedProperties['custom']).toEqual({ type: 'text', text: 'parent-value', spelling: 'parent-value' });
     });
 
     it('子セクションが親プロパティをオーバーライド（child-wins）', () => {
@@ -129,7 +129,7 @@ describe('SectionPropertyResolver', () => {
 
         const child = doc.sections[0].children[0];
         expect(child.resolvedColor).toBe('blue');
-        expect(child.resolvedProperties['custom']).toEqual({ value: 'child-value', type: 'string' });
+        expect(child.resolvedProperties['custom']).toEqual({ type: 'text', text: 'child-value', spelling: 'child-value' });
     });
 
     it('3レベルカスケード: frontmatter → ## → ###', () => {
@@ -206,7 +206,7 @@ describe('SectionPropertyResolver', () => {
         ]);
 
         expect(doc.sections[0].resolvedProperties['priority']).toEqual({
-            value: '1', type: 'number', number: 1,
+            type: 'number', number: 1, spelling: '1',
         });
     });
 
@@ -414,7 +414,7 @@ describe('SectionPropertyResolver の出所', () => {
             '- [ ] task',
         ]);
         const section = doc.sections[0];
-        expect(section.resolvedProperties.owner.value).toBe('second');
+        expect(section.resolvedProperties.owner).toMatchObject({ text: 'second' });
         expect(section.resolvedSources.properties.owner).toEqual(at(2, 'Section'));
     });
 
