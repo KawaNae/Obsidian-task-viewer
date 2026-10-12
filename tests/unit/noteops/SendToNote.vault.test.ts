@@ -9,11 +9,11 @@ import { NoteSections } from '../../../src/services/parsing/tree/NoteSections';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 
 /**
- * A send to another note (`TaskIndex.send`, 段 B3): the note written first —
+ * A send to another note (`TaskIndex.send`): the note written first —
  * made, or written in one write — then each note the rows came from, each
  * row's subtree replaced by a link to the note; and, when a note the rows
  * came from refuses, what went of its rows taken out of the note again
- * (`archive/2026-09-send.md`, 書き込みの順序と補償).
+ * (`structure/writes.md`).
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
@@ -126,7 +126,8 @@ describe('to a new note', () => {
     it('that could not be made: refused, told once, the rows left where they stood', async () => {
         const note = await open({ 'src.md': ['- [ ] A', ''], 'a.md': ['x', ''] });
 
-        // A path a note has in another case (stage 0): the vault refuses it.
+        // A path a note has in another case: the vault refuses it, as the file
+        // systems of macOS and Windows tell no case apart.
         const sent = await note.send([note.row('A')], { path: 'A.md', create: true });
 
         expect(sent).toMatchObject({ kind: 'not-done', refused: { file: 'A.md', reason: { kind: 'failed' } } });

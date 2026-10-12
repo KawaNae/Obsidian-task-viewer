@@ -12,7 +12,7 @@ describe('PropertyValues.fromText', () => {
         expect(PropertyValues.fromText('3.14')).toEqual({ type: 'number', value: '3.14', number: 3.14 });
     });
 
-    it('reads YAML\'s six boolean spellings, keeping the spelling (論点14a)', () => {
+    it('reads YAML\'s six boolean spellings, keeping the spelling', () => {
         for (const [text, boolean] of [
             ['true', true], ['True', true], ['TRUE', true],
             ['false', false], ['False', false], ['FALSE', false],

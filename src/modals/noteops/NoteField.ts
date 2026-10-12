@@ -18,7 +18,7 @@ export interface NoteFieldOptions {
  * The field that names a note: a form row with its icon, as the hub's rows
  * are, searched by name or folder among the vault's notes, aliases and
  * unresolved links, as Obsidian's `[[` lists them (`NoteSuggest`;
- * `note-suggest/send-field.md`).
+ * `structure/dialogs.md`, 候補の一覧とメニュー).
  *
  * It holds the text typed and the note picked (`NoteAsk`). A note picked,
  * or an alias of one, puts the note's name in the field and is held as

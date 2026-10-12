@@ -1,12 +1,12 @@
 /**
- * The create dialog and the editor's line menu (段10e), in the running Dev
+ * The create dialog and the editor's line menu, in the running Dev
  * vault.
  *
  * - The dialog is opened as a user opens it: from a Timeline's all-day empty
  *   space ("Create task", on the daily note of that day) and from a card's
  *   menu ("Add child task"). It says where the line goes, its placeholders
  *   show what a line there inherits and nothing else, a time with no date
- *   is said to want a date where the place gives none (論点1), and a write
+ *   is said to want a date where the place gives none, and a write
  *   refused keeps it open with why above its buttons and no notice.
  * - The editor's line button: a tv-inline task has the task's menu, a Tasks
  *   task none, and a checkbox in a note the views do not read the checkbox's
@@ -172,7 +172,7 @@ describe('the create dialog on a daily note (a Timeline\'s all-day empty space)'
             const out = { opened: dialog() };
             const before = notices();
 
-            // The start's date taken away, a time left: the note's day is no start (論点1).
+            // The start's date taken away, a time left: the note's day is no start.
             type(nameInput(), '電話');
             type(dateInput(${JSON.stringify(tr('modal.start'))}, 'date'), '');
             type(dateInput(${JSON.stringify(tr('modal.start'))}, 'time'), '10:00');

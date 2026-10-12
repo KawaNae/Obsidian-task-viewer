@@ -1,5 +1,5 @@
 /**
- * The settings' fields and the load (段10g), in the running Dev vault: a
+ * The settings' fields and the load, in the running Dev vault: a
  * settings field reads what is typed and commits once (a blur, the form's
  * Enter), saving only a value that reads and saying under its description
  * why one does not; a scope key typed again tells nothing and reads the
@@ -13,7 +13,7 @@
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
- *     with a build of 段10g
+ *     with a current build
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/settings-fields.test.ts
  */

@@ -108,7 +108,7 @@ describe('ChildPropertyLineEditor', () => {
             expect(lines[1]).toBe('\t- tags:: #a #b #c');
         });
 
-        it('edits the property line the parser reads under any bullet, keeping its bullet (論点14b)', () => {
+        it('edits the property line the parser reads under any bullet, keeping its bullet', () => {
             const lines = [
                 '- [ ] task',
                 '    * a:: 1',
@@ -263,7 +263,7 @@ describe('ChildPropertyLineEditor', () => {
             ['a tab-indented fence', ['- [ ] task', '\t```', '\t- key:: 例', '\t```', '\t- other:: 本物'], { other: '本物' }],
             ['a property under a note bullet', ['- [ ] task', '    - note', '        - deep:: of-note', '    - key:: own'], { key: 'own' }],
             ['a property under a child task', ['- [ ] task', '    - [ ] child', '        - deep:: of-child', '    - key:: own'], { key: 'own' }],
-            // (Obsidian, measurement.md q4) eight columns in is the task's
+            // (Obsidian, `OutlineRead.test.ts` q4) eight columns in is the task's
             // paragraph going on, not an item: no property.
             ['a property line in the paragraph going on', ['- [ ] task', '        - key:: deep', '    - other:: own'], { other: 'own' }],
             ['a blank line between', ['- [ ] task', '    - [ ] child', '', '    - key:: own', ''], { key: 'own' }],

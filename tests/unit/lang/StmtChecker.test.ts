@@ -145,7 +145,7 @@ describe('StmtChecker', () => {
         });
 
         // 関数は StaticType を持たない。だから配列にもレコードにも入れられず、
-        // 段 3 のセルにも入らない。境界ごとに弾く処理を書かずに閉じている。
+        // フローコマンドの `state(...)` のセルにも入らない。境界ごとに弾く処理を書かずに閉じている。
         it('refuses a function anywhere a value is expected', () => {
             expect(codes('const f = x => x\nlet y = f')).toEqual(['expr.fn-not-a-value']);
             expect(codes('const f = x => x\nlet xs = [f]')).toEqual(['expr.fn-not-a-value']);

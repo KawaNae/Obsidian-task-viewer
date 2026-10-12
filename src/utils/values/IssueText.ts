@@ -5,7 +5,7 @@ import type { Issue, NotationKind, ShapeKind } from './Read';
  * (which are in English). `label` names the value (`due`, `limit`); `given`,
  * when passed, is the text that was read, quoted at the end.
  *
- * A form in the app tells the same issue through i18n instead (stage 10).
+ * A form in the app tells the same issue through i18n instead.
  */
 
 const SHAPE: Record<ShapeKind, string> = {

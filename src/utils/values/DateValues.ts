@@ -12,7 +12,7 @@ import { readFail, readOk, type FieldCodec, type Issue, type Read } from './Read
  * `dashed` for the date), so `２０２６ー１０ー０１` is a date.
  *
  * The note's own notation is not read here: it keeps its own rule for the
- * day of the month (stage 7, decision N).
+ * day of the month (`structure/dates.md`, 誤りとして扱う行).
  */
 
 const DATE_TIME_RE = /^(\S+?)(?:T|\s+)(\S+)$/;

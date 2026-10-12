@@ -3,7 +3,7 @@ import { IntInput, IntValue, FloatInput, FloatValue } from '../../../../src/util
 
 /**
  * Numbers are read only when written as decimal numbers, and out of range
- * is refused, not moved to the end (input decisions E and F).
+ * is refused, not moved to the end.
  */
 
 describe('IntInput', () => {

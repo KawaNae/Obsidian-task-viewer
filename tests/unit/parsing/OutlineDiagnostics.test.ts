@@ -15,7 +15,7 @@ const warned = (lines: string[], code: string) =>
 
 /**
  * The shapes the reading view draws a quote inside the item above, where
- * CommonMark and Live Preview end the item (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L3 の実測),
+ * CommonMark and Live Preview end the item (measured in Obsidian 1.12.4),
  * and two more of the same kind.
  */
 const QUOTE_IN_ITEM_ON_READING_VIEW: Record<string, number> = {

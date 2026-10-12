@@ -1,5 +1,5 @@
 /**
- * What a step the user asked for would lose (I#1, 論点G): a draft of a
+ * What a step the user asked for would lose: a draft of a
  * subtree's text that writes something (the send dialog, the hub's source
  * mode: `SubtreeFrame.check` is not `same`), or the values of the hub's form
  * that cannot be saved, by the names of their fields.

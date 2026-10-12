@@ -8,7 +8,7 @@ const task = (lines: string[]) => read(lines).tasks[0];
 
 /** A note's properties as the index reads them, across the layers. */
 describe('property values in a note', () => {
-    it('reads a line\'s true as a boolean, as the frontmatter does (論点14a)', () => {
+    it('reads a line\'s true as a boolean, as the frontmatter does', () => {
         expect(task(['- [ ] t', '    - f:: true']).properties!.f).toEqual({ type: 'boolean', value: 'true', boolean: true });
         expect(task(['- [ ] t', '    - f:: True']).properties!.f).toEqual({ type: 'boolean', value: 'True', boolean: true });
         expect(task(['- [ ] t', '    - f:: yes']).properties!.f.type).toBe('string');
@@ -29,7 +29,7 @@ describe('property values in a note', () => {
         expect(read(['---', 'tv-ignore: "true"', 'bad: [', '---', '- [ ] t']).ignored).toBe(false);
     });
 
-    it('reads a property line and a properties group under any list bullet (論点14b)', () => {
+    it('reads a property line and a properties group under any list bullet', () => {
         expect(task(['- [ ] t', '    * f:: x']).properties).toEqual({ f: { type: 'string', value: 'x' } });
         expect(task(['- [ ] t', '    1. f:: x']).properties).toEqual({ f: { type: 'string', value: 'x' } });
         expect(task(['* tv-color:: red', '- [ ] t']).cascadeContext?.color).toBe('red');

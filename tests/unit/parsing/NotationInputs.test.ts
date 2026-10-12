@@ -6,7 +6,7 @@ import { StatusCharInput } from '../../../src/services/parsing/utils/StatusCharI
 import { HeadingInput } from '../../../src/services/parsing/utils/HeadingInput';
 import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 
-describe('a task name typed in a field (入力の論点 A)', () => {
+describe('a task name typed in a field', () => {
     it.each([
         ['電話 @10:00', 'dateBlock'],
         ['電話 @2026-10-05', 'dateBlock'],

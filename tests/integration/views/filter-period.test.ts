@@ -1,5 +1,5 @@
 /**
- * The filter's period condition and its ranges (段11d), in the running Dev
+ * The filter's period condition and its ranges, in the running Dev
  * vault: a pinned list's filter menu driven as the user clicks it (the
  * property, the operator, the value's kind, the range's two fields), what
  * the list keeps (`filterState`) and how many tasks it counts; and a filter

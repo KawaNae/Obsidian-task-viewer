@@ -13,7 +13,7 @@ vi.mock('obsidian', async () => {
  * What the create dialog is told of a place before the line is written
  * (`CreatePlaces.facts`): where the line goes, and what it inherits there —
  * what the reading gives the line once it is written, and nothing else (the
- * decision of 2026-10-04, 論点1: a daily note's day is not given).
+ * decision of 2026-10-04: a daily note's day is not given).
  */
 
 const DAY = '2031-01-15';

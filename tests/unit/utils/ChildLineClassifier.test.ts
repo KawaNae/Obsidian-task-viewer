@@ -107,7 +107,7 @@ describe('ChildLineClassifier', () => {
             expect(result.propertyKey).toBeNull();
         });
 
-        it('reads no property or link on a line whose bullet opens no list item (Obsidian, measurement.md q9)', () => {
+        it('reads no property or link on a line whose bullet opens no list item (Obsidian, `OutlineRead.test.ts` q9)', () => {
             // After the bullet, a list item has spaces or tabs and nothing else.
             for (const gap of ['', ' ', '　']) {
                 const outline = Outline.read(['- [ ] task', `\t-${gap}key:: value`]);

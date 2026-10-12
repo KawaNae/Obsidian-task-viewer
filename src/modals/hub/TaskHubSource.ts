@@ -9,8 +9,8 @@ import { DraftGuard } from '../form/DraftGuard';
 
 /**
  * The hub's source mode: the row and its subtree as text, written from a
- * draft when the user applies it, and nowhere else (source-mode-design.md,
- * 3「確定の仕方」).
+ * draft when the user applies it, and nowhere else: not when the mode or
+ * the hub is left.
  *
  * This is the mode's logic, apart from the DOM: when the switch is offered,
  * what the source opens on, what an apply writes, what a refusal leaves, and

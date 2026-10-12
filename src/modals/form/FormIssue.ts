@@ -2,7 +2,7 @@ import type { Issue } from '../../utils/values/Read';
 import { issueWords } from './issueWords';
 
 /**
- * What a form says of what it holds, and where (I#2): an error keeps the
+ * What a form says of what it holds, and where: an error keeps the
  * form from doing what it is for, a warning is what it can be done in spite
  * of, and an info is what it will do.
  */

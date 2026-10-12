@@ -116,8 +116,8 @@ describe('renderGenBody', () => {
     });
 
     it('evaluates the lines in document order, parent line included', () => {
-        // 今は式に効果が無いので順序は結果に現れない — 段 3 の代入
-        // ${n = n + 1} が入った日に、書き手の読む順で走ることが要る。
+        // 差し込みの代入 ${n = n + 1} は値を変えるので、行は書き手の読む順で
+        // 走ることが要る。
         // 観測手段はエラーの発生順: 両方の行が失敗する形で、文書で先に
         // 読む行のエラーが返ることを pin する
         const result = render([

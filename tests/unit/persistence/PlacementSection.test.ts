@@ -126,7 +126,7 @@ describe('Placement.into, at the head', () => {
 
     it('is past the paragraph and the indented code below the heading, and not past the next heading', () => {
         expect(headOf(['## H', 'para', 'more', '', '- [ ] a'], 'H').at).toBe(3);
-        // Four columns under a heading is indented code (measurement.md q10).
+        // Four columns under a heading is indented code (`OutlineRead.test.ts` q10).
         expect(headOf(['## H', '\t- [ ] a', '\t\t- [ ] b', '- [ ] c'], 'H')).toEqual({ at: 3, parent: null, indent: '' });
         expect(headOf(['## H', '### Sub', 'para'], 'H').at).toBe(1);
         expect(headOf(['## H', '---', 'para'], 'H').at).toBe(1);

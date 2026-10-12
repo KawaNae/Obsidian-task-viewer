@@ -123,7 +123,7 @@ describe('inheritedAt', () => {
         expect(values.day.yaml).toEqual(['day: "2026-09-29"']);
         expect(values.done.yaml).toEqual(['done: true']);
         expect(values.off.yaml).toEqual(['off: false']);
-        // `true` is a boolean on a line as in YAML (論点14a), and is written as one.
+        // `true` is a boolean on a line as in YAML, and is written as one.
         expect(values.word.yaml).toEqual(['word: true']);
         expect(values.area.yaml).toEqual(['area:', '  - lab', '  - desk']);
         expect(values.pair.yaml).toEqual(['pair:', '  - x', '  - y']);

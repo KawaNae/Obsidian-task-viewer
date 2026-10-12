@@ -4,8 +4,8 @@ import { readExportOptions } from '../../../src/cli/handlers/ExportImageHandler'
 /**
  * export-image's own number flags, `width` and `wait`, are read as the view's
  * are (`IntInput`): a whole decimal number in range, or the command fails. A
- * value that is not one used to reach the export as NaN (the input decision
- * F, 2026-10-01).
+ * value that is not one used to reach the export as NaN (decided
+ * 2026-10-01).
  */
 
 function errorOf(result: ReturnType<typeof readExportOptions>): string {

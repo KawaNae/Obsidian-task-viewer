@@ -163,8 +163,9 @@ describe('creating a note', () => {
         const outcome = await append(b, NEW, CONTENT);
 
         expect(outcome.written).toBe(true);
-        // Made of the lines of an empty note, `['']`: until stage 4 it was
-        // made of none, and ended without a terminator (decided, 論点5).
+        // Made of the lines of an empty note, `['']`: it was once made of
+        // none, and ended without a terminator (decided 2026-09-30: one way
+        // to make a note, so one shape).
         expect(b.text(NEW)).toBe(CONTENT + '\n');
         expect(b.refused).toEqual([]);
     });

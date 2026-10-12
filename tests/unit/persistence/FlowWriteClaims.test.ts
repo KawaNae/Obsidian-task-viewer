@@ -17,7 +17,7 @@ function stripFlow(task: Task) {
  *
  * A firing writes three times — the tick, the next instance, the `==>` coming
  * off the fired line — and the last two report here. The tick is
- * an `update`, which reports from stage 2-4. Through the real writers
+ * an `update`, which reports what it rewrote (#203). Through the real writers
  * and the real `processLines`, so the report is the one a scan would be
  * handed, arithmetic included.
  */

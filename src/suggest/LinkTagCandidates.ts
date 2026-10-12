@@ -7,8 +7,8 @@
  * both ask here, so the two complete the same things over the same range,
  * drawn alike (`candidateView.renderLinkTag`).
  *
- * A link is completed as Obsidian's `[[` completes one
- * (`note-suggest/candidates.md`): its notes, other files, aliases and
+ * A link is completed as Obsidian's `[[` completes one: its notes, other
+ * files, aliases and
  * unresolved links (`NoteCandidates`), a note's headings matched fuzzily,
  * and the link written as Obsidian writes it (`NoteLink.pickedLink`), from
  * the note the link is written in (`sourcePath`), which the caller names.

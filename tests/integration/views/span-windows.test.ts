@@ -1,10 +1,10 @@
 /**
- * A task's span and the visual days that answer for it (段11b), in the
+ * A task's span and the visual days that answer for it, in the
  * running Dev vault: a task holds its time as moments `[start, end)`, `@D`
  * being `[D startHour, D+1 startHour)`, and the CLI's windows, a pinned
  * list's date filter and sort, Timeline's overdue mark in its heading and
  * the hub's faint values all read that span. A task with only a due is
- * read as `@>due` (段11c): the views, the CLI and the hub draw it on the
+ * read as `@>due`: the views, the CLI and the hub draw it on the
  * due's day, the timed one the hour before its due.
  *
  * The days are counted from today's visual day (a day starts at the vault's

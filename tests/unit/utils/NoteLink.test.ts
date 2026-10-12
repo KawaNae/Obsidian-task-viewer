@@ -5,8 +5,8 @@ import { linkDouble, type LinkSettings } from '../helpers/linkDouble';
 import { makeFile } from '../helpers/vaultSession';
 
 /**
- * A link to a file, under each of the link settings measured at stage 0
- * (`archive/2026-09-stages/3-v058-2026-09-28.md`, s0-measure, リンクの生成), through a stand-in that
+ * A link to a file, under each of the link settings measured in Obsidian
+ * 1.13.7, through a stand-in that
  * spells links as Obsidian was measured to (`linkDouble`). What is asserted
  * is what `noteLink` hands Obsidian: the file, the note the link is written
  * in, the subpath and the display text. The link a sent row is left with

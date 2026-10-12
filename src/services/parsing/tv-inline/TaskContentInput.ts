@@ -6,7 +6,7 @@ import { readDateBlock } from './DateBlock';
 
 /**
  * The notation in `text` that a task's line, `text` written as its name,
- * would read as something other than the name (入力の論点 A): a trailing
+ * would read as something other than the name (`structure/dialogs.md`, 値の読み): a trailing
  * block ID (`^id`), the command (`==>` with text after it), a date block
  * (`@2026-10-05`, `@10:00`). Read as the line is read (`taskContentText`,
  * `readDateBlock`), so `@alice` or a bare `==>` is the name's own text. Null

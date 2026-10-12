@@ -18,7 +18,7 @@ function flatten(tree: Tree, prefix = ''): Record<string, string> {
 /**
  * `flowDiag` / `flowEval` are ja-only by design: English for those two lives
  * as the `message` field in the diagnostic's TS source, not in en.json
- * (services/lang/flow/diagnosticText.ts, and reference_diagnostic_i18n.md).
+ * (services/lang/flow/diagnosticText.ts).
  * Everything else must exist in both.
  */
 const JA_ONLY_NAMESPACES = ['flowDiag', 'flowEval'];

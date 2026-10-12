@@ -192,7 +192,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             // `create`, which the index scans like any other arrival — so the
             // scan follows here too, and every row in the file is minted by it.
             // A path that differs from a note's in case alone is taken, as
-            // on the file systems of macOS and Windows (stage 0).
+            // on the file systems of macOS and Windows.
             create: async (path: string, data: string) => {
                 if ([...contents.keys()].some(p => p.toLowerCase() === path.toLowerCase())) throw new Error('File already exists.');
                 const file = fileAt(path);

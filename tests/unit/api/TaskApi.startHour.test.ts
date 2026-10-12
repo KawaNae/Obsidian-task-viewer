@@ -5,7 +5,7 @@ import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 
 /**
- * A query's startHour (stage 11e): the visual day boundary of that call
+ * A query's startHour: the visual day boundary of that call
  * alone, for the copies' spans, the windows and the effective times. The
  * setting is 5.
  */

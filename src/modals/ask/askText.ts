@@ -21,7 +21,7 @@ export interface TextSpec<T> {
      * Act on the value read, and answer when done: null to close, or what
      * keeps it from going, of the value or of the form (a write refused),
      * said with the dialog left open. What is written is written here,
-     * waited for (I#9).
+     * waited for.
      */
     submit(value: T): Promise<FormIssue<'value'> | null>;
 }
@@ -30,7 +30,7 @@ export interface TextSpec<T> {
  * Ask for one value, in a dialog of a field. The focus opens on the field,
  * its text selected. The form's Enter (`onFormEnter`) or the submit button
  * reads the text: what does not read is said under the field, the field
- * marked, and the dialog stays open (入力の論点 E). A value read is handed
+ * marked, and the dialog stays open. A value read is handed
  * to `submit`, waited for, and the dialog closes once it has gone; what
  * keeps it from going is said under the field, or above the buttons.
  * Typing again takes back what was said.

@@ -10,12 +10,12 @@ import { TrimmedText } from '../utils/values/TextValues';
 import { readFail, readOk, type FieldCodec, type Issue, type Read } from '../utils/values/Read';
 
 /**
- * The settings' one table of values (I#11, 入力の所見4): for each key, how
+ * The settings' one table of values: for each key, how
  * a stored value is read (`check`), and, for a key a text field sets, how
  * the field's text is read (`codec`). The load (`readSettings`) and the
  * settings' fields read the same table, so what the load keeps is what a
  * field takes; and a menu that sets a key (the timer's Custom...) reads its
- * range here too (論点6).
+ * range here too.
  *
  * The values a key falls back on are `DEFAULT_SETTINGS`'s.
  */
@@ -139,7 +139,7 @@ export const SETTINGS_SCHEMA = {
     taskHeading: text(HeadingInput),
     taskHeadingLevel: int({ min: 1, max: 6 }),
     sectionSide: oneOf(['head', 'end']),
-    // 論点6: the work and the break take any length of a minute or more.
+    // The work and the break take any length of a minute or more (decided 2026-10-04).
     pomodoroWorkMinutes: int({ min: 1 }),
     pomodoroBreakMinutes: int({ min: 1 }),
     countdownMinutes: int({ min: 1 }),

@@ -8,7 +8,7 @@ import { isIgnored, isLinkable } from '../../../src/suggest/ObsidianFiles';
 
 /**
  * The notes a list suggests, as Obsidian's `[[` suggests them
- * (`note-suggest/candidates.md`): what is held, by the kinds a caller
+ * (`structure/dialogs.md`): what is held, by the kinds a caller
  * chooses, and how it is matched and ranked. The fuzzy search is the mock's
  * (`mocks/obsidian.ts`), so what is asserted is the order the rules make,
  * not Obsidian's scores.

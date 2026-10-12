@@ -18,17 +18,17 @@ const SHAPES: Array<[string, string[]]> = [
     ['a flow line in a fence under the task', [
         `- [ ] a ${D} ==> every mon`, '\t```', '\t- ==> in the fence', '\t```', '\t- ==> x3', '',
     ]],
-    // (Obsidian, measurement.md q1) the shallow line goes on the fence, and
+    // (Obsidian, `OutlineRead.test.ts` q1) the shallow line goes on the fence, and
     // the task with it, to the closing line.
     ['a fence that takes a shallower line (BK1)', [
         `- [ ] a ${D} ==> every mon`, '    ```', 'shallow at column 0', '    ```', '    - ==> x3', `- [ ] b ${D}`, '',
     ]],
-    // (Obsidian, measurement.md q6) one column in after a blank line is an
+    // (Obsidian, `OutlineRead.test.ts` q6) one column in after a blank line is an
     // item at the top, not the task's.
     ['a flow line one column in after a blank line', [
         `- [ ] a ${D} ==> every mon`, '', ' - ==> x3', '',
     ]],
-    // (Obsidian, measurement.md q5) a line at column 0 goes on the task's
+    // (Obsidian, `OutlineRead.test.ts` q5) a line at column 0 goes on the task's
     // paragraph, and the tab child below it is the task's.
     ['a paragraph line going on at column 0', [
         `- [ ] a ${D} ==> every mon`, 'memo at column 0', '\t- ==> x3', '',

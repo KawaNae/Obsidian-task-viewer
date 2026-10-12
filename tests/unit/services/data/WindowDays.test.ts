@@ -12,7 +12,7 @@ import type { Task } from '../../../../src/types';
 import { makeTask } from '../../helpers/makeTask';
 
 /**
- * Stage 7's issue P (T1–T6) and tasks with only a due: the views, the window queries and the overdue
+ * The cases T1–T6 and tasks with only a due: the views, the window queries and the overdue
  * mark of Timeline's heading answer the same visual days (startHour 5).
  */
 const CASES: { name: string; task: Partial<Task>; days: string[] }[] = [

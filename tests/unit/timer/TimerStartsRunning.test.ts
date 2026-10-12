@@ -4,7 +4,7 @@ import { widgetOver } from '../helpers/timerRig';
 import { readSeconds } from '../../../src/timer/TimerClock';
 
 /**
- * 開始の命令は押した瞬間に走り出す（論点10）。「子として記録」もデイリーノートの
+ * 開始の命令は押した瞬間に走り出す（`structure/views-timer.md` のタイマーの状態）。「子として記録」もデイリーノートの
  * タイマーも、開いたまま待つ状態を持たない。1 本目の行の start は押した時刻で、
  * 時計もそこから数える。
  */

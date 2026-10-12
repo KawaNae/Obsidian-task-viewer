@@ -1,5 +1,5 @@
 /**
- * The hub's form and what it says (段10c), in the running Dev vault: each
+ * The hub's form and what it says, in the running Dev vault: each
  * field reads what is typed, shows it in the form the note writes once it
  * is committed, says what does not read under its row and saves none of
  * it, and one field's issue is not taken back by another's.

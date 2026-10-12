@@ -6,8 +6,8 @@ import { TaskApiError } from '../../../src/api/TaskApiTypes';
 
 /**
  * The CLI's whole-number flags are read by `IntInput`: `parseInt` read
- * `3days` as 3 and `1.5` as 1 (stage 7, input decision F). The range is the
- * API's to check, once (B#13b; `CliApiChecks.test.ts`).
+ * `3days` as 3 and `1.5` as 1 (decided 2026-10-01). The range is the
+ * API's to check, once (`CliApiChecks.test.ts`).
  */
 
 describe('parseLimit', () => {

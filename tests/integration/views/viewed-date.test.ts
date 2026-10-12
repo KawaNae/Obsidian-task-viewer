@@ -1,6 +1,6 @@
 /**
- * The day a dated view looks at, in the running Dev vault (stage9b-design,
- * 設計 3). Timeline, Schedule, Calendar and MiniCalendar hold the transient
+ * The day a dated view looks at, in the running Dev vault
+ * (`structure/views-timer.md`, 見ている日). Timeline, Schedule, Calendar and MiniCalendar hold the transient
  * `date`: absent, the view follows today; present, it stays on that day.
  * Calendar and MiniCalendar also hold `weekOffset`, the weeks their grid was
  * moved from `date`'s month grid.

@@ -16,8 +16,8 @@ import { useMarkdownLinks } from './ObsidianConfig';
  * in (`sourcePath`). `subpath` points into the file (`#heading`); `display`
  * is the text the link shows.
  *
- * Obsidian drops a display text that reads as the link does (measured at
- * stage 0), so a note the shortest path names by its name alone, shown by
+ * Obsidian drops a display text that reads as the link does (measured in
+ * Obsidian 1.13.7), so a note the shortest path names by its name alone, shown by
  * its name, is linked as `[[Note]]`, and one it has to name by its path,
  * since another note has its name, as `[[Folder/Note|Note]]`: whether the
  * path is needed is Obsidian's to answer, not ours.
@@ -50,7 +50,7 @@ const IMAGE_EXTENSIONS = new Set(['bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'we
 /**
  * The link Obsidian's `[[` writes for the candidate `target` picked in the
  * note at `sourcePath`, copied from its unpublished writer (`KR` of
- * Obsidian 1.13.7, `note-suggest/implementation.md`, 段3):
+ * Obsidian 1.13.7):
  *
  * - A file is named as `fileToLinktext` names it from the note (the shortest,
  *   relative or absolute path, a note without `.md` in a wikilink). Named by

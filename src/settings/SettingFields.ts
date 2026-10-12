@@ -26,12 +26,12 @@ export interface TextSettingSpec<T> {
 }
 
 /**
- * The text fields of the settings, bound to their values (`bindField`,
- * I#11): a field is read as it is typed and what does not read is said
+ * The text fields of the settings, bound to their values (`bindField`): a
+ * field is read as it is typed and what does not read is said
  * under the setting's description, the field marked; nothing is saved
  * while typing. A blur or the form's Enter commits once: a value that
  * reads is shown as read and saved, one that does not stays as typed and
- * is not saved (入力の論点 E). The settings are read again (and the notes,
+ * is not saved. The settings are read again (and the notes,
  * when a scope key changed) once for a commit, not for each key typed.
  *
  * One per drawing of the settings' tab: {@link commitAll} commits what is

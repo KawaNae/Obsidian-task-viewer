@@ -278,7 +278,7 @@ describe('cancelling', () => {
 });
 
 describe('closing the hub (beforeClose)', () => {
-    it('lets it close over an edit that writes nothing: a blank line added at the end of the children (論点2)', async () => {
+    it('lets it close over an edit that writes nothing: a blank line added at the end of the children', async () => {
         const h = await opened();
         h.editor().children.push({ text: '', was: null });
         expect(h.source.beforeClose()).toBe(true);

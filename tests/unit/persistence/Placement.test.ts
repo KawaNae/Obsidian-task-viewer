@@ -105,7 +105,7 @@ describe('Placement.groupHead', () => {
 
         it('is the row itself when it stands at the top with nothing above it but the frontmatter', () => {
             // Two columns in under nothing is an item at the top (Obsidian,
-            // measurement.md q3; four would be indented code, q10), and a
+            // `OutlineRead.test.ts` q3; four would be indented code, q10), and a
             // blank line ends its run.
             const lines = ['---', 'tags: a', '---', '', '  - [ ] current'];
             expect(Placement.groupHead(Outline.read(lines), 4, '- [ ] n', '\t').at).toBe(4);
@@ -119,7 +119,7 @@ describe('Placement.afterSubtree', () => {
         expect(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n', '\t').at).toBe(4);
     });
 
-    it('is past a fence in the subtree that never closes, which takes the shallow line below it (Obsidian, measurement.md q14)', () => {
+    it('is past a fence in the subtree that never closes, which takes the shallow line below it (Obsidian, `OutlineRead.test.ts` q14)', () => {
         // `after` goes on a's fence, and a with it; a sibling put past it
         // starts an item, which ends both.
         const lines = ['- [ ] a', '  ```', '  x', 'after', ''];

@@ -87,10 +87,10 @@ describe('OutlineReading.subtreeEnd', () => {
         expect(subtreeEnd(['- [ ] a', '', '- [ ] b'], 0)).toBe(1);
     });
 
-    // (Obsidian, measurement.md q8) `code` at column 0 goes on the fence
+    // (Obsidian, `OutlineRead.test.ts` q8) `code` at column 0 goes on the fence
     // opened in T, and T with it; the delimiter at column 0 opens a fence of
     // its own, which ends T and its fence.
-    it('takes a shallow line in its fence, and ends at a delimiter at column 0 (Obsidian, measurement.md q8)', () => {
+    it('takes a shallow line in its fence, and ends at a delimiter at column 0 (Obsidian, `OutlineRead.test.ts` q8)', () => {
         const lines = ['- [ ] T', '', '  ```js', 'code', '```', '- [ ] U'];
         expect(subtreeEnd(lines, 0)).toBe(4);
     });
@@ -124,9 +124,9 @@ describe('a child below a blank line', () => {
         expect(p.childLines.map(line => line.text.trim())).toEqual(['', 'memo of p']);
     });
 
-    // (Obsidian, measurement.md q5) With no blank line between, `memo of p` goes on the
+    // (Obsidian, `OutlineRead.test.ts` q5) With no blank line between, `memo of p` goes on the
     // paragraph `memo of c` opened (a lazy continuation), so it is c's.
-    it('takes a shallower line right below it as its paragraph going on (Obsidian, measurement.md q5)', () => {
+    it('takes a shallower line right below it as its paragraph going on (Obsidian, `OutlineRead.test.ts` q5)', () => {
         const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '\tmemo of p', ''];
         const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
@@ -157,21 +157,21 @@ describe('the write and the parser agree on every subtree', () => {
         ['a blank line and then a shallower line', ['- [ ] a', '\t- [ ] b', '', 'text', '\t- [ ] c', '']],
         ['a heading after a blank line', ['- [ ] a', '\t- [ ] b', '', '# h', '\t- [ ] c', '']],
         ['a fence closed at column 0 below a blank line', ['- [ ] a', '\t- [ ] b', '', '  ```', 'x', '```', '- [ ] c', '']],
-        // (Obsidian, measurement.md q11) `# x` at column 0 is a heading: it
+        // (Obsidian, `OutlineRead.test.ts` q11) `# x` at column 0 is a heading: it
         // ends T and its fence, and the delimiter after it opens a fence
         // that holds C and U.
         ['a heading-like line in a fence under a task', ['- [ ] T', '  ```', '# x', '  ```', '\t- [ ] C', '- [ ] U', '']],
         ['a tab-indented fence under a task', ['- [ ] T', '\t```js', '\t- [ ] x', '\t```', '\t- [ ] C', '- [ ] U', '']],
-        // (Obsidian, measurement.md q8) six columns in is T's paragraph going
+        // (Obsidian, `OutlineRead.test.ts` q8) six columns in is T's paragraph going
         // on, not a fence: `- [ ] x` is text too.
         ['a fence indented four columns past the content', ['- [ ] T', '      ```', '      - [ ] x', '      ```', '    - [ ] C', '- [ ] U', '']],
-        // (Obsidian, measurement.md q2)
+        // (Obsidian, `OutlineRead.test.ts` q2)
         ['a fence that never closes at the end of a subtree, and a sibling (R5)', ['- [ ] root', '    ```', '    body', '- [ ] sibling', '']],
-        // (Obsidian, measurement.md q1)
+        // (Obsidian, `OutlineRead.test.ts` q1)
         ['a fence that takes a line at column 0 (BK1)', ['- [ ] task', '    ```', 'shallow at column 0', '    ```', '- [ ] sibling', '']],
-        // (Obsidian, measurement.md q5)
+        // (Obsidian, `OutlineRead.test.ts` q5)
         ['a U+3000-led and an NBSP-led line between a parent and its tab child', ['- [ ] P', '　memo', '\t- [ ] c', '- [ ] Q', ' memo', '\t- [ ] d', '']],
-        // (Obsidian, measurement.md q5, q9)
+        // (Obsidian, `OutlineRead.test.ts` q5, q9)
         ['`-[ ] x` between a parent and its tab child', ['- [ ] P', '-[ ] x', '\t- [ ] c', '- [ ] Q', '']],
     ];
 

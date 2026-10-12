@@ -118,7 +118,7 @@ describe('shorthandConditions: the window is period overlaps', () => {
             .toThrow(/Invalid date value for date: invalid\. Use YYYY-MM-DD, YYYY-MM-DD HH:mm or a preset \(today, /);
     });
 
-    // Stage 7, input decision B: a date-shaped value naming no day is refused.
+    // A date-shaped value naming no day is refused.
     it.each([
         [{ date: '2026-02-30' }, /date must be a day that exists, got: "2026-02-30"/],
         [{ from: '2026-13-45' }, /from must be a day that exists/],

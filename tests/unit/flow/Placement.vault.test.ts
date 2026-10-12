@@ -118,7 +118,7 @@ describe('a next instance with nowhere in the body to go', () => {
 
     it('goes at the top of its run when a fence it stands after is closed above it', async () => {
         // Two columns in under nothing is an item at the top (Obsidian,
-        // measurement.md q3), and a closed fence above ends its run. The old
+        // `OutlineRead.test.ts` q3), and a closed fence above ends its run. The old
         // depth reading took the group to be under `x`, in the fence, and
         // refused.
         const note = ['# note', '```', 'x', '   ```', `  ${ROW}`, ''];
@@ -132,7 +132,7 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('goes under the item it stands in when a fence in that item takes a shallower line (Obsidian, measurement.md q1)', async () => {
+    it('goes under the item it stands in when a fence in that item takes a shallower line (Obsidian, `OutlineRead.test.ts` q1)', async () => {
         // `\tx` goes on Q's fence, so the row is Q's child and its group is
         // under Q, above the fence. The old depth reading took the group to be
         // under `\tx`, in the fence, and refused.
@@ -244,8 +244,8 @@ describe('the end of a note', () => {
 });
 
 describe('a line put past a fence in a list item that never closes', () => {
-    // Q's fence never closes and `x` goes on it (Obsidian, measurement.md
-    // q14). Every write that puts a line there puts one that starts a block of
+    // Q's fence never closes and `x` goes on it (Obsidian,
+    // `OutlineRead.test.ts` q14). Every write that puts a line there puts one that starts a block of
     // its own, which ends Q's item and its fence (Placement's precondition).
     const NOTE = ['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', ''];
 

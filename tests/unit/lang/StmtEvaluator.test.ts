@@ -148,7 +148,7 @@ describe('StmtEvaluator', () => {
             expect(fails('const f = x => f(x)', 'f(1)')).toContain('calls deep');
         });
 
-        // 天井は入口ではなくここに置いてある。プレビューや段 3 で 2 つ目の
+        // 天井は入口ではなくここに置いてある。プレビューなどで 2 つ目の
         // 入口ができても、そこで抜けない。
         it('makes its own budget when the caller brought none', () => {
             const { program } = parseProgram('let n = 0\nwhile (true) { n = n + 1 }');

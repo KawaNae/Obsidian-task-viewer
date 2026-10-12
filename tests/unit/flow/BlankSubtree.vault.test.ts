@@ -9,7 +9,8 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
- * A task's subtree goes on past a blank line inside it (論点4), for the
+ * A task's subtree goes on past a blank line inside it (decided
+ * 2026-09-21), for the
  * parser and for every write alike.
  *
  * The subtree used to stop at the first blank line. A deeper line below one
@@ -95,7 +96,7 @@ describe('a subtree with a blank line inside it', () => {
     });
 });
 
-describe('a fence below a blank line whose closing line is at column 0 (Obsidian, measurement.md q8)', () => {
+describe('a fence below a blank line whose closing line is at column 0 (Obsidian, `OutlineRead.test.ts` q8)', () => {
     // The fence opens inside T's item, and `code` at column 0 goes on it (and
     // on T). The delimiter at column 0 does not close it: it starts a block
     // of its own, which ends T and its fence and opens a fence that never

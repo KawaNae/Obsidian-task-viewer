@@ -29,7 +29,7 @@ export type NameCheck =
 /**
  * What the send dialog's note field holds: the text typed, and the note a
  * candidate picked from its list named, while the text is what the pick put
- * in (`note-suggest/send-field.md`).
+ * in (`structure/dialogs.md`, 候補の一覧とメニュー).
  */
 export interface NoteAsk {
     text: string;
@@ -95,7 +95,7 @@ function folded(text: string): string {
  * and Windows do not tell `Note.md` from `note.md`: Obsidian does not find
  * one under the other's path (`getAbstractFileByPath`), but creating one
  * where the other is fails, and a link to either resolves to the one there is
- * (measured at stage 0). So a path that differs from a note's in case alone
+ * (measured in Obsidian 1.13.7). So a path that differs from a note's in case alone
  * points at that note, and a folder that differs in case alone is that folder.
  */
 export const NoteName = {
@@ -168,8 +168,7 @@ export const NoteName = {
     },
 
     /**
-     * The note a note field points at, the rules taken in order
-     * (`note-suggest/send-field.md`, 行き先の決め方):
+     * The note a note field points at, the rules taken in order:
      *
      * 1. The note picked, while the vault has it.
      * 2. The text, read as the text of a `[[link]]` is ({@link typed}). A

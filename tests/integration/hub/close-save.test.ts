@@ -1,5 +1,5 @@
 /**
- * The hub's close (段10d), in the running Dev vault: every way the user
+ * The hub's close, in the running Dev vault: every way the user
  * closes it saves what is typed with no blur waited for, a value that cannot
  * be saved keeps it open and asks (the focus on fix), a write refused keeps
  * it open with why at the form's end and no notice, and the source mode asks

@@ -34,7 +34,7 @@ describe('bindField', () => {
         expect(f.field.pending()).toEqual({ ok: false, issue: { code: 'noSuchDay' } });
     });
 
-    it('commits a blur once, the text shown as the value reads (論点 C), and not again on the next blur', () => {
+    it('commits a blur once, the text shown as the value reads, and not again on the next blur', () => {
         const f = dateField(undefined);
         f.input.type('２０２６ー１０ー０５');
         f.input.blur();
@@ -56,7 +56,7 @@ describe('bindField', () => {
         expect(f.commits).toEqual(['2026-10-05']);
     });
 
-    it('keeps a text that does not read, said wrong and not committed (論点 E)', () => {
+    it('keeps a text that does not read, said wrong and not committed', () => {
         const f = dateField('2026-10-01');
         f.input.type('明日');
         f.input.blur();

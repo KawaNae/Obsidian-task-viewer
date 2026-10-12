@@ -104,7 +104,7 @@ describe('CreateDialog', () => {
         }
     });
 
-    it('reads a time with no date as a start only where the place gives a start date (論点1)', async () => {
+    it('reads a time with no date as a start only where the place gives a start date', async () => {
         const plain = rig(daily());
         await plain.answerFacts();
         expect(plain.dialog.dateContext()).toEqual({ hasImplicitStartDate: false, implicitStartDate: undefined });
