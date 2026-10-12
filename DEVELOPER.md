@@ -315,7 +315,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
 | **File** | `BuiltinPropertyExtractor.fromFrontmatter` | Frontmatter object | Read every key as a `PropertyValue` (`PropertyValues.fromFrontmatter`), then put the builtin keys apart with the same extractor a section and a task use; the tags are read off the YAML as Obsidian reads them (`TagRule.ofFrontmatter`). Used as the cascade root by `SectionPropertyResolver`. |
-| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + each section's property lines (`PropertyLines`) | FM → root section → nested sections, child-wins cascade for the dates (a date and its time each on its own), `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`, and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds). |
+| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + each section's property lines (`PropertyLines`) | FM → root section → nested sections, child-wins cascade for the dates (a date and its time each on its own), `color`/`linestyle`/`mask`/`tags`/custom properties; a layer's no value wins too and hides the value above (「継承と値のない値」). Output stored on `SectionNode.resolvedX` (null for a value hidden so), and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds; the frontmatter's by its key's line). |
 
 **Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass.
 
@@ -327,7 +327,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `NoteTasks`, from `SectionNode.resolvedX`; where each came from as `task.inheritedFrom` (the section's `resolvedSources`) | Merge step below; the hub's source labels (`CascadeSource`) read `inheritedFrom`, never the metadata cache |
 | **effective** | `DisplayTask.stated` (merged), `span` and `dueMs` (resolved — needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
-Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread, a key's case aside (「プロパティのキー」). The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
+Merge rules: style is the row's own where it says one, a value or none (null), else the cascade's; tags are a sorted union; custom properties are per-key child-wins spread, a key's case aside (「プロパティのキー」), a null value winning as any value does (「継承と値のない値」). The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), and no built-in a section hides, but stores tags/properties unconditionally since they merge partially rather than shadow.
 
 **Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Properties`: by key folded to lower case, each with its key as written (「プロパティのキー」). Both are read on the frontmatter, a section and a task by the one `BuiltinPropertyExtractor`, and inherit by the merge rules above; the structural difference is type-level (separate Task fields vs `Properties`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is not read (`PropertyLines.read`, a `date-key-under-task` finding), so the section's date still shows through.
 
@@ -352,7 +352,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - タスクの下の日付のキー（設定 `scopeKeys` の start、end、due。`TV-START::` も）は読まない。タスクの日付はタスク行の `@` だけが決める
 - プロパティ行の下の行は、プロパティの一部として読むか、所見（`PropertyFinding`）になる。所見は、出す行、関わる行の範囲（`end`）、キー、プロパティ行、持ち主を持つ
     - エラー: `duplicate-key`（同じ持ち主の重複したキー）
-    - 警告: `date-key-under-task`、`lines-under-value`（値のある行の下の行）、`property-shaped-item`、`not-a-list-item`（リストの項目として読めない行）
+    - 警告: `date-key-under-task`、`lines-under-value`（値のある行の下の行）、`property-shaped-item`、`not-a-list-item`（リストの項目として読めない行）、`unreadable-value`（組み込みのキーの読めない値。行を読まない。「継承と値のない値」）
 - 所見はエディタの診断になる（`propertyDiagnostics`、`parsing/tree/PropertyDiagnostics.ts`）。`DiagnosticsExtension` が、日付のブロックやフローの診断と同じ波線で出す
     - 文書の内容から、すべての節（根の節を含む、`NoteSections.read`）とすべてのタスク（`NoteTasks.taskLines`）のプロパティ行を、パーサと同じ `read` で読む。設定の日付のキーが変われば、文書が同じでも読み直す
     - 波線は所見の行（`line`）に、字下げの後ろから行末まで引く。値のある行の下の項目なら、プロパティ行でなく項目の行である。所見が覆う下の行（`end` まで）には引かない
@@ -374,6 +374,22 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - 書き込みは、タスクの行（`ChildPropertyLineEditor`）も frontmatter（`FrontmatterLineEditor.findKeyRange`、`valueRange`、`hasKey`）も、キーを区別せずに行を探し、既にある行のキーの綴りを保つ。新しく足す行は、渡されたキーの綴りで書く。ハブは、タスクが書いているキーの綴りか、受け継いだ値なら受け継いだキーの綴りで書く
 - 入力では、ハブの新しいキー（`PropertyKeyInput`）は予約したキーを大文字と小文字によらず拒む。設定のキー（`ScopeKeyInput`）は、予約したキーとほかの設定のキーを、大文字と小文字だけの違いでも拒む。読み込んだ設定がこれに当たれば、設定のキーは既定に戻る
 
+### 継承と値のない値
+
+値のないプロパティ（行の `- key::` で下に読める項目のないもの、`- key:: null`、frontmatter の `key:`）は、その層では値がないという宣言である。近い層の値が勝つ規則のまま、値なしも値として勝ち、上の層の値を隠す。組み込みのキーにもカスタムプロパティにも同じ規則を当てる。
+
+- 組み込みのキーの値は `readBuiltin` が読み、次の3つのどれかを返す
+    - 値: 色、線種、マスクの文字、日付と時刻、期限、タグ
+    - 値なし（null）: 値のない値。上の層の値を隠す
+    - 読めない値（undefined）: 書いていないものとして扱い、上の層の値を通す。リスト（タグを除く）、空のテキスト、知らない線種、日付も時刻も指さない値、実在しない日や時刻、日付のない期限がこれに当たる。行なら `PropertyLines.read` がその行を読まず、`unreadable-value` の警告を出す。frontmatter の所見は出さない
+- 型では、組み込みの欄の undefined が「書いていない」、null が「値なしと書いた」を表す（`ExtractedProperties`、`SectionNode.resolved*`、`Task.color`、`linestyle`、`mask`）。カスタムプロパティの値なしは、値の型の null（`PropertyValue`）である
+- 値のない日付のキー（`- tv-start::`）は、日付と時刻の両方を隠す。値を書いたときは、今までどおり日付と時刻を別々に受け継ぐ（`tv-start:: 11:00` は時刻だけを言い、日付は上の層から来る）
+- タグは和集合で、隠す操作がない。値のない `- tags::` は何も足さず、上の層のタグも残る
+- カスタムプロパティのリストは1つの値で、近い層のリストが上の層のリストを丸ごと置き換える
+- 節が隠した組み込みの値は、タスクの `cascadeContext` に入らない。どの層が隠したかは出所に残る。値なしを書いた層も、値を書いた層と同じく出所になる（`resolvedSources`、`Task.inheritedFrom`）
+- frontmatter の出所（`ValueSource` の `frontmatter`）は、そのキーの行を持つ（`frontmatterKeyRange`。書き込みが編集する行と同じ答え）。キーの行を読めないときは null である
+- API は値なしを `null` で出す。frontmatter の `key:` も同じである
+
 ### プロパティの値
 
 プロパティの値は `PropertyValues`（`parsing/utils/PropertyValues.ts`）の1か所で `PropertyValue` に読む。`PropertyValue` は型で分かれる判別共用体で、テキスト、数、真偽値（この3つがスカラー）、値なし（`null`）、スカラーのリストのどれかである。スカラーと値なしは `spelling` に行で書く綴りを持ち、型ごとの値（`text`、`number`、`boolean`）を別の欄に持つ。読み手は型の欄を読み、綴りから真偽や数を決め直さない。
@@ -385,7 +401,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
     - それ以外はテキストである。YAML 1.1 の `1_000`、`1,000`、`10:30`、`yes`、`on` もテキストになる。行のリストは入れ子の項目だけで書くので（「プロパティ行」）、`[a, b]`、`a, b`、`[[x]]` もテキストである
     - 値全体を `"` か `'` で囲めば、中身のテキストになる（`"123"`）。エスケープは読まない。全角の引用符と、値の一部だけを囲む引用符は文字のまま残る
 - frontmatter は `fromFrontmatter` で読む。型は YAML のパーサが決めたもので、引用符の付いた `"true"` はテキストである。値の綴りは行がそのまま読み返せる形にする。テキストは行が別の型に読むなら引用符で囲み（`"123"`）、数は YAML が書く形にする（`.inf`、`.nan`）
-    - 値のないキー（`key:`、`key: null`）は、今はプロパティにしない
+    - 値のないキー（`key:`、`key: null`）は、値が null のプロパティである。行の `- key::` と同じく上の層の値を隠す（「継承と値のない値」）。大文字と小文字だけが違うキーとの重複は、値がなくても重複として数える
     - 連想配列の値はプロパティにしない。リストは、スカラーの項目だけを項目にする。値なし、入れ子のリスト、連想配列の項目は読まない。テキストの項目は前後の空白を除き、空なら捨てる
     - 日付のキー（`tv-start` など）も同じ規則で読み、組み込みとして表示の文字から日付を読む。数（`tv-end: 630`）は日付として読めない値で、その層の値にならない
 - 表示は `display` が決める。テキストは引用符を外した中身、数、真偽値、値なしは書かれた綴り（`0x1F`、`True`）、リストは項目の表示を `, ` でつないだものである。カード、ハブ、メニュー、候補はこれを出し、フィルタはこの文字で比べる
@@ -395,7 +411,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - frontmatter として読むのは、YAML が連想配列に読むブロックだけである。Obsidian の metadata worker と同じく、リスト（`- a`）やテキストに読むブロックは frontmatter ではない
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 
-組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず表示の文字（`display`）を読む。引用符で囲んだ `"red"` は `red`、値なしは値を持たない。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。プラグインのキー（`tv-color` など）も、ほかのキーと同じく大文字と小文字を区別しない（「プロパティのキー」）。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` と設定のキーを探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
+組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みの値の読みは `readBuiltin`（`parsing/utils/BuiltinValues.ts`）の1か所にあり、値、値なし、読めない値のどれかを返す（「継承と値のない値」）。値は型によらず表示の文字（`display`）から読み、引用符で囲んだ `"red"` は `red` である。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。プラグインのキー（`tv-color` など）も、ほかのキーと同じく大文字と小文字を区別しない（「プロパティのキー」）。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` と設定のキーを探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
 
 ### Inline child line extraction
 
@@ -432,7 +448,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 
 2つ目以降のブロックは日付ではなく、内容にも入らず、parse-error の診断が付く。最初のブロックの区画が1つでも読めなければ、そのブロックも日付を与えず、parse-error の診断が読めない区画に付く。2つ目以降のブロックを日付に繰り上げることはしない。日付を読まなかったブロックの原文は、書かれた順に `Task.unreadDateBlocks` に残り、`formatTaskLine` が日付のブロックの直後にそのまま書き戻す（issue #198）。位置は本文の途中から日付のブロックの直後へ移る。それでも読み直しで同じブロックが日付になるので、開始日は入れ替わらない。日付の無いタスクでは、残したブロックの先頭がそれだけで日付として読めるときに限り、先に空の `@>`（日付なし）を書く。先頭が読めないブロックなら書かないので、書き戻しで行に `@>` が増えることはない。`shiftLineDates` は読めないブロックをずらさない。
 
-`@` の外の日付も同じ述語で読む。frontmatter と節のプロパティ行（`BuiltinPropertyExtractor`）は読めない値をその層の値とせず、継承の上の層の値になる。行を書き直す書き手は無いので文字は残るが、エディタの診断の経路は無い。Tasks の絵文字の行（`TasksPluginParser`）は読めない日付を欄に入れず、行の持ち主は形で決めたまま、warning の parse-error を付ける（エディタの診断が無いので、error にしてビューから黙って消さない）。式のリテラル（`Lexer`）は `lex.no-such-day` / `lex.no-such-time` の診断になる。
+`@` の外の日付も同じ述語で読む。frontmatter と節のプロパティ行は、読めない値をその層の値とせず、継承の上の層の値になる（`readBuiltin`、「継承と値のない値」）。行を書き直す書き手は無いので文字は残り、節の行には `unreadable-value` の診断が出る。Tasks の絵文字の行（`TasksPluginParser`）は読めない日付を欄に入れず、行の持ち主は形で決めたまま、warning の parse-error を付ける（エディタの診断が無いので、error にしてビューから黙って消さない）。式のリテラル（`Lexer`）は `lex.no-such-day` / `lex.no-such-time` の診断になる。
 
 #### 本文の記法
 
