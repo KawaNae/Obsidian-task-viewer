@@ -2,7 +2,8 @@
  * The hub's custom properties, in the running Dev vault: a value is written
  * back as it is spelled. Editing one property rewrites that line alone, so
  * the other lines keep their spelling (`007`, `True`, `0x1F`, a quoted
- * `"123"`, a line with no value), and a value typed is written as typed.
+ * `"123"`, a line with no value), and a value typed is written as typed. A
+ * value is shown as spelled, a quoted text without its quotes.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
@@ -90,12 +91,12 @@ afterAll(async () => {
 });
 
 describe('the hub writes a custom property back as it is spelled', () => {
-    it('shows a number and a boolean as written', () => {
+    it('shows a number and a boolean as written, and a quoted text without its quotes', () => {
         openHub('親');
         const shown = run<Record<string, string>>(`
-            return JSON.stringify(Object.fromEntries(['n', 'flag', 'hex', 'e', 'memo'].map(k => [k, valueInput(k).value])));
+            return JSON.stringify(Object.fromEntries(['n', 'flag', 'hex', 'id', 'e', 'memo'].map(k => [k, valueInput(k).value])));
         `);
-        expect(shown).toEqual({ n: '007', flag: 'True', hex: '0x1F', e: '', memo: 'a' });
+        expect(shown).toEqual({ n: '007', flag: 'True', hex: '0x1F', id: '123', e: '', memo: 'a' });
     });
 
     it('edits one property, leaving every other line as written', () => {
@@ -107,7 +108,7 @@ describe('the hub writes a custom property back as it is spelled', () => {
     it('writes nothing when a value is left as it is shown', () => {
         openHub('親');
         run(`
-            for (const k of ['n', 'flag', 'hex']) { const input = valueInput(k); type(input, input.value); await leave(input); }
+            for (const k of ['n', 'flag', 'hex', 'id']) { const input = valueInput(k); type(input, input.value); await leave(input); }
             return 'ok';
         `);
         expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
