@@ -3,6 +3,7 @@ import type {
     TextListProperty, DateProperty, DateComparison, LengthComparison,
 } from './FilterTypes';
 import { isDateRange, isFilterCondition, isPresenceOperator } from './FilterTypes';
+import { normalizeColor } from '../../utils/ColorUtils';
 
 /**
  * The tree the engine evaluates, compiled from a FilterState.
@@ -133,10 +134,15 @@ function positiveOf(c: FilterCondition): { atom: FilterAtom; negated: boolean } 
     switch (c.property) {
         case 'file':
         case 'status':
-        case 'color':
         case 'linestyle':
         case 'notation':
             return { atom: { kind: 'textIn', property: c.property, values: c.value ?? [] }, negated };
+        case 'color':
+            // A note's color is read through `normalizeColor` (`#ff0000` is
+            // held as `ff0000`); a condition's is read the same way, so a
+            // color given with its `#` (the API's `color=`, a filter file)
+            // names the one a note gives with it.
+            return { atom: { kind: 'textIn', property: c.property, values: (c.value ?? []).map(normalizeColor) }, negated };
         case 'tag': {
             const tags = c.value ?? [];
             if (c.operator === 'equals') return { atom: { kind: 'tagIs', tags }, negated };
