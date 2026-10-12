@@ -244,7 +244,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskRenderOrder** | `services/display/TaskRenderOrder.ts` | The canonical order of each section's bucket, which every view draws in; a tie goes by where the task is written (file, then line as a number, then ID). See "Canonical order within a section" |
 | **ViewExporter** | `services/export/ViewExporter.ts` | Clones a view's container, grows what scrolls (each view's `ExportTargetSpec` in `ExportRegistry`) and captures it as a PNG |
 | **ExportSave** | `services/export/ExportSave.ts` | Where an export is saved and saving it, for the view menu and the CLI alike: `exportFolderOf(settings, override?)` (the folder asked for, else the setting, else `DEFAULT_SETTINGS.exportFolder`), `saveExportImage` (a vault-relative folder through the vault, an absolute one through Node's `fs`, desktop only) |
-| **PropertyValues** | `services/parsing/utils/PropertyValues.ts` | The one reading of a property's value (`PropertyValue`): `fromText` for a line, `fromYaml` / `fromFrontmatter` for the frontmatter; see "プロパティの値" |
+| **PropertyValues** | `services/parsing/utils/PropertyValues.ts` | The one reading of a property's value (`PropertyValue`): `fromText` for a line, `fromYaml` / `fromFrontmatter` for the frontmatter, `display` for what is shown and compared, `spelling` for what a line writes; see "プロパティの値" |
 | **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
 | **NoteSections** | `services/parsing/tree/NoteSections.ts` | A note's sections from `outline.headings`, each with its own property lines (the section scope of the cascade) |
@@ -331,15 +331,26 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 
 ### プロパティの値
 
-プロパティの値は `PropertyValues`（`parsing/utils/PropertyValues.ts`）の1か所で `PropertyValue` に読む。`PropertyValue` は型で分かれる判別共用体で、`value` に書かれたとおりの綴りを持ち、型ごとの値（`number`、`boolean`、`items`）を別の欄に持つ。書き戻しは `value` を書くので、利用者の綴りは変わらない。読み手は型の欄を読み、`value` から真偽や数を決め直さない。
+プロパティの値は `PropertyValues`（`parsing/utils/PropertyValues.ts`）の1か所で `PropertyValue` に読む。`PropertyValue` は型で分かれる判別共用体で、テキスト、数、真偽値（この3つがスカラー）、値なし（`null`）、スカラーのリストのどれかである。スカラーと値なしは `spelling` に行で書く綴りを持ち、型ごとの値（`text`、`number`、`boolean`）を別の欄に持つ。読み手は型の欄を読み、綴りから真偽や数を決め直さない。
 
-- 行の値（`- key:: value`、節の `- properties::` の項目、ハブの入力）は `fromText` で読む。数は数字と小数、配列は `[` `]` の中か `,` 区切り、ほかは文字列である
-- 真偽値の綴りは `true` `True` `TRUE` `false` `False` `FALSE` の6つだけで、Obsidian の YAML と同じである。`tRue`、`yes`、`on` は文字列、`1` は数である
-- frontmatter は `fromFrontmatter` で読む。型は YAML のパーサが決めたもので、引用符の付いた `"true"` は文字列である。日付のキー（`tv-start` など）の値は、ここで日付の文字列にする（`normalizeYamlDate`）。YAML の `Date` は日付（0:00 でなければ時刻も）に、0 以上 1440 未満の数は一日の分として時刻にし（`tv-end: 630` は `10:30`）、ほかの数は値にしない。Obsidian の `parseYaml` は YAML 1.2 で読み、`10:30` を文字列で返すので、数になるのは `630` のように数で書いた値である
+- 行の値（`- key:: value`、節の `- properties::` の項目、ハブの入力）は `fromText` で読む。型は、同じ綴りを引用符なしの YAML 1.2 の core スキーマ（Obsidian が frontmatter を読む規則）が読む型である
+    - 数: `-5`、`+5`、`.5`、`5.`、`1e3`、`0x1F`、`0o17`、`.inf`、`-.inf`、`.nan`。`017` は10進の 17
+    - 真偽値: `true` `True` `TRUE` と、その false の3つ
+    - 値なし: 空、`null` `Null` `NULL`、`~`
+    - それ以外はテキストである。YAML 1.1 の `1_000`、`1,000`、`10:30`、`yes`、`on` もテキストになる。行はリストを書かないので、`[a, b]`、`a, b`、`[[x]]` もテキストである
+    - 値全体を `"` か `'` で囲めば、中身のテキストになる（`"123"`）。エスケープは読まない。全角の引用符と、値の一部だけを囲む引用符は文字のまま残る
+- frontmatter は `fromFrontmatter` で読む。型は YAML のパーサが決めたもので、引用符の付いた `"true"` はテキストである。値の綴りは行がそのまま読み返せる形にする。テキストは行が別の型に読むなら引用符で囲み（`"123"`）、数は YAML が書く形にする（`.inf`、`.nan`）
+    - 値のないキー（`key:`、`key: null`）は、今はプロパティにしない
+    - 連想配列の値はプロパティにしない。リストは、スカラーの項目だけを項目にする。値なし、入れ子のリスト、連想配列の項目は読まない。テキストの項目は前後の空白を除き、空なら捨てる
+    - 日付のキー（`tv-start` など）も同じ規則で読み、組み込みとして表示の文字から日付を読む。数（`tv-end: 630`）は日付として読めない値で、その層の値にならない
+- 表示は `display` が決める。テキストは引用符を外した中身、数、真偽値、値なしは書かれた綴り（`0x1F`、`True`）、リストは項目の表示を `, ` でつないだものである。カード、ハブ、メニュー、候補はこれを出し、フィルタはこの文字で比べる
+- 書き戻しは `spelling` を書くので、利用者の綴りは変わらない。ハブとプランナーは綴りで差を取る。行はまだリストを書かないので、リストの綴りは項目の綴りを `, ` でつないだもの（行は1つのテキストに読む）である
+- API は型どおりに出す。数は `number`、値なしは `null`、リストは項目ごとに同じ型の配列である。CLI の出力は、JSON の数で書けない数を YAML の綴りの文字列（`".inf"`）にする
 - `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
+- frontmatter として読むのは、YAML が連想配列に読むブロックだけである。Obsidian の metadata worker と同じく、リスト（`- a`）やテキストに読むブロックは frontmatter ではない
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 
-組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず `value` を読む。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。大文字と小文字を区別しないのは Obsidian のキーである `tags` だけで、プラグインのキー（`tv-color` など）は設定の綴りのとおりに読む。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` を探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。どちらの層かは入口が決める。
+組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず表示の文字（`display`）を読む。引用符で囲んだ `"red"` は `red`、値なしは値を持たない。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。大文字と小文字を区別しないのは Obsidian のキーである `tags` だけで、プラグインのキー（`tv-color` など）は設定の綴りのとおりに読む。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` を探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。どちらの層かは入口が決める。
 
 ### Inline child line extraction
 
@@ -390,7 +401,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - 大文字と小文字は区別しない。`a/b` は `a` の下のタグである。候補は `getTags()` と同じく1つにまとめ、親のタグも入れる。綴りは最も多く書かれたもの（下のタグの分を含む）、同数なら先に出たものを選ぶ
 - 書く側: ハブのタグ欄はタグの語にならない語を拒む（`chars` か `digitsOnly`）。`tags::` の行は常に `#a #b` で書く
 
-リンクの正規表現は同じ断片（`WIKILINK_SOURCE`、`MARKDOWN_LINK_SOURCE`）から組む。使う所は `ChildLineClassifier` の wikilink の子行と配列の項目、`NoteName`、カードの埋め込みの除去（`withoutEmbeds`）である。wikilink の中身は `[` `]` と改行を含まない。
+リンクの正規表現は同じ断片（`WIKILINK_SOURCE`、`MARKDOWN_LINK_SOURCE`）から組む。使う所は `ChildLineClassifier` の wikilink の子行、`NoteName`、カードの埋め込みの除去（`withoutEmbeds`）である。wikilink の中身は `[` `]` と改行を含まない。
 
 #### ChildLine.bodyLine のセマンティクス
 

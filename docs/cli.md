@@ -403,6 +403,8 @@ def	Review	x	2026-03-14
 
 値の中のタブと改行は空白で書きます。`tags` と `childIds` は `;` でつなぎ、`properties` は json と同じ値を JSON で書きます（`{"area":"lab","n":3}`）。
 
+json、jsonl、tsv のどれでも、JSON の数で書けない `properties` の数（無限大と NaN）は、YAML の綴りの文字列で書きます（`".inf"`、`"-.inf"`、`".nan"`）。`null` は値のないプロパティです。
+
 **jsonl**:
 ```
 {"id":"abc","content":"Meeting","status":" ","startDate":"2026-03-15"}
