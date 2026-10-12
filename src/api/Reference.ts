@@ -289,7 +289,7 @@ export const FILTER_VALUE_DOC = {
     notation: '"value": ["taskviewer" | "tasks" | "dayplanner"]',
     parent: 'no value',
     children: 'no value — child tasks only (plain checkbox lines and links are not)',
-    property: '"key": "priority", "value": "high" — equals is exact, contains any case',
+    property: '"key": "priority", "value": "high" — the key in any case; the value typed as a property line types it ("123" in quotes is text): numbers and booleans compared as values, texts in any case, a number\'s contains in its spelling, a list item by item; isNotSet: no value or no key',
 } as const satisfies Record<FilterProperty, string>;
 
 // ── Shared sections ──

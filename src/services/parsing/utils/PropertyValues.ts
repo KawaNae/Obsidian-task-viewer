@@ -52,7 +52,7 @@ export const PropertyValues = {
      * read). Anything else is text, `[a, b]` and `[[x]]` included: a line
      * writes no list in brackets.
      */
-    fromText(spelling: string): PropertyValue {
+    fromText(spelling: string): PropertyScalar | Extract<PropertyValue, { type: 'null' }> {
         if (isQuoted(spelling)) return { type: 'text', text: spelling.slice(1, -1), spelling };
         if (NULL_SPELLING.test(spelling)) return { type: 'null', spelling };
         const boolean = BOOLEAN_SPELLINGS.get(spelling);
@@ -106,7 +106,8 @@ export const PropertyValues = {
      * The value as a card, the hub and a list of candidates show it: a text
      * without the quotes it was written in, a number and a boolean as spelled
      * (`0x1F`, `True`), no value as spelled (empty for `- key::`), and a
-     * list's items shown so, joined by `, `. A filter compares this text.
+     * list's items shown so, joined by `, `. A filter's `contains` looks in
+     * a number's and a boolean's text so (`PropertyMatch`).
      */
     display(value: PropertyValue): string {
         switch (value.type) {

@@ -113,4 +113,24 @@ export class FilterValueCollector {
         }
         return Array.from(set).sort();
     }
+
+    /**
+     * The values a property condition on `key` can be given to find the
+     * tasks that show them, its case aside: each item of a list on its own,
+     * as a condition compares a list item by item (`PropertyMatch`), and no
+     * value left out, as `isNotSet` finds it, not a value.
+     */
+    static collectPropertyItemsForKey(tasks: Task[], key: string): string[] {
+        if (!key) return [];
+        const set = new Set<string>();
+        for (const task of tasks) {
+            const value = PropertyKey.get(getEffectiveProperties(task), key)?.value;
+            if (!value || value.type === 'null') continue;
+            for (const item of value.type === 'list' ? value.items : [value]) {
+                const shown = PropertyValues.display(item);
+                if (shown !== '') set.add(shown);
+            }
+        }
+        return Array.from(set).sort();
+    }
 }
