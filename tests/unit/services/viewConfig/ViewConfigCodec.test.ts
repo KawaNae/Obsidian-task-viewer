@@ -280,7 +280,7 @@ describe('ViewConfigCodec', () => {
         });
 
         it('int reads typed text as the input codec does: space around it and full-width digits', () => {
-            // Stage 7, input decision C: a URI carries text a person typed.
+            // A URI carries text a person typed.
             expect(codec.fromUriParams({ span: ' 5 ' }).span).toBe(5);
             expect(codec.fromUriParams({ span: '１２' }).span).toBe(12);
             expect(codec.parseConfig({ span: ' 5 ' }).span).toBe(5);

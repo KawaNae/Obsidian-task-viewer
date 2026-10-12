@@ -68,7 +68,7 @@ function readTestFile(): string {
     return fs.readFileSync(vaultAbsolute(TEST_FILE), 'utf-8');
 }
 
-/** The lines of the test file's `## Done` section: where a move takes a row (F8, within its note). */
+/** The lines of the test file's `## Done` section: where a move takes a row, within its note. */
 function doneSection(): string[] {
     const lines = readTestFile().split(/\r?\n/);
     return lines.slice(lines.indexOf('## Done') + 1);

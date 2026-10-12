@@ -5,7 +5,7 @@ import { targetOf, type TimerState } from './TimerState';
 
 /**
  * Whether the open timers let rows go to a note (the send operation,
- * `NoteOps.send`; `archive/2026-09-send.md`, 開いているタイマー). A timer finds its lines by their
+ * `NoteOps.send`). A timer finds its lines by their
  * `^id`s in its note (`file`), so a send that carries them away must
  * take the timer along, and one that would leave it without its lines is
  * not made.

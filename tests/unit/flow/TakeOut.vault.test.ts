@@ -3,6 +3,7 @@ import { Notice } from 'obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
+import { byKey } from '../helpers/properties';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
@@ -17,8 +18,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  *
  * Taken out alone, the line left its child standing under the task, too deep
  * for the task's item: Obsidian reads it as a paragraph going on, and so does
- * the outline, and the child's task and ID were gone (the L2 counterexample
- * run, PR3 and SF1).
+ * the outline, and the child's task and ID were gone.
  */
 
 const FILE = 'note.md';
@@ -59,7 +59,8 @@ describe('a property line deleted', () => {
 
         expect(contents.get(FILE)).toBe(before);
         expect(session.index.getTask(sub)?.content).toBe('sub');
-        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedDisturbs'), subject: 'T' })]);
+        // A line under a value is a finding of the property's block, which no write goes over.
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedProperty', { key: 'memo', line: 4 }), subject: 'T' })]);
     });
 
     it('is taken out when it stands alone', async () => {
@@ -69,6 +70,25 @@ describe('a property line deleted', () => {
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] T', '\t- [ ] sub', '- [ ] U', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
+    });
+});
+
+describe('a list\'s line', () => {
+    it('is taken out with its items', async () => {
+        const { contents, session } = await open(['# note', '- [ ] T', '\t- memo::', '\t\t- a', '\t\t- b', '\t- [ ] sub', '- [ ] U', '']);
+        await deleteMemo(session);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] T', '\t- [ ] sub', '- [ ] U', ''].join('\n'));
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('takes a value as its items, reordered as written', async () => {
+        const { contents, session } = await open(['# note', '- [ ] T', '\t- memo::', '\t\t- a', '\t\t- b', '- [ ] U', '']);
+        const task = session.index.getTask(idOf(session, 'T'))!;
+        const memo = task.properties.memo.value;
+        if (memo.type !== 'list') throw new Error('no list');
+        await session.ops.updateTask(task.id, { properties: { memo: { key: 'memo', value: { type: 'list', items: [...memo.items].reverse() } } } });
+        await session.settle(FILE);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] T', '\t- memo::', '\t\t- b', '\t\t- a', '- [ ] U', ''].join('\n'));
     });
 });
 
@@ -106,12 +126,12 @@ describe('a property line added after one with a child', () => {
         const { contents, session } = await open(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '- [ ] U', '']);
 
         await session.ops.updateTask(idOf(session, 'T'),
-            { properties: { memo: { value: 'a', type: 'string' }, k2: { value: 'z', type: 'string' } } } as never);
+            { properties: byKey({ memo: { type: 'text', text: 'a', spelling: 'a' }, k2: { type: 'text', text: 'z', spelling: 'z' } }) } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k2:: z', '- [ ] U', '']);
 
         const before = contents.get(FILE)!;
-        await session.ops.updateTask(idOf(session, 'T'), { properties: { k2: { value: 'z', type: 'string' } } } as never);
+        await session.ops.updateTask(idOf(session, 'T'), { properties: byKey({ k2: { type: 'text', text: 'z', spelling: 'z' } }) } as never);
         await session.settle(FILE);
         expect(contents.get(FILE)).toBe(before);
     });
@@ -131,7 +151,7 @@ describe('a child written under a task with no children', () => {
 
 describe('a line with a note bullet below it', () => {
     // The note goes under the task: no task, command or property changes
-    // (the fourth L2 counterexample run, U1 and U2). Refused, the series
+    // Refused, the series
     // stopped when a `==>` line had a word of explanation under it.
     it('is stripped by a fire, and the series goes on', async () => {
         const { contents, session } = await open(['# note', '- [ ] T @2026-09-21', '  - ==> every mon', '    - why weekly', '- [ ] U', '']);
@@ -145,13 +165,14 @@ describe('a line with a note bullet below it', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('is deleted as a property line, the note going under the task', async () => {
+    it('is not deleted as a property line: a note under a value is a finding of its block', async () => {
         const { contents, session } = await open(['# note', '- [ ] T', '  - memo:: a', '    - detail', '- [ ] U', '']);
+        const before = contents.get(FILE)!;
 
         await deleteMemo(session);
 
-        expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', '    - detail', '- [ ] U', '']);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(before);
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedProperty', { key: 'memo', line: 4 }), subject: 'T' })]);
     });
 });
 

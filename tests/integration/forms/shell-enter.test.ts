@@ -1,5 +1,5 @@
 /**
- * The overlay's rules and the form's Enter (段10a), in the running Dev
+ * The overlay's rules and the form's Enter, in the running Dev
  * vault: every overlay keeps Obsidian's hotkeys from the note behind and
  * holds the focus from the moment it opens, and an Enter an IME commits a
  * conversion with, or one an open list takes, is not the form's.

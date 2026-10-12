@@ -104,7 +104,7 @@ describe('a completion made in the editor', () => {
     });
 });
 
-describe('a transaction that completes rows, some of whose fires cannot be written (R1)', () => {
+describe('a transaction that completes rows, some of whose fires cannot be written', () => {
     // 対象's `==>` line is a child of its own child's line: the next instance
     // cannot be written without changing what `sub` is, and is refused.
     const refused = ['- [ ] 対象 @2026-09-21', '\t- ==> every mon', '\t\t- [ ] sub'];

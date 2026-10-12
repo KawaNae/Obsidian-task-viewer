@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { resolveFields, pickFields, formatOutput, cliOk, cliError } from '../../../src/cli/CliOutputFormatter';
+import { resolveFields, pickFields, formatOutput, formatSingleTask, cliOk, cliError } from '../../../src/cli/CliOutputFormatter';
 import { taskToRecord } from '../../../src/api/TaskNormalizer';
 import { normalizeTask } from '../../../src/api/TaskNormalizer';
 import { makeTask } from '../helpers/makeTask';
 import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
+import { byKey } from '../helpers/properties';
 
 /** No row answers to a name: every ID goes out as it is. */
 const noRow = () => undefined;
@@ -100,11 +101,47 @@ describe('CliOutputFormatter', () => {
         });
 
         it('keeps a tsv row on one line when the content holds U+2028 or U+2029', () => {
-            // A note keeps them inside a line (L1), but a reader of tsv may
+            // A note keeps them inside a line, but a reader of tsv may
             // split its rows there, as at a newline.
             const content = ['a', 'b', 'c'].join(String.fromCharCode(0x2028)) + String.fromCharCode(0x2029) + 'd';
             const row = formatOutput([makeNormalized({ content })], 'tsv', ['content']).split('\n')[1];
             expect(row).toBe('a b c d');
+        });
+
+        it('writes properties in a tsv cell as the JSON the json format holds for them', () => {
+            const task = makeNormalized({
+                properties: byKey({
+                    area: PropertyValues.fromText('lab'),
+                    n: PropertyValues.fromText('3'),
+                    who: PropertyValues.fromYaml(['a', 'b'])!,
+                }),
+            });
+            const row = formatOutput([task], 'tsv', ['properties']).split('\n')[1];
+            expect(row).toBe('{"area":"lab","n":3,"who":["a","b"]}');
+            expect(JSON.parse(row)).toEqual(JSON.parse(formatOutput([task], 'json', ['properties'])).tasks[0].properties);
+            expect(formatSingleTask(task, 'tsv', ['properties']).split('\n')[1]).toBe(row);
+        });
+
+        it('writes a number JSON cannot write as its YAML spelling, and no value as null', () => {
+            const task = makeNormalized({
+                properties: byKey({
+                    inf: PropertyValues.fromText('.inf'),
+                    neg: PropertyValues.fromText('-.Inf'),
+                    nan: PropertyValues.fromText('.nan'),
+                    list: PropertyValues.fromYaml([1, Infinity])!,
+                    none: PropertyValues.fromText(''),
+                    hex: PropertyValues.fromText('0x1F'),
+                }),
+            });
+            const expected = { inf: '.inf', neg: '-.inf', nan: '.nan', list: [1, '.inf'], none: null, hex: 31 };
+            expect(JSON.parse(formatOutput([task], 'json', ['properties'])).tasks[0].properties).toEqual(expected);
+            expect(JSON.parse(formatOutput([task], 'tsv', ['properties']).split('\n')[1])).toEqual(expected);
+        });
+
+        it('keeps a tsv row on one line when a property value holds a tab or a line break', () => {
+            const task = makeNormalized({ properties: byKey({ note: PropertyValues.fromYaml('a\tb\nc')! }) });
+            const row = formatOutput([task], 'tsv', ['properties']).split('\n')[1];
+            expect(JSON.parse(row)).toEqual({ note: 'a\tb\nc' });
         });
 
         it('formats as jsonl with one line per task', () => {
@@ -162,11 +199,11 @@ describe('CliOutputFormatter', () => {
 describe('boolean properties (TaskNormalizer)', () => {
     it('reads true whether a property line spells it True or frontmatter reads it back as true', () => {
         const normalized = makeNormalized({
-            properties: {
+            properties: byKey({
                 line: PropertyValues.fromText('True'),
                 front: PropertyValues.fromYaml(true)!,
                 off: PropertyValues.fromText('false'),
-            },
+            }),
         });
         expect(normalized.properties).toMatchObject({ line: true, front: true, off: false });
     });

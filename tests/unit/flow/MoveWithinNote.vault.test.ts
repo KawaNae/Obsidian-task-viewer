@@ -9,13 +9,13 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { SectionSide } from '../../../src/services/persistence/utils/Placement';
 
 /**
- * A move stays in its note (F8, the decision of 2026-09-26): `move([[#name]])`
+ * A move stays in its note: `move([[#name]])`
  * carries the completed row and its subtree to that heading's section, at
- * the side the settings say (`sectionSide`, the head unless set; the
- * decision of 2026-09-28). A heading that is not there, or is there twice,
+ * the side the settings say (`sectionSide`, the head unless
+ * set). A heading that is not there, or is there twice,
  * fires nothing: the completion is written, the command stays, and the user
  * is told. A move that names no heading of the note — another note, or
- * nothing at all, `move()` — is a syntax error (2026-10-01): the command does
+ * nothing at all, `move()` — is a syntax error: the command does
  * not read, so nothing fires and nothing is said; the editor marks it. The
  * same on every path that completes a row — a card, the API, the editor.
  */
@@ -168,15 +168,14 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
 
 /**
  * A heading is a bound of the note's structure as an item is: a write puts
- * no line past one, and leaves every one reading as it did (F8's
- * counterexample run, R1 and R2). A move that would is refused, the
- * completion written alone and the command kept, and the user is told.
+ * no line past one, and leaves every one reading as it did. A move that
+ * would is refused, the completion written alone and the command kept, and the user is told.
  */
 describe.each<Path>(['card', 'api', 'editor'])('a move and the headings around it, from the %s', (path) => {
     it.each([
-        ['an indented heading just below an empty section (R1)', ['## Log', '   ## Next', '- [x] b']],
-        ['a setext heading just below an empty section (R1)', ['## Log', 'Next', '----']],
-        ['an indented heading below the section\'s paragraph (R1)', ['## Log', 'words', '', '  ## Next']],
+        ['an indented heading just below an empty section', ['## Log', '   ## Next', '- [x] b']],
+        ['a setext heading just below an empty section', ['## Log', 'Next', '----']],
+        ['an indented heading below the section\'s paragraph', ['## Log', 'words', '', '  ## Next']],
     ])('does not carry the row past %s', async (_name, below) => {
         const lines = ['# note', '- [ ] A ==> move([[#Log]])', ...below, ''];
         expect(await complete(lines, 1, 'A', path)).toEqual(['# note', '- [x] A ==> move([[#Log]])', ...below, '']);
@@ -186,8 +185,8 @@ describe.each<Path>(['card', 'api', 'editor'])('a move and the headings around i
     });
 
     it.each([
-        ['a paragraph and a rule become a setext heading (R2)', ['Para', '- [ ] A ==> move([[#Done]])', '---', '## Done'], 2],
-        ['an indented heading goes into the item above (R2)', ['1. [x] Z', '  1. [ ] A ==> move([[#Done]])', '   # H', '## Done'], 2],
+        ['a paragraph and a rule become a setext heading', ['Para', '- [ ] A ==> move([[#Done]])', '---', '## Done'], 2],
+        ['an indented heading goes into the item above', ['1. [x] Z', '  1. [ ] A ==> move([[#Done]])', '   # H', '## Done'], 2],
     ])('does not take the row out when %s', async (_name, note, line) => {
         const lines = ['# note', ...note, ''];
         const expected = lines.map(text => text.replace('[ ] A', '[x] A'));
@@ -198,7 +197,7 @@ describe.each<Path>(['card', 'api', 'editor'])('a move and the headings around i
     });
 });
 
-describe('a parent\'s move and a child\'s fire in one editor transaction (R10 within a note)', () => {
+describe('a parent\'s move and a child\'s fire in one editor transaction', () => {
     const PARENT = '- [ ] P @2026-09-21 ==> move([[#Done]])';
 
     async function both(child: string, headings: string[] = [], side: SectionSide = 'end'): Promise<{ lines: string[]; fired: string[] }> {

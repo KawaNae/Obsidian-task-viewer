@@ -3,7 +3,8 @@ import { composingIn, isFormEnter } from '../modals/form/formEnter';
 
 /**
  * Obsidian's input suggest, as every list of candidates under a field of
- * ours is shown (段10f, 論点5, 論点A). It behaves as Obsidian's lists do:
+ * ours is shown, so that a field's list and the editor's own behave alike.
+ * It behaves as Obsidian's lists do:
  * the first item is selected as the list opens, an Enter puts the selected
  * item in, an Escape closes the list alone; a value that is no item is
  * put in by closing the list (Escape) and pressing Enter.

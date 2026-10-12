@@ -1,9 +1,10 @@
 import type { ParserId, Task, ScopeKeys } from '../../../types';
 import { isTvInline } from '../../../types';
-import { SCALAR_FIELDS, type ScalarField, type SectionNode } from './Sections';
+import { SCALAR_FIELDS, type ResolvedSources, type ScalarField, type SectionNode } from './Sections';
 import { NoteSections } from './NoteSections';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
+import { PropertyLines } from '../utils/PropertyLines';
 import { TagExtractor } from '../utils/TagExtractor';
 import type { ParserChain } from '../strategies/ParserChain';
 import { readFlow } from '../utils/FlowLineScanner';
@@ -65,14 +66,16 @@ export class NoteTasks {
      *   code stays a child line (it goes with the row verbatim) and is never
      *   read as notation.
      * - Its properties are those of its own property lines
-     *   (`ChildLineClassifier.ownPropertyLines`), the lines the writer edits.
+     *   (`PropertyLines.ofTask`), the lines the writer edits, as they read
+     *   (`PropertyLines.read`: no date key, no key written twice), and what
+     *   is wrong with them goes to `propertyFindings`.
      * - What its section gives it goes to `cascadeContext`, beside what the
-     *   row says itself (`getEffective*` puts the two together).
+     *   row says itself (`getEffective*` puts the two together), and where
+     *   each value of it came from to `inheritedFrom`.
      */
     static extract(outline: OutlineReading, sections: readonly SectionNode[], ctx: TaskExtractionContext): Task[] {
         const rows = new Map<number, Task>();
-        for (let line = outline.bodyStart; line < outline.lines.length; line++) {
-            if (!TaskLineClassifier.opensTask(outline, line)) continue;
+        for (const line of this.taskLines(outline)) {
             // The chain ends in tv-inline, which reads every task line: no
             // line that opens a task is refused.
             const read = ctx.parsers.parse(outline.lines[line], ctx.filePath, line);
@@ -89,6 +92,15 @@ export class NoteTasks {
             this.fill(task, outline, NoteSections.at(sections, line)!, rows, ctx.scopeKeys);
         }
         return [...rows.values()];
+    }
+
+    /** The lines of the note's body that open a task (`TaskLineClassifier.opensTask`), top to bottom: each is a row. */
+    static taskLines(outline: OutlineReading): number[] {
+        const lines: number[] = [];
+        for (let line = outline.bodyStart; line < outline.lines.length; line++) {
+            if (TaskLineClassifier.opensTask(outline, line)) lines.push(line);
+        }
+        return lines;
     }
 
     /** What the row reads of the lines under it and of its section. */
@@ -113,11 +125,9 @@ export class NoteTasks {
 
         task.childLines = this.childLines(outline, line, rows, flow?.childSegments.map(segment => segment.bodyLine) ?? []);
 
-        const own = new Set(ChildLineClassifier.ownPropertyLines(outline, line));
-        const extracted = BuiltinPropertyExtractor.extract(
-            ChildLineClassifier.collectProperties(task.childLines.filter(child => own.has(child.bodyLine))),
-            keys,
-        );
+        const reading = PropertyLines.read(PropertyLines.ofTask(outline, line), keys);
+        const extracted = BuiltinPropertyExtractor.extract(reading.values, keys);
+        if (reading.findings.length > 0) task.propertyFindings = reading.findings;
         // Raw is the row's own say: its property lines and its content's tags.
         task.properties = extracted.properties;
         task.color = extracted.color;
@@ -126,23 +136,28 @@ export class NoteTasks {
         if (extracted.tags && extracted.tags.length > 0) task.tags = TagExtractor.merge(extracted.tags, task.tags);
 
         // What the section gives. Dates and style are the section's only
-        // where the row says none (they override); tags and properties go
-        // through in part (a union; child-wins per key), so they are kept
+        // where the row says nothing of them (they override, and a style the
+        // row says it has none of hides the section's); tags and properties
+        // go through in part (a union; child-wins per key), so they are kept
         // whole.
         const cc = this.inheritance(section);
-        for (const field of SCALAR_FIELDS) if (task[field]) delete cc[field];
+        // A row says a field with a value, or with none (null); an empty
+        // date is a line with no `@` block, which says none of them.
+        for (const field of SCALAR_FIELDS) if (task[field] !== undefined && task[field] !== '') delete cc[field];
         if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+        if (hasSources(section.resolvedSources)) task.inheritedFrom = section.resolvedSources;
     }
 
     /**
      * What a row standing in `section` inherits of it, the row saying
-     * nothing itself: every value the section resolves to. A row that says
+     * nothing itself: every value the section resolves to. A built-in the
+     * section hides with no value is none to inherit. A row that says
      * a date or a style itself keeps its own (`fill`); a row not yet
      * written (the create dialog's) is shown what it would inherit.
      */
     static inheritance(section: SectionNode): NonNullable<Task['cascadeContext']> {
         const cc: NonNullable<Task['cascadeContext']> = {};
-        const given: Record<ScalarField, string | undefined> = {
+        const given: Record<ScalarField, string | null | undefined> = {
             startDate: section.resolvedStartDate,
             startTime: section.resolvedStartTime,
             endDate: section.resolvedEndDate,
@@ -190,4 +205,9 @@ export class NoteTasks {
         }
         return ChildLineClassifier.classifyLines(texts, numbers);
     }
+}
+
+/** Whether a section's sources name any layer: a value, or no value, said above the row. */
+function hasSources(sources: ResolvedSources): boolean {
+    return Object.keys(sources.fields).length > 0 || sources.tags.length > 0 || Object.keys(sources.properties).length > 0;
 }

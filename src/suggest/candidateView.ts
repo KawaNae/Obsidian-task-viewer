@@ -4,8 +4,8 @@ import type { LinkTagCandidate } from './LinkTagCandidates';
 import type { NoteCandidate } from './NoteCandidates';
 
 /**
- * A candidate as Obsidian draws one in its `[[` list
- * (`note-suggest/candidates.md`, 描き方): an item of `mod-complex`, whose
+ * A candidate as Obsidian draws one in its `[[` list: an item of
+ * `mod-complex`, whose
  * `suggestion-content` holds the title and, under it, a note (a folder,
  * here), and whose `suggestion-aux` holds a mark (an alias's icon, a
  * heading's level). The ranges

@@ -1,9 +1,11 @@
 import { stringifyYaml } from 'obsidian';
-import type { PropertyValue, TaskViewerSettings } from '../../types';
+import type { PropertyScalar, PropertyValue, TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { ValueSource } from '../parsing/tree/Sections';
 import { NoteSections } from '../parsing/tree/NoteSections';
-import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
+import { PropertyValues } from '../parsing/utils/PropertyValues';
+import type { PropertyLine } from '../parsing/utils/PropertyLines';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
 
 /**
@@ -35,8 +37,8 @@ const OBSIDIAN_KEYS: ReadonlySet<string> = new Set(['aliases', 'alias', 'cssclas
  * record (`SectionNode.resolvedSources`); this only says it again:
  *
  * - A key one layer sets is said as that layer said it. The frontmatter's
- *   lines go as they are: the resolved value is normalized (a list
- *   joined), and the lines keep what it lost. A property line's value is
+ *   lines go as they are: the resolved value is normalized (a number's
+ *   spelling, a comment), and the lines keep what it lost. A property line's value is
  *   said in the YAML of the type the line gave it
  *   (`PropertyValues.fromText`), so the frontmatter reads back the
  *   same type (`propertyYaml`); the plugin's own keys (color, line style,
@@ -58,19 +60,22 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     const keys = settings.scopeKeys;
     const { fields, tags, properties } = section.resolvedSources;
     const fmEnd = FrontmatterLineEditor.findEnd(lines);
+    const propertyLines = new Map<number, PropertyLine>();
+    for (const node of NoteSections.all(read.sections)) for (const line of node.properties.lines) propertyLines.set(line.line, line);
     const out: InheritedValue[] = [];
     const push = (key: string, yaml: readonly string[], from: readonly ValueSource[]) => {
-        out.push({ key, yaml, from, obsidian: OBSIDIAN_KEYS.has(key) });
+        out.push({ key, yaml, from, obsidian: OBSIDIAN_KEYS.has(PropertyKey.fold(key)) });
     };
     /**
      * A key one layer set, said as that layer said it: a property line's
-     * value as `typed` says it, or else as a string.
+     * value as `typed` says it, or else as a string; no value as no value.
      */
     const asWritten = (key: string, from: ValueSource, typed?: PropertyValue) => {
         if (from.kind === 'section') {
-            push(key, typed
-                ? propertyYaml(key, typed)
-                : [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(propertyValueAt(lines, from.line))}`], [from]);
+            const written = typed ?? propertyLines.get(from.line)!.value;
+            push(key, typed || written.type === 'null'
+                ? propertyYaml(key, written)
+                : [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(PropertyValues.display(written))}`], [from]);
             return;
         }
         const range = FrontmatterLineEditor.findKeyRange(lines, fmEnd, key);
@@ -78,10 +83,18 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
         push(key, written ?? stringifyYaml({ [key]: read.frontmatter?.[key] }).trimEnd().split('\n'), [from]);
     };
 
-    const when = (key: string, date: string | undefined, time: string | undefined, sources: readonly (ValueSource | undefined)[]) => {
-        const value = date && time ? `${date}T${time}` : date ?? time;
-        if (value === undefined) return;
-        push(key, [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(value)}`], distinct(sources));
+    /**
+     * A date key put together from its date and time. A key whose date and
+     * time a layer hides with no value goes as no value is said of a
+     * property line (`propertyYaml`).
+     */
+    const when = (key: string, date: string | null | undefined, time: string | null | undefined, sources: readonly (ValueSource | undefined)[]) => {
+        const value = date && time ? `${date}T${time}` : date || time;
+        if (value) {
+            push(key, [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(value)}`], distinct(sources));
+        } else if (date === null) {
+            push(key, propertyYaml(key, NO_VALUE), distinct(sources));
+        }
     };
     when(keys.start, section.resolvedStartDate, section.resolvedStartTime, [fields.startDate, fields.startTime]);
     when(keys.end, section.resolvedEndDate, section.resolvedEndTime, [fields.endDate, fields.endTime]);
@@ -92,40 +105,67 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     if (fields.mask) asWritten(keys.mask, fields.mask);
 
     if (section.resolvedTags && section.resolvedTags.length > 0) {
-        push('tags', ['tags:', ...section.resolvedTags.map(tag => `  - ${FrontmatterLineEditor.escapeYamlScalar(tag)}`)], tags);
+        push('tags', ['tags:', ...section.resolvedTags.map(tag => `  - ${FrontmatterLineEditor.escapeYamlScalar(tag)}`)], tags.map(layer => layer.from));
     }
 
-    for (const [key, value] of Object.entries(section.resolvedProperties)) {
-        const from = properties[key];
+    // Each key as the layer that won it writes it: the frontmatter's line is found by it.
+    for (const [folded, { key, value }] of Object.entries(section.resolvedProperties)) {
+        const from = properties[folded];
         if (from) asWritten(key, from, value);
     }
     return out;
 }
 
-/** The value a section's property line says, as the sections read it (`NoteSections`). */
-function propertyValueAt(lines: readonly string[], line: number): string {
-    return lines[line].match(ChildLineClassifier.PROPERTY_LINE)?.[2].trim() ?? '';
-}
+const NO_VALUE: PropertyValue = { type: 'null', spelling: '' };
 
 /**
  * A property line's value as frontmatter lines the frontmatter reads back
- * as the same type (`PropertyValues.fromYaml`): a number bare, a boolean as
- * the plugin writes a new one (lowercase), an array as a list of its items
- * (which the frontmatter joins back with `, `), a string quoted when it has
- * to be. The text comes back as written but where the YAML type has its
- * own spelling: `True` as `true`, `007` as `7`, `[a,b]` as `a, b`.
+ * as the same type (`PropertyValues.fromYaml`): a number as spelled (every
+ * number a line reads is one YAML reads), a boolean as the plugin writes a
+ * new one (lowercase), a text quoted on the line with its quotes as written
+ * (`"123"`, `'abc'`) and any other text quoted when YAML would read it as
+ * something else (`escapeYamlScalar`), a list as a list of its items. The
+ * text comes back as written but where the YAML type has its own spelling:
+ * `True` as `true`.
+ *
+ * No value, however the line spells it (`- k::`, `- k:: null`, `~`), goes
+ * as the frontmatter's key with no value (`key:`), which hides the value
+ * above it there as the line does here.
  */
 function propertyYaml(key: string, property: PropertyValue): string[] {
     const head = `${yamlKey(key)}:`;
     switch (property.type) {
-        case 'number': return [`${head} ${property.value}`];
-        case 'boolean': return [`${head} ${property.boolean}`];
-        case 'array': {
+        case 'list': {
             if (property.items.length === 0) return [`${head} []`];
-            return [head, ...property.items.map(item => `  - ${FrontmatterLineEditor.escapeYamlScalar(item)}`)];
+            return [head, ...property.items.map(item => `  - ${scalarYaml(item)}`)];
         }
-        case 'string': return [`${head} ${FrontmatterLineEditor.escapeYamlScalar(property.value)}`];
+        case 'null': return [head];
+        default: return [`${head} ${scalarYaml(property)}`];
     }
+}
+
+function scalarYaml(scalar: PropertyScalar): string {
+    switch (scalar.type) {
+        case 'number': return scalar.spelling;
+        case 'boolean': return String(scalar.boolean);
+        case 'text': return quotedAsWritten(scalar) ?? FrontmatterLineEditor.escapeYamlScalar(scalar.text);
+    }
+}
+
+/**
+ * A text the line quotes, as the line writes it, when YAML reads those
+ * quotes back as the same text: none inside but a single quote in double
+ * ones and a double quote in single ones, and no backslash in double ones
+ * (YAML reads escapes there, and a line reads none). Null for a text the
+ * line does not quote, or whose quotes YAML would read otherwise.
+ */
+function quotedAsWritten(scalar: Extract<PropertyScalar, { type: 'text' }>): string | null {
+    const { spelling, text } = scalar;
+    if (spelling === text) return null;
+    const quote = spelling[0];
+    if (quote === '"' && !/["\\]/.test(text)) return spelling;
+    if (quote === "'" && !text.includes("'")) return spelling;
+    return null;
 }
 
 /** A key as a YAML mapping key: plain when YAML reads it plain, else quoted. */

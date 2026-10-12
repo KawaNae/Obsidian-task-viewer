@@ -88,14 +88,14 @@ describe('Notes: a line put in a section', () => {
             expect(result.insertedLine).toBe(2);
         });
 
-        it('goes past the paragraph under the heading, which a line put above it would take in (P1)', () => {
+        it('goes past the paragraph under the heading, which a line put above it would take in', () => {
             const content = '## Tasks\npara one\npara two\n\n- [ ] a';
             const result = insertFromText(content, '- [ ] new', 'Tasks', 2);
             expect(result.content.split('\n')).toEqual(['## Tasks', 'para one', 'para two', '- [ ] new', '', '- [ ] a']);
             expect(result.insertedLine).toBe(3);
         });
 
-        it('puts the line at the indentation of the first item under the heading, as its sibling (P1)', () => {
+        it('puts the line at the indentation of the first item under the heading, as its sibling', () => {
             const content = '## Tasks\n\n  - [ ] a\n\t- [ ] b';
             const result = insertFromText(content, '- [ ] new', 'Tasks', 2);
             expect(result.content.split('\n')).toEqual(['## Tasks', '  - [ ] new', '', '  - [ ] a', '\t- [ ] b']);
@@ -214,7 +214,7 @@ describe('Notes: a line put in a section', () => {
             expect(result.insertedLine).toBeGreaterThan(4);
         });
 
-        it('reads the heading as the note does: a setext one, one indented up to three columns, one closed with `#` (F8)', () => {
+        it('reads the heading as the note does: a setext one, one indented up to three columns, one closed with `#`', () => {
             const put = (lines: string[]) => insertFromText(lines.join('\n'), '- [ ] n', 'Tasks', 2).content.split('\n');
             expect(put(['Tasks', '---', '- [ ] a'])).toEqual(['Tasks', '---', '- [ ] n', '- [ ] a']);
             expect(put(['text', '', '  ## Tasks', '- [ ] a'])).toEqual(['text', '', '  ## Tasks', '- [ ] n', '- [ ] a']);

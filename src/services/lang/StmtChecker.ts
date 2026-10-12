@@ -315,7 +315,7 @@ class CheckState {
         let result: StaticType = 'error';
         this.scoped(() => {
             for (const p of arrow.params) {
-                // An error, not the warning a `let` gets. R6b: a parameter is
+                // An error, not the warning a `let` gets: a parameter is
                 // the only handle on what was passed, so a body that cannot
                 // see it has no correct reading — and it fails quietly, which
                 // is what makes it worse than a binding nobody can read.

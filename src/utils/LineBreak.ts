@@ -3,7 +3,7 @@
  *
  * Read as Obsidian reads a note: its editor ends a line at CRLF, at LF and at
  * a CR on its own, and keeps U+2028 and U+2029 inside the line — a checkbox
- * line holding one is a checkbox (R0, Obsidian 1.12.4). `splitLines` cuts the
+ * line holding one is a checkbox (measured in Obsidian 1.12.4). `splitLines` cuts the
  * file here, a write refuses a line holding one of these, the parsers read a
  * line's content as anything but these, and the API and the flows refuse a
  * value holding one. One set, so that a line the plugin writes is the line it

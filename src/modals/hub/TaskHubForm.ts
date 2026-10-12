@@ -17,7 +17,6 @@ import { IssueBoard, readIssue, type IssueSlot } from '../form/FormIssue';
 import { TaskContentInput } from '../../services/parsing/tv-inline/TaskContentInput';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
-import { openFile } from '../../utils/NavigationUtils';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
 import type { DateTimeFields } from '../TaskDateValidator';
 import { logError } from '../../log/log';
@@ -30,6 +29,8 @@ import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './f
 import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
+import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
+import { openSourceLine, type LineTarget } from './SourceLine';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
@@ -65,15 +66,15 @@ export interface TaskHubFormDeps {
  * 欄の行の下とフォームの末尾である。行が日付の規則を破っていれば（規則4
  * など）、開いたときから破れた欄の下に出す。
  *
- * 書き込みの拒否（I#9、論点3）: 書き込みは通知を出さない書き方で頼み
+ * 書き込みの拒否: 書き込みは通知を出さない書き方で頼み
  * （`tellRefusal: false`）、拒まれた理由をフォームの末尾に1回だけ出す。拒まれた
  * 欄は打った値のまま残り（`bindField`）、もう一度確定すれば新しい版へ書く。
  * ハブが閉じた後に届いた拒否は通知で言う。
  *
- * 閉じる手順（{@link beforeClose}、ハブを閉じるときの保存の決定）: ×、Escape、
+ * 閉じる手順（{@link beforeClose}）: ×、Escape、
  * 外側、下へ払う、戻るのどれも、blur を待たずに打ちかけの欄を明示して保存する。
  * 保存できない値（読めない値、日付の規則に反する値）が残れば閉じずに問い
- * （`DraftGuard`、論点G）、[直す] にフォーカスを置く。[捨てて閉じる] はその値を
+ * （`DraftGuard`）、[直す] にフォーカスを置く。[捨てて閉じる] はその値を
  * 元に戻し、ほかの欄を保存して閉じる。書き込みが途中なら答えを待ち、拒まれたら
  * 開いたまま理由を出す。
  *
@@ -100,6 +101,9 @@ export class TaskHubForm {
     private readonly issues: IssueBoard<HubField>;
     /** Where the form says what is of it as a whole: at its end. */
     private readonly formSays: HTMLElement;
+    /** The row's own findings as last read (`hubFindings`), and the fields they lock. */
+    private findings: readonly HubFinding[] = [];
+    private locks: ReadonlySet<FindingField> = new Set();
 
     private nameInput: HTMLInputElement;
     private nameSays: HTMLElement;
@@ -138,10 +142,14 @@ export class TaskHubForm {
             plugin: deps.plugin,
             index: deps.index,
             sourceLabel: (source) => this.sourceLabel(source),
-            jumpToFile: () => this.jumpToFile(),
+            openSource: (locate) => this.openSource(locate),
             issues: this.issues,
+            findings: () => this.findings,
+            locked: (field) => this.locks.has(field),
         };
+        this.readFindings();
         this.render();
+        this.sayFindings();
     }
 
     // ==================== DOM 構築 ====================
@@ -290,9 +298,43 @@ export class TaskHubForm {
         return source === 'file' ? t('modal.hub.inheritedFromFile') : t('modal.hub.inheritedFromSection');
     }
 
-    private jumpToFile(): void {
-        void openFile(this.deps.app, this.task.file, this.deps.plugin.settings.reuseExistingTab);
+    /** Open a line of the row's note and light it (`openSourceLine`); the hub closes, as for any navigation. */
+    private openSource(locate: (task: Task) => LineTarget | null): void {
+        void openSourceLine(
+            { app: this.deps.app, index: this.deps.index, reuseTab: this.deps.plugin.settings.reuseExistingTab },
+            this.task,
+            locate,
+        );
         this.deps.onNavigate?.();
+    }
+
+    // ==================== 所見 ====================
+
+    /** Read the row's findings and the fields they lock from the model. */
+    private readFindings(): void {
+        this.findings = hubFindings(this.task, this.deps.plugin.settings.scopeKeys);
+        this.locks = lockedFields(this.findings);
+    }
+
+    /**
+     * Say each finding under the field it is of (the form's at its end),
+     * with the line to open in the editor: the user fixes the block there.
+     */
+    private sayFindings(): void {
+        this.issues.set('findings', this.findings.map(finding => ({
+            at: finding.field,
+            tone: finding.tone,
+            text: finding.text,
+            action: {
+                label: t('modal.hub.openLine'),
+                run: () => {
+                    const among = this.findings;
+                    this.openSource(row => (row === this.task
+                        ? { line: finding.line }
+                        : { line: lineOfFinding(finding, among, row, this.deps.plugin.settings.scopeKeys) }));
+                },
+            },
+        })));
     }
 
     // ==================== コミット ====================
@@ -468,12 +510,14 @@ export class TaskHubForm {
             this.showShut();
         }
 
+        this.readFindings();
         this.nameField.set(fresh.content ?? '');
         this.renderStatusPill();
         this.dateGroup.set(dateFieldsOf(fresh));
         this.styleField.refresh();
         this.tagsField.refresh();
         this.propsField.refresh();
+        this.sayFindings();
     }
 
     /** タスクが index から消えた（削除 / id 変化）ときの縮退表示 */

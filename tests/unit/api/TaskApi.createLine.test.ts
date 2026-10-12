@@ -60,7 +60,7 @@ function createMockApiForCreate(opts: {
     return { api: new TaskApi(mockPlugin as any), readService, operations };
 }
 
-describe('G4: create の行番号ベース再特定', () => {
+describe('create の行番号ベース再特定', () => {
     it('通常の create (append) で getTaskByFileLine が insertedLine で呼ばれる', async () => {
         const created = makeFullTask({ line: 10 });
         const { api, readService } = createMockApiForCreate({
@@ -197,7 +197,7 @@ describe('the date block create writes', () => {
         expect(await written(params)).toBe(line);
     });
 
-    // The values are read as typed text (stage 7, input decisions B, C, D):
+    // The values are read as typed text:
     // an hour of one digit is written with two, full-width and hyphen-like
     // characters are read as ASCII.
     it.each([

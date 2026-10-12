@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ChoiceInput } from '../../../../src/utils/values/ChoiceValues';
 import { ColorInput } from '../../../../src/utils/values/ColorValues';
+import { ColorCheck } from '../../../../src/utils/ColorUtils';
 import { DateInput, TimeInput } from '../../../../src/utils/values/DateValues';
 import { IntInput } from '../../../../src/utils/values/NumberValues';
 import { optional, type FieldCodec } from '../../../../src/utils/values/Read';
@@ -49,6 +50,16 @@ describe('the field codecs', () => {
         expect(shown(ColorInput, '＃ｆｆ８８００')).toBe('ff8800');
         expect(shown(ColorInput, 'ff88')).toEqual({ issue: { code: 'shape', kind: 'color' } });
         expect(shown(ColorInput, 'reddish')).toEqual({ issue: { code: 'shape', kind: 'color' } });
+    });
+
+    it('read any other color CSS reads as one, as typed', () => {
+        ColorCheck.use((text) => text === 'rgb(0 0 0)');
+        try {
+            expect(shown(ColorInput, 'rgb(0 0 0)')).toBe('rgb(0 0 0)');
+            expect(shown(ColorInput, 'rgb(0 0)')).toEqual({ issue: { code: 'shape', kind: 'color' } });
+        } finally {
+            ColorCheck.reset();
+        }
     });
 
     it('read a name with the space around it taken off, an empty one refused; free text as typed', () => {

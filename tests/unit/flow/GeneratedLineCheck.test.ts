@@ -139,7 +139,7 @@ describe('a generated child line', () => {
     });
 
     it('warns, but still writes as-is, a checked child that carries its own command', () => {
-        // G1: this shape is not refused or normalized — the byte-for-byte
+        // This shape is not refused or normalized — the byte-for-byte
         // line still passes through — but it is worth flagging, since the
         // command will not fire until the box is unchecked and rechecked by
         // hand, which is unlikely to be what was meant.

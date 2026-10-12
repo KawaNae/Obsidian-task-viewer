@@ -5,9 +5,9 @@ import { SETTINGS_SCHEMA } from '../../../src/settings/SettingsSchema';
 import { FakeEl, asEl } from '../helpers/fakeDom';
 
 /**
- * The settings' text fields (I#11): read as typed, said under the
+ * The settings' text fields: read as typed, said under the
  * description, committed once by a blur or the form's Enter, and saved only
- * when what is typed reads (入力の論点 E).
+ * when what is typed reads.
  */
 
 /** A setting as `SettingFields` uses it: a description, and the text fields it adds. */

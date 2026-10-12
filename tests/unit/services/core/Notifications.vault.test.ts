@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { openLiveVault, makeFile, type VaultSession } from '../../helpers/vaultSession';
 
 /**
- * What the views are told, and when, after a write of ours or a change event
- * (structure/layers.md, 通知). A listener of the index hears either a span
+ * What the views are told, and when, after a write of ours or a change event.
+ * A listener of the index hears either a span
  * (a row's name and the fields that moved) or a full invalidation (no
  * arguments). The index merges what one frame (16ms) asks into one telling
  * (`NotifyCoalescer`).

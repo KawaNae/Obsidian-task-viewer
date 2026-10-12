@@ -59,8 +59,7 @@ describe.each([
 });
 
 /**
- * The range's own bounds are read as the filter's dates are (stage 7,
- * input decision B): a day that exists, typed text normalized.
+ * The range's own bounds are read as the filter's dates are: a day that exists, typed text normalized.
  */
 describe('the range bounds', () => {
     it('refuses a bound that names no day', async () => {

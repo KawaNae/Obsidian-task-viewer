@@ -3,6 +3,7 @@ import { BuiltinPropertyExtractor } from '../../../../src/services/parsing/tree/
 import { DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import type { PropertyValue } from '../../../../src/types';
 import { PropertyValues } from '../../../../src/services/parsing/utils/PropertyValues';
+import { byKey, valuesOf } from '../../helpers/properties';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
@@ -14,30 +15,30 @@ function pv(value: string): PropertyValue {
 describe('BuiltinPropertyExtractor', () => {
     it('extracts tv-color to color field', () => {
         const raw = { 'tv-color': pv('ff0000') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.color).toBe('ff0000');
-        expect(result.properties).toEqual({});
+        expect(valuesOf(result.properties)).toEqual({});
     });
 
     it('extracts tv-linestyle to linestyle field (valid value)', () => {
         const raw = { 'tv-linestyle': pv('dashed') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.linestyle).toBe('dashed');
-        expect(result.properties).toEqual({});
+        expect(valuesOf(result.properties)).toEqual({});
     });
 
     it('discards invalid tv-linestyle', () => {
         const raw = { 'tv-linestyle': pv('wavy') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.linestyle).toBeUndefined();
-        expect(result.properties).toEqual({});
+        expect(valuesOf(result.properties)).toEqual({});
     });
 
     it('extracts tv-mask to mask field', () => {
         const raw = { 'tv-mask': pv('***') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.mask).toBe('***');
-        expect(result.properties).toEqual({});
+        expect(valuesOf(result.properties)).toEqual({});
     });
 
     // A declaration key this extractor has no field for is still a
@@ -47,21 +48,21 @@ describe('BuiltinPropertyExtractor', () => {
     it.each(['tv-content', 'tv-status', 'tv-ignore', 'tv-timer-target-id', 'position'])(
         'drops %s instead of making it a custom property',
         (key) => {
-            const result = BuiltinPropertyExtractor.extract({ [key]: pv('x') }, keys);
-            expect(result.properties).toEqual({});
+            const result = BuiltinPropertyExtractor.extract(byKey({ [key]: pv('x') }), keys);
+            expect(valuesOf(result.properties)).toEqual({});
         },
     );
 
     it('drops a renamed declaration key and keeps the name it freed', () => {
         const custom = { ...keys, ignore: 'my-ignore' };
         const raw = { 'my-ignore': pv('x'), 'tv-ignore': pv('y') };
-        const result = BuiltinPropertyExtractor.extract(raw, custom);
-        expect(result.properties).toEqual({ 'tv-ignore': pv('y') });
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), custom);
+        expect(valuesOf(result.properties)).toEqual({ 'tv-ignore': pv('y') });
     });
 
     it('never turns the file task\'s legacy keys into custom properties', () => {
         const raw = { 'tv-status': pv('x'), 'tv-content': pv('名前'), 'tv-timer-target-id': pv('tv-t-1') };
-        expect(BuiltinPropertyExtractor.extract(raw, keys).properties).toEqual({});
+        expect(valuesOf(BuiltinPropertyExtractor.extract(byKey(raw), keys).properties)).toEqual({});
     });
 
     it('keeps non-builtin properties in properties', () => {
@@ -69,11 +70,11 @@ describe('BuiltinPropertyExtractor', () => {
             'custom-prop': pv('hello'),
             '金額': pv('2000'),
         };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.color).toBeUndefined();
         expect(result.linestyle).toBeUndefined();
         expect(result.mask).toBeUndefined();
-        expect(result.properties).toEqual({
+        expect(valuesOf(result.properties)).toEqual({
             'custom-prop': pv('hello'),
             '金額': pv('2000'),
         });
@@ -86,11 +87,11 @@ describe('BuiltinPropertyExtractor', () => {
             'note': pv('something'),
             'priority': pv('1'),
         };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.color).toBe('333333');
         expect(result.linestyle).toBe('dotted');
         expect(result.mask).toBeUndefined();
-        expect(result.properties).toEqual({
+        expect(valuesOf(result.properties)).toEqual({
             'note': pv('something'),
             'priority': pv('1'),
         });
@@ -98,25 +99,25 @@ describe('BuiltinPropertyExtractor', () => {
 
     it('trims whitespace from color value', () => {
         const raw = { 'tv-color': pv('  red  ') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.color).toBe('red');
     });
 
     it('normalizes linestyle to lowercase', () => {
         const raw = { 'tv-linestyle': pv('Dashed') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.linestyle).toBe('dashed');
     });
 
     it('ignores empty/whitespace-only color', () => {
         const raw = { 'tv-color': pv('   ') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.color).toBeUndefined();
     });
 
     it('strips # prefix from hex color', () => {
         const raw = { 'tv-color': pv('#ff0000') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.color).toBe('ff0000');
     });
 
@@ -132,38 +133,42 @@ describe('BuiltinPropertyExtractor', () => {
             'my-style': pv('solid'),
             'tv-color': pv('red'),  // should NOT be extracted with custom keys
         };
-        const result = BuiltinPropertyExtractor.extract(raw, customKeys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), customKeys);
         expect(result.color).toBe('blue');
         expect(result.linestyle).toBe('solid');
-        expect(result.properties).toEqual({ 'tv-color': pv('red') });
+        expect(valuesOf(result.properties)).toEqual({ 'tv-color': pv('red') });
     });
 
     it('returns empty result for empty input', () => {
-        const result = BuiltinPropertyExtractor.extract({}, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey({}), keys);
         expect(result.color).toBeUndefined();
         expect(result.linestyle).toBeUndefined();
         expect(result.mask).toBeUndefined();
         expect(result.tags).toBeUndefined();
-        expect(result.properties).toEqual({});
+        expect(valuesOf(result.properties)).toEqual({});
     });
 
     it('extracts tags from #hashtag format', () => {
         const raw = { 'tags': pv('#work #urgent') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.tags).toEqual(['urgent', 'work']);
         expect(result.properties['tags']).toBeUndefined();
     });
 
-    it('extracts tags from comma-separated format', () => {
+    it('reads no tags from a line\'s list without #, as Obsidian reads the line', () => {
         const raw = { 'tags': pv('work, urgent') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
-        expect(result.tags).toEqual(['urgent', 'work']);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
+        expect(result.tags).toBeUndefined();
         expect(result.properties['tags']).toBeUndefined();
+    });
+
+    it('reads a line\'s #tags whatever list its value is written as', () => {
+        expect(BuiltinPropertyExtractor.extract(byKey({ 'tags': pv('#work, #urgent') }), keys).tags).toEqual(['urgent', 'work']);
     });
 
     it('does not extract tags from empty value', () => {
         const raw = { 'tags': pv('') };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.tags).toBeUndefined();
         expect(result.properties['tags']).toBeUndefined();
     });
@@ -174,9 +179,9 @@ describe('BuiltinPropertyExtractor', () => {
             'tags': pv('#project #review'),
             'note': pv('something'),
         };
-        const result = BuiltinPropertyExtractor.extract(raw, keys);
+        const result = BuiltinPropertyExtractor.extract(byKey(raw), keys);
         expect(result.color).toBe('red');
         expect(result.tags).toEqual(['project', 'review']);
-        expect(result.properties).toEqual({ 'note': pv('something') });
+        expect(valuesOf(result.properties)).toEqual({ 'note': pv('something') });
     });
 });

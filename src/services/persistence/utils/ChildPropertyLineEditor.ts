@@ -1,112 +1,143 @@
-import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
+import { PropertyKey } from '../../parsing/utils/PropertyKey';
+import { ITEM_TEXT, PROPERTY_LINE, PropertyLines, type PropertyLine } from '../../parsing/utils/PropertyLines';
+import { Outline } from '../../parsing/utils/Outline';
 import { Block, Placement } from './Placement';
-import type { PropertyOp } from '../PropertyUpdatePlanner';
-import type { LineDraft } from '../FileLines';
-import type { OutlineReading } from '../../parsing/utils/Outline';
+import type { PropertyEdit, PropertyOp, PropertyWrite } from '../PropertyUpdatePlanner';
+import type { LineDraft, RefusalReason } from '../FileLines';
 
-interface OwnPropertyLine {
-    lineIdx: number;
-    key: string;
-    value: string;
-}
+/** Why the property ops of a write were not written (`ChildPropertyLineEditor.applyOps`). */
+export type PropertyRefusal = Extract<RefusalReason, { kind: 'property' }>;
 
 /**
- * インラインタスクの子プロパティ行（`- key:: value`）の外科的編集。
- * FrontmatterLineEditor と対を成す純関数・静的クラスで、vault.process()
- * コールバック内の lines[] を直接操作する。
+ * The writes to a task's own property lines, inside a write
+ * (`InlineTaskWriter`, `update`). The lines it writes are the ones the
+ * parser reads as the task's (`PropertyLines.ofTask`), and a property is
+ * its block: its line, and for a line with no value the items of its list
+ * under it.
  *
- * ルールB（表現保持）の実装点:
- * - 更新は既存行の `- key:: ` プレフィックス（インデント・bullet・キー表記）
- *   を保存して値部分のみ置換
- * - tags は既存値が #hashtag 形式ならその形式、カンマ区切りならその形式で
- *   書き戻す（新規は #hashtag が正準）
- * - set は「最後の own 宣言行」を対象（パースが後勝ちのため）、delete は
- *   全 own 宣言行を除去（先行の重複が透け戻るのを防ぐ）
+ * - A line it rewrites keeps its indentation, bullet and key as written,
+ *   and so does an item it rewrites: only the value changes
+ * - A line it adds goes past the task's last property line's subtree, or
+ *   as the task's first child, spelled as the item next to it is; the items
+ *   of a list go a level under their line, as a first child does
+ *   (`Placement`)
+ * - It writes over no block the reading finds anything wrong in
+ *   (`PropertyLines.read`: a key written twice, lines under a value, an
+ *   item it does not read, a built-in's value it cannot read): what was
+ *   meant there is the user's to say in the editor. A key written twice is
+ *   not made one line either
  */
 export class ChildPropertyLineEditor {
     /**
-     * タスク直下の own プロパティ行を列挙する。どの行が own かはパーサと
-     * 同じ1か所（`ChildLineClassifier.ownPropertyLines`）が決める: ノート
-     * 全体の読み（`Outline.read`）でタスクの項目を親に持つ項目のうち、
-     * コードでない `- key:: value` 行。子タスクやメモの下、コードブロック
-     * の中の行は own でない。
-     */
-    static findOwnPropertyLines(outline: OutlineReading, taskLineIdx: number): OwnPropertyLine[] {
-        const { lines } = outline;
-        return ChildLineClassifier.ownPropertyLines(outline, taskLineIdx).map(lineIdx => {
-            const m = lines[lineIdx].match(ChildLineClassifier.PROPERTY_LINE)!;
-            return { lineIdx, key: m[1].trim(), value: m[2].trim() };
-        });
-    }
-
-    /**
-     * ops を draft に適用する。
-     * 各 op の前に own プロパティ行を再走査するので、op 間の行シフトに
-     * 対して常に正しい行を対象にする。
+     * Apply `edit` to the property lines of the task on `taskLine`. Each op
+     * reads the lines again, as the ops before it left them.
      *
-     * ここが触る行はどれもタスク行より下なので、呼び口が先に書き換えた
-     * タスク行の座標は動かない。変更はすべて draft を通るので、3経路とも
-     * そのまま申告になる。行を足す位置は `Placement` が答え、足した行と
-     * 消した行のあとで、ほかの行が変わらないかは書き込みの検査
-     * （`checkWrite`）が答える。変わるなら書き込み全体が拒否される。
+     * Every line it touches is below the task's, so the caller's rewrite of
+     * the task's own line stays where it is. Whether the lines written read
+     * as meant and every other line as it did is the write's check
+     * (`checkWrite`), which an item of a list is held to as a property is
+     * (`ChildLineClassifier.carriesMeaning`).
      *
-     * `unit` は Obsidian の設定が言う一段の字下げ（`ObsidianConfig.indentUnit`）
-     * で、子の無いタスクに最初のプロパティ行を足すときの字下げになる。
+     * `unit` is Obsidian's one level of indentation (`ObsidianConfig.indentUnit`):
+     * the first child of a line with none.
+     *
+     * @returns null when written; else why not, and nothing of it is to be written.
      */
-    static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[], unit: string): void {
-        for (const op of ops) {
-            const ownLines = this.findOwnPropertyLines(draft.reading(), taskLineIdx);
-            const matching = ownLines.filter(l => l.key === op.key);
-
-            if (op.op === 'delete') {
-                // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。
-                for (let i = matching.length - 1; i >= 0; i--) {
-                    draft.splice(matching[i].lineIdx, 1);
-                }
-                continue;
-            }
-
-            if (matching.length > 0) {
-                // 更新: 最後の宣言行の値部分のみ置換（プレフィックス保存）
-                const target = matching[matching.length - 1];
-                // 値の前まで（字下げ、記号、キー、`::` とその後の空白）。own の行は
-                // PROPERTY_LINE に合うので、値の捕捉を除いた残りがそれである。
-                const line = draft.lines[target.lineIdx];
-                const prefix = line.slice(0, line.length - line.match(ChildLineClassifier.PROPERTY_LINE)![2].length);
-                const value = this.formatValue(op.value, target.value);
-                // 空値行 (`- key ::`) はプレフィックスが `::` で終わるため、
-                // 値を書き込むときはセパレータの空白を補う
-                const sep = value !== '' && !/\s$/.test(prefix) ? ' ' : '';
-                // 値が変わっただけで、行の素性は変わらない。
-                draft.rewrite(target.lineIdx, prefix + sep + value);
-                continue;
-            }
-
-            // 新規挿入（ルールA: 正準位置）: 既存の own プロパティ行があれば
-            // その最後の兄弟として部分木の後ろ（宣言塊を保つ。その行の下の
-            // 行はその行のまま）、なければタスクの最初の子（タスクの本文の
-            // 続きの行の後ろ）。新しい行なので、字下げは隣の項目の綴りで、
-            // 隣に兄弟が無ければ子の字下げ（`Placement.resolveChildIndent`。
-            // 子が1つも無ければ Obsidian の設定の一段）。
-            const line = `- ${op.key}:: ${this.formatValue(op.value, null)}`;
-            const spot = ownLines.length > 0
-                ? Placement.afterSubtree(draft.reading(), ownLines[ownLines.length - 1].lineIdx, line, unit)
-                : Placement.firstChild(draft.reading(), taskLineIdx, line, unit);
-            draft.put(spot, Block.line(line));
+    static applyOps(draft: LineDraft, taskLine: number, edit: PropertyEdit, unit: string): PropertyRefusal | null {
+        for (const op of edit.ops) {
+            const own = PropertyLines.ofTask(draft.reading(), taskLine);
+            const found = PropertyLines.read(own, edit.keys).findings.find(finding => PropertyKey.same(finding.key, op.key));
+            if (found) return { kind: 'property', key: found.key, line: found.line };
+            // One at most: a key written twice is a finding.
+            const line = own.lines.find(candidate => PropertyKey.same(candidate.key, op.key));
+            if (line) this.rewrite(draft, line, op, unit);
+            else if (op.op !== 'delete') this.add(draft, taskLine, own.lines, op, unit);
         }
+        return null;
+    }
+
+    /** The block of the property line `line` written as `op` says. */
+    private static rewrite(draft: LineDraft, line: PropertyLine, op: PropertyOp, unit: string): void {
+        const items = line.items;
+        const pastItems = items.length > 0 ? items[items.length - 1] + 1 : line.line + 1;
+        if (op.op === 'delete') {
+            draft.splice(line.line, pastItems - line.line);
+            return;
+        }
+        const list = op.op === 'set' ? this.itemsOf(op.value, items.length > 0) : null;
+        if (list === null) {
+            // One line: the items under it go, and the line says the value or none.
+            if (pastItems > line.line + 1) draft.splice(line.line + 1, pastItems - line.line - 1);
+            draft.rewrite(line.line, this.withValue(draft.lines[line.line], op.op === 'set' ? this.textOf(op.value) : ''));
+            return;
+        }
+        // A list: its items rewritten one for one, the ones past the new list
+        // taken out, and the new ones put past the last.
+        for (let i = items.length - 1; i >= list.length; i--) draft.splice(items[i], 1);
+        const kept = Math.min(items.length, list.length);
+        for (let i = 0; i < kept; i++) draft.rewrite(items[i], this.itemWith(draft.lines[items[i]], list[i]));
+        if (line.written !== '') draft.rewrite(line.line, this.withValue(draft.lines[line.line], ''));
+        const more = list.slice(kept).map(item => `- ${item}`);
+        if (more.length === 0) return;
+        const reading = draft.reading();
+        const spot = kept > 0
+            ? Placement.afterSubtree(reading, items[kept - 1], more[0], unit)
+            : Placement.firstChild(reading, line.line, more[0], unit);
+        draft.put(spot, Block.read(more));
+    }
+
+    /** A new property line, and its list's items under it, past the task's property lines or as its first child. */
+    private static add(draft: LineDraft, taskLine: number, own: readonly PropertyLine[], op: Exclude<PropertyOp, { op: 'delete' }>, unit: string): void {
+        const list = op.op === 'set' ? this.itemsOf(op.value, false) : null;
+        const head = list === null && op.op === 'set' ? `- ${op.key}:: ${this.textOf(op.value)}` : `- ${op.key}::`;
+        const reading = draft.reading();
+        const spot = own.length > 0
+            ? Placement.afterSubtree(reading, own[own.length - 1].line, head, unit)
+            : Placement.firstChild(reading, taskLine, head, unit);
+        if (list === null) {
+            draft.put(spot, Block.line(head));
+            return;
+        }
+        // The items a level under the new line, as the first child of a line
+        // with none is (`Placement.childOfPut`), written from the line's own
+        // column so that the block reads by itself (`Block.read`).
+        const under = Outline.shiftedIndent(Placement.childOfPut(reading, spot, head, unit), spot.indent, '');
+        draft.put(spot, Block.read([head, ...list.map(item => `${under}- ${item}`)]));
     }
 
     /**
-     * op.value を子行の値表現にフォーマットする。
-     * tags（string[]）は既存値の表現（#hashtag / カンマ区切り）を踏襲、
-     * 新規は #hashtag を正準とする。
+     * The items `value` writes, or null for a value on the line itself. Tags
+     * are items when the line writes them as a list already (`asList`), and
+     * `#a #b` on the line otherwise.
      */
-    private static formatValue(value: string | string[] | undefined, existingValue: string | null): string {
-        if (value === undefined) return '';
-        if (!Array.isArray(value)) return value;
-        const useComma = existingValue !== null && !existingValue.includes('#');
-        return useComma
-            ? value.join(', ')
-            : value.map(t => `#${t}`).join(' ');
+    private static itemsOf(value: PropertyWrite, asList: boolean): readonly string[] | null {
+        if ('items' in value) return value.items;
+        if ('tags' in value && asList) return value.tags.map(tag => `#${tag}`);
+        return null;
+    }
+
+    /** The line's value `value` writes when it is no list. */
+    private static textOf(value: PropertyWrite): string {
+        if ('tags' in value) return value.tags.map(tag => `#${tag}`).join(' ');
+        if ('text' in value) return value.text;
+        return '';
+    }
+
+    /**
+     * The property line `text` saying `value` (none for empty): what stands
+     * before its value (indentation, bullet, key, `::`) kept as written, a
+     * space put after `::` for a value when none is there, and the spaces
+     * after `::` dropped for none.
+     */
+    private static withValue(text: string, value: string): string {
+        const prefix = text.slice(0, text.length - text.match(PROPERTY_LINE)![2].length);
+        if (value === '') return prefix.replace(/[ \t]+$/, '');
+        return prefix + (/\s$/.test(prefix) ? '' : ' ') + value;
+    }
+
+    /** The list item `text` saying `value`: its indentation, bullet and the gap after it kept. */
+    private static itemWith(text: string, value: string): string {
+        const written = text.match(ITEM_TEXT)?.[1] ?? '';
+        return text.slice(0, text.length - written.length) + value;
     }
 }

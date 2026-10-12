@@ -12,11 +12,11 @@ import { freezeDate } from '../helpers/fakeDate';
  * read as *something* on record for it and never looked at the command
  * lines, so a command line edited from outside was consumed by the plan it
  * no longer said, and a generation block edited from outside was written as
- * it no longer read (the F3 counterexample runs: CE2, CX1). Each is refused
+ * it no longer read. Each is refused
  * now, whole, with one notice.
  *
  * A completion's fire has no copy to be stale: it is planned inside the write
- * that completes the row, from the lines that write holds (stage X). A card's
+ * that completes the row, from the lines that write holds. A card's
  * completion over a file edited from outside before any scan read it is not
  * made at all: the copy it names was read in content the file has moved on
  * from (`NamedRow.read`). It is refused with one notice, and once the scan
@@ -73,7 +73,7 @@ async function refusedUntilScanned(contents: Map<string, string>, session: Vault
     return idOf(session, 'A');
 }
 
-describe('CE2: a command line edited from outside, before any scan read it', () => {
+describe('a command line edited from outside, before any scan read it', () => {
     it('a completion is refused until a scan, then fires the command as the file says it now', async () => {
         const { contents, session } = await open({ [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d', ''] });
         const id = idOf(session, 'A');
@@ -111,7 +111,7 @@ describe('CE2: a command line edited from outside, before any scan read it', () 
     });
 });
 
-describe('CX1: a generation block edited from outside, before any scan read it', () => {
+describe('a generation block edited from outside, before any scan read it', () => {
     const NOTE = [
         '# note', '- [ ] Z', '',
         '```tv-gen w', '- [ ] A ${dates}', '\t- [ ] old child', '```', '',
@@ -160,11 +160,11 @@ describe('CX1: a generation block edited from outside, before any scan read it',
     });
 });
 
-describe('F5: a subtree changed from outside, before any scan read it', () => {
+describe('a subtree changed from outside, before any scan read it', () => {
     // An operation that takes the row away, or carries it, takes its subtree
     // with it. A deletion plans from its copy, so the subtree is part of what
     // it planned from, and a line that joined it since would otherwise go
-    // with it unseen (F4's last out-of-scope shape). A completion's move is
+    // with it unseen. A completion's move is
     // planned from the lines it is written over, once a scan has read them,
     // and carries the subtree they hold.
 

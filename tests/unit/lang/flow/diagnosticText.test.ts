@@ -185,7 +185,7 @@ describe('diagnosticText', () => {
         expect(seen).toContain('gen.unterminated-interpolation');
     });
 
-    // 段 2（js セクション）の診断は文パーサから出るので、式の網にも
+    // js セクションの診断は文パーサから出るので、式の網にも
     // フロー行の網にも載らない。ここで別に通す。
     describe('the js section', () => {
         const STATEMENT_SAMPLES = [

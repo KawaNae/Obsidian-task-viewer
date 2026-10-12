@@ -5,7 +5,7 @@ import { FileParsePipeline } from '../../../../src/services/parsing/FileParsePip
 import { contentKeyOf } from '../../../../src/services/core/ContentKey';
 
 /**
- * N1: a write of ours that landed is the index's next reading of the file
+ * A write of ours that landed is the index's next reading of the file
  * (`TaskIndex.landed`), taken in before the scan its `modify` starts. That
  * scan reads the same content and commits nothing: a content is parsed once.
  */

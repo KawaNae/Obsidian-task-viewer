@@ -15,7 +15,7 @@ function createMockPlugin(apiOverride: Record<string, any> = {}) {
     } as any;
 }
 
-describe('C9: output-fields を mutation 前に検証', () => {
+describe('output-fields を mutation 前に検証', () => {
     it('create: 不正な output-fields で mutation 実行前にエラー', async () => {
         const plugin = createMockPlugin();
         const handler = createCreateHandler(plugin);

@@ -1,6 +1,5 @@
 /**
- * The day a dated view looks at, in the running Dev vault (stage9b-design,
- * 設計 3). Timeline, Schedule, Calendar and MiniCalendar hold the transient
+ * The day a dated view looks at, in the running Dev vault. Timeline, Schedule, Calendar and MiniCalendar hold the transient
  * `date`: absent, the view follows today; present, it stays on that day.
  * Calendar and MiniCalendar also hold `weekOffset`, the weeks their grid was
  * moved from `date`'s month grid.
@@ -343,7 +342,7 @@ describe('a day roll', () => {
     });
 });
 
-describe('the oldest overdue pull (S2)', () => {
+describe('the oldest overdue pull', () => {
     const FILE = 'test-int-viewed-date-overdue.md';
     let overdue: string;
     const filterState = () => ({ logic: 'and', filters: [{ property: 'file', operator: 'includes', value: [FILE] }] });

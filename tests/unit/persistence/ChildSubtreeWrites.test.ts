@@ -83,7 +83,7 @@ describe('a remove takes the whole subtree', () => {
 
     it('leaves a sibling at the same depth untouched', async () => {
         // Under a root: a tab at the top of a note is indented code
-        // (Obsidian, measurement.md q10), and would hold no task.
+        // (Obsidian, `OutlineRead.test.ts` q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '\t- [ ] parent @2026-08-15',
@@ -134,9 +134,9 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
         expect(h.lines()[5]).toBe('- [ ] next');
     });
 
-    // The first run's B: a new line, spelled as the item next to it, not as
+    // A new line, spelled as the item next to it, not as
     // the task. Spelled `- ` at the top, it would take U in as its child.
-    it('writes the new record as the sibling below it is spelled (P1\'s B1)', async () => {
+    it('writes the new record as the sibling below it is spelled', async () => {
         const h = await writeBench(['1. [ ] T @2026-08-15', '  - [ ] U'].join('\n'));
 
         const { written } = await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
@@ -290,7 +290,7 @@ describe('a move within the file carries the subtree', () => {
 
     it('strips the prefix when the parent was itself indented', async () => {
         // Under a root: a tab at the top of a note is indented code
-        // (Obsidian, measurement.md q10), and would hold no task.
+        // (Obsidian, `OutlineRead.test.ts` q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '\t- [ ] parent @2026-08-15',
@@ -406,7 +406,7 @@ describe('mixed indentation is read by the width it shows at', () => {
     it('does not treat a 4-space line under a tab parent as a descendant', async () => {
         // A tab and four spaces are one depth: the space line is a sibling.
         // Under a root: a tab at the top of a note is indented code
-        // (Obsidian, measurement.md q10), and would hold no task.
+        // (Obsidian, `OutlineRead.test.ts` q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '\t- [ ] parent @2026-08-15',
@@ -426,7 +426,7 @@ describe('mixed indentation is read by the width it shows at', () => {
     it('does not treat a tab child of a 4-space parent as a descendant', async () => {
         // The mirror image, which counting characters already read this way.
         // Under a root: four spaces at the top of a note are indented code
-        // (Obsidian, measurement.md q10), and would hold no task.
+        // (Obsidian, `OutlineRead.test.ts` q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '    - [ ] parent @2026-08-15',

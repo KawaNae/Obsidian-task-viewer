@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DateInput, TimeInput, DateTimeInput } from '../../../../src/utils/values/DateValues';
 
 /**
- * Dates and times typed by a person or a script (stage 7, input decisions
- * B, C and D): a date names a day that exists, a time may have one digit
+ * Dates and times typed by a person or a script: a date names a day that exists, a time may have one digit
  * of hour and is given back with two, and full-width text and hyphen-like
  * characters read as ASCII.
  */

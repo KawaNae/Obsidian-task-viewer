@@ -69,7 +69,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | `to` | 窓の終わりの日。期間がこの日以前と重なるタスク | `to=2026-03-31` |
 | `due` | 締切日 = 指定値 | `due=today` |
 | `leaf` | 子タスクを持たないタスクのみ | `leaf` |
-| `property` | カスタムプロパティ（`key:value` 形式） | `property=priority:high` |
+| `property` | カスタムプロパティ（`key:value` 形式）。値が `value` を含むタスク。キーは大文字と小文字を区別しない（比べ方は [api.md のプロパティの値の比べ方](api.md#プロパティの値の比べ方)） | `property=priority:high` |
 | `color` | カード色で絞り込み（カンマ区切り） | `color=red,blue` |
 | `type` | タスク notation で絞り込み | `type=taskviewer` |
 | `root` | 親タスクを持たないタスクのみ | `root` |
@@ -111,7 +111,7 @@ obsidian obsidian-task-viewer:today tag=work
 | `content` | コンテンツの部分一致 |
 | `due` | 締切日 = 指定値 |
 | `leaf` | 子タスクを持たないタスクのみ |
-| `property` | カスタムプロパティ（`key:value` 形式） |
+| `property` | カスタムプロパティ（`key:value` 形式。`list` の `property` と同じ） |
 | `color` | カード色で絞り込み（カンマ区切り） |
 | `type` | タスク notation で絞り込み |
 | `root` | 親タスクを持たないタスクのみ |
@@ -232,7 +232,7 @@ obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31
 | `content` | | コンテンツの部分一致 |
 | `due` | | 締切日 = 指定値 |
 | `leaf` | | 子タスクを持たないタスクのみ |
-| `property` | | カスタムプロパティ（`key:value` 形式） |
+| `property` | | カスタムプロパティ（`key:value` 形式。`list` の `property` と同じ） |
 | `color` | | カード色で絞り込み（カンマ区切り） |
 | `type` | | タスク notation で絞り込み |
 | `root` | | 親タスクを持たないタスクのみ |
@@ -260,7 +260,7 @@ obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 t
 | `content` | | コンテンツの部分一致 |
 | `due` | | 締切日 = 指定値 |
 | `leaf` | | 子タスクを持たないタスクのみ |
-| `property` | | カスタムプロパティ（`key:value` 形式） |
+| `property` | | カスタムプロパティ（`key:value` 形式。`list` の `property` と同じ） |
 | `color` | | カード色で絞り込み（カンマ区切り） |
 | `type` | | タスク notation で絞り込み |
 | `root` | | 親タスクを持たないタスクのみ |
@@ -382,7 +382,7 @@ obsidian obsidian-task-viewer:help
 | `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
 | `effectiveDue` | `string \| null` | 受け継ぎを含む締切 |
 | `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（`@2026-10-04` と `@>>2026-10-04` は 1440） |
-| `properties` | `Record<string, unknown>` | カスタムプロパティ |
+| `properties` | `Record<string, unknown>` | カスタムプロパティ。値は型どおり（数、真偽値、引用符を外したテキスト、配列、値なしは `null`）で、キーは効いている値を書いた層の綴り（[api.md の NormalizedTask](api.md#normalizedtask-フィールド)） |
 | `flow` | `string \| null` | `==>` に続くフローのコマンド |
 
 ## 出力形式の例
@@ -400,6 +400,10 @@ id	content	status	startDate
 abc	Meeting	 	2026-03-15
 def	Review	x	2026-03-14
 ```
+
+値の中のタブと改行は空白で書きます。`tags` と `childIds` は `;` でつなぎ、`properties` は json と同じ値を JSON で書きます（`{"area":"lab","n":3}`）。
+
+json、jsonl、tsv のどれでも、JSON の数で書けない `properties` の数（無限大と NaN）は、YAML の綴りの文字列で書きます（`".inf"`、`"-.inf"`、`".nan"`）。`null` は値のないプロパティです。
 
 **jsonl**:
 ```

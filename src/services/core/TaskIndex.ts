@@ -45,6 +45,8 @@ export interface IndexReads {
     getTaskByFileLine(filePath: string, line: number): Task | undefined;
     /** The task on a line an editor shows, in the content it shows (`TaskIndex.taskAtEditorLine`). */
     taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null;
+    /** Where line `line` of reading `read` of `filePath` stands in content `now`, across our own writes (`TaskIndex.followLine`). */
+    followLine(filePath: string, read: ReadingId, line: number, now: ContentKey): number | null;
     onChange(callback: ChangeListener): () => void;
     /** Hear each name that ends: its row gone from the index's next reading (`TaskIndex.onTaskDeleted`). */
     onTaskDeleted(callback: (taskId: string) => void): () => void;
@@ -59,7 +61,7 @@ export interface IndexReads {
 /**
  * The index: the copies of the last reading of each note, how to look them
  * up by name and by anchor, whether a copy is still what the disk holds, and
- * the one telling of a change to what it holds (structure/layers.md).
+ * the one telling of a change to what it holds.
  *
  * The copies are written by the scan and by what a write of ours left
  * (`landed`), nothing else. The operations (`Operations`) read the index and
@@ -101,7 +103,7 @@ export class TaskIndex implements IndexReads {
 
     /**
      * Brings the index's readings to the disk when a change notice never
-     * comes (structure/layers.md, 読みの鮮度). None where there is no disk to ask.
+     * comes. None where there is no disk to ask.
      */
     private readonly reconciler: DiskReconciler | null;
 
@@ -415,7 +417,7 @@ export class TaskIndex implements IndexReads {
      * A row a write of ours took away ends, and the rows it rewrote do not;
      * after an edit from outside every row of the file ends, as its names do;
      * a note forgotten (deleted, renamed, gone from the disk) ends all of its
-     * rows. A content read again ends none (structure/layers.md, 名前).
+     * rows. A content read again ends none.
      *
      * Told in the task after the change is in the index, whoever read it:
      * a scan may commit what a write of ours left before the write reports
@@ -486,8 +488,7 @@ export class TaskIndex implements IndexReads {
     /**
      * What the index does when an operation found its note other than the
      * index read it, by the reason's kind, in one place: the log line, the
-     * reading asked for, and what the reconciler is asked
-     * (structure/layers.md, 読みの鮮度).
+     * reading asked for, and what the reconciler is asked.
      *
      * `stale`: the note is read now, so the operation asked again plans from
      * the new reading, and the reconciler sweeps — one change notice missed
@@ -512,7 +513,7 @@ export class TaskIndex implements IndexReads {
                 break;
             default:
                 logWarn(`[TaskIndex] refused: file=${file} reason=${reason.kind} subject=${subject}`);
-                // `gone`, `unplaceable`, `disturbs`, `headings`: the note read as the index read it.
+                // `gone`, `unplaceable`, `disturbs`, `headings`, `property`: the note read as the index read it.
                 if (reason.kind !== 'changed' && reason.kind !== 'failed') return;
         }
         this.reconciler?.request('refusal', file);

@@ -8,8 +8,9 @@ import {
  * Lists in the source editor, as Obsidian's editor keeps them: Enter goes on
  * with the list markup of the line it breaks, an empty item gives up a level
  * or its markup, and numbered lists are numbered again after every change.
- * What Obsidian's editor does was measured in it (source-mode-design.md,
- * 段 4b); each rule below says which case it follows.
+ * What Obsidian's editor does was measured in it (Obsidian 1.13.7, the Dev
+ * vault, `useTab` on, `tabSize` 4); each rule below says which case it
+ * follows.
  *
  * Lines are read one by one, not parsed as CommonMark. The source holds a
  * row's subtree, lists of tasks and the lines under them, and the measured
@@ -101,8 +102,8 @@ function cutAt(line: Line, from: number, to: number): { from: number; to: number
 /**
  * A line break that keeps the indent of the line it breaks, spelled as that
  * line spells it (a break inside the indent keeps the part before it): a
- * new line at the same depth takes the spelling of the line it follows
- * (source-mode-design.md, 3「字下げの綴り」).
+ * new line at the same depth takes the spelling of the line it follows, as
+ * in Obsidian's editor.
  */
 function breakKeepingIndent(state: EditorState, range: SelectionRange) {
     const line = state.doc.lineAt(range.from);

@@ -6,8 +6,7 @@ export type LineMenu = 'task' | 'checkbox' | 'none';
 
 /**
  * The button at the end of a checkbox line, and the menu it opens: the one
- * answer for the decorations and for the press (the 2026-10-04 decision on
- * the editor's line menu).
+ * answer for the decorations and for the press.
  *
  * - A task of this plugin's notation (tv-inline): the task's menu, while
  *   `editorMenuForTasks`.

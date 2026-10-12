@@ -1,6 +1,6 @@
 /**
  * The notes a field suggests, listed and drawn as Obsidian's `[[` lists and
- * draws them (`NoteCandidates`, `candidateView`; `note-suggest/candidates.md`),
+ * draws them (`NoteCandidates`, `candidateView`),
  * in the running Dev vault: the send dialog's note, the settings' note
  * templates, and the `[[` of the task name and of the source editor, whose
  * picks write the link Obsidian's `[[` writes (the note a link is spelt

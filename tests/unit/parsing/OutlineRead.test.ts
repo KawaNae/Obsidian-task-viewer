@@ -4,7 +4,7 @@ import { checkWrite, type WrittenLine } from '../../../src/services/parsing/util
 
 /**
  * `Outline.read` against what Obsidian 1.12.4 reads of the same notes
- * (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L2 の実測, questions 1-16). Each shape is one the
+ * (19 shapes, on the Dev vault). Each shape is one the
  * measurement wrote to a note, and the expected items and code lines are the
  * ones its `listItems`, `sections` and reading view gave.
  *
@@ -36,12 +36,12 @@ function codeOf(outline: OutlineReading): string {
 
 const MEASURED: Array<{ q: string; name: string; lines: string[]; items: Item[]; code: string }> = [
     {
-        q: 'q1', name: 'BK1: a fence in an item takes a shallower line, and the item with it',
+        q: 'q1', name: 'a fence in an item takes a shallower line, and the item with it',
         lines: ['- [ ] task', `    ${F}`, 'shallow content at column 0', `    ${F}`, '- [ ] sibling'],
         items: [[0, 4, null], [4, 5, null]], code: '01110',
     },
     {
-        q: 'q1', name: 'BK1 indented with a tab',
+        q: 'q1', name: 'a fence in an item takes a shallower line, indented with a tab',
         lines: ['- [ ] task', `${TAB}${F}`, 'shallow', `${TAB}${F}`, '- [ ] sibling'],
         items: [[0, 4, null], [4, 5, null]], code: '01110',
     },
@@ -51,12 +51,12 @@ const MEASURED: Array<{ q: string; name: string; lines: string[]; items: Item[];
         items: [[0, 6, null], [1, 3, 0], [3, 5, 0], [5, 6, 0], [6, 7, null]], code: '0010100',
     },
     {
-        q: 'q2', name: 'R5: a fence that never closes ends with its item, and the sibling is a task',
+        q: 'q2', name: 'a fence that never closes ends with its item, and the sibling is a task',
         lines: ['- [ ] root', `    ${F}`, '    unclosed fence body', '- [ ] sibling', '- [ ] sibling2'],
         items: [[0, 3, null], [3, 4, null], [4, 5, null]], code: '01100',
     },
     {
-        q: 'q2', name: 'R5 in a child',
+        q: 'q2', name: 'a fence that never closes, in a child',
         lines: ['- [ ] root', `${TAB}- [ ] child`, `${TAB}${TAB}${F}`, `${TAB}${TAB}body`, '- [ ] sibling'],
         items: [[0, 4, null], [1, 4, 0], [4, 5, null]], code: '00110',
     },
@@ -132,7 +132,7 @@ const MEASURED: Array<{ q: string; name: string; lines: string[]; items: Item[];
     },
 ];
 
-describe('Outline.read reads what Obsidian reads (measurement.md)', () => {
+describe('Outline.read reads what Obsidian 1.12.4 reads', () => {
     for (const shape of MEASURED) {
         it(`${shape.q}: ${shape.name}`, () => {
             const outline = Outline.read(shape.lines);
@@ -161,7 +161,7 @@ describe('OutlineReading', () => {
 
     it('opens no item on a line in code, in every shape measured', () => {
         // The readers that ask for an item under a task ask nothing more of
-        // code (ownPropertyLines, collectFlowLineIndices, opensTask).
+        // code (PropertyLines.ofTask, collectFlowLineIndices, opensTask).
         for (const shape of MEASURED) {
             const outline = Outline.read(shape.lines);
             const both = shape.lines.map((_, i) => i).filter(i => outline.item(i) !== null && outline.inCode(i));
@@ -196,8 +196,7 @@ describe('OutlineReading', () => {
         expect(takesOut(outline, [3])).toBe(true);
         expect(takesOut(outline, [5])).toBe(true);
         // A child that still reaches an item changes parent: T's own, or a
-        // sibling's, and a command or a property would work for that task
-        // (the third L2 counterexample run).
+        // sibling's, and a command or a property would work for that task.
         for (const child of ['    - [ ] sub', '    - ==> every tue', '    - k:: v', '    - [[link]]']) {
             expect(takesOut(Outline.read(['- [ ] T', '  - memo:: a', child]), [1]), child).toBe(false);
             expect(takesOut(Outline.read(['- [ ] T', '  - [ ] B', '  - memo:: a', child]), [2]), child).toBe(false);
@@ -205,8 +204,7 @@ describe('OutlineReading', () => {
     });
 
     it('lets a note bullet change parent, and not a task whose note bullet goes under a sibling', () => {
-        // The note goes under T: nothing the plugin reads changes (the
-        // fourth L2 counterexample run, U1 and U2), and a task under the note
+        // The note goes under T: nothing the plugin reads changes, and a task under the note
         // keeps its parent and its task above.
         expect(takesOut(Outline.read(['- [ ] T', '  - ==> every mon', '    - why weekly']), [1])).toBe(true);
         expect(takesOut(Outline.read(['- [ ] T', '  - memo:: a', '    - detail', '      - [ ] sub']), [1])).toBe(true);
@@ -219,8 +217,7 @@ describe('OutlineReading', () => {
 
     it('does not take a line out when a fence below it would be indented code without it', () => {
         // The fence is two columns into memo's content; without memo it is
-        // six into T's, past a blank line: indented code, `js` text (the
-        // fourth L2 counterexample run, G1). Code either way, a fence only
+        // six into T's, past a blank line: indented code, `js` text. Code either way, a fence only
         // before.
         const fence = ['- [ ] T', '    - memo:: a', '', '        ```js', '        x', '        ```', '- [ ] U'];
         const outline = Outline.read(fence);

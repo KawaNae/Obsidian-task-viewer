@@ -49,7 +49,7 @@ function addScopeKeySettings(containerEl: HTMLElement, plugin: PluginContext, fi
     ];
     for (const { key, name, desc } of keys) {
         // Read as typed and committed once (a blur, the form's Enter): the notes
-        // are read again for a key committed, not for each key typed (I#11).
+        // are read again for a key committed, not for each key typed.
         fields.text(new Setting(containerEl).setName(name).setDesc(desc), {
             codec: ScopeKeyInput.codec(() => keys.filter(other => other.key !== key).map(other => plugin.settings.scopeKeys[other.key])),
             get: () => plugin.settings.scopeKeys[key],

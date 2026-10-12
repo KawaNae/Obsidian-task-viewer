@@ -7,7 +7,7 @@ import {
 } from '../../../src/cli/handlers/TaskActionHandlers';
 
 /**
- * B#13b: whether a parameter is required and whether its value is one the
+ * Whether a parameter is required and whether its value is one the
  * operation takes is checked once, by the API. The CLI turns the flags' text
  * into the API's types and tells the API's error with the parameters named
  * by their flags.

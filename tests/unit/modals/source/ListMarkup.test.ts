@@ -11,7 +11,7 @@ import { childrenState, draftOf, parentState } from '../../../../src/modals/form
 /**
  * Lists in the source editor. The expected texts are what Obsidian 1.13.7's
  * own editor made of the same text and keys in the Dev vault (tabs, 4
- * columns), measured on 2026-09-29 (source-mode-design.md, 段 4b).
+ * columns).
  */
 
 /** `text` with the caret at '|', in an editor that numbers its lists. */

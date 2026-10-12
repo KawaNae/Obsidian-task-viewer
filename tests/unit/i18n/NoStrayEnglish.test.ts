@@ -44,7 +44,7 @@ const SINKS: [string, RegExp][] = [
  *
  * `lang` and `flow` emit the notation itself (`x3`, `until(...)`) and carry
  * their diagnostics in English on purpose — English for flowDiag/flowEval
- * lives in the TS source, not en.json (reference_diagnostic_i18n).
+ * lives in the TS source, not en.json.
  */
 const EXEMPT_DIRS = ['services/lang/', 'services/flow/'];
 

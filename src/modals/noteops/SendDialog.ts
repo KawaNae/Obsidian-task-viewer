@@ -16,8 +16,8 @@ import type { FormIssue, Tone } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
 
 /**
- * The send dialog: rows and their subtrees sent to a section of a note
- * (`archive/2026-09-send.md`, ダイアログ, 骨組みと並び). This is its logic, apart from the DOM: what it
+ * The send dialog: rows and their subtrees sent to a section of a note.
+ * This is its logic, apart from the DOM: what it
  * opens on, what it says of the destination the fields name, which values
  * it offers for the note's frontmatter, whether a send may be asked, what
  * a send asks, and whether the dialog may close. What it looks like is the
@@ -44,8 +44,7 @@ import { DraftGuard } from '../form/DraftGuard';
  *   under the note, which note the rows go to, always: the note there is,
  *   the rows' own note, or the note the send makes (and its folder), or why
  *   the field names none — a name or a path no note can be made at, or more
- *   than one note it does not tell apart (`note-suggest/send-field.md`,
- *   欄の下の行); under the heading, where in the note they go, or why the
+ *   than one note it does not tell apart; under the heading, where in the note they go, or why the
  *   heading names no one place; why a row's draft cannot be written, under
  *   that row; the rest (the timers, what a send is asked in spite of, the
  *   last send's answer) of the form. A send is asked only while no error is
@@ -541,20 +540,8 @@ export function yamlValue(yaml: readonly string[]): string {
 /** A YAML scalar as its value reads; null for a list or a mapping. */
 function scalarText(value: unknown): string | null {
     if (value === null || value === undefined) return '';
-    if (value instanceof Date) return dateText(value);
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
     return null;
-}
-
-/**
- * A YAML timestamp as it was written: YAML reads one without a zone as UTC,
- * so its UTC fields are the written ones. A date alone when the time is
- * midnight, else to the minute.
- */
-function dateText(date: Date): string {
-    if (Number.isNaN(date.getTime())) return '';
-    const iso = date.toISOString();
-    return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.slice(0, 16);
 }
 
 /** A YAML list of scalars as its items joined; null for anything else. */

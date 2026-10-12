@@ -1,5 +1,6 @@
 import { DateUtils } from '../../utils/DateUtils';
-import type { PropertyValue, Task } from '../../types';
+import type { Properties, Task } from '../../types';
+import { PropertyUpdatePlanner } from '../../services/persistence/PropertyUpdatePlanner';
 
 /**
  * フォームのフィールド確定値 → updateTask に渡す Partial<Task> 差分。
@@ -8,8 +9,10 @@ import type { PropertyValue, Task } from '../../types';
  * - 変更なし → null（updateTask を呼ばない）
  * - 値あり → own 宣言を設定
  * - undefined → own 宣言の削除（暗黙値 / cascade が透ける）
+ * - null（色、線種、マスク）→ 値のない own 宣言（上の層の値を隠す）
  *
- * 空欄は一貫して「宣言なし」を意味する。
+ * 空欄は一貫して「宣言なし」を意味する。own と比べるので、受け継いだ値と
+ * 同じ値も own の宣言として書く。
  */
 export class TaskUpdateBuilder {
     static content(task: Task, content: string): Partial<Task> | null {
@@ -41,6 +44,11 @@ export class TaskUpdateBuilder {
         return task[field] === v ? null : { [field]: v };
     }
 
+    /** The row's own no value of the style field (`- tv-color::`), which hides the value it inherits. */
+    static styleHidden(task: Task, field: 'color' | 'linestyle' | 'mask'): Partial<Task> | null {
+        return task[field] === null ? null : { [field]: null };
+    }
+
     /** own tags 全体（content 由来含む）の望ましい姿を渡す */
     static tags(task: Task, tags: string[]): Partial<Task> | null {
         const next = [...new Set(tags)].sort();
@@ -50,12 +58,12 @@ export class TaskUpdateBuilder {
     }
 
     /** own custom properties 全体の望ましい姿を渡す（per-key diff は planner が行う） */
-    static customProperties(task: Task, props: Record<string, PropertyValue>): Partial<Task> | null {
+    static customProperties(task: Task, props: Properties): Partial<Task> | null {
         const prev = task.properties ?? {};
         const prevKeys = Object.keys(prev);
         const nextKeys = Object.keys(props);
         const same = prevKeys.length === nextKeys.length
-            && nextKeys.every(k => prev[k]?.value === props[k].value);
+            && nextKeys.every(k => k in prev && PropertyUpdatePlanner.sameWritten(prev[k].value, props[k].value));
         return same ? null : { properties: props };
     }
 }

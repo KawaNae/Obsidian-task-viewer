@@ -177,7 +177,7 @@ describe('parseGenBody — diagnostics', () => {
         expect(found[0].message).toContain('four or more backticks');
     });
 
-    // ブロックの差し込みは、段 2b で初めて静的検査を受ける。
+    // ブロックの差し込みは、セクションが宣言した名前に対して静的検査を受ける。
     it('checks the body interpolations against what the section declared', () => {
         expect(parse(['<js>', 'const n = 1', '</js>', '- [ ] 第${n}回']).diagnostics).toEqual([]);
         expect(codes(['- [ ] 第${n}回'])).toEqual([['expr.unknown-ident', 1]]);

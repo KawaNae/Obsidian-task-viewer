@@ -56,7 +56,7 @@ describe('through the real modify handler', () => {
         }
     });
 
-    // A completion fires in the write that made it (X), so a drag that holds
+    // A completion fires in the write that made it, so a drag that holds
     // back the scan holds back no fire: the completion fires once, at once,
     // and the scan after the drag reads it without firing again.
     const WEEKLY = '- [ ] 週報 @2026-09-21 ==> every mon\n';

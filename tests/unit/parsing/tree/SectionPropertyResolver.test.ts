@@ -2,13 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { NoteSections } from '../../../../src/services/parsing/tree/NoteSections';
 import { Outline } from '../../../../src/services/parsing/utils/Outline';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
-import { DEFAULT_SCOPE_KEYS } from '../../../../src/types';
+import { DEFAULT_SCOPE_KEYS, DEFAULT_SETTINGS } from '../../../../src/types';
+import { FileParsePipeline } from '../../../../src/services/parsing/FileParsePipeline';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
 function buildAndResolve(bodyLines: string[], frontmatter?: Record<string, any>) {
-    const sections = NoteSections.read(Outline.read(bodyLines));
-    SectionPropertyResolver.resolve(sections, frontmatter, keys);
+    const outline = Outline.read(bodyLines);
+    const sections = NoteSections.read(outline);
+    SectionPropertyResolver.resolve(outline, sections, frontmatter, keys);
     return { sections };
 }
 
@@ -22,11 +24,11 @@ describe('SectionPropertyResolver', () => {
         ]);
         const section = doc.sections[0];
         expect(section.resolvedColor).toBe('ff0000');
-        expect(section.resolvedProperties['custom']).toEqual({ value: 'hello', type: 'string' });
+        expect(section.resolvedProperties['custom']?.value).toEqual({ type: 'text', text: 'hello', spelling: 'hello' });
         expect(section.resolvedProperties['tv-color']).toBeUndefined(); // 分離済み
     });
 
-    it('セクションプロパティを解決（グループ形式）', () => {
+    it('`- properties::` はまとめの形でなく、キー properties のリスト', () => {
         const doc = buildAndResolve([
             '## Section',
             '- properties::',
@@ -35,8 +37,12 @@ describe('SectionPropertyResolver', () => {
             '- [ ] task @2026-03-24',
         ]);
         const section = doc.sections[0];
-        expect(section.resolvedColor).toBe('333333');
-        expect(section.resolvedProperties['note']).toEqual({ value: 'something', type: 'string' });
+        expect(section.resolvedColor).toBeUndefined();
+        expect(section.resolvedProperties['note']).toBeUndefined();
+        expect(section.resolvedProperties['properties']?.value).toEqual({ type: 'list', items: [
+            { type: 'text', text: 'tv-color:: 333333', spelling: 'tv-color:: 333333' },
+            { type: 'text', text: 'note:: something', spelling: 'note:: something' },
+        ] });
     });
 
     it('frontmatter → セクションのカスケード（child-wins）', () => {
@@ -50,7 +56,7 @@ describe('SectionPropertyResolver', () => {
         // セクションの color がfrontmatter を上書き
         expect(section.resolvedColor).toBe('00ff00');
         // frontmatter のカスタムプロパティが継承
-        expect(section.resolvedProperties['custom-fm']).toEqual({ value: 'from-fm', type: 'string' });
+        expect(section.resolvedProperties['custom-fm']?.value).toEqual({ type: 'text', text: 'from-fm', spelling: 'from-fm' });
     });
 
     it('frontmatter プロパティのみ（セクションプロパティなし）', () => {
@@ -96,7 +102,7 @@ describe('SectionPropertyResolver', () => {
 
         const section = doc.sections[0];
         expect(section.resolvedProperties['position']).toBeUndefined();
-        expect(section.resolvedProperties['real']).toEqual({ value: 'kept', type: 'string' });
+        expect(section.resolvedProperties['real']?.value).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
     });
 
     it('ネストセクションのカスケード: 親 → 子', () => {
@@ -113,7 +119,7 @@ describe('SectionPropertyResolver', () => {
 
         expect(parent.resolvedColor).toBe('red');
         expect(child.resolvedColor).toBe('red'); // 親から継承
-        expect(child.resolvedProperties['custom']).toEqual({ value: 'parent-value', type: 'string' });
+        expect(child.resolvedProperties['custom']?.value).toEqual({ type: 'text', text: 'parent-value', spelling: 'parent-value' });
     });
 
     it('子セクションが親プロパティをオーバーライド（child-wins）', () => {
@@ -129,7 +135,7 @@ describe('SectionPropertyResolver', () => {
 
         const child = doc.sections[0].children[0];
         expect(child.resolvedColor).toBe('blue');
-        expect(child.resolvedProperties['custom']).toEqual({ value: 'child-value', type: 'string' });
+        expect(child.resolvedProperties['custom']?.value).toEqual({ type: 'text', text: 'child-value', spelling: 'child-value' });
     });
 
     it('3レベルカスケード: frontmatter → ## → ###', () => {
@@ -205,8 +211,8 @@ describe('SectionPropertyResolver', () => {
             '- [ ] task @2026-03-24',
         ]);
 
-        expect(doc.sections[0].resolvedProperties['priority']).toEqual({
-            value: '1', type: 'number', number: 1,
+        expect(doc.sections[0].resolvedProperties['priority']?.value).toEqual({
+            type: 'number', number: 1, spelling: '1',
         });
     });
 
@@ -319,7 +325,8 @@ describe('SectionPropertyResolver', () => {
 });
 
 describe('SectionPropertyResolver の出所', () => {
-    const fm = { kind: 'frontmatter' };
+    // These notes are given their frontmatter as read, with no lines for it.
+    const fm = { kind: 'frontmatter', line: null };
     const at = (line: number, text: string | null, level = 2) => ({
         kind: 'section',
         line,
@@ -334,7 +341,7 @@ describe('SectionPropertyResolver の出所', () => {
         const sources = doc.sections[0].resolvedSources;
         expect(sources.fields).toEqual({ color: fm, startDate: fm });
         expect(sources.properties).toEqual({ owner: fm });
-        expect(sources.tags).toEqual([fm]);
+        expect(sources.tags).toEqual([{ from: fm, tags: ['a'] }]);
     });
 
     it('見出しのプロパティ行が上書きした値は、その行から', () => {
@@ -384,12 +391,15 @@ describe('SectionPropertyResolver の出所', () => {
     it('tags の出所が2つ: 和集合に加えた層を上から順に', () => {
         const doc = buildAndResolve([
             '## Section',
-            '- tags:: sectionTag',
+            '- tags:: #sectionTag',
             '- [ ] task',
         ], { tags: ['project'] });
         const section = doc.sections[0];
         expect(section.resolvedTags).toEqual(['project', 'sectionTag']);
-        expect(section.resolvedSources.tags).toEqual([fm, at(1, 'Section')]);
+        expect(section.resolvedSources.tags).toEqual([
+            { from: fm, tags: ['project'] },
+            { from: at(1, 'Section'), tags: ['sectionTag'] },
+        ]);
     });
 
     it('最初の見出しより上の節は heading が null', () => {
@@ -403,16 +413,19 @@ describe('SectionPropertyResolver の出所', () => {
         expect(doc.sections[1].resolvedSources.properties).toEqual({});
     });
 
-    it('同じキーが2度あれば、値と同じく後の行', () => {
+    it('同じキーが2度あれば、そのキーを読まず、上の層の値が届く。ほかのキーは読む', () => {
         const doc = buildAndResolve([
             '## Section',
             '- owner:: first',
             '- owner:: second',
+            '- area:: lab',
             '- [ ] task',
-        ]);
+        ], { owner: 'fm' });
         const section = doc.sections[0];
-        expect(section.resolvedProperties.owner.value).toBe('second');
-        expect(section.resolvedSources.properties.owner).toEqual(at(2, 'Section'));
+        expect(section.resolvedProperties.owner?.value).toMatchObject({ text: 'fm' });
+        expect(section.resolvedSources.properties.owner).toEqual(fm);
+        expect(section.resolvedProperties.area?.value).toMatchObject({ text: 'lab' });
+        expect(section.resolvedSources.properties.area).toEqual(at(3, 'Section'));
     });
 
     // 実在しない日や時刻を指す値は、日付も時刻も読まない。その層は日付を
@@ -442,5 +455,185 @@ describe('SectionPropertyResolver の出所', () => {
             expect(section.resolvedSources.fields.startDate).toEqual(fm);
             expect(section.resolvedDue).toBe('2026-10-05');
         });
+    });
+});
+
+describe('値のない値と読めない値', () => {
+    const fm = { kind: 'frontmatter', line: null };
+    const at = (line: number) => expect.objectContaining({ kind: 'section', line });
+
+    it('見出しの値のない組み込みのキーは、frontmatter の値を隠し、出所はその行', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-color::',
+            '- tv-linestyle:: null',
+            '- tv-mask:: ~',
+            '- [ ] task',
+        ], { 'tv-color': 'red', 'tv-linestyle': 'dashed', 'tv-mask': '***' });
+        const section = doc.sections[0];
+        expect(section.resolvedColor).toBeNull();
+        expect(section.resolvedLinestyle).toBeNull();
+        expect(section.resolvedMask).toBeNull();
+        expect(section.resolvedSources.fields.color).toEqual(at(1));
+        expect(section.resolvedSources.fields.linestyle).toEqual(at(2));
+        expect(section.resolvedSources.fields.mask).toEqual(at(3));
+    });
+
+    it('値のない値を、さらに下の層の値が上書きする', () => {
+        const doc = buildAndResolve([
+            '## Parent',
+            '- tv-color::',
+            '- area::',
+            '### Child',
+            '- tv-color:: blue',
+            '- area:: desk',
+            '- [ ] task',
+        ], { 'tv-color': 'red', area: 'lab' });
+        const child = doc.sections[0].children[0];
+        expect(child.resolvedColor).toBe('blue');
+        expect(child.resolvedProperties.area?.value).toMatchObject({ text: 'desk' });
+        expect(child.resolvedSources.fields.color).toEqual(at(4));
+    });
+
+    it('見出しの値のない tv-start は、frontmatter の日付と時刻の両方を隠す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-start::',
+            '- tv-end::',
+            '- tv-due::',
+            '- [ ] task',
+        ], { 'tv-start': '2026-09-28T10:00', 'tv-end': '2026-09-29T11:00', 'tv-due': '2026-09-30' });
+        const section = doc.sections[0];
+        expect(section.resolvedStartDate).toBeNull();
+        expect(section.resolvedStartTime).toBeNull();
+        expect(section.resolvedEndDate).toBeNull();
+        expect(section.resolvedEndTime).toBeNull();
+        expect(section.resolvedDue).toBeNull();
+        expect(section.resolvedSources.fields.startDate).toEqual(at(1));
+        expect(section.resolvedSources.fields.startTime).toEqual(at(1));
+    });
+
+    it('値を書いた tv-start は、日付と時刻を別々に受け継ぐ（隠した後も）', () => {
+        const doc = buildAndResolve([
+            '## Parent',
+            '- tv-start::',
+            '### Child',
+            '- tv-start:: 11:00',
+            '- [ ] task',
+        ], { 'tv-start': '2026-09-28T10:00' });
+        const child = doc.sections[0].children[0];
+        expect(child.resolvedStartDate).toBeNull();
+        expect(child.resolvedStartTime).toBe('11:00');
+    });
+
+    it('見出しの値のないカスタムのキーは、frontmatter の値を隠す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- area::',
+            '- [ ] task',
+        ], { area: 'lab' });
+        const section = doc.sections[0];
+        expect(section.resolvedProperties.area?.value).toEqual({ type: 'null', spelling: '' });
+        expect(section.resolvedSources.properties.area).toEqual(at(1));
+    });
+
+    it('frontmatter の値のないキーは値のないプロパティで、出所は frontmatter', () => {
+        const doc = buildAndResolve(['## Section', '- [ ] task'], { area: null, 'tv-color': null, 'tv-start': null });
+        const section = doc.sections[0];
+        expect(section.resolvedProperties.area).toEqual({ key: 'area', value: { type: 'null', spelling: '' } });
+        expect(section.resolvedColor).toBeNull();
+        expect(section.resolvedStartDate).toBeNull();
+        expect(section.resolvedStartTime).toBeNull();
+        expect(section.resolvedSources.fields.color).toEqual(fm);
+        expect(section.resolvedSources.properties.area).toEqual(fm);
+    });
+
+    it('frontmatter の大小違いの重複は、値のないキーでも重複として読まない', () => {
+        const doc = buildAndResolve(['## Section', '- [ ] task'], { Area: 'lab', area: null });
+        expect(doc.sections[0].resolvedProperties.area).toBeUndefined();
+    });
+
+    it('見出しの読めない値は、書いていないものとして上の層の値を通す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-linestyle:: wavy',
+            '- tv-start:: someday',
+            '- tv-due:: 10:00',
+            '- tv-color:: ""',
+            '- [ ] task',
+        ], { 'tv-linestyle': 'dashed', 'tv-start': '2026-09-28', 'tv-due': '2026-09-30', 'tv-color': 'red' });
+        const section = doc.sections[0];
+        expect(section.resolvedLinestyle).toBe('dashed');
+        expect(section.resolvedStartDate).toBe('2026-09-28');
+        expect(section.resolvedDue).toBe('2026-09-30');
+        expect(section.resolvedColor).toBe('red');
+        expect(section.resolvedSources.fields.linestyle).toEqual(fm);
+    });
+
+    it('見出しの組み込みのキーのリストは読めない値で、上の層の値を通す', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-color::',
+            '    - red',
+            '- tv-mask::',
+            '    - a',
+            '    - b',
+            '- [ ] task',
+        ], { 'tv-color': 'blue' });
+        const section = doc.sections[0];
+        expect(section.resolvedColor).toBe('blue');
+        expect(section.resolvedMask).toBeUndefined();
+    });
+
+    it('frontmatter の組み込みのキーのリストも読めない値', () => {
+        const doc = buildAndResolve(['## Section', '- [ ] task'], { 'tv-color': ['red'], 'tv-mask': [] });
+        const section = doc.sections[0];
+        expect(section.resolvedColor).toBeUndefined();
+        expect(section.resolvedMask).toBeUndefined();
+        expect(section.resolvedSources.fields).toEqual({});
+    });
+
+    it('カスタムのリストは上の層のリストを丸ごと置き換える', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- who::',
+            '    - c',
+            '- [ ] task',
+        ], { who: ['a', 'b'] });
+        expect(doc.sections[0].resolvedProperties.who?.value).toEqual({ type: 'list', items: [{ type: 'text', text: 'c', spelling: 'c' }] });
+    });
+
+    it('値のない tags は何も足さず、上の層のタグを隠さない', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tags::',
+            '- [ ] task',
+        ], { tags: ['a'] });
+        const section = doc.sections[0];
+        expect(section.resolvedTags).toEqual(['a']);
+        expect(section.resolvedSources.tags).toEqual([{ from: fm, tags: ['a'] }]);
+    });
+});
+
+describe('frontmatter の出所の行', () => {
+    it('frontmatter の値の出所は、そのキーの行（大文字と小文字によらない）', () => {
+        const lines = [
+            '---',
+            'tv-color: red',
+            'Area: lab',
+            'tags:',
+            '  - a',
+            'tv-start:',
+            '---',
+            '## S',
+            '- [ ] task',
+        ];
+        const read = FileParsePipeline.resolveSections(lines, DEFAULT_SETTINGS)!;
+        const sources = read.sections[read.sections.length - 1].resolvedSources;
+        expect(sources.fields.color).toEqual({ kind: 'frontmatter', line: 1 });
+        expect(sources.properties.area).toEqual({ kind: 'frontmatter', line: 2 });
+        expect(sources.tags).toEqual([{ from: { kind: 'frontmatter', line: 3 }, tags: ['a'] }]);
+        expect(sources.fields.startDate).toEqual({ kind: 'frontmatter', line: 5 });
+        expect(sources.fields.startTime).toEqual({ kind: 'frontmatter', line: 5 });
     });
 });

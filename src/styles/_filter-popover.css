@@ -284,7 +284,7 @@ body:not(.theme-dark) .filter-popover__group-body[data-depth]:not([data-depth="0
 /* ── Date Value Selector ── */
 
 /* [kind ▾] then the value: a date field, a preset, or a range's two fields.
-   The fields are 段10's (`.tv-ctrl .tv-form__input-with-picker`, _form.css). */
+   The fields are the form's (`.tv-ctrl .tv-form__input-with-picker`, _form.css). */
 .filter-popover__date-value {
     display: flex;
     flex-wrap: wrap;

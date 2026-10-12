@@ -9,6 +9,7 @@ import { createFormRow } from '../../form/formRow';
 import { bindField, type BoundField } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { TagInput } from '../../../services/parsing/utils/TagInput';
+import { TagRule } from '../../../services/parsing/utils/TagRule';
 import { optional } from '../../../utils/values/Read';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 import { ValueSuggest } from '../../../suggest/ValueSuggest';
@@ -48,10 +49,10 @@ export class TagsFieldGroup implements ClosingPart {
         this.sectionEl.empty();
 
         const task = this.ctx.getTask();
-        const shut = this.ctx.isShut();
+        // A finding in the tags' block locks them as the form's shut does.
+        const shut = this.ctx.isShut() || this.ctx.locked('tags');
         const contentTags = new Set(TagExtractor.fromContent(task.content ?? ''));
         const ownTags = new Set(task.tags);
-        const keys = this.ctx.plugin.settings.scopeKeys;
 
         // pills（フル幅、行の外）
         const effectiveTags = getEffectiveTags(task);
@@ -70,10 +71,12 @@ export class TagsFieldGroup implements ClosingPart {
                     removeBtn.disabled = shut;
                     removeBtn.addEventListener('click', () => this.commit(task.tags.filter(x => x !== tag)));
                 } else {
-                    const source = CascadeSource.forTag(this.ctx.app, task, keys, tag);
+                    const source = CascadeSource.forTag(task, tag);
                     chip.addClass('task-hub__tag-chip--locked');
                     chip.addClass('task-hub__tag-chip--cascade');
                     chip.setAttribute('aria-label', t('modal.hub.cascadeTagLocked', { source: this.ctx.sourceLabel(source) }));
+                    // The chip opens the line that adds the tag.
+                    chip.addEventListener('click', () => this.ctx.openSource(row => CascadeSource.lineOfTag(row, tag)));
                 }
             }
         }
@@ -109,9 +112,9 @@ export class TagsFieldGroup implements ClosingPart {
         this.suggest = new ValueSuggest(this.ctx.app, input, {
             candidates: (query) => {
                 const q = query.trim().toLowerCase().replace(/^#/, '');
-                const selected = new Set(getEffectiveTags(this.ctx.getTask()));
+                const selected = new Set(getEffectiveTags(this.ctx.getTask()).map(TagRule.key));
                 return FilterValueCollector.collectTags(this.ctx.index.getTasks())
-                    .filter(v => !selected.has(v))
+                    .filter(v => !selected.has(TagRule.key(v)))
                     .filter(v => !q || v.toLowerCase().includes(q));
             },
             render: (val, el) => el.setText(`#${val}`),
@@ -139,7 +142,7 @@ export class TagsFieldGroup implements ClosingPart {
     }
 
     private commit(tags: string[]): Promise<boolean> | undefined {
-        if (this.ctx.isShut()) return undefined;
+        if (this.ctx.isShut() || this.ctx.locked('tags')) return undefined;
         const write = this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。

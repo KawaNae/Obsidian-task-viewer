@@ -14,8 +14,9 @@ describe('issueWords', () => {
         { code: 'range', max: 60 },
         { code: 'oneOf', allowed: ['solid', 'dashed'] },
         { code: 'dateRequired' },
-        ...(['dateBlock', 'command', 'blockId', 'headingMark'] as const).map(kind => ({ code: 'notation', kind }) as const),
+        ...(['dateBlock', 'command', 'blockId', 'headingMark', 'listItem'] as const).map(kind => ({ code: 'notation', kind }) as const),
         { code: 'chars', chars: ': [' },
+        { code: 'digitsOnly' },
         { code: 'reserved' },
         { code: 'duplicate' },
     ];

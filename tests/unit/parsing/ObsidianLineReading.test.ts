@@ -3,6 +3,7 @@ import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeli
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
+import { PropertyLines } from '../../../src/services/parsing/utils/PropertyLines';
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
 import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
@@ -11,9 +12,8 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 
 /**
- * What a line is and how deep it stands, read as Obsidian 1.12.4 reads it
- * (R0, `archive/2026-09-stages/1-identity-2026-09-21.md`, 実測で分かった事実, question 1). The cases are the
- * R0 probe's, byte for byte; the expectations are Obsidian's metadata
+ * What a line is and how deep it stands, read as Obsidian 1.12.4 reads it.
+ * The cases are the ones measured in Obsidian, byte for byte; the expectations are Obsidian's metadata
  * (`listItems`) rather than the plugin's reading at the time.
  */
 
@@ -76,7 +76,7 @@ describe('indentation, as Obsidian nests a list', () => {
             // `nests` plus that second, depth condition.
             const outline = Outline.read(['- [ ] task', `${lead}- k:: v`]);
             const contentColumn = outline.item(0)!.contentColumn;
-            expect(ChildLineClassifier.ownPropertyLines(outline, 0).includes(1), label).toBe(nests && Outline.depthOf(indent) >= contentColumn);
+            expect(PropertyLines.ofTask(outline, 0).lines.some(line => line.line === 1), label).toBe(nests && Outline.depthOf(indent) >= contentColumn);
             expect(matchFlowLine(`${lead}- ==> next`) !== null, label).toBe(nests);
             expect(Outline.dedent(`${lead}- [ ] x`), label).toBe(`${lead}- [ ] x`.slice(indent.length));
         }
@@ -104,7 +104,7 @@ describe('line breaks, as Obsidian ends a line', () => {
 
     it('takes any status but U+2028 and U+2029, which are no task to Obsidian', () => {
         // Dev, Obsidian 1.12.4: `listItems`, Live Preview and the reading view
-        // agree (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L1 の実測).
+        // agree.
         for (const sep of [LS, PS]) {
             expect(TaskLineClassifier.isTaskLine(`- [${sep}] a`)).toBe(false);
             expect(TaskLineClassifier.isTaskLine(`\t- [${sep}] a`)).toBe(false);
@@ -117,8 +117,7 @@ describe('line breaks, as Obsidian ends a line', () => {
     });
 
     it('reads a checkbox as a task only with a space or a tab after `]`', () => {
-        // Dev, Obsidian 1.12.4: `listItems` and the reading view agree
-        // (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L1 の実測).
+        // Dev, Obsidian 1.12.4: `listItems` and the reading view agree.
         for (const tail of [' x', '\tx', ' ']) {
             expect(TaskLineClassifier.isTaskLine(`- [ ]${tail}`)).toBe(true);
             expect(TaskLineClassifier.isTaskLine(`\t- [ ]${tail}`)).toBe(true);
@@ -156,7 +155,7 @@ describe('line breaks, as Obsidian ends a line', () => {
     it('reads an ordered marker of any number of digits, as the outline reads an item (Obsidian)', () => {
         // One definition of the marker for the task line and the outline's
         // items. Obsidian 1.12.4 reads the ten-digit one as a task, in
-        // `listItems` and the reading view, past CommonMark's nine (the L2 gate).
+        // `listItems` and the reading view, past CommonMark's nine.
         for (const line of ['123456789. [ ] x', '1234567890. [ ] x', '12345678901234567890) [ ] x']) {
             expect(TaskLineClassifier.isTaskLine(line), line).toBe(true);
             expect(Outline.read([line]).item(0), line).not.toBeNull();
@@ -182,7 +181,7 @@ describe('line breaks, as Obsidian ends a line', () => {
 
         const property = ChildLineClassifier.classify(`    - k:: a${LS}b`, 0);
         expect([property.propertyKey, property.propertyValue]).toEqual(['k', `a${LS}b`]);
-        expect(PropertyValues.fromText(`[a${LS}b]`).type).toBe('array');
+        expect(PropertyValues.fromText(`"a${LS}b"`)).toMatchObject({ type: 'text', text: `a${LS}b` });
 
         expect(matchFlowLine(`    - ==> next${LS}more`)?.tail).toBe(`next${LS}more`);
         expect(Outline.read([`## a${LS}b`]).headings[0].text).toBe(`a${LS}b`);

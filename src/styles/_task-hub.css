@@ -141,6 +141,12 @@
     color: var(--tv-text-muted);
 }
 
+/* A property a finding locks: its value is shown, and taken no edit */
+.task-hub__row--locked .tv-ctrl__text-input {
+    color: var(--tv-text-muted);
+    cursor: not-allowed;
+}
+
 .tv-form__input-with-picker--color .task-hub__color-swatch {
     position: absolute;
     left: 44px;
@@ -162,4 +168,94 @@
 
 .task-hub__source:hover {
     color: var(--tv-text-muted);
+}
+
+/* --- A custom property's list: an item a line, as the note writes it --- */
+.task-hub__list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-hub__list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-hub__list-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: var(--tv-radius-s);
+}
+
+.task-hub__list-item > .tv-ctrl__text-input {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* The handle an item is dragged by; touch-action keeps a drag from scrolling */
+.task-hub__list-handle {
+    display: flex;
+    flex: 0 0 auto;
+    color: var(--tv-text-faint);
+    cursor: grab;
+    touch-action: none;
+}
+
+.task-hub__list-handle svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* The add field's room for a handle and a ×, so that it lines up with the items */
+.task-hub__list-item--add > .is-placeholder {
+    visibility: hidden;
+}
+
+.task-hub__list-item.is-dragging {
+    opacity: 0.5;
+}
+
+/* Where a dragged item would go: a line above or below the item */
+.task-hub__list-item.is-drop-before {
+    box-shadow: 0 -2px 0 var(--tv-accent);
+}
+
+.task-hub__list-item.is-drop-after {
+    box-shadow: 0 2px 0 var(--tv-accent);
+}
+
+.task-hub__list-chip--cascade {
+    background: var(--tv-bg-secondary);
+    color: var(--tv-text-muted);
+    border: 1px dashed var(--tv-border);
+}
+
+.task-hub__make-own {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+}
+
+/* Hide an inherited value: an icon beside the source, drawn as a row's × is */
+.tv-ctrl .task-hub__hide {
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 50%;
+}
+
+.tv-ctrl .task-hub__hide:hover {
+    background-color: var(--tv-bg-primary);
+}
+
+.task-hub__hide .svg-icon {
+    width: 10px;
+    height: 10px;
+}
+
+.task-hub__hide.is-hidden,
+.task-hub__prop-remove.is-hidden {
+    display: none;
 }

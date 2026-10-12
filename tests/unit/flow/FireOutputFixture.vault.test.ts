@@ -9,14 +9,14 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * What a fire leaves in the file, byte for byte, pinned before the effects of
- * one fire were folded into one write (F3) and held to after it.
+ * one fire were folded into one write and held to after it.
  *
  * The snapshot was taken on the code that still wrote each effect on its own:
  * the next instance, then the strip or the delete, each resolving the task
  * again. Folding them must change how many writes there are and nothing about
  * what they leave.
  *
- * Placement (F4) changed what some of them leave, and only where it meant
+ * Placement changed what some of them leave, and only where it meant
  * to: a next instance written above the frontmatter now goes below it.
  */
 
@@ -56,7 +56,7 @@ function bytes(contents: Map<string, string>): Record<string, string[]> {
 }
 
 // The note under frontmatter pinned the next instance going above the
-// frontmatter until placement (F4) kept it in the body (CY1).
+// frontmatter until placement kept it in the body.
 const GEN = ['```tv-gen 週報', '- [ ] 対象', '\t- [ ] 生成子', '```', ''];
 
 /** Each note holds one row worded `対象`, the one that fires. */

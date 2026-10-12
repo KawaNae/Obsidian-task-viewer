@@ -10,8 +10,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
- * A fire writes its next instance in the body of the note, or not at all
- * (CY1, older than F3).
+ * A fire writes its next instance in the body of the note, or not at all.
  *
  * The next instance of a row that is not indented goes to the head of the
  * run of siblings above it. The walk that found the head took any unindented
@@ -53,7 +52,7 @@ const ROW = '- [ ] 対象 @2026-09-21 ==> every mon';
 const NEXT = '- [ ] 対象 @2026-09-28 ==> every mon';
 const DONE = '- [x] 対象 @2026-09-21';
 
-describe('CY1: the next instance of a row with no sibling above it', () => {
+describe('the next instance of a row with no sibling above it', () => {
     const SHAPES: Array<[string, string[]]> = [
         ['a fence just above', ['# note', '```', '- [ ] sample', '```']],
         ['a tilde fence just above', ['# note', '~~~markdown', 'text', '~~~']],
@@ -118,7 +117,7 @@ describe('a next instance with nowhere in the body to go', () => {
 
     it('goes at the top of its run when a fence it stands after is closed above it', async () => {
         // Two columns in under nothing is an item at the top (Obsidian,
-        // measurement.md q3), and a closed fence above ends its run. The old
+        // `OutlineRead.test.ts` q3), and a closed fence above ends its run. The old
         // depth reading took the group to be under `x`, in the fence, and
         // refused.
         const note = ['# note', '```', 'x', '   ```', `  ${ROW}`, ''];
@@ -132,7 +131,7 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('goes under the item it stands in when a fence in that item takes a shallower line (Obsidian, measurement.md q1)', async () => {
+    it('goes under the item it stands in when a fence in that item takes a shallower line (Obsidian, `OutlineRead.test.ts` q1)', async () => {
         // `\tx` goes on Q's fence, so the row is Q's child and its group is
         // under Q, above the fence. The old depth reading took the group to be
         // under `\tx`, in the fence, and refused.
@@ -148,7 +147,7 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    describe('a copy of a subtree whose fence never closes (BK3)', () => {
+    describe('a copy of a subtree whose fence never closes', () => {
         // A fence in an item ends with the item (`Outline.read`), and what
         // ends the item is a line that starts a block of its own. A copy is
         // an item, and what follows it is the original's own line (a copy
@@ -202,7 +201,7 @@ describe('a next instance with nowhere in the body to go', () => {
             expect(original?.line).toBe(5);
         });
 
-        it('writes a copy after the subtree, before the sibling that ends the fence (R5)', async () => {
+        it('writes a copy after the subtree, before the sibling that ends the fence', async () => {
             const { lines, tasks, original } = await duplicated(
                 ['# note', '- [ ] root', '    ```', '    body', '- [ ] sibling', '']);
 
@@ -244,8 +243,8 @@ describe('the end of a note', () => {
 });
 
 describe('a line put past a fence in a list item that never closes', () => {
-    // Q's fence never closes and `x` goes on it (Obsidian, measurement.md
-    // q14). Every write that puts a line there puts one that starts a block of
+    // Q's fence never closes and `x` goes on it (Obsidian,
+    // `OutlineRead.test.ts` q14). Every write that puts a line there puts one that starts a block of
     // its own, which ends Q's item and its fence (Placement's precondition).
     const NOTE = ['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', ''];
 
@@ -273,10 +272,10 @@ describe('a line put past a fence in a list item that never closes', () => {
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'new']]);
     });
 
-    // Older than L2 (F4's R5, the part left): a child of the item whose own
-    // fence never closes went past the fence, on it. P1 puts it above the
+    // A child of the item whose own fence never closes went past the fence,
+    // on it. Placement puts it above the
     // item's own fence, where it reads as a task.
-    it('reads a child put under the item whose own fence never closes as a task, or writes nothing (P1)', async () => {
+    it('reads a child put under the item whose own fence never closes as a task, or writes nothing', async () => {
         const { contents, session } = await open(['# note', '- [ ] T', '    ```', '    code', '- [ ] U', '']);
         const before = contents.get(FILE)!;
 

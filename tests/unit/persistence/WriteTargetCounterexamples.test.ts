@@ -9,9 +9,9 @@ import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { planDuplicate } from '../../../src/services/operations/DuplicateShift';
 
 /**
- * Counterexamples found against the name-based targeting of F2 to F5b (a write
- * named its target and asked `TaskScanner.locate` where it stood), rerun
- * against N1's: a write takes the line the index's copy stands on, and only if
+ * Counterexamples found against the name-based targeting a write once had (a
+ * write named its target and asked `TaskScanner.locate` where it stood), rerun
+ * against the targeting by coordinate: a write takes the line the index's copy stands on, and only if
  * the line there still reads as the copy (`WriteSession.row`).
  *
  * Nothing looks for a row anywhere else, so these shapes, which were about the
@@ -19,7 +19,7 @@ import { planDuplicate } from '../../../src/services/operations/DuplicateShift';
  * Where the copy's line reads otherwise, the basis refuses it. Where it reads
  * the same — a twin moved onto it — nothing on the line tells the twins
  * apart, so the line counts only in the content the copy was read in, or one
- * our own writes carried it to (`NamedRow.read`, 2026-09-25): after any edit
+ * our own writes carried it to (`NamedRow.read`): after any edit
  * from outside, the write waits for a scan.
  */
 
@@ -57,7 +57,7 @@ describe('nested rows that read the same', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('N1 (F2\'s): c2\'s subtree moved above c1 from outside: the delete of c2 is refused', async () => {
+    it('c2\'s subtree moved above c1 from outside: the delete of c2 is refused', async () => {
         const bench = await writeBench(before);
         const c2 = bench.taskAt(4);
         const moved = [
@@ -78,9 +78,9 @@ describe('nested rows that read the same', () => {
 });
 
 describe('a row replaced from outside', () => {
-    // R4: "buy milk" replaced from outside by "call mom" (a sync, or a delete
+    // "buy milk" replaced from outside by "call mom" (a sync, or a delete
     // and an add in one save). The copy's line does not read "buy milk".
-    it('R4: refuses to delete a row whose line reads another', async () => {
+    it('refuses to delete a row whose line reads another', async () => {
         const before = ['- [ ] alpha', '- [ ] buy milk', '- [ ] omega'];
         const bench = await writeBench(before);
         const milk = bench.taskAt(1);
@@ -123,8 +123,8 @@ describe('identical rows', () => {
     });
 
     it('a line inserted above from outside: refused, though the copy\'s line now holds its twin', async () => {
-        // Refused as ambiguous under F2; written on the twin while N1 took a
-        // line on its basis alone. The twin reads as the copy, and only the
+        // Once refused as ambiguous, and once written on the twin when a write
+        // took a line on its basis alone. The twin reads as the copy, and only the
         // content tells them apart: the copy was not read in this one.
         const bench = await writeBench(same);
         const y = bench.taskAt(1);
@@ -136,7 +136,7 @@ describe('identical rows', () => {
     });
 
     it('an edit below them from outside: refused until a scan, then written', async () => {
-        // Refused as ambiguous under F2 (availability, not a wrong line).
+        // Once refused as ambiguous (availability, not a wrong line).
         const bench = await writeBench(same);
         const y = bench.taskAt(1);
         const edited = ['- [ ] 読書', '- [ ] 読書', '- [ ] other!'];
@@ -169,10 +169,10 @@ describe('identical rows', () => {
 });
 
 describe('own writes and outside edits interleaved', () => {
-    // X1: our write renames X to Y's text, then Y is deleted from outside
+    // Our write renames X to Y's text, then Y is deleted from outside
     // before any scan. A write on Y (from a view the scan has not refreshed)
     // landed on X under the ladder. Y's line now holds C.
-    it('X1: a write on a row deleted from outside does not land on the row our own write renamed to its text', async () => {
+    it('a write on a row deleted from outside does not land on the row our own write renamed to its text', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B', '- [ ] C']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
@@ -203,10 +203,10 @@ describe('own writes and outside edits interleaved', () => {
 });
 
 describe('^id', () => {
-    // B1: the ^id moved from the task onto a paragraph line from outside, and
+    // The ^id moved from the task onto a paragraph line from outside, and
     // a write from a copy taken before still has the ^id. The copy's line no
     // longer reads as the copy, and nothing looks for the ^id.
-    it('B1: a delete from a stale snapshot does not take the paragraph that now carries the ^id', async () => {
+    it('a delete from a stale snapshot does not take the paragraph that now carries the ^id', async () => {
         const bench = await writeBench(['- [ ] A ^a', 'text']);
         const stale = bench.taskAt(0);
         bench.edit(['- [ ] A', 'text ^a']);
@@ -218,7 +218,7 @@ describe('^id', () => {
     });
 
     it('a ^id line copied above from outside: refused until a scan', async () => {
-        // Refused under F2, the ^id naming two lines. The copy's line reads
+        // Once refused, the ^id naming two lines. The copy's line reads
         // as the copy, and so does the line below it: which of the two is the
         // row the copy was read from, nothing on either line says.
         const bench = await writeBench(['- [ ] A ^a']);
@@ -255,7 +255,7 @@ describe('flow effects', () => {
     });
 
     it('an outside line before the fire: nothing lands, the command stays', async () => {
-        // Landed under F3, the ladder finding the row below the new line.
+        // Once landed, the ladder finding the row below the new line.
         const bench = await writeBench([DONE, FLOW, '']);
         const rec = bench.taskAt(0);
         bench.edit(['メモ', DONE, FLOW, '']);
@@ -302,7 +302,7 @@ describe('editor-driven writes', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    // The editor's delete takes the subtree it showed, and only that (F5): a
+    // The editor's delete takes the subtree it showed, and only that: a
     // child the user has not seen is not taken with its parent.
     const shown = ['- [ ] A', '\t- [ ] c', '- [ ] B'];
     it('the editor menu delete refuses when a child was added under the line since the editor showed it', async () => {
@@ -330,7 +330,7 @@ describe('editor-driven writes', () => {
 });
 
 describe('a guess by position one level up', () => {
-    // S1: identical parents, each with one `c`. The ladder paired the
+    // Identical parents, each with one `c`. The ladder paired the
     // children by the parents' positions.
     const before = [
         '- [ ] p',
@@ -341,7 +341,7 @@ describe('a guess by position one level up', () => {
         '\t\t- [ ] g2',
     ];
 
-    it('S1a: subtrees swapped from outside: the delete of c1 takes neither c and g', async () => {
+    it('subtrees swapped from outside: the delete of c1 takes neither c and g', async () => {
         const bench = await writeBench(before);
         const c1 = bench.taskAt(1);
         const swapped = ['- [ ] p', '\t- [ ] c', '\t\t- [ ] g2', '- [ ] p', '\t- [ ] c', '\t\t- [ ] g1'];
@@ -351,7 +351,7 @@ describe('a guess by position one level up', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('S1b: the first subtree deleted from outside: a delete of c1 does not take c2', async () => {
+    it('the first subtree deleted from outside: a delete of c1 does not take c2', async () => {
         const bench = await writeBench(before);
         const c1 = bench.taskAt(1);
         bench.edit(before.slice(3));
@@ -360,7 +360,7 @@ describe('a guess by position one level up', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('S1c: the same, an update: c2, which now stands on c1\'s line and reads as it, is not written', async () => {
+    it('the same, an update: c2, which now stands on c1\'s line and reads as it, is not written', async () => {
         // An update plans from the row's line alone, and the line reads so;
         // the delete above plans from the subtree too, which does not. The
         // content tells them apart: c1 was not read in this one.
@@ -372,7 +372,7 @@ describe('a guess by position one level up', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('S1d: children that differ under swapped identical parents: refused, b untouched', async () => {
+    it('children that differ under swapped identical parents: refused, b untouched', async () => {
         const bench = await writeBench(['- [ ] p', '\t- [ ] a', '- [ ] p', '\t- [ ] b']);
         const a = bench.taskAt(1);
         bench.edit(['- [ ] p', '\t- [ ] b', '- [ ] p', '\t- [ ] a']);
@@ -382,7 +382,7 @@ describe('a guess by position one level up', () => {
 });
 
 describe('two own writes trade the texts of two rows, then an unreported change', () => {
-    // S2: X and Y trade `[ ] A` and `[x] A` by our own writes, no scan in
+    // X and Y trade `[ ] A` and `[x] A` by our own writes, no scan in
     // between. X's copy is the index's once its write landed (`landed`).
     const traded = async (): Promise<{ bench: WriteBench; x: Task }> => {
         const bench = await writeBench(['- [ ] A', '- [x] A']);
@@ -394,7 +394,7 @@ describe('two own writes trade the texts of two rows, then an unreported change'
         return { bench, x: bench.taskAt(0) };
     };
 
-    it('S2a: after the plugin\'s own frontmatter write moved the rows, a delete of X from its copy takes X', async () => {
+    it('after the plugin\'s own frontmatter write moved the rows, a delete of X from its copy takes X', async () => {
         // Only our own write came between: its report carries X's line.
         const { bench, x } = await traded();
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
@@ -406,7 +406,7 @@ describe('two own writes trade the texts of two rows, then an unreported change'
         expect(bench.refused).toEqual([]);
     });
 
-    it('S2b: after a line appended from outside: refused until a scan', async () => {
+    it('after a line appended from outside: refused until a scan', async () => {
         const { bench, x } = await traded();
         const edited = ['- [x] A', '- [ ] A', 'メモ'];
         bench.edit(edited);
@@ -415,7 +415,7 @@ describe('two own writes trade the texts of two rows, then an unreported change'
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('S2d: the same with renames (X to B, Y to A), X planned from a copy older than its rename', async () => {
+    it('the same with renames (X to B, Y to A), X planned from a copy older than its rename', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
@@ -450,7 +450,7 @@ describe('an outside line above: refused until a scan', () => {
         expect(bench.lines()).toEqual(['メモ', '- [x] A', '- [x] B']);
     });
 
-    it('X1 through a scan that read before our write: the write on Y, deleted from outside, is refused', async () => {
+    it('our write renamed X to Y\'s text, through a scan that read before it: the write on Y, deleted from outside, is refused', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B', '- [ ] C']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);

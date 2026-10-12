@@ -13,7 +13,7 @@ import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
  * in its view as the API and the CLI list for it (`list filterFile=…
  * list=…`): both ask `PinnedListQuery`, leave out the tasks with a
  * validation error, and sort by the list's own order when the call names no
- * `sort` (stage 7, point Q). Checked for a list with the view filter applied
+ * `sort`, as the UI does. Checked for a list with the view filter applied
  * and without, with an order and without, a template with a view filter and
  * without, and Kanban's grid.
  */

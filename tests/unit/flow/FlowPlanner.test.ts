@@ -415,7 +415,7 @@ describe('FlowPlanner', () => {
             expect(effect.warnings).toEqual([]);
         });
 
-        it('G1: warns, without touching the line, for a generated child that is checked and carries its own command', () => {
+        it('warns, without touching the line, for a generated child that is checked and carries its own command', () => {
             // The child is written byte-for-byte as the block wrote it —
             // only the parent's own status is normalized — but a checked
             // child with a `==>` of its own will not fire until it is

@@ -66,7 +66,7 @@ describe('Outline.shiftIndent', () => {
         expect(Outline.shiftIndent('\t- c', '', '\t')).toBe('\t\t- c');
     });
 
-    it('writes the columns in spaces when the characters cut off would not keep them (G3)', () => {
+    it('writes the columns in spaces when the characters cut off would not keep them', () => {
         // Under a tab (column 4), eight spaces are four past it.
         expect(Outline.shiftIndent('        - [ ] c', '\t', '')).toBe('    - [ ] c');
         // Under four spaces, a tab and two spaces are at column 6: two past it.
@@ -106,7 +106,7 @@ describe('Outline.shiftIndent', () => {
 describe('renderFlowInstance: the lines a next instance is written as', () => {
     const render = (lines: string[], line: number, instance: FlowInstance) => renderFlowInstance(Outline.read(lines), line, instance, '\t');
 
-    it('spells the next instance as the row that fired, its `==>` line its child (H2)', () => {
+    it('spells the next instance as the row that fired, its `==>` line its child', () => {
         // `10.   [ ] T` opens its content at column 6, and its `==>` line at
         // six spaces is its child. The next instance, handed over as
         // `- [ ] T`, is written with the row's delimiter and gap, numbered 1

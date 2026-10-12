@@ -73,12 +73,14 @@ function computeCache(content: string): VaultCache {
         if (end > 0) {
             try {
                 const parsed: unknown = parseYaml(lines.slice(1, end).join('\n'));
-                if (parsed && typeof parsed === 'object') {
+                // Obsidian's cache keeps a block only when it reads as a mapping.
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
                     frontmatter = parsed as Record<string, unknown>;
                 }
             } catch {
-                // Malformed YAML: real Obsidian's cache omits frontmatter too,
-                // and FileParsePipeline's own fallback swallows the same error.
+                // Malformed YAML, a key written twice among it: real
+                // Obsidian's cache omits the whole frontmatter too, and
+                // FileParsePipeline's own fallback swallows the same error.
             }
         }
     }
@@ -192,7 +194,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             // `create`, which the index scans like any other arrival — so the
             // scan follows here too, and every row in the file is minted by it.
             // A path that differs from a note's in case alone is taken, as
-            // on the file systems of macOS and Windows (stage 0).
+            // on the file systems of macOS and Windows.
             create: async (path: string, data: string) => {
                 if ([...contents.keys()].some(p => p.toLowerCase() === path.toLowerCase())) throw new Error('File already exists.');
                 const file = fileAt(path);

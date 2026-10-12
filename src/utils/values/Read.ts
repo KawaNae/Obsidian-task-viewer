@@ -10,7 +10,8 @@
 /**
  * The kinds of value whose shape a reading can miss. `dateTime` is a date
  * with or without a time; `dateTimeOrTime` also takes a time alone. `color`
- * is a hex color or a CSS color name. `statusChar` is one character a
+ * is what CSS reads as a color (`ColorCheck`): a hex value, a color name, or
+ * an expression such as `rgb()`. `statusChar` is one character a
  * checkbox can hold (`TaskLineClassifier.isStatusChar`). `text` is any
  * text: what a stored setting of text that is not one misses.
  */
@@ -21,9 +22,11 @@ export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' 
  * something else. Of a task's name, in its line: a date block
  * (`@2026-10-05`, `@10:00`), the command (`==>` and what follows), a
  * trailing block ID (`^id`). Of a heading's name: the heading's own mark
- * (`#`) before it, which the line writes itself.
+ * (`#`) before it, which the line writes itself. Of an item of a property's
+ * list: what its line would read as no such item (no value, a checkbox, a
+ * property line's shape).
  */
-export type NotationKind = 'dateBlock' | 'command' | 'blockId' | 'headingMark';
+export type NotationKind = 'dateBlock' | 'command' | 'blockId' | 'headingMark' | 'listItem';
 
 export type Issue =
     /** Nothing was given (only space, once normalized). */
@@ -42,6 +45,8 @@ export type Issue =
     | { readonly code: 'notation'; readonly kind: NotationKind }
     /** Characters the value cannot hold, each once, in the order they come. */
     | { readonly code: 'chars'; readonly chars: string }
+    /** A word of digits alone where a tag is wanted (`123`): Obsidian takes `#123` for no tag. */
+    | { readonly code: 'digitsOnly' }
     /** A name the plugin keeps for itself (a property key that is a scope key, `tags`). */
     | { readonly code: 'reserved' }
     /** A value that must differ from the others of its set and is one of them (a scope key, a status's character). */

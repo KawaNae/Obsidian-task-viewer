@@ -1,6 +1,8 @@
 import { DateUtils } from '../../utils/DateUtils';
 import type { DisplayTask, StatedDates, TaskViewerSettings, TopRightConfig } from '../../types';
 import { getEffectiveTags, getEffectiveProperties } from '../../services/data/EffectiveProperties';
+import { PropertyKey } from '../../services/parsing/utils/PropertyKey';
+import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
 import { t } from '../../i18n';
 
 /**
@@ -102,9 +104,9 @@ const FIELD_MAP: Record<string, FieldExtractor> = {
 /** The pieces of one field; none when the task has no value for it. */
 function fieldPieces(task: DisplayTask, fieldName: string, settings: TaskViewerSettings): TopRightPiece[] {
     if (fieldName.startsWith('prop.')) {
-        const props = getEffectiveProperties(task);
-        const pv = props[fieldName.slice(5)];
-        return seg(pv?.value != null ? String(pv.value) : null);
+        // `prop.<key>` names the key its case aside (`PropertyKey`).
+        const property = PropertyKey.get(getEffectiveProperties(task), fieldName.slice(5));
+        return seg(property ? PropertyValues.display(property.value) : null);
     }
     const extractor = FIELD_MAP[fieldName];
     return extractor ? extractor(task, settings) : [];

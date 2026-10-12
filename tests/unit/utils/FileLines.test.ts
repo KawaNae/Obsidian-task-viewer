@@ -55,7 +55,7 @@ describe('splitLines', () => {
 
     it('ends a line at a CR on its own, as the editor does', () => {
         // Obsidian's editor breaks the line there and its metadata counts two
-        // lines (R0). Read as one, every line below it has a number the editor
+        // lines (measured in Obsidian 1.12.4). Read as one, every line below it has a number the editor
         // does not give it.
         expect(splitLines('a\rb\n').lines).toEqual(['a', 'b', '']);
         expect(splitLines('a\nb\r').lines).toEqual(['a', 'b', '']);
@@ -70,7 +70,8 @@ describe('splitLines', () => {
     });
 
     it('keeps U+2028 and U+2029 inside the line', () => {
-        // Obsidian reads neither as a line break: the line is one checkbox (R0).
+        // Obsidian reads neither as a line break: the line is one checkbox (measured in
+        // Obsidian 1.12.4).
         expect(splitLines('- [ ] a b\n- [ ] c d').lines).toEqual(['- [ ] a b', '- [ ] c d']);
     });
 
@@ -267,7 +268,7 @@ describe('processLines', () => {
     it('writes nothing when its report is not one a file could follow: the write is checked by it', async () => {
         // The report is what says which lines the write put in and which it
         // kept (`checkWrite`). One no file could follow is a bug in the
-        // write, and nothing is written (P1; it used to land, the chain of
+        // write, and nothing is written (it used to land, the chain of
         // records marked broken).
         const h = harness('- [ ] a\n');
         const log = writeSink();

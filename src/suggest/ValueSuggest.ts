@@ -19,9 +19,9 @@ export interface ValueSuggestOptions {
  * The list of values under a text field of ours: the hub's tags, style and
  * properties, the filter's keys, values and pills, the top-right fields of
  * a list. One kind of list for every field, Obsidian's (`ShownSuggest`), as
- * the name's links and tags are (論点5): the first item is selected as it
+ * the name's links and tags are: the first item is selected as it
  * opens, an Enter puts it in, and a value that is no item is put in by
- * closing the list (Escape) and pressing Enter (論点A).
+ * closing the list (Escape) and pressing Enter, as the editor's lists do.
  *
  * The field's own Enter (`onFormEnter`, `bindField`) never sees an Enter
  * the list takes: Obsidian's keymap takes it before the field does. What

@@ -1,6 +1,6 @@
 import { instantText } from '../utils/DayWindow';
 import { TaskValues } from '../services/filter/TaskValues';
-import type { DisplayTask, PropertyValue } from '../types';
+import type { DisplayTask, PropertyScalar, PropertyValue } from '../types';
 import type { NormalizedTask } from './TaskApiTypes';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
@@ -48,8 +48,9 @@ const FIELD_EXTRACTORS: { [K in keyof NormalizedTask]: (task: DisplayTask, env: 
     durationMinutes:    t => computeDurationMinutes(t),
     properties:         t => {
         const result: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(getEffectiveProperties(t))) {
-            result[k] = toNativeValue(v);
+        // Each key as the layer whose value it is writes it.
+        for (const { key, value } of Object.values(getEffectiveProperties(t))) {
+            result[key] = toNativeValue(value);
         }
         return result;
     },
@@ -69,12 +70,24 @@ function extractFlowString(task: DisplayTask): string | null {
 
 // ── Property value conversion ──
 
+/**
+ * A property's value as its type says: a number as a number (`0x1F` is 31),
+ * a boolean as a boolean, a text without the quotes it was written in, no
+ * value as null, and a list as its items so.
+ */
 function toNativeValue(pv: PropertyValue): unknown {
     switch (pv.type) {
-        case 'number': return pv.number;
-        case 'boolean': return pv.boolean;
-        case 'array': return pv.items;
-        case 'string': return pv.value;
+        case 'null': return null;
+        case 'list': return pv.items.map(nativeScalar);
+        default: return nativeScalar(pv);
+    }
+}
+
+function nativeScalar(scalar: PropertyScalar): string | number | boolean {
+    switch (scalar.type) {
+        case 'number': return scalar.number;
+        case 'boolean': return scalar.boolean;
+        case 'text': return scalar.text;
     }
 }
 

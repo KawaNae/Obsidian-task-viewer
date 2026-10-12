@@ -1,9 +1,9 @@
 /**
- * Sending a row and its subtree to a note (`NoteOps.send`, 段 B3), in the
+ * Sending a row and its subtree to a note (`NoteOps.send`), in the
  * running Dev vault: to a new note, to a note there is, to a heading of the
  * row's own note, and a send whose note the row came from refuses once the
  * new note is written, which takes the new note away again. Then the send
- * dialog (段 B5), opened from a card's menu: the note and the heading picked
+ * dialog, opened from a card's menu: the note and the heading picked
  * from their lists with the pointer while the rows' editor holds a draft,
  * and a subtree it cannot open in the editor, shown as it stands. The
  * notes' bytes are read back from the disk.
@@ -104,6 +104,23 @@ describe('sending a row', () => {
         expect(sent.result).toEqual({ kind: 'done', note: DST });
         expect(readTestFile(DST)).toBe(['---', 'tv-color: "red"', 'tags:', '  - e2e', '---', '# 送り先', '', '## Tasks', '1. [ ] 手順 ^s1', '    - [ ] 子', '- [ ] 前からある', ''].join('\n'));
         expect(readTestFile(SRC)).toBe([`1. [[${DST.replace(/\.md$/, '')}]]`, '2. [ ] 次', ''].join('\n'));
+    });
+
+    it('with the values it inherits: no value as the key with none, a quoted value with its quotes', async () => {
+        deleteTestFile(`${NEW}.md`);
+        await writeIndexedTestFile(SRC, ['---', 'area: lab', 'tv-color: red', '---', '## S', '- area::', "- sq:: 'abc'", '- id:: "123"', '- tv-color:: null', '- [ ] 値', ''].join('\n'));
+
+        const candidates = obsidianEval(`(async () => {
+            const plugin = app.plugins.plugins['obsidian-task-viewer'];
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === '値');
+            const preview = await plugin.getNoteOps().previewSend([task.id]);
+            return JSON.stringify(preview.candidates);
+        })()`) as unknown[];
+        const sent = send('値', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION }, candidates);
+
+        expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
+        expect(readTestFile(`${NEW}.md`)).toBe(['---', 'tv-color:', 'area:', "sq: 'abc'", 'id: "123"', '---', '', '## Tasks', '- [ ] 値', ''].join('\n'));
+        deleteTestFile(`${NEW}.md`);
     });
 
     it('to a heading of its own note: carried in one write, and not told', async () => {
@@ -208,7 +225,7 @@ function closeTimer(id: string): void {
     })()`);
 }
 
-describe('sending a row a timer runs on (段 B4)', () => {
+describe('sending a row a timer runs on', () => {
     let open: string | null = null;
     afterEach(() => {
         if (open) closeTimer(open);
@@ -377,7 +394,7 @@ describe('the send dialog', () => {
 });
 
 /**
- * The note field (`note-suggest/send-field.md`): which note a name, a path
+ * The note field: which note a name, a path
  * or a pick points at, and what is said of it under the field. The notes
  * are made through Obsidian in a folder of their own and taken away at the
  * end; the row is written anew for each send, which takes it away.

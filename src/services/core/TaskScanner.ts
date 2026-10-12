@@ -9,6 +9,8 @@ import { nameOf, namesOfReading, readName } from './RowNames';
 import { splitLines, type Landing, type ReadMark } from '../persistence/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
+import { TagRule } from '../parsing/utils/TagRule';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -21,12 +23,11 @@ import { logDebug, logError, logInfo } from '../../log/log';
  *   commit   — store 更新
  *
  * 前回の読みと突き合わせない。名前は 1 回の読みの中だけで意味を持ち、読み
- * 直しをまたぐ同一性は `^id` だけが担う（structure/layers.md の「名前」）。自分の
+ * 直しをまたぐ同一性は `^id` だけが担う。自分の
  * 書き込みをまたぐ名前は、書き込みの報告で写す（`WriteLinks`）。
  *
  * スキャンは読むだけで、フローを発火させない。発火は完了させた操作が起こす
- * （エディタのトランザクションと、プラグイン自身の書き込み。structure/firing.md の
- * 「発火の可否」）。
+ * （エディタのトランザクションと、プラグイン自身の書き込み）。
  */
 export class TaskScanner {
     private scanQueue: Map<string, Promise<unknown>> = new Map();
@@ -113,11 +114,10 @@ export class TaskScanner {
 
         const fm = cache.frontmatter;
         if (fm) {
-            if ('tags' in fm) return true;
-            const keys = this.settings.scopeKeys;
-            if (keys.start in fm || keys.end in fm || keys.due in fm ||
-                keys.color in fm || keys.linestyle in fm || keys.mask in fm ||
-                keys.ignore in fm) return true;
+            // キーは Obsidian と同じく大文字と小文字を区別しない (PropertyKey)
+            if (Object.keys(fm).some(TagRule.isFrontmatterKey)) return true;
+            const scope = new Set(Object.values(this.settings.scopeKeys).map(PropertyKey.fold));
+            if (Object.keys(fm).some(key => scope.has(PropertyKey.fold(key)))) return true;
         }
 
         if (cache.listItems && cache.listItems.length > 0) return true;

@@ -10,6 +10,7 @@ import { unresolvedAt, type UnresolvedReference } from '../flow/FlowReferences';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../core/RowNames';
 import { Outline } from '../parsing/utils/Outline';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { Destination, type Section } from '../persistence/Destination';
 import { splitLines } from '../persistence/FileLines';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
@@ -172,7 +173,7 @@ export interface SendingLines {
 }
 
 /**
- * The open timers, as a send asks them (`archive/2026-09-send.md`, 開いているタイマー; `structure/writes.md`). A timer
+ * The open timers, as a send asks them. A timer
  * finds its lines by their `^id`s in its note; the timers are not the
  * send's to know, so they answer here.
  */
@@ -231,7 +232,7 @@ export type SendResult =
 
 /**
  * The operations on notes the UI asks for: sending rows and their subtrees
- * to a section of a note (`archive/2026-09-send.md`, 仕様の決定, 移す操作から送る操作へ). Each takes
+ * to a section of a note. Each takes
  * what the dialog holds as its arguments; what is told the user, the
  * operation tells, and the dialog only decides from the result whether it
  * closes.
@@ -396,7 +397,8 @@ export class NoteOps {
             path = note.path;
         }
         const keys = req.frontmatter.map(one => one.key);
-        if (new Set(keys).size !== keys.length) {
+        // `Area` and `area` are one key (`PropertyKey`).
+        if (new Set(keys.map(PropertyKey.fold)).size !== keys.length) {
             logWarn(`[NoteOps] send: a frontmatter key is given twice: ${keys.join(', ')}`);
             return wrongly;
         }

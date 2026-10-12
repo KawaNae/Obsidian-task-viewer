@@ -5,7 +5,7 @@ import { issueText } from '../utils/values/IssueText';
 
 /**
  * Keys injected by the Obsidian CLI framework itself, exempt from strict
- * validation. Verified empirically (2026-07-03, Obsidian 1.12): `vault=` is
+ * validation. Verified empirically (Obsidian 1.12): `vault=` is
  * consumed by the framework and never reaches handler params, so the
  * allowlist is currently empty. The e2e suite doubles as a canary — every
  * call goes through `vault=dev`, so an injected key would fail all of them.

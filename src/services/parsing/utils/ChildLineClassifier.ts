@@ -1,12 +1,11 @@
-import type { ChildLine, PropertyValue } from '../../../types';
-import { IN_LINE } from '../../../utils/LineBreak';
+import type { ChildLine } from '../../../types';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 import { FLOW_LINE_RE } from './FlowLineScanner';
 import { TaskLineClassifier } from './TaskLineClassifier';
 import { WIKILINK_TEXT_SOURCE } from './InlineNotation';
-import { PropertyValues } from './PropertyValues';
+import { PROPERTY_LINE } from './PropertyLines';
 
 /**
  * 子行のパース・分類ユーティリティ。
@@ -14,22 +13,11 @@ import { PropertyValues } from './PropertyValues';
  */
 export class ChildLineClassifier {
     /**
-     * `- [[link]]` with any list bullet. Here and in `PROPERTY_LINE`, the
-     * marker is followed by spaces and tabs as a list item's is
-     * (`Outline.read`); a no-break space there opens no item.
+     * `- [[link]]` with any list bullet. The marker is followed by spaces
+     * and tabs as a list item's is (`Outline.read`); a no-break space there
+     * opens no item.
      */
     static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+\\[\\[(${WIKILINK_TEXT_SOURCE}+)\\]\\]\\s*$`);
-    /**
-     * Matches `- key:: value` (Dataview-compatible), with any list bullet as
-     * a `==>` line takes one (`*`, `+`, `1.`). A key holds no `[` or `]`,
-     * so a checkbox line and a wikilink line are never property lines. The
-     * parser reads a task's and a section's properties from these lines,
-     * and the writer (`ChildPropertyLineEditor`) edits the same lines.
-     * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
-     * 有無で認識が反転する（`- key :: ` だけマッチ）ため `(.*)` が正しい。
-     */
-    static readonly PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
-
     /**
      * 生テキスト → ChildLine に変換。
      * @param bodyLine 絶対ファイル行（`Task.line` と同規約）
@@ -38,7 +26,7 @@ export class ChildLineClassifier {
         const indent = Outline.indentOf(text);
         const wikiMatch = text.match(this.WIKILINK_CHILD);
 
-        const propMatch = text.match(this.PROPERTY_LINE);
+        const propMatch = text.match(PROPERTY_LINE);
 
         return {
             text,
@@ -59,38 +47,23 @@ export class ChildLineClassifier {
     }
 
     /**
-     * Whether the plugin reads a meaning from `text` when it opens a list
-     * item: a task, a `==>` line, a property or a wikilink child. Such an
-     * item means what it does by where it stands (the task it belongs to),
-     * so a write that takes lines out must leave it standing where it was
-     * (`checkWrite`). Any other item is a note.
+     * Whether the plugin reads a meaning from the item on `line` of
+     * `reading`: a task, a `==>` line, a property, a wikilink child, or an
+     * item of a property's list (an item directly under a property line
+     * with no value, `PropertyLines`). Such an item means what it does by
+     * where it stands (the task it belongs to, the property it is an item
+     * of), so a write that takes lines out must leave it standing where it
+     * was (`checkWrite`): a list's line taken out from above its items
+     * would leave them notes of another item. Any other item is a note.
      */
-    static carriesMeaning(text: string): boolean {
-        return TaskLineClassifier.isTaskLine(text)
+    static carriesMeaning(reading: OutlineReading, line: number): boolean {
+        const text = reading.lines[line];
+        if (TaskLineClassifier.isTaskLine(text)
             || FLOW_LINE_RE.test(text)
-            || this.PROPERTY_LINE.test(text)
-            || this.WIKILINK_CHILD.test(text);
-    }
-
-    /**
-     * The task's own property lines, as absolute line numbers: the list items
-     * the outline reads directly under the task's item, not code
-     * (`OutlineReading.directItems`), that are `- key:: value` lines. A property line under a child task, under a
-     * note bullet, in a code block, or in a paragraph going on is not the
-     * task's. The parser reads the task's properties from these lines and
-     * the writer edits these lines (`ChildPropertyLineEditor`), so the two
-     * are one set.
-     */
-    static ownPropertyLines(outline: OutlineReading, taskLine: number): number[] {
-        return outline.directItems(taskLine).filter(line => this.PROPERTY_LINE.test(outline.lines[line]));
-    }
-
-    /** childLines から properties を集約（値の読みは `PropertyValues.fromText`） */
-    static collectProperties(childLines: ChildLine[]): Record<string, PropertyValue> {
-        const properties: Record<string, PropertyValue> = {};
-        for (const cl of childLines) {
-            if (cl.propertyKey) properties[cl.propertyKey] = PropertyValues.fromText(cl.propertyValue!);
-        }
-        return properties;
+            || PROPERTY_LINE.test(text)
+            || this.WIKILINK_CHILD.test(text)) return true;
+        const parent = reading.item(line)?.parent ?? null;
+        if (parent === null || reading.inCode(parent)) return false;
+        return reading.lines[parent].match(PROPERTY_LINE)?.[2].trim() === '';
     }
 }

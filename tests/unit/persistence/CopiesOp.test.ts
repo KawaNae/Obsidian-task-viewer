@@ -35,7 +35,7 @@ function spliceAndReport(
     const target = [...lines];
     const op: TaskOp = { kind: 'copies', side: position === 'before' ? 'above' : 'below', lines: parentLines, children: true };
     const { draft, reported, puts, placedBy } = draftOver(target);
-    applyOp.call({}, draft, taskLine, op);
+    applyOp.call({}, draft, {}, taskLine, op);
     // Every copy reads as the original's subtree does, and every other line
     // as it did: the check the write is held to (`checkWrite`).
     const replayed = replayEdits(lines.length, reported, placedBy)!;

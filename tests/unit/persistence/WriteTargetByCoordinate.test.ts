@@ -9,7 +9,7 @@ import { plannedOn } from '../../../src/services/persistence/TaskRefs';
  * A write takes its row by the line the index's copy stands on, and only if
  * the line there still reads as the copy (`WriteSession.row`). Nothing looks
  * for the row anywhere else: not by its name, not by its `^id`, not by the
- * first line that reads like it (2026-09-24). And the line counts only in the
+ * first line that reads like it. And the line counts only in the
  * content the copy was read in, or one our own writes led it to
  * (`NamedRow.read`): after any edit from outside, the write is refused until
  * a scan has read the file, however the copy's line reads.
@@ -97,7 +97,7 @@ describe('a line that reads as the copy on the copy\'s line, in content the copy
     it('is refused when it is the twin of the row that was read there', async () => {
         // Nothing on the line tells two rows that read the same apart: the
         // twin moved onto the copy's line reads as the copy. Only the content
-        // does, and it is not the one the copy was read in (2026-09-25).
+        // does, and it is not the one the copy was read in.
         const same = ['- [ ] 別 @2026-08-14', '- [ ] 読書 @2026-08-14', '- [ ] 読書 @2026-08-14'];
         const { bench, written } = await checkAfterEdit(same, 2, ['メモ', ...same]);
 

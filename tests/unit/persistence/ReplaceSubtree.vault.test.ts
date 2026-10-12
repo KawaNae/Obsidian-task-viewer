@@ -137,7 +137,7 @@ describe('the rows a replacement completes', () => {
 
     it('each stands on its own: a fire that cannot be written is set aside, the others written, and the user told of it once', async () => {
         // 対象's `==>` line holds `sub`: its next instance cannot be written
-        // without changing what `sub` is (as in the editor's R1).
+        // without changing what `sub` is (as in the editor's, `FlowFireExtension.test.ts`).
         const note = await open([
             '- [ ] P',
             '    - [ ] 対象 @2026-09-21',

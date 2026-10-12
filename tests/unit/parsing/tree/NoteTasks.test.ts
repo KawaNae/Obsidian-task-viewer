@@ -10,6 +10,7 @@ import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
     getEffectiveTags, getEffectiveProperties,
 } from '../../../../src/services/data/EffectiveProperties';
+import { PropertyKey } from '../../../../src/services/parsing/utils/PropertyKey';
 
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
@@ -21,7 +22,7 @@ const defaultCtx: TaskExtractionContext = {
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
     const outline = Outline.read(bodyLines);
     const sections = NoteSections.read(outline);
-    SectionPropertyResolver.resolve(sections, frontmatter, DEFAULT_SCOPE_KEYS);
+    SectionPropertyResolver.resolve(outline, sections, frontmatter, DEFAULT_SCOPE_KEYS);
     return NoteTasks.extract(outline, sections, { ...defaultCtx, ...ctx });
 }
 
@@ -115,8 +116,22 @@ describe('NoteTasks', () => {
                 '    - note:: something',
                 '    - priority:: 1',
             ]);
-            expect(tasks[0].properties['note']).toEqual({ value: 'something', type: 'string' });
-            expect(tasks[0].properties['priority']).toEqual({ value: '1', type: 'number', number: 1 });
+            expect(tasks[0].properties['note']?.value).toEqual({ type: 'text', text: 'something', spelling: 'something' });
+            expect(tasks[0].properties['priority']?.value).toEqual({ type: 'number', number: 1, spelling: '1' });
+        });
+
+        it('子行の日付のキーは読まない: 日付にもカスタムプロパティにもならず、節の日付が通る', () => {
+            const tasks = extractTasks([
+                '## A',
+                '- tv-start:: 2026-03-20',
+                '- [ ] task',
+                '    - tv-start:: 2026-03-24',
+                '    - tv-due:: 2026-03-30',
+            ]);
+            expect(tasks[0].startDate).toBeFalsy();
+            expect(tasks[0].due).toBeFalsy();
+            expect(tasks[0].properties).toEqual({});
+            expect(tasks[0].cascadeContext?.startDate).toBe('2026-03-20');
         });
     });
 
@@ -149,8 +164,8 @@ describe('NoteTasks', () => {
                 '- [ ] task @2026-03-24',
             ]);
             expect(tasks[0].properties['category']).toBeUndefined();
-            expect(tasks[0].cascadeContext?.properties?.['category']).toEqual({ value: 'work', type: 'string' });
-            expect(getEffectiveProperties(tasks[0])['category']).toEqual({ value: 'work', type: 'string' });
+            expect(tasks[0].cascadeContext?.properties?.['category']?.value).toEqual({ type: 'text', text: 'work', spelling: 'work' });
+            expect(getEffectiveProperties(tasks[0])['category']?.value).toEqual({ type: 'text', text: 'work', spelling: 'work' });
         });
 
         it('タスクの子行プロパティがセクションプロパティをオーバーライド', () => {
@@ -160,7 +175,88 @@ describe('NoteTasks', () => {
                 '- [ ] task @2026-03-24',
                 '    - priority:: 5',
             ]);
-            expect(tasks[0].properties['priority']).toEqual({ value: '5', type: 'number', number: 5 });
+            expect(tasks[0].properties['priority']?.value).toEqual({ type: 'number', number: 5, spelling: '5' });
+        });
+    });
+
+    describe('値のない値と読めない値', () => {
+        it('タスクの値のない組み込みのキーは、節の値を隠す', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tv-color:: ff0000',
+                '- tv-mask:: ***',
+                '- tv-linestyle:: dashed',
+                '- [ ] task @2026-03-24',
+                '    - tv-color::',
+                '    - tv-mask::',
+            ]);
+            expect(tasks[0].color).toBeNull();
+            expect(tasks[0].mask).toBeNull();
+            expect(tasks[0].cascadeContext?.color).toBeUndefined();
+            expect(getEffectiveColor(tasks[0])).toBeUndefined();
+            expect(getEffectiveMask(tasks[0])).toBeUndefined();
+            expect(getEffectiveLinestyle(tasks[0])).toBe('dashed');
+        });
+
+        it('節が値のない組み込みのキーで隠した値は、タスクに届かず、出所は残る', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tv-color::',
+                '- tv-start::',
+                '- [ ] task',
+            ], { 'tv-color': 'red', 'tv-start': '2026-09-28T10:00' });
+            expect(tasks[0].cascadeContext).toBeUndefined();
+            expect(getEffectiveColor(tasks[0])).toBeUndefined();
+            expect(tasks[0].inheritedFrom?.fields.color).toMatchObject({ kind: 'section', line: 1 });
+            expect(tasks[0].inheritedFrom?.fields.startDate).toMatchObject({ kind: 'section', line: 2 });
+        });
+
+        it('frontmatter の値のないキーは、タスクに値のないプロパティとして届く', () => {
+            const tasks = extractTasks(['## Section', '- [ ] task'], { area: null, 'tv-color': null });
+            expect(getEffectiveProperties(tasks[0]).area?.value).toEqual({ type: 'null', spelling: '' });
+            expect(getEffectiveColor(tasks[0])).toBeUndefined();
+        });
+
+        it('タスクの値のないカスタムのキーは、節の値を隠す', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- area:: lab',
+                '- [ ] task @2026-03-24',
+                '    - area::',
+            ]);
+            expect(getEffectiveProperties(tasks[0]).area?.value).toEqual({ type: 'null', spelling: '' });
+        });
+
+        it('タスクの値のない tags は何も足さず、節のタグを隠さない', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tags:: #a',
+                '- [ ] task @2026-03-24',
+                '    - tags::',
+            ]);
+            expect(getEffectiveTags(tasks[0])).toEqual(['a']);
+        });
+
+        it('タスクの読めない値は、書いていないものとして節の値を通す', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tv-linestyle:: dashed',
+                '- tv-color:: red',
+                '- [ ] task @2026-03-24',
+                '    - tv-linestyle:: wavy',
+                '    - tv-color::',
+                '        - blue',
+            ]);
+            expect(tasks[0].linestyle).toBeUndefined();
+            expect(tasks[0].color).toBeUndefined();
+            expect(getEffectiveLinestyle(tasks[0])).toBe('dashed');
+            expect(getEffectiveColor(tasks[0])).toBe('red');
+        });
+
+        it('節が値を何も言わなければ、出所を持たない', () => {
+            const tasks = extractTasks(['## Section', '- [ ] task @2026-03-24']);
+            expect(tasks[0].cascadeContext).toBeUndefined();
+            expect(tasks[0].inheritedFrom).toBeUndefined();
         });
     });
 
@@ -259,9 +355,9 @@ describe('NoteTasks', () => {
             expect(getEffectiveColor(b4)).toBe('ff6b6b');
 
             // customProp が全タスクに cascade 経由で継承
-            expect(getEffectiveProperties(b1)['customProp']).toEqual({ value: 'section-B', type: 'string' });
-            expect(getEffectiveProperties(b3)['customProp']).toEqual({ value: 'section-B', type: 'string' });
-            expect(b1.properties['customProp']).toBeUndefined();
+            expect(PropertyKey.get(getEffectiveProperties(b1), 'customProp')?.value).toEqual({ type: 'text', text: 'section-B', spelling: 'section-B' });
+            expect(PropertyKey.get(getEffectiveProperties(b3), 'customProp')?.value).toEqual({ type: 'text', text: 'section-B', spelling: 'section-B' });
+            expect(PropertyKey.get(b1.properties, 'customProp')).toBeUndefined();
         });
 
         it('日付なしの子チェックボックスは子タスクになり childLines に残らない', () => {
@@ -366,7 +462,7 @@ describe('NoteTasks', () => {
             expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 4, 5]);
         });
 
-        it('子タスクの段落の直後の浅い行は子タスクの段落の続き (Obsidian, measurement.md q5)', () => {
+        it('子タスクの段落の直後の浅い行は子タスクの段落の続き (Obsidian, `OutlineRead.test.ts` q5)', () => {
             // 空行を挟まない `desc line 2` は `child desc` の段落の続き（lazy continuation）
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',    // line 0
@@ -657,15 +753,15 @@ describe('NoteTasks', () => {
             `${unit}${unit}- [ ] c`,
         ];
 
-        // (Obsidian, measurement.md q3) 1 字下げは `- ` の内容の列（2）より浅いので、3 行とも兄弟
-        it('1スペースの3段は子でなく兄弟 (Obsidian, measurement.md q3)', () => {
+        // (Obsidian, `OutlineRead.test.ts` q3) 1 字下げは `- ` の内容の列（2）より浅いので、3 行とも兄弟
+        it('1スペースの3段は子でなく兄弟 (Obsidian, `OutlineRead.test.ts` q3)', () => {
             const tasks = extractTasks(nested(' '));
             expect(tasks.map(t => t.content)).toEqual(['a', 'b', 'c']);
             expect(tasks.every(t => t.parentId === undefined)).toBe(true);
         });
 
-        // (Obsidian, measurement.md q4) 8 字下げは内容の列 + 4 以上なので段落の続きで、タスクでない
-        it('8スペースの3段は a の段落の続き (Obsidian, measurement.md q4)', () => {
+        // (Obsidian, `OutlineRead.test.ts` q4) 8 字下げは内容の列 + 4 以上なので段落の続きで、タスクでない
+        it('8スペースの3段は a の段落の続き (Obsidian, `OutlineRead.test.ts` q4)', () => {
             const tasks = extractTasks(nested('        '));
             expect(tasks.map(t => t.content)).toEqual(['a']);
             expect(tasks[0].childLines.map(c => c.bodyLine)).toEqual([1, 2]);

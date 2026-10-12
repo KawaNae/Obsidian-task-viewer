@@ -4,11 +4,11 @@ import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A flow's `set content` that yields several lines stops the fire with a
- * reason (stage F5, found by its counterexample run).
+ * reason.
  *
  * The write refuses a line with a break in it (`LineBreakInLine`) and says so
  * only in the log: it is the input's place to refuse, where it can say why.
- * Before F5 the line was written split in two; with the write's check alone
+ * The line used to be written split in two; with the write's check alone
  * the fire did nothing and nobody was told.
  */
 

@@ -8,12 +8,11 @@ export interface LinkSettings {
 
 /**
  * A stand-in for `fileManager.generateMarkdownLink`, spelling links as
- * Obsidian 1.13.7 was measured to at stage 0
- * (`archive/2026-09-stages/3-v058-2026-09-28.md`, s0-measure, リンクの生成):
+ * Obsidian 1.13.7 was measured to:
  *
  * - shortest: the note's name when it is the one note of the vault by that
  *   name, case aside; its path without `.md` when another has it, or when
- *   the vault does not hold the note (measured at stage A2: a note not made
+ *   the vault does not hold the note (measured: a note not made
  *   yet is named by its path). relative: the path from the linking
  *   note's folder, the name alone in the same folder. absolute: the path
  *   from the vault's root.

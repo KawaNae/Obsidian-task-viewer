@@ -5,13 +5,13 @@ import { join, relative } from 'path';
 /**
  * Every reading of a line's indentation goes through `Outline`
  * (`INDENT_SOURCE`, `indentOf`, `dedent`), and every reading of a line's
- * content through `IN_LINE` (L1). A copy of its own is a second answer: `\s`
+ * content through `IN_LINE`. A copy of its own is a second answer: `\s`
  * took a full-width space, a no-break space and U+2028 for indentation, and
  * the index and the writes read one note two ways.
  *
  * This walks the source for the idioms those copies were written in. The
  * fence readings that dedented a line before looking for a fence are gone:
- * they read the outline now (stage L2, `BlockReading.census.test.ts`).
+ * they read the outline now (`BlockReading.census.test.ts`).
  */
 
 const SRC = join(__dirname, '../../../src');

@@ -8,7 +8,7 @@ import type { ValidationContext } from '../TaskDateValidator';
 import type { FormIssue, Tone } from '../form/FormIssue';
 
 /**
- * The create dialog (I#3): a new task line, and the place it goes
+ * The create dialog: a new task line, and the place it goes
  * (`CreatePlace`). This is its logic, apart from the DOM: what the place is
  * and what a line there inherits, what the dialog says of it, whether a
  * create may be asked, and the write. What it looks like, and the reading of
@@ -23,8 +23,8 @@ import type { FormIssue, Tone } from '../form/FormIssue';
  *   show it, and a time with no date reads as having one only where a date
  *   is inherited. A daily note's day is no such value: the reading gives a
  *   line no date of the note's name, so a time typed with no date is no
- *   start there (the decision of 2026-10-04, 論点1).
- * - A create waits for the write (I#9): written, the dialog closes; not, it
+ *   start there.
+ * - A create waits for the write: written, the dialog closes; not, it
  *   stays as it was, and says why above its buttons once, with no notice.
  *   A refusal that comes after the dialog was closed is told by a notice.
  */

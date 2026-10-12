@@ -591,7 +591,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
     // reads exactly as the target's basis did (the twins are alike). Nothing
     // on the line tells them apart; the content does, and the copy was not
     // read in this one (`NamedRow.read`). So the write is refused until a
-    // scan has read the file (2026-09-25).
+    // scan has read the file.
     it('an update is refused, though the twin now on the coordinate reads as the basis', async () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21') });
         const second = rows(session)[2].id;

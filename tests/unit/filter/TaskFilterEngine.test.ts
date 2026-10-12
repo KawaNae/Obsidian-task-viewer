@@ -108,6 +108,13 @@ describe('TaskFilterEngine', () => {
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
+        it('reads a condition\'s color as a note\'s color is read: `#ff0000` is the `ff0000` a note holds', () => {
+            const task = makeTask({ color: 'ff0000' });
+            expect(evaluateFilter(task, stateFromCondition(cond('color', 'includes', ['#ff0000'])))).toBe(true);
+            expect(evaluateFilter(task, stateFromCondition(cond('color', 'includes', [' #ff0000 '])))).toBe(true);
+            expect(evaluateFilter(task, stateFromCondition(cond('color', 'excludes', ['#ff0000'])))).toBe(false);
+        });
+
         it('no color set — empty string for matching', () => {
             const task = makeTask();
             const state = stateFromCondition(cond('color', 'includes', ['']));
@@ -251,6 +258,14 @@ describe('TaskFilterEngine', () => {
             const t = makeTask({ tags: ['A'] });
             const state = stateFromCondition(cond('tag', 'only', ['A']));
             expect(evaluateFilter(t, state)).toBe(true);
+        });
+
+        it('matches a tag whatever its case, as Obsidian does', () => {
+            const t = makeTask({ tags: ['CaseTag', 'Area/Work'] });
+            expect(evaluateFilter(t, stateFromCondition(cond('tag', 'includes', ['area'])))).toBe(true);
+            expect(evaluateFilter(t, stateFromCondition(cond('tag', 'equals', ['casetag'])))).toBe(true);
+            expect(evaluateFilter(t, stateFromCondition(cond('tag', 'only', ['casetag', 'area/work'])))).toBe(true);
+            expect(evaluateFilter(makeTask({ tags: ['casetag', 'CaseTag'] }), stateFromCondition(cond('tag', 'only', ['CASETAG'])))).toBe(true);
         });
 
         it('only — does not match empty tags against non-empty filter', () => {
@@ -698,7 +713,7 @@ describe('TaskFilterEngine', () => {
         });
 
         // A negative operator with the parent target asks that no ancestor
-        // answers yes (`not(ancestors(positive))`, decided 2026-09-30). It
+        // answers yes (`not(ancestors(positive))`). It
         // used to ask that some ancestor answered no, so a parent holding the
         // excluded tag passed when the grandparent did not, and a task
         // without ancestors failed.

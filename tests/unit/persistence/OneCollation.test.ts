@@ -7,11 +7,11 @@ import type { Task } from '../../../src/types';
 import { planDuplicate } from '../../../src/services/operations/DuplicateShift';
 
 /**
- * Stage F5: one check for every write that names a row.
+ * One check for every write that names a row.
  *
  * A write that takes its row by name carries what it was planned from, and
  * `WriteSession.row` checks the lines read that way before handing out the
- * line. F2's `edited` accepted any text on record for the row, a write of ours
+ * line. An earlier check (`edited`) accepted any text on record for the row, a write of ours
  * included, so a plan made from a copy older than our own last write could
  * still be written over it. These pin the shapes that differ.
  */
@@ -118,7 +118,7 @@ describe('the menu\'s own coordinate', () => {
 });
 
 describe('write checks its basis whatever the ops are', () => {
-    // Until F5 the basis was read inside the first op, so an empty list of ops
+    // The basis used to be read inside the first op, so an empty list of ops
     // answered written without looking. A fire's plan always strips its
     // command, which is what kept that from mattering.
     it('refuses an empty list of ops planned from a copy the file has moved on from', async () => {
@@ -142,7 +142,7 @@ describe('write checks its basis whatever the ops are', () => {
 });
 
 describe('an operation that takes the row away plans from its subtree', () => {
-    // F4's last out-of-scope shape. A task goes from outside, and before any
+    // A task goes from outside, and before any
     // scan the line below it — past a blank, deeper than the task above —
     // reads as that task's child. A delete planned from the scan's copy of the
     // upper task would take it too.

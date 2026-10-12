@@ -6,7 +6,7 @@ import type { SubtreeLine } from '../../../src/services/persistence/TaskOps';
 import type { SendRow } from '../../../src/services/core/TaskIndex';
 
 /**
- * A send to a section of the rows' own note (`TaskIndex.send`, 段 B2): one
+ * A send to a section of the rows' own note (`TaskIndex.send`): one
  * write, which writes each draft, fires each row a draft completed where it
  * stood, and carries the rows, in the order they stood, to the section.
  */

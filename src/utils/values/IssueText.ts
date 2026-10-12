@@ -5,7 +5,7 @@ import type { Issue, NotationKind, ShapeKind } from './Read';
  * (which are in English). `label` names the value (`due`, `limit`); `given`,
  * when passed, is the text that was read, quoted at the end.
  *
- * A form in the app tells the same issue through i18n instead (stage 10).
+ * A form in the app tells the same issue through i18n instead.
  */
 
 const SHAPE: Record<ShapeKind, string> = {
@@ -16,7 +16,7 @@ const SHAPE: Record<ShapeKind, string> = {
     int: 'a whole number',
     number: 'a number',
     bool: 'true or false',
-    color: 'a hex color (ff0000) or a color name (red)',
+    color: 'a color: a hex value (ff0000), a color name (red) or a CSS color (rgb(255 0 0))',
     statusChar: 'one character that is not a line break',
     text: 'text',
 };
@@ -26,6 +26,7 @@ const NOTATION: Record<NotationKind, string> = {
     command: 'a command (==>)',
     blockId: 'a block ID (^id) at its end',
     headingMark: 'the heading mark (#) at its start',
+    listItem: 'what a list\'s item line does not read as an item: no value (null, ~), a checkbox ([ ]) or a property (key:: value)',
 };
 
 function sentence(issue: Issue, label: string): string {
@@ -41,6 +42,7 @@ function sentence(issue: Issue, label: string): string {
         case 'dateRequired': return `${label} must include a date`;
         case 'notation': return `${label} must not hold ${NOTATION[issue.kind]}`;
         case 'chars': return `${label} must not hold: ${issue.chars}`;
+        case 'digitsOnly': return `${label} must not be digits alone`;
         case 'reserved': return `${label} is reserved`;
         case 'duplicate': return `${label} is already used`;
     }

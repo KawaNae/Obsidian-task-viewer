@@ -33,7 +33,7 @@ describe('FlowLineScanner', () => {
             expect(isFlowLine('- key:: value')).toBe(false);
         });
 
-        it('rejects a line whose bullet opens no list item (Obsidian, measurement.md q9)', () => {
+        it('rejects a line whose bullet opens no list item (Obsidian, `OutlineRead.test.ts` q9)', () => {
             // After the bullet, a list item has spaces or tabs and nothing else.
             expect(isFlowLine('-==> every mon')).toBe(false);
             expect(isFlowLine('- ==> every mon')).toBe(false);
@@ -137,12 +137,12 @@ describe('FlowLineScanner', () => {
             expect(collectFlowLineIndices(Outline.read(lines), 1)).toEqual([2]);
         });
 
-        it('takes no line with no gap after its bullet (Obsidian, measurement.md q9)', () => {
+        it('takes no line with no gap after its bullet (Obsidian, `OutlineRead.test.ts` q9)', () => {
             // `-==>` opens no list item: it goes on the task's paragraph.
             expect(collectFlowLineIndices(Outline.read(['- [ ] task', '\t-==> every mon']), 0)).toEqual([]);
         });
 
-        it('takes no line indented four columns past the task\'s content (Obsidian, measurement.md q4)', () => {
+        it('takes no line indented four columns past the task\'s content (Obsidian, `OutlineRead.test.ts` q4)', () => {
             // Six spaces under `- [ ] ` is the paragraph going on, not an item.
             expect(collectFlowLineIndices(Outline.read(['- [ ] task', '      - ==> every mon']), 0)).toEqual([]);
         });

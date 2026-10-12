@@ -152,7 +152,7 @@ export class TaskLineClassifier {
      *
      * Spaces, as a tab's width is the column it stands at: a line moved to
      * another indentation keeps its content as far past its marker, and a
-     * child moved with it stays its child (the fifth L2 counterexample run).
+     * child moved with it stays its child.
      * One to four columns: a task line's gap either way.
      */
     static extractMarker(line: string): string {

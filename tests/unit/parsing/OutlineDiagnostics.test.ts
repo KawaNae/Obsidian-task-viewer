@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { outlineDiagnostics } from '../../../src/services/parsing/utils/OutlineDiagnostics';
-import fixture from './fixtures/l3-commonmark.json';
+import fixture from './fixtures/commonmark-outline.json';
 
 /**
  * The editor's two warnings on the note's reading: a `>` that ends an item
@@ -15,11 +15,11 @@ const warned = (lines: string[], code: string) =>
 
 /**
  * The shapes the reading view draws a quote inside the item above, where
- * CommonMark and Live Preview end the item (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L3 の実測),
+ * CommonMark and Live Preview end the item (measured in Obsidian 1.12.4),
  * and two more of the same kind.
  */
 const QUOTE_IN_ITEM_ON_READING_VIEW: Record<string, number> = {
-    'F-quote': 1, 'F-callout': 1, 'F-callout-c': 1, 'F-s3-18255': 2, 'F-quote-sib': 1, 'F-quote-tab': 1,
+    'F-quote': 1, 'F-callout': 1, 'F-callout-c': 1, 'F-quote-after-empty-child': 2, 'F-quote-sib': 1, 'F-quote-tab': 1,
     'F-quote-nosp': 1, 'F-quote-after-child': 2, 'F-quote-para': 2, 'F-quote-lazy': 1,
     'H-quote-blank-c2': 1, 'H-quote-deep': 2,
     'X-quote-deep-lazy': 1, 'X-quote-empty': 1, 'X-quote-then-ord2': 1,

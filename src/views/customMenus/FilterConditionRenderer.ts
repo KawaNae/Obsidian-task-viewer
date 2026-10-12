@@ -126,7 +126,7 @@ export class FilterConditionRenderer {
             placeholder: t('filter.typePropertyValue'),
             wrapClass: 'filter-popover__property-value-wrap',
             inputClass: 'tv-ctrl__text-input',
-            getCandidates: () => key ? FilterValueCollector.collectPropertyValuesForKey(tasks, key) : [],
+            getCandidates: () => FilterValueCollector.collectPropertyItemsForKey(tasks, key),
             onCommit: (val) => {
                 edit.update(c => ({ ...c, value: val }), 'keep');
             },
@@ -385,7 +385,7 @@ export class FilterConditionRenderer {
     }
 
     /**
-     * A field of a day (段10's field: text, a picker, a clear button),
+     * A field of a day (the form's field: text, a picker, a clear button),
      * bound to the date of `value` (`bindField`). What does not read is said
      * under the row's value line and is not committed. A value with a time
      * shows the time faint beside the field and keeps it when the day
@@ -497,7 +497,7 @@ export class FilterConditionRenderer {
      * A number field of a row (`bindField`): read as typed by `codec`, and
      * what does not read said under the row's value line, the field marked;
      * a blur or the form's Enter commits once a value that reads, and one
-     * that does not is kept as typed and not committed (入力の論点 E).
+     * that does not is kept as typed and not committed.
      */
     private renderNumberField<T>(
         container: HTMLElement,

@@ -5,8 +5,8 @@ import {
 import { isIgnored, isLinkable } from './ObsidianFiles';
 
 /**
- * The notes a field suggests, as Obsidian's `[[` suggests them
- * (`note-suggest-design.md`, `note-suggest/candidates.md`): every list of
+ * The notes a field suggests, as Obsidian's `[[` suggests them (as
+ * observed in Obsidian 1.13.7, and read in its `app.js`): every list of
  * notes asks here, and draws what it gets with `candidateView`.
  *
  * Obsidian's list is made of its link suggestions (`getLinkSuggestions`,

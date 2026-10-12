@@ -1,12 +1,12 @@
 /**
- * The questions put to the user (段10b), in the running Dev vault: the
+ * The questions put to the user, in the running Dev vault: the
  * delete's confirmation, a flow's three ways to delete, and a timer's three
  * ways to start on a completed task stand on OverlayShell (`askChoice`),
  * open with the focus on cancel, and answer once: the button pressed, or
  * cancel however else they close (Escape, the close button, a press
  * outside). The timer's Custom... length (`askText`) says under its field
  * what does not read, stays open, and closes on a value that does, in the
- * range of the settings' table (a work of a minute or more, 論点6).
+ * range of the settings' table (a work of a minute or more).
  *
  * The delete is chosen from a card's menu, as a user chooses it; the timer
  * is started on the completed row as its menu starts it. The note's bytes
@@ -317,7 +317,7 @@ describe('the timer\'s Custom... length', () => {
             button(${JSON.stringify(tr('modal.ok'))}).click();
             await sleep(200);
             out.abc = askState();
-            // 論点6: no upper bound on the work's length.
+            // No upper bound on the work's length.
             type('200');
             enter(input());
             out.long = await closed();

@@ -275,7 +275,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = (Object.keys(OPERATIONS) as O
  */
 export const FILTER_VALUE_DOC = {
     file: '"value": ["notes/a.md"] — whole file paths',
-    tag: '"value": ["work"] — includes and excludes take sub-tags too (work matches work/x); equals is the exact tag; only = the task\'s tags are this set and no other',
+    tag: '"value": ["work"] — any case, as Obsidian has it (Work is work); includes and excludes take sub-tags too (work matches work/x); equals is the tag itself; only = the task\'s tags are this set and no other',
     status: '"value": [" ", "x"] — status characters',
     content: '"value": "text" — contained, any case',
     startDate: '"value": "YYYY-MM-DD", "YYYY-MM-DDTHH:mm", { "preset": "<preset>", "n"?: number }, or with equals only a range { "from"?, "to"? } — a date or a preset is the visual days it names, and the task\'s moment is compared with them (an end or a due right at a day\'s start is the day before\'s); a date and a time is a moment, compared as a number',
@@ -289,7 +289,7 @@ export const FILTER_VALUE_DOC = {
     notation: '"value": ["taskviewer" | "tasks" | "dayplanner"]',
     parent: 'no value',
     children: 'no value — child tasks only (plain checkbox lines and links are not)',
-    property: '"key": "priority", "value": "high" — equals is exact, contains any case',
+    property: '"key": "priority", "value": "high" — the key in any case; the value typed as a property line types it ("123" in quotes is text): numbers and booleans compared as values, texts in any case, a number\'s contains in its spelling, a list item by item; isNotSet: no value or no key',
 } as const satisfies Record<FilterProperty, string>;
 
 // ── Shared sections ──
@@ -625,7 +625,8 @@ ${renderFlagTable(CLI_OUTPUT_SCHEMA)}
       json:  "truncated": true and "total": N in the response
       tsv:   a trailing line: # truncated: showing N of M
       jsonl: a trailing record: {"_truncated":true,"showing":N,"total":M}
-    TSV: tabs and line breaks in values are written as spaces.
+    TSV: tabs and line breaks in values are written as spaces. A list
+    (tags, childIds) is joined with ';'; properties is written as JSON.
 
 ${fieldsSection('Output Fields')}
 

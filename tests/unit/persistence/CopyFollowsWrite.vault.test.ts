@@ -1,16 +1,17 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
+import { byKey } from '../helpers/properties';
 
 /**
- * Stage F5: a card's update brings the index's copy of the row up to what it
+ * A card's update brings the index's copy of the row up to what it
  * wrote, so the next write planned from that copy is not refused against our
  * own write in the moment before the scan reads it.
  *
  * Every write that names a row is checked against the copy it was planned
  * from (`WriteSession.row`). Until the copy followed the write, a deletion
- * fire right after a card's update was always refused (a loss of availability
- * F3 introduced), and a second update would have been too. The scan is held
+ * fire right after a card's update was always refused (a loss of
+ * availability), and a second update would have been too. The scan is held
  * here the way a drag holds it, so each case runs in that moment.
  */
 
@@ -70,7 +71,7 @@ describe('after a card\'s update, before any scan', () => {
         const id = idOf(session, 'A');
         session.holdScans();
 
-        expect((await session.ops.updateTask(id, { properties: { memo: { value: 'new', type: 'string' } } } as never)).written).toBe(true);
+        expect((await session.ops.updateTask(id, { properties: byKey({ memo: { type: 'text', text: 'new', spelling: 'new' } }) } as never)).written).toBe(true);
         expect(contents.get(FILE)).toContain('\t- memo:: new');
         expect(await session.ops.deleteTask(id)).toBe(true);
 
@@ -92,11 +93,10 @@ describe('after a card\'s update, before any scan', () => {
 });
 
 describe('a subtree written in from outside before the update', () => {
-    // Found by the F5 counterexample run, when the copy was brought up to the
-    // write by hand: a card's update planned from the row's line only, so a
-    // child written in from outside since the scan did not stop it. Since N1
-    // the copy counts only in the content it was read in (`NamedRow.read`):
-    // the update is refused, and has the file read again. The copy that
+    // When the copy was first brought up to the write by hand, a card's
+    // update planned from the row's line only, so a child written in from
+    // outside since the scan did not stop it. The copy counts only in the
+    // content it was read in (`NamedRow.read`): the update is refused, and has the file read again. The copy that
     // reading gives shows the child, and the delete planned from it takes it.
     const ROW = '- [ ] A @2026-09-21 ^keep';
 
@@ -119,7 +119,7 @@ describe('a subtree written in from outside before the update', () => {
 });
 
 describe('writes asked of one row before the one before them is back', () => {
-    // Found by the F5 counterexample run's second pass. A card's checkbox does
+    // A card's checkbox does
     // not wait for its update, so two clicks can ask two writes of one row
     // before the first is written. Planned from the copy as it stood when each
     // was asked, the second would be refused against the first — and the
@@ -173,7 +173,7 @@ describe('writes asked of one row before the one before them is back', () => {
 });
 
 describe('an update that rewrites property lines plans from them', () => {
-    // Found by the F5 counterexample run's second pass, older than F5. A tag
+    // A tag
     // list is written whole from the copy's, so a tag added from outside since
     // the scan would be written over. The update's basis takes in the subtree
     // when it rewrites property lines, and the write is refused instead.

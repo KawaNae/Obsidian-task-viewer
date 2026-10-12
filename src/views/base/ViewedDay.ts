@@ -4,7 +4,7 @@
  * A dated view (Timeline, Schedule, Calendar, MiniCalendar) holds the
  * transient `date`. Absent, the view follows today — it moves to the new day
  * when the visual day rolls; present, it stays on that day, across a day
- * change and a restart (S3). Where the view puts the day in what it draws is
+ * change and a restart. Where the view puts the day in what it draws is
  * its own (Timeline puts the past days before it; Calendar starts its grid
  * on it).
  */

@@ -19,7 +19,7 @@ export interface DurationField {
     presets: readonly number[];
     /**
      * Custom… が受け付ける分の範囲と読み方。設定の表（`SETTINGS_SCHEMA`）の
-     * その長さのキーで、設定画面の欄と同じ範囲を読む（論点6）。
+     * その長さのキーで、設定画面の欄と同じ範囲を読む。
      */
     setting: IntSetting;
     get(): number;

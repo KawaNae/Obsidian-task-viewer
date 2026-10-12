@@ -9,11 +9,10 @@ import { NoteSections } from '../../../src/services/parsing/tree/NoteSections';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 
 /**
- * A send to another note (`TaskIndex.send`, 段 B3): the note written first —
+ * A send to another note (`TaskIndex.send`): the note written first —
  * made, or written in one write — then each note the rows came from, each
  * row's subtree replaced by a link to the note; and, when a note the rows
- * came from refuses, what went of its rows taken out of the note again
- * (`archive/2026-09-send.md`, 書き込みの順序と補償).
+ * came from refuses, what went of its rows taken out of the note again.
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
@@ -126,7 +125,8 @@ describe('to a new note', () => {
     it('that could not be made: refused, told once, the rows left where they stood', async () => {
         const note = await open({ 'src.md': ['- [ ] A', ''], 'a.md': ['x', ''] });
 
-        // A path a note has in another case (stage 0): the vault refuses it.
+        // A path a note has in another case: the vault refuses it, as the file
+        // systems of macOS and Windows tell no case apart.
         const sent = await note.send([note.row('A')], { path: 'A.md', create: true });
 
         expect(sent).toMatchObject({ kind: 'not-done', refused: { file: 'A.md', reason: { kind: 'failed' } } });
@@ -226,14 +226,14 @@ describe('to a note there is', () => {
         expect(note.lines('dst.md')).toEqual(['---', 'j: 2', '---', '## Tasks', '- [ ] A', '- [ ] x', '']);
     });
 
-    it('at the head of a section with property lines: past them, so the section still reads them and the row takes their values', async () => {
+    it('at the head of a section with property lines: past them, and the row takes their values', async () => {
         const note = await open({ 'src.md': ['- [ ] A', ''], 'dst.md': ['### Section', '* tv-color:: #ffffff', '* [ ] x', ''] });
 
         await note.send([note.row('A')], { path: 'dst.md', heading: 'Section' });
 
         expect(note.lines('dst.md')).toEqual(['### Section', '* tv-color:: #ffffff', '- [ ] A', '* [ ] x', '']);
         const sections = NoteSections.all(NoteSections.read(Outline.read(note.lines('dst.md')!)));
-        expect(sections.find(s => s.heading?.text === 'Section')?.propertyBlock?.entries.map(e => e.key)).toEqual(['tv-color']);
+        expect(sections.find(s => s.heading?.text === 'Section')?.properties.lines.map(line => line.key)).toEqual(['tv-color']);
         expect(note.task('A').cascadeContext?.color).toBe('ffffff');
         expect(note.task('x').cascadeContext?.color).toBe('ffffff');
     });

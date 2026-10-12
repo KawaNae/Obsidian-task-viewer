@@ -376,8 +376,11 @@ function spliceStart(length: number, at: number): number {
  * `checkWrite`, and name the fence that never closes when that is where the
  * line reads: `WriteFinding.fence`), the section it goes to is under
  * `count` headings named `name` and none of them is the one (`headings`,
- * `Placement.into`), or the write itself failed — it threw, or the file could
- * not be read or written.
+ * `Placement.into`), the lines of the property `key` it would write hold
+ * what the reading finds wrong, a key written twice or a line it does not
+ * read (`property`, `ChildPropertyLineEditor`; `line` is the line found), or
+ * the write itself failed — it threw, or the file could not be read or
+ * written.
  */
 export type RefusalReason =
     | { kind: 'gone' }
@@ -385,6 +388,7 @@ export type RefusalReason =
     | { kind: 'unplaceable'; fence: number | null }
     | { kind: 'disturbs'; fence: number | null }
     | { kind: 'headings'; name: string; count: number }
+    | { kind: 'property'; key: string; line: number }
     | { kind: 'failed' };
 
 /** A write that was not made, as it is told to whoever reports it. */
@@ -505,7 +509,7 @@ export interface RowRef {
  * editor showed it, in the content whose key is `key`; with `subtree`, the
  * line and every line of its subtree as the editor showed them, for a write
  * that takes them away, made only if the file still reads them so, as a
- * delete that names its row is (F5).
+ * delete that names its row is.
  */
 export function editorRow(line: number, text: string, key: ContentKey, subtree?: readonly string[]): RowRef {
     return { line, subject: text.trim(), basis: { text, ...(subtree ? { subtree } : {}) }, in: { key } };
@@ -581,10 +585,12 @@ export interface WriteSession {
      * row's subtree (`ReplaceSubtree`), or the lines are not the ones the
      * write was made for (`changed`: a send's row whose subtree, once its
      * draft and fires are written, is not what went to its note, `SendWriter`;
-     * a note to take a write back from that was written since, `takeBack`).
+     * a note to take a write back from that was written since, `takeBack`),
+     * or a property's lines hold what the reading finds wrong (`property`,
+     * `ChildPropertyLineEditor`).
      * The callback returns what this answers.
      */
-    refuse(reason: Extract<RefusalReason, { kind: 'headings' | 'unplaceable' | 'disturbs' | 'changed' }>): false;
+    refuse(reason: Extract<RefusalReason, { kind: 'headings' | 'unplaceable' | 'disturbs' | 'changed' | 'property' }>): false;
 }
 
 /**
@@ -981,7 +987,7 @@ export function editLines(
     // lines it put in read as put, and every other line as it did
     // (`checkWrite`). A write that reported nothing is not asked: one
     // that changed lines behind the draft is written with the chain
-    // marked broken (W1's contract, `ChainMarks.vault.test.ts`).
+    // marked broken (`ChainMarks.vault.test.ts`).
     let readings: { read: OutlineReading; left: OutlineReading } | undefined;
     if (reported.length > 0) {
         const written = writtenLines(before.length, reported, placedBy);

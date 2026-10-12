@@ -189,7 +189,7 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
         expect(text.split('\n')).toEqual([first, NEW_SESSION, prose]);
     });
 
-    it('goes past a paragraph line right below the row, which is the row\'s (Obsidian, measurement.md q5)', async () => {
+    it('goes past a paragraph line right below the row, which is the row\'s (Obsidian, `OutlineRead.test.ts` q5)', async () => {
         // A line at column 0 with no blank line above goes on the row's
         // paragraph (a lazy continuation): it is in the row's item.
         const prose = 'ここから先はメモ';
@@ -373,7 +373,7 @@ describe('completed-run walk across mixed indentation', () => {
         );
 
         // At the indentation of the sibling it goes next to, the last of the
-        // run (P1: siblings spelled at other columns would take it under them).
+        // run (siblings spelled at other columns would take it under them).
         expect(text.split('\n')).toEqual(['- [ ] parent', first, second, '\t' + NEW_SESSION]);
     });
 

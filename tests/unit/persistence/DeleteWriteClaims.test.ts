@@ -78,7 +78,7 @@ describe('the origin half of a move says what it did', () => {
     const moving = '- [ ] 移動する @2026-09-21';
 
     it('says the lines went, when they were written to another file', async () => {
-        // Before F3 this half stayed quiet, so that a move within one file
+        // This half once stayed quiet, so that a move within one file
         // would not call its living rows dead. That move is now one write that
         // carries them, and across files "gone" is true: the row in the other
         // file is another row, as the ladder would also say.
@@ -102,7 +102,7 @@ describe('the origin half of a move says what it did', () => {
 });
 
 describe('what the editor menu delete reports (write, remove)', () => {
-    it('says the line and its subtree went, as a card\'s delete does (P1)', async () => {
+    it('says the line and its subtree went, as a card\'s delete does', async () => {
         const b = await writeBench([
             '- [ ] 親 @2026-09-21',
             '\t- [ ] 子 @2026-09-21',

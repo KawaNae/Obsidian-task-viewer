@@ -6,7 +6,7 @@
  * held: it is read from the day, the settings and the tasks each time
  * (`timelineWindow`), so a change of "past days to show" shows at once.
  *
- * "Start from the oldest overdue task" (S2) pulls the window's start back to
+ * "Start from the oldest overdue task" pulls the window's start back to
  * the oldest overdue day — only while the view follows today, and read only
  * at the moments it enters following (`settle`): when it opens with its
  * tasks, on Now, when the day rolls and when the settings are saved. Between

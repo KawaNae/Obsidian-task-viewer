@@ -41,8 +41,31 @@ export function resolveFields(outputFields: string | undefined): string[] {
 
 export function pickFields(record: NormalizedTask, fields: string[]): Record<string, unknown> {
     const result: Record<string, unknown> = {};
-    for (const f of fields) result[f] = record[f as keyof NormalizedTask] ?? null;
+    for (const f of fields) {
+        result[f] = f === 'properties' ? jsonProperties(record.properties) : record[f as keyof NormalizedTask] ?? null;
+    }
     return result;
+}
+
+/**
+ * The properties as the output's JSON holds them. A number JSON cannot write
+ * (infinity, NaN) is its YAML spelling as a string (`".inf"`, `"-.inf"`,
+ * `".nan"`): `JSON.stringify` would make it `null`, which is a property with
+ * no value.
+ */
+function jsonProperties(properties: Record<string, unknown> | undefined): Record<string, unknown> | null {
+    if (!properties) return null;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(properties)) {
+        out[key] = Array.isArray(value) ? value.map(jsonNumber) : jsonNumber(value);
+    }
+    return out;
+}
+
+function jsonNumber(value: unknown): unknown {
+    if (typeof value !== 'number' || Number.isFinite(value)) return value;
+    if (Number.isNaN(value)) return '.nan';
+    return value > 0 ? '.inf' : '-.inf';
 }
 
 // ── Output formatters ──
@@ -113,12 +136,20 @@ function formatTsvRow(record: Record<string, unknown>, fields: string[]): string
     return fields.map(field => tsvValue(record[field])).join('\t');
 }
 
+/**
+ * A field's value in a tsv cell. A list of IDs or tags is joined with `;`.
+ * `properties` (a key to a number, a boolean, a string, null or a list) is written
+ * as the JSON the json format holds for it: a `;` joined pair would not tell
+ * a list in a value from the next key, nor `3` from `"3"`.
+ */
 function tsvValue(value: unknown): string {
     if (value === null || value === undefined) return '';
-    if (Array.isArray(value)) return value.join(';');
+    const text = Array.isArray(value) ? value.join(';')
+        : typeof value === 'object' ? JSON.stringify(value)
+        : String(value);
     // U+2028 and U+2029 too: a note keeps them inside a line, but a reader
     // of this output may split its rows at them.
-    return String(value).replace(/[\t\n\r\u2028\u2029]/g, ' ');
+    return text.replace(/[\t\n\r\u2028\u2029]/g, ' ');
 }
 
 // ── Shared CLI validation ──

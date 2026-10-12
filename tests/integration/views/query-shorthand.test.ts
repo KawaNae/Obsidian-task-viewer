@@ -1,5 +1,5 @@
 /**
- * The entry's shorthand and a query's start hour (段11e), in the running Dev
+ * The entry's shorthand and a query's start hour, in the running Dev
  * vault: the CLI's and the API's params are conditions of one FilterState,
  * taken together (date, from and to as period overlaps, the simple flags,
  * filter-file and the API's filter), so list, today, the two range commands

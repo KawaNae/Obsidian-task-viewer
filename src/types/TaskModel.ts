@@ -7,6 +7,8 @@
  */
 import type { ValidationRule } from './Validation';
 import type { TaskFlow } from './Flow';
+import type { ResolvedSources } from '../services/parsing/tree/Sections';
+import type { PropertyFinding } from '../services/parsing/utils/PropertyLines';
 
 export interface StatusDefinition {
     char: string;
@@ -48,18 +50,47 @@ export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[
 export type NoteType = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 /**
+ * One value of a property, or one item of a list: a text, a number or a
+ * boolean. `spelling` is the value as a property line writes it, which a
+ * write-back writes again: the line's own text (`007`, `True`, a quoted
+ * `"123"`), or for a value the frontmatter gave, the line text that reads
+ * back as the same value. A reader asks the type's own field (`text`,
+ * `number`, `boolean`) for what the value means, and never reads it off
+ * `spelling`.
+ */
+export type PropertyScalar =
+    | { type: 'text'; text: string; spelling: string }
+    | { type: 'number'; number: number; spelling: string }
+    | { type: 'boolean'; boolean: boolean; spelling: string };
+
+/**
  * A property's value (`- key:: value` or frontmatter), read once by
- * `PropertyValues`: `value` is the text as written, which a write-back writes
- * again; the type's own field is the value it means. A reader asks the type
- * (`boolean`, `number`, `items`) and never reads truth or numbers off `value`.
+ * `PropertyValues`: a scalar, no value (`null`: a line with nothing after
+ * `::`, or `null`, `~`), or a list of scalars (the frontmatter's).
  */
 export type PropertyValue =
-    | { type: 'string'; value: string }
-    | { type: 'number'; value: string; number: number }
-    | { type: 'boolean'; value: string; boolean: boolean }
-    | { type: 'array'; value: string; items: string[] };
+    | PropertyScalar
+    | { type: 'null'; spelling: string }
+    | { type: 'list'; items: PropertyScalar[] };
 
 export type PropertyType = PropertyValue['type'];
+
+/**
+ * A custom property as the layer whose value it is writes it: the key as
+ * written there (`Area`), which is what shows it, and the value.
+ */
+export interface Property {
+    key: string;
+    value: PropertyValue;
+}
+
+/**
+ * Custom properties by key, the key folded to lower case
+ * (`PropertyKey.fold`): `Area` and `area` name one property, as they do in
+ * Obsidian. A reader looks a key up by `PropertyKey.get`, and shows the key
+ * each holds as written.
+ */
+export type Properties = Record<string, Property>;
 
 export interface ChildLine {
     text: string;
@@ -167,6 +198,11 @@ export interface Task {
      * (`resolveSpan`). Properties/tags/style close over
      * the Task alone, so they merge via the `getEffective*` derived helpers
      * (`services/data/EffectiveProperties.ts`).
+     *
+     * It holds the values the row inherits: a built-in a section hides with
+     * no value (`- tv-color::`) is not here, as one no layer says is not
+     * (where it was hidden is `inheritedFrom`). A custom property hidden so
+     * is here with its value null, which the API puts out as null.
      */
     cascadeContext?: {
         startDate?: string;
@@ -178,8 +214,34 @@ export interface Task {
         linestyle?: string;
         mask?: string;
         tags?: string[];
-        properties?: Record<string, PropertyValue>;
+        properties?: Properties;
     };
+
+    /**
+     * Where each value the row's section gives it came from: the record the
+     * resolution kept (`SectionNode.resolvedSources`) for the section the
+     * row stands in, of the same reading as the row. Set by NoteTasks,
+     * shared with the section, never serialized. Read by the hub to say
+     * where an inherited value is written (`CascadeSource`).
+     */
+    inheritedFrom?: ResolvedSources;
+
+    /**
+     * What is wrong with the row's own property lines and the lines under
+     * them, as the reading found it (`PropertyLines.read`), in the order of
+     * the lines they are on; absent when nothing is. Set by NoteTasks, never
+     * serialized. The editor says the same on the lines themselves
+     * (`propertyDiagnostics`); this is for a view that shows the row without
+     * the note.
+     *
+     * A finding names the property it is about by its key as written
+     * (`PropertyFinding.key`), matched to a property as every key is
+     * (`PropertyKey.same`), and the line of that property
+     * (`propertyLine`). Its lines are the row's reading's, as `line` is:
+     * they say where it is in the note only while the note reads as it did
+     * then (`reading`).
+     */
+    propertyFindings?: readonly PropertyFinding[];
 
     // Original parsed text and stable IDs.
     originalText: string;
@@ -233,12 +295,14 @@ export interface Task {
      * Raw styling: the task's own child lines / own frontmatter only.
      * Section-inherited style lives in `cascadeContext`; consumers read the
      * merged view via `getEffectiveColor()` / `getEffectiveLinestyle()`.
+     * Undefined where the row says nothing of it, null where its line says
+     * it has none (`- tv-color::`), which hides the section's.
      */
-    color?: string;
-    linestyle?: string;
+    color?: string | null;
+    linestyle?: string | null;
 
     /** Raw mask (own declaration only; merged view via `getEffectiveMask()`). */
-    mask?: string;
+    mask?: string | null;
 
     /** True when parsed by a read-only parser (no writeback support). */
     isReadOnly?: boolean;
@@ -248,7 +312,7 @@ export interface Task {
      * only. Section-inherited properties live in `cascadeContext.properties`;
      * consumers read the merged view via `getEffectiveProperties()`.
      */
-    properties: Record<string, PropertyValue>;
+    properties: Properties;
 }
 
 /** TaskViewer inline-form task (writable; primary write target). */

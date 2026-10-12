@@ -1,3 +1,4 @@
+import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { COLOR_VALUES, LINE_STYLE_VALUES } from '../../../suggest/ScopeValues';
@@ -46,9 +47,12 @@ export class StyleFieldGroup implements ClosingPart {
     private readonly bound = {} as Record<StyleField, BoundField<string | undefined>>;
     private readonly says = {} as Record<StyleField, HTMLElement>;
     private sourceEls: Partial<Record<StyleField, HTMLElement>> = {};
+    private hideButtons: Partial<Record<StyleField, HTMLButtonElement>> = {};
+    private unhideButtons: Partial<Record<StyleField, HTMLButtonElement>> = {};
 
     constructor(container: HTMLElement, private ctx: FieldGroupContext) {
         for (const field of FIELDS) this.renderRow(container, field, LABEL_KEYS[field]);
+        this.showEnabled();
     }
 
     private renderRow(container: HTMLElement, field: StyleField, labelKey: string): void {
@@ -84,8 +88,20 @@ export class StyleFieldGroup implements ClosingPart {
         input.value = this.ctx.getTask()[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
-        sourceEl.addEventListener('click', () => this.ctx.jumpToFile());
+        sourceEl.addEventListener('click', () => this.ctx.openSource(row => CascadeSource.lineOfStyleField(row, field, this.ctx.plugin.settings.scopeKeys[field])));
         this.sourceEls[field] = sourceEl;
+
+        // Hide the inherited value (`- tv-color::`), and the × that takes the row's own no value out again.
+        const hide = row.createEl('button', { cls: 'tv-icon-btn task-hub__hide', attr: { type: 'button' } });
+        setIcon(hide.createSpan(), 'ban');
+        hide.setAttribute('aria-label', t('modal.hub.hideInherited', { key: this.ctx.plugin.settings.scopeKeys[field] }));
+        hide.addEventListener('click', () => this.hide(field));
+        this.hideButtons[field] = hide;
+        const unhide = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove task-hub__prop-remove' });
+        setIcon(unhide.createSpan(), 'x');
+        unhide.setAttribute('aria-label', t('modal.hub.removeNoValue', { field: t(labelKey) }));
+        unhide.addEventListener('click', () => { void this.commit(field, undefined); this.refresh(); });
+        this.unhideButtons[field] = unhide;
 
         // An item picked from the list is put in and committed; the field's
         // own Enter (bindField) commits what is typed when no list is open.
@@ -122,7 +138,8 @@ export class StyleFieldGroup implements ClosingPart {
 
         this.bound[field] = bindField(input, {
             codec: CODECS[field],
-            current: () => this.ctx.getTask()[field],
+            // A row's own no value (`- tv-color::`) shows as no value of its own.
+            current: () => this.ctx.getTask()[field] ?? undefined,
             commit: (value) => this.commit(field, value),
             issues: (issue) => this.ctx.issues.set(field, readIssue(field, issue)),
             takesEnter: () => suggest?.listShown ?? false,
@@ -133,8 +150,15 @@ export class StyleFieldGroup implements ClosingPart {
     }
 
     private commit(field: StyleField, value: string | undefined): Promise<boolean> | void {
-        if (this.ctx.isShut()) return;
+        if (this.ctx.isShut() || this.ctx.locked(field)) return;
         return this.ctx.queue(TaskUpdateBuilder.styleField(this.ctx.getTask(), field, value ?? ''));
+    }
+
+    /** Write the row's own no value of `field`, which hides the value it inherits. */
+    private hide(field: StyleField): void {
+        if (this.ctx.isShut() || this.ctx.locked(field)) return;
+        void this.ctx.queue(TaskUpdateBuilder.styleHidden(this.ctx.getTask(), field));
+        this.refresh();
     }
 
     unsaved(): UnsavedField[] {
@@ -158,10 +182,16 @@ export class StyleFieldGroup implements ClosingPart {
 
         const task = this.ctx.getTask();
         const cascadeValue = task.cascadeContext?.[field];
-        input.placeholder = (task[field] === undefined && cascadeValue) || '';
+        // Inherited, a value or no value (a layer above hid it); null when the row says its own.
+        const source = CascadeSource.forStyleField(task, field);
+        // A no value shows as such, the row's own (with its ×) or an inherited one
+        // (with its source); with none of its own, the value it inherits.
+        const noValue = task[field] === null || (source !== null && cascadeValue === undefined);
+        input.placeholder = noValue ? t('modal.hub.noValue') : (task[field] === undefined && cascadeValue) || '';
+        const hidesNothing = task[field] !== undefined || cascadeValue === undefined;
+        this.hideButtons[field]?.toggleClass('is-hidden', hidesNothing);
+        this.unhideButtons[field]?.toggleClass('is-hidden', task[field] !== null);
 
-        const keys = this.ctx.plugin.settings.scopeKeys;
-        const source = CascadeSource.forStyleField(this.ctx.app, task, keys, field);
         if (source) {
             sourceEl.setText(this.ctx.sourceLabel(source));
             sourceEl.style.display = '';
@@ -186,15 +216,27 @@ export class StyleFieldGroup implements ClosingPart {
     refresh(): void {
         const task = this.ctx.getTask();
         for (const field of FIELDS) {
-            this.bound[field].set(task[field]);
+            this.bound[field].set(task[field] ?? undefined);
             this.updateDecoration(field);
         }
+        this.showEnabled();
     }
 
-    setEnabled(enabled: boolean): void {
-        this.colorField?.setEnabled(enabled);
-        for (const input of [this.inputs.linestyle, this.inputs.mask]) {
-            if (input) input.disabled = !enabled;
+    setEnabled(_enabled: boolean): void {
+        this.showEnabled();
+    }
+
+    /** Each field takes edits unless the form is shut or a finding locks it (`FieldGroupContext.locked`). */
+    private showEnabled(): void {
+        const shut = this.ctx.isShut();
+        this.colorField?.setEnabled(!shut && !this.ctx.locked('color'));
+        for (const field of ['linestyle', 'mask'] as const) {
+            const input = this.inputs[field];
+            if (input) input.disabled = shut || this.ctx.locked(field);
+        }
+        for (const field of FIELDS) {
+            const off = shut || this.ctx.locked(field);
+            for (const button of [this.hideButtons[field], this.unhideButtons[field]]) if (button) button.disabled = off;
         }
     }
 

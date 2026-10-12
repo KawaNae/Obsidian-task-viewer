@@ -1,3 +1,4 @@
+import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskStore } from '../../../src/services/core/TaskStore';
@@ -147,7 +148,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
 }
 
 /**
- * The row rewritten as `task`, its property lines by `childOps`, with `fire`
+ * The row rewritten as `task`, its property lines by `childOps` (`ChildPropertyLineEditor`), with `fire`
  * when the rewrite completes it: the `update` a card's write hands the
  * write layer (`TaskIndex.writeUpdate`), through `writer`'s `write`.
  */
@@ -159,5 +160,5 @@ export function updateRow<F extends CompletionFire>(
     childOps: PropertyOp[] = [],
     fire?: F,
 ): Promise<FiringOutcome<F>> {
-    return writer.write(file, target, [{ kind: 'update', text: formatRow(task), childOps }], { fire });
+    return writer.write(file, target, [{ kind: 'update', text: formatRow(task), properties: { ops: childOps, keys: DEFAULT_SCOPE_KEYS } }], { fire });
 }

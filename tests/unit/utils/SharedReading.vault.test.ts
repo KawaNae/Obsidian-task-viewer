@@ -1,3 +1,4 @@
+import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { editorRow, editLines, replayEdits, type EditedLines } from '../../../src/services/persistence/FileLines';
@@ -97,7 +98,7 @@ describe('a write of several ops, read once while its lines are as handed', () =
         const note = ['# note', '- [ ] T', '\t- [ ] c', '- [ ] U', ''];
         const lines = await sameEitherWay(note, 1, () => [{
             kind: 'update', text: '- [ ] T',
-            childOps: [{ key: 'tv-color', op: 'set', value: 'ff0000' }, { key: 'tv-mask', op: 'set', value: 'x' }],
+            properties: { ops: [{ key: 'tv-color', op: 'set', value: { text: 'ff0000' } }, { key: 'tv-mask', op: 'set', value: { text: 'x' } }], keys: DEFAULT_SCOPE_KEYS },
         }]);
         expect(lines.indexOf('\t- tv-color:: ff0000')).toBeLessThan(lines.indexOf('\t- tv-mask:: x'));
     });

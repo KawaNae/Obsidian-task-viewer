@@ -6,8 +6,8 @@ import type { App } from 'obsidian';
  *
  * `Vault.getConfig` is not in Obsidian's typings: it is the app's reading of
  * `.obsidian/app.json`, which answers a setting's default when the file does
- * not hold it (`archive/2026-09-stages/3-v058-2026-09-28.md`, sm0-measure: `useTab` true and
- * `tabSize` 4 on a vault whose file names neither). Being unpublished, it may
+ * not hold it (measured: `useTab` true and `tabSize` 4 on a vault whose
+ * file names neither). Being unpublished, it may
  * go or change its answers, so every reading of it is here, each with the
  * answer it falls back to — Obsidian's own default.
  */

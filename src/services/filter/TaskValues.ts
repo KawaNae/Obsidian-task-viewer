@@ -1,4 +1,5 @@
-import type { DisplayTask } from '../../types';
+import type { DisplayTask, PropertyValue } from '../../types';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import type { FilterProperty } from './FilterTypes';
 import { getTaskNotation } from './parserTaxonomy';
 import {
@@ -124,9 +125,15 @@ export const TaskValues = {
         return ms < 0 ? { kind: 'number', present: true } : { kind: 'number', present: true, value: ms };
     },
 
-    /** The value of a property (`key:: value`), the section's when the task has none of its own. */
-    property(task: DisplayTask, key: string): TextValue {
-        return text(getEffectiveProperties(task)[key]?.value);
+    /**
+     * The value of a property (`key:: value`) as its type says, the one of
+     * the nearest layer that writes the key (`null` when that layer writes
+     * no value); absent when no layer writes it. The key is matched its case
+     * aside (`PropertyKey`): `area` finds `Area::`. A property condition
+     * compares it by its type (`PropertyMatch`).
+     */
+    property(task: DisplayTask, key: string): PropertyValue | undefined {
+        return PropertyKey.get(getEffectiveProperties(task), key)?.value;
     },
 
     /**

@@ -1,5 +1,6 @@
-import type { PropertyValue } from '../../../types';
+import type { Properties } from '../../../types';
 import type { OutlineHeading } from '../utils/Outline';
+import type { OwnPropertyLines } from '../utils/PropertyLines';
 
 /**
  * A section of a note: the lines a heading the note reads opens, up to the
@@ -12,18 +13,29 @@ import type { OutlineHeading } from '../utils/Outline';
 export interface SectionNode {
     /** The heading that opens it; null for the lines above the note's first heading. */
     heading: OutlineHeading | null;
-    propertyBlock: PropertyBlock | null;
-    /** カスケード解決済みプロパティ（SectionPropertyResolver が設定） */
-    resolvedProperties: Record<string, PropertyValue>;
-    resolvedColor?: string;
-    resolvedLinestyle?: string;
-    resolvedMask?: string;
+    /** Its own property lines (`PropertyLines.ofSection`), every one, those not read included. */
+    properties: OwnPropertyLines;
+    /**
+     * Where a line put at its head goes (`Placement.into`): past the
+     * property lines written at its top, above its first task, or just
+     * below its heading when there are none.
+     */
+    head: number;
+    /** カスケード解決済みプロパティ（SectionPropertyResolver が設定）。キーは折りたたんだ形、綴りは値を書いた層のもの */
+    resolvedProperties: Properties;
+    /*
+     * The built-ins resolved: undefined where no layer says one, null where
+     * the nearest layer that says one says it has none (`- tv-color::`).
+     */
+    resolvedColor?: string | null;
+    resolvedLinestyle?: string | null;
+    resolvedMask?: string | null;
     resolvedTags?: string[];
-    resolvedStartDate?: string;
-    resolvedStartTime?: string;
-    resolvedEndDate?: string;
-    resolvedEndTime?: string;
-    resolvedDue?: string;
+    resolvedStartDate?: string | null;
+    resolvedStartTime?: string | null;
+    resolvedEndDate?: string | null;
+    resolvedEndTime?: string | null;
+    resolvedDue?: string | null;
     /** Which layer each resolved value above came from (SectionPropertyResolver が設定) */
     resolvedSources: ResolvedSources;
     children: SectionNode[];         // ネストした子セクション
@@ -33,60 +45,46 @@ export interface SectionNode {
 }
 
 /**
- * The layer a resolved value came from: the note's frontmatter, or the
- * property line `line` of a section — `heading` null for the section above
- * the note's first heading.
+ * The layer a resolved value came from: the note's frontmatter, by the line
+ * of its key (`frontmatterKeyRange`; null when no line is read as the key's,
+ * as for a key the YAML quotes), or the property line `line` of a section —
+ * `heading` null for the section above the note's first heading. A layer
+ * that says it has no value is the source of that, as one with a value is.
  */
 export type ValueSource =
-    | { kind: 'frontmatter' }
+    | { kind: 'frontmatter'; line: number | null }
     | { kind: 'section'; line: number; heading: OutlineHeading | null };
 
-/** A resolved value one layer sets for good: the nearest layer that has one wins. */
+/** A resolved value one layer sets for good: the nearest layer that says one wins, no value included. */
 export type ScalarField = 'color' | 'linestyle' | 'mask' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due';
 
 export const SCALAR_FIELDS: readonly ScalarField[] = ['color', 'linestyle', 'mask', 'startDate', 'startTime', 'endDate', 'endTime', 'due'];
+
+/** A layer that adds tags to a section's union, and the tags it adds. */
+export interface TagLayer {
+    from: ValueSource;
+    tags: readonly string[];
+}
 
 /**
  * Where a section's resolved values came from, value by value: which layer
  * won each (the resolution decides that, and only it), so that a reader
  * who has to say a value again elsewhere — the frontmatter of a note a row
- * is sent to — can go back to the line that says it.
+ * is sent to — can go back to the line that says it, and one who shows a
+ * row what it inherits (the hub) can say from where.
  */
 export interface ResolvedSources {
-    /** Per scalar value, the layer whose value won. None for a value no layer sets. */
+    /** Per scalar value, the layer whose value won, or that hides the value above with none. None for a value no layer says. */
     fields: Readonly<Partial<Record<ScalarField, ValueSource>>>;
-    /** Every layer that adds tags to the union, from the top down. */
-    tags: readonly ValueSource[];
-    /** Per custom key, the layer whose value won. */
+    /** Every layer that adds tags to the union, from the top down, with the tags it adds. */
+    tags: readonly TagLayer[];
+    /** Per custom key, folded (`PropertyKey.fold`), the layer whose value won, no value included. */
     properties: Readonly<Record<string, ValueSource>>;
 }
 
 /** The sources of a section nothing resolved yet: no layer sets anything. */
 export const NO_SOURCES: ResolvedSources = Object.freeze({
     fields: Object.freeze({}),
-    tags: Object.freeze([]) as readonly ValueSource[],
+    tags: Object.freeze([]) as readonly TagLayer[],
     properties: Object.freeze({}),
 });
-
-/**
- * セクションスコープのプロパティ集合。
- * lead area (heading 直後 〜 最初のタスク行直前) 内の同レベル
- * `- key:: value` 行をすべて集約する。物理的に連続している必要はない。
- */
-export interface PropertyBlock {
-    entries: PropertyBlockEntry[];
-    /**
-     * The index just past the block: past the subtree of its last item at
-     * indent 0 that holds an entry (a `- key:: value` line, or the whole
-     * `- properties::` group). A line put in the section above it would
-     * stand before the block's lines and cut them off the lead area; the
-     * head of a section is here (`Placement.into`).
-     */
-    end: number;
-}
-
-export interface PropertyBlockEntry {
-    key: string;
-    value: string;
-    line: number;
-}

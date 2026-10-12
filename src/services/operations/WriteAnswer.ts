@@ -2,7 +2,7 @@ import { t } from '../../i18n';
 import { refusalNotice, type IndexRefusal } from '../core/RefusalClause';
 
 /**
- * What an operation that writes answers its caller (I#9): written, or not,
+ * What an operation that writes answers its caller: written, or not,
  * and why not. `refused` is null for a write turned away without a reason to
  * tell (a read-only row, the operations taken down).
  *

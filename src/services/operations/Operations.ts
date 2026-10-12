@@ -91,7 +91,7 @@ export interface RowSnapshot {
 
 /**
  * The operations on the notes: the one way a consumer — a view, a menu, the
- * hub, a timer, the API, the CLI, the editor — writes (structure/layers.md).
+ * hub, a timer, the API, the CLI, the editor — writes.
  *
  * Each operation that names a row plans from the index's copy of it, once
  * the copy is known to be the row on the disk (`planCopy`), and in order
@@ -233,7 +233,8 @@ export class Operations {
 
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作。写しと更新の
         // diff から導く。
-        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.scopeKeys);
+        const keys = this.settings.scopeKeys;
+        const propertyOps = PropertyUpdatePlanner.plan(task, updates, keys);
 
         // 書く行は写しに更新を重ねた姿から作る。行の探索は写しで行う:
         // ファイルに書かれているのは写しの行なので、更新後の日付や時刻で
@@ -248,7 +249,7 @@ export class Operations {
         const target = plannedOn(task, { subtree: propertyOps.length > 0 });
         const answer = await this.writeCompleting(
             completes(task.originalText, text, this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, childOps: propertyOps }], { fire, refused: heard(hear) }));
+            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, properties: { ops: propertyOps, keys } }], { fire, refused: heard(hear) }));
 
         // Not written: why has been told once (see reportRefusal), or is the caller's to tell.
         if (!answer.written) logWarn(`[Operations] update was not written: id=${taskId} fields=[${Object.keys(updates)}]`);
@@ -433,7 +434,7 @@ export class Operations {
      * A copy the disk no longer reads as (`checkCopy`: a change the index was
      * never told of) is not planned from: it is refused as `stale`, the note
      * is read again, and the user is asked to do it again, from the new
-     * reading (structure/layers.md, 読みの鮮度). Every write that plans from a copy
+     * reading. Every write that plans from a copy
      * comes through here, and so do the drag and the card's menu before the
      * user puts work in (`confirmTask`).
      *
@@ -538,7 +539,7 @@ export class Operations {
      * way the index was never told of, or that the index has not read yet,
      * is read first. For a caller that names its row by `^id` — the API's
      * `path#^id`, a timer — whose anchor outlives readings, so it goes on
-     * with the row it finds (contract 3), where one that named a reading is
+     * with the row it finds, where one that named a reading is
      * asked to try again. Nothing is told the user here: the caller goes on,
      * or says why it does not.
      *

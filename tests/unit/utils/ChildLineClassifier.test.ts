@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { PropertyLines } from '../../../src/services/parsing/utils/PropertyLines';
+
+const ownLines = (outline: ReturnType<typeof Outline.read>, task: number) => PropertyLines.ofTask(outline, task).lines.map(line => line.line);
 
 const NBSP = String.fromCharCode(0x00a0);
 const IDEOGRAPHIC = String.fromCharCode(0x3000);
@@ -91,6 +94,14 @@ describe('ChildLineClassifier', () => {
             expect(result.propertyKey).toBeNull();
         });
 
+        it('does not treat a key of space alone, or one holding a backquote, as property', () => {
+            for (const text of ['-  :: x', '- \t::', '- `k`:: v', '- 見出し直下のプロパティ行（`- tv-color:: `）でも']) {
+                const result = ChildLineClassifier.classify(text, 0);
+                expect(result.propertyKey, text).toBeNull();
+                expect(result.propertyValue, text).toBeNull();
+            }
+        });
+
         it('does NOT parse single-colon as property', () => {
             const result = ChildLineClassifier.classify('\t- 金額: 2000', 0);
             expect(result.propertyKey).toBeNull();
@@ -107,41 +118,17 @@ describe('ChildLineClassifier', () => {
             expect(result.propertyKey).toBeNull();
         });
 
-        it('reads no property or link on a line whose bullet opens no list item (Obsidian, measurement.md q9)', () => {
+        it('reads no property or link on a line whose bullet opens no list item (Obsidian, `OutlineRead.test.ts` q9)', () => {
             // After the bullet, a list item has spaces or tabs and nothing else.
             for (const gap of ['', ' ', '　']) {
                 const outline = Outline.read(['- [ ] task', `\t-${gap}key:: value`]);
-                expect(ChildLineClassifier.ownPropertyLines(outline, 0), JSON.stringify(gap)).toEqual([]);
+                expect(ownLines(outline, 0), JSON.stringify(gap)).toEqual([]);
                 expect(ChildLineClassifier.classify(`\t-${gap}[[note]]`, 0).wikilinkTarget).toBeNull();
             }
             const outline = Outline.read(['- [ ] task', '\t-\tkey:: value']);
-            expect(ChildLineClassifier.ownPropertyLines(outline, 0)).toEqual([1]);
+            expect(ownLines(outline, 0)).toEqual([1]);
         });
     });
-
-    describe('collectProperties', () => {
-        it('collects properties from classified lines', () => {
-            const lines = ChildLineClassifier.classifyLines([
-                '\t- 金額:: 2000',
-                '\t- 優先度:: 高',
-                '\t- [x] checkbox',
-            ], [1, 2, 3]);
-            const props = ChildLineClassifier.collectProperties(lines);
-            expect(props).toEqual({
-                '金額': { value: '2000', type: 'number', number: 2000 },
-                '優先度': { value: '高', type: 'string' },
-            });
-        });
-
-        it('returns empty object when no properties', () => {
-            const lines = ChildLineClassifier.classifyLines([
-                '\t- [x] checkbox',
-                '\t- [[Link]]',
-            ], [1, 2]);
-            expect(ChildLineClassifier.collectProperties(lines)).toEqual({});
-        });
-    });
-
 
     describe('classifyLines', () => {
         it('classifies multiple lines and carries bodyLines', () => {
@@ -165,7 +152,7 @@ describe('ChildLineClassifier', () => {
             expect(() => ChildLineClassifier.classifyLines(['- a'], [])).toThrow();
         });
 
-        it('ownPropertyLines keeps only the task\'s own `- key:: value` children', () => {
+        it('a task\'s property lines are only the task\'s own `- key:: value` children', () => {
             const outline = Outline.read([
                 '- [ ] task',
                 '\t- key:: value',
@@ -173,7 +160,7 @@ describe('ChildLineClassifier', () => {
                 '\t- [[key:: value]]',
                 '\t- plain note',
             ]);
-            expect(ChildLineClassifier.ownPropertyLines(outline, 0)).toEqual([1]);
+            expect(ownLines(outline, 0)).toEqual([1]);
         });
 
         it('tells a task\'s own property line from a deeper one by depth, not by indent length', () => {
@@ -191,7 +178,30 @@ describe('ChildLineClassifier', () => {
             expect(Outline.indentOf(outline.lines[2]).length).toBe(Outline.indentOf(outline.lines[3]).length);
             expect(outline.item(2)!.parent).toBe(1);
             expect(outline.item(3)!.parent).toBe(0);
-            expect(ChildLineClassifier.ownPropertyLines(outline, 0)).toEqual([1, 3]);
+            expect(ownLines(outline, 0)).toEqual([1, 3]);
+        });
+    });
+
+    describe('carriesMeaning', () => {
+        const means = (lines: string[], line: number) => ChildLineClassifier.carriesMeaning(Outline.read(lines), line);
+
+        it('reads a meaning from an item of a property\'s list, by the line it stands under', () => {
+            const lines = ['- [ ] task', '\t- k::', '\t\t- a', '\t- v:: 1', '\t\t- note', '\t- memo', '\t\t- b'];
+            expect(means(lines, 1)).toBe(true);
+            expect(means(lines, 2)).toBe(true);
+            // Under a line with a value, or under a note: a note.
+            expect(means(lines, 4)).toBe(false);
+            expect(means(lines, 6)).toBe(false);
+        });
+
+        it('reads none from a line whose key the property line does not read, nor from an item under it', () => {
+            const lines = ['- [ ] task', '\t- `k`::', '\t\t- a', '\t-  ::', '\t\t- b'];
+            expect(lines.slice(1).map((_, i) => means(lines, i + 1))).toEqual([false, false, false, false]);
+        });
+
+        it('reads none from an item under a property line in code', () => {
+            const lines = ['- [ ] task', '\t```', '\t- k::', '\t\t- a', '\t```'];
+            expect(means(lines, 3)).toBe(false);
         });
     });
 });

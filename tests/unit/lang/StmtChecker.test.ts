@@ -50,7 +50,7 @@ describe('StmtChecker', () => {
             expect(codes('let y = nope')).toEqual(['expr.unknown-ident']);
         });
 
-        // R6b: 解決は束縛より先に効くので、隠した名前は参照できない。
+        // 解決は束縛より先に効くので、隠した名前は参照できない。
         it('warns when a declaration shadows a name the parser resolves first', () => {
             for (const name of ['content', 'today', 'Math', 'undefined', 'null', 'none']) {
                 const found = check(`let ${name} = 1`);
@@ -145,7 +145,7 @@ describe('StmtChecker', () => {
         });
 
         // 関数は StaticType を持たない。だから配列にもレコードにも入れられず、
-        // 段 3 のセルにも入らない。境界ごとに弾く処理を書かずに閉じている。
+        // フローコマンドの `state(...)` のセルにも入らない。境界ごとに弾く処理を書かずに閉じている。
         it('refuses a function anywhere a value is expected', () => {
             expect(codes('const f = x => x\nlet y = f')).toEqual(['expr.fn-not-a-value']);
             expect(codes('const f = x => x\nlet xs = [f]')).toEqual(['expr.fn-not-a-value']);
@@ -185,7 +185,7 @@ describe('StmtChecker', () => {
             expect(codes('const f = x => x + 1\nlet n = f(1).nope')).toEqual([]);
         });
 
-        // R6b: 引数が予約名を隠すのは error。let の隠蔽は束縛が読めないだけ
+        // 引数が予約名を隠すのは error。let の隠蔽は束縛が読めないだけ
         // だが、引数は要素に触る唯一の手段なので本体に正しい読みが無い。
         it('refuses a parameter that shadows a reserved name, in a declaration too', () => {
             const found = check('const f = start => 1');

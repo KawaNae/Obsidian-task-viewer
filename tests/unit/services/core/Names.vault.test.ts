@@ -6,7 +6,7 @@ import { Block } from '../../../../src/services/persistence/utils/Placement';
 import { updateRow } from '../../helpers/writeBench';
 
 /**
- * N1: a name lasts one reading of its file (the path, the reading's number,
+ * A name lasts one reading of its file (the path, the reading's number,
  * the line). The index never pairs a reading with the one before it. A name
  * given before a write of ours is followed across the write's report
  * (`TaskIndex.getTask`); one given before any other change names nothing.
@@ -84,7 +84,7 @@ describe('a reading\'s names', () => {
 });
 
 describe('a name given before our writes brought the file back to a content it had', () => {
-    // The walk of stage N1 found these: a name made of the content's key
+    // A name once made of the content's key
     // named the same line of both readings, and the store answered it before
     // the writes' reports were followed (`TaskIndex.getTask`).
 

@@ -3,6 +3,8 @@ import type {
     TextListProperty, DateProperty, DateComparison, LengthComparison,
 } from './FilterTypes';
 import { isDateRange, isFilterCondition, isPresenceOperator } from './FilterTypes';
+import { normalizeColor } from '../../utils/ColorUtils';
+import { PropertyMatch, type PropertyQuery } from './PropertyMatch';
 
 /**
  * The tree the engine evaluates, compiled from a FilterState.
@@ -55,12 +57,12 @@ export type FilterAtom =
     | { readonly kind: 'period'; readonly rel: 'overlaps' | 'within'; readonly value: DateFilterValue }
     /** The span compares to `value` in `unit`. */
     | { readonly kind: 'length'; readonly op: LengthComparison; readonly value: number; readonly unit: 'hours' | 'minutes' }
-    /** The task has the `key:: value` property. */
+    /** The `key:: value` property has a value (`PropertyMatch.isSet`). */
     | { readonly kind: 'propertySet'; readonly key: string }
-    /** The property's value is `value`. */
-    | { readonly kind: 'propertyEquals'; readonly key: string; readonly value: string }
-    /** The property's value contains `value`, ignoring case. */
-    | { readonly kind: 'propertyContains'; readonly key: string; readonly value: string };
+    /** The property's value, or one of its items, equals `value` (`PropertyMatch.equals`). */
+    | { readonly kind: 'propertyEquals'; readonly key: string; readonly value: PropertyQuery }
+    /** The property's value, or one of its items, contains `value` (`PropertyMatch.contains`). */
+    | { readonly kind: 'propertyContains'; readonly key: string; readonly value: PropertyQuery };
 
 /** The tree that every task passes: an empty `all`. */
 export const ALWAYS: FilterExpr = { kind: 'all', items: [] };
@@ -133,10 +135,15 @@ function positiveOf(c: FilterCondition): { atom: FilterAtom; negated: boolean } 
     switch (c.property) {
         case 'file':
         case 'status':
-        case 'color':
         case 'linestyle':
         case 'notation':
             return { atom: { kind: 'textIn', property: c.property, values: c.value ?? [] }, negated };
+        case 'color':
+            // A note's color is read through `normalizeColor` (`#ff0000` is
+            // held as `ff0000`); a condition's is read the same way, so a
+            // color given with its `#` (the API's `color=`, a filter file)
+            // names the one a note gives with it.
+            return { atom: { kind: 'textIn', property: c.property, values: (c.value ?? []).map(normalizeColor) }, negated };
         case 'tag': {
             const tags = c.value ?? [];
             if (c.operator === 'equals') return { atom: { kind: 'tagIs', tags }, negated };
@@ -169,7 +176,8 @@ function positiveOf(c: FilterCondition): { atom: FilterAtom; negated: boolean } 
             const key = c.key ?? '';
             const { operator } = c;
             if (isPresenceOperator(operator)) return { atom: { kind: 'propertySet', key }, negated };
-            const value = c.value ?? '';
+            // Typed as a line types its value: `123` a number, `"123"` text.
+            const value = PropertyMatch.query(c.value ?? '');
             return operator === 'equals'
                 ? { atom: { kind: 'propertyEquals', key, value }, negated }
                 : { atom: { kind: 'propertyContains', key, value }, negated };

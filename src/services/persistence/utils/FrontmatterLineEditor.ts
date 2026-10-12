@@ -1,4 +1,7 @@
+import { stringifyYaml } from 'obsidian';
 import { Outline } from '../../parsing/utils/Outline';
+import { PropertyKey } from '../../parsing/utils/PropertyKey';
+import { frontmatterKeyLine, frontmatterKeyRange } from '../../parsing/utils/FrontmatterKeyLines';
 import type { LineDraft } from '../FileLines';
 
 /**
@@ -23,8 +26,8 @@ export class FrontmatterLineEditor {
     }
 
     /**
-     * Whether the frontmatter of `lines` has the top-level key `key`, as a
-     * write reads it ({@link findKeyRange}): the one answer both a send's
+     * Whether the frontmatter of `lines` has the top-level key `key`, its
+     * case aside, as a write reads it ({@link findKeyRange}): the one answer both a send's
      * write and its dialog give, the one to add only the keys a note has
      * none of, the other to say which it will not write.
      */
@@ -36,14 +39,15 @@ export class FrontmatterLineEditor {
      * Where the value of the top-level key `key` stands on `line`, as a key
      * line of {@link findKeyRange} reads it: from past the key, its colon and
      * the spaces after them, to before a comment (` # …`) and the spaces
-     * before it or the line's end. Null when the line is no line of `key`.
+     * before it or the line's end. Null when the line is no line of `key`,
+     * its case aside (`PropertyKey`): `TV-COLOR:` is a line of `tv-color`.
      * What an edit of the value alone replaces: the key and the separator
      * stay as they are spelled, and so does a comment.
      */
     static valueRange(line: string, key: string): { start: number; end: number } | null {
-        const head = line.match(/^([^:\s]+)\s*:[ \t]*/);
-        if (!head || head[1] !== key) return null;
-        const start = head[0].length;
+        const head = frontmatterKeyLine(line);
+        if (!head || !PropertyKey.same(head.key, key)) return null;
+        const start = head.valueStart;
         const rest = line.slice(start);
         const comment = rest.search(/(^|\s)#/);
         const value = (comment < 0 ? rest : rest.slice(0, comment)).replace(/\s+$/, '');
@@ -68,22 +72,12 @@ export class FrontmatterLineEditor {
     /**
      * frontmatter 内でトップレベルキーの行範囲 [start, end) を返す。
      * 継続行（配列項目・ブロックスカラー等）も含む。
-     * キーが存在しない場合は null。
+     * キーは大文字と小文字を区別せずに探し（`PropertyKey`）、最初の行を返す。
+     * キーが存在しない場合は null。読みが値の出所として記録する行と同じ答え
+     * （`frontmatterKeyRange`）である。
      */
     static findKeyRange(lines: readonly string[], fmEnd: number, key: string): [number, number] | null {
-        for (let i = 1; i < fmEnd; i++) {
-            const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
-            if (keyMatch && keyMatch[1] === key) {
-                // キー行を発見。継続行の終端を探す
-                let end = i + 1;
-                while (end < fmEnd) {
-                    if (lines[end].match(/^([^:\s]+)\s*:/)) break; // 次のキー
-                    end++;
-                }
-                return [i, end];
-            }
-        }
-        return null;
+        return frontmatterKeyRange(lines, fmEnd, key);
     }
 
     /**
@@ -91,7 +85,8 @@ export class FrontmatterLineEditor {
      * 指定キーのみを更新・削除・挿入する。他の行は一切変更しない。
      *
      * - value: null → キー削除（継続行含む）
-     * - value: string → キー更新（既存なら置換、なければ閉じ --- の直前に挿入）
+     * - value: string → キー更新（既存なら置換、なければ閉じ --- の直前に挿入）。
+     *   既存の行は大文字と小文字を区別せずに探し、置換してもその行のキーの綴りを保つ
      * - value: string[] → キー行 + 継続行の完全な生行列（マルチライン値。
      *   先頭要素が `key:` 行であること）。既存範囲を丸ごと差し替え / 挿入
      *
@@ -113,9 +108,11 @@ export class FrontmatterLineEditor {
                     currentFmEnd -= count;
                 }
             } else {
+                // An existing line keeps its key as written (`TV-COLOR:` stays).
+                const written = range ? frontmatterKeyLine(result[range[0]])!.written : key;
                 const newLines = Array.isArray(value)
                     ? value
-                    : [value === '' ? `${key}:` : `${key}: ${value}`];
+                    : [value === '' ? `${written}:` : `${written}: ${value}`];
                 if (range) {
                     // 更新: キー行 + 継続行を新しい行列に置換
                     const count = range[1] - range[0];
@@ -131,39 +128,18 @@ export class FrontmatterLineEditor {
     }
 
     /**
-     * Converts an arbitrary string into a safe single-line YAML scalar.
-     * The single canonical authority shared by every frontmatter write surface
-     * (FrontmatterWriter.setKeys + applyUpdates)
-     * so no value silently corrupts the block on write.
-     *
-     * Allowlist policy: emit a plain (unquoted) scalar ONLY for values that are
-     * provably safe and would round-trip as the same string. Everything else is
-     * double-quoted with full escaping. A misjudgement therefore degrades to a
-     * harmless extra pair of quotes rather than YAML corruption / data loss.
+     * `value` as a single-line YAML scalar that reads back as the same text:
+     * as Obsidian writes a text into the frontmatter (`stringifyYaml`), plain
+     * where YAML 1.2 reads it plain as that text (`yes`, `on`, `2026-06-09`,
+     * `a, b`) and quoted where it would read otherwise (`"123"`, `"true"`,
+     * `"null"`, `"a: b"`, `""`). A text Obsidian would write on more lines
+     * than one (one holding a line break) is double-quoted with its escapes,
+     * so the value stays on its key's line. The one way every frontmatter
+     * write spells a text (`FrontmatterWriter.setKeys`, a send's values).
      */
     static escapeYamlScalar(value: string): string {
-        if (value === '') return '""';
-        return this.isSafePlainScalar(value) ? value : this.toDoubleQuotedYaml(value);
-    }
-
-    /**
-     * True only when `value` can be emitted unquoted and re-parses verbatim as
-     * the identical string. Conservative on purpose — anything uncertain returns
-     * false so the caller quotes it.
-     */
-    private static isSafePlainScalar(value: string): boolean {
-        // Surrounding whitespace would be trimmed away by the YAML parser.
-        if (value !== value.trim()) return false;
-        // Alphanumerics / spaces / underscore only, and must not lead with a
-        // space-class char. This rejects every YAML indicator and leading sigil
-        // (`-`, `~`, `` ` ``, `:`, `#`, `[`, `{`, `@`, `*`, `&`, `!`, `|`, `>`, …),
-        // colons, and control chars (newline/CR/tab) outright.
-        if (!/^[A-Za-z0-9_][A-Za-z0-9 _]*$/.test(value)) return false;
-        // Pure numbers would be re-typed as a number on read.
-        if (/^[0-9]+(?:\.[0-9]+)?$/.test(value)) return false;
-        // YAML 1.1 keywords would be re-typed as boolean/null on read.
-        if (/^(?:true|false|null|yes|no|on|off|~)$/i.test(value)) return false;
-        return true;
+        const written = stringifyYaml(value).replace(/\n$/, '');
+        return written.includes('\n') ? this.toDoubleQuotedYaml(value) : written;
     }
 
     /**

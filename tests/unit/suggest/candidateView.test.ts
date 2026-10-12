@@ -7,8 +7,7 @@ import { t } from '../../../src/i18n';
 import { FakeEl, asEl } from '../helpers/fakeDom';
 
 /**
- * A candidate drawn as Obsidian draws one in its `[[` list
- * (`note-suggest/candidates.md`, 描き方): the item's DOM, and what each
+ * A candidate drawn as Obsidian draws one in its `[[` list: the item's DOM, and what each
  * kind of candidate shows in it.
  */
 

@@ -21,7 +21,7 @@ export interface ChoiceSpec<C extends string> {
 
 /**
  * Ask the user to choose, in a dialog of buttons. The focus opens on
- * cancel (論点4): an Enter pressed before anything is read writes nothing,
+ * cancel: an Enter pressed before anything is read writes nothing,
  * deletes nothing, starts nothing. Answered once, when it has closed: the
  * choice pressed, else `'cancel'` (cancel, the close button, Escape, the
  * back, a click outside, a swipe).

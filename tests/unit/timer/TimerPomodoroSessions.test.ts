@@ -6,7 +6,7 @@ import { finished, type TimerState } from '../../../src/timer/TimerState';
 import { step } from '../../../src/timer/TimerTransitions';
 
 /**
- * ポモドーロも countup と同じ状態機械に乗る（論点11a）。⏸ は記録を閉じて中断し、
+ * ポモドーロも countup と同じ状態機械に乗る。⏸ は記録を閉じて中断し、
  * ▶ は新しい走行中の行を書く。時計は止めた所から続き、止まっていた時間は記録に
  * 入らない。周に限りがあれば、最後の区間が満ちた時刻で記録して閉じる。
  */

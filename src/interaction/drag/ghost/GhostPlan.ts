@@ -45,8 +45,7 @@ export interface AbsoluteGhostPlan {
  *
  * これにより ghost 内の掴み位置と pointer の相対関係が drag 開始時と同じに
  * 保たれる。`clientX + 10` のような pointer 無関係オフセットは ghost を
- * pointer から飛び離して見せるので避ける (履歴 issue: timeline 移動ハンドル
- * ずれ 2026-05-11)。
+ * pointer から飛び離して見せるので避ける。
  */
 export interface FixedGhostPlan {
     layout: 'fixed';

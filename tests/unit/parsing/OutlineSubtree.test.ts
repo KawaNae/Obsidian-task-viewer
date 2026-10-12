@@ -91,7 +91,7 @@ describe('OutlineReading.subtreeEnd', () => {
 
         it('collects deeply nested children', () => {
             // Under a root: a tab at the top of a note is indented code
-            // (Obsidian, measurement.md q10), and opens no item.
+            // (Obsidian, `OutlineRead.test.ts` q10), and opens no item.
             const lines = [
                 '- [ ] root',
                 '\t- [ ] parent',

@@ -59,6 +59,14 @@ describe('shorthandConditions: the simple fields', () => {
         expect(findCondition(shorthandConditions({ color: ['green'] }), 'color')!.value).toEqual(['green']);
     });
 
+    it('color=#ff0000 matches the task whose note gives it #ff0000', () => {
+        const matches = (color: string) =>
+            evaluateFilter(makeTask({ color: 'ff0000' }), { logic: 'and', filters: shorthandConditions({ color }) });
+        expect(matches('#ff0000')).toBe(true);
+        expect(matches('ff0000')).toBe(true);
+        expect(matches('#00ff00')).toBe(false);
+    });
+
     it('type → notation includes', () => {
         expect(findCondition(shorthandConditions({ type: 'taskviewer,tasks' }), 'notation')!.value).toEqual(['taskviewer', 'tasks']);
     });
@@ -118,7 +126,7 @@ describe('shorthandConditions: the window is period overlaps', () => {
             .toThrow(/Invalid date value for date: invalid\. Use YYYY-MM-DD, YYYY-MM-DD HH:mm or a preset \(today, /);
     });
 
-    // Stage 7, input decision B: a date-shaped value naming no day is refused.
+    // A date-shaped value naming no day is refused.
     it.each([
         [{ date: '2026-02-30' }, /date must be a day that exists, got: "2026-02-30"/],
         [{ from: '2026-13-45' }, /from must be a day that exists/],

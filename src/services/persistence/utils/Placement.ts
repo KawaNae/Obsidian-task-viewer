@@ -56,7 +56,7 @@ const HEADING_MARKS_RE = /[!"#$%&()*+,./:;<=>?@[\\\]^`{|}~]/g;
 
 /**
  * A heading's name as Obsidian compares it when it resolves a link to a
- * heading (F8's Dev measurement, as the API's `stripHeading` describes it):
+ * heading (measured in Obsidian, as the API's `stripHeading` describes it):
  * the ASCII marks but `'`, `-` and `_` read as a space, spaces run together
  * and trimmed off, and case aside. `**bold**` is `bold`, `[[Other]]` is
  * `other`, `a:b` is `a b`. Other characters (full-width ones) are compared
@@ -231,11 +231,11 @@ export class Placement {
      * - `head`: just below the heading, past the paragraph and the code
      *   below it, at the top as a sibling of the items there. A task
      *   indented under the heading stays where it stands, not under the new
-     *   line. A section with property lines of its own has its head just
-     *   past them (`PropertyBlock.end`, as `NoteSections` reads the block):
-     *   a line put above them would stand before them, and they would read
-     *   as no longer the section's, which reads its properties only above
-     *   its first task. The blank lines past the block stay below the line,
+     *   line. A section whose property lines stand at its top, above its
+     *   first task, has its head just past them (`SectionNode.head`, as
+     *   `NoteSections` reads it), so that they stay together below the
+     *   heading, where a note is best written; they read as the section's
+     *   wherever they stand. The blank lines past them stay below the line,
      *   as those below the heading do.
      * - `end`: just past the section's last line that is not blank — past
      *   the subtree of an item that ends it, as a sibling at the top — so
@@ -248,7 +248,7 @@ export class Placement {
         const { heading } = found;
         if (to.side === 'head') {
             const section = NoteSections.all(NoteSections.read(outline)).find(s => s.heading?.line === heading.line);
-            return { kind: 'spot', spot: this.topSibling(outline, section?.propertyBlock?.end ?? heading.end, head) };
+            return { kind: 'spot', spot: this.topSibling(outline, section?.head ?? heading.end, head) };
         }
         const { lines } = outline;
         const next = outline.headings.find(h => h.line >= heading.end);
@@ -290,7 +290,11 @@ export class Placement {
      * past the lines in `except` (the ones the write takes away) where it has
      * another, carried under `parent` as far past it as it stood past the
      * task (`Outline.shiftedIndent`). A task with no children has its first
-     * one a level deeper: `parent`'s indentation and `unit`, repeated until
+     * one a level deeper, the level spelled as the task stands past the item
+     * it is under ({@link stepPast}: four spaces more under a task four
+     * spaces in, where Obsidian's editor would put a tab before or after
+     * them); a task at the top, or one whose level does not land where a
+     * child opens, takes `parent`'s indentation and `unit`, repeated until
      * the line reaches the parent's content column (`Outline.childIndent`,
      * the one rule for a child's indentation). How the rest of the file is
      * indented does not decide it, as it does not in the editor: a
@@ -307,10 +311,39 @@ export class Placement {
     ): string {
         const lines = outline.lines;
         const first = Placement.firstChildIndent(outline, taskLineIndex, except)
-            ?? (except.size > 0 ? Placement.firstChildIndent(outline, taskLineIndex) : null);
+            ?? (except.size > 0 ? Placement.firstChildIndent(outline, taskLineIndex) : null)
+            ?? Placement.stepPast(outline, taskLineIndex);
         const sample = first === null ? null
             : Outline.shiftedIndent(first, Outline.indentOf(lines[taskLineIndex]), Outline.indentOf(parent));
         return Outline.childIndent(parent, sample, unit);
+    }
+
+    /**
+     * The indentation a level under `row` takes when `row` has no child to
+     * spell it: `row`'s own line as far past it as `row` stands past the item
+     * it is under, so the subtree keeps the one spelling its levels have
+     * (four spaces under four spaces, not a tab after them). Null for a row
+     * at the top, which has no level above it to go by.
+     */
+    private static stepPast(outline: OutlineReading, row: number): string | null {
+        return this.levelPast(outline, outline.item(row)?.parent ?? null, Outline.indentOf(outline.lines[row]));
+    }
+
+    /** `indent` as far past itself as it stands past the line `above`; null with none above. */
+    private static levelPast(outline: OutlineReading, above: number | null, indent: string): string | null {
+        if (above === null) return null;
+        return Outline.shiftedIndent(indent, Outline.indentOf(outline.lines[above]), indent);
+    }
+
+    /**
+     * The indentation of a first child of `head`, a line not yet written
+     * that goes at `spot`: a level under it spelled as it stands past the
+     * spot's parent, as a row with no child has its first one
+     * ({@link resolveChildIndent}). The items of a list a write adds with
+     * its property line.
+     */
+    static childOfPut(outline: OutlineReading, spot: Spot, head: string, unit: string): string {
+        return Outline.childIndent(spot.indent + Outline.dedent(head), this.levelPast(outline, spot.parent, spot.indent), unit);
     }
 
     /**

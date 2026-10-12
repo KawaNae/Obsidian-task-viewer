@@ -1,10 +1,10 @@
 /**
- * The lists of candidates under our fields (段10f), in the running Dev
+ * The lists of candidates under our fields, in the running Dev
  * vault: every one is Obsidian's input suggest (`ShownSuggest`), which keeps
  * the note's hotkeys out while it is open, takes no Enter an IME commits a
  * conversion with, and behaves as Obsidian's lists do: the first item is
  * selected as it opens, an Enter puts the selected item in, and an Escape
- * closes the list alone (論点A).
+ * closes the list alone.
  *
  * The hub is opened on a row as a card opens it, a note beside it active in
  * source mode; fields are typed in as a person types (the text, then its
@@ -12,7 +12,7 @@
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
- *     with a build of 段10f
+ *     with a current build
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/suggest-lists.test.ts
  */
@@ -140,7 +140,7 @@ describe('a list open under a field keeps the note\'s hotkeys out', () => {
     });
 });
 
-describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys (論点A)', () => {
+describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys', () => {
     it('opens its list as the field takes the focus, the first item selected; Escape closes the list and leaves the hub open', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`

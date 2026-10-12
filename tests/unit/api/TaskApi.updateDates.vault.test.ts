@@ -52,7 +52,7 @@ describe('the due update writes', () => {
 });
 
 /**
- * The values are read as typed text (stage 7, input decisions B, C, D):
+ * The values are read as typed text:
  * a date names a day that exists, an hour of one digit is written with two,
  * full-width and hyphen-like characters are read as ASCII. What the update
  * writes is what the notation reads back.

@@ -152,7 +152,7 @@ export class InlineTaskWriter {
             const line = session.row(target);
             if (line === null) return false;
             if (op.kind === 'fire') queue.unshift(...op.plan(draft.lines, line));
-            else this.applyOp(draft, line, op);
+            else if (!this.applyOp(draft, session, line, op)) return false;
         }
         return true;
     }
@@ -161,9 +161,11 @@ export class InlineTaskWriter {
      * Apply one op to the row at `line`. Whether the lines it puts in read
      * as put, and every other line as it did, is asked of the whole write
      * once every op is applied (`processLines`): refused, none of the ops is
-     * written.
+     * written. False when the op itself gives the write up, the reason said
+     * through `session`: an update over a property whose lines the reading
+     * finds wrong.
      */
-    private applyOp(draft: LineDraft, line: number, op: Exclude<TaskOp, { kind: 'fire' }>): void {
+    private applyOp(draft: LineDraft, session: WriteSession, line: number, op: Exclude<TaskOp, { kind: 'fire' }>): boolean {
         const lines = draft.lines;
         switch (op.kind) {
             case 'update': {
@@ -171,14 +173,15 @@ export class InlineTaskWriter {
                 // Done before the property lines, which are all below it, so
                 // the coordinate is still this line afterwards.
                 draft.rewrite(line, Outline.indentOf(lines[line]) + Outline.dedent(op.text));
-                ChildPropertyLineEditor.applyOps(draft, line, [...(op.childOps ?? [])], indentUnit(this.app));
-                return;
+                if (!op.properties) return true;
+                const refused = ChildPropertyLineEditor.applyOps(draft, line, op.properties, indentUnit(this.app));
+                return refused === null || session.refuse(refused);
             }
             case 'insert-instance': {
                 const outline = draft.reading();
                 const unit = indentUnit(this.app);
                 draft.put(Placement.groupHead(outline, line, op.instance.head, unit), renderFlowInstance(outline, line, op.instance, unit));
-                return;
+                return true;
             }
             case 'strip-flow': {
                 // Every flow line is below the row (the scan starts past it
@@ -191,7 +194,7 @@ export class InlineTaskWriter {
                 const indent = Outline.indentOf(lines[line]);
                 // Losing `==>` rewrites the text; the row is the one that fired.
                 draft.rewrite(line, indent + Outline.dedent(op.text));
-                return;
+                return true;
             }
             case 'move': {
                 // The row and what goes with it are carried to the heading's
@@ -201,20 +204,20 @@ export class InlineTaskWriter {
                 const outline = draft.reading();
                 const head = ListNumber.first(Outline.indentOf(lines[line]) + Outline.dedent(op.text));
                 carryTo(draft, line, this.destinationOf(outline, op.to, head), { head: op.text, flow: 'drop' });
-                return;
+                return true;
             }
             case 'remove': {
                 draft.splice(line, draft.reading().subtreeEnd(line) - line);
-                return;
+                return true;
             }
             case 'insert': {
                 // A new line beside the row, spelled as the item next to it.
                 draft.put(Placement[op.place](draft.reading(), line, op.text, indentUnit(this.app)), Block.line(op.text));
-                return;
+                return true;
             }
             case 'copies': {
                 putCopies(draft, line, op);
-                return;
+                return true;
             }
         }
     }

@@ -8,7 +8,7 @@ import type { App, TFile } from 'obsidian';
  * `MetadataCache.isSupportedFile` and `isUserIgnored` are not in Obsidian's
  * typings. Obsidian lists a file under `[[` when it shows unsupported files
  * or a view is registered for its extension, which other plugins add to
- * (`note-suggest-design.md`, 観察で足したこと); a fixed list of extensions
+ * (observed in Obsidian 1.13.7); a fixed list of extensions
  * would leave theirs out. Being unpublished, they may go or change, so each
  * is read with the answer it falls back to, as `ObsidianConfig` reads the
  * settings.

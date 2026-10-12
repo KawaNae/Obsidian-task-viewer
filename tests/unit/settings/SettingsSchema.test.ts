@@ -3,8 +3,7 @@ import { readSettings, SETTINGS_SCHEMA } from '../../../src/settings/SettingsSch
 import { DEFAULT_SCOPE_KEYS, DEFAULT_SETTINGS } from '../../../src/types';
 
 /**
- * The settings' load reads each key by the settings' table (I#11, 入力の
- * 所見4): a key missing takes its default, a key of a group too, and a
+ * The settings' load reads each key by the settings' table: a key missing takes its default, a key of a group too, and a
  * stored value that does not read takes its default and is told.
  */
 describe('readSettings', () => {
@@ -60,7 +59,7 @@ describe('readSettings', () => {
         ]);
     });
 
-    // 論点6: no upper bound on the work and the break.
+    // No upper bound on the work and the break.
     it('takes a work and a break of any length of a minute or more', () => {
         const { settings, fixes } = readSettings({ pomodoroWorkMinutes: 200, pomodoroBreakMinutes: 90 });
         expect([settings.pomodoroWorkMinutes, settings.pomodoroBreakMinutes]).toEqual([200, 90]);

@@ -7,6 +7,7 @@ import { NoteTasks, type RowNamer } from './tree/NoteTasks';
 import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { lineParsers } from './TaskParser';
+import { PropertyKey } from './utils/PropertyKey';
 import { PropertyValues } from './utils/PropertyValues';
 
 export interface FileParseResult {
@@ -110,7 +111,10 @@ export class FileParsePipeline {
             try {
                 const yamlContent = lines.slice(1, bodyStart - 1).join('\n');
                 const parsed: unknown = parseYaml(yamlContent);
-                if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
+                // A block that reads as anything but a mapping (a list, a
+                // text) is no frontmatter: Obsidian's metadata worker keeps a
+                // block only when it reads as one.
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) frontmatterObj = parsed as Record<string, any>;
             } catch {
                 // A malformed block reads as no frontmatter, as metadataCache
                 // reads it.
@@ -120,7 +124,7 @@ export class FileParsePipeline {
         if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStart, settings)) return null;
 
         const sections = NoteSections.read(outline);
-        SectionPropertyResolver.resolve(sections, frontmatterObj, settings.scopeKeys);
+        SectionPropertyResolver.resolve(outline, sections, frontmatterObj, settings.scopeKeys);
         return { outline, sections, frontmatter: frontmatterObj };
     }
 
@@ -128,9 +132,11 @@ export class FileParsePipeline {
      * Whether the note says `tv-ignore` (the configured key) is true, by the
      * one boolean rule of property values (`PropertyValues`): the YAML's
      * boolean `true` (`true`, `True`, `TRUE`). `yes`, `on`, `1` and a quoted
-     * `"true"` are not true. A block YAML refuses still says it line by line:
-     * then the key's line, with a trailing ` # comment` left out, must be one
-     * of those three spellings.
+     * `"true"` are not true. The key is matched its case aside, and one the
+     * frontmatter writes twice so (`tv-ignore` and `TV-IGNORE`) is read on
+     * neither (`PropertyKey`). A block YAML refuses still says it line by
+     * line: then the first line of the key, with a trailing ` # comment`
+     * left out, must be one of those three spellings.
      */
     private static isIgnoredByFrontmatter(
         frontmatterObj: Record<string, any> | undefined,
@@ -139,15 +145,16 @@ export class FileParsePipeline {
         settings: TaskViewerSettings
     ): boolean {
         const ignoreKey = settings.scopeKeys.ignore;
-        if (frontmatterObj) return PropertyValues.isTrue(PropertyValues.fromYaml(frontmatterObj[ignoreKey]));
+        if (frontmatterObj) {
+            const entry = PropertyKey.ofMapping(frontmatterObj).get(PropertyKey.fold(ignoreKey));
+            return PropertyValues.isTrue(PropertyValues.fromYaml(entry?.value));
+        }
         if (bodyStartIndex <= 0) return false;
 
-        const escapedKey = ignoreKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const keyLineRegex = new RegExp(`^${escapedKey}\\s*:\\s*(.*)$`);
         for (let i = 1; i < bodyStartIndex - 1; i++) {
-            const match = lines[i].match(keyLineRegex);
-            if (!match) continue;
-            return PropertyValues.isTrue(PropertyValues.fromText(match[1].replace(/\s+#.*$/, '').trim()));
+            const match = lines[i].match(/^([^:]*?)\s*:\s*(.*)$/);
+            if (!match || !PropertyKey.same(match[1], ignoreKey)) continue;
+            return PropertyValues.isTrue(PropertyValues.fromText(match[2].replace(/\s+#.*$/, '').trim()));
         }
         return false;
     }

@@ -60,7 +60,8 @@ export interface WriteFinding {
  * - A line kept keeps its kind (`OutlineReading.kindOf`): a heading stays
  *   one, and a line that was none does not become one. An item kept
  *   that the plugin reads a meaning from (`ChildLineClassifier.carriesMeaning`:
- *   a task, a `==>` line, a property, a wikilink child) keeps the items it
+ *   a task, a `==>` line, a property, a wikilink child, an item of a
+ *   property's list) keeps the items it
  *   stands in: the line it stood under is not taken out, and the items above
  *   it are the ones they were, the lines taken out aside. Else `disturbs`
  * - A line put in reads as its block says: its kind, and, for an item with a
@@ -69,8 +70,8 @@ export interface WriteFinding {
  *   went on it, an item it made its child. Else `disturbs`
  * - A line spliced in without a block is in the frontmatter. Else `loose`
  *
- * The first two are what a line taken out was held to (the L2 `canTakeOut`)
- * and the two a line put in is: one question, whether the lines written are
+ * The first two are what a line taken out is held to, and the two a line
+ * put in is: one question, whether the lines written are
  * what the write says they are and every other line is what it was.
  *
  * The third asks of every line an item put in takes in, where the first asks
@@ -89,7 +90,7 @@ export function checkWrite(
     written: readonly WrittenLine[],
     puts: readonly PutBlock[],
 ): WriteFinding {
-    const meaningful = (line: string) => ChildLineClassifier.carriesMeaning(line);
+    const meaningful = (reading: OutlineReading, line: number) => ChildLineClassifier.carriesMeaning(reading, line);
     const same = (a: WrittenLine, b: WrittenLine) => a.kind === b.kind && (
         a.kind === 'kept' ? a.from === (b as typeof a).from
             : a.kind === 'placed' ? a.put === (b as typeof a).put && a.offset === (b as typeof a).offset
@@ -119,7 +120,7 @@ export function checkWrite(
             if (after.kindOf(k) !== reads.kind) return fail('unplaceable', k);
             const item = after.item(k);
             if (item === null) return;
-            if (reads.under !== undefined && meaningful(after.lines[k])) {
+            if (reads.under !== undefined && meaningful(after, k)) {
                 const parent = reads.under === 'lost' ? undefined
                     : reads.under === 'spot'
                         ? (puts[line.put].parent === null ? null : lineOf(puts[line.put].parent!))
@@ -132,7 +133,7 @@ export function checkWrite(
         const i = line.from;
         if (before.kindOf(i) !== after.kindOf(k)) return fail('disturbs', k);
         const item = before.item(i);
-        if (item === null || !meaningful(before.lines[i])) return;
+        if (item === null || !meaningful(before, i)) return;
         if (item.parent !== null && !keptAt.has(item.parent)) return fail('disturbs', k);
         const above = before.itemsAbove(i).filter(row => keptAt.has(row));
         const aboveNow = after.itemsAbove(k).map(row => written[row].kind === 'kept' ? (written[row] as { from: number }).from : -1);

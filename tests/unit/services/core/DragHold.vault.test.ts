@@ -15,8 +15,7 @@ import { TaskReadService } from '../../../../src/services/data/TaskReadService';
  * from before the drag still name their rows, and a write by one of them
  * lands as it would without the drag.
  *
- * The shape is case 222 of stage N1's counterexample run (`n1drag`): with
- * the reading taken in at the refused write, the write by the child's name
+ * In the shape below, with the reading taken in at the refused write, the write by the child's name
  * held from before was refused.
  */
 

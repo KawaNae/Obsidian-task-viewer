@@ -21,6 +21,17 @@ function form() {
 }
 
 describe('IssueBoard', () => {
+    it('offers an issue\'s action as a button after its text', () => {
+        const f = form();
+        const runs: string[] = [];
+        f.board.set('findings', [{ at: 'endDate', tone: 'warning', text: '読めない行', action: { label: '開く', run: () => runs.push('open') } }]);
+        expect(f.fields.endDate.message.lines()).toEqual(['warning: 読めない行']);
+        const button = f.fields.endDate.message.find('tv-form__issue-action');
+        expect(button?.text).toBe('開く');
+        button?.dispatchEvent(new Event('click'));
+        expect(runs).toEqual(['open']);
+    });
+
     it('says an issue under its field and marks the field of an error', () => {
         const f = form();
         f.board.set('dates', [{ at: 'endDate', tone: 'error', text: '終了日が開始日より前です。' }]);
