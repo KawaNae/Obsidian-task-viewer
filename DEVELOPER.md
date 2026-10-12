@@ -275,7 +275,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **SidebarManager** | `views/sidebar/SidebarManager.ts` | The sidebar of Timeline and Calendar: its layout, and whether it is open (closed at narrow width until the toggle opens it). What it holds is the pinned lists' panel (`PinnedListPanel`) |
 | **CreateDialog / CreateModal** | `modals/create/` | The create dialog: a new task line and the place it goes (`CreatePlace`: a daily note's task section, or the head of a row's children), its logic (`CreateDialog`) apart from how it looks (`CreateModal`), as the send dialog's is. It asks the place what it is (`CreatePlaces.facts`, `services/data/`) and says where the line goes; its placeholders and date rules read only what a line there inherits (the reading's answer, never a daily note's day). Opens on the name field and creates nothing while the name is empty; waits for the write, closing once written and saying why above its buttons when refused |
 | **SendDialog / NoteField** | `modals/noteops/` | The send dialog: rows and their subtrees sent to a heading of a note, its logic (`SendDialog`) apart from how it looks (`SendModal`). The note is one field (`NoteField`) searched among the vault's notes, aliases and unresolved links (`NoteSuggest`); it holds the text and the note picked (`NoteAsk`), a pick let go once the text changes. `NoteName.find` reads it as a link's text is read: the note picked; a name, the vault's one note by it or a new note in the folder for new notes; a path, the note at it from the root or the one whose path ends in it, or a new note there. More than one note is no note, and no send until one is picked. Under the field the dialog always says which note the rows go to; under the heading, where in it |
-| **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`. Its fields' lists are Obsidian's (`ValueSuggest`), its status button opens the card menu's statuses (`addStatusItems`). Entry: card double-tap, menu Properties items (with field focus) |
+| **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`. Its fields' lists are Obsidian's (`ValueSuggest`), its status button opens the card menu's statuses (`addStatusItems`). Entry: card double-tap, menu Properties items (with field focus). Its property fields: 「ハブのプロパティの欄」 |
 | **OverlayShell** | `views/sharedUI/OverlayShell.ts` | The one surface of the plugin's dialogs and popovers (centered: a dialog, a bottom sheet on a phone; anchored: a popover). Every overlay is given Obsidian's keymap and keeps its hotkeys out while the focus is in it (`HotkeyShield`); a frame after it opens, it puts the focus on the field the body names (`initialFocus`, its text selected), else on the panel itself, and gives the focus back on close. A close the user asks for (×, Escape, the back, outside, a swipe) asks the body first (`beforeClose`, a `CloseAnswer`: close, stay, or a promise waited for; `CloseGate`) |
 | **askChoice / confirm / askText** | `modals/ask/` | The questions put to the user, on OverlayShell's centered panel (a sheet from below on a phone), each answered once when it has closed (`ask`): a choice of buttons opens with the focus on cancel and answers `'cancel'` however else it closes (×, Escape, the back, outside, a swipe); a text opens on its field, says under it what does not read (`issueWords`), and waits for its `submit` before closing. Their button row is `FormActions` (`modals/form/`) |
 | **onFormEnter** | `modals/form/formEnter.ts` | The one answer to whether a field's Enter is the form's: not an IME's commit (`isComposing`, `keyCode` 229, the field's own composition flag; Windows sends `Process`), nor one a list open on the field takes (`takesEnter`, e.g. `ShownSuggest.listShown`). Every field of ours puts its Enter through it; the commit Enter of an IME commits only, and the next Enter is the form's |
@@ -340,7 +340,12 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 節: 節の自分の行（入れ子の節を除く）の最上位の項目。節の中のどこに書いてもよく、最初のタスクより下でもよい
     - それより深い `- key:: value` は、どの層のプロパティにもならない
     - 最初の見出しより上は見出しのない節（根の節）で、その値はそこのタスクにだけ届く
-- `- properties::` は、ふつうのプロパティ行である。節の下の行をまとめて読む形は無い
+- キーは、記号の後の空白から最初の `::` までの文字列で、前後の空白を除いたものである。規則は `PROPERTY_KEY_SOURCE`（`parsing/utils/PropertyKey.ts`）の1か所にあり、`PROPERTY_LINE` はこれで組む
+    - `:`、`[`、`]`、`` ` `` を含むキーは読まない。`[` と `]` はチェックボックスの行とリンクの行を、`` ` `` はインラインコードでプロパティ行を引用した説明文の行（`` - 見出しの下に `- tv-color:: red` を書く ``）を除くためである
+    - 空のキーと空白だけのキー（`-  :: x`）も読まない
+    - 規則は正規表現の段階で効くので、こうした行はプロパティ行でなく、ふつうの項目である。リストの項目にもなり、プロパティ行の形の所見（`property-shaped-item`）も出ない。`ChildLineClassifier`（`classify`、`carriesMeaning`）、エディタの診断、書き込みの検査も同じ答えを出す
+    - `**k**` と `#tag` は記号ごとキーの文字である。`- k::: v` はキー `k`、値 `: v` である
+- `- properties::` は、ふつうのプロパティ行である
 - 値のある行（`- key:: value`）の値は `fromText` で読む。下の行は読まず、メモとして残す
 - 値のない行（`- key::`）は、直下の項目をリストとして読む。各項目の文字は行の値と同じく `fromText` で型を決める
     - チェックボックスの項目はタスクとして読み（`TaskLineClassifier.opensTask`）、リストの項目にしない
@@ -372,7 +377,9 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - 組み込みのキー（`tags` と設定 `scopeKeys` のキー）も区別しない。`TV-COLOR::`、`Tags::`、frontmatter の `TV-Color:` は組み込みとして読み、カスタムプロパティにならない。予約したキー（`reservedPropertyKeys`）も小文字にした形で持つ
 - フィルタ（`TaskValues.property`）、API の `property=`、カード右上の `prop.<key>` は、キーを区別せずに照合する。`property=area:lab` は `Area:: lab` に当たる。フィルタのキーの候補（`FilterValueCollector.collectPropertyKeys`）は1つのプロパティを1つにまとめ、最も多く書かれた綴り、同数なら先に出た綴りで出す
 - 書き込みは、タスクの行（`ChildPropertyLineEditor`）も frontmatter（`FrontmatterLineEditor.findKeyRange`、`valueRange`、`hasKey`）も、キーを区別せずに行を探し、既にある行のキーの綴りを保つ。新しく足す行は、渡されたキーの綴りで書く。ハブは、タスクが書いているキーの綴りか、受け継いだ値なら受け継いだキーの綴りで書く
-- 入力では、ハブの新しいキー（`PropertyKeyInput`）は予約したキーを大文字と小文字によらず拒む。設定のキー（`ScopeKeyInput`）は、予約したキーとほかの設定のキーを、大文字と小文字だけの違いでも拒む。読み込んだ設定がこれに当たれば、設定のキーは既定に戻る
+- 入力では、ハブの新しいキー（`PropertyKeyInput`）と設定のキー（`ScopeKeyInput`）を、プロパティ行がキーを読む規則（「プロパティ行」）と同じ規則で読む。空のキーと、`:`、`[`、`]`、`` ` `` を含むキーは、どちらも `PropertyKey.charsNotIn` が答える文字を挙げて拒む。行に書いて読み返せないキーを、欄が受けないためである
+    - ハブの新しいキーは、さらに予約したキーを大文字と小文字によらず拒む
+    - 設定のキーは、さらに予約したキーとほかの設定のキーを、大文字と小文字だけの違いでも拒む。読み込んだ設定がこれに当たれば、設定のキーは既定に戻る
 
 ### 継承と値のない値
 
@@ -381,13 +388,13 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - 組み込みのキーの値は `readBuiltin` が読み、次の3つのどれかを返す
     - 値: 色、線種、マスクの文字、日付と時刻、期限、タグ
     - 値なし（null）: 値のない値。上の層の値を隠す
-    - 読めない値（undefined）: 書いていないものとして扱い、上の層の値を通す。リスト（タグを除く）、空のテキスト、知らない線種、日付も時刻も指さない値、実在しない日や時刻、日付のない期限がこれに当たる。行なら `PropertyLines.read` がその行を読まず、`unreadable-value` の警告を出す。frontmatter の所見は出さない
+    - 読めない値（undefined）: 書いていないものとして扱い、上の層の値を通す。リスト（タグを除く）、空のテキスト、CSS が色と読まない `tv-color`（綴りを誤った `rde`。`ColorCheck`、「プロパティの値」）、知らない線種、日付も時刻も指さない値、実在しない日や時刻、日付のない期限がこれに当たる。行なら `PropertyLines.read` がその行を読まず、`unreadable-value` の警告を出す。frontmatter の所見は出さない
 - 型では、組み込みの欄の undefined が「書いていない」、null が「値なしと書いた」を表す（`ExtractedProperties`、`SectionNode.resolved*`、`Task.color`、`linestyle`、`mask`）。カスタムプロパティの値なしは、値の型の null（`PropertyValue`）である
-- 値のない日付のキー（`- tv-start::`）は、日付と時刻の両方を隠す。値を書いたときは、今までどおり日付と時刻を別々に受け継ぐ（`tv-start:: 11:00` は時刻だけを言い、日付は上の層から来る）
+- 値のない日付のキー（`- tv-start::`）は、日付と時刻の両方を隠す。値を書いたときは、日付と時刻を別々に受け継ぐ（`tv-start:: 11:00` は時刻だけを言い、日付は上の層から来る）
 - タグは和集合で、隠す操作がない。値のない `- tags::` は何も足さず、上の層のタグも残る
 - カスタムプロパティのリストは1つの値で、近い層のリストが上の層のリストを丸ごと置き換える
 - 節が隠した組み込みの値は、タスクの `cascadeContext` に入らない。どの層が隠したかは出所に残る。値なしを書いた層も、値を書いた層と同じく出所になる（`resolvedSources`、`Task.inheritedFrom`）
-- ハブは受け継いだ値なしを、組み込みのキー（色、線種、マスク）でもカスタムプロパティでも、空の欄と「値なし」の placeholder、出所のラベル（隠した層の行を開ける）で出す。組み込みのキーの出所は `inheritedFrom` から言う（`CascadeSource.forStyleField`）。自分の値なしは出所のラベルの代わりに × を出し、× は自分の行を消す。どちらの欄も、打った値は自分の値として書く
+- ハブでの値なしの出し方は「ハブのプロパティの欄」にある
 - frontmatter の出所（`ValueSource` の `frontmatter`）は、そのキーの行を持つ（`frontmatterKeyRange`。書き込みが編集する行と同じ答え）。キーの行を読めないときは null である
 - API は値なしを `null` で出す。frontmatter の `key:` も同じである
 
@@ -403,12 +410,11 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 色、線種、マスクは、文字が `set`、null が `hide`、undefined か空の文字が `delete` である
     - タグは、本文の `#tag` を除いた残りを `#a #b` で `set` し、残りが無ければ `delete` する。下にリストを持つ `- tags::` には、`- #a` の項目で書く
     - カスタムプロパティは、綴りが空の null が `hide`、項目のあるリストが項目の `set`、ほかの値が綴りの `set`、無くなったキーが `delete` である。項目の無いリストは行に書けないので `delete` になる
-    - own と比べるので、受け継いだ値と同じ値も、確定すれば自分の行として書く。ハブの受け継いだ値の欄は、同じ文字を打ち直して確定すれば書く（`bindField` の `takesSame`）。触れただけでは書かない
-    - ハブで値を空にして確定すると `delete` になる。追加の行でキーだけを確定すると `hide` になる
+    - own と比べるので、受け継いだ値と同じ値も、確定すれば自分の行として書く。ハブの欄がいつ確定するかは「ハブのプロパティの欄」にある
 - 書き方
     - 既にある行は、値の前（字下げ、記号、キー、`::`）を書かれたまま保ち、値だけを書き換える。リストの項目も記号と字下げを保つ
     - リストは項目を上から1対1で書き換え、余った項目を消し、足りない項目を最後の項目の後ろに足す。並べ替えは行の順序の書き換えになる。値のある行にリストを書くと、行の値を消して下に項目を置く。リストの行にテキストを書くと、項目を消して行に値を書く
-    - 新しい行は、タスクの最後のプロパティ行の部分木の後ろか、タスクの最初の子に置く（`Placement`）。リストの項目は、その行の最初の子と同じ字下げの規則で1段下に置く
+    - 新しい行は、タスクの最後のプロパティ行の部分木の後ろか、タスクの最初の子に置く（`Placement`）。リストの項目は、子の行の字下げの規則（Persistence Layer の「Child line indentation」）で行の1段下に置く。下に子の無い行の最初の項目は `Placement.childOfPut` が決める
 - 所見のあるブロックには書かない。`PropertyLines.read` がそのキーの行に所見（重複したキー、値のある行の下の行、リストの項目として読めない行、組み込みのキーの読めない値など）を出していれば、操作を書かず、書き込み全体を `property` の拒否で終える（通知に、キーと所見の行が出る）。ほかの操作も書かない。重複したキーを1行にまとめることもしない。利用者がエディタで直す
 - リストの項目は、書き込みの検査（`checkWrite`）で意味のある行として扱う（`ChildLineClassifier.carriesMeaning`）。リストの行だけを消して項目を残す書き込みは `disturbs` で拒否される
 - フローの次のインスタンスには、子の行を写さない（プロパティ行も写さない）。次のインスタンスが持つ子の行は、生成ブロック（`use`）に書く。複製は部分木の全行を写す
@@ -444,6 +450,8 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みの値の読みは `readBuiltin`（`parsing/utils/BuiltinValues.ts`）の1か所にあり、値、値なし、読めない値のどれかを返す（「継承と値のない値」）。値は型によらず表示の文字（`display`）から読み、引用符で囲んだ `"red"` は `red` である。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。プラグインのキー（`tv-color` など）も、ほかのキーと同じく大文字と小文字を区別しない（「プロパティのキー」）。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` と設定のキーを探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
 
+色の判定は `ColorCheck.isColor`（`utils/ColorUtils.ts`）の1か所にある。3桁と6桁の16進は自前で読み、それ以外は CSS に問う（`CSS.supports('color', …)`）。CSS の色の名前（大文字と小文字によらず）、`rgb()` などの色の式が色になる。どの層の `tv-color`（`readBuiltin`）も、ハブの色の欄（`ColorInput`）も、この答えで決める。ハブの欄は `rgb(0 0 0)` を打った綴りのまま受ける。DOM の無い単体テストでは、判定を `ColorCheck.use` で差し替える。差し替えなければ色の名前だけを色とする。
+
 ### プロパティの条件
 
 フィルタの `property` の条件は、値を型に合わせて比べる。比べ方は `PropertyMatch`（`services/filter/PropertyMatch.ts`）の1か所にある。比べる値は `TaskValues.property` が出す受け継ぎを含む値で、キーは `PropertyKey` で大文字と小文字を区別せずに引く。
@@ -459,7 +467,58 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - 条件の値が値なしの綴り（空、`null`、`~`）なら、その綴りのテキストとして比べる。`equals ""` は空のテキストに当たり、値なしには当たらない
 - 否定の演算子は肯定の否定のまま組む（`FilterExpr`）。`isNotSet` は値なしとキーの無いタスクに当たり、`notContains` はどの項目にも含まれないタスク、値なしのタスク、キーの無いタスクに当たる
 - API と CLI の `property=key:value` は `contains` の条件の略記である（`QueryShorthand`）
-- フィルタメニューの値の候補（`FilterValueCollector.collectPropertyItemsForKey`）は、リストを項目ごとに出し、値なしを出さない。どの候補も、`equals` で選べば候補を出したタスクに当たる。ハブの値の候補（`collectPropertyValuesForKey`）は、各タスクの値の表示の文字をそのまま出す（リストは項目をつないだ1つの文字）
+- フィルタメニューの値の候補（`FilterValueCollector.collectPropertyItemsForKey`）は、リストを項目ごとに出し、値なしを出さない。どの候補も、`equals` で選べば候補を出したタスクに当たる。ハブの値の候補（`collectPropertySpellingsForKey`）は、リストを項目ごとに出し、値なしを出さず、各値を行に書く綴りで出す（「ハブのプロパティの欄」）
+
+### ハブのプロパティの欄
+
+ハブ（`TaskHubForm`）は、タスク自身のプロパティ行を欄から書く。欄は、組み込みの色、線種、マスク（`StyleFieldGroup`）、タグ（`TagsFieldGroup`）、カスタムプロパティ（`PropertiesFieldGroup`、リストは `PropertyListField`）である。節と frontmatter の値を編集する欄は無い。受け継いだ値は出所のラベル（`CascadeSource`）で示し、ラベルから値を書いた行を開く。
+
+- 欄の文字は、行に書く綴り（`spelling`）である。`- id:: "123"` の欄は `"123"` を出す。欄は入力の場所で、引用符を外して出すと、`124` に直したときに型が数に変わるからである。カード、メニュー、候補は引用符を外した表示（`display`）を出す
+- 欄の確定は `bindField`（`modals/form/bindField.ts`）が決める。blur とフォームの Enter で確定し、読めない文字は欄の下に理由を出して確定しない
+    - 受け継いだ値を出す欄は `takesSame` を持つ。同じ文字を打ち直して確定すれば、受け継いだ値と同じ値でもタスク自身の行として書く。触れただけで打っていない欄は書かない
+    - 打ち直した値は、確定するまで `pending` に残る。ハブを閉じる手順の保存（`save`）は `pending` を確定するので、blur せずに閉じても書く。ほかの欄が閉じるときに保存するのと揃えている
+- 値を空にして確定すると、自分の行を消す（`delete`）。上の層の値が届く
+- 値の候補（`FilterValueCollector.collectPropertySpellingsForKey`）は、vault の同じキーの値を、リストは項目ごとに、行に書く綴りで出す。値なしは出さない。綴りで出すので、`"123"` と `123` は別の候補で、見た目でも区別できる。空のテキスト `""` も候補になる
+
+### ハブで値を隠す
+
+- 値を受け継いでいて自分の値を持たない行（カスタムプロパティの値とリスト、色、線種、マスク）には「隠す」ボタンを出す。押すと、自分の値なしの行（`- key::`）を書く。組み込みは `TaskUpdateBuilder.styleHidden` が null を渡し、カスタムプロパティは値なしの値を渡す。プランナーはどちらも `hide` にする
+- 自分の値なしは、空の欄と「値なし」の placeholder で出し、出所のラベルの代わりに × を出す。× は自分の行を消し、上の層の値が届く。カスタムプロパティの `- key:: null` のように綴りのある値なしは、綴りのまま出す
+- 受け継いだ値なしも、組み込みでもカスタムプロパティでも、空の欄と「値なし」の placeholder で出す。出所のラベルは隠した層の行を開く。組み込みの出所は `inheritedFrom` の隠した層から言う（`CascadeSource.forStyleField`）。打った値は自分の値として書く
+- タグには隠す操作が無い。タグは層ごとに足し合わせるからである
+- 追加の行でキーだけを確定しても値なしの行を書くが、隠す入口は「隠す」ボタンである
+
+### ハブのリストの欄
+
+`PropertyListField` は、リストを1項目1行で出す。
+
+- 自分のリストの項目は、その場で編集する。項目の文字の編集、項目の × での削除、追加の欄での末尾への追加、取っ手のドラッグか Alt+↑↓ での並べ替えができる。編集のたびにリスト全体を書く（`set` の `{ items }`）。空にした項目は消し、最後の項目を消すと行も消える（`delete`）
+- 自分のリストの行には、プロパティ全体を消す × を出さない。項目ごとの × と並んで見た目が近く、取り違えやすいためである
+- 項目の文字は `PropertyItemInput` で読む。行に書いて同じ1項目として読み返せる文字だけを受ける（`PropertyLines.itemOf`）。値なし（`null`、`~`）、チェックボックス（`[ ] x`）、プロパティ行の形（`a:: b`）は、欄の下に理由を出して書かない
+- 受け継いだリストは、項目を並べて出すだけで編集しない。出所のラベル、「隠す」ボタン、「このタスクの値にする」ボタンを出す
+    - 「このタスクの値にする」は、受け継いだ項目を写した下書きを作り、追加の欄に focus を置く。下書きは書かずに保ち、最初の編集でタスク自身のリストとして書く
+    - 下書きの行の × は、何も書かずに下書きを捨てる。項目の × で消していくと縮んだリストが書かれるので、書かずに捨てる手段はこれだけである
+- 新しいプロパティは、追加の行からテキストとしてだけ足せる。リストのプロパティを新しく作るのは、ソースモードか行に直接書く
+
+### ハブの所見のある欄
+
+タスク自身のプロパティ行の所見（`Task.propertyFindings`）は、`hubFindings`（`modals/hub/HubFindings.ts`）が欄に振り分ける。
+
+- 所見はそのプロパティのブロックの欄のものである。色、線種、マスク、タグは組み込みのキー（`builtinsByKey`）で、ほかのキーはカスタムプロパティ（`prop:<小文字にしたキー>`）で引く
+- タスクの下の日付のキー（`date-key-under-task`）は、どの欄のものでもなく、フォーム全体の所見として末尾に出す。日付の欄はタスク行の `@` を書くので、子の行の `tv-start::` はどの欄とも関係がない。そのため、どの欄も止めない
+- 所見のある欄は編集できない（`lockedFields`、`FieldGroupContext.locked`）。値の無いキー（重複したキーで、受け継ぐ値も無い）にも、所見を出すための編集できない行を作る。ほかの欄は書ける。プラグインが意図を判断できないブロックに書かないためで、書き込みの側も同じブロックを断る（「プロパティの書き込み」）
+- 文はエディタの診断と同じ文である（`propertyFindingDiagnostic` を `diagnosticText` で訳す）
+- 所見の下に「行を開く」（`FormIssue.action`）を出す。所見の行は所見を読んだ読みの座標なので、別の写しで開くときは、同じ種類と同じキーの所見を上から数えて照合する（`lineOfFinding`）
+- 追加の行に重複したキーを打つと、書き込みが断られ、理由をフォームの末尾に出す。重複を1行にまとめることはしない
+
+### ハブから出所の行を開く
+
+`openSourceLine`（`modals/hub/SourceLine.ts`）が、受け継いだ値を書いた行か所見の行を開いて光らせる。出所のラベルと「行を開く」が使う。
+
+- 行はタスクの読みの座標である。今エディタが出している内容（エディタが無ければファイル）に、`IndexReads.followLine` で写す。自分の書き込みはこれで追える
+- 写せない（未保存の編集がある、読み直しが済んでいない）ときは、エディタを保存して読み直し、新しい写しで出所を探し直す（`locate`）。それでも写せなければ推測せず、ノートを開くだけにする
+- 行は `setEphemeralState({ line })` で開き、カーソルを置いて Obsidian の光らせ方で光らせる
+- frontmatter の出所は、Properties ビューの `.metadata-property`（キーは大文字と小文字によらず照合）を光らせる。Live Preview では frontmatter の行がエディタに無く、行で開くと本文の先頭にカーソルが行くためである。Properties ビューが無ければ行で開く
 
 ### Inline child line extraction
 
@@ -1273,6 +1332,16 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 
 - Every task has a real body line. A new line (the API's `create` and `insertChildTask`, the create dialog, the timer's records) is written from its fields with `formatTaskLine`, never through a temporary Task; `createTempTask` is only for the create dialog's preview.
 
+### Child line indentation
+
+A line a write puts under a row (a property line, a list's item, a child the API or the create dialog puts under a row, a fire's next instance's children) is indented by one rule, `Placement.resolveChildIndent`, which keeps Obsidian's editor's: a line at the depth of a line there takes that line's spelling, and a line one level deeper than any there takes the level Obsidian's settings say (`ObsidianConfig.indentUnit`: a tab, or `tabSize` spaces, at most four).
+
+- A row with children: the new child is spelled as the row's first child (past the lines the write takes away), carried under the new parent as far past it as it stood past the row (`Outline.shiftedIndent`).
+- A row with no children: its first child goes a level deeper, the level spelled as the row stands past the item it is under (`Placement.stepPast`). A task four spaces under its parent gets its first child eight spaces in, not four spaces and a tab.
+- A row at the top, or one whose sample does not land where a child opens: the row's indentation and the unit, repeated until the line reaches the row's content column (`Outline.childIndent`). Short of the content column a line is no child; a unit of at most four columns keeps it out of indented code.
+- How the rest of the note is indented does not decide it, as it does not in the editor.
+- A list's first item under a property line a write adds is spelled the same way (`Placement.childOfPut`), from where the line goes.
+
 ### Inline persistence rules
 
 #### Date field handling
@@ -1482,7 +1551,7 @@ A new key is a field of `TaskViewerSettings`, its default in `DEFAULT_SETTINGS`,
 
 **`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
 
-All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Each must be a key a property line reads (no `:`, `[`, `]`), none of `tags`, `position` and the file task's former keys, and none of the other scope keys, a key's case aside (`ScopeKeyInput`); a stored set with one that is not falls back to the defaults whole. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
+All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Each must be a key a property line reads (not empty, and no `:`, `[`, `]` or backquote; the hub's key field reads by the same rule, 「プロパティのキー」), none of `tags`, `position` and the file task's former keys, and none of the other scope keys, a key's case aside (`ScopeKeyInput`); a stored set with one that is not falls back to the defaults whole. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
 
 ---
 
