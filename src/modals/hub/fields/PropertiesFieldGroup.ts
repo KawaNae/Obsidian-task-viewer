@@ -278,7 +278,8 @@ export class PropertiesFieldGroup implements ClosingPart {
      * × takes the line out again.
      */
     private hideButton(row: HTMLElement, key: string, disabled: boolean): void {
-        const hide = row.createEl('button', { cls: 'task-hub__hide', text: t('modal.hub.hide'), attr: { type: 'button' } });
+        const hide = row.createEl('button', { cls: 'tv-icon-btn task-hub__hide', attr: { type: 'button' } });
+        setIcon(hide.createSpan(), 'ban');
         hide.setAttribute('aria-label', t('modal.hub.hideInherited', { key }));
         hide.disabled = disabled;
         hide.addEventListener('click', () => {

@@ -238,10 +238,21 @@
     font-size: 0.75em;
 }
 
-/* Hide an inherited value: a small button beside the source, as the list's */
-.task-hub__hide {
-    flex: 0 0 auto;
-    font-size: 0.75em;
+/* Hide an inherited value: an icon beside the source, drawn as a row's × is */
+.tv-ctrl .task-hub__hide {
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 50%;
+}
+
+.tv-ctrl .task-hub__hide:hover {
+    background-color: var(--tv-bg-primary);
+}
+
+.task-hub__hide .svg-icon {
+    width: 10px;
+    height: 10px;
 }
 
 .task-hub__hide.is-hidden,

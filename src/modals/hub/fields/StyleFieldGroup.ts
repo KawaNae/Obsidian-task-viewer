@@ -92,7 +92,8 @@ export class StyleFieldGroup implements ClosingPart {
         this.sourceEls[field] = sourceEl;
 
         // Hide the inherited value (`- tv-color::`), and the × that takes the row's own no value out again.
-        const hide = row.createEl('button', { cls: 'task-hub__hide', text: t('modal.hub.hide'), attr: { type: 'button' } });
+        const hide = row.createEl('button', { cls: 'tv-icon-btn task-hub__hide', attr: { type: 'button' } });
+        setIcon(hide.createSpan(), 'ban');
         hide.setAttribute('aria-label', t('modal.hub.hideInherited', { key: this.ctx.plugin.settings.scopeKeys[field] }));
         hide.addEventListener('click', () => this.hide(field));
         this.hideButtons[field] = hide;
