@@ -49,16 +49,28 @@ export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[
 export type NoteType = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 /**
+ * One value of a property, or one item of a list: a text, a number or a
+ * boolean. `spelling` is the value as a property line writes it, which a
+ * write-back writes again: the line's own text (`007`, `True`, a quoted
+ * `"123"`), or for a value the frontmatter gave, the line text that reads
+ * back as the same value. A reader asks the type's own field (`text`,
+ * `number`, `boolean`) for what the value means, and never reads it off
+ * `spelling`.
+ */
+export type PropertyScalar =
+    | { type: 'text'; text: string; spelling: string }
+    | { type: 'number'; number: number; spelling: string }
+    | { type: 'boolean'; boolean: boolean; spelling: string };
+
+/**
  * A property's value (`- key:: value` or frontmatter), read once by
- * `PropertyValues`: `value` is the text as written, which a write-back writes
- * again; the type's own field is the value it means. A reader asks the type
- * (`boolean`, `number`, `items`) and never reads truth or numbers off `value`.
+ * `PropertyValues`: a scalar, no value (`null`: a line with nothing after
+ * `::`, or `null`, `~`), or a list of scalars (the frontmatter's).
  */
 export type PropertyValue =
-    | { type: 'string'; value: string }
-    | { type: 'number'; value: string; number: number }
-    | { type: 'boolean'; value: string; boolean: boolean }
-    | { type: 'array'; value: string; items: string[] };
+    | PropertyScalar
+    | { type: 'null'; spelling: string }
+    | { type: 'list'; items: PropertyScalar[] };
 
 export type PropertyType = PropertyValue['type'];
 

@@ -1,5 +1,6 @@
 import { DateUtils } from '../../utils/DateUtils';
 import type { PropertyValue, Task } from '../../types';
+import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
 
 /**
  * フォームのフィールド確定値 → updateTask に渡す Partial<Task> 差分。
@@ -55,7 +56,7 @@ export class TaskUpdateBuilder {
         const prevKeys = Object.keys(prev);
         const nextKeys = Object.keys(props);
         const same = prevKeys.length === nextKeys.length
-            && nextKeys.every(k => prev[k]?.value === props[k].value);
+            && nextKeys.every(k => k in prev && PropertyValues.spelling(prev[k]) === PropertyValues.spelling(props[k]));
         return same ? null : { properties: props };
     }
 }

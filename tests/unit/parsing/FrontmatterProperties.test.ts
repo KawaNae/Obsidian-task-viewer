@@ -53,8 +53,8 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
                 'custom1': 'value1',
                 'custom2': 42,
             }, keys);
-            expect(result.properties['custom1']).toEqual({ value: 'value1', type: 'string' });
-            expect(result.properties['custom2']).toEqual({ value: '42', type: 'number', number: 42 });
+            expect(result.properties['custom1']).toEqual({ type: 'text', text: 'value1', spelling: 'value1' });
+            expect(result.properties['custom2']).toEqual({ type: 'number', number: 42, spelling: '42' });
             expect(result.properties['tv-color']).toBeUndefined();
         });
 
@@ -65,10 +65,13 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
                 'a': ['x', 'y'],
                 's': 'hello',
             }, keys);
-            expect(result.properties['b']).toEqual({ value: 'true', type: 'boolean', boolean: true });
-            expect(result.properties['n']).toEqual({ value: '3.14', type: 'number', number: 3.14 });
-            expect(result.properties['a']).toEqual({ value: 'x, y', type: 'array', items: ['x', 'y'] });
-            expect(result.properties['s']).toEqual({ value: 'hello', type: 'string' });
+            expect(result.properties['b']).toEqual({ type: 'boolean', boolean: true, spelling: 'true' });
+            expect(result.properties['n']).toEqual({ type: 'number', number: 3.14, spelling: '3.14' });
+            expect(result.properties['a']).toEqual({ type: 'list', items: [
+                { type: 'text', text: 'x', spelling: 'x' },
+                { type: 'text', text: 'y', spelling: 'y' },
+            ] });
+            expect(result.properties['s']).toEqual({ type: 'text', text: 'hello', spelling: 'hello' });
         });
 
         it('null / undefined 値は properties から除外', () => {
@@ -79,7 +82,30 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
             }, keys);
             expect(result.properties['a']).toBeUndefined();
             expect(result.properties['b']).toBeUndefined();
-            expect(result.properties['c']).toEqual({ value: 'kept', type: 'string' });
+            expect(result.properties['c']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
+        });
+
+        it('reads no property from a mapping, nor an item from a list or a mapping in a list', () => {
+            const result = frontmatterLayer({
+                'map': { p: 1 },
+                'mixed': ['a', ['b'], { c: 1 }, null, 2],
+                'tv-color': { red: true },
+            }, keys);
+            expect(result.properties['map']).toBeUndefined();
+            expect(result.properties['mixed']).toEqual({ type: 'list', items: [
+                { type: 'text', text: 'a', spelling: 'a' },
+                { type: 'number', number: 2, spelling: '2' },
+            ] });
+            expect(result.color).toBeUndefined();
+        });
+
+        it('spells a text a line would read as something else in quotes, and a number as YAML does', () => {
+            const result = frontmatterLayer({ id: '123', flag: 'true', plain: 'a b', inf: -Infinity, nan: NaN }, keys);
+            expect(result.properties['id']).toEqual({ type: 'text', text: '123', spelling: '"123"' });
+            expect(result.properties['flag']).toEqual({ type: 'text', text: 'true', spelling: '"true"' });
+            expect(result.properties['plain']).toEqual({ type: 'text', text: 'a b', spelling: 'a b' });
+            expect(result.properties['inf']).toEqual({ type: 'number', number: -Infinity, spelling: '-.inf' });
+            expect(result.properties['nan']).toMatchObject({ type: 'number', spelling: '.nan' });
         });
 
         it('Obsidian 内部キー (position) を properties から除外', () => {
@@ -88,7 +114,7 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
                 'real-prop': 'kept',
             }, keys);
             expect(result.properties['position']).toBeUndefined();
-            expect(result.properties['real-prop']).toEqual({ value: 'kept', type: 'string' });
+            expect(result.properties['real-prop']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
         });
 
         it('tags キーは properties に含めない (専用フィールドへ)', () => {
@@ -97,7 +123,7 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
                 'custom': 'kept',
             }, keys);
             expect(result.properties['tags']).toBeUndefined();
-            expect(result.properties['custom']).toEqual({ value: 'kept', type: 'string' });
+            expect(result.properties['custom']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
         });
     });
 
@@ -144,20 +170,21 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
     });
 
     describe('dates', () => {
-        it('reads a date key\'s Date and minutes of the day as the date text', () => {
+        it('reads a date key from its text, and a number as no date', () => {
             const result = frontmatterLayer({
-                'tv-start': new Date(2026, 8, 21, 9, 30),
+                'tv-start': '2026-09-21T09:30',
                 'tv-end': 630,
                 'tv-due': '2026-09-30',
             }, keys);
             expect(result.startDate).toBe('2026-09-21');
             expect(result.startTime).toBe('09:30');
-            expect(result.endTime).toBe('10:30');
+            expect(result.endDate).toBeUndefined();
+            expect(result.endTime).toBeUndefined();
             expect(result.due).toBe('2026-09-30');
         });
 
         it('keeps a number under another key a number', () => {
-            expect(frontmatterLayer({ n: 630 }, keys).properties.n).toEqual({ value: '630', type: 'number', number: 630 });
+            expect(frontmatterLayer({ n: 630 }, keys).properties.n).toEqual({ type: 'number', number: 630, spelling: '630' });
         });
     });
 
@@ -192,7 +219,7 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
             expect(result.tags).toEqual(['t1', 't2']);
             expect(result.properties['position']).toBeUndefined();
             expect(result.properties['tv-start']).toBeUndefined();
-            expect(result.properties['fm-prop']).toEqual({ value: 'fm-value', type: 'string' });
+            expect(result.properties['fm-prop']).toEqual({ type: 'text', text: 'fm-value', spelling: 'fm-value' });
         });
     });
 });

@@ -1,9 +1,10 @@
 import { stringifyYaml } from 'obsidian';
-import type { PropertyValue, TaskViewerSettings } from '../../types';
+import type { PropertyScalar, PropertyValue, TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { ValueSource } from '../parsing/tree/Sections';
 import { NoteSections } from '../parsing/tree/NoteSections';
 import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
+import { PropertyValues } from '../parsing/utils/PropertyValues';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
 
 /**
@@ -35,8 +36,8 @@ const OBSIDIAN_KEYS: ReadonlySet<string> = new Set(['aliases', 'alias', 'cssclas
  * record (`SectionNode.resolvedSources`); this only says it again:
  *
  * - A key one layer sets is said as that layer said it. The frontmatter's
- *   lines go as they are: the resolved value is normalized (a list
- *   joined), and the lines keep what it lost. A property line's value is
+ *   lines go as they are: the resolved value is normalized (a number's
+ *   spelling, a comment), and the lines keep what it lost. A property line's value is
  *   said in the YAML of the type the line gave it
  *   (`PropertyValues.fromText`), so the frontmatter reads back the
  *   same type (`propertyYaml`); the plugin's own keys (color, line style,
@@ -102,29 +103,44 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     return out;
 }
 
-/** The value a section's property line says, as the sections read it (`NoteSections`). */
+/**
+ * The value a section's property line says, as the sections read it
+ * (`NoteSections`) and as a built-in reads it (`PropertyValues.display`).
+ */
 function propertyValueAt(lines: readonly string[], line: number): string {
-    return lines[line].match(ChildLineClassifier.PROPERTY_LINE)?.[2].trim() ?? '';
+    return PropertyValues.display(PropertyValues.fromText(lines[line].match(ChildLineClassifier.PROPERTY_LINE)?.[2].trim() ?? ''));
 }
 
 /**
  * A property line's value as frontmatter lines the frontmatter reads back
- * as the same type (`PropertyValues.fromYaml`): a number bare, a boolean as
- * the plugin writes a new one (lowercase), an array as a list of its items
- * (which the frontmatter joins back with `, `), a string quoted when it has
- * to be. The text comes back as written but where the YAML type has its
- * own spelling: `True` as `true`, `007` as `7`, `[a,b]` as `a, b`.
+ * as the same type (`PropertyValues.fromYaml`): a number as spelled (every
+ * number a line reads is one YAML reads), a boolean as the plugin writes a
+ * new one (lowercase), a text without its quotes and quoted when YAML would
+ * read it as something else, a list as a list of its items. The text comes
+ * back as written but where the YAML type has its own spelling: `True` as
+ * `true`, `"123"` as YAML quotes it.
+ *
+ * No value goes as the text it is spelled (`""` for an empty line): the
+ * frontmatter's key with no value is no property, and would not hide the
+ * value above it as the line does.
  */
 function propertyYaml(key: string, property: PropertyValue): string[] {
     const head = `${yamlKey(key)}:`;
     switch (property.type) {
-        case 'number': return [`${head} ${property.value}`];
-        case 'boolean': return [`${head} ${property.boolean}`];
-        case 'array': {
+        case 'list': {
             if (property.items.length === 0) return [`${head} []`];
-            return [head, ...property.items.map(item => `  - ${FrontmatterLineEditor.escapeYamlScalar(item)}`)];
+            return [head, ...property.items.map(item => `  - ${scalarYaml(item)}`)];
         }
-        case 'string': return [`${head} ${FrontmatterLineEditor.escapeYamlScalar(property.value)}`];
+        case 'null': return [`${head} ${FrontmatterLineEditor.escapeYamlScalar(property.spelling)}`];
+        default: return [`${head} ${scalarYaml(property)}`];
+    }
+}
+
+function scalarYaml(scalar: PropertyScalar): string {
+    switch (scalar.type) {
+        case 'number': return scalar.spelling;
+        case 'boolean': return String(scalar.boolean);
+        case 'text': return FrontmatterLineEditor.escapeYamlScalar(scalar.text);
     }
 }
 

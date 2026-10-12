@@ -1,4 +1,5 @@
 import type { DisplayTask } from '../../types';
+import { PropertyValues } from '../parsing/utils/PropertyValues';
 import type { FilterProperty } from './FilterTypes';
 import { getTaskNotation } from './parserTaxonomy';
 import {
@@ -124,9 +125,13 @@ export const TaskValues = {
         return ms < 0 ? { kind: 'number', present: true } : { kind: 'number', present: true, value: ms };
     },
 
-    /** The value of a property (`key:: value`), the section's when the task has none of its own. */
+    /**
+     * The value of a property (`key:: value`), the section's when the task
+     * has none of its own, as it is shown (`PropertyValues.display`).
+     */
     property(task: DisplayTask, key: string): TextValue {
-        return text(getEffectiveProperties(task)[key]?.value);
+        const value = getEffectiveProperties(task)[key];
+        return text(value ? PropertyValues.display(value) : undefined);
     },
 
     /**

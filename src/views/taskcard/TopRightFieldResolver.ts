@@ -1,6 +1,7 @@
 import { DateUtils } from '../../utils/DateUtils';
 import type { DisplayTask, StatedDates, TaskViewerSettings, TopRightConfig } from '../../types';
 import { getEffectiveTags, getEffectiveProperties } from '../../services/data/EffectiveProperties';
+import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
 import { t } from '../../i18n';
 
 /**
@@ -104,7 +105,7 @@ function fieldPieces(task: DisplayTask, fieldName: string, settings: TaskViewerS
     if (fieldName.startsWith('prop.')) {
         const props = getEffectiveProperties(task);
         const pv = props[fieldName.slice(5)];
-        return seg(pv?.value != null ? String(pv.value) : null);
+        return seg(pv ? PropertyValues.display(pv) : null);
     }
     const extractor = FIELD_MAP[fieldName];
     return extractor ? extractor(task, settings) : [];

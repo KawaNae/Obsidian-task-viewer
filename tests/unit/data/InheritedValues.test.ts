@@ -113,6 +113,9 @@ describe('inheritedAt', () => {
             '- link:: [[x]]',
             '- links:: [[a]], [[b|B, c]]',
             '- none:: ,',
+            '- hex:: 0x1F',
+            '- id:: "123"',
+            '- empty::',
             '- tv-color:: 007700',
             '- [ ] task',
         ];
@@ -125,11 +128,17 @@ describe('inheritedAt', () => {
         expect(values.off.yaml).toEqual(['off: false']);
         // `true` is a boolean on a line as in YAML, and is written as one.
         expect(values.word.yaml).toEqual(['word: true']);
-        expect(values.area.yaml).toEqual(['area:', '  - lab', '  - desk']);
-        expect(values.pair.yaml).toEqual(['pair:', '  - x', '  - y']);
-        expect(values.link.yaml).toEqual(['link:', '  - "[[x]]"']);
-        expect(values.links.yaml).toEqual(['links:', '  - "[[a]]"', '  - "[[b|B, c]]"']);
-        expect(values.none.yaml).toEqual(['none: []']);
+        // A line writes no list: `,` and brackets are text, which YAML is told by quotes.
+        expect(values.area.yaml).toEqual(['area: "lab, desk"']);
+        expect(values.pair.yaml).toEqual(['pair: "[x, y]"']);
+        expect(values.link.yaml).toEqual(['link: "[[x]]"']);
+        expect(values.links.yaml).toEqual(['links: "[[a]], [[b|B, c]]"']);
+        expect(values.none.yaml).toEqual(['none: ","']);
+        expect(values.hex.yaml).toEqual(['hex: 0x1F']);
+        // A quoted line value is text, and YAML is told so by its own quotes.
+        expect(values.id.yaml).toEqual(['id: "123"']);
+        // No value goes as an empty text: the frontmatter's `empty:` would be no property.
+        expect(values.empty.yaml).toEqual(['empty: ""']);
         // The plugin's own keys are read as text: a color is not a number.
         expect(values['tv-color'].yaml).toEqual(['tv-color: "007700"']);
     });
@@ -143,8 +152,8 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
     /**
      * What a row inherits, as the views read it. A property is its type and
      * what that type means: an array its items, a boolean its truth, a
-     * number its number. The text alone may change where YAML spells a type
-     * its own way (`True` as `true`, `[x, y]` as `x, y`); what reads it
+     * number its number. The spelling alone may change where YAML spells a
+     * type its own way (`True` as `true`, `1.50` as `1.5`); what reads it
      * gets the same either way.
      */
     function inherited(task: Task) {
@@ -166,10 +175,11 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
 
     function meaning(property: PropertyValue): unknown {
         switch (property.type) {
-            case 'array': return property.items;
+            case 'list': return property.items.map(meaning);
             case 'boolean': return property.boolean;
             case 'number': return property.number;
-            case 'string': return property.value;
+            case 'text': return property.text;
+            case 'null': return null;
         }
     }
 
@@ -208,6 +218,8 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
         '- memo:: see: there',
         '- area:: lab, desk',
         '- pair:: [x, y]',
+        '- quoted:: "123"',
+        '- hex:: 0x1F',
         '- link:: [[x]]',
         '- refs:: [[a]], [[b|B, c]]',
         '- done:: True',
@@ -235,13 +247,18 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
         const was = getEffectiveProperties(before);
         const is = getEffectiveProperties(after);
         for (const key of Object.keys(was)) expect(is[key]?.type, key).toBe(was[key].type);
-        for (const key of ['priority', 'memo', 'area', 'link', 'refs', 'day', 'word', 'links', 'owner']) {
+        for (const key of ['priority', 'memo', 'area', 'pair', 'quoted', 'link', 'refs', 'day', 'word', 'links', 'owner']) {
             expect(is[key], key).toEqual(was[key]);
         }
-        expect(was.done).toEqual({ value: 'True', type: 'boolean', boolean: true });
-        expect(is.done).toEqual({ value: 'true', type: 'boolean', boolean: true });
-        expect(is.pair).toEqual({ value: 'x, y', type: 'array', items: ['x', 'y'] });
-        expect(is.size).toEqual({ value: '1.5', type: 'number', number: 1.5 });
+        expect(was.done).toEqual({ type: 'boolean', boolean: true, spelling: 'True' });
+        expect(is.done).toEqual({ type: 'boolean', boolean: true, spelling: 'true' });
+        expect(is.links).toEqual({ type: 'list', items: [
+            { type: 'text', text: '[[a]]', spelling: '[[a]]' },
+            { type: 'text', text: '[[b]]', spelling: '[[b]]' },
+        ] });
+        // The frontmatter's number is spelled as YAML gives it back.
+        expect(is.hex).toEqual({ type: 'number', number: 31, spelling: '31' });
+        expect(is.size).toEqual({ type: 'number', number: 1.5, spelling: '1.5' });
     });
 
     it('子タスクの行を単独で送っても', () => {

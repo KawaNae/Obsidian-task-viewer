@@ -199,21 +199,21 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
     it('goes past the task\'s text that goes on, as its first child', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', 'lazy words', '- [ ] U', '']);
 
-        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).written).toBe(true);
+        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { type: 'text', text: 'x', spelling: 'x' } } } as never)).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', 'lazy words', '    - memo:: x', '- [ ] U', '']);
-        expect(only(session, 'T').properties?.memo?.value).toBe('x');
+        expect(only(session, 'T').properties?.memo).toMatchObject({ spelling: 'x' });
     });
 
     it('goes past the last property\'s subtree, as its sibling, tab and spaces mixed', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '- [ ] U', '']);
 
-        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number', number: 1 }, b: { value: '2', type: 'number', number: 2 } } } as never)).written).toBe(true);
+        expect((await session.ops.updateTask(only(session, 'T').id, { properties: { a: { type: 'number', number: 1, spelling: '1' }, b: { type: 'number', number: 2, spelling: '2' } } } as never)).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '\t    - b:: 2', '- [ ] U', '']);
-        expect(only(session, 'T').properties?.b?.value).toBe('2');
+        expect(only(session, 'T').properties?.b).toMatchObject({ spelling: '2' });
     });
 });
 
@@ -512,11 +512,11 @@ describe('the two readings made CommonMark\'s: a quote after an item, an ordered
         it('puts a property', async () => {
             const { contents, session } = await open(NOTE);
 
-            expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).written).toBe(true);
+            expect((await session.ops.updateTask(only(session, 'T').id, { properties: { memo: { type: 'text', text: 'x', spelling: 'x' } } } as never)).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - memo:: x', '- [ ] V', '']);
-            expect(only(session, 'T').properties?.memo?.value).toBe('x');
+            expect(only(session, 'T').properties?.memo).toMatchObject({ spelling: 'x' });
         });
     });
 

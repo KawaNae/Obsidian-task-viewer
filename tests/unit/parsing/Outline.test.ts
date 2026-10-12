@@ -112,7 +112,7 @@ describe('a child below a blank line', () => {
         expect(b.parentId).toBe(p.id);
         expect(parsed.tasks.find(task => task.content === 'q')!.parentId).toBeUndefined();
         // A property line below the blank line is the task's too.
-        expect(p.properties.key?.value).toBe('value');
+        expect(p.properties.key).toMatchObject({ spelling: 'value' });
     });
 
     it('of a child task stays the child\'s, not the parent\'s child line', () => {

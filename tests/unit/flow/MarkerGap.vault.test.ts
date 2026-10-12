@@ -131,7 +131,7 @@ describe('a task moved to another indentation', () => {
         expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] P', '- [ ] U', '## Done', '- [x] T @2026-09-21', '  - [ ] c', '  - memo:: a', '']);
         const { T, c } = movedIn(session, FILE);
         expect(c?.parentId).toBe(T.id);
-        expect(T.properties?.memo?.value).toBe('a');
+        expect(T.properties?.memo).toMatchObject({ spelling: 'a' });
     });
 
     it('keeps its child under a heading of the note', async () => {

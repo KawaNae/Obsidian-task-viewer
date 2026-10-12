@@ -1,4 +1,5 @@
 import type { App, Menu } from 'obsidian';
+import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
 import { TaskValues } from '../../../services/filter/TaskValues';
 import type { Task, DisplayTask, PropertyType } from '../../../types';
 import type { Operations } from '../../../services/operations/Operations';
@@ -248,7 +249,7 @@ export class PropertiesMenuBuilder {
         for (const key of keys) {
             const prop = properties[key];
             menu.addItem((item) => {
-                item.setTitle(`${key}: ${prop.value}`)
+                item.setTitle(`${key}: ${PropertyValues.display(prop)}`)
                     .setIcon(this.getPropertyTypeIcon(prop.type))
                     .onClick(() => openModal(`property:${key}`));
             });
@@ -259,7 +260,7 @@ export class PropertiesMenuBuilder {
         switch (type) {
             case 'number':  return 'hash';
             case 'boolean': return 'toggle-left';
-            case 'array':   return 'list';
+            case 'list':    return 'list';
             default:        return 'type';
         }
     }

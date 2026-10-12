@@ -1,4 +1,5 @@
 import type { Task } from '../../types';
+import { PropertyValues } from '../parsing/utils/PropertyValues';
 import { getTaskNotation } from './parserTaxonomy';
 import { TagRule } from '../parsing/utils/TagRule';
 import {
@@ -93,8 +94,9 @@ export class FilterValueCollector {
         if (!key) return [];
         const set = new Set<string>();
         for (const task of tasks) {
-            const v = getEffectiveProperties(task)[key]?.value;
-            if (v != null && v !== '') set.add(v);
+            const pv = getEffectiveProperties(task)[key];
+            const v = pv ? PropertyValues.display(pv) : '';
+            if (v !== '') set.add(v);
         }
         return Array.from(set).sort();
     }

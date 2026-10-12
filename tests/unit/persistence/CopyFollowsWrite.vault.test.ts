@@ -70,7 +70,7 @@ describe('after a card\'s update, before any scan', () => {
         const id = idOf(session, 'A');
         session.holdScans();
 
-        expect((await session.ops.updateTask(id, { properties: { memo: { value: 'new', type: 'string' } } } as never)).written).toBe(true);
+        expect((await session.ops.updateTask(id, { properties: { memo: { type: 'text', text: 'new', spelling: 'new' } } } as never)).written).toBe(true);
         expect(contents.get(FILE)).toContain('\t- memo:: new');
         expect(await session.ops.deleteTask(id)).toBe(true);
 
