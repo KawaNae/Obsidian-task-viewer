@@ -3,7 +3,9 @@ import type { ScopeKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
+import { TagRule } from '../utils/TagRule';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
+import { PropertyValues } from '../utils/PropertyValues';
 import { reservedPropertyKeys } from '../utils/FrontmatterPolicy';
 import type { ScalarField } from './Sections';
 
@@ -44,16 +46,38 @@ const BUILTINS: readonly Builtin[] = ['color', 'linestyle', 'mask', 'tags', 'sta
 /**
  * The built-in values of one layer's properties, put into their own fields,
  * and the rest as custom properties: the frontmatter's
- * (`PropertyValues.fromFrontmatter`), a section's and a task's alike, so a
- * key means one thing on every layer. Which key is which built-in is
- * {@link fieldKey}'s table.
+ * ({@link BuiltinPropertyExtractor.fromFrontmatter}), a section's and a
+ * task's alike, so a key means one thing on every layer. Which key is which
+ * built-in is {@link fieldKey}'s table.
  *
  * A built-in reads the value as written (`value`), whatever its type, but
- * tags: a list's items (`tags: [a, b]` in the frontmatter, `tags:: a, b` on a
- * line) are the tags, and a text is read as `#tag`s or else as a `,` list
- * (`TagExtractor.fromPropertyValue`).
+ * tags, which are read where Obsidian reads them: a line's are the `#tag`s
+ * its value holds (`TagExtractor.fromContent`; `tags:: a, b` holds none),
+ * and the frontmatter's are Obsidian's `tags` key, read off the YAML before
+ * its values are made text ({@link BuiltinPropertyExtractor.fromFrontmatter}).
  */
 export class BuiltinPropertyExtractor {
+    /**
+     * The built-ins and custom properties of a note's frontmatter, as its
+     * YAML gave it. Its tags are Obsidian's (`TagExtractor.fromFrontmatter`):
+     * the key `tags` whatever its case, and of its items those YAML read as
+     * text (`tags: [true, a]` holds `a`), which the values made text no
+     * longer tell apart. Every key Obsidian could read tags from is the tags'
+     * and no custom property, as `tags` is on any layer.
+     */
+    static fromFrontmatter(
+        frontmatter: Record<string, unknown> | undefined,
+        keys: ScopeKeys
+    ): ExtractedProperties {
+        const values = PropertyValues.fromFrontmatter(frontmatter, keys);
+        for (const key of Object.keys(values)) if (TagRule.isFrontmatterKey(key)) delete values[key];
+        const result = this.extract(values, keys);
+        const tags = TagExtractor.fromFrontmatter(frontmatter);
+        if (tags.length > 0) result.tags = tags;
+        return result;
+    }
+
+    /** The built-ins and custom properties of a property block's lines (a section's, a task's). */
     static extract(
         rawProperties: Record<string, PropertyValue>,
         keys: ScopeKeys
@@ -96,9 +120,7 @@ export class BuiltinPropertyExtractor {
                 if (text) result.mask = text;
                 return;
             case 'tags': {
-                const tags = pv.type === 'array'
-                    ? TagExtractor.fromFrontmatter(pv.items)
-                    : TagExtractor.fromPropertyValue(pv.value);
+                const tags = TagExtractor.fromContent(pv.value);
                 if (tags.length > 0) result.tags = tags;
                 return;
             }

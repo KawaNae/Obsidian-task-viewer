@@ -1,12 +1,15 @@
 import { scanNotation } from './InlineNotation';
+import { TagRule } from './TagRule';
 
 /**
  * Shared utility for extracting tags from task content and frontmatter.
  */
 export class TagExtractor {
     /**
-     * The tags of inline content text: its `#tag` notation outside code and
-     * links (`scanNotation`), so `[[報告書#見出し]]` holds none.
+     * The tags of inline text, a task's content or a `tags::` line's value:
+     * its `#tag` notation outside code and links (`scanNotation`), so
+     * `[[報告書#見出し]]` holds none. A `tags::` value is read as any text
+     * is, as Obsidian reads that line: `tags:: a, b` holds no tag.
      * Returns sorted, deduplicated tag names (without leading #).
      */
     static fromContent(content: string): string[] {
@@ -18,35 +21,12 @@ export class TagExtractor {
     }
 
     /**
-     * Extract tags from frontmatter `tags` field.
-     * Handles: string[], string (comma-separated), YAML lists.
+     * The tags of a frontmatter as YAML gave it, the ones Obsidian lists
+     * (`TagRule.ofFrontmatter`): `tags: [a.b, ok, true]` holds `ok`, and so
+     * does `Tags: ok`. Sorted, deduplicated, without `#`.
      */
-    static fromFrontmatter(value: unknown): string[] {
-        if (!value) return [];
-        if (Array.isArray(value)) {
-            return value
-                .filter(v => typeof v === 'string' && v.trim().length > 0)
-                .map(v => (v as string).trim().replace(/^#/, ''))
-                .filter(v => v.length > 0)
-                .sort();
-        }
-        if (typeof value === 'string') {
-            return value.split(',')
-                .map(v => v.trim().replace(/^#/, ''))
-                .filter(v => v.length > 0)
-                .sort();
-        }
-        return [];
-    }
-
-    /**
-     * Extract tags from a property line value (e.g. "- tags:: #tag1 #tag2" or "- tags:: tag1, tag2").
-     * Supports both #hashtag format and comma-separated format (frontmatter-compatible).
-     */
-    static fromPropertyValue(value: string): string[] {
-        const hashTags = TagExtractor.fromContent(value);
-        if (hashTags.length > 0) return hashTags;
-        return TagExtractor.fromFrontmatter(value);
+    static fromFrontmatter(frontmatter: Readonly<Record<string, unknown>> | undefined): string[] {
+        return Array.from(new Set(TagRule.ofFrontmatter(frontmatter))).sort();
     }
 
     /**

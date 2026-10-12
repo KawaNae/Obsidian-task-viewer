@@ -253,6 +253,14 @@ describe('TaskFilterEngine', () => {
             expect(evaluateFilter(t, state)).toBe(true);
         });
 
+        it('matches a tag whatever its case, as Obsidian does', () => {
+            const t = makeTask({ tags: ['CaseTag', 'Area/Work'] });
+            expect(evaluateFilter(t, stateFromCondition(cond('tag', 'includes', ['area'])))).toBe(true);
+            expect(evaluateFilter(t, stateFromCondition(cond('tag', 'equals', ['casetag'])))).toBe(true);
+            expect(evaluateFilter(t, stateFromCondition(cond('tag', 'only', ['casetag', 'area/work'])))).toBe(true);
+            expect(evaluateFilter(makeTask({ tags: ['casetag', 'CaseTag'] }), stateFromCondition(cond('tag', 'only', ['CASETAG'])))).toBe(true);
+        });
+
         it('only — does not match empty tags against non-empty filter', () => {
             const t = makeTask({ tags: [] });
             const state = stateFromCondition(cond('tag', 'only', ['A']));

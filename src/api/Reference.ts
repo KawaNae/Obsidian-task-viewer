@@ -275,7 +275,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = (Object.keys(OPERATIONS) as O
  */
 export const FILTER_VALUE_DOC = {
     file: '"value": ["notes/a.md"] — whole file paths',
-    tag: '"value": ["work"] — includes and excludes take sub-tags too (work matches work/x); equals is the exact tag; only = the task\'s tags are this set and no other',
+    tag: '"value": ["work"] — any case, as Obsidian has it (Work is work); includes and excludes take sub-tags too (work matches work/x); equals is the tag itself; only = the task\'s tags are this set and no other',
     status: '"value": [" ", "x"] — status characters',
     content: '"value": "text" — contained, any case',
     startDate: '"value": "YYYY-MM-DD", "YYYY-MM-DDTHH:mm", { "preset": "<preset>", "n"?: number }, or with equals only a range { "from"?, "to"? } — a date or a preset is the visual days it names, and the task\'s moment is compared with them (an end or a due right at a day\'s start is the day before\'s); a date and a time is a moment, compared as a number',

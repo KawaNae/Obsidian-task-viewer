@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
 import { getTaskNotation } from './parserTaxonomy';
+import { TagRule } from '../parsing/utils/TagRule';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
 } from '../data/EffectiveProperties';
@@ -10,14 +11,30 @@ import {
  * always match what TaskFilterEngine evaluates against.
  */
 export class FilterValueCollector {
+    /**
+     * The tags of the tasks as Obsidian lists tags (`getTags`), so that
+     * picking one is picking the tag the filter matches (case aside, and
+     * with the tags below it): one per tag whatever its case, each tag above
+     * one its `/` names too (`TagRule.withParents`). A tag is spelt as it is
+     * most often written, counting a tag below it as a writing of it, and as
+     * first met on a tie: `getTags`'s choice, over the tasks.
+     */
     static collectTags(tasks: Task[]): string[] {
-        const set = new Set<string>();
+        const counts = new Map<string, number>();
         for (const task of tasks) {
             for (const tag of getEffectiveTags(task)) {
-                set.add(tag);
+                for (const spelling of TagRule.withParents(tag)) {
+                    counts.set(spelling, (counts.get(spelling) ?? 0) + 1);
+                }
             }
         }
-        return Array.from(set).sort();
+        const chosen = new Map<string, { tag: string; most: number }>();
+        for (const [tag, count] of counts) {
+            const key = TagRule.key(tag);
+            const known = chosen.get(key);
+            if (!known || count > known.most) chosen.set(key, { tag, most: count });
+        }
+        return Array.from(chosen.values(), c => c.tag).sort();
     }
 
     static collectFiles(tasks: Task[]): string[] {

@@ -73,7 +73,7 @@ export class ChildPropertyLineEditor {
                 // PROPERTY_LINE に合うので、値の捕捉を除いた残りがそれである。
                 const line = draft.lines[target.lineIdx];
                 const prefix = line.slice(0, line.length - line.match(ChildLineClassifier.PROPERTY_LINE)![2].length);
-                const value = this.formatValue(op.value, target.value);
+                const value = this.formatValue(op.value);
                 // 空値行 (`- key ::`) はプレフィックスが `::` で終わるため、
                 // 値を書き込むときはセパレータの空白を補う
                 const sep = value !== '' && !/\s$/.test(prefix) ? ' ' : '';
@@ -88,7 +88,7 @@ export class ChildPropertyLineEditor {
             // 続きの行の後ろ）。新しい行なので、字下げは隣の項目の綴りで、
             // 隣に兄弟が無ければ子の字下げ（`Placement.resolveChildIndent`。
             // 子が1つも無ければ Obsidian の設定の一段）。
-            const line = `- ${op.key}:: ${this.formatValue(op.value, null)}`;
+            const line = `- ${op.key}:: ${this.formatValue(op.value)}`;
             const spot = ownLines.length > 0
                 ? Placement.afterSubtree(draft.reading(), ownLines[ownLines.length - 1].lineIdx, line, unit)
                 : Placement.firstChild(draft.reading(), taskLineIdx, line, unit);
@@ -97,16 +97,13 @@ export class ChildPropertyLineEditor {
     }
 
     /**
-     * op.value を子行の値表現にフォーマットする。
-     * tags（string[]）は既存値の表現（#hashtag / カンマ区切り）を踏襲、
-     * 新規は #hashtag を正準とする。
+     * op.value を子行の値表現にフォーマットする。tags（string[]）は常に
+     * `#a #b` で書く。Obsidian が `tags::` の行から読むのは `#tag` だけなので
+     * （`TagExtractor.fromContent`）、既存の行がカンマ区切りでもこの形に書き換える。
      */
-    private static formatValue(value: string | string[] | undefined, existingValue: string | null): string {
+    private static formatValue(value: string | string[] | undefined): string {
         if (value === undefined) return '';
         if (!Array.isArray(value)) return value;
-        const useComma = existingValue !== null && !existingValue.includes('#');
-        return useComma
-            ? value.join(', ')
-            : value.map(t => `#${t}`).join(' ');
+        return value.map(t => `#${t}`).join(' ');
     }
 }

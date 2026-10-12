@@ -7,6 +7,7 @@
  */
 import type { ValidationRule } from './Validation';
 import type { TaskFlow } from './Flow';
+import type { ResolvedSources } from '../services/parsing/tree/Sections';
 
 export interface StatusDefinition {
     char: string;
@@ -180,6 +181,15 @@ export interface Task {
         tags?: string[];
         properties?: Record<string, PropertyValue>;
     };
+
+    /**
+     * Where each value the row's section gives it came from: the record the
+     * resolution kept (`SectionNode.resolvedSources`) for the section the
+     * row stands in, of the same reading as the row. Set by NoteTasks,
+     * shared with the section, never serialized. Read by the hub to say
+     * where an inherited value is written (`CascadeSource`).
+     */
+    inheritedFrom?: ResolvedSources;
 
     // Original parsed text and stable IDs.
     originalText: string;

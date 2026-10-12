@@ -17,8 +17,8 @@ const FRONTMATTER: ValueSource = Object.freeze({ kind: 'frontmatter' });
  *
  * Cascades properties along the section tree (frontmatter → parent section →
  * child section, child-wins). The frontmatter is the base: its values read
- * as property values (`PropertyValues.fromFrontmatter`) and its built-ins put
- * apart by the same extractor as a section's (`BuiltinPropertyExtractor`).
+ * by the same extractor as a section's, its built-ins put apart from its
+ * custom properties (`BuiltinPropertyExtractor.fromFrontmatter`).
  *
  * Beside each resolved value it records the layer that won it
  * (`SectionNode.resolvedSources`): the frontmatter, or the property line of a
@@ -32,7 +32,7 @@ export class SectionPropertyResolver {
         frontmatter: Record<string, any> | undefined,
         keys: ScopeKeys
     ): void {
-        const values = BuiltinPropertyExtractor.extract(PropertyValues.fromFrontmatter(frontmatter, keys), keys);
+        const values = BuiltinPropertyExtractor.fromFrontmatter(frontmatter, keys);
         const root: Resolved = { values, sources: this.frontmatterSources(values) };
 
         for (const section of sections) {
@@ -46,7 +46,7 @@ export class SectionPropertyResolver {
         for (const field of SCALAR_FIELDS) if (values[field] !== undefined) fields[field] = FRONTMATTER;
         const properties: Record<string, ValueSource> = {};
         for (const key of Object.keys(values.properties)) properties[key] = FRONTMATTER;
-        return { fields, tags: values.tags ? [FRONTMATTER] : [], properties };
+        return { fields, tags: values.tags ? [{ from: FRONTMATTER, tags: values.tags }] : [], properties };
     }
 
     private static resolveSection(
@@ -72,7 +72,7 @@ export class SectionPropertyResolver {
 
         // tags: 和集合。加えた層をすべて記録する
         values.tags = own.tags ? TagExtractor.merge(parent.values.tags ?? [], own.tags) : parent.values.tags;
-        const tags = own.tags ? [...parent.sources.tags, here('tags')] : parent.sources.tags;
+        const tags = own.tags ? [...parent.sources.tags, { from: here('tags'), tags: own.tags }] : parent.sources.tags;
 
         // custom: キー単位の child-wins
         let properties = parent.sources.properties;

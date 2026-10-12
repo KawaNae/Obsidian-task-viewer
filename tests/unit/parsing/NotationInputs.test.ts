@@ -30,10 +30,16 @@ describe('tags typed to add', () => {
         expect(TagInput.show(['仕事', '急ぎ'])).toBe('#仕事 #急ぎ');
     });
 
-    it('refuses a word the notation would not read back as one tag, with the characters that break it', () => {
+    it('refuses a word that is not one tag\'s word, with the characters that end a tag', () => {
         expect(TagInput.read('a#b')).toEqual({ ok: false, issue: { code: 'chars', chars: '#' } });
         expect(TagInput.read('a,b c')).toEqual({ ok: false, issue: { code: 'chars', chars: ',' } });
+        expect(TagInput.read('foo.bar a…b')).toEqual({ ok: false, issue: { code: 'chars', chars: '. …' } });
         expect(TagInput.read(' ')).toEqual({ ok: false, issue: { code: 'empty' } });
+    });
+
+    it('refuses a word of digits alone, which Obsidian takes for no tag', () => {
+        expect(TagInput.read('123')).toEqual({ ok: false, issue: { code: 'digitsOnly' } });
+        expect(TagInput.read('#12/34 １２ 出/りそな')).toEqual({ ok: true, value: ['12/34', '１２', '出/りそな'] });
     });
 });
 

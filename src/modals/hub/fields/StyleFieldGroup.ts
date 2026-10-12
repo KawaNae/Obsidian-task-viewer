@@ -160,8 +160,7 @@ export class StyleFieldGroup implements ClosingPart {
         const cascadeValue = task.cascadeContext?.[field];
         input.placeholder = (task[field] === undefined && cascadeValue) || '';
 
-        const keys = this.ctx.plugin.settings.scopeKeys;
-        const source = CascadeSource.forStyleField(this.ctx.app, task, keys, field);
+        const source = CascadeSource.forStyleField(task, field);
         if (source) {
             sourceEl.setText(this.ctx.sourceLabel(source));
             sourceEl.style.display = '';

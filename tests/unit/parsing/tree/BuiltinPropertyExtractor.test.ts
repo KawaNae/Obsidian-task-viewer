@@ -154,11 +154,15 @@ describe('BuiltinPropertyExtractor', () => {
         expect(result.properties['tags']).toBeUndefined();
     });
 
-    it('extracts tags from comma-separated format', () => {
+    it('reads no tags from a line\'s list without #, as Obsidian reads the line', () => {
         const raw = { 'tags': pv('work, urgent') };
         const result = BuiltinPropertyExtractor.extract(raw, keys);
-        expect(result.tags).toEqual(['urgent', 'work']);
+        expect(result.tags).toBeUndefined();
         expect(result.properties['tags']).toBeUndefined();
+    });
+
+    it('reads a line\'s #tags whatever list its value is written as', () => {
+        expect(BuiltinPropertyExtractor.extract({ 'tags': pv('#work, #urgent') }, keys).tags).toEqual(['urgent', 'work']);
     });
 
     it('does not extract tags from empty value', () => {

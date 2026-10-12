@@ -1,15 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { BuiltinPropertyExtractor } from '../../../src/services/parsing/tree/BuiltinPropertyExtractor';
-import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
 /** The frontmatter as the sections' base reads it: normalized, then its built-ins put apart. */
 const frontmatterLayer = (fm: Record<string, unknown> | undefined, k: typeof keys) =>
-    BuiltinPropertyExtractor.extract(PropertyValues.fromFrontmatter(fm, k), k);
+    BuiltinPropertyExtractor.fromFrontmatter(fm, k);
 
-describe('the frontmatter layer (PropertyValues.fromFrontmatter + BuiltinPropertyExtractor)', () => {
+describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () => {
     describe('builtin keys', () => {
         it('色を normalizeColor で正規化', () => {
             const result = frontmatterLayer({ 'tv-color': '#ff0000' }, keys);
@@ -108,9 +107,15 @@ describe('the frontmatter layer (PropertyValues.fromFrontmatter + BuiltinPropert
             expect(result.tags).toEqual(['x', 'y']);
         });
 
-        it('カンマ区切り string の tags を抽出', () => {
-            const result = frontmatterLayer({ 'tags': 'a, b, c' }, keys);
-            expect(result.tags).toEqual(['a', 'b', 'c']);
+        it('文字列の tags は1項目のリスト: カンマ区切りや空白区切りはタグにならない', () => {
+            expect(frontmatterLayer({ 'tags': 'a, b, c' }, keys).tags).toBeUndefined();
+            expect(frontmatterLayer({ 'tags': 'a b' }, keys).tags).toBeUndefined();
+            expect(frontmatterLayer({ 'tags': 'work' }, keys).tags).toEqual(['work']);
+        });
+
+        it('タグとして読めない項目は落とす', () => {
+            const result = frontmatterLayer({ 'tags': ['ok', 'a.b', '123', '#lead', '##dbl', 'x,y'] }, keys);
+            expect(result.tags).toEqual(['lead', 'ok']);
         });
 
         it('tags が空なら undefined', () => {
@@ -121,6 +126,20 @@ describe('the frontmatter layer (PropertyValues.fromFrontmatter + BuiltinPropert
         it('tags が無いなら undefined', () => {
             const result = frontmatterLayer({ 'tv-color': 'ff0000' }, keys);
             expect(result.tags).toBeUndefined();
+        });
+
+        // Obsidian の parseFrontMatterTags と同じく、キーは大文字と小文字を区別しない
+        it('Tags / TAGS も tags のキーとして読み、カスタムプロパティにしない', () => {
+            const result = frontmatterLayer({ 'Tags': ['x'], 'custom': 'kept' }, keys);
+            expect(result.tags).toEqual(['x']);
+            expect(result.properties['Tags']).toBeUndefined();
+            expect(frontmatterLayer({ 'TAGS': 'y' }, keys).tags).toEqual(['y']);
+        });
+
+        it('YAML が真偽値、null、数値と読んだ項目はタグにしない', () => {
+            const result = frontmatterLayer({ 'tags': [true, null, 123, 'false', 'ok'] }, keys);
+            expect(result.tags).toEqual(['false', 'ok']);
+            expect(frontmatterLayer({ 'tags': true }, keys).tags).toBeUndefined();
         });
     });
 

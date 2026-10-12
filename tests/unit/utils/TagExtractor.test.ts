@@ -23,11 +23,15 @@ describe('TagExtractor', () => {
             expect(TagExtractor.fromContent('plain text')).toEqual([]);
         });
 
-        it('takes no tag inside a link or code', () => {
+        it('takes no tag inside a link\'s target or code', () => {
             expect(TagExtractor.fromContent('see [[報告書#見出し]] #work')).toEqual(['work']);
             expect(TagExtractor.fromContent('see [[note#heading]]')).toEqual([]);
             expect(TagExtractor.fromContent('run `#x` now')).toEqual([]);
-            expect(TagExtractor.fromContent('![[画像#部分]] [見出し](#anchor) [#t](u)')).toEqual([]);
+            expect(TagExtractor.fromContent('![[画像#部分]] [見出し](#anchor) ![#alt](u)')).toEqual([]);
+        });
+
+        it('takes a tag in a Markdown link\'s shown text, as Obsidian does', () => {
+            expect(TagExtractor.fromContent('[#t](u) [#ref]')).toEqual(['ref', 't']);
         });
 
         it('takes a tag right after a link, as it always did', () => {
@@ -42,49 +46,26 @@ describe('TagExtractor', () => {
 
     describe('fromFrontmatter', () => {
         it('handles string array', () => {
-            expect(TagExtractor.fromFrontmatter(['work', 'urgent'])).toEqual(['urgent', 'work']);
+            expect(TagExtractor.fromFrontmatter({ tags: ['work', 'urgent'] })).toEqual(['urgent', 'work']);
         });
 
-        it('handles comma-separated string', () => {
-            expect(TagExtractor.fromFrontmatter('work, urgent')).toEqual(['urgent', 'work']);
+        it('reads a text as a list of one: a list written with commas is no tag', () => {
+            expect(TagExtractor.fromFrontmatter({ tags: 'work, urgent' })).toEqual([]);
+            expect(TagExtractor.fromFrontmatter({ tags: 'work' })).toEqual(['work']);
         });
 
-        it('strips # prefix', () => {
-            expect(TagExtractor.fromFrontmatter(['#work', '#play'])).toEqual(['play', 'work']);
+        it('strips one # prefix', () => {
+            expect(TagExtractor.fromFrontmatter({ tags: ['#work', '#play', '##two'] })).toEqual(['play', 'work']);
         });
 
-        it('returns empty for null', () => {
-            expect(TagExtractor.fromFrontmatter(null)).toEqual([]);
-        });
-
-        it('returns empty for undefined', () => {
+        it('returns empty for no tags', () => {
+            expect(TagExtractor.fromFrontmatter({ tags: null })).toEqual([]);
+            expect(TagExtractor.fromFrontmatter({})).toEqual([]);
             expect(TagExtractor.fromFrontmatter(undefined)).toEqual([]);
         });
 
         it('filters empty strings', () => {
-            expect(TagExtractor.fromFrontmatter(['work', '', '  '])).toEqual(['work']);
-        });
-    });
-
-    describe('fromPropertyValue', () => {
-        it('extracts #hashtag format', () => {
-            expect(TagExtractor.fromPropertyValue('#tag1 #tag2')).toEqual(['tag1', 'tag2']);
-        });
-
-        it('extracts single #hashtag', () => {
-            expect(TagExtractor.fromPropertyValue('#work')).toEqual(['work']);
-        });
-
-        it('extracts nested #hashtag', () => {
-            expect(TagExtractor.fromPropertyValue('#project/sub')).toEqual(['project/sub']);
-        });
-
-        it('falls back to comma-separated format', () => {
-            expect(TagExtractor.fromPropertyValue('tag1, tag2')).toEqual(['tag1', 'tag2']);
-        });
-
-        it('returns empty for empty string', () => {
-            expect(TagExtractor.fromPropertyValue('')).toEqual([]);
+            expect(TagExtractor.fromFrontmatter({ tags: ['work', '', '  '] })).toEqual(['work']);
         });
     });
 

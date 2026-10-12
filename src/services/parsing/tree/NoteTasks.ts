@@ -67,7 +67,8 @@ export class NoteTasks {
      * - Its properties are those of its own property lines
      *   (`ChildLineClassifier.ownPropertyLines`), the lines the writer edits.
      * - What its section gives it goes to `cascadeContext`, beside what the
-     *   row says itself (`getEffective*` puts the two together).
+     *   row says itself (`getEffective*` puts the two together), and where
+     *   each value of it came from to `inheritedFrom`.
      */
     static extract(outline: OutlineReading, sections: readonly SectionNode[], ctx: TaskExtractionContext): Task[] {
         const rows = new Map<number, Task>();
@@ -131,7 +132,10 @@ export class NoteTasks {
         // whole.
         const cc = this.inheritance(section);
         for (const field of SCALAR_FIELDS) if (task[field]) delete cc[field];
-        if (Object.keys(cc).length > 0) task.cascadeContext = cc;
+        if (Object.keys(cc).length > 0) {
+            task.cascadeContext = cc;
+            task.inheritedFrom = section.resolvedSources;
+        }
     }
 
     /**

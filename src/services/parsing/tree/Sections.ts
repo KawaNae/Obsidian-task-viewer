@@ -46,17 +46,24 @@ export type ScalarField = 'color' | 'linestyle' | 'mask' | 'startDate' | 'startT
 
 export const SCALAR_FIELDS: readonly ScalarField[] = ['color', 'linestyle', 'mask', 'startDate', 'startTime', 'endDate', 'endTime', 'due'];
 
+/** A layer that adds tags to a section's union, and the tags it adds. */
+export interface TagLayer {
+    from: ValueSource;
+    tags: readonly string[];
+}
+
 /**
  * Where a section's resolved values came from, value by value: which layer
  * won each (the resolution decides that, and only it), so that a reader
  * who has to say a value again elsewhere — the frontmatter of a note a row
- * is sent to — can go back to the line that says it.
+ * is sent to — can go back to the line that says it, and one who shows a
+ * row what it inherits (the hub) can say from where.
  */
 export interface ResolvedSources {
     /** Per scalar value, the layer whose value won. None for a value no layer sets. */
     fields: Readonly<Partial<Record<ScalarField, ValueSource>>>;
-    /** Every layer that adds tags to the union, from the top down. */
-    tags: readonly ValueSource[];
+    /** Every layer that adds tags to the union, from the top down, with the tags it adds. */
+    tags: readonly TagLayer[];
     /** Per custom key, the layer whose value won. */
     properties: Readonly<Record<string, ValueSource>>;
 }
@@ -64,7 +71,7 @@ export interface ResolvedSources {
 /** The sources of a section nothing resolved yet: no layer sets anything. */
 export const NO_SOURCES: ResolvedSources = Object.freeze({
     fields: Object.freeze({}),
-    tags: Object.freeze([]) as readonly ValueSource[],
+    tags: Object.freeze([]) as readonly TagLayer[],
     properties: Object.freeze({}),
 });
 

@@ -6,6 +6,7 @@ import { ofValue } from '../../utils/DayWindow';
 import { overlaps, within } from '../../utils/SpanRelation';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { TaskValues, type InstantValue } from './TaskValues';
+import { TagRule } from '../parsing/utils/TagRule';
 
 /**
  * Evaluates whether a task passes a compiled filter tree ({@link FilterExpr},
@@ -33,18 +34,20 @@ export class TaskFilterEngine {
                 return this.someAncestor(task, expr.item, context);
             case 'textIn':
                 return expr.values.includes(TaskValues.of(task, expr.property).text ?? '');
+            // A tag is matched as Obsidian's tag search matches it, case
+            // aside (`TagRule`): `#CaseTag` is the tag `casetag`.
             case 'tagUnder': {
                 const tags = TaskValues.of(task, 'tag').items;
-                return expr.tags.some(v => tags.some(t => t === v || t.startsWith(v + '/')));
+                return expr.tags.some(v => tags.some(t => TagRule.isUnder(t, v)));
             }
             case 'tagIs': {
-                const tags = TaskValues.of(task, 'tag').items;
-                return expr.tags.some(v => tags.includes(v));
+                const tags = new Set(TaskValues.of(task, 'tag').items.map(TagRule.key));
+                return expr.tags.some(v => tags.has(TagRule.key(v)));
             }
             case 'tagsExactly': {
-                const tags = TaskValues.of(task, 'tag').items;
-                const wanted = new Set(expr.tags);
-                return tags.length === wanted.size && tags.every(t => wanted.has(t));
+                const tags = new Set(TaskValues.of(task, 'tag').items.map(TagRule.key));
+                const wanted = new Set(expr.tags.map(TagRule.key));
+                return tags.size === wanted.size && [...tags].every(t => wanted.has(t));
             }
             case 'contentContains':
                 return (TaskValues.of(task, 'content').text ?? '').toLowerCase().includes(expr.text.toLowerCase());

@@ -41,6 +41,7 @@ function sentence(issue: Issue, label: string): string {
         case 'dateRequired': return `${label} must include a date`;
         case 'notation': return `${label} must not hold ${NOTATION[issue.kind]}`;
         case 'chars': return `${label} must not hold: ${issue.chars}`;
+        case 'digitsOnly': return `${label} must not be digits alone`;
         case 'reserved': return `${label} is reserved`;
         case 'duplicate': return `${label} is already used`;
     }

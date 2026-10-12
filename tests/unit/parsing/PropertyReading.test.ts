@@ -41,11 +41,18 @@ describe('property values in a note', () => {
         expect(task(['- [ ] t', '    - tv-color:: 336699']).color).toBe('336699');
     });
 
-    it('reads a list of tags as its items, and a text as #tags or a , list', () => {
+    it('reads a line\'s tags as the #tags its value holds, as Obsidian reads the line', () => {
         expect(task(['- [ ] t', '    - tags:: #a, #b']).tags).toEqual(['a', 'b']);
-        expect(task(['- [ ] t', '    - tags:: [a, b]']).tags).toEqual(['a', 'b']);
         expect(task(['- [ ] t', '    - tags:: #a #b']).tags).toEqual(['a', 'b']);
+        expect(task(['- [ ] t', '    - tags:: a, b']).tags).toEqual([]);
+        expect(task(['- [ ] t', '    - tags:: [a, b]']).tags).toEqual([]);
+    });
+
+    it('reads the frontmatter\'s tags as its list\'s items that are tags, and a text as a list of one', () => {
         expect(task(['---', 'tags: [x, y]', '---', '- [ ] t']).cascadeContext?.tags).toEqual(['x', 'y']);
-        expect(task(['---', 'tags: "#a #b"', '---', '- [ ] t']).cascadeContext?.tags).toEqual(['a', 'b']);
+        expect(task(['---', 'tags: [a.b, "#ok", "123", "##dbl"]', '---', '- [ ] t']).cascadeContext?.tags).toEqual(['ok']);
+        expect(task(['---', 'tags: work', '---', '- [ ] t']).cascadeContext?.tags).toEqual(['work']);
+        expect(task(['---', 'tags: "#a #b"', '---', '- [ ] t']).cascadeContext?.tags).toBeUndefined();
+        expect(task(['---', 'tags: a, b', '---', '- [ ] t']).cascadeContext?.tags).toBeUndefined();
     });
 });

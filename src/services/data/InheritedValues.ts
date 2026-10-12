@@ -92,7 +92,7 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     if (fields.mask) asWritten(keys.mask, fields.mask);
 
     if (section.resolvedTags && section.resolvedTags.length > 0) {
-        push('tags', ['tags:', ...section.resolvedTags.map(tag => `  - ${FrontmatterLineEditor.escapeYamlScalar(tag)}`)], tags);
+        push('tags', ['tags:', ...section.resolvedTags.map(tag => `  - ${FrontmatterLineEditor.escapeYamlScalar(tag)}`)], tags.map(layer => layer.from));
     }
 
     for (const [key, value] of Object.entries(section.resolvedProperties)) {
