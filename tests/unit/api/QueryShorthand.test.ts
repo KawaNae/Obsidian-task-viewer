@@ -59,6 +59,14 @@ describe('shorthandConditions: the simple fields', () => {
         expect(findCondition(shorthandConditions({ color: ['green'] }), 'color')!.value).toEqual(['green']);
     });
 
+    it('color=#ff0000 matches the task whose note gives it #ff0000', () => {
+        const matches = (color: string) =>
+            evaluateFilter(makeTask({ color: 'ff0000' }), { logic: 'and', filters: shorthandConditions({ color }) });
+        expect(matches('#ff0000')).toBe(true);
+        expect(matches('ff0000')).toBe(true);
+        expect(matches('#00ff00')).toBe(false);
+    });
+
     it('type → notation includes', () => {
         expect(findCondition(shorthandConditions({ type: 'taskviewer,tasks' }), 'notation')!.value).toEqual(['taskviewer', 'tasks']);
     });

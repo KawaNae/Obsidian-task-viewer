@@ -108,6 +108,13 @@ describe('TaskFilterEngine', () => {
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
+        it('reads a condition\'s color as a note\'s color is read: `#ff0000` is the `ff0000` a note holds', () => {
+            const task = makeTask({ color: 'ff0000' });
+            expect(evaluateFilter(task, stateFromCondition(cond('color', 'includes', ['#ff0000'])))).toBe(true);
+            expect(evaluateFilter(task, stateFromCondition(cond('color', 'includes', [' #ff0000 '])))).toBe(true);
+            expect(evaluateFilter(task, stateFromCondition(cond('color', 'excludes', ['#ff0000'])))).toBe(false);
+        });
+
         it('no color set — empty string for matching', () => {
             const task = makeTask();
             const state = stateFromCondition(cond('color', 'includes', ['']));
