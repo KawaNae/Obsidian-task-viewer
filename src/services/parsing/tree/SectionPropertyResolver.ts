@@ -1,8 +1,8 @@
 import { SCALAR_FIELDS, type ResolvedSources, type ScalarField, type SectionNode, type ValueSource } from './Sections';
-import type { ScopeKeys, PropertyValue } from '../../../types';
+import type { ScopeKeys } from '../../../types';
 import { BuiltinPropertyExtractor, fieldKey, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { TagExtractor } from '../utils/TagExtractor';
-import { PropertyValues } from '../utils/PropertyValues';
+import { PropertyLines } from '../utils/PropertyLines';
 
 /** What one layer hands the sections below it: its resolved values, and where each came from. */
 interface Resolved {
@@ -54,10 +54,10 @@ export class SectionPropertyResolver {
         parent: Resolved,
         keys: ScopeKeys
     ): void {
-        // セクション自身の PropertyBlock からプロパティ抽出
-        const { raw, lines } = this.propertyBlockToRecord(section);
+        // What the section's own property lines say (a key written twice says nothing).
+        const { values: raw, lineOf } = PropertyLines.read(section.properties, keys);
         const own = BuiltinPropertyExtractor.extract(raw, keys);
-        const here = (key: string): ValueSource => ({ kind: 'section', line: lines.get(key)!, heading: section.heading });
+        const here = (key: string): ValueSource => ({ kind: 'section', line: lineOf.get(key)!, heading: section.heading });
 
         // 親プロパティ + 自身のプロパティを child-wins マージ。
         // Partial merge: date と time は独立に継承（別の field）。
@@ -101,22 +101,5 @@ export class SectionPropertyResolver {
         for (const child of section.children) {
             this.resolveSection(child, resolved, keys);
         }
-    }
-
-    /**
-     * PropertyBlock のエントリを Record<string, PropertyValue> に変換し、
-     * キーごとにその値を書いた行を添える。同じキーが2度あれば後の行が勝つ。
-     */
-    private static propertyBlockToRecord(
-        section: SectionNode
-    ): { raw: Record<string, PropertyValue>; lines: Map<string, number> } {
-        const raw: Record<string, PropertyValue> = {};
-        const lines = new Map<string, number>();
-        if (!section.propertyBlock) return { raw, lines };
-        for (const entry of section.propertyBlock.entries) {
-            raw[entry.key] = PropertyValues.fromText(entry.value);
-            lines.set(entry.key, entry.line);
-        }
-        return { raw, lines };
     }
 }

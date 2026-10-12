@@ -231,11 +231,11 @@ export class Placement {
      * - `head`: just below the heading, past the paragraph and the code
      *   below it, at the top as a sibling of the items there. A task
      *   indented under the heading stays where it stands, not under the new
-     *   line. A section with property lines of its own has its head just
-     *   past them (`PropertyBlock.end`, as `NoteSections` reads the block):
-     *   a line put above them would stand before them, and they would read
-     *   as no longer the section's, which reads its properties only above
-     *   its first task. The blank lines past the block stay below the line,
+     *   line. A section whose property lines stand at its top, above its
+     *   first task, has its head just past them (`SectionNode.head`, as
+     *   `NoteSections` reads it), so that they stay together below the
+     *   heading, where a note is best written; they read as the section's
+     *   wherever they stand. The blank lines past them stay below the line,
      *   as those below the heading do.
      * - `end`: just past the section's last line that is not blank — past
      *   the subtree of an item that ends it, as a sibling at the top — so
@@ -248,7 +248,7 @@ export class Placement {
         const { heading } = found;
         if (to.side === 'head') {
             const section = NoteSections.all(NoteSections.read(outline)).find(s => s.heading?.line === heading.line);
-            return { kind: 'spot', spot: this.topSibling(outline, section?.propertyBlock?.end ?? heading.end, head) };
+            return { kind: 'spot', spot: this.topSibling(outline, section?.head ?? heading.end, head) };
         }
         const { lines } = outline;
         const next = outline.headings.find(h => h.line >= heading.end);

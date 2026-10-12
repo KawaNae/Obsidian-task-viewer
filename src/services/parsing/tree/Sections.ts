@@ -1,5 +1,6 @@
 import type { PropertyValue } from '../../../types';
 import type { OutlineHeading } from '../utils/Outline';
+import type { OwnPropertyLines } from '../utils/PropertyLines';
 
 /**
  * A section of a note: the lines a heading the note reads opens, up to the
@@ -12,7 +13,14 @@ import type { OutlineHeading } from '../utils/Outline';
 export interface SectionNode {
     /** The heading that opens it; null for the lines above the note's first heading. */
     heading: OutlineHeading | null;
-    propertyBlock: PropertyBlock | null;
+    /** Its own property lines (`PropertyLines.ofSection`), every one, those not read included. */
+    properties: OwnPropertyLines;
+    /**
+     * Where a line put at its head goes (`Placement.into`): past the
+     * property lines written at its top, above its first task, or just
+     * below its heading when there are none.
+     */
+    head: number;
     /** カスケード解決済みプロパティ（SectionPropertyResolver が設定） */
     resolvedProperties: Record<string, PropertyValue>;
     resolvedColor?: string;
@@ -74,26 +82,3 @@ export const NO_SOURCES: ResolvedSources = Object.freeze({
     tags: Object.freeze([]) as readonly TagLayer[],
     properties: Object.freeze({}),
 });
-
-/**
- * セクションスコープのプロパティ集合。
- * lead area (heading 直後 〜 最初のタスク行直前) 内の同レベル
- * `- key:: value` 行をすべて集約する。物理的に連続している必要はない。
- */
-export interface PropertyBlock {
-    entries: PropertyBlockEntry[];
-    /**
-     * The index just past the block: past the subtree of its last item at
-     * indent 0 that holds an entry (a `- key:: value` line, or the whole
-     * `- properties::` group). A line put in the section above it would
-     * stand before the block's lines and cut them off the lead area; the
-     * head of a section is here (`Placement.into`).
-     */
-    end: number;
-}
-
-export interface PropertyBlockEntry {
-    key: string;
-    value: string;
-    line: number;
-}

@@ -1,11 +1,7 @@
-import { NO_SOURCES, type PropertyBlock, type PropertyBlockEntry, type SectionNode } from './Sections';
-import { ChildLineClassifier } from '../utils/ChildLineClassifier';
+import { NO_SOURCES, type SectionNode } from './Sections';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
-import { INDENT_SOURCE, Outline, type OutlineHeading, type OutlineReading } from '../utils/Outline';
-import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from '../utils/ListMarker';
-
-/** `- properties::`, with any list bullet, as a property line takes one (`ChildLineClassifier.PROPERTY_LINE`). */
-const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+properties::\\s*$`);
+import { type OutlineHeading, type OutlineReading } from '../utils/Outline';
+import { PropertyLines } from '../utils/PropertyLines';
 
 /**
  * The sections of a note and the property lines each one gives the rows in
@@ -21,8 +17,9 @@ export class NoteSections {
      * its nested ones: one for the lines above the first heading when there
      * are any (or for the whole body, with no heading), then one per heading
      * from its line to the next heading of its level or above. Each holds
-     * its own property lines (`propertyBlock`); the values they resolve to
-     * are `SectionPropertyResolver`'s to set.
+     * its own property lines (`properties`, `PropertyLines.ofSection`) and
+     * where its head is (`head`); the values they resolve to are
+     * `SectionPropertyResolver`'s to set.
      */
     static read(outline: OutlineReading): SectionNode[] {
         const { bodyStart } = outline;
@@ -45,7 +42,7 @@ export class NoteSections {
         });
         stretchOverChildren(top);
 
-        for (const node of this.all(top)) node.propertyBlock = propertyBlockOf(node, outline);
+        for (const node of this.all(top)) readProperties(node, outline);
         return top;
     }
 
@@ -75,7 +72,8 @@ export class NoteSections {
 function section(heading: OutlineHeading | null, startLine: number, endLine: number): SectionNode {
     return {
         heading,
-        propertyBlock: null,
+        properties: { owner: { kind: 'section', heading: heading?.line ?? null }, lines: [] },
+        head: heading?.end ?? startLine,
         resolvedProperties: {},
         resolvedSources: NO_SOURCES,
         children: [],
@@ -94,58 +92,25 @@ function stretchOverChildren(sections: readonly SectionNode[]): void {
 }
 
 /**
- * A section's own property lines: the lead area's `- key:: value` lines at
- * indent 0, and the entries of a `- properties::` group there. The lead area
- * is the section's own lines (its nested sections' left out) from its
- * heading to the first line that opens a task. Text, links, blank lines and
- * indented items may stand between property lines; code is never one.
+ * A section's own property lines (`PropertyLines.ofSection`) over its own
+ * lines: below its heading, up to its first nested section, which a
+ * section runs to the next heading of its level or above, so ends the one
+ * around it too.
  *
- * Cut at the first task so that a note written below a task does not reach
- * back to the task above it, and the root section's end does not run on.
- * Indent 0 only: the frontmatter's top level is its peer, and a
- * `- key:: value` under a wikilink bullet does not look like a section's.
- *
- * The block ends past the subtree of its last item that holds an entry
- * (`PropertyBlock.end`): what a write puts at the section's head goes there,
- * so that it is the block's own reading that says where it may go.
+ * Its head (`SectionNode.head`) is past the subtree of the last of them
+ * written above its first task, or just below its heading when none is: a
+ * line put at the head of the section goes there (`Placement.into`), below
+ * the property lines a note writes at the top of a section. The rest of
+ * them, below a task, do not move it: a line put at the head does not go
+ * down past a task.
  */
-function propertyBlockOf(node: SectionNode, outline: OutlineReading): PropertyBlock | null {
-    const lines = outline.lines;
-    // A section's own lines end where its first nested section begins: a
-    // nested section runs to the next heading of its level or above, which
-    // ends the section around it too.
+function readProperties(node: SectionNode, outline: OutlineReading): void {
     const ownEnd = node.children[0]?.startLine ?? node.endLine;
-    const from = node.heading ? node.heading.line + 1 : node.startLine;
+    const from = node.heading ? node.heading.end : node.startLine;
+    node.properties = PropertyLines.ofSection(outline, node.heading?.line ?? null, from, ownEnd);
 
-    const entries: PropertyBlockEntry[] = [];
-    let blockEnd = from;
-    const take = (line: number): boolean => {
-        if (outline.inCode(line)) return false;
-        const match = lines[line].match(ChildLineClassifier.PROPERTY_LINE);
-        if (match) entries.push({ key: match[1].trim(), value: match[2].trim(), line });
-        return match !== null;
-    };
-
-    for (let line = from; line < ownEnd; line++) {
-        if (TaskLineClassifier.opensTask(outline, line)) break;
-        const text = lines[line];
-        if (outline.inCode(line) || Outline.isBlank(text) || Outline.depthOf(text) !== 0) continue;
-
-        // The group form: every entry in the `- properties::` item's subtree.
-        if (PROPERTY_GROUP_HEADER.test(text) && outline.item(line)) {
-            const end = Math.min(outline.subtreeEnd(line), ownEnd);
-            let held = false;
-            let cut = false;
-            for (let entry = line + 1; entry < end && !cut; entry++) {
-                cut = TaskLineClassifier.opensTask(outline, entry);
-                if (!cut && take(entry)) held = true;
-            }
-            if (held) blockEnd = end;
-            if (cut) break;
-            line = end - 1;
-            continue;
-        }
-        if (take(line)) blockEnd = Math.min(outline.subtreeEnd(line), ownEnd);
-    }
-    return entries.length > 0 ? { entries, end: blockEnd } : null;
+    let firstTask = from;
+    while (firstTask < ownEnd && !TaskLineClassifier.opensTask(outline, firstTask)) firstTask++;
+    const atHead = node.properties.lines.filter(line => line.line < firstTask);
+    node.head = atHead.length > 0 ? atHead[atHead.length - 1].end : from;
 }

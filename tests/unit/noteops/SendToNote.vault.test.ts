@@ -226,14 +226,14 @@ describe('to a note there is', () => {
         expect(note.lines('dst.md')).toEqual(['---', 'j: 2', '---', '## Tasks', '- [ ] A', '- [ ] x', '']);
     });
 
-    it('at the head of a section with property lines: past them, so the section still reads them and the row takes their values', async () => {
+    it('at the head of a section with property lines: past them, and the row takes their values', async () => {
         const note = await open({ 'src.md': ['- [ ] A', ''], 'dst.md': ['### Section', '* tv-color:: #ffffff', '* [ ] x', ''] });
 
         await note.send([note.row('A')], { path: 'dst.md', heading: 'Section' });
 
         expect(note.lines('dst.md')).toEqual(['### Section', '* tv-color:: #ffffff', '- [ ] A', '* [ ] x', '']);
         const sections = NoteSections.all(NoteSections.read(Outline.read(note.lines('dst.md')!)));
-        expect(sections.find(s => s.heading?.text === 'Section')?.propertyBlock?.entries.map(e => e.key)).toEqual(['tv-color']);
+        expect(sections.find(s => s.heading?.text === 'Section')?.properties.lines.map(line => line.key)).toEqual(['tv-color']);
         expect(note.task('A').cascadeContext?.color).toBe('ffffff');
         expect(note.task('x').cascadeContext?.color).toBe('ffffff');
     });

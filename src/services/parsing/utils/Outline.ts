@@ -379,7 +379,7 @@ export class OutlineReading {
      * The items that stand directly in the item `line` opens, top to bottom:
      * those whose parent is `line`, code left out. The lines a task owns by
      * their shape — its `- ==>` lines (`collectFlowLineIndices`) and its
-     * property lines (`ChildLineClassifier.ownPropertyLines`) — are the
+     * property lines (`PropertyLines.ofTask`) — are the
      * ones among these that have it. A line that opens no item has none.
      */
     directItems(line: number): number[] {

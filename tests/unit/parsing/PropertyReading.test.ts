@@ -31,11 +31,15 @@ describe('property values in a note', () => {
         expect(read(['---', 'tv-ignore: "true"', 'bad: [', '---', '- [ ] t']).ignored).toBe(false);
     });
 
-    it('reads a property line and a properties group under any list bullet', () => {
+    it('reads a property line under any list bullet, `properties::` a property of its own with its items a list', () => {
         expect(task(['- [ ] t', '    * f:: x']).properties).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
         expect(task(['- [ ] t', '    1. f:: x']).properties).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
         expect(task(['* tv-color:: red', '- [ ] t']).cascadeContext?.color).toBe('red');
-        expect(task(['+ properties::', '    - tv-color:: red', '- [ ] t']).cascadeContext?.color).toBe('red');
+        const grouped = task(['+ properties::', '    - tv-color:: red', '- [ ] t']);
+        expect(grouped.cascadeContext?.color).toBeUndefined();
+        expect(grouped.cascadeContext?.properties).toEqual({
+            properties: { type: 'list', items: [{ type: 'text', text: 'tv-color:: red', spelling: 'tv-color:: red' }] },
+        });
     });
 
     it('reads a built-in the same way on every layer: the frontmatter\'s number color as its text', () => {

@@ -254,7 +254,7 @@ describe('ChildPropertyLineEditor', () => {
 
     /**
      * The lines a property edit touches are the lines the parser read the
-     * task's properties from (`ChildLineClassifier.ownPropertyLines`), for
+     * task's properties from (`PropertyLines.ofTask`), for
      * every shape here: an edit of a line the parser does not read as the
      * task's writes where the index says nothing is.
      */

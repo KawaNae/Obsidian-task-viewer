@@ -138,18 +138,17 @@ describe('Placement.into, at the head', () => {
 });
 
 /**
- * A section reads its property lines only above its first task
- * (`NoteSections`), so a line put at its head goes past them: put above
- * them, it would cut them off, and every row of the section would lose
- * what they say. Where the block ends is the one `NoteSections` reads
- * (`PropertyBlock.end`); these check both that the spot is past it and
+ * A line put at the head of a section goes past the property lines written
+ * at its top, above its first task, so that they stay together below the
+ * heading. Where they end is the one `NoteSections` reads
+ * (`SectionNode.head`); these check both that the spot is past them and
  * that the section reads the same properties with the line put there.
  */
 describe('Placement.into, at the head of a section with property lines', () => {
     /** The section `name`'s own property entries, as `NoteSections` reads them. */
     const entriesOf = (lines: string[], name: string) => {
         const node = NoteSections.all(NoteSections.read(Outline.read(lines))).find(s => s.heading?.text === name);
-        return node?.propertyBlock?.entries.map(e => [e.key, e.value]) ?? [];
+        return node?.properties.lines.map(line => [line.key, line.written]) ?? [];
     };
     /** The spot at the head of `name`, and the lines with `- [ ] m` put there, which read the section's properties as before. */
     const putAtHead = (lines: string[], name: string) => {
@@ -170,14 +169,14 @@ describe('Placement.into, at the head of a section with property lines', () => {
         expect(putAtHead(['## S', '- tv-color:: red', '- tags:: a', '- [ ] a'], 'S').spot).toEqual({ at: 3, parent: null, indent: '' });
     });
 
-    it('goes past the whole `- properties::` group, its entries with it', () => {
+    it('goes past the whole `- properties::` line, the items of its list with it', () => {
         expect(putAtHead(['## S', '- properties::', '  - tv-color:: red', '  - tags:: a', '- [ ] a'], 'S').spot.at).toBe(4);
     });
 
-    it('goes past the group when a task in it ends the block, which reads as it did', () => {
+    it('goes past a `- properties::` line with a task among its items, as past any property line\'s subtree', () => {
         const lines = ['## S', '- properties::', '  - tv-color:: red', '  - [ ] t', '  - tags:: x', '- [ ] a'];
         expect(putAtHead(lines, 'S').spot.at).toBe(5);
-        expect(entriesOf(lines, 'S')).toEqual([['tv-color', 'red']]);
+        expect(entriesOf(lines, 'S')).toEqual([['properties', '']]);
     });
 
     it('goes past the subtree of the last property line, a task under it included', () => {
@@ -209,8 +208,14 @@ describe('Placement.into, at the head of a section with property lines', () => {
         expect(putAtHead(['## S', '```', '- a:: 1', '```', '- tv-color:: red', '- [ ] a'], 'S').spot.at).toBe(5);
     });
 
-    it('stays just below the heading when the property lines stand below the first task, which the section does not read', () => {
-        expect(putAtHead(['## S', '- [ ] a', '- tv-color:: red'], 'S').spot.at).toBe(1);
+    it('stays just below the heading when the property lines stand below the first task, which the section reads all the same', () => {
+        const lines = ['## S', '- [ ] a', '- tv-color:: red'];
+        expect(putAtHead(lines, 'S').spot.at).toBe(1);
+        expect(entriesOf(lines, 'S')).toEqual([['tv-color', 'red']]);
+    });
+
+    it('goes past the property lines above the first task only, those below it left where they are', () => {
+        expect(putAtHead(['## S', '- tv-color:: red', '- [ ] a', '- area:: lab'], 'S').spot.at).toBe(2);
     });
 
     it('leaves the end as it was: past the section\'s last line', () => {

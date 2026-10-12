@@ -4,6 +4,7 @@ import { SCALAR_FIELDS, type ScalarField, type SectionNode } from './Sections';
 import { NoteSections } from './NoteSections';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
+import { PropertyLines } from '../utils/PropertyLines';
 import { TagExtractor } from '../utils/TagExtractor';
 import type { ParserChain } from '../strategies/ParserChain';
 import { readFlow } from '../utils/FlowLineScanner';
@@ -65,7 +66,8 @@ export class NoteTasks {
      *   code stays a child line (it goes with the row verbatim) and is never
      *   read as notation.
      * - Its properties are those of its own property lines
-     *   (`ChildLineClassifier.ownPropertyLines`), the lines the writer edits.
+     *   (`PropertyLines.ofTask`), the lines the writer edits, as they read
+     *   (`PropertyLines.read`: no date key, no key written twice).
      * - What its section gives it goes to `cascadeContext`, beside what the
      *   row says itself (`getEffective*` puts the two together), and where
      *   each value of it came from to `inheritedFrom`.
@@ -114,11 +116,7 @@ export class NoteTasks {
 
         task.childLines = this.childLines(outline, line, rows, flow?.childSegments.map(segment => segment.bodyLine) ?? []);
 
-        const own = new Set(ChildLineClassifier.ownPropertyLines(outline, line));
-        const extracted = BuiltinPropertyExtractor.extract(
-            ChildLineClassifier.collectProperties(task.childLines.filter(child => own.has(child.bodyLine))),
-            keys,
-        );
+        const extracted = BuiltinPropertyExtractor.extract(PropertyLines.read(PropertyLines.ofTask(outline, line), keys).values, keys);
         // Raw is the row's own say: its property lines and its content's tags.
         task.properties = extracted.properties;
         task.color = extracted.color;
