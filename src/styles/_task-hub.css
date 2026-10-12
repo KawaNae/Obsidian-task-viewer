@@ -141,6 +141,12 @@
     color: var(--tv-text-muted);
 }
 
+/* A property a finding locks: its value is shown, and taken no edit */
+.task-hub__row--locked .tv-ctrl__text-input {
+    color: var(--tv-text-muted);
+    cursor: not-allowed;
+}
+
 .tv-form__input-with-picker--color .task-hub__color-swatch {
     position: absolute;
     left: 44px;

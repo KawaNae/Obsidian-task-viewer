@@ -507,6 +507,7 @@
       "removeTag": "Remove tag {{tag}}",
       "propertyKey": "Key",
       "propertyValue": "Value",
+      "openLine": "Open the line",
       "removeProperty": "Remove property {{key}}",
       "inheritedFromFile": "inherited: file",
       "inheritedFromSection": "inherited: section",

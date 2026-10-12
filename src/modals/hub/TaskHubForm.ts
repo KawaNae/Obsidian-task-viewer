@@ -30,6 +30,7 @@ import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './f
 import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
+import { hubFindings, lockedFields, type FindingField, type HubFinding } from './HubFindings';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
@@ -100,6 +101,9 @@ export class TaskHubForm {
     private readonly issues: IssueBoard<HubField>;
     /** Where the form says what is of it as a whole: at its end. */
     private readonly formSays: HTMLElement;
+    /** The row's own findings as last read (`hubFindings`), and the fields they lock. */
+    private findings: readonly HubFinding[] = [];
+    private locks: ReadonlySet<FindingField> = new Set();
 
     private nameInput: HTMLInputElement;
     private nameSays: HTMLElement;
@@ -140,8 +144,12 @@ export class TaskHubForm {
             sourceLabel: (source) => this.sourceLabel(source),
             jumpToFile: () => this.jumpToFile(),
             issues: this.issues,
+            findings: () => this.findings,
+            locked: (field) => this.locks.has(field),
         };
+        this.readFindings();
         this.render();
+        this.sayFindings();
     }
 
     // ==================== DOM 構築 ====================
@@ -293,6 +301,32 @@ export class TaskHubForm {
     private jumpToFile(): void {
         void openFile(this.deps.app, this.task.file, this.deps.plugin.settings.reuseExistingTab);
         this.deps.onNavigate?.();
+    }
+
+    // ==================== 所見 ====================
+
+    /** Read the row's findings and the fields they lock from the model. */
+    private readFindings(): void {
+        this.findings = hubFindings(this.task, this.deps.plugin.settings.scopeKeys);
+        this.locks = lockedFields(this.findings);
+    }
+
+    /**
+     * Say each finding under the field it is of (the form's at its end),
+     * with the line to open in the editor: the user fixes the block there.
+     */
+    private sayFindings(): void {
+        this.issues.set('findings', this.findings.map(finding => ({
+            at: finding.field,
+            tone: finding.tone,
+            text: finding.text,
+            action: { label: t('modal.hub.openLine'), run: () => this.openLine(finding.line) },
+        })));
+    }
+
+    /** Open the row's note at line `line` of the row's reading. */
+    private openLine(_line: number): void {
+        this.jumpToFile();
     }
 
     // ==================== コミット ====================
@@ -468,12 +502,14 @@ export class TaskHubForm {
             this.showShut();
         }
 
+        this.readFindings();
         this.nameField.set(fresh.content ?? '');
         this.renderStatusPill();
         this.dateGroup.set(dateFieldsOf(fresh));
         this.styleField.refresh();
         this.tagsField.refresh();
         this.propsField.refresh();
+        this.sayFindings();
     }
 
     /** タスクが index から消えた（削除 / id 変化）ときの縮退表示 */

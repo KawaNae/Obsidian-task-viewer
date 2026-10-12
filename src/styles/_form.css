@@ -357,6 +357,23 @@
     white-space: pre-line;
 }
 
+/* An issue's button after its text (open the line it is on): a link in
+   the issue's own line, so it reads as part of the sentence */
+.tv-form__says .tv-form__issue-action {
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin-inline-start: 0.5em;
+    height: auto;
+    font-size: inherit;
+    color: var(--tv-text-accent);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 /* Error message */
 .tv-form__error {
     color: var(--tv-text-danger);

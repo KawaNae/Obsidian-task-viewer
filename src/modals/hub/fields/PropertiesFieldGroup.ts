@@ -72,14 +72,16 @@ export class PropertiesFieldGroup implements ClosingPart {
 
         for (const [folded, { key, value: pv }] of Object.entries(effective)) {
             const isOwn = PropertyKey.get(own, key) !== undefined;
+            const locked = this.ctx.locked(`prop:${folded}`);
 
             const { row, says } = createFormRow(this.sectionEl, key);
             if (!isOwn) row.addClass('task-hub__row--cascade');
+            if (locked) row.addClass('task-hub__row--locked');
             this.valueSays.set(folded, says);
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
             valueInput.value = PropertyValues.display(pv);
-            valueInput.disabled = shut;
+            valueInput.disabled = shut || locked;
             this.valueInputs.set(folded, valueInput);
 
             const suggest = this.offer(valueInput, {
@@ -114,17 +116,32 @@ export class PropertiesFieldGroup implements ClosingPart {
                 const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
-                removeBtn.disabled = shut;
+                removeBtn.disabled = shut || locked;
                 removeBtn.addEventListener('click', () => {
                     this.remove(key);
                     // 構造コミット: 楽観 model から行を即時再構築
                     this.render(true);
                 });
-            } else if (!isOwn) {
+            } else {
                 const source = CascadeSource.forProperty(task, key);
                 const sourceEl = row.createSpan({ cls: 'task-hub__source', text: this.ctx.sourceLabel(source) });
                 sourceEl.addEventListener('click', () => this.ctx.jumpToFile());
             }
+        }
+
+        // A property whose block has a finding and that has no value to show
+        // (a key written twice, and nothing inherited): a locked row of its
+        // own, so that what is wrong is said where the property would be.
+        for (const finding of this.ctx.findings()) {
+            if (!finding.field.startsWith('prop:')) continue;
+            const folded = finding.field.slice('prop:'.length);
+            if (this.valueSays.has(folded)) continue;
+            const { row, says } = createFormRow(this.sectionEl, finding.key);
+            row.addClass('task-hub__row--locked');
+            this.valueSays.set(folded, says);
+            const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
+            valueInput.disabled = true;
+            this.valueInputs.set(folded, valueInput);
         }
 
         // 追加行 — キーはラベル列に収め、値 input の左端を上の行と揃える
@@ -164,7 +181,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         const keySuggest = this.offer(keyInput, {
             candidates: (q) => {
                 return FilterValueCollector.collectPropertyKeys(this.ctx.index.getTasks())
-                    .filter(k => !PropertyKey.get(effective, k))
+                    .filter(k => !PropertyKey.get(effective, k) && !this.ctx.locked(`prop:${PropertyKey.fold(k)}`))
                     .filter(k => !q || k.toLowerCase().includes(q.toLowerCase()));
             },
             pick: (val) => {

@@ -5,6 +5,7 @@ import type { IndexReads } from '../../../services/core/TaskIndex';
 import type { CascadeSourceKind } from '../CascadeSource';
 import type { DateKey } from '../../form/DateFieldGroup';
 import type { IssueBoard } from '../../form/FormIssue';
+import type { FindingField, HubFinding } from '../HubFindings';
 
 /**
  * The hub's fields, by the names its issues are said of (`FormIssue.at`):
@@ -47,6 +48,14 @@ export interface FieldGroupContext {
     index: IndexReads;
     sourceLabel: (source: CascadeSourceKind) => string;
     jumpToFile: () => void;
+    /** What the row's own property lines hold that is wrong, by field (`hubFindings`), as the form last read them. */
+    findings: () => readonly HubFinding[];
+    /**
+     * Whether a finding locks the field: its block is one the plugin does
+     * not write (the write would be refused), so the field takes no edit
+     * and says why, with the line to open in the editor.
+     */
+    locked: (field: FindingField) => boolean;
     /**
      * Where the form's issues are said. A group says its fields' under the
      * source of the field's name, and draws them again once it has built its
