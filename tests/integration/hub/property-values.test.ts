@@ -184,6 +184,20 @@ describe('the hub writes a property as its block', () => {
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
     });
 
+    it('writes an inherited value typed again when the hub closes with no blur', () => {
+        openHub('親');
+        run(`
+            type(valueInput('area'), 'lab');
+            document.querySelector('.tv-overlay:not(.is-closing) .tv-overlay__close').click();
+            await until(() => !hub());
+            await sleep(300);
+            return 'ok';
+        `);
+        const lines = [...BLOCK];
+        lines.splice(8, 0, '\t- area:: lab');
+        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
+    });
+
     it('takes a list\'s line out with its items', () => {
         openHub('親');
         run(`rowOf('k').querySelector('.task-hub__prop-remove').click(); await sleep(600); return 'ok';`);

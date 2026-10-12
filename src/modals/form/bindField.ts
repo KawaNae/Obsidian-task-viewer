@@ -5,9 +5,10 @@ import { composingIn, onFormEnter } from './formEnter';
 export interface BoundField<T> {
     /**
      * What the field holds that is not its value: the reading of the text
-     * typed, when it is not the value shown; null when the field shows its
-     * value. What a close asks of a form: saved when it reads, asked about
-     * when it does not.
+     * typed, when it is not the value shown, or when it is the value typed
+     * again over a field that makes it the row's own (`takesSame`); null
+     * when the field shows its value. What a close asks of a form: saved
+     * when it reads, asked about when it does not.
      */
     pending(): Read<T> | null;
     /**
@@ -89,7 +90,9 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     composingIn(input);
 
     const shownValue = () => codec.show(opts.current());
-    const pending = (): Read<T> | null => (input.value === shownValue() ? null : codec.read(input.value));
+    /** The value typed again over a field that makes it the row's own (`takesSame`): a commit hands it on. */
+    const typedSame = () => typedOver && (opts.takesSame?.() ?? false);
+    const pending = (): Read<T> | null => (input.value === shownValue() && !typedSame() ? null : codec.read(input.value));
 
     const check = () => {
         const read = pending();
@@ -97,9 +100,9 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
     };
 
     const commit = () => {
-        const same = typedOver && (opts.takesSame?.() ?? false);
+        const same = typedSame();
+        const read = pending();
         typedOver = false;
-        const read = pending() ?? (same ? codec.read(input.value) : null);
         if (read === null) {
             // The field shows its value: nothing typed over it.
             given = input.value;

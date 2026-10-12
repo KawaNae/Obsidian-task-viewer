@@ -5,7 +5,7 @@ import { optional, type Issue } from '../../../src/utils/values/Read';
 import { FakeEl, asEl } from '../helpers/fakeDom';
 
 /** A date field bound to a value held here, as the hub holds its row. */
-function dateField(initial: string | undefined, opts: { refuse?: boolean } = {}) {
+function dateField(initial: string | undefined, opts: { refuse?: boolean; takesSame?: boolean } = {}) {
     const input = new FakeEl();
     input.value = initial ?? '';
     let value = initial;
@@ -20,6 +20,7 @@ function dateField(initial: string | undefined, opts: { refuse?: boolean } = {})
             value = v;
         },
         issues: (issue) => said.push(issue),
+        takesSame: opts.takesSame ? () => true : undefined,
     });
     return { input, field, commits, said, last: () => said[said.length - 1], setValue: (v: string | undefined) => { value = v; } };
 }
@@ -192,5 +193,31 @@ describe('bindField', () => {
         expect(input.value).toBe('2026-09-01');
         expect(field.pending()).toEqual({ ok: true, value: '2026-09-01' });
     });
-});
 
+    describe('a field that shows an inherited value (takesSame)', () => {
+        it('commits the value typed again, and nothing when it is only focused and left', () => {
+            const f = dateField('2026-10-01', { takesSame: true });
+            f.input.blur();
+            expect(f.commits).toEqual([]);
+            f.input.type('2026-10-01');
+            f.input.blur();
+            expect(f.commits).toEqual(['2026-10-01']);
+        });
+
+        it('holds the value typed again as pending, so that a close saves it', () => {
+            const f = dateField('2026-10-01', { takesSame: true });
+            expect(f.field.pending()).toBeNull();
+            f.input.type('2026-10-01');
+            expect(f.field.pending()).toEqual({ ok: true, value: '2026-10-01' });
+            f.field.commit();
+            expect(f.commits).toEqual(['2026-10-01']);
+            expect(f.field.pending()).toBeNull();
+        });
+
+        it('holds nothing as pending for a field that does not take the same value', () => {
+            const f = dateField('2026-10-01');
+            f.input.type('2026-10-01');
+            expect(f.field.pending()).toBeNull();
+        });
+    });
+});
