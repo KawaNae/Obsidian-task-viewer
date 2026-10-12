@@ -508,6 +508,10 @@
       "propertyKey": "Key",
       "propertyValue": "Value",
       "openLine": "Open the line",
+      "makeOwnList": "Make it this task's own",
+      "addItem": "Add item…",
+      "removeItem": "Remove item {{item}}",
+      "moveItem": "Drag to reorder (Alt+↑/↓ in the item)",
       "removeProperty": "Remove property {{key}}",
       "inheritedFromFile": "inherited: file",
       "inheritedFromSection": "inherited: section",
@@ -614,7 +618,8 @@
       "dateBlock": "A name cannot hold a date block (@…). Enter dates in their own fields.",
       "command": "A name cannot hold a command (==>).",
       "blockId": "A name cannot end with a block ID (^id).",
-      "headingMark": "Leave out the heading mark (#). Enter the heading's name alone."
+      "headingMark": "Leave out the heading mark (#). Enter the heading's name alone.",
+      "listItem": "An item cannot be null or ~ (no value), a checkbox ([ ]) or a property (key:: value): its line would not read back as this item."
     },
     "chars": "These characters cannot be used: {{chars}}",
     "digitsOnly": "A word of digits alone is not a tag.",

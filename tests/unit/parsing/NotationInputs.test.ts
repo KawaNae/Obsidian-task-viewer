@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { notationInName, TaskContentInput } from '../../../src/services/parsing/tv-inline/TaskContentInput';
+import { PropertyItemInput } from '../../../src/services/parsing/utils/PropertyItemInput';
 import { TagInput } from '../../../src/services/parsing/utils/TagInput';
 import { PropertyKeyInput, ScopeKeyInput } from '../../../src/services/parsing/utils/PropertyKeyInput';
 import { StatusCharInput } from '../../../src/services/parsing/utils/StatusCharInput';
@@ -123,5 +124,27 @@ describe('a heading typed in the settings', () => {
     it('refuses none, and the heading mark before the name', () => {
         expect(HeadingInput.read(' ')).toEqual({ ok: false, issue: { code: 'empty' } });
         expect(HeadingInput.read('## Tasks')).toEqual({ ok: false, issue: { code: 'notation', kind: 'headingMark' } });
+    });
+});
+
+describe('an item of a property\'s list typed in the hub', () => {
+    const refused = { ok: false, issue: { code: 'notation', kind: 'listItem' } };
+
+    it('reads what a line holding it reads back as one item, spelled as typed', () => {
+        expect(PropertyItemInput.read(' lab ')).toEqual({ ok: true, value: { type: 'text', text: 'lab', spelling: 'lab' } });
+        expect(PropertyItemInput.read('"123"')).toEqual({ ok: true, value: { type: 'text', text: '123', spelling: '"123"' } });
+        expect(PropertyItemInput.read('0x1F')).toEqual({ ok: true, value: { type: 'number', number: 31, spelling: '0x1F' } });
+        expect(PropertyItemInput.read('#tag [[link]]')).toMatchObject({ ok: true });
+    });
+
+    it('refuses none, no value, a checkbox and a property line\'s shape', () => {
+        expect(PropertyItemInput.read('  ')).toEqual({ ok: false, issue: { code: 'empty' } });
+        for (const text of ['null', '~', 'NULL', '[ ] x', '[x] done', 'a:: b']) {
+            expect(PropertyItemInput.read(text), text).toEqual(refused);
+        }
+    });
+
+    it('shows an item as spelled', () => {
+        expect(PropertyItemInput.show({ type: 'text', text: '123', spelling: '"123"' })).toBe('"123"');
     });
 });

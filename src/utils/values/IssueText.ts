@@ -26,6 +26,7 @@ const NOTATION: Record<NotationKind, string> = {
     command: 'a command (==>)',
     blockId: 'a block ID (^id) at its end',
     headingMark: 'the heading mark (#) at its start',
+    listItem: 'what a list\'s item line does not read as an item: no value (null, ~), a checkbox ([ ]) or a property (key:: value)',
 };
 
 function sentence(issue: Issue, label: string): string {

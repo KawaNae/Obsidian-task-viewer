@@ -184,17 +184,9 @@ describe('the hub writes a property as its block', () => {
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
     });
 
-    it('writes a value over a list, taking its items out', () => {
-        openHub('親');
-        run(`type(valueInput('k'), 'x'); await leave(valueInput('k')); return 'ok';`);
-        const lines = [...BLOCK];
-        lines.splice(3, 3, '\t- k:: x');
-        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
-    });
-
     it('takes a list\'s line out with its items', () => {
         openHub('親');
-        run(`rowOf('k').querySelector('.tv-ctrl__pill-remove').click(); await sleep(600); return 'ok';`);
+        run(`rowOf('k').querySelector('.task-hub__prop-remove').click(); await sleep(600); return 'ok';`);
         const lines = [...BLOCK];
         lines.splice(3, 3);
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));

@@ -21,9 +21,11 @@ export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' 
  * something else. Of a task's name, in its line: a date block
  * (`@2026-10-05`, `@10:00`), the command (`==>` and what follows), a
  * trailing block ID (`^id`). Of a heading's name: the heading's own mark
- * (`#`) before it, which the line writes itself.
+ * (`#`) before it, which the line writes itself. Of an item of a property's
+ * list: what its line would read as no such item (no value, a checkbox, a
+ * property line's shape).
  */
-export type NotationKind = 'dateBlock' | 'command' | 'blockId' | 'headingMark';
+export type NotationKind = 'dateBlock' | 'command' | 'blockId' | 'headingMark' | 'listItem';
 
 export type Issue =
     /** Nothing was given (only space, once normalized). */

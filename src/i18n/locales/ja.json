@@ -508,6 +508,10 @@
       "propertyKey": "キー",
       "propertyValue": "値",
       "openLine": "行を開く",
+      "makeOwnList": "このタスクの値にする",
+      "addItem": "項目を追加…",
+      "removeItem": "項目 {{item}} を削除",
+      "moveItem": "ドラッグで並べ替え（項目の中で Alt+↑/↓）",
       "removeProperty": "プロパティ {{key}} を削除",
       "inheritedFromFile": "継承: ファイル",
       "inheritedFromSection": "継承: セクション",
@@ -614,7 +618,8 @@
       "dateBlock": "名前に日付ブロック（@…）は書けません。日付はそれぞれの欄に入れてください。",
       "command": "名前にコマンド（==>）は書けません。",
       "blockId": "名前の末尾にブロック ID（^id）は書けません。",
-      "headingMark": "見出しの記号（#）は要りません。見出しの名前だけを入れてください。"
+      "headingMark": "見出しの記号（#）は要りません。見出しの名前だけを入れてください。",
+      "listItem": "項目には、値なし（null、~）、チェックボックス（[ ]）、プロパティ（key:: value）は書けません。行に書くと、この項目として読めません。"
     },
     "chars": "使えない文字があります: {{chars}}",
     "digitsOnly": "数字だけの語はタグになりません。",
