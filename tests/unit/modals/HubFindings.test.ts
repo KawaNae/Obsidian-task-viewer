@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hubFindings, lockedFields } from '../../../src/modals/hub/HubFindings';
+import { hubFindings, lineOfFinding, lockedFields } from '../../../src/modals/hub/HubFindings';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SCOPE_KEYS, DEFAULT_SETTINGS } from '../../../src/types';
@@ -43,5 +43,13 @@ describe('hubFindings', () => {
 
     it('has none for a row whose lines are well written', () => {
         expect(hubFindings(taskOf(['- [ ] t', '    - area:: lab']), DEFAULT_SCOPE_KEYS)).toEqual([]);
+    });
+
+    it('finds a finding again on another copy of the row: the same one of its kind and key, counted from the top', () => {
+        const before = taskOf(['- [ ] t', '    - a:: 1', '    - a:: 2']);
+        const after = taskOf(['- [ ] t', '    - b:: 0', '    - a:: 1', '    - a:: 2']);
+        const among = hubFindings(before, DEFAULT_SCOPE_KEYS);
+        expect(lineOfFinding(among[1], among, after, DEFAULT_SCOPE_KEYS)).toBe(3);
+        expect(lineOfFinding(among[1], among, taskOf(['- [ ] t', '    - a:: 1']), DEFAULT_SCOPE_KEYS)).toBeNull();
     });
 });

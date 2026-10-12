@@ -85,7 +85,7 @@ export class StyleFieldGroup implements ClosingPart {
         input.value = this.ctx.getTask()[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
-        sourceEl.addEventListener('click', () => this.ctx.jumpToFile());
+        sourceEl.addEventListener('click', () => this.ctx.openSource(row => CascadeSource.lineOfStyleField(row, field, this.ctx.plugin.settings.scopeKeys[field])));
         this.sourceEls[field] = sourceEl;
 
         // An item picked from the list is put in and committed; the field's

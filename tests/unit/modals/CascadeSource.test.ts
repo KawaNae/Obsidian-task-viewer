@@ -45,4 +45,13 @@ describe('CascadeSource', () => {
     it('says a property is the layer\'s that won it', () => {
         expect(CascadeSource.forProperty(task('row'), 'owner')).toBe('section');
     });
+
+    it('gives the line a value is written on, a frontmatter key with its key', () => {
+        expect(CascadeSource.lineOfStyleField(task('row'), 'color', 'tv-color')).toEqual({ line: 2, frontmatterKey: 'tv-color' });
+        expect(CascadeSource.lineOfStyleField(task('row'), 'mask', 'tv-mask')).toEqual({ line: 7 });
+        expect(CascadeSource.lineOfStyleField(task('row'), 'linestyle', 'tv-linestyle')).toBeNull();
+        expect(CascadeSource.lineOfTag(task('row'), 'sec')).toEqual({ line: 6 });
+        expect(CascadeSource.lineOfTag(task('row'), 'file')).toEqual({ line: 1, frontmatterKey: 'tags' });
+        expect(CascadeSource.lineOfProperty(task('row'), 'OWNER')).toEqual({ line: 8 });
+    });
 });

@@ -1,6 +1,7 @@
 import type { Task } from '../../types';
 import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { PropertyKey } from '../../services/parsing/utils/PropertyKey';
+import type { LineTarget } from './SourceLine';
 
 export type CascadeSourceKind = 'file' | 'section';
 
@@ -30,6 +31,31 @@ export class CascadeSource {
     static forProperty(task: Task, key: string): CascadeSourceKind {
         return kindOf(task.inheritedFrom?.properties[PropertyKey.fold(key)]);
     }
+
+    /**
+     * The line an inherited style value is written on (`frontmatterKey` the
+     * key the settings name for it), to open in the editor; null when no
+     * layer is recorded for it.
+     */
+    static lineOfStyleField(task: Task, field: 'color' | 'linestyle' | 'mask', frontmatterKey: string): LineTarget | null {
+        return targetOf(task.inheritedFrom?.fields[field], frontmatterKey);
+    }
+
+    /** The line of the layer that first adds the inherited tag `tag`. */
+    static lineOfTag(task: Task, tag: string): LineTarget | null {
+        return targetOf(task.inheritedFrom?.tags.find(layer => layer.tags.includes(tag))?.from, 'tags');
+    }
+
+    /** The line an inherited custom property is written on, its key's case aside. */
+    static lineOfProperty(task: Task, key: string): LineTarget | null {
+        return targetOf(task.inheritedFrom?.properties[PropertyKey.fold(key)], key);
+    }
+}
+
+/** A layer's line as the hub opens it: a frontmatter key by its key too, which the Properties view shows. */
+function targetOf(source: ValueSource | undefined, key: string): LineTarget | null {
+    if (!source) return null;
+    return source.kind === 'frontmatter' ? { line: source.line, frontmatterKey: key } : { line: source.line };
 }
 
 /** 記録がない値は節の値として言う（記録はすべての継承値にあるので、起きるのは記録を持たないタスクだけ）。 */

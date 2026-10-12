@@ -45,6 +45,8 @@ export interface IndexReads {
     getTaskByFileLine(filePath: string, line: number): Task | undefined;
     /** The task on a line an editor shows, in the content it shows (`TaskIndex.taskAtEditorLine`). */
     taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null;
+    /** Where line `line` of reading `read` of `filePath` stands in content `now`, across our own writes (`TaskIndex.followLine`). */
+    followLine(filePath: string, read: ReadingId, line: number, now: ContentKey): number | null;
     onChange(callback: ChangeListener): () => void;
     /** Hear each name that ends: its row gone from the index's next reading (`TaskIndex.onTaskDeleted`). */
     onTaskDeleted(callback: (taskId: string) => void): () => void;
