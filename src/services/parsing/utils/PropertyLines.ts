@@ -17,7 +17,7 @@ import { TaskLineClassifier } from './TaskLineClassifier';
 export const PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
 
 /** A list item's text: what follows its marker and the gap after it. */
-const ITEM_TEXT = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}(?:${SPACE_OR_TAB_SOURCE}+(${IN_LINE}*))?$`);
+export const ITEM_TEXT = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}(?:${SPACE_OR_TAB_SOURCE}+(${IN_LINE}*))?$`);
 
 /**
  * Who a property line is written for: a task, by the line of its item, or a

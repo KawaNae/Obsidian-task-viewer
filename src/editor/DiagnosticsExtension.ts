@@ -17,6 +17,7 @@ import type { ParserChain } from '../services/parsing/strategies/ParserChain';
 import type { ReadFlow, TaskViewerSettings } from '../types';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
 import { outlineDiagnostics } from '../services/parsing/utils/OutlineDiagnostics';
+import { propertyDiagnostics } from '../services/parsing/tree/PropertyDiagnostics';
 import {
     inertFlowDiagnostic,
     inertNotationOf,
@@ -84,10 +85,12 @@ function locateSegments(outline: OutlineReading, root: number, flow: ReadFlow): 
 }
 
 /**
- * Editor diagnostics: wavy underlines with hover messages, for both
+ * Editor diagnostics: wavy underlines with hover messages, for
  * `==>` flow commands (typos, misordered clauses, legacy syntax, type
- * errors) and `@start>end>due` date blocks (date/time constraint rules,
- * structural warnings).
+ * errors), `@start>end>due` date blocks (date/time constraint rules,
+ * structural warnings) and property lines (`propertyDiagnostics`: a key
+ * written twice, a task's date key, lines under a property line that are
+ * not read as its list).
  *
  * Flow is multi-line aware: a flow program is the task line's tail plus
  * its direct `- ==>` child lines, read as one program by the function the
@@ -95,6 +98,10 @@ function locateSegments(outline: OutlineReading, root: number, flow: ReadFlow): 
  * note. A visible flow child line is diagnosed correctly even when its task
  * line is scrolled out of view — and a lone `x3` child segment is NOT a
  * false orphan-modifier.
+ *
+ * Property lines are read as the parser reads them: every owner's (each
+ * section's and each task's) over the whole note, with the scope keys of the
+ * settings, so a line out of view is still judged in its owner's terms.
  *
  * Date blocks are strictly per-line: each visible task line is re-parsed
  * through the real parser chain (see dateBlockDiagnostics), so ownership
@@ -220,6 +227,34 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
         return analysis;
     };
 
+    /**
+     * The property lines' diagnostics, bucketed by 0-indexed line, for the
+     * doc and the scope keys they were read with: the date keys a task's
+     * lines may not write are the settings', so a change to them reads the
+     * note again though the doc is the same.
+     */
+    let propertyCache: { doc: Text; keys: string; byLine: Map<number, LocatedDiagnostic[]> } | null = null;
+    const propertyDiagnosticsOf = (doc: Text): Map<number, LocatedDiagnostic[]> => {
+        const keys = settings().scopeKeys;
+        const fingerprint = JSON.stringify(keys);
+        if (propertyCache?.doc === doc && propertyCache.keys === fingerprint) return propertyCache.byLine;
+        const byLine = new Map<number, LocatedDiagnostic[]>();
+        for (const d of propertyDiagnostics(outlineFor(doc), keys)) {
+            const at = byLine.get(d.line);
+            if (at) at.push(d);
+            else byLine.set(d.line, [d]);
+        }
+        propertyCache = { doc, keys: fingerprint, byLine };
+        return byLine;
+    };
+
+    /**
+     * What the decorations are drawn with besides the doc: the parser chain
+     * (`syncChain`) and the scope keys. The settings object is mutated in
+     * place, so this, not the reference, says whether they are still current.
+     */
+    const drawnFingerprint = (): string => JSON.stringify([syncChain(), settings().scopeKeys]);
+
     const buildDecorations = (view: EditorView): DecorationSet => {
         const marks: { from: number; to: number; deco: Decoration }[] = [];
         const seenRoots = new Set<number>();
@@ -248,8 +283,14 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                 // Block diagnostics anchor on the delimiter and on body
                 // lines, neither of which is a task or flow line — so they
                 // run before the fence guard below rather than through it.
+                // Property diagnostics too: a property line, and most lines
+                // under one, are no task line.
                 {
-                    for (const d of analyze(view.state.doc).gen.get(line.number - 1) ?? []) {
+                    const lineDiagnostics = [
+                        ...analyze(view.state.doc).gen.get(line.number - 1) ?? [],
+                        ...propertyDiagnosticsOf(view.state.doc).get(line.number - 1) ?? [],
+                    ];
+                    for (const d of lineDiagnostics) {
                         const from = line.from + d.span.start;
                         const to = Math.min(line.from + d.span.end, line.to);
                         if (to <= from) continue;
@@ -374,20 +415,21 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
     return ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
-            /** Fingerprint of the settings these decorations were drawn with. */
+            /** Fingerprint of the settings these decorations were drawn with (`drawnFingerprint`). */
             drawnWith: string;
 
             constructor(view: EditorView) {
-                this.drawnWith = syncChain();
+                this.drawnWith = drawnFingerprint();
                 this.decorations = buildDecorations(view);
             }
 
             update(update: ViewUpdate) {
                 // Settings that read lines differently invalidate date
-                // ownership/verdicts. The chain and its caches are shared by
-                // every editor, so the first to notice rebuilds them; each
-                // editor redecorates when its own marks came from the old one.
-                const key = syncChain();
+                // ownership/verdicts and which property keys are dates. The
+                // chain and its caches are shared by every editor, so the
+                // first to notice rebuilds them; each editor redecorates when
+                // its own marks came from the old one.
+                const key = drawnFingerprint();
                 if (key !== this.drawnWith || update.docChanged || update.viewportChanged) {
                     this.drawnWith = key;
                     this.decorations = buildDecorations(update.view);
