@@ -1,5 +1,5 @@
 import type { FlowInstance } from './FlowInstanceLines';
-import type { PropertyOp } from './PropertyUpdatePlanner';
+import type { PropertyEdit } from './PropertyUpdatePlanner';
 import type { InSection } from './utils/Placement';
 
 /** Where a new line goes beside the row (see {@link TaskOp} `insert`). */
@@ -39,8 +39,10 @@ export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
  *   the API's and the CLI's duplicate of a row (`planDuplicate`), and the
  *   editor menu's duplicate of a line (one line, no children).
  * - `update`: the row reads `text` (indentation kept from the file), and
- *   its own property lines change by `childOps`. A card's, the API's and a
- *   timer's rewrite of a row, and the editor menu's rewrite of a line.
+ *   its own property lines change by `properties`
+ *   (`ChildPropertyLineEditor`), which refuses the write over a property
+ *   whose lines it finds wrong. A card's, the API's and a timer's rewrite of
+ *   a row, and the editor menu's rewrite of a line.
  * - `fire`: the row's flow fires. What it does is planned here, inside the
  *   write, from the lines as the ops before it left them (`plan`, which the
  *   flow layer hands in), and the ops it answers are applied in its place.
@@ -54,7 +56,7 @@ export type TaskOp =
     | { kind: 'remove' }
     | { kind: 'copies'; side: 'above' | 'below'; lines: CopyLines; children: boolean }
     | { kind: 'insert'; place: InsertPlace; text: string }
-    | { kind: 'update'; text: string; childOps?: readonly PropertyOp[] }
+    | { kind: 'update'; text: string; properties?: PropertyEdit }
     | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
 
 /**

@@ -1,3 +1,4 @@
+import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskStore } from '../../../src/services/core/TaskStore';
@@ -159,5 +160,5 @@ export function updateRow<F extends CompletionFire>(
     childOps: PropertyOp[] = [],
     fire?: F,
 ): Promise<FiringOutcome<F>> {
-    return writer.write(file, target, [{ kind: 'update', text: formatRow(task), childOps }], { fire });
+    return writer.write(file, target, [{ kind: 'update', text: formatRow(task), properties: { ops: childOps, keys: DEFAULT_SCOPE_KEYS } }], { fire });
 }

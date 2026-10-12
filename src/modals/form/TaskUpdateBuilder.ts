@@ -1,6 +1,6 @@
 import { DateUtils } from '../../utils/DateUtils';
 import type { Properties, Task } from '../../types';
-import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
+import { PropertyUpdatePlanner } from '../../services/persistence/PropertyUpdatePlanner';
 
 /**
  * フォームのフィールド確定値 → updateTask に渡す Partial<Task> 差分。
@@ -9,8 +9,10 @@ import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
  * - 変更なし → null（updateTask を呼ばない）
  * - 値あり → own 宣言を設定
  * - undefined → own 宣言の削除（暗黙値 / cascade が透ける）
+ * - null（色、線種、マスク）→ 値のない own 宣言（上の層の値を隠す）
  *
- * 空欄は一貫して「宣言なし」を意味する。
+ * 空欄は一貫して「宣言なし」を意味する。own と比べるので、受け継いだ値と
+ * 同じ値も own の宣言として書く。
  */
 export class TaskUpdateBuilder {
     static content(task: Task, content: string): Partial<Task> | null {
@@ -56,7 +58,7 @@ export class TaskUpdateBuilder {
         const prevKeys = Object.keys(prev);
         const nextKeys = Object.keys(props);
         const same = prevKeys.length === nextKeys.length
-            && nextKeys.every(k => k in prev && PropertyValues.spelling(prev[k].value) === PropertyValues.spelling(props[k].value));
+            && nextKeys.every(k => k in prev && PropertyUpdatePlanner.sameWritten(prev[k].value, props[k].value));
         return same ? null : { properties: props };
     }
 }
