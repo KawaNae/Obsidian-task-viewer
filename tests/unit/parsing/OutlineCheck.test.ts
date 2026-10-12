@@ -161,6 +161,12 @@ describe('a line kept keeps its kind, and a task its items above, or the write d
         expect(checked(lines, (draft) => draft.splice(2, 1))).toBe('sound');
     });
 
+    it('disturbs where an item of a property\'s list would lose the line it is an item of', () => {
+        const lines = ['- [ ] T', '\t- k::', '\t\t- a', '\t- other:: 1'];
+        expect(checked(lines, (draft) => draft.splice(1, 1))).toBe('disturbs');
+        expect(checked(lines, (draft) => draft.splice(1, 2))).toBe('sound');
+    });
+
     it('lets a note bullet or a paragraph line go on another item', () => {
         expect(checked(['- [ ] T', '  - ==> every mon', '    - why'], (draft) => draft.splice(1, 1))).toBe('sound');
     });
