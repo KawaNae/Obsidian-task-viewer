@@ -106,6 +106,23 @@ describe('sending a row', () => {
         expect(readTestFile(SRC)).toBe([`1. [[${DST.replace(/\.md$/, '')}]]`, '2. [ ] 次', ''].join('\n'));
     });
 
+    it('with the values it inherits: no value as the key with none, a quoted value with its quotes', async () => {
+        deleteTestFile(`${NEW}.md`);
+        await writeIndexedTestFile(SRC, ['---', 'area: lab', 'tv-color: red', '---', '## S', '- area::', "- sq:: 'abc'", '- id:: "123"', '- tv-color:: null', '- [ ] 値', ''].join('\n'));
+
+        const candidates = obsidianEval(`(async () => {
+            const plugin = app.plugins.plugins['obsidian-task-viewer'];
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === '値');
+            const preview = await plugin.getNoteOps().previewSend([task.id]);
+            return JSON.stringify(preview.candidates);
+        })()`) as unknown[];
+        const sent = send('値', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION }, candidates);
+
+        expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
+        expect(readTestFile(`${NEW}.md`)).toBe(['---', 'tv-color:', 'area:', "sq: 'abc'", 'id: "123"', '---', '', '## Tasks', '- [ ] 値', ''].join('\n'));
+        deleteTestFile(`${NEW}.md`);
+    });
+
     it('to a heading of its own note: carried in one write, and not told', async () => {
         await writeIndexedTestFile(SRC, ['- [ ] 動く', '    - [ ] 子', '## Done', '- [x] 済み', ''].join('\n'));
 

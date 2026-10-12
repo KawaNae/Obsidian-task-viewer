@@ -133,7 +133,7 @@ describe('the hub\'s form', () => {
             '# 見出し',
             '- [ ] 親 @2026-10-06',
             // The vault indents with a tab; an empty value is written after its space.
-            '\t- 場所:: ',
+            '\t- 場所::',
             '- [ ] 次',
             '',
         ].join('\n'));
