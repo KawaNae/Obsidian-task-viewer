@@ -72,6 +72,8 @@ describe('FrontmatterLineEditor', () => {
 
         it('returns null for missing key', () => {
             expect(FrontmatterLineEditor.findKeyRange(lines, fmEnd, 'nonexistent')).toBeNull();
+            expect(FrontmatterLineEditor.findKeyRange(['---', '"my key": 1', 'two words: 2', '---'], 3, 'my key')).toBeNull();
+            expect(FrontmatterLineEditor.findKeyRange(['---', '"my key": 1', 'two words: 2', '---'], 3, 'two words')).toBeNull();
         });
 
         it('handles key with continuation lines (block scalar)', () => {

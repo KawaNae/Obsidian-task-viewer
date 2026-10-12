@@ -173,4 +173,11 @@ describe('ChildLineClassifier', () => {
             expect(ownLines(outline, 0)).toEqual([1, 3]);
         });
     });
+
+    describe('carriesMeaning', () => {
+        it('reads a meaning from a line\'s shape alone: an item of a property\'s list is a note', () => {
+            expect(ChildLineClassifier.carriesMeaning('\t- k:: v')).toBe(true);
+            expect(ChildLineClassifier.carriesMeaning('\t\t- a')).toBe(false);
+        });
+    });
 });
