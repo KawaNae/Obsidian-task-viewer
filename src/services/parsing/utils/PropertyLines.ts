@@ -160,6 +160,23 @@ export const PropertyLines = {
     },
 
     /**
+     * The item of a list that `text` is, written as one (`- text` one level
+     * under `- key::`) and read back as this reading reads a list: null when
+     * it does not read back as that one item, spelled as given, with nothing
+     * found. Empty text, no value (`null`, `~`), a checkbox (`[ ] x`), a
+     * property line's shape (`a:: b`) are none. What a field that writes an
+     * item takes (`PropertyItemInput`), so that what it writes is read as it
+     * was typed.
+     */
+    itemOf(text: string): PropertyScalar | null {
+        const lines = ['- k::', `    - ${text}`];
+        const [line] = PropertyLines.ofSection(Outline.read(lines), null, 0, lines.length).lines;
+        if (!line || line.findings.length > 0 || line.value.type !== 'list' || line.value.items.length !== 1) return null;
+        const [item] = line.value.items;
+        return item.spelling === text ? item : null;
+    },
+
+    /**
      * What `own` says, key by key, a key's case aside (`PropertyKey`). A
      * key the owner writes twice is read on neither line (`duplicate-key`): the owner says nothing of it, and the
      * value above comes through. A task's date keys are not read

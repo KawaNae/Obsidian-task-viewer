@@ -169,3 +169,71 @@
 .task-hub__source:hover {
     color: var(--tv-text-muted);
 }
+
+/* --- A custom property's list: an item a line, as the note writes it --- */
+.task-hub__list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-hub__list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.task-hub__list-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: var(--tv-radius-s);
+}
+
+.task-hub__list-item > .tv-ctrl__text-input {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* The handle an item is dragged by; touch-action keeps a drag from scrolling */
+.task-hub__list-handle {
+    display: flex;
+    flex: 0 0 auto;
+    color: var(--tv-text-faint);
+    cursor: grab;
+    touch-action: none;
+}
+
+.task-hub__list-handle svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* The add field's room for a handle and a ×, so that it lines up with the items */
+.task-hub__list-item--add > .is-placeholder {
+    visibility: hidden;
+}
+
+.task-hub__list-item.is-dragging {
+    opacity: 0.5;
+}
+
+/* Where a dragged item would go: a line above or below the item */
+.task-hub__list-item.is-drop-before {
+    box-shadow: 0 -2px 0 var(--tv-accent);
+}
+
+.task-hub__list-item.is-drop-after {
+    box-shadow: 0 2px 0 var(--tv-accent);
+}
+
+.task-hub__list-chip--cascade {
+    background: var(--tv-bg-secondary);
+    color: var(--tv-text-muted);
+    border: 1px dashed var(--tv-border);
+}
+
+.task-hub__make-own {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+}

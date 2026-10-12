@@ -32,6 +32,7 @@ function notationWords(kind: NotationKind): string {
         case 'command': return t('issue.notation.command');
         case 'blockId': return t('issue.notation.blockId');
         case 'headingMark': return t('issue.notation.headingMark');
+        case 'listItem': return t('issue.notation.listItem');
     }
 }
 
