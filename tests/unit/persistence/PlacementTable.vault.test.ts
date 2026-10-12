@@ -451,7 +451,7 @@ describe('the two readings made CommonMark\'s: a quote after an item, an ordered
         expect(parents(session)).toEqual([['T', null], ['n', 'T'], ['c', null]]);
     });
 
-    it('copies s3#18255 in place, the empty item underlining t2 going with it', async () => {
+    it('copies a task whose empty child item a quote follows in place, the empty item going with it', async () => {
         const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
         expect(parents(session)).toEqual([['t2', null], ['t8', null]]);
 
@@ -462,7 +462,7 @@ describe('the two readings made CommonMark\'s: a quote after an item, an ordered
         expect(parents(session)).toEqual([['t2', null], ['t2', null], ['t8', null]]);
     });
 
-    it('puts a child of s3#18255\'s t2 past the empty item underlining it, above the quote', async () => {
+    it('puts a child of a task whose empty child item a quote follows past the empty item, above the quote', async () => {
         const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
 
         expect((await session.ops.insertLine(only(session, 't2').id, '- [ ] n', 'firstChild')).written).toBe(true);
