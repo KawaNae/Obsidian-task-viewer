@@ -237,3 +237,14 @@
     flex: 0 0 auto;
     font-size: 0.75em;
 }
+
+/* Hide an inherited value: a small button beside the source, as the list's */
+.task-hub__hide {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+}
+
+.task-hub__hide.is-hidden,
+.task-hub__prop-remove.is-hidden {
+    display: none;
+}
