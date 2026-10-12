@@ -179,6 +179,59 @@ describe('NoteTasks', () => {
         });
     });
 
+    describe('値のない値と読めない値', () => {
+        it('タスクの値のない組み込みのキーは、節の値を通す', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tv-color:: ff0000',
+                '- tv-mask:: ***',
+                '- [ ] task @2026-03-24',
+                '    - tv-color::',
+                '    - tv-mask::',
+            ]);
+            expect(tasks[0].color).toBeUndefined();
+            expect(getEffectiveColor(tasks[0])).toBe('ff0000');
+            expect(getEffectiveMask(tasks[0])).toBe('***');
+        });
+
+        it('タスクの値のないカスタムのキーは、節の値を隠す', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- area:: lab',
+                '- [ ] task @2026-03-24',
+                '    - area::',
+            ]);
+            expect(getEffectiveProperties(tasks[0]).area?.value).toEqual({ type: 'null', spelling: '' });
+        });
+
+        it('タスクの値のない tags は何も足さず、節のタグを隠さない', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tags:: #a',
+                '- [ ] task @2026-03-24',
+                '    - tags::',
+            ]);
+            expect(getEffectiveTags(tasks[0])).toEqual(['a']);
+        });
+
+        it('タスクの読めない線種は、節の値を通す', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tv-linestyle:: dashed',
+                '- [ ] task @2026-03-24',
+                '    - tv-linestyle:: wavy',
+            ]);
+            expect(tasks[0].linestyle).toBeUndefined();
+            expect(getEffectiveLinestyle(tasks[0])).toBe('dashed');
+        });
+
+        it('節が値を何も言わなければ、出所を持たない', () => {
+            const tasks = extractTasks(['## Section', '- [ ] task @2026-03-24']);
+            expect(tasks[0].cascadeContext).toBeUndefined();
+            expect(tasks[0].inheritedFrom).toBeUndefined();
+        });
+    });
+
     describe('フルカスケード: frontmatter → section → task', () => {
         it('frontmatter → section → task のカスケード（child-wins）', () => {
             const tasks = extractTasks([

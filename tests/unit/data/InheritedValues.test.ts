@@ -161,6 +161,24 @@ describe('inheritedAt', () => {
         expect(values['tv-mask'].yaml).toEqual(['tv-mask: "x, y"']);
     });
 
+    it('見出しの値のない組み込みのキーは frontmatter の値を送り、frontmatter の値のないキーは送らない', () => {
+        const lines = [
+            '---',
+            'tv-color: red',
+            'tv-start: 2026-09-01',
+            'area:',
+            '---',
+            '## S',
+            '- tv-color::',
+            '- tv-start::',
+            '- [ ] task',
+        ];
+        const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
+        expect(values['tv-color'].yaml).toEqual(['tv-color: red']);
+        expect(values['tv-start'].yaml).toEqual(['tv-start: "2026-09-01"']);
+        expect(values.area).toBeUndefined();
+    });
+
     it('tv-ignore のノートは行を持たないので、何も答えない', () => {
         expect(inheritedAt(['---', 'tv-ignore: true', 'x: 1', '---', '- [ ] task'], 4, DEFAULT_SETTINGS)).toEqual([]);
     });
