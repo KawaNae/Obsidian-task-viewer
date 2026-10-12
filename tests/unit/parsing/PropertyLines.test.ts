@@ -168,6 +168,38 @@ describe('PropertyLines', () => {
         });
     });
 
+    describe('a built-in\'s value it cannot read', () => {
+        it('is not read, a warning that covers the lines under it; no value is read', () => {
+            const { read } = ofRoot([
+                '- tv-start:: 2026-02-30',
+                '- tv-linestyle:: wavy',
+                '- tv-color::',
+                '    - red',
+                '- tv-mask::',
+                '- tv-due:: 10:00',
+                '- tags::',
+                '    - b',
+                '- area:: 2026-02-30',
+            ]);
+            expect(brief(read.findings)).toEqual([
+                ['unreadable-value', 0, 1, 'tv-start'],
+                ['unreadable-value', 1, 2, 'tv-linestyle'],
+                ['unreadable-value', 2, 4, 'tv-color'],
+                ['unreadable-value', 5, 6, 'tv-due'],
+            ]);
+            expect(read.findings.every(f => f.severity === 'warning')).toBe(true);
+            expect(Object.keys(read.values)).toEqual(['tv-mask', 'tags', 'area']);
+            expect(read.lineOf.has('tv-start')).toBe(false);
+        });
+
+        it('is found under a task too, by the keys the settings name, its case aside', () => {
+            const keys = { ...DEFAULT_SCOPE_KEYS, linestyle: 'line' };
+            const own = PropertyLines.ofTask(Outline.read(['- [ ] t', '    - LINE:: wavy', '    - tv-linestyle:: wavy']), 0);
+            const read = PropertyLines.read(own, keys);
+            expect(brief(read.findings)).toEqual([['unreadable-value', 1, 2, 'LINE']]);
+        });
+    });
+
     describe('in a note', () => {
         it('a section\'s property line below its first task reaches every task of the section', () => {
             const all = tasks(['## S', '- [ ] a', '- area:: lab', '- [ ] b', '## T', '- [ ] c']);

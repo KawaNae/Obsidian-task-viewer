@@ -1,5 +1,6 @@
 import { Outline } from '../../parsing/utils/Outline';
 import { PropertyKey } from '../../parsing/utils/PropertyKey';
+import { frontmatterKeyRange } from '../../parsing/utils/FrontmatterKeyLines';
 import type { LineDraft } from '../FileLines';
 
 /**
@@ -71,22 +72,11 @@ export class FrontmatterLineEditor {
      * frontmatter 内でトップレベルキーの行範囲 [start, end) を返す。
      * 継続行（配列項目・ブロックスカラー等）も含む。
      * キーは大文字と小文字を区別せずに探し（`PropertyKey`）、最初の行を返す。
-     * キーが存在しない場合は null。
+     * キーが存在しない場合は null。読みが値の出所として記録する行と同じ答え
+     * （`frontmatterKeyRange`）である。
      */
     static findKeyRange(lines: readonly string[], fmEnd: number, key: string): [number, number] | null {
-        for (let i = 1; i < fmEnd; i++) {
-            const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
-            if (keyMatch && PropertyKey.same(keyMatch[1], key)) {
-                // キー行を発見。継続行の終端を探す
-                let end = i + 1;
-                while (end < fmEnd) {
-                    if (lines[end].match(/^([^:\s]+)\s*:/)) break; // 次のキー
-                    end++;
-                }
-                return [i, end];
-            }
-        }
-        return null;
+        return frontmatterKeyRange(lines, fmEnd, key);
     }
 
     /**

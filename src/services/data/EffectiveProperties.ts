@@ -16,19 +16,28 @@ import { TagExtractor } from '../parsing/utils/TagExtractor';
  * keep reading raw fields only — inherited values are never serialized.
  */
 
+/**
+ * A style as the row shows it: its own, where it says one, else what its
+ * section gives. A row's own no value (`- tv-color::`) is none, hiding the
+ * section's.
+ */
+function ownOrInherited(own: string | null | undefined, inherited: string | undefined): string | undefined {
+    return own !== undefined ? own ?? undefined : inherited;
+}
+
 /** Merged color: own child-line / own-FM declaration, else section cascade. */
 export function getEffectiveColor(t: Task): string | undefined {
-    return t.color ?? t.cascadeContext?.color;
+    return ownOrInherited(t.color, t.cascadeContext?.color);
 }
 
 /** Merged linestyle: own declaration, else section cascade. */
 export function getEffectiveLinestyle(t: Task): string | undefined {
-    return t.linestyle ?? t.cascadeContext?.linestyle;
+    return ownOrInherited(t.linestyle, t.cascadeContext?.linestyle);
 }
 
 /** Merged mask: own declaration, else section cascade. */
 export function getEffectiveMask(t: Task): string | undefined {
-    return t.mask ?? t.cascadeContext?.mask;
+    return ownOrInherited(t.mask, t.cascadeContext?.mask);
 }
 
 /** Merged tags: union of section cascade and own tags (sorted, deduped). */
@@ -41,6 +50,8 @@ export function getEffectiveTags(t: Task): string[] {
 /**
  * Merged custom properties: section cascade overlaid by own (child-wins per
  * key, its case aside). Each keeps the key as the layer that won writes it.
+ * A key with no value (null) wins as one with a value does, hiding the
+ * value above it.
  */
 export function getEffectiveProperties(t: Task): Properties {
     const cascadeProps = t.cascadeContext?.properties;

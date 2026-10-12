@@ -4,6 +4,7 @@ import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { PropertyKey } from './PropertyKey';
 import { PropertyValues } from './PropertyValues';
+import { builtinsByKey, readBuiltin } from './BuiltinValues';
 import { TaskLineClassifier } from './TaskLineClassifier';
 
 /**
@@ -49,13 +50,17 @@ export type PropertyOwner =
  *   that is no item of its list: a task, an item nested in an item, a line
  *   that is no item (a paragraph going on, a quote, code), an item that is
  *   empty or no value
+ * - `unreadable-value` (warning): a built-in's value it cannot read
+ *   (`readBuiltin`: `tv-start:: 2026-02-30`, `tv-linestyle:: wavy`, a list
+ *   under `- tv-color::`); not read, so the value above comes through
  */
 export type PropertyFindingKind =
     | 'duplicate-key'
     | 'date-key-under-task'
     | 'lines-under-value'
     | 'property-shaped-item'
-    | 'not-a-list-item';
+    | 'not-a-list-item'
+    | 'unreadable-value';
 
 export interface PropertyFinding {
     kind: PropertyFindingKind;
@@ -158,9 +163,11 @@ export const PropertyLines = {
      * What `own` says, key by key, a key's case aside (`PropertyKey`). A
      * key the owner writes twice is read on neither line (`duplicate-key`): the owner says nothing of it, and the
      * value above comes through. A task's date keys are not read
-     * (`date-key-under-task`): a task's dates are its own line's `@`. A
-     * line not read has one finding, which covers the lines under it too
-     * (`PropertyFinding.end`): none of them is read either.
+     * (`date-key-under-task`): a task's dates are its own line's `@`. Nor
+     * is a built-in's value it cannot read (`unreadable-value`), which says
+     * nothing either; no value (`- tv-color::`) is read, and hides the value
+     * above. A line not read has one finding, which covers the lines under
+     * it too (`PropertyFinding.end`): none of them is read either.
      */
     read(own: OwnPropertyLines, keys: ScopeKeys): PropertyReading {
         const findings: PropertyFinding[] = [];
@@ -176,6 +183,7 @@ export const PropertyLines = {
 
         const values: Properties = {};
         const lineOf = new Map<string, number>();
+        const builtinOf = builtinsByKey(keys);
         for (const line of considered) {
             const twins = considered.filter(other => PropertyKey.same(other.key, line.key));
             if (twins.length > 1) {
@@ -183,6 +191,11 @@ export const PropertyLines = {
                 continue;
             }
             const key = PropertyKey.fold(line.key);
+            const builtin = builtinOf.get(key);
+            if (builtin && readBuiltin(builtin, line.value) === undefined) {
+                findings.push(finding('unreadable-value', line.line, line.end, line, own.owner));
+                continue;
+            }
             values[key] = { key: line.key, value: line.value };
             lineOf.set(key, line.line);
             findings.push(...line.findings);

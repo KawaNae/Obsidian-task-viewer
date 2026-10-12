@@ -124,7 +124,7 @@ export class FileParsePipeline {
         if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStart, settings)) return null;
 
         const sections = NoteSections.read(outline);
-        SectionPropertyResolver.resolve(sections, frontmatterObj, settings.scopeKeys);
+        SectionPropertyResolver.resolve(outline, sections, frontmatterObj, settings.scopeKeys);
         return { outline, sections, frontmatter: frontmatterObj };
     }
 

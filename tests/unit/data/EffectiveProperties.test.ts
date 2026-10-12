@@ -22,6 +22,13 @@ describe('EffectiveProperties', () => {
             expect(getEffectiveColor(t)).toBe('00ff00');
         });
 
+        it('raw の値なし (null) は cascade を隠す', () => {
+            const t = makeTask({ color: null, linestyle: null, mask: null, cascadeContext: { color: 'ff0000', linestyle: 'dashed', mask: '***' } });
+            expect(getEffectiveColor(t)).toBeUndefined();
+            expect(getEffectiveLinestyle(t)).toBeUndefined();
+            expect(getEffectiveMask(t)).toBeUndefined();
+        });
+
         it('両方無ければ undefined', () => {
             const t = makeTask({});
             expect(getEffectiveColor(t)).toBeUndefined();

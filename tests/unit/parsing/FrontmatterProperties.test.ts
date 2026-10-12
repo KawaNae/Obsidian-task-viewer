@@ -80,14 +80,14 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
             expect(result.properties['s']).toEqual({ type: 'text', text: 'hello', spelling: 'hello' });
         });
 
-        it('null / undefined 値は properties から除外', () => {
+        it('null / undefined 値は値のないプロパティ', () => {
             const result = frontmatterLayer({
                 'a': null,
                 'b': undefined,
                 'c': 'kept',
             }, keys);
-            expect(result.properties['a']).toBeUndefined();
-            expect(result.properties['b']).toBeUndefined();
+            expect(result.properties['a']).toEqual({ type: 'null', spelling: '' });
+            expect(result.properties['b']).toEqual({ type: 'null', spelling: '' });
             expect(result.properties['c']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
         });
 

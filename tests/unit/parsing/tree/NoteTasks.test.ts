@@ -22,7 +22,7 @@ const defaultCtx: TaskExtractionContext = {
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
     const outline = Outline.read(bodyLines);
     const sections = NoteSections.read(outline);
-    SectionPropertyResolver.resolve(sections, frontmatter, DEFAULT_SCOPE_KEYS);
+    SectionPropertyResolver.resolve(outline, sections, frontmatter, DEFAULT_SCOPE_KEYS);
     return NoteTasks.extract(outline, sections, { ...defaultCtx, ...ctx });
 }
 
@@ -180,18 +180,41 @@ describe('NoteTasks', () => {
     });
 
     describe('値のない値と読めない値', () => {
-        it('タスクの値のない組み込みのキーは、節の値を通す', () => {
+        it('タスクの値のない組み込みのキーは、節の値を隠す', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- tv-color:: ff0000',
                 '- tv-mask:: ***',
+                '- tv-linestyle:: dashed',
                 '- [ ] task @2026-03-24',
                 '    - tv-color::',
                 '    - tv-mask::',
             ]);
-            expect(tasks[0].color).toBeUndefined();
-            expect(getEffectiveColor(tasks[0])).toBe('ff0000');
-            expect(getEffectiveMask(tasks[0])).toBe('***');
+            expect(tasks[0].color).toBeNull();
+            expect(tasks[0].mask).toBeNull();
+            expect(tasks[0].cascadeContext?.color).toBeUndefined();
+            expect(getEffectiveColor(tasks[0])).toBeUndefined();
+            expect(getEffectiveMask(tasks[0])).toBeUndefined();
+            expect(getEffectiveLinestyle(tasks[0])).toBe('dashed');
+        });
+
+        it('節が値のない組み込みのキーで隠した値は、タスクに届かず、出所は残る', () => {
+            const tasks = extractTasks([
+                '## Section',
+                '- tv-color::',
+                '- tv-start::',
+                '- [ ] task',
+            ], { 'tv-color': 'red', 'tv-start': '2026-09-28T10:00' });
+            expect(tasks[0].cascadeContext).toBeUndefined();
+            expect(getEffectiveColor(tasks[0])).toBeUndefined();
+            expect(tasks[0].inheritedFrom?.fields.color).toMatchObject({ kind: 'section', line: 1 });
+            expect(tasks[0].inheritedFrom?.fields.startDate).toMatchObject({ kind: 'section', line: 2 });
+        });
+
+        it('frontmatter の値のないキーは、タスクに値のないプロパティとして届く', () => {
+            const tasks = extractTasks(['## Section', '- [ ] task'], { area: null, 'tv-color': null });
+            expect(getEffectiveProperties(tasks[0]).area?.value).toEqual({ type: 'null', spelling: '' });
+            expect(getEffectiveColor(tasks[0])).toBeUndefined();
         });
 
         it('タスクの値のないカスタムのキーは、節の値を隠す', () => {
@@ -214,15 +237,20 @@ describe('NoteTasks', () => {
             expect(getEffectiveTags(tasks[0])).toEqual(['a']);
         });
 
-        it('タスクの読めない線種は、節の値を通す', () => {
+        it('タスクの読めない値は、書いていないものとして節の値を通す', () => {
             const tasks = extractTasks([
                 '## Section',
                 '- tv-linestyle:: dashed',
+                '- tv-color:: red',
                 '- [ ] task @2026-03-24',
                 '    - tv-linestyle:: wavy',
+                '    - tv-color::',
+                '        - blue',
             ]);
             expect(tasks[0].linestyle).toBeUndefined();
+            expect(tasks[0].color).toBeUndefined();
             expect(getEffectiveLinestyle(tasks[0])).toBe('dashed');
+            expect(getEffectiveColor(tasks[0])).toBe('red');
         });
 
         it('節が値を何も言わなければ、出所を持たない', () => {

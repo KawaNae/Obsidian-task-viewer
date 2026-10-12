@@ -23,15 +23,19 @@ export interface SectionNode {
     head: number;
     /** カスケード解決済みプロパティ（SectionPropertyResolver が設定）。キーは折りたたんだ形、綴りは値を書いた層のもの */
     resolvedProperties: Properties;
-    resolvedColor?: string;
-    resolvedLinestyle?: string;
-    resolvedMask?: string;
+    /*
+     * The built-ins resolved: undefined where no layer says one, null where
+     * the nearest layer that says one says it has none (`- tv-color::`).
+     */
+    resolvedColor?: string | null;
+    resolvedLinestyle?: string | null;
+    resolvedMask?: string | null;
     resolvedTags?: string[];
-    resolvedStartDate?: string;
-    resolvedStartTime?: string;
-    resolvedEndDate?: string;
-    resolvedEndTime?: string;
-    resolvedDue?: string;
+    resolvedStartDate?: string | null;
+    resolvedStartTime?: string | null;
+    resolvedEndDate?: string | null;
+    resolvedEndTime?: string | null;
+    resolvedDue?: string | null;
     /** Which layer each resolved value above came from (SectionPropertyResolver が設定) */
     resolvedSources: ResolvedSources;
     children: SectionNode[];         // ネストした子セクション
@@ -41,15 +45,17 @@ export interface SectionNode {
 }
 
 /**
- * The layer a resolved value came from: the note's frontmatter, or the
- * property line `line` of a section — `heading` null for the section above
- * the note's first heading.
+ * The layer a resolved value came from: the note's frontmatter, by the line
+ * of its key (`frontmatterKeyRange`; null when no line is read as the key's,
+ * as for a key the YAML quotes), or the property line `line` of a section —
+ * `heading` null for the section above the note's first heading. A layer
+ * that says it has no value is the source of that, as one with a value is.
  */
 export type ValueSource =
-    | { kind: 'frontmatter' }
+    | { kind: 'frontmatter'; line: number | null }
     | { kind: 'section'; line: number; heading: OutlineHeading | null };
 
-/** A resolved value one layer sets for good: the nearest layer that has one wins. */
+/** A resolved value one layer sets for good: the nearest layer that says one wins, no value included. */
 export type ScalarField = 'color' | 'linestyle' | 'mask' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due';
 
 export const SCALAR_FIELDS: readonly ScalarField[] = ['color', 'linestyle', 'mask', 'startDate', 'startTime', 'endDate', 'endTime', 'due'];
@@ -68,11 +74,11 @@ export interface TagLayer {
  * row what it inherits (the hub) can say from where.
  */
 export interface ResolvedSources {
-    /** Per scalar value, the layer whose value won. None for a value no layer sets. */
+    /** Per scalar value, the layer whose value won, or that hides the value above with none. None for a value no layer says. */
     fields: Readonly<Partial<Record<ScalarField, ValueSource>>>;
     /** Every layer that adds tags to the union, from the top down, with the tags it adds. */
     tags: readonly TagLayer[];
-    /** Per custom key, folded (`PropertyKey.fold`), the layer whose value won. */
+    /** Per custom key, folded (`PropertyKey.fold`), the layer whose value won, no value included. */
     properties: Readonly<Record<string, ValueSource>>;
 }
 
