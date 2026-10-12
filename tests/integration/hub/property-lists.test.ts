@@ -145,6 +145,42 @@ describe('the hub edits a list item by item', () => {
         expect(readTestFile(TEST_FILE)).toBe(withLines(5, 8));
     });
 
+    it('leaves the focus where it was when an item is taken out', () => {
+        openHub('親');
+        const removeOf = `i => items('k')[i].closest('.task-hub__list-item').querySelector('.tv-ctrl__pill-remove')`;
+        const focus = run<Record<string, unknown>>(`
+            const removeAt = ${removeOf};
+            document.activeElement?.blur();
+            removeAt(1).click();
+            await sleep(600);
+            const outside = !rowOf('k').contains(document.activeElement);
+            type(addItem('k'), 'c');
+            await enter(addItem('k'));
+            removeAt(0).click();
+            await sleep(600);
+            return JSON.stringify({ outside, add: document.activeElement === addItem('k') });
+        `);
+        expect(focus).toEqual({ outside: true, add: true });
+        expect(readTestFile(TEST_FILE)).toBe(withLines(6, 8, '\t\t- c'));
+    });
+
+    it('puts the focus in the add field when an item emptied is written by Enter, and leaves it where it goes on leaving the item', () => {
+        openHub('親');
+        const entered = run<boolean>(`type(items('k')[0], ''); await enter(items('k')[0]); return document.activeElement === addItem('k');`);
+        expect(entered).toBe(true);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(6, 7));
+        const left = run<boolean>(`type(items('k')[0], ''); nameInput().focus(); await sleep(600); return document.activeElement === nameInput();`);
+        expect(left).toBe(true);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(5, 8));
+    });
+
+    it('follows the focus to the next item when an item typed over is written on leaving it', () => {
+        openHub('親');
+        const next = run<boolean>(`type(items('k')[0], 'c'); items('k')[1].focus(); await sleep(600); return document.activeElement === items('k')[1];`);
+        expect(next).toBe(true);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(6, 7, '\t\t- c'));
+    });
+
     it('moves an item by Alt+Down, and by dragging its handle', () => {
         openHub('親');
         run(`

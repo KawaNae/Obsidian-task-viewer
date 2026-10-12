@@ -30,7 +30,7 @@ export interface PropertyListFieldOptions {
     disabled: boolean;
     /** The values offered for an item, as spelled (`collectPropertySpellingsForKey`). */
     candidates(): readonly string[];
-    /** Write `items` as the row's own list, then put the focus at `focus`. */
+    /** Write `items` as the row's own list, then put the focus at `focus` (left where it is when none). */
     write(items: PropertyScalar[], focus?: ListFocus): void;
     /** Say what the field's inputs read as wrong, under the row (`IssueBoard`, by `source`). */
     say(source: string, issues: readonly FormIssue<HubField>[]): void;
@@ -49,6 +49,11 @@ export interface PropertyListFieldOptions {
  * edit writes the whole list (`write`); a list left with no item takes the
  * property's line out, and the value above comes through.
  *
+ * A write builds the rows anew, and the focus stays where it was: in the
+ * add field, or in the item it was in at that item's new place (the add
+ * field when the item is gone). Focus outside the list's inputs is not
+ * moved, so a tap on an item's × or handle brings up no keyboard.
+ *
  * An inherited list is shown as it is, and not edited here: its source is
  * opened from the row, and the row made its own starts from a copy of its
  * items (`PropertiesFieldGroup`).
@@ -62,9 +67,19 @@ export class PropertyListField {
     private readonly suggests: ValueSuggest[] = [];
     /** The issue each input says now, by its source: an item's place, or the add field. */
     private readonly sources = new Set<string>();
+    /**
+     * Where the focus went when it last left one of the list's inputs. A
+     * blur commits before the focus lands, so its write finds the focus
+     * here and not on the document.
+     */
+    private leftFor: Element | null = null;
 
     constructor(parent: HTMLElement, private readonly opts: PropertyListFieldOptions) {
         this.el = parent.createDiv({ cls: 'task-hub__list tv-form__control' });
+        // Heard in the capture phase, before the input's own blur commits.
+        this.el.addEventListener('blur', (e: FocusEvent) => {
+            this.leftFor = e.relatedTarget instanceof Element ? e.relatedTarget : null;
+        }, true);
         if (opts.own) this.renderOwn();
         else this.renderInherited();
     }
@@ -105,10 +120,8 @@ export class PropertyListField {
                 current: () => item,
                 // An item emptied is taken out; one typed is put in its place.
                 commit: (value) => {
-                    const next = [...this.opts.items];
-                    if (value === undefined) next.splice(index, 1);
-                    else next[index] = value;
-                    this.opts.write(next, value === undefined ? 'add' : index);
+                    if (value === undefined) this.writeKept(...removed(this.opts.items, index));
+                    else this.writeKept(this.opts.items.map((x, i) => (i === index ? value : x)), places(this.opts.items));
                 },
                 issues: (issue) => this.sayOf(source, input, issue),
                 takesEnter: () => suggest.listShown,
@@ -119,7 +132,7 @@ export class PropertyListField {
                 const to = index + (e.key === 'ArrowUp' ? -1 : 1);
                 if (to < 0 || to >= this.opts.items.length) return;
                 e.preventDefault();
-                this.opts.write(moved(this.opts.items, index, to), to);
+                this.writeKept(moved(this.opts.items, index, to), moved(places(this.opts.items), index, to));
             });
 
             const removeBtn = itemEl.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
@@ -127,9 +140,7 @@ export class PropertyListField {
             removeBtn.setAttribute('aria-label', t('modal.hub.removeItem', { item: item.spelling }));
             removeBtn.disabled = disabled;
             removeBtn.addEventListener('click', () => {
-                const next = [...this.opts.items];
-                next.splice(index, 1);
-                this.opts.write(next, 'add');
+                this.writeKept(...removed(this.opts.items, index));
             });
         });
 
@@ -155,7 +166,7 @@ export class PropertyListField {
             current: () => undefined,
             commit: (value) => {
                 if (value === undefined) return;
-                this.opts.write([...this.opts.items, value], 'add');
+                this.writeKept([...this.opts.items, value], places(this.opts.items));
             },
             issues: (issue) => this.sayOf(source, add, issue),
             takesEnter: () => suggest.listShown,
@@ -215,12 +226,33 @@ export class PropertyListField {
                 const target = to;
                 to = from;
                 mark();
-                if (target !== from) this.opts.write(moved(this.opts.items, from, target), target);
+                if (target !== from) this.writeKept(moved(this.opts.items, from, target), moved(places(this.opts.items), from, target));
             };
             doc.addEventListener('pointermove', move);
             doc.addEventListener('pointerup', up);
             doc.addEventListener('pointercancel', up);
         });
+    }
+
+    /**
+     * Write `items` with the focus kept where it is (or is going, while an
+     * input blurs). `order` names, for each place in `items`, the place the
+     * item had; an item that is not there any more leaves the focus it held
+     * to the add field.
+     */
+    private writeKept(items: PropertyScalar[], order: readonly number[]): void {
+        const doc = this.el.ownerDocument;
+        const active = doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement : this.leftFor;
+        let focus: ListFocus | undefined;
+        if (active && active === this.addInput) focus = 'add';
+        else {
+            const from = this.itemInputs.findIndex(input => input === active);
+            if (from !== -1) {
+                const to = order.indexOf(from);
+                focus = to === -1 ? 'add' : to;
+            }
+        }
+        this.opts.write(items, focus);
     }
 
     private sayOf(source: string, input: HTMLInputElement, issue: Issue | null): void {
@@ -278,6 +310,17 @@ export class PropertyListField {
         for (const suggest of this.suggests) suggest.close();
         for (const source of this.sources) this.opts.say(source, []);
     }
+}
+
+/** The places of `items`, in their order. */
+function places(items: readonly unknown[]): number[] {
+    return items.map((_, i) => i);
+}
+
+/** `items` with the item at `at` taken out, and the places the rest had. */
+function removed<T>(items: readonly T[], at: number): [T[], number[]] {
+    const keep = (_: unknown, i: number) => i !== at;
+    return [items.filter(keep), places(items).filter(keep)];
 }
 
 /** `items` with the item at `from` moved to `to`. */
