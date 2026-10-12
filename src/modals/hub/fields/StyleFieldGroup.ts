@@ -181,13 +181,16 @@ export class StyleFieldGroup implements ClosingPart {
 
         const task = this.ctx.getTask();
         const cascadeValue = task.cascadeContext?.[field];
-        // The row's own no value shows as such; with none of its own, the value it inherits.
-        input.placeholder = task[field] === null ? t('modal.hub.noValue') : (task[field] === undefined && cascadeValue) || '';
+        // Inherited, a value or no value (a layer above hid it); null when the row says its own.
+        const source = CascadeSource.forStyleField(task, field);
+        // A no value shows as such, the row's own (with its ×) or an inherited one
+        // (with its source); with none of its own, the value it inherits.
+        const noValue = task[field] === null || (source !== null && cascadeValue === undefined);
+        input.placeholder = noValue ? t('modal.hub.noValue') : (task[field] === undefined && cascadeValue) || '';
         const hidesNothing = task[field] !== undefined || cascadeValue === undefined;
         this.hideButtons[field]?.toggleClass('is-hidden', hidesNothing);
         this.unhideButtons[field]?.toggleClass('is-hidden', task[field] !== null);
 
-        const source = CascadeSource.forStyleField(task, field);
         if (source) {
             sourceEl.setText(this.ctx.sourceLabel(source));
             sourceEl.style.display = '';

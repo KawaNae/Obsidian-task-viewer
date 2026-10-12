@@ -16,10 +16,16 @@ export type CascadeSourceKind = 'file' | 'section';
  * 見出し単位の特定はしない（ユーザー決定: file / section の粗い区別で十分）。
  */
 export class CascadeSource {
-    /** color / linestyle / mask の cascade 出所。cascade 値がない、または自身の値があれば null */
+    /**
+     * color / linestyle / mask の cascade 出所。受け継いだ値なし（上の層が
+     * `- tv-color::` で隠した値）も、値と同じく隠した層を出所として言う。
+     * 何も受け継がない、または自身の値（値なしを含む）があれば null
+     */
     static forStyleField(task: Task, field: 'color' | 'linestyle' | 'mask'): CascadeSourceKind | null {
-        if (task.cascadeContext?.[field] === undefined || task[field] !== undefined) return null;
-        return kindOf(task.inheritedFrom?.fields[field]);
+        if (task[field] !== undefined) return null;
+        const from = task.inheritedFrom?.fields[field];
+        if (task.cascadeContext?.[field] === undefined && !from) return null;
+        return kindOf(from);
     }
 
     /** cascade 由来タグ 1 件の出所: そのタグを最初に加えた層 */
