@@ -146,7 +146,7 @@ const result = await api.list({ date: '2026-03-15', startHour: 0 });
 | `to` | `string` | 窓の終わりの日。期間がこの日以前と重なるタスク |
 | `due` | `string` | 締切日 = 指定値 |
 | `leaf` | `boolean` | 子なしタスクのみ |
-| `property` | `string` | カスタムプロパティ（`key:value`）。値が `value` を含むタスク（条件の `contains`。下の「プロパティの値の比べ方」） |
+| `property` | `string` | カスタムプロパティ（`key:value`）。値が `value` を含むタスク（条件の `contains`）。`key` は大文字と小文字を区別しない（下の「プロパティの値の比べ方」） |
 | `color` | `string \| string[]` | カード色 |
 | `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
@@ -167,7 +167,7 @@ const result = await api.list({ date: '2026-03-15', startHour: 0 });
 | `content` | `string` | コンテンツ部分一致 |
 | `due` | `string` | 締切日 = 指定値 |
 | `leaf` | `boolean` | 子なしタスクのみ |
-| `property` | `string` | カスタムプロパティ（`key:value`）。値が `value` を含むタスク（条件の `contains`。下の「プロパティの値の比べ方」） |
+| `property` | `string` | カスタムプロパティ（`key:value`）。値が `value` を含むタスク（条件の `contains`）。`key` は大文字と小文字を区別しない（下の「プロパティの値の比べ方」） |
 | `color` | `string \| string[]` | カード色 |
 | `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
@@ -494,7 +494,7 @@ console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
 
 ### プロパティの値の比べ方
 
-`property` の条件は、カスタムプロパティ（`key:: value` と frontmatter）を値の型に合わせて比べます。値は、見出しやノートから受け継いだものを含みます。
+`property` の条件は、カスタムプロパティ（`key:: value` と frontmatter）を値の型に合わせて比べます。値は、見出しやノートから受け継いだものを含みます。値の型の決まり方は [記法リファレンス](notation.md#値の型) にあります。
 
 - `key` は大文字と小文字を区別しません。`area` は `Area:: lab` にも frontmatter の `AREA: lab` にも当たります。文字の幅は揃えないので、全角の `ａｒｅａ` は別のキーです
 - `value` も、行の値と同じ規則で型が決まります。`123` は数、`true` は真偽値、`"123"` のように値全体を引用符で囲んだ値はテキストです
@@ -553,7 +553,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
 | `effectiveDue` | `string \| null` | 受け継ぎを含む締切。行に無ければ見出しやノートの締切（フィルタと並べ替えの `due` はこの値） |
 | `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（フィルタの `length` と同じ。`@2026-10-04` と `@>>2026-10-04` は 1440）。日付も締切も無いタスクは `null` |
-| `properties` | `Record<string, unknown>` | カスタムプロパティ。見出しやノートから受け継いだ値を含む。値は型に従う。型は行でも frontmatter でも、引用符のない YAML と同じ綴りで決まる。数は `number`（`0x1F` は 31）、真偽値（`true` `True` `TRUE` と、その false の3つ）は `boolean`、値なし（`- key::`、`null`、`~`、frontmatter の `key:`）は `null`、リスト（行の下の入れ子の項目、frontmatter のリスト）は項目ごとに同じ型の配列、ほかは `string`。`"123"` のように値全体を引用符で囲んだ値は、引用符を外した `string`。キーは、効いている値を書いた層の綴りで出す（frontmatter の `Area: desk` をタスクの `- AREA:: lab` が上書きすれば `AREA`） |
+| `properties` | `Record<string, unknown>` | カスタムプロパティ。見出しやノートから受け継いだ値を含む。値は型に従う。型は行でも frontmatter でも、引用符のない YAML と同じ綴りで決まる。数は `number`（`0x1F` は 31）、真偽値（`true` `True` `TRUE` と、その false の3つ）は `boolean`、値なし（`- key::`、`null`、`~`、frontmatter の `key:`）は `null`、リスト（行の下の入れ子の項目、frontmatter のリスト）は項目ごとに同じ型の配列、ほかは `string`。`"123"` のように値全体を引用符で囲んだ値は、引用符を外した `string`。キーは大文字と小文字を区別しないので、`Area` と `area` は1つのプロパティとして1つのキーで出る。キーの綴りは、効いている値を書いた層の綴り（frontmatter の `Area: desk` をタスクの `- AREA:: lab` が上書きすれば `AREA`）。タスクごとに綴りが違いうるので、キーは小文字にして照合するとよい。値の型の決まり方は [記法リファレンス](notation.md#値の型) |
 | `flow` | `string \| null` | `==>` に続くフローのコマンドを正規の形で1行にしたもの（例: `every tue,fri`、[コマンド](commands.md)）。子の `- ==>` 行も含む。無ければ `null` |
 
 ## DataviewJS 使用例
