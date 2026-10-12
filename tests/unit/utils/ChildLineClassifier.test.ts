@@ -94,6 +94,14 @@ describe('ChildLineClassifier', () => {
             expect(result.propertyKey).toBeNull();
         });
 
+        it('does not treat a key of space alone, or one holding a backquote, as property', () => {
+            for (const text of ['-  :: x', '- \t::', '- `k`:: v', '- 見出し直下のプロパティ行（`- tv-color:: `）でも']) {
+                const result = ChildLineClassifier.classify(text, 0);
+                expect(result.propertyKey, text).toBeNull();
+                expect(result.propertyValue, text).toBeNull();
+            }
+        });
+
         it('does NOT parse single-colon as property', () => {
             const result = ChildLineClassifier.classify('\t- 金額: 2000', 0);
             expect(result.propertyKey).toBeNull();
@@ -184,6 +192,11 @@ describe('ChildLineClassifier', () => {
             // Under a line with a value, or under a note: a note.
             expect(means(lines, 4)).toBe(false);
             expect(means(lines, 6)).toBe(false);
+        });
+
+        it('reads none from a line whose key the property line does not read, nor from an item under it', () => {
+            const lines = ['- [ ] task', '\t- `k`::', '\t\t- a', '\t-  ::', '\t\t- b'];
+            expect(lines.slice(1).map((_, i) => means(lines, i + 1))).toEqual([false, false, false, false]);
         });
 
         it('reads none from an item under a property line in code', () => {
