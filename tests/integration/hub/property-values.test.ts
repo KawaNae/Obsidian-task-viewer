@@ -198,14 +198,6 @@ describe('the hub writes a property as its block', () => {
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
     });
 
-    it('takes a list\'s line out with its items', () => {
-        openHub('親');
-        run(`rowOf('k').querySelector('.task-hub__prop-remove').click(); await sleep(600); return 'ok';`);
-        const lines = [...BLOCK];
-        lines.splice(3, 3);
-        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
-    });
-
     it('writes nothing over a key written twice, and says so at the form\'s end', () => {
         openHub('親');
         const said = run<string>(`

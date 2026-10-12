@@ -22,7 +22,8 @@ import { PropertyListField, type ListFocus } from './PropertyListField';
  * カスタムプロパティ行。
  * - own キー: value 編集可 + 行削除ボタン
  * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格
- * - リストの値: 項目ごとの欄（`PropertyListField`）。受け継いだリストは読むだけで、
+ * - リストの値: 項目ごとの欄（`PropertyListField`）。自分のリストには行削除ボタンを
+ *   出さず、最後の項目を消すと行も消える。受け継いだリストは読むだけで、
  *   「このタスクの値にする」で項目を写した下書きになり、最初の確定で書く
  * - 所見のあるキー: 編集できない行（`FieldGroupContext.locked`）
  *
@@ -291,7 +292,8 @@ export class PropertiesFieldGroup implements ClosingPart {
      * (`own`, or a `draft` made of the inherited ones, written by its first
      * edit) edited item by item, or the inherited items shown, with the
      * line they are written on to open and the row made its own from a copy
-     * of them (`PropertyListField`).
+     * of them (`PropertyListField`). An own list has no × that takes its
+     * whole line out; a draft's × throws the draft away.
      */
     private renderListRow(folded: string, key: string, items: readonly PropertyScalar[], kind: 'own' | 'draft' | 'inherited'): void {
         const task = this.ctx.getTask();
@@ -318,10 +320,10 @@ export class PropertiesFieldGroup implements ClosingPart {
         });
         this.lists.set(folded, field);
 
-        if (kind === 'own') {
-            this.removeButton(row, key, shut || locked, () => { this.remove(key); });
-            return;
-        }
+        // The row's own list has no × of its own: it would stand beside the
+        // items' ×s and look as theirs do. Its items taken out, the last
+        // takes the line out with it.
+        if (kind === 'own') return;
         if (kind === 'draft') {
             // The draft is not written yet: its × throws it away, and the inherited list shows again.
             this.removeButton(row, key, shut || locked, () => { this.drafts.delete(folded); });
