@@ -122,12 +122,15 @@ const NO_VALUE: PropertyValue = { type: 'null', spelling: '' };
  * A property line's value as frontmatter lines the frontmatter reads back
  * as the same type (`PropertyValues.fromYaml`): a number as spelled (every
  * number a line reads is one YAML reads), a boolean as the plugin writes a
- * new one (lowercase), a text without its quotes and quoted when YAML would
- * read it as something else, a list as a list of its items. The text comes
- * back as written but where the YAML type has its own spelling: `True` as
- * `true`, `"123"` as YAML quotes it.
+ * new one (lowercase), a text quoted on the line with its quotes as written
+ * (`"123"`, `'abc'`) and any other text quoted when YAML would read it as
+ * something else (`escapeYamlScalar`), a list as a list of its items. The
+ * text comes back as written but where the YAML type has its own spelling:
+ * `True` as `true`.
  *
- * No value goes as the text it is spelled (`""` for an empty line).
+ * No value, however the line spells it (`- k::`, `- k:: null`, `~`), goes
+ * as the frontmatter's key with no value (`key:`), which hides the value
+ * above it there as the line does here.
  */
 function propertyYaml(key: string, property: PropertyValue): string[] {
     const head = `${yamlKey(key)}:`;
@@ -136,7 +139,7 @@ function propertyYaml(key: string, property: PropertyValue): string[] {
             if (property.items.length === 0) return [`${head} []`];
             return [head, ...property.items.map(item => `  - ${scalarYaml(item)}`)];
         }
-        case 'null': return [`${head} ${FrontmatterLineEditor.escapeYamlScalar(property.spelling)}`];
+        case 'null': return [head];
         default: return [`${head} ${scalarYaml(property)}`];
     }
 }
@@ -145,8 +148,24 @@ function scalarYaml(scalar: PropertyScalar): string {
     switch (scalar.type) {
         case 'number': return scalar.spelling;
         case 'boolean': return String(scalar.boolean);
-        case 'text': return FrontmatterLineEditor.escapeYamlScalar(scalar.text);
+        case 'text': return quotedAsWritten(scalar) ?? FrontmatterLineEditor.escapeYamlScalar(scalar.text);
     }
+}
+
+/**
+ * A text the line quotes, as the line writes it, when YAML reads those
+ * quotes back as the same text: none inside but a single quote in double
+ * ones and a double quote in single ones, and no backslash in double ones
+ * (YAML reads escapes there, and a line reads none). Null for a text the
+ * line does not quote, or whose quotes YAML would read otherwise.
+ */
+function quotedAsWritten(scalar: Extract<PropertyScalar, { type: 'text' }>): string | null {
+    const { spelling, text } = scalar;
+    if (spelling === text) return null;
+    const quote = spelling[0];
+    if (quote === '"' && !/["\\]/.test(text)) return spelling;
+    if (quote === "'" && !text.includes("'")) return spelling;
+    return null;
 }
 
 /** A key as a YAML mapping key: plain when YAML reads it plain, else quoted. */
