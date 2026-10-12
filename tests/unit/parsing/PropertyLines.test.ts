@@ -198,6 +198,13 @@ describe('PropertyLines', () => {
             const read = PropertyLines.read(own, keys);
             expect(brief(read.findings)).toEqual([['unreadable-value', 1, 2, 'LINE']]);
         });
+
+        it('is found on a color CSS does not read as one, and the color above comes through', () => {
+            const own = PropertyLines.ofTask(Outline.read(['- [ ] t', '    - tv-color:: rde']), 0);
+            expect(brief(PropertyLines.read(own, DEFAULT_SCOPE_KEYS).findings)).toEqual([['unreadable-value', 1, 2, 'tv-color']]);
+            const all = tasks(['## S', '- tv-color:: red', '- [ ] a', '    - tv-color:: rde']);
+            expect(all.map(task => [task.color, task.cascadeContext?.color])).toEqual([[undefined, 'red']]);
+        });
     });
 
     describe('in a note', () => {
