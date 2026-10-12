@@ -228,9 +228,9 @@ Quick reference for locating the right layer when implementing a feature.
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the Properties view's color / line-style suggests and its color picker) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
-| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, `property`), the text a sort rule compares (`sortKey`) and each value in words for the references (`words`). The API's `leaf` (`list` and `today`) is its `children`. A flow's expression is not read through it: `start`, `end` and `due` in `at(due+7d)` are the row's own, since the value is written to the next instance's line and an inherited due would be written out onto it (`FlowPlanner`) |
+| **TaskValues** | `services/filter/TaskValues.ts` | What the filter and the sort compare for each property: the effective value, one table (`of`, `length`, and `property`: a custom property's value as read, absent when no layer writes the key), the text a sort rule compares (`sortKey`) and each value in words for the references (`words`). The API's `leaf` (`list` and `today`) is its `children`. A flow's expression is not read through it: `start`, `end` and `due` in `at(due+7d)` are the row's own, since the value is written to the next instance's line and an inherited due would be written out onto it (`FlowPlanner`) |
 | **FilterExpr** | `services/filter/FilterExpr.ts` | `compileFilter(state)`: the saved FilterState compiled into the tree the engine evaluates — groups, `not`, `ancestors` (some ancestor) and positive atoms. A negative operator is `not(positive)`; with `target: parent`, `not(ancestors(positive))`. An unfinished condition (no value chosen) is `ALWAYS`. Never saved |
-| **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Evaluates a compiled `FilterExpr` over the values `TaskValues` gives, in a required `FilterContext` (start hour, week start, task lookup, now) |
+| **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Evaluates a compiled `FilterExpr` over the values `TaskValues` gives, in a required `FilterContext` (start hour, week start, task lookup, now). A property condition is compared by `PropertyMatch` (「プロパティの条件」) |
 | **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). `parse(raw)` is the one reader of every saved or handed-in filter: it returns `{ state, issues }`, dropping a condition of an unknown property, an operator the property does not take, or a value of the wrong shape into `issues` (the API throws them, a view drops them with a notice), and dropping conditions on retired properties (`kind`) silently; a group left empty stays, and evaluates as true. `SortSerializer.parse` does the same for sorts |
 | **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing, over the values `TaskValues` gives; without rules, `DEFAULT_SORT_ORDER` (due, startDate, content) |
 | **FilterEdit** | `services/filter/FilterEdit.ts` | The filter menu's edits as functions that return a new tree (`updateConditionAt`, `replaceAt`, `appendTo`, `toggleLogic`, `withOperator`, ...), a node addressed by its path from the root (`NodePath`). `FilterState` and `SortState` are `readonly` values: no holder changes one in place, so none copies one to protect itself |
@@ -404,7 +404,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 値のないキー（`key:`、`key: null`）は、値が null のプロパティである。行の `- key::` と同じく上の層の値を隠す（「継承と値のない値」）。大文字と小文字だけが違うキーとの重複は、値がなくても重複として数える
     - 連想配列の値はプロパティにしない。リストは、スカラーの項目だけを項目にする。値なし、入れ子のリスト、連想配列の項目は読まない。テキストの項目は前後の空白を除き、空なら捨てる
     - 日付のキー（`tv-start` など）も同じ規則で読み、組み込みとして表示の文字から日付を読む。数（`tv-end: 630`）は日付として読めない値で、その層の値にならない
-- 表示は `display` が決める。テキストは引用符を外した中身、数、真偽値、値なしは書かれた綴り（`0x1F`、`True`）、リストは項目の表示を `, ` でつないだものである。カード、ハブ、メニュー、候補はこれを出し、フィルタはこの文字で比べる
+- 表示は `display` が決める。テキストは引用符を外した中身、数、真偽値、値なしは書かれた綴り（`0x1F`、`True`）、リストは項目の表示を `, ` でつないだものである。カード、ハブ、メニュー、候補はこれを出す。フィルタは型で比べ、この文字は `contains` が数と真偽値を探すときに使う（「プロパティの条件」）
 - 書き戻しは `spelling` を書くので、利用者の綴りは変わらない。ハブとプランナーは綴りで差を取る。書き戻しはまだリストを入れ子の項目で書かないので、リストの綴りは項目の綴りを `, ` でつないだもの（行は1つのテキストに読む）である
 - API は型どおりに出す。数は `number`、値なしは `null`、リストは項目ごとに同じ型の配列である。CLI の出力は、JSON の数で書けない数を YAML の綴りの文字列（`".inf"`）にする
 - `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
@@ -412,6 +412,23 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 
 組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みの値の読みは `readBuiltin`（`parsing/utils/BuiltinValues.ts`）の1か所にあり、値、値なし、読めない値のどれかを返す（「継承と値のない値」）。値は型によらず表示の文字（`display`）から読み、引用符で囲んだ `"red"` は `red` である。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。プラグインのキー（`tv-color` など）も、ほかのキーと同じく大文字と小文字を区別しない（「プロパティのキー」）。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` と設定のキーを探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
+
+### プロパティの条件
+
+フィルタの `property` の条件は、値を型に合わせて比べる。比べ方は `PropertyMatch`（`services/filter/PropertyMatch.ts`）の1か所にある。比べる値は `TaskValues.property` が出す受け継ぎを含む値で、キーは `PropertyKey` で大文字と小文字を区別せずに引く。
+
+- 条件の値も、行の値と同じく `fromText` で型を決める。`compileFilter` が条件を木に写すときに読み、原子（`propertyEquals`、`propertyContains`）が型の付いた値を持つ。引用符で囲んだ `"123"` はテキストとしての指定である
+- `equals`
+    - 数どうし、真偽値どうしは値で比べる（`1` と `1.0`、`True` と `true`）。`.nan` は `.nan` に等しい
+    - テキストは、引用符を外した中身を大文字と小文字を区別せずに比べる
+    - 引用符なしの数と真偽値は、その綴りのテキストにも当たる。`123` は数の 123 とテキストの `"123"` に当たり、`"123"` はテキストだけに当たる
+- `contains` は、表示の文字（`display`）を大文字と小文字を区別せずに探す。数と真偽値は書かれた綴りで探すので、`contains 1` は `10` にも `0x1F` にも当たる。引用符で囲んだ条件の値は、テキストだけを探す
+- リストは項目ごとに比べ、どれかの項目が当たれば当たる。空のリストは何にも当たらない
+- `isSet` は値があるかを問う（`PropertyMatch.isSet`）。値なし（null）は当たらず、`""` と空のリストは当たる。値なしは `equals` にも `contains` にも当たらない
+- 条件の値が値なしの綴り（空、`null`、`~`）なら、その綴りのテキストとして比べる。`equals ""` は空のテキストに当たり、値なしには当たらない
+- 否定の演算子は肯定の否定のまま組む（`FilterExpr`）。`isNotSet` は値なしとキーの無いタスクに当たり、`notContains` はどの項目にも含まれないタスク、値なしのタスク、キーの無いタスクに当たる
+- API と CLI の `property=key:value` は `contains` の条件の略記である（`QueryShorthand`）
+- フィルタメニューの値の候補（`FilterValueCollector.collectPropertyItemsForKey`）は、リストを項目ごとに出し、値なしを出さない。どの候補も、`equals` で選べば候補を出したタスクに当たる。ハブの値の候補（`collectPropertyValuesForKey`）は、各タスクの値の表示の文字をそのまま出す（リストは項目をつないだ1つの文字）
 
 ### Inline child line extraction
 

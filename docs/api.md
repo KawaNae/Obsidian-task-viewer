@@ -146,7 +146,7 @@ const result = await api.list({ date: '2026-03-15', startHour: 0 });
 | `to` | `string` | 窓の終わりの日。期間がこの日以前と重なるタスク |
 | `due` | `string` | 締切日 = 指定値 |
 | `leaf` | `boolean` | 子なしタスクのみ |
-| `property` | `string` | カスタムプロパティ（`key:value`） |
+| `property` | `string` | カスタムプロパティ（`key:value`）。値が `value` を含むタスク（条件の `contains`。下の「プロパティの値の比べ方」） |
 | `color` | `string \| string[]` | カード色 |
 | `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
@@ -167,7 +167,7 @@ const result = await api.list({ date: '2026-03-15', startHour: 0 });
 | `content` | `string` | コンテンツ部分一致 |
 | `due` | `string` | 締切日 = 指定値 |
 | `leaf` | `boolean` | 子なしタスクのみ |
-| `property` | `string` | カスタムプロパティ（`key:value`） |
+| `property` | `string` | カスタムプロパティ（`key:value`）。値が `value` を含むタスク（条件の `contains`。下の「プロパティの値の比べ方」） |
 | `color` | `string \| string[]` | カード色 |
 | `type` | `string \| string[]` | タスク notation（`taskviewer`, `tasks`, `dayplanner`） |
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
@@ -339,7 +339,7 @@ const result = await api.tasksForDateRange({
 | `content` | | `string` | コンテンツ部分一致 |
 | `due` | | `string` | 締切日 = 指定値 |
 | `leaf` | | `boolean` | 子タスクを持たないタスクのみ |
-| `property` | | `string` | カスタムプロパティ（`key:value`） |
+| `property` | | `string` | カスタムプロパティ（`key:value`。`list` の `property` と同じ） |
 | `color` | | `string \| string[]` | カード色 |
 | `type` | | `string \| string[]` | タスク notation |
 | `root` | | `boolean` | 親タスクを持たないタスクのみ |
@@ -376,7 +376,7 @@ const result = await api.categorizedTasksForDateRange({
 | `content` | | `string` | コンテンツ部分一致 |
 | `due` | | `string` | 締切日 = 指定値 |
 | `leaf` | | `boolean` | 子タスクを持たないタスクのみ |
-| `property` | | `string` | カスタムプロパティ（`key:value`） |
+| `property` | | `string` | カスタムプロパティ（`key:value`。`list` の `property` と同じ） |
 | `color` | | `string \| string[]` | カード色 |
 | `type` | | `string \| string[]` | タスク notation |
 | `root` | | `boolean` | 親タスクを持たないタスクのみ |
@@ -479,7 +479,7 @@ console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
 | `notation` | `includes`, `excludes` | `string[]`。`taskviewer`、`tasks`、`dayplanner` |
 | `parent` | `isSet`, `isNotSet` | なし |
 | `children` | `isSet`, `isNotSet` | なし。子タスクだけを数える |
-| `property` | `isSet`, `isNotSet`, `equals`, `contains`, `notContains` | `key` と `value`（`string`）。`equals` は完全一致、`contains` は大文字小文字を問わない |
+| `property` | `isSet`, `isNotSet`, `equals`, `contains`, `notContains` | `key` と `value`（`string`）。値の型に合わせて比べる（下の「プロパティの値の比べ方」） |
 
 日付のプリセットは `today`、`thisWeek`、`nextWeek`、`pastWeek`、`nextNDays`（`n` で日数）、`thisMonth`、`thisYear` です。
 
@@ -491,6 +491,21 @@ console.log(app.plugins.plugins['obsidian-task-viewer'].api.help())
 - 日時 `2026-10-04T10:00` は瞬間で、開始か終了かを問わず数で比べます。`@2026-10-04T09:00>10:00` は「終了 `before` 10:00」に当たらず、「`onOrBefore`」と「`equals`」に当たります。`@2026-10-04` は「開始 `before` `2026-10-04T10:00`」に当たります
 - `period` に日時を1つ書くと、その瞬間に期間がかかっているタスク（開始 ≤ 瞬間 < 終了）に当たります
 - 読み込んだ `YYYY-MM-DD HH:mm` は `YYYY-MM-DDTHH:mm` に直して保存します
+
+### プロパティの値の比べ方
+
+`property` の条件は、カスタムプロパティ（`key:: value` と frontmatter）を値の型に合わせて比べます。値は、見出しやノートから受け継いだものを含みます。
+
+- `key` は大文字と小文字を区別しません。`area` は `Area:: lab` にも frontmatter の `AREA: lab` にも当たります。文字の幅は揃えないので、全角の `ａｒｅａ` は別のキーです
+- `value` も、行の値と同じ規則で型が決まります。`123` は数、`true` は真偽値、`"123"` のように値全体を引用符で囲んだ値はテキストです
+- 数どうし、真偽値どうしは値で比べます。`equals 1` は `1` にも `1.0` にも当たり、`equals true` は `True` にも当たります
+- テキストは、引用符を外し、大文字と小文字を区別せずに比べます。`equals lab` は `Lab` に当たり、`contains AB` も `Lab` に当たります
+- 引用符なしの数や真偽値は、その綴りのテキストにも当たります。`equals 123` は数の `123` とテキストの `"123"` の両方に当たり、`equals "123"` はテキストの `"123"` だけに当たります
+- `contains` は、数と真偽値を書かれた綴りで探します。`contains 1` は `10` にも `0x1F` にも当たります。引用符で囲んだ `value` はテキストだけを探します
+- リストは項目ごとに比べます。`equals` と `contains` は、どれかの項目が当たれば当たります。`notContains` は、どの項目にも含まれないときに当たります。`contains a, b` は、項目 `a` と `b` のリストには当たりません
+- `isSet` は、プロパティに値があるタスクに当たります。空のテキスト（`""`）と空のリスト（`[]`）は値があるものとして扱います
+- `isNotSet` は、値のないプロパティ（`- key::`、`null`、`~`、frontmatter の `key:`）のタスクと、どの層にもキーが無いタスクに当たります。値のないプロパティは `equals` にも `contains` にも当たりません
+- `value` の空、`null`、`~` は、その綴りのテキストとして比べます。`equals ""` は空のテキストに当たり、値のないプロパティには当たりません。値のないプロパティは `isNotSet` で探します
 
 ### 否定と `target: parent`
 
@@ -538,7 +553,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `effectiveEndTime` | `string \| null` | 期間の終了の瞬間の時刻（`@2026-10-04` は `05:00`。期間は終了の瞬間を含まない） |
 | `effectiveDue` | `string \| null` | 受け継ぎを含む締切。行に無ければ見出しやノートの締切（フィルタと並べ替えの `due` はこの値） |
 | `durationMinutes` | `number \| null` | 所要時間（分）。期間の開始から終了まで（フィルタの `length` と同じ。`@2026-10-04` と `@>>2026-10-04` は 1440）。日付も締切も無いタスクは `null` |
-| `properties` | `Record<string, unknown>` | カスタムプロパティ。値は型に従う。型は行でも frontmatter でも、引用符のない YAML と同じ綴りで決まる。数は `number`（`0x1F` は 31）、真偽値（`true` `True` `TRUE` と、その false の3つ）は `boolean`、値なし（`- key::`、`null`、`~`）は `null`、frontmatter のリストは項目ごとに同じ型の配列、ほかは `string`。`"123"` のように値全体を引用符で囲んだ値は、引用符を外した `string` |
+| `properties` | `Record<string, unknown>` | カスタムプロパティ。見出しやノートから受け継いだ値を含む。値は型に従う。型は行でも frontmatter でも、引用符のない YAML と同じ綴りで決まる。数は `number`（`0x1F` は 31）、真偽値（`true` `True` `TRUE` と、その false の3つ）は `boolean`、値なし（`- key::`、`null`、`~`、frontmatter の `key:`）は `null`、リスト（行の下の入れ子の項目、frontmatter のリスト）は項目ごとに同じ型の配列、ほかは `string`。`"123"` のように値全体を引用符で囲んだ値は、引用符を外した `string`。キーは、効いている値を書いた層の綴りで出す（frontmatter の `Area: desk` をタスクの `- AREA:: lab` が上書きすれば `AREA`） |
 | `flow` | `string \| null` | `==>` に続くフローのコマンドを正規の形で1行にしたもの（例: `every tue,fri`、[コマンド](commands.md)）。子の `- ==>` 行も含む。無ければ `null` |
 
 ## DataviewJS 使用例
