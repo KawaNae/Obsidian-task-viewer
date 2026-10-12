@@ -1,3 +1,5 @@
+import { PropertyKey } from './PropertyKey';
+
 /**
  * What a tag is, as Obsidian has it: the one rule the plugin reads tags by
  * (`scanNotation`, `TagExtractor`), takes them from a field by (`TagInput`)
@@ -38,13 +40,6 @@ const DIGITS_ONLY = /^\d+$/;
 /** Why a word is no tag: the characters that end one, each once in the order they come, or digits alone. */
 export type TagWordFault = { kind: 'chars'; chars: string[] } | { kind: 'digitsOnly' };
 
-/**
- * The frontmatter key Obsidian reads tags from (`parseFrontMatterTags`):
- * `tags`, whatever its case. Obsidian's own key, read as Obsidian reads it;
- * the plugin's keys (`tv-color`, the dates) are its own and are read as the
- * settings spell them.
- */
-const FRONTMATTER_TAGS_KEY = /^tags$/i;
 
 export const TagRule = {
     /** Whether `word` (without `#`) is the word of one tag. */
@@ -58,9 +53,14 @@ export const TagRule = {
         return { kind: 'chars', chars: [...new Set(word.match(NOT_TAG_CHAR) ?? [])] };
     },
 
-    /** Whether a frontmatter key is the one Obsidian reads tags from: `tags`, `Tags`, `TAGS`. */
+    /**
+     * Whether a frontmatter key is one Obsidian reads tags from
+     * (`parseFrontMatterTags`): `tags`, `Tags`, `TAGS`, a key's case aside
+     * as every property key's is (`PropertyKey`). The full-width `ｔａｇｓ` is
+     * none.
+     */
     isFrontmatterKey(key: string): boolean {
-        return FRONTMATTER_TAGS_KEY.test(key);
+        return PropertyKey.same(key, 'tags');
     },
 
     /**

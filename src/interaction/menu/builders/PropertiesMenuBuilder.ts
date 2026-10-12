@@ -241,16 +241,14 @@ export class PropertiesMenuBuilder {
     }
 
     private addCustomPropertiesItems(menu: Menu, task: Task, openModal: (focusField: TaskHubFocusField) => void): void {
-        const properties = getEffectiveProperties(task);
-        const keys = Object.keys(properties);
-        if (keys.length === 0) return;
+        const properties = Object.values(getEffectiveProperties(task));
+        if (properties.length === 0) return;
 
         menu.addSeparator();
-        for (const key of keys) {
-            const prop = properties[key];
+        for (const { key, value } of properties) {
             menu.addItem((item) => {
-                item.setTitle(`${key}: ${PropertyValues.display(prop)}`)
-                    .setIcon(this.getPropertyTypeIcon(prop.type))
+                item.setTitle(`${key}: ${PropertyValues.display(value)}`)
+                    .setIcon(this.getPropertyTypeIcon(value.type))
                     .onClick(() => openModal(`property:${key}`));
             });
         }

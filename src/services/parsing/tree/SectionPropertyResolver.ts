@@ -2,6 +2,7 @@ import { SCALAR_FIELDS, type ResolvedSources, type ScalarField, type SectionNode
 import type { ScopeKeys } from '../../../types';
 import { BuiltinPropertyExtractor, fieldKey, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { TagExtractor } from '../utils/TagExtractor';
+import { PropertyKey } from '../utils/PropertyKey';
 import { PropertyLines } from '../utils/PropertyLines';
 
 /** What one layer hands the sections below it: its resolved values, and where each came from. */
@@ -57,7 +58,7 @@ export class SectionPropertyResolver {
         // What the section's own property lines say (a key written twice says nothing).
         const { values: raw, lineOf } = PropertyLines.read(section.properties, keys);
         const own = BuiltinPropertyExtractor.extract(raw, keys);
-        const here = (key: string): ValueSource => ({ kind: 'section', line: lineOf.get(key)!, heading: section.heading });
+        const here = (key: string): ValueSource => ({ kind: 'section', line: lineOf.get(PropertyKey.fold(key))!, heading: section.heading });
 
         // 親プロパティ + 自身のプロパティを child-wins マージ。
         // Partial merge: date と time は独立に継承（別の field）。
@@ -74,7 +75,8 @@ export class SectionPropertyResolver {
         values.tags = own.tags ? TagExtractor.merge(parent.values.tags ?? [], own.tags) : parent.values.tags;
         const tags = own.tags ? [...parent.sources.tags, { from: here('tags'), tags: own.tags }] : parent.sources.tags;
 
-        // custom: キー単位の child-wins
+        // custom: キー単位の child-wins。キーは大文字と小文字を区別しない
+        // (`PropertyKey`)。近い層の値が、その層の綴りのキーとともに勝つ
         let properties = parent.sources.properties;
         const ownKeys = Object.keys(own.properties);
         if (ownKeys.length > 0) {

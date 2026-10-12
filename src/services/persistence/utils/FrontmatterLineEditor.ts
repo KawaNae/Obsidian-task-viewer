@@ -1,4 +1,5 @@
 import { Outline } from '../../parsing/utils/Outline';
+import { PropertyKey } from '../../parsing/utils/PropertyKey';
 import type { LineDraft } from '../FileLines';
 
 /**
@@ -23,8 +24,8 @@ export class FrontmatterLineEditor {
     }
 
     /**
-     * Whether the frontmatter of `lines` has the top-level key `key`, as a
-     * write reads it ({@link findKeyRange}): the one answer both a send's
+     * Whether the frontmatter of `lines` has the top-level key `key`, its
+     * case aside, as a write reads it ({@link findKeyRange}): the one answer both a send's
      * write and its dialog give, the one to add only the keys a note has
      * none of, the other to say which it will not write.
      */
@@ -36,13 +37,14 @@ export class FrontmatterLineEditor {
      * Where the value of the top-level key `key` stands on `line`, as a key
      * line of {@link findKeyRange} reads it: from past the key, its colon and
      * the spaces after them, to before a comment (` # …`) and the spaces
-     * before it or the line's end. Null when the line is no line of `key`.
+     * before it or the line's end. Null when the line is no line of `key`,
+     * its case aside (`PropertyKey`): `TV-COLOR:` is a line of `tv-color`.
      * What an edit of the value alone replaces: the key and the separator
      * stay as they are spelled, and so does a comment.
      */
     static valueRange(line: string, key: string): { start: number; end: number } | null {
         const head = line.match(/^([^:\s]+)\s*:[ \t]*/);
-        if (!head || head[1] !== key) return null;
+        if (!head || !PropertyKey.same(head[1], key)) return null;
         const start = head[0].length;
         const rest = line.slice(start);
         const comment = rest.search(/(^|\s)#/);
@@ -68,12 +70,13 @@ export class FrontmatterLineEditor {
     /**
      * frontmatter 内でトップレベルキーの行範囲 [start, end) を返す。
      * 継続行（配列項目・ブロックスカラー等）も含む。
+     * キーは大文字と小文字を区別せずに探し（`PropertyKey`）、最初の行を返す。
      * キーが存在しない場合は null。
      */
     static findKeyRange(lines: readonly string[], fmEnd: number, key: string): [number, number] | null {
         for (let i = 1; i < fmEnd; i++) {
             const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
-            if (keyMatch && keyMatch[1] === key) {
+            if (keyMatch && PropertyKey.same(keyMatch[1], key)) {
                 // キー行を発見。継続行の終端を探す
                 let end = i + 1;
                 while (end < fmEnd) {
@@ -91,7 +94,8 @@ export class FrontmatterLineEditor {
      * 指定キーのみを更新・削除・挿入する。他の行は一切変更しない。
      *
      * - value: null → キー削除（継続行含む）
-     * - value: string → キー更新（既存なら置換、なければ閉じ --- の直前に挿入）
+     * - value: string → キー更新（既存なら置換、なければ閉じ --- の直前に挿入）。
+     *   既存の行は大文字と小文字を区別せずに探し、置換してもその行のキーの綴りを保つ
      * - value: string[] → キー行 + 継続行の完全な生行列（マルチライン値。
      *   先頭要素が `key:` 行であること）。既存範囲を丸ごと差し替え / 挿入
      *
@@ -113,9 +117,11 @@ export class FrontmatterLineEditor {
                     currentFmEnd -= count;
                 }
             } else {
+                // An existing line keeps its key as written (`TV-COLOR:` stays).
+                const written = range ? result[range[0]].match(/^([^:\s]+)\s*:/)![1] : key;
                 const newLines = Array.isArray(value)
                     ? value
-                    : [value === '' ? `${key}:` : `${key}: ${value}`];
+                    : [value === '' ? `${written}:` : `${written}: ${value}`];
                 if (range) {
                     // 更新: キー行 + 継続行を新しい行列に置換
                     const count = range[1] - range[0];

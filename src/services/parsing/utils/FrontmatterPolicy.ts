@@ -1,4 +1,5 @@
 import type { ScopeKeys } from '../../../types';
+import { PropertyKey } from './PropertyKey';
 
 /**
  * Keys the file task was written under before frontmatter stopped making
@@ -9,12 +10,15 @@ const LEGACY_FILE_TASK_KEYS: ReadonlyArray<string> = ['tv-status', 'tv-content',
 
 /**
  * The reserved keys that are not scope keys: the file task's legacy keys,
- * `tags` and `position`. A scope key cannot be one of them either.
+ * `tags` and `position`, folded (`PropertyKey.fold`). A scope key cannot be
+ * one of them either, whatever its case.
  */
 export const KEYS_NOT_SCOPE: ReadonlySet<string> = new Set<string>([...LEGACY_FILE_TASK_KEYS, 'tags', 'position']);
 
 /**
- * Keys that cannot be a custom property, whatever layer they arrive on.
+ * Keys that cannot be a custom property, whatever layer they arrive on,
+ * folded (`PropertyKey.fold`): a key is asked folded, so `TV-COLOR` and
+ * `Tags` are reserved as `tv-color` and `tags` are.
  *
  * Every configured scope key, the file task's legacy keys, `tags` (its own
  * field) and `position` (Obsidian writes it into the metadata cache). Said once
@@ -23,5 +27,5 @@ export const KEYS_NOT_SCOPE: ReadonlySet<string> = new Set<string>([...LEGACY_FI
  * child-line extractor listed only the keys it happened to handle.
  */
 export function reservedPropertyKeys(fmKeys: ScopeKeys): ReadonlySet<string> {
-    return new Set<string>([...Object.values(fmKeys), ...KEYS_NOT_SCOPE]);
+    return new Set<string>([...Object.values(fmKeys).map(PropertyKey.fold), ...KEYS_NOT_SCOPE]);
 }

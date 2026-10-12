@@ -1,4 +1,4 @@
-import type { Task, PropertyValue } from '../../types';
+import type { Properties, Task } from '../../types';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 
 /**
@@ -38,8 +38,11 @@ export function getEffectiveTags(t: Task): string[] {
     return TagExtractor.merge(cascadeTags, t.tags);
 }
 
-/** Merged custom properties: section cascade overlaid by own (child-wins per key). */
-export function getEffectiveProperties(t: Task): Record<string, PropertyValue> {
+/**
+ * Merged custom properties: section cascade overlaid by own (child-wins per
+ * key, its case aside). Each keeps the key as the layer that won writes it.
+ */
+export function getEffectiveProperties(t: Task): Properties {
     const cascadeProps = t.cascadeContext?.properties;
     if (!cascadeProps || Object.keys(cascadeProps).length === 0) return t.properties;
     return { ...cascadeProps, ...t.properties };

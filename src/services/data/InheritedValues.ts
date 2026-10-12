@@ -3,6 +3,7 @@ import type { PropertyScalar, PropertyValue, TaskViewerSettings } from '../../ty
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { ValueSource } from '../parsing/tree/Sections';
 import { NoteSections } from '../parsing/tree/NoteSections';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { PropertyValues } from '../parsing/utils/PropertyValues';
 import type { PropertyLine } from '../parsing/utils/PropertyLines';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
@@ -63,7 +64,7 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     for (const node of NoteSections.all(read.sections)) for (const line of node.properties.lines) propertyLines.set(line.line, line);
     const out: InheritedValue[] = [];
     const push = (key: string, yaml: readonly string[], from: readonly ValueSource[]) => {
-        out.push({ key, yaml, from, obsidian: OBSIDIAN_KEYS.has(key) });
+        out.push({ key, yaml, from, obsidian: OBSIDIAN_KEYS.has(PropertyKey.fold(key)) });
     };
     /**
      * A key one layer set, said as that layer said it: a property line's
@@ -98,8 +99,9 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
         push('tags', ['tags:', ...section.resolvedTags.map(tag => `  - ${FrontmatterLineEditor.escapeYamlScalar(tag)}`)], tags.map(layer => layer.from));
     }
 
-    for (const [key, value] of Object.entries(section.resolvedProperties)) {
-        const from = properties[key];
+    // Each key as the layer that won it writes it: the frontmatter's line is found by it.
+    for (const [folded, { key, value }] of Object.entries(section.resolvedProperties)) {
+        const from = properties[folded];
         if (from) asWritten(key, from, value);
     }
     return out;

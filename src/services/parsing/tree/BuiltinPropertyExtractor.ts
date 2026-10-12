@@ -1,10 +1,11 @@
 import { DateUtils } from '../../../utils/DateUtils';
-import type { ScopeKeys, PropertyValue } from '../../../types';
+import type { Properties, ScopeKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TagRule } from '../utils/TagRule';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
+import { PropertyKey } from '../utils/PropertyKey';
 import { PropertyValues } from '../utils/PropertyValues';
 import { reservedPropertyKeys } from '../utils/FrontmatterPolicy';
 import type { ScalarField } from './Sections';
@@ -19,7 +20,8 @@ export interface ExtractedProperties {
     endDate?: string;
     endTime?: string;
     due?: string;
-    properties: Record<string, PropertyValue>;
+    /** Custom properties by key folded, each with its key as this layer writes it. */
+    properties: Properties;
 }
 
 /**
@@ -48,7 +50,8 @@ const BUILTINS: readonly Builtin[] = ['color', 'linestyle', 'mask', 'tags', 'sta
  * and the rest as custom properties: the frontmatter's
  * ({@link BuiltinPropertyExtractor.fromFrontmatter}), a section's and a
  * task's alike, so a key means one thing on every layer. Which key is which
- * built-in is {@link fieldKey}'s table.
+ * built-in is {@link fieldKey}'s table, a key's case aside (`PropertyKey`):
+ * `TV-COLOR::` is the color, `Tags::` the tags.
  *
  * A built-in reads the value's text as shown (`PropertyValues.display`),
  * whatever its type: a quoted `"red"` is `red`, no value is none, and a
@@ -63,46 +66,49 @@ const BUILTINS: readonly Builtin[] = ['color', 'linestyle', 'mask', 'tags', 'sta
 export class BuiltinPropertyExtractor {
     /**
      * The built-ins and custom properties of a note's frontmatter, as its
-     * YAML gave it. Its tags are Obsidian's (`TagExtractor.fromFrontmatter`):
-     * the key `tags` whatever its case, and of its items those YAML read as
-     * text (`tags: [true, a]` holds `a`), which the values made text no
-     * longer tell apart. Every key Obsidian could read tags from is the tags'
-     * and no custom property, as `tags` is on any layer.
+     * YAML gave it. A key written twice, its case aside (`Area` and
+     * `area`), is read on neither (`PropertyValues.fromFrontmatter`). Its
+     * tags are Obsidian's (`TagExtractor.fromFrontmatter`): the first key
+     * that is `tags` whatever its case, `Tags` beside it or not, and of its
+     * items those YAML read as text (`tags: [true, a]` holds `a`), which the
+     * values made text no longer tell apart. Every key Obsidian could read
+     * tags from is the tags' and no custom property, as `tags` is on any
+     * layer.
      */
     static fromFrontmatter(
         frontmatter: Record<string, unknown> | undefined,
         keys: ScopeKeys
     ): ExtractedProperties {
         const values = PropertyValues.fromFrontmatter(frontmatter);
-        for (const key of Object.keys(values)) if (TagRule.isFrontmatterKey(key)) delete values[key];
+        for (const [folded, { key }] of Object.entries(values)) if (TagRule.isFrontmatterKey(key)) delete values[folded];
         const result = this.extract(values, keys);
         const tags = TagExtractor.fromFrontmatter(frontmatter);
         if (tags.length > 0) result.tags = tags;
         return result;
     }
 
-    /** The built-ins and custom properties of a property block's lines (a section's, a task's). */
+    /** The built-ins and custom properties of one layer's properties (a section's, a task's), by key folded. */
     static extract(
-        rawProperties: Record<string, PropertyValue>,
+        rawProperties: Properties,
         keys: ScopeKeys
     ): ExtractedProperties {
         const result: ExtractedProperties = { properties: {} };
         const reserved = reservedPropertyKeys(keys);
         const builtinOf = new Map<string, Builtin>();
         for (const field of BUILTINS) {
-            const key = fieldKey(field, keys);
+            const key = PropertyKey.fold(fieldKey(field, keys));
             if (!builtinOf.has(key)) builtinOf.set(key, field);
         }
 
-        for (const [key, pv] of Object.entries(rawProperties)) {
+        for (const [key, property] of Object.entries(rawProperties)) {
             const field = builtinOf.get(key);
             if (field) {
-                this.readBuiltin(field, pv, result);
+                this.readBuiltin(field, property.value, result);
             } else if (!reserved.has(key)) {
                 // A reserved key with no field (tv-ignore, the file task's
                 // legacy tv-content / tv-status / tv-timer-target-id, and
                 // Obsidian's `position`) is not a custom property.
-                result.properties[key] = pv;
+                result.properties[key] = property;
             }
         }
 

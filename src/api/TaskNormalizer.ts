@@ -48,8 +48,9 @@ const FIELD_EXTRACTORS: { [K in keyof NormalizedTask]: (task: DisplayTask, env: 
     durationMinutes:    t => computeDurationMinutes(t),
     properties:         t => {
         const result: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(getEffectiveProperties(t))) {
-            result[k] = toNativeValue(v);
+        // Each key as the layer whose value it is writes it.
+        for (const { key, value } of Object.values(getEffectiveProperties(t))) {
+            result[key] = toNativeValue(value);
         }
         return result;
     },

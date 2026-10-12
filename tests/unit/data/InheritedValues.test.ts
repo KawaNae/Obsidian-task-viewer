@@ -6,6 +6,7 @@ import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask, getEffectiveProperties, getEffectiveTags,
 } from '../../../src/services/data/EffectiveProperties';
 import { DEFAULT_SETTINGS, type PropertyValue, type Task } from '../../../src/types';
+import { valuesOf } from '../helpers/properties';
 
 const byKey = (values: InheritedValue[]) => Object.fromEntries(values.map(v => [v.key, v]));
 const rowOf = (lines: string[], text: string) => lines.findIndex(line => line.includes(text));
@@ -185,8 +186,8 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
             linestyle: getEffectiveLinestyle(task),
             mask: getEffectiveMask(task),
             tags: getEffectiveTags(task),
-            properties: Object.fromEntries(Object.entries(getEffectiveProperties(task))
-                .map(([key, property]) => [key, { type: property.type, means: meaning(property) }])),
+            properties: Object.fromEntries(Object.values(getEffectiveProperties(task))
+                .map(({ key, value }) => [key, { type: value.type, means: meaning(value) }])),
         };
     }
 
@@ -261,8 +262,8 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
 
     it('型を保ち、YAML に型の綴りがない形は文字もそのまま', () => {
         const { before, after } = send(SOURCE, rowOf(SOURCE, 'parent'));
-        const was = getEffectiveProperties(before);
-        const is = getEffectiveProperties(after);
+        const was = valuesOf(getEffectiveProperties(before));
+        const is = valuesOf(getEffectiveProperties(after));
         for (const key of Object.keys(was)) expect(is[key]?.type, key).toBe(was[key].type);
         for (const key of ['priority', 'memo', 'area', 'pair', 'quoted', 'link', 'refs', 'day', 'word', 'links', 'owner']) {
             expect(is[key], key).toEqual(was[key]);

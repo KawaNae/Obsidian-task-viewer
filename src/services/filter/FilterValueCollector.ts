@@ -1,4 +1,5 @@
 import type { Task } from '../../types';
+import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { PropertyValues } from '../parsing/utils/PropertyValues';
 import { getTaskNotation } from './parserTaxonomy';
 import { TagRule } from '../parsing/utils/TagRule';
@@ -80,22 +81,34 @@ export class FilterValueCollector {
         return Array.from(set).sort();
     }
 
+    /**
+     * The property keys of the tasks, one per property whatever its case
+     * (`PropertyKey`), spelt as the tasks most often show it, and as first
+     * met on a tie: the tags' choice ({@link collectTags}).
+     */
     static collectPropertyKeys(tasks: Task[]): string[] {
-        const set = new Set<string>();
+        const counts = new Map<string, number>();
         for (const task of tasks) {
-            for (const key of Object.keys(getEffectiveProperties(task))) {
-                set.add(key);
+            for (const { key } of Object.values(getEffectiveProperties(task))) {
+                counts.set(key, (counts.get(key) ?? 0) + 1);
             }
         }
-        return Array.from(set).sort();
+        const chosen = new Map<string, { key: string; most: number }>();
+        for (const [key, count] of counts) {
+            const folded = PropertyKey.fold(key);
+            const known = chosen.get(folded);
+            if (!known || count > known.most) chosen.set(folded, { key, most: count });
+        }
+        return Array.from(chosen.values(), c => c.key).sort();
     }
 
+    /** The values the tasks show for the property `key`, its case aside. */
     static collectPropertyValuesForKey(tasks: Task[], key: string): string[] {
         if (!key) return [];
         const set = new Set<string>();
         for (const task of tasks) {
-            const pv = getEffectiveProperties(task)[key];
-            const v = pv ? PropertyValues.display(pv) : '';
+            const property = PropertyKey.get(getEffectiveProperties(task), key);
+            const v = property ? PropertyValues.display(property.value) : '';
             if (v !== '') set.add(v);
         }
         return Array.from(set).sort();

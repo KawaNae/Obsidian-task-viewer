@@ -7,6 +7,7 @@ import { COLOR_VALUES, LINE_STYLE_VALUES } from './ScopeValues';
 import { normalizeColor, cssColorToHex } from '../utils/ColorUtils';
 import { fileOfElement } from '../utils/ObsidianView';
 import { createNativePicker } from '../views/sharedUI/NativePicker';
+import { PropertyKey } from '../services/parsing/utils/PropertyKey';
 
 export interface AttachmentContext {
     app: App;
@@ -96,8 +97,9 @@ export class WindowAttachment {
 
         keyInputs.forEach((keyInput) => {
             const input = keyInput as HTMLInputElement;
-            const isColorKey = input.value === colorKey;
-            const isLineStyleKey = input.value === linestyleKey;
+            // A key is the scope key its case aside (`PropertyKey`): `TV-COLOR` is the color.
+            const isColorKey = PropertyKey.same(input.value, colorKey);
+            const isLineStyleKey = PropertyKey.same(input.value, linestyleKey);
             if (!isColorKey && !isLineStyleKey) return;
 
             const propertyContainer = input.closest('.metadata-property');
@@ -195,7 +197,8 @@ export class WindowAttachment {
                 if (!written) {
                     // 書けなかった。表示を先に変えていたので、ファイルの値へ戻す。
                     // 理由は書き込みの層が通知済み。
-                    const onFile = this.ctx.app.metadataCache.getFileCache(file)?.frontmatter?.[colorKey];
+                    const frontmatter = this.ctx.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+                    const onFile = PropertyKey.ofMapping(frontmatter).get(PropertyKey.fold(colorKey))?.value;
                     const now = shown();
                     if (now) now.textContent = typeof onFile === 'string' ? onFile : '';
                 }

@@ -4,6 +4,7 @@ import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, type DisplayTask } from '../../../src/types';
 import { getEffectiveProperties } from '../../../src/services/data/EffectiveProperties';
 import { TaskValues } from '../../../src/services/filter/TaskValues';
+import { valuesOf } from '../helpers/properties';
 
 const read = (lines: string[]) => FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('n.md'));
 const task = (lines: string[]) => read(lines).tasks[0];
@@ -11,9 +12,9 @@ const task = (lines: string[]) => read(lines).tasks[0];
 /** A note's properties as the index reads them, across the layers. */
 describe('property values in a note', () => {
     it('reads a line\'s true as a boolean, as the frontmatter does', () => {
-        expect(task(['- [ ] t', '    - f:: true']).properties!.f).toEqual({ type: 'boolean', boolean: true, spelling: 'true' });
-        expect(task(['- [ ] t', '    - f:: True']).properties!.f).toEqual({ type: 'boolean', boolean: true, spelling: 'True' });
-        expect(task(['- [ ] t', '    - f:: yes']).properties!.f.type).toBe('text');
+        expect(task(['- [ ] t', '    - f:: true']).properties!.f.value).toEqual({ type: 'boolean', boolean: true, spelling: 'true' });
+        expect(task(['- [ ] t', '    - f:: True']).properties!.f.value).toEqual({ type: 'boolean', boolean: true, spelling: 'True' });
+        expect(task(['- [ ] t', '    - f:: yes']).properties!.f.value.type).toBe('text');
     });
 
     it('ignores a note only for tv-ignore\'s YAML boolean true', () => {
@@ -32,12 +33,12 @@ describe('property values in a note', () => {
     });
 
     it('reads a property line under any list bullet, `properties::` a property of its own with its items a list', () => {
-        expect(task(['- [ ] t', '    * f:: x']).properties).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
-        expect(task(['- [ ] t', '    1. f:: x']).properties).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
+        expect(valuesOf(task(['- [ ] t', '    * f:: x']).properties)).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
+        expect(valuesOf(task(['- [ ] t', '    1. f:: x']).properties)).toEqual({ f: { type: 'text', text: 'x', spelling: 'x' } });
         expect(task(['* tv-color:: red', '- [ ] t']).cascadeContext?.color).toBe('red');
         const grouped = task(['+ properties::', '    - tv-color:: red', '- [ ] t']);
         expect(grouped.cascadeContext?.color).toBeUndefined();
-        expect(grouped.cascadeContext?.properties).toEqual({
+        expect(valuesOf(grouped.cascadeContext?.properties)).toEqual({
             properties: { type: 'list', items: [{ type: 'text', text: 'tv-color:: red', spelling: 'tv-color:: red' }] },
         });
     });

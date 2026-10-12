@@ -1,5 +1,5 @@
 import { DateUtils } from '../../utils/DateUtils';
-import type { PropertyValue, Task } from '../../types';
+import type { Properties, Task } from '../../types';
 import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
 
 /**
@@ -51,12 +51,12 @@ export class TaskUpdateBuilder {
     }
 
     /** own custom properties 全体の望ましい姿を渡す（per-key diff は planner が行う） */
-    static customProperties(task: Task, props: Record<string, PropertyValue>): Partial<Task> | null {
+    static customProperties(task: Task, props: Properties): Partial<Task> | null {
         const prev = task.properties ?? {};
         const prevKeys = Object.keys(prev);
         const nextKeys = Object.keys(props);
         const same = prevKeys.length === nextKeys.length
-            && nextKeys.every(k => k in prev && PropertyValues.spelling(prev[k]) === PropertyValues.spelling(props[k]));
+            && nextKeys.every(k => k in prev && PropertyValues.spelling(prev[k].value) === PropertyValues.spelling(props[k].value));
         return same ? null : { properties: props };
     }
 }

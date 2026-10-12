@@ -1,4 +1,4 @@
-import type { PropertyValue } from '../../../types';
+import type { Properties } from '../../../types';
 import type { OutlineHeading } from '../utils/Outline';
 import type { OwnPropertyLines } from '../utils/PropertyLines';
 
@@ -21,8 +21,8 @@ export interface SectionNode {
      * below its heading when there are none.
      */
     head: number;
-    /** カスケード解決済みプロパティ（SectionPropertyResolver が設定） */
-    resolvedProperties: Record<string, PropertyValue>;
+    /** カスケード解決済みプロパティ（SectionPropertyResolver が設定）。キーは折りたたんだ形、綴りは値を書いた層のもの */
+    resolvedProperties: Properties;
     resolvedColor?: string;
     resolvedLinestyle?: string;
     resolvedMask?: string;
@@ -72,7 +72,7 @@ export interface ResolvedSources {
     fields: Readonly<Partial<Record<ScalarField, ValueSource>>>;
     /** Every layer that adds tags to the union, from the top down, with the tags it adds. */
     tags: readonly TagLayer[];
-    /** Per custom key, the layer whose value won. */
+    /** Per custom key, folded (`PropertyKey.fold`), the layer whose value won. */
     properties: Readonly<Record<string, ValueSource>>;
 }
 

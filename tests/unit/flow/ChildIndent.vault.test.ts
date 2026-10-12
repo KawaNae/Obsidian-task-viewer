@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
+import { byKey } from '../helpers/properties';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
@@ -71,11 +72,11 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit, confi
         const { contents, session } = await open(NOTE, config);
 
         await session.ops.updateTask(taskWorded(session, 'T').id,
-            { properties: { memo: { type: 'text', text: 'new', spelling: 'new' } } } as never);
+            { properties: byKey({ memo: { type: 'text', text: 'new', spelling: 'new' } }) } as never);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toContain(`${unit}- memo:: new`);
-        expect(taskWorded(session, 'T').properties?.memo).toMatchObject({ spelling: 'new' });
+        expect(taskWorded(session, 'T').properties?.memo?.value).toMatchObject({ spelling: 'new' });
     });
 
     it('lends no indentation to the next instance\'s command, which keeps the series going', async () => {

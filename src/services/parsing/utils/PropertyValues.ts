@@ -1,4 +1,5 @@
-import type { PropertyScalar, PropertyValue } from '../../../types';
+import type { Properties, PropertyScalar, PropertyValue } from '../../../types';
+import { PropertyKey } from './PropertyKey';
 
 /**
  * The spellings that are not text, as YAML 1.2's core schema reads a plain
@@ -82,17 +83,19 @@ export const PropertyValues = {
     },
 
     /**
-     * The frontmatter as property values, key by key, before any key is told
-     * apart as a built-in (`BuiltinPropertyExtractor` does that, for every
-     * layer). A key with no value (`key:`, `key: null`) is left out, as is
-     * one whose value no property holds (`fromYaml`).
+     * The frontmatter as property values, by key folded
+     * (`PropertyKey.ofMapping`), before any key is told apart as a built-in
+     * (`BuiltinPropertyExtractor` does that, for every layer). A key written
+     * twice, its case aside (`Area` and `area`), is read on neither. A key
+     * with no value (`key:`, `key: null`) is left out, as is one whose value
+     * no property holds (`fromYaml`).
      */
-    fromFrontmatter(frontmatter: Record<string, unknown> | undefined): Record<string, PropertyValue> {
-        const out: Record<string, PropertyValue> = {};
+    fromFrontmatter(frontmatter: Record<string, unknown> | undefined): Properties {
+        const out: Properties = {};
         if (!frontmatter) return out;
-        for (const [key, raw] of Object.entries(frontmatter)) {
+        for (const [folded, { key, value: raw }] of PropertyKey.ofMapping(frontmatter)) {
             const value = this.fromYaml(raw);
-            if (value && value.type !== 'null') out[key] = value;
+            if (value && value.type !== 'null') out[folded] = { key, value };
         }
         return out;
     },

@@ -1,3 +1,4 @@
+import { PropertyKey } from '../../parsing/utils/PropertyKey';
 import { PROPERTY_LINE, PropertyLines } from '../../parsing/utils/PropertyLines';
 import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
@@ -20,6 +21,8 @@ interface OwnPropertyLine {
  *   を保存して値部分のみ置換
  * - tags は既存値が #hashtag 形式ならその形式、カンマ区切りならその形式で
  *   書き戻す（新規は #hashtag が正準）
+ * - op のキーに当たる行は、大文字と小文字を区別せずに探す（`PropertyKey`）。
+ *   更新はその行のキーの綴りを保ち、op のキーの綴りは新しく足す行にだけ使う
  * - set は「最後の own 宣言行」を書き換え、delete は全 own 宣言行を除去
  *   する。同じキーが2行以上あれば読みはそのキーを読まない
  *   （`PropertyLines.read`）ので、set では重複が残り、値は読まれないまま
@@ -55,7 +58,7 @@ export class ChildPropertyLineEditor {
     static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[], unit: string): void {
         for (const op of ops) {
             const ownLines = this.findOwnPropertyLines(draft.reading(), taskLineIdx);
-            const matching = ownLines.filter(l => l.key === op.key);
+            const matching = ownLines.filter(l => PropertyKey.same(l.key, op.key));
 
             if (op.op === 'delete') {
                 // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。

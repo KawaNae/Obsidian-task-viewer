@@ -74,6 +74,23 @@ export type PropertyValue =
 
 export type PropertyType = PropertyValue['type'];
 
+/**
+ * A custom property as the layer whose value it is writes it: the key as
+ * written there (`Area`), which is what shows it, and the value.
+ */
+export interface Property {
+    key: string;
+    value: PropertyValue;
+}
+
+/**
+ * Custom properties by key, the key folded to lower case
+ * (`PropertyKey.fold`): `Area` and `area` name one property, as they do in
+ * Obsidian. A reader looks a key up by `PropertyKey.get`, and shows the key
+ * each holds as written.
+ */
+export type Properties = Record<string, Property>;
+
 export interface ChildLine {
     text: string;
     /** Absolute 0-indexed file line this child line lives on (same convention as `Task.line`). */
@@ -191,7 +208,7 @@ export interface Task {
         linestyle?: string;
         mask?: string;
         tags?: string[];
-        properties?: Record<string, PropertyValue>;
+        properties?: Properties;
     };
 
     /**
@@ -270,7 +287,7 @@ export interface Task {
      * only. Section-inherited properties live in `cascadeContext.properties`;
      * consumers read the merged view via `getEffectiveProperties()`.
      */
-    properties: Record<string, PropertyValue>;
+    properties: Properties;
 }
 
 /** TaskViewer inline-form task (writable; primary write target). */
