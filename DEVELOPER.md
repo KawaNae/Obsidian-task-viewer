@@ -326,9 +326,9 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `NoteTasks`, from `SectionNode.resolvedX`; where each came from as `task.inheritedFrom` (the section's `resolvedSources`) | Merge step below; the hub's source labels (`CascadeSource`) read `inheritedFrom`, never the metadata cache |
 | **effective** | `DisplayTask.stated` (merged), `span` and `dueMs` (resolved — needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
-Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
+Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread, a key's case aside (「プロパティのキー」). The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
 
-**Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both are read on the frontmatter, a section and a task by the one `BuiltinPropertyExtractor`, and inherit by the merge rules above; the structural difference is type-level (separate Task fields vs `Record`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is not read (`PropertyLines.read`, a `date-key-under-task` finding), so the section's date still shows through.
+**Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Properties`: by key folded to lower case, each with its key as written (「プロパティのキー」). Both are read on the frontmatter, a section and a task by the one `BuiltinPropertyExtractor`, and inherit by the merge rules above; the structural difference is type-level (separate Task fields vs `Properties`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is not read (`PropertyLines.read`, a `date-key-under-task` finding), so the section's date still shows through.
 
 ### プロパティ行
 
@@ -347,13 +347,27 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
     - プロパティ行の形をした項目（`- name:: Kawa`）は、テキスト `name:: Kawa` の項目になる
     - 空の項目と値なしの項目（`- null`）、項目でない行（本文の続き、引用、コード）はリストに入れない
     - 読める項目が1つも無ければ値なし（`null`）である。frontmatter の `key: []` に当たる空のリストは、行では書けない
-- 同じ持ち主が同じキーを2行以上に書いたら、そのキーをどの行でも読まない。上の層の値が届く。ほかのキーは読む。別の層に同じキーがあるのは継承の上書きである
-- タスクの下の日付のキー（設定 `scopeKeys` の start、end、due）は読まない。タスクの日付はタスク行の `@` だけが決める
+- 同じ持ち主が同じキーを2行以上に書いたら、そのキーをどの行でも読まない。大文字と小文字だけが違うキー（`Area::` と `area::`）も同じキーである（「プロパティのキー」）。上の層の値が届く。ほかのキーは読む。別の層に同じキーがあるのは継承の上書きである
+- タスクの下の日付のキー（設定 `scopeKeys` の start、end、due。`TV-START::` も）は読まない。タスクの日付はタスク行の `@` だけが決める
 - プロパティ行の下の行は、プロパティの一部として読むか、所見（`PropertyFinding`）になる。所見は、出す行、関わる行の範囲（`end`）、キー、プロパティ行、持ち主を持つ
     - エラー: `duplicate-key`（同じ持ち主の重複したキー）
     - 警告: `date-key-under-task`、`lines-under-value`（値のある行の下の行）、`property-shaped-item`、`not-a-list-item`（リストの項目として読めない行）
     - 所見はまだ表示しない。エディタの診断とハブは、この所見を出す
 - 節の頭（`SectionNode.head`）は、最初のタスクより上にあるプロパティ行の部分木の後ろである。見出しの下に行を足す書き込み（`Placement.into` の `head`）はそこに置く。プロパティ行を見出しの直下にまとめて書く形を保つためで、読みは位置に依らない。最初のタスクより下のプロパティ行は頭を動かさない
+
+### プロパティのキー
+
+プロパティのキーは、すべての層で大文字と小文字を区別しない。Obsidian がプロパティの型、Properties ビュー、検索、組み込みのキーでキーを区別しないのに合わせる。比べ方は `PropertyKey`（`parsing/utils/PropertyKey.ts`）の1か所にあり、キーを比べる所はすべてこれを通す。
+
+- 比べるときは `toLowerCase` で小文字にするだけで、文字の幅は揃えない。`ａｒｅａ` と `area`、`担当１` と `担当1` は別のキーで、全角の `ｔａｇｓ::` はタグにならない。Obsidian もキーを `toLowerCase` だけで比べる
+- カスタムプロパティは `Properties` に持つ。小文字にしたキーで引き（`PropertyKey.get`）、各項目は書かれたキーの綴りと値を持つ（`Property`）。タスク自身の値（`Task.properties`）、継承した値（`cascadeContext.properties`、`SectionNode.resolvedProperties`）、出所（`ResolvedSources.properties`）、読んだ値（`PropertyReading.values`、`lineOf`）が、どれも小文字にしたキーを使う
+- 継承では、frontmatter の `area`、節の `AREA::`、タスクの `Area::` は同じプロパティで、近い層が上書きする。表示とキーの綴りは、効いている値を書いた層の綴りである。カード右上、ハブ、メニュー、API の `properties` は、この綴りを出す
+- 同じ持ち主が大文字と小文字だけが違うキーを書いたら、重複したキーとしてどちらも読まない（`duplicate-key`）
+- frontmatter も、YAML としては別のキーの `Area` と `area` を両方書いたら、どちらも読まない（`PropertyKey.ofMapping`）。Obsidian はこのとき2つの値を残すが、プロパティは値を1つしか持てない。frontmatter の所見はプラグインから出さない。`tags` と `Tags` は例外で、タグの規則のとおり先のキーのタグを読む（`TagRule.ofFrontmatter`）。`tv-ignore` も同じ規則で読む
+- 組み込みのキー（`tags` と設定 `scopeKeys` のキー）も区別しない。`TV-COLOR::`、`Tags::`、frontmatter の `TV-Color:` は組み込みとして読み、カスタムプロパティにならない。予約したキー（`reservedPropertyKeys`）も小文字にした形で持つ
+- フィルタ（`TaskValues.property`）、API の `property=`、カード右上の `prop.<key>` は、キーを区別せずに照合する。`property=area:lab` は `Area:: lab` に当たる。フィルタのキーの候補（`FilterValueCollector.collectPropertyKeys`）は1つのプロパティを1つにまとめ、最も多く書かれた綴り、同数なら先に出た綴りで出す
+- 書き込みは、タスクの行（`ChildPropertyLineEditor`）も frontmatter（`FrontmatterLineEditor.findKeyRange`、`valueRange`、`hasKey`）も、キーを区別せずに行を探し、既にある行のキーの綴りを保つ。新しく足す行は、渡されたキーの綴りで書く。ハブは、タスクが書いているキーの綴りか、受け継いだ値なら受け継いだキーの綴りで書く
+- 入力では、ハブの新しいキー（`PropertyKeyInput`）は予約したキーを大文字と小文字によらず拒む。設定のキー（`ScopeKeyInput`）は、予約したキーとほかの設定のキーを、大文字と小文字だけの違いでも拒む。読み込んだ設定がこれに当たれば、設定のキーは既定に戻る
 
 ### プロパティの値
 
@@ -376,7 +390,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - frontmatter として読むのは、YAML が連想配列に読むブロックだけである。Obsidian の metadata worker と同じく、リスト（`- a`）やテキストに読むブロックは frontmatter ではない
 - プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 
-組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず表示の文字（`display`）を読む。引用符で囲んだ `"red"` は `red`、値なしは値を持たない。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。大文字と小文字を区別しないのは Obsidian のキーである `tags` だけで、プラグインのキー（`tv-color` など）は設定の綴りのとおりに読む。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` を探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
+組み込みのキー（色、線種、マスク、日付3つ、`tags`）の振り分けは、frontmatter、節、タスクのどの層も `BuiltinPropertyExtractor` の1本が `fieldKey` の表で行う。組み込みは型によらず表示の文字（`display`）を読む。引用符で囲んだ `"red"` は `red`、値なしは値を持たない。ただしタグは、Obsidian が読む所から読む。frontmatter のタグは `parseFrontMatterTags` の手順で YAML の値から読む（`fromFrontmatter`、`TagRule.ofFrontmatter`）。キーは大文字と小文字を区別しない `tags` の最初のもの（`Tags`、`TAGS` も）で、どれもカスタムプロパティにならない。文字列は1項目のリストで、YAML が文字列と読んだ項目だけを取り（`true`、`null`、`123` は取らない）、先頭の `#` を1つ除いてタグの語になるものだけを残す。プラグインのキー（`tv-color` など）も、ほかのキーと同じく大文字と小文字を区別しない（「プロパティのキー」）。前段の判定（`TaskScanner.mayContainTasks`）も同じキーの規則で `tags` と設定のキーを探す。節とタスクの `tags::` は値の中の `#tag` だけを読み、`tags:: a, b` はタグを持たない（`extract`）。値のない `- tags::` の下のリストは、項目ごとに同じ規則で読む（`- #a` はタグ a、`- b` はタグにならない）。どちらの層かは入口が決める。
 
 ### Inline child line extraction
 
@@ -1174,7 +1188,7 @@ Touch support: `TouchEventHandler` detects long-press (configurable via `longPre
 When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 
 - `FrontmatterLineEditor.applyUpdates()` touches **only the target key's lines** and leaves all other lines intact.
-- `findKeyRange()` identifies the range `[start, end)` covering the key line and any continuation lines before any update, delete, or insert.
+- `findKeyRange()` identifies the range `[start, end)` covering the key line and any continuation lines before any update, delete, or insert. A key is found its case aside (`PropertyKey`), and an update keeps the key as the line writes it (`TV-COLOR: red` stays `TV-COLOR:`).
 - YAML arrays and block scalars (multi-line values) are never corrupted.
 - Key order is preserved exactly as the user wrote it.
 - **Never reconstruct the entire frontmatter as a string** — this risks data loss.
@@ -1399,7 +1413,7 @@ A new key is a field of `TaskViewerSettings`, its default in `DEFAULT_SETTINGS`,
 
 **`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
 
-All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Each must be a key a property line reads (no `:`, `[`, `]`), none of `tags`, `position` and the file task's former keys, and none of the other scope keys (`ScopeKeyInput`); a stored set with one that is not falls back to the defaults whole. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
+All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Each must be a key a property line reads (no `:`, `[`, `]`), none of `tags`, `position` and the file task's former keys, and none of the other scope keys, a key's case aside (`ScopeKeyInput`); a stored set with one that is not falls back to the defaults whole. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
 
 ---
 
