@@ -13,6 +13,7 @@ export type FindingField = 'color' | 'linestyle' | 'mask' | 'tags' | `prop:${str
 
 /** A finding of the row's own property lines, as the hub says it. */
 export interface HubFinding {
+    kind: PropertyFinding['kind'];
     /** Where it is said; every field but the form's is locked by it. */
     field: FindingField;
     tone: 'error' | 'warning';
@@ -41,6 +42,7 @@ export function hubFindings(task: Task, keys: ScopeKeys): HubFinding[] {
     if (findings.length === 0) return [];
     const builtins = builtinsByKey(keys);
     return findings.map(finding => ({
+        kind: finding.kind,
         field: fieldOf(finding, builtins.get(PropertyKey.fold(finding.key))),
         tone: finding.severity,
         text: diagnosticText(propertyFindingDiagnostic(finding, lineText(task, finding.line))),
@@ -66,4 +68,15 @@ function fieldOf(finding: PropertyFinding, builtin: Builtin | undefined): Findin
 /** The text of line `line` of the row's reading, from the subtree the parse kept; empty when it kept none. */
 function lineText(task: Task, line: number): string {
     return task.subtreeLines?.[line - task.line] ?? '';
+}
+
+/**
+ * The line of `finding` on another copy of the row: the finding of the same
+ * kind on the same key as written, the same one of them counted from the
+ * top. Null when that copy has no such finding (the line was fixed).
+ */
+export function lineOfFinding(finding: HubFinding, among: readonly HubFinding[], on: Task, keys: ScopeKeys): number | null {
+    const same = (f: HubFinding) => f.kind === finding.kind && f.key === finding.key;
+    const nth = among.filter(same).indexOf(finding);
+    return hubFindings(on, keys).filter(same)[nth]?.line ?? null;
 }

@@ -17,7 +17,6 @@ import { IssueBoard, readIssue, type IssueSlot } from '../form/FormIssue';
 import { TaskContentInput } from '../../services/parsing/tv-inline/TaskContentInput';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
-import { openFile } from '../../utils/NavigationUtils';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
 import type { DateTimeFields } from '../TaskDateValidator';
 import { logError } from '../../log/log';
@@ -30,7 +29,8 @@ import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './f
 import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
-import { hubFindings, lockedFields, type FindingField, type HubFinding } from './HubFindings';
+import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
+import { openSourceLine, type LineTarget } from './SourceLine';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
@@ -142,7 +142,7 @@ export class TaskHubForm {
             plugin: deps.plugin,
             index: deps.index,
             sourceLabel: (source) => this.sourceLabel(source),
-            jumpToFile: () => this.jumpToFile(),
+            openSource: (locate) => this.openSource(locate),
             issues: this.issues,
             findings: () => this.findings,
             locked: (field) => this.locks.has(field),
@@ -298,8 +298,13 @@ export class TaskHubForm {
         return source === 'file' ? t('modal.hub.inheritedFromFile') : t('modal.hub.inheritedFromSection');
     }
 
-    private jumpToFile(): void {
-        void openFile(this.deps.app, this.task.file, this.deps.plugin.settings.reuseExistingTab);
+    /** Open a line of the row's note and light it (`openSourceLine`); the hub closes, as for any navigation. */
+    private openSource(locate: (task: Task) => LineTarget | null): void {
+        void openSourceLine(
+            { app: this.deps.app, index: this.deps.index, reuseTab: this.deps.plugin.settings.reuseExistingTab },
+            this.task,
+            locate,
+        );
         this.deps.onNavigate?.();
     }
 
@@ -320,13 +325,16 @@ export class TaskHubForm {
             at: finding.field,
             tone: finding.tone,
             text: finding.text,
-            action: { label: t('modal.hub.openLine'), run: () => this.openLine(finding.line) },
+            action: {
+                label: t('modal.hub.openLine'),
+                run: () => {
+                    const among = this.findings;
+                    this.openSource(row => (row === this.task
+                        ? { line: finding.line }
+                        : { line: lineOfFinding(finding, among, row, this.deps.plugin.settings.scopeKeys) }));
+                },
+            },
         })));
-    }
-
-    /** Open the row's note at line `line` of the row's reading. */
-    private openLine(_line: number): void {
-        this.jumpToFile();
     }
 
     // ==================== コミット ====================

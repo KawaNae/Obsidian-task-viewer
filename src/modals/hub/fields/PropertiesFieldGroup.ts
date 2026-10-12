@@ -125,7 +125,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             } else {
                 const source = CascadeSource.forProperty(task, key);
                 const sourceEl = row.createSpan({ cls: 'task-hub__source', text: this.ctx.sourceLabel(source) });
-                sourceEl.addEventListener('click', () => this.ctx.jumpToFile());
+                sourceEl.addEventListener('click', () => this.ctx.openSource(row => CascadeSource.lineOfProperty(row, key)));
             }
         }
 

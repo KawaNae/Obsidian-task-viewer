@@ -6,6 +6,7 @@ import type { CascadeSourceKind } from '../CascadeSource';
 import type { DateKey } from '../../form/DateFieldGroup';
 import type { IssueBoard } from '../../form/FormIssue';
 import type { FindingField, HubFinding } from '../HubFindings';
+import type { LineTarget } from '../SourceLine';
 
 /**
  * The hub's fields, by the names its issues are said of (`FormIssue.at`):
@@ -47,7 +48,12 @@ export interface FieldGroupContext {
     plugin: PluginContext;
     index: IndexReads;
     sourceLabel: (source: CascadeSourceKind) => string;
-    jumpToFile: () => void;
+    /**
+     * Open a line of the row's note in the editor and light it (`openSourceLine`):
+     * the line `locate` finds on a copy of the row, which is asked again of a
+     * newer copy when the note has changed. The hub closes.
+     */
+    openSource: (locate: (task: Task) => LineTarget | null) => void;
     /** What the row's own property lines hold that is wrong, by field (`hubFindings`), as the form last read them. */
     findings: () => readonly HubFinding[];
     /**

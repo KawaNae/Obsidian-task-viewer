@@ -75,6 +75,8 @@ export class TagsFieldGroup implements ClosingPart {
                     chip.addClass('task-hub__tag-chip--locked');
                     chip.addClass('task-hub__tag-chip--cascade');
                     chip.setAttribute('aria-label', t('modal.hub.cascadeTagLocked', { source: this.ctx.sourceLabel(source) }));
+                    // The chip opens the line that adds the tag.
+                    chip.addEventListener('click', () => this.ctx.openSource(row => CascadeSource.lineOfTag(row, tag)));
                 }
             }
         }
