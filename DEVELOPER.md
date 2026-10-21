@@ -247,7 +247,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **PropertyValues** | `services/parsing/utils/PropertyValues.ts` | The one reading of a property's value (`PropertyValue`): `fromText` for a line, `fromYaml` / `fromFrontmatter` for the frontmatter, `display` for what is shown and compared, `spelling` for what a line writes; see "プロパティの値" |
 | **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
-| **NoteSections** | `services/parsing/tree/NoteSections.ts` | A note's sections from `outline.headings`, each with its own property lines (the section scope of the cascade) |
+| **NoteSections** | `services/parsing/tree/NoteSections.ts` | A note's sections from `outline.headings` as a tree under its root (the whole body, whose own lines are those above the first heading), each with its own property lines and its head (the root and section scopes of the cascade) |
 | **PropertyLines** | `services/parsing/utils/PropertyLines.ts` | The one reading of property lines: which lines are a task's or a section's (`ofTask`, `ofSection`), what they say and what is wrong with them (`read`: values, the line of each, `PropertyFinding`); see "プロパティ行" |
 | **PropertyDiagnostics** | `services/parsing/tree/PropertyDiagnostics.ts` | The editor's diagnostics on property lines: every section's and task's `PropertyFinding` as a diagnostic on its line, with one sentence per kind; see "プロパティ行" |
 | **NoteTasks** | `services/parsing/tree/NoteTasks.ts` | A note's rows: every line that opens a task, its parent, child lines, flow, properties and section cascade, read once |
@@ -297,8 +297,8 @@ Quick reference for locating the right layer when implementing a feature.
 ```
 0. Outline.read(lines)                 — the note's one reading (items, subtrees, code, headings, body start)
 1. Frontmatter → tv-ignore check
-2. NoteSections.read(outline)          — sections from outline.headings, each with its own property lines
-3. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (the frontmatter read by BuiltinPropertyExtractor.fromFrontmatter)
+2. NoteSections.read(outline)          — the root (the whole body) and the sections of outline.headings nested in it, each with its own property lines
+3. SectionPropertyResolver.resolve()   — Cascade properties down the tree from the root (on the frontmatter's built-ins, read by BuiltinPropertyExtractor.fromFrontmatter)
 4. NoteTasks.extract()                 — every line that opens a task, read once, with its section's values attached
 ```
 
@@ -306,7 +306,7 @@ Parsing spells no name. A line parser answers an unnamed task (`UnnamedTask`); `
 
 The name layer lives in `services/core/RowNames.ts`: the spelling of a name (`nameOf`, `readName`) and the namers. A namer gives a row its reading (`Task.reading`) together with its name, so a write takes the reading from the copy (`plannedOn`) and reads no name's spelling. What outlives a reading is a row's anchor (`Task.anchor`, set by the scan); `TaskStore` keeps a `(file, anchor) → name` table with the tasks, and `TaskIndex.getTaskByAnchor` is one lookup in it. A segment of a task split at the day boundary (`<name>##seg:YYYY-MM-DD`, `services/display/SegmentIds.ts`) is a key within the display: a caller acting on one hands its row's name (`getOriginalTaskId`), and the write side does not take segments apart.
 
-Frontmatter makes no task. It is only the root of the cascade below: its scope keys (`tv-start`/`tv-end`/`tv-due`/`tv-color`/`tv-linestyle`/`tv-mask`), `tags` and custom properties are inherited by every task in the note.
+Frontmatter makes no task. It is only the base of the cascade below: its scope keys (`tv-start`/`tv-end`/`tv-due`/`tv-color`/`tv-linestyle`/`tv-mask`) and `tags` are inherited by every task in the note. Its other keys are the note's own metadata, which other plugins and scripts write and read as they mean them (a daily note's `体重[kg]:`), and no task inherits them. A custom value every task of the note inherits is a property line of the root, above the first heading, which is the plugin's notation: the frontmatter and the root do not share a role.
 
 ### Inheritance pipeline (File / Section)
 
@@ -314,10 +314,10 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
-| **File** | `BuiltinPropertyExtractor.fromFrontmatter` | Frontmatter object | Read every key as a `PropertyValue` (`PropertyValues.fromFrontmatter`), then put the builtin keys apart with the same extractor a section and a task use; the tags are read off the YAML as Obsidian reads them (`TagRule.ofFrontmatter`). Used as the cascade root by `SectionPropertyResolver`. |
-| **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + each section's property lines (`PropertyLines`) | FM → root section → nested sections, child-wins cascade for the dates (a date and its time each on its own), `color`/`linestyle`/`mask`/`tags`/custom properties; a layer's no value wins too and hides the value above (「継承と値のない値」). Output stored on `SectionNode.resolvedX` (null for a value hidden so), and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds; the frontmatter's by its key's line). |
+| **File** | `BuiltinPropertyExtractor.fromFrontmatter` | Frontmatter object | Read every key as a `PropertyValue` (`PropertyValues.fromFrontmatter`), then read the built-in keys as a section's are (`ExtractedBuiltins`), and no other key; the tags are read off the YAML as Obsidian reads them (`TagRule.ofFrontmatter`). Used as the cascade base by `SectionPropertyResolver`. |
+| **Section** | `SectionPropertyResolver` | The root (the whole body; `heading: null`), the heading hierarchy (`## A` → `### B`) nested in it, and each section's property lines (`PropertyLines`) | FM → root → nested sections, child-wins cascade for the dates (a date and its time each on its own), `color`/`linestyle`/`mask`/`tags`/custom properties; a layer's no value wins too and hides the value above (「継承と値のない値」). Output stored on `SectionNode.resolvedX` (null for a value hidden so), and the layer each value came from on `SectionNode.resolvedSources` (per tag layer, the tags it adds; the frontmatter's by its key's line). |
 
-**Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass.
+**Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → root → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass.
 
 **Three-layer value model (raw / cascadeContext / effective).** Dates and properties/tags/style share the same layering:
 
@@ -329,7 +329,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 Merge rules: style is the row's own where it says one, a value or none (null), else the cascade's; tags are a sorted union; custom properties are per-key child-wins spread, a key's case aside (「プロパティのキー」), a null value winning as any value does (「継承と値のない値」). The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), and no built-in a section hides, but stores tags/properties unconditionally since they merge partially rather than shadow.
 
-**Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Properties`: by key folded to lower case, each with its key as written (「プロパティのキー」). Both are read on the frontmatter, a section and a task by the one `BuiltinPropertyExtractor`, and inherit by the merge rules above; the structural difference is type-level (separate Task fields vs `Properties`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is not read (`PropertyLines.read`, a `date-key-under-task` finding), so the section's date still shows through.
+**Builtin vs custom properties.** Builtin (the three dates, `color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Properties`: by key folded to lower case, each with its key as written (「プロパティのキー」). Both are read on a section and a task by the one `BuiltinPropertyExtractor.extract`, and inherit by the merge rules above; the frontmatter gives its built-ins alone, read by the same rules (`fromFrontmatter`); the structural difference is type-level (separate Task fields vs `Properties`). The dates are the exception on the task's layer: a task's dates are its line's `@` alone. A date key on a task's own property line (`- tv-start:: …`) is not read (`PropertyLines.read`, a `date-key-under-task` finding), so the section's date still shows through.
 
 ### プロパティ行
 
@@ -339,7 +339,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - タスク: 読みがタスクの項目の直下と読む項目（`directItems`）
     - 節: 節の自分の行（入れ子の節を除く）の最上位の項目。節の中のどこに書いてもよく、最初のタスクより下でもよい
     - それより深い `- key:: value` は、どの層のプロパティにもならない
-    - 最初の見出しより上は見出しのない節（根の節）で、その値はそこのタスクにだけ届く
+    - 根の節（`heading: null`）は本文全体の節で、最上位の見出しの節はその子である。根の自分の行は最初の見出しより上の行（frontmatter の次の行から。見出しが無ければ本文全体）で、そこのプロパティ行の値はノートのすべてのタスクに届く。根は見出しのレベル 0 の節として、ほかの節と同じ規則で自分の行と届く範囲が決まる。本文が空でも、最初の行が見出しでも、根は1つある
 - キーは、記号の後の空白から最初の `::` までの文字列で、前後の空白を除いたものである。規則は `PROPERTY_KEY_SOURCE`（`parsing/utils/PropertyKey.ts`）の1か所にあり、`PROPERTY_LINE` はこれで組む
     - `:`、`[`、`]`、`` ` `` を含むキーは読まない。`[` と `]` はチェックボックスの行とリンクの行を、`` ` `` はインラインコードでプロパティ行を引用した説明文の行（`` - 見出しの下に `- tv-color:: red` を書く ``）を除くためである
     - 空のキーと空白だけのキー（`-  :: x`）も読まない
@@ -352,7 +352,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 項目の下に入れ子にした行は読まず、上の項目は読む
     - プロパティ行の形をした項目（`- name:: Kawa`）は、テキスト `name:: Kawa` の項目になる
     - 空の項目と値なしの項目（`- null`）、項目でない行（本文の続き、引用、コード）はリストに入れない
-    - 読める項目が1つも無ければ値なし（`null`）である。frontmatter の `key: []` に当たる空のリストは、行では書けない
+    - 読める項目が1つも無ければ値なし（`null`）である。空のリストは、行では書けない
 - 同じ持ち主が同じキーを2行以上に書いたら、そのキーをどの行でも読まない。大文字と小文字だけが違うキー（`Area::` と `area::`）も同じキーである（「プロパティのキー」）。上の層の値が届く。ほかのキーは読む。別の層に同じキーがあるのは継承の上書きである
 - タスクの下の日付のキー（設定 `scopeKeys` の start、end、due。`TV-START::` も）は読まない。タスクの日付はタスク行の `@` だけが決める
 - プロパティ行の下の行は、プロパティの一部として読むか、所見（`PropertyFinding`）になる。所見は、出す行、関わる行の範囲（`end`）、キー、プロパティ行、持ち主を持つ
@@ -364,6 +364,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 文は所見の種類ごとに1つで、プラグインがしたことと直し方を書き、意図を推測しない。英語は `PropertyDiagnostics.ts` の表に、日本語は `ja.json` の `flowDiag.property.<種類>` に置く（`diagnosticText`）。文の材料はどの種類も同じで、キーの綴り（`key`）と、所見の行の字下げと記号を除いた文字（`text`）である。種類を足すときは、表と `ja.json` に文を足すだけでよい
 - タスク自身の所見は `Task.propertyFindings` に載る（無ければ欠ける）。ハブのように、ノートを開かずにタスクを見せる所が使う。所見がどのプロパティのものかはキー（`PropertyKey.same` で照合する）とプロパティ行で引く。行番号はタスクの `line` と同じく、その読みの中の座標である
 - 節の頭（`SectionNode.head`）は、最初のタスクより上にあるプロパティ行の部分木の後ろである。見出しの下に行を足す書き込み（`Placement.into` の `head`）はそこに置く。プロパティ行を見出しの直下にまとめて書く形を保つためで、読みは位置に依らない。最初のタスクより下のプロパティ行は頭を動かさない
+    - 根の頭も同じ規則で、無ければ本文の最初の行である。送る処理が根の行を足す口（`Placement.rootHead`）はそこに置く。本文の最初に段落（`Inherit properties:` のようなラベル）があれば、そこで試した行は段落の続きとして取り込まれるので、`settle` が段落の下へ送る
 
 ### プロパティのキー
 
@@ -371,9 +372,9 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 - 比べるときは `toLowerCase` で小文字にするだけで、文字の幅は揃えない。`ａｒｅａ` と `area`、`担当１` と `担当1` は別のキーで、全角の `ｔａｇｓ::` はタグにならない。Obsidian もキーを `toLowerCase` だけで比べる
 - カスタムプロパティは `Properties` に持つ。小文字にしたキーで引き（`PropertyKey.get`）、各項目は書かれたキーの綴りと値を持つ（`Property`）。タスク自身の値（`Task.properties`）、継承した値（`cascadeContext.properties`、`SectionNode.resolvedProperties`）、出所（`ResolvedSources.properties`）、読んだ値（`PropertyReading.values`、`lineOf`）が、どれも小文字にしたキーを使う
-- 継承では、frontmatter の `area`、節の `AREA::`、タスクの `Area::` は同じプロパティで、近い層が上書きする。表示とキーの綴りは、効いている値を書いた層の綴りである。カード右上、ハブ、メニュー、API の `properties` は、この綴りを出す
+- 継承では、根の `area::`、見出しの節の `AREA::`、タスクの `Area::` は同じプロパティで、近い層が上書きする。表示とキーの綴りは、効いている値を書いた層の綴りである。カード右上、ハブ、メニュー、API の `properties` は、この綴りを出す
 - 同じ持ち主が大文字と小文字だけが違うキーを書いたら、重複したキーとしてどちらも読まない（`duplicate-key`）
-- frontmatter も、YAML としては別のキーの `Area` と `area` を両方書いたら、どちらも読まない（`PropertyKey.ofMapping`）。Obsidian はこのとき2つの値を残すが、プロパティは値を1つしか持てない。frontmatter の所見はプラグインから出さない。`tags` と `Tags` は例外で、タグの規則のとおり先のキーのタグを読む（`TagRule.ofFrontmatter`）。`tv-ignore` も同じ規則で読む
+- frontmatter も、YAML としては別のキーの `TV-COLOR` と `tv-color` を両方書いたら、どちらも読まない（`PropertyKey.ofMapping`）。Obsidian はこのとき2つの値を残すが、プロパティは値を1つしか持てない。frontmatter の所見はプラグインから出さない。`tags` と `Tags` は例外で、タグの規則のとおり先のキーのタグを読む（`TagRule.ofFrontmatter`）。`tv-ignore` も同じ規則で読む
 - 組み込みのキー（`tags` と設定 `scopeKeys` のキー）も区別しない。`TV-COLOR::`、`Tags::`、frontmatter の `TV-Color:` は組み込みとして読み、カスタムプロパティにならない。予約したキー（`reservedPropertyKeys`）も小文字にした形で持つ
 - フィルタ（`TaskValues.property`）、API の `property=`、カード右上の `prop.<key>` は、キーを区別せずに照合する。`property=area:lab` は `Area:: lab` に当たる。フィルタのキーの候補（`FilterValueCollector.collectPropertyKeys`）は1つのプロパティを1つにまとめ、最も多く書かれた綴り、同数なら先に出た綴りで出す
 - 書き込みは、タスクの行（`ChildPropertyLineEditor`）も frontmatter（`FrontmatterLineEditor.findKeyRange`、`valueRange`、`hasKey`）も、キーを区別せずに行を探し、既にある行のキーの綴りを保つ。新しく足す行は、渡されたキーの綴りで書く。ハブは、タスクが書いているキーの綴りか、受け継いだ値なら受け継いだキーの綴りで書く
@@ -383,27 +384,27 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 ### 継承と値のない値
 
-値のないプロパティ（行の `- key::` で下に読める項目のないもの、`- key:: null`、frontmatter の `key:`）は、その層では値がないという宣言である。近い層の値が勝つ規則のまま、値なしも値として勝ち、上の層の値を隠す。組み込みのキーにもカスタムプロパティにも同じ規則を当てる。
+値のないプロパティ（行の `- key::` で下に読める項目のないもの、`- key:: null`、frontmatter の組み込みのキーの `tv-color:`）は、その層では値がないという宣言である。近い層の値が勝つ規則のまま、値なしも値として勝ち、上の層の値を隠す。組み込みのキーにもカスタムプロパティにも同じ規則を当てる。層は外側から frontmatter、根、見出しの節（上の階層から）、タスクの順で、根の `- tv-color::` は frontmatter の `tv-color:` に勝つ。
 
 - 組み込みのキーの値は `readBuiltin` が読み、次の3つのどれかを返す
     - 値: 色、線種、マスクの文字、日付と時刻、期限、タグ
     - 値なし（null）: 値のない値。上の層の値を隠す
     - 読めない値（undefined）: 書いていないものとして扱い、上の層の値を通す。リスト（タグを除く）、空のテキスト、CSS が色と読まない `tv-color`（綴りを誤った `rde`。`ColorCheck`、「プロパティの値」）、知らない線種、日付も時刻も指さない値、実在しない日や時刻、日付のない期限がこれに当たる。行なら `PropertyLines.read` がその行を読まず、`unreadable-value` の警告を出す。frontmatter の所見は出さない
-- 型では、組み込みの欄の undefined が「書いていない」、null が「値なしと書いた」を表す（`ExtractedProperties`、`SectionNode.resolved*`、`Task.color`、`linestyle`、`mask`）。カスタムプロパティの値なしは、値の型の null（`PropertyValue`）である
+- 型では、組み込みの欄の undefined が「書いていない」、null が「値なしと書いた」を表す（`ExtractedBuiltins`、`ExtractedProperties`、`SectionNode.resolved*`、`Task.color`、`linestyle`、`mask`）。カスタムプロパティの値なしは、値の型の null（`PropertyValue`）である
 - 値のない日付のキー（`- tv-start::`）は、日付と時刻の両方を隠す。値を書いたときは、日付と時刻を別々に受け継ぐ（`tv-start:: 11:00` は時刻だけを言い、日付は上の層から来る）
 - タグは和集合で、隠す操作がない。値のない `- tags::` は何も足さず、上の層のタグも残る
 - カスタムプロパティのリストは1つの値で、近い層のリストが上の層のリストを丸ごと置き換える
 - 節が隠した組み込みの値は、タスクの `cascadeContext` に入らない。どの層が隠したかは出所に残る。値なしを書いた層も、値を書いた層と同じく出所になる（`resolvedSources`、`Task.inheritedFrom`）
 - ハブでの値なしの出し方は「ハブのプロパティの欄」にある
 - frontmatter の出所（`ValueSource` の `frontmatter`）は、そのキーの行を持つ（`frontmatterKeyRange`。書き込みが編集する行と同じ答え）。キーの行を読めないときは null である
-- API は値なしを `null` で出す。frontmatter の `key:` も同じである
+- API は値なしを `null` で出す
 
 ### プロパティの書き込み
 
 タスクのプロパティを書くのは、ハブ、API、カードの更新（`updateTask`）である。`PropertyUpdatePlanner` が更新とタスク自身の値（own）の差から操作（`PropertyOp`）を作り、書き込みの `update`（`TaskOps`）の中で `ChildPropertyLineEditor` が行に書く。書く行は、パーサがタスクのものと読む行（`PropertyLines.ofTask`）で、プロパティはそのブロック（プロパティ行と、値のない行の下のリストの項目）を単位に書く。
 
 - 操作は3つで、キーは大文字と小文字を区別せずに行を探す（「プロパティのキー」）
-    - `set`: 値を書く。テキスト（`{ text }`）は入力された綴りのまま行に書き、型は行と同じ規則で綴りから決まる（`123` は数、`"123"` はテキスト）。引用符を足すのは、型が分かっている値を写すときだけで、frontmatter のテキスト `123` をタスクの値にするなら、その綴り（`"123"`）を書く。リスト（`{ items }`）は、値のないプロパティ行の下に1項目1行で書く
+    - `set`: 値を書く。テキスト（`{ text }`）は入力された綴りのまま行に書き、型は行と同じ規則で綴りから決まる（`123` は数、`"123"` はテキスト）。引用符を足すのは、型が分かっている値を写すときだけで、受け継いだテキスト `123`（`- id:: "123"`）をタスクの値にするなら、その綴り（`"123"`）を書く。リスト（`{ items }`）は、値のないプロパティ行の下に1項目1行で書く
     - `hide`: 値のない行（`- key::`、下に項目なし）を書き、上の層の値を隠す
     - `delete`: 自分の行を下の項目ごと消し、上の層の値が届くようにする
 - プランナーの規則
@@ -419,11 +420,19 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - リストの項目は、書き込みの検査（`checkWrite`）で意味のある行として扱う（`ChildLineClassifier.carriesMeaning`）。リストの行だけを消して項目を残す書き込みは `disturbs` で拒否される
 - フローの次のインスタンスには、子の行を写さない（プロパティ行も写さない）。次のインスタンスが持つ子の行は、生成ブロック（`use`）に書く。複製は部分木の全行を写す
 
-送る処理（`InheritedValues`）は、行が受け継いだ値を送り先の frontmatter のキーとして書く。
+送る処理（`InheritedValues`）は、行が受け継いだ値を、送り先のノートがすべての行に言う形で書く。書く先（`InheritedValue.to`）は値の種類で決まる。
 
-- 行の値は、行が付けた型を frontmatter が読み返す形で書く。行が引用符で囲んだテキストは、YAML が同じテキストに読み返すかぎり引用符ごと書く（`'abc'`、`"123"`）。ほかのテキストは YAML が別の型に読むときだけ引用符で囲む（`escapeYamlScalar`）
-- 値なし（節の `- area::`、`- area:: null`、隠した組み込みのキー）は、値のないキー（`area:`）で書く。送り先でも上の層の値を隠す
-- 節の行のリストは YAML のリストで書き、項目はテキストと同じ規則で書く
+- 組み込みのキー（日付、色、線種、マスク、タグ）は、どの層から来ても送り先の frontmatter のキーにする（`frontmatter`）
+    - frontmatter の値は、そのキーの行をそのまま写す。解決した値は正規化されていて（数の綴り、コメント）、行はそれが失ったものを保つ
+    - プロパティ行の値は文字列で書く（`escapeYamlScalar`）。プラグインのキーは、どの型で書いても表示の文字から読むためである
+    - 日付と時刻は別の層から来うるので、解決した日付と時刻からキーを組む。タグは解決した和集合をリストで書く
+    - 値なし（隠した組み込みのキー）は、値のないキー（`tv-color:`）で書く。送り先でも上の層の値を隠す
+- カスタムプロパティは、出所が必ずプロパティ行（見出しの節か根）なので、送り先の根の行にする（`root`）
+    - 出所のプロパティ行を写す。1行目は `- key:: value` に綴り直し（記号を `-` にする）、値は綴りのまま写す。リストの項目は、1行目からの字下げの差を保って写す（`Outline.shiftIndent`）。送り先でも同じ型に読まれ、値なしは `- key::` になる
+    - 行の下のリストの項目でない行は値の一部でないので、写さない
+- 送り先が既に言うキーの値は書かない（`SendWriter.saidIn`。ダイアログには `NoteFacts.present` で出す）。`root` の値は、送り先の根の行にそのキーがあれば書かない。`frontmatter` の値は、送り先の frontmatter か根の行にあれば書かない。根の値は frontmatter に勝つので、根にあるキーを frontmatter に書いても効かないためである
+- 書き込み（`SendWriter.placeInNote`）は1回で、frontmatter のキーを足し、根の行を根の頭（`Placement.rootHead`）に置いてから、行をセクションに置く。新しいノートでは frontmatter の直後に根の行が来て、見出しはその後ろに作られる
+- ダイアログ（`SendModal`）は候補を書く先ごとに見出しで分け、「frontmatter に書く値」の下に組み込みのキーを、「ノートの先頭に書く値」の下にカスタムの値を置く。どの候補も既定でチェックする。行の `- aliases:: x` は Obsidian の別名でなくカスタムプロパティなので、ほかの値と同じく扱う
 
 ### プロパティの値
 
@@ -444,7 +453,6 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - API は型どおりに出す。数は `number`、値なしは `null`、リストは項目ごとに同じ型の配列である。CLI の出力は、JSON の数で書けない数を YAML の綴りの文字列（`".inf"`）にする
 - `tv-ignore` も同じ規則で読む。YAML の真偽値の true だけがノートを外す。YAML が壊れたブロックでは、キーの行（末尾の ` # コメント` を除く）が `true` `True` `TRUE` のどれかのときだけ外す
 - frontmatter として読むのは、YAML が連想配列に読むブロックだけである。Obsidian の metadata worker と同じく、リスト（`- a`）やテキストに読むブロックは frontmatter ではない
-- プラグインが新しく書く真偽値は小文字である（`InheritedValues` が行の値を frontmatter に書くとき）
 - frontmatter に書くテキストは、Obsidian の `stringifyYaml` と同じ綴りにする（`FrontmatterLineEditor.escapeYamlScalar`）。YAML 1.2 がテキストに読む `yes`、`on`、`2026-06-09`、`a, b` は引用符なしで、別の型に読む `123`、`true`、`null` や、YAML の記号で始まる値は引用符で囲む。改行を含むテキストは、キーの行に収まるようにエスケープした二重引用符で書く
 - frontmatter のキーの行は、YAML がブロックの連想配列のキーを読むとおりに探す（`frontmatterKeyLine`）。二重引用符と一重引用符のキー（`"my key":`）と、空白や `:` を含む引用符なしのキー（`two words:`、`a:b:`）も読む。書き換えはキーの綴りを引用符ごと保つ
 
@@ -471,7 +479,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 ### ハブのプロパティの欄
 
-ハブ（`TaskHubForm`）は、タスク自身のプロパティ行を欄から書く。欄は、組み込みの色、線種、マスク（`StyleFieldGroup`）、タグ（`TagsFieldGroup`）、カスタムプロパティ（`PropertiesFieldGroup`、リストは `PropertyListField`）である。節と frontmatter の値を編集する欄は無い。受け継いだ値は出所のラベル（`CascadeSource`）で示し、ラベルから値を書いた行を開く。
+ハブ（`TaskHubForm`）は、タスク自身のプロパティ行を欄から書く。欄は、組み込みの色、線種、マスク（`StyleFieldGroup`）、タグ（`TagsFieldGroup`）、カスタムプロパティ（`PropertiesFieldGroup`、リストは `PropertyListField`）である。節、根、frontmatter の値を編集する欄は無い。受け継いだ値は出所のラベル（`CascadeSource`）で示し、ラベルから値を書いた行を開く。ラベルは、frontmatter と根の行の値を「継承: ファイル」、見出しの節の値を「継承: セクション」と言う。根も frontmatter もノート全体の値で、どちらの行かはラベルから行を開けば分かる
 
 - 欄の文字は、行に書く綴り（`spelling`）である。`- id:: "123"` の欄は `"123"` を出す。欄は入力の場所で、引用符を外して出すと、`124` に直したときに型が数に変わるからである。カード、メニュー、候補は引用符を外した表示（`display`）を出す
 - 欄の確定は `bindField`（`modals/form/bindField.ts`）が決める。blur とフォームの Enter で確定し、読めない文字は欄の下に理由を出して確定しない
@@ -520,6 +528,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - 行はタスクの読みの座標である。今エディタが出している内容（エディタが無ければファイル）に、`IndexReads.followLine` で写す。自分の書き込みはこれで追える
 - 写せない（未保存の編集がある、読み直しが済んでいない）ときは、エディタを保存して読み直し、新しい写しで出所を探し直す（`locate`）。それでも写せなければ推測せず、ノートを開くだけにする
 - 行は `setEphemeralState({ line })` で開き、カーソルを置いて Obsidian の光らせ方で光らせる
+- 根の行の出所は、見出しの節の行と同じく行で開く
 - frontmatter の出所は、Properties ビューの `.metadata-property`（キーは大文字と小文字によらず照合）を光らせる。Live Preview では frontmatter の行がエディタに無く、行で開くと本文の先頭にカーソルが行くためである。Properties ビューが無ければ行で開く
 
 ### Inline child line extraction
@@ -1330,7 +1339,7 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 
 ### Write dispatch
 
-Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is never written on a task's behalf. It is written in three places, each touching only the key's lines (`FrontmatterLineEditor`): `setFrontmatterKeys` (`FrontmatterWriter.setKeys`; the scope keys from the Properties view's suggests and color picker), a send (`SendWriter.placeInNote` adds the keys the destination lacks, within the send's write), and the editor's `FrontmatterValueSuggest` (a picked value replaces the value on the key's line through `editor.replaceRange`, the editor's change, not a vault write).
+Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is never written on a task's behalf. It is written in three places, each touching only the key's lines (`FrontmatterLineEditor`): `setFrontmatterKeys` (`FrontmatterWriter.setKeys`; the scope keys from the Properties view's suggests and color picker), a send (`SendWriter.placeInNote` adds the built-in keys the destination does not say, within the send's write, and the custom values as lines above its first heading), and the editor's `FrontmatterValueSuggest` (a picked value replaces the value on the key's line through `editor.replaceRange`, the editor's change, not a vault write).
 
 - Every task has a real body line. A new line (the API's `create` and `insertChildTask`, the create dialog, the timer's records) is written from its fields with `formatTaskLine`, never through a temporary Task; `createTempTask` is only for the create dialog's preview.
 
