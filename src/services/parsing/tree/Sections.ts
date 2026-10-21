@@ -4,14 +4,15 @@ import type { OwnPropertyLines } from '../utils/PropertyLines';
 
 /**
  * A section of a note: the lines a heading the note reads opens, up to the
- * next heading of its level or above (`NoteSections.read`). Holds what the
+ * next heading of its level or above, or the root, the note's whole body,
+ * which every heading's section is nested in (`NoteSections.read`). Holds what the
  * section gives the rows in it — its own property lines, and the values
  * resolved down the cascade (`SectionPropertyResolver`) — and nothing of
  * the rows themselves, which the extraction reads off the note's reading
  * (`NoteTasks`).
  */
 export interface SectionNode {
-    /** The heading that opens it; null for the lines above the note's first heading. */
+    /** The heading that opens it; null for the root (the whole note), whose own lines are those above the first heading. */
     heading: OutlineHeading | null;
     /** Its own property lines (`PropertyLines.ofSection`), every one, those not read included. */
     properties: OwnPropertyLines;
@@ -48,8 +49,9 @@ export interface SectionNode {
  * The layer a resolved value came from: the note's frontmatter, by the line
  * of its key (`frontmatterKeyRange`; null when no line is read as the key's,
  * as for a key the YAML quotes), or the property line `line` of a section —
- * `heading` null for the section above the note's first heading. A layer
- * that says it has no value is the source of that, as one with a value is.
+ * `heading` null for the root, a line above the note's first heading. A
+ * layer that says it has no value is the source of that, as one with a
+ * value is.
  */
 export type ValueSource =
     | { kind: 'frontmatter'; line: number | null }

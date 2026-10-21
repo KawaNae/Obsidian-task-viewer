@@ -258,6 +258,19 @@ export class Placement {
     }
 
     /**
+     * Where lines go at the head of the root, the section of the whole note
+     * (`NoteSections.read`): just past the property lines written above its
+     * first task, above the first heading, as a heading's section has its
+     * head past its own ({@link into}); at the body's first line when there
+     * are none, past a paragraph that stands there (a label the user wrote
+     * above the lines, `Inherit properties:`), at the top. A heading there
+     * stays below the line.
+     */
+    static rootHead(outline: OutlineReading, head: string): Spot {
+        return this.topSibling(outline, NoteSections.read(outline).head, head);
+    }
+
+    /**
      * The indent string of the task's first child, or null when it has none:
      * the first list item the outline reads directly under the task's own
      * item, past the lines in `except`. A line of the subtree that opens no

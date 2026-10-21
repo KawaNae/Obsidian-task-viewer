@@ -26,8 +26,10 @@ export interface FileParseResult {
  *   the note's reading (`Outline.read`) → frontmatter → ignore check
  *   → NoteSections.read → SectionPropertyResolver.resolve → NoteTasks.extract
  *
- * Frontmatter makes no task: it is the root of the property cascade, which
- * hands its dates, style and tags down to every task in the note.
+ * Frontmatter makes no task: it is the base of the property cascade, which
+ * hands its built-ins (dates, style, tags) down to every task in the note.
+ * Its other keys are the note's own; a value every task inherits is a
+ * property line of the root section, above the first heading.
  *
  * The sections are read, then resolved in place, then read by the
  * extraction, in that exact order; wrapping them here means callers cannot
@@ -63,9 +65,9 @@ export class FileParsePipeline {
     ): FileParseResult {
         const read = this.resolveSections(lines, settings, reading);
         if (!read) return { ignored: true, tasks: [], genBlocks: new Map() };
-        const { outline, sections } = read;
+        const { outline, root } = read;
 
-        const tasks = NoteTasks.extract(outline, sections, {
+        const tasks = NoteTasks.extract(outline, root, {
             filePath,
             scopeKeys: settings.scopeKeys,
             parsers: lineParsers(settings),
@@ -88,8 +90,9 @@ export class FileParsePipeline {
     }
 
     /**
-     * The note's reading and its sections with every section's values
-     * resolved, and where each came from (`SectionNode.resolvedSources`):
+     * The note's reading and the tree of its sections (`root`, the whole
+     * note's) with every section's values resolved, and where each came
+     * from (`SectionNode.resolvedSources`):
      * what `parse` extracts the rows from, for a reader who asks what a line
      * of the note inherits (`InheritedValues`). Null for a tv-ignore'd note,
      * which has no rows. `frontmatter` is the block as the YAML parser read
@@ -99,7 +102,7 @@ export class FileParsePipeline {
         lines: readonly string[],
         settings: TaskViewerSettings,
         reading?: OutlineReading,
-    ): { outline: OutlineReading; sections: SectionNode[]; frontmatter: Record<string, any> | undefined } | null {
+    ): { outline: OutlineReading; root: SectionNode; frontmatter: Record<string, any> | undefined } | null {
         const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
 
         // The same reading a write takes of where the body begins
@@ -123,9 +126,9 @@ export class FileParsePipeline {
 
         if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStart, settings)) return null;
 
-        const sections = NoteSections.read(outline);
-        SectionPropertyResolver.resolve(outline, sections, frontmatterObj, settings.scopeKeys);
-        return { outline, sections, frontmatter: frontmatterObj };
+        const root = NoteSections.read(outline);
+        SectionPropertyResolver.resolve(outline, root, frontmatterObj, settings.scopeKeys);
+        return { outline, root, frontmatter: frontmatterObj };
     }
 
     /**

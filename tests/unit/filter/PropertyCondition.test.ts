@@ -11,7 +11,8 @@ import { evaluateFilter } from '../helpers/filterContext';
 
 /**
  * A note per task, the task's text its name: each holds the property `k` as
- * its line, a list or the frontmatter writes it.
+ * its line, a list or a line above the first heading writes it. The
+ * frontmatter's `k` is the note's own, and no task holds it.
  */
 const NOTES: Record<string, string[]> = {
     one: ['- [ ] one', '    - k:: 1'],
@@ -28,10 +29,10 @@ const NOTES: Record<string, string[]> = {
     noValue: ['- [ ] noValue', '    - k::'],
     nullWord: ['- [ ] nullWord', '    - k:: null'],
     list: ['- [ ] list', '    - k::', '        - a', '        - Bee'],
-    fmList: ['---', 'k: [x, 2]', '---', '- [ ] fmList'],
-    fmEmptyList: ['---', 'k: []', '---', '- [ ] fmEmptyList'],
-    fmNoValue: ['---', 'k:', '---', '- [ ] fmNoValue'],
-    hidden: ['---', 'k: lab', '---', '# A', '- k::', '- [ ] hidden'],
+    rootList: ['- k::', '    - x', '    - 2', '', '- [ ] rootList'],
+    rootNoValue: ['- k::', '', '- [ ] rootNoValue'],
+    hidden: ['- k:: lab', '# A', '- k::', '- [ ] hidden'],
+    fmKey: ['---', 'k: lab', '---', '- [ ] fmKey'],
     missing: ['- [ ] missing', '    - other:: lab'],
 };
 
@@ -80,16 +81,16 @@ async function which(row: Row): Promise<string[]> {
 }
 
 describe('a property condition', () => {
-    it('isSet: a task whose property has a value, the empty text and the empty list among them', async () => {
+    it('isSet: a task whose property has a value, the empty text among them', async () => {
         expect(await which({ operator: 'isSet', key: 'k' })).toEqual([
             'one', 'oneDot', 'ten', 'hex', 'num123', 'text123', 'trueCap', 'trueLow', 'lab', 'upperKey',
-            'emptyText', 'list', 'fmList', 'fmEmptyList',
+            'emptyText', 'list', 'rootList',
         ]);
     });
 
-    it('isNotSet: a task whose property has no value (a line\'s, the frontmatter\'s, one hiding the value above), or which has none', async () => {
+    it('isNotSet: a task whose property has no value (a line\'s, one above the first heading, one hiding the value above), or which has none', async () => {
         expect(await which({ operator: 'isNotSet', key: 'k' }))
-            .toEqual(['noValue', 'nullWord', 'fmNoValue', 'hidden', 'missing']);
+            .toEqual(['noValue', 'nullWord', 'rootNoValue', 'hidden', 'fmKey', 'missing']);
     });
 
     it('equals a number: by its value, whatever its spelling', async () => {
@@ -121,8 +122,8 @@ describe('a property condition', () => {
         expect(await which({ operator: 'equals', key: 'k', value: 'a' })).toEqual(['list']);
         expect(await which({ operator: 'equals', key: 'k', value: 'bee' })).toEqual(['list']);
         expect(await which({ operator: 'equals', key: 'k', value: 'a, Bee' })).toEqual([]);
-        expect(await which({ operator: 'equals', key: 'k', value: 'x' })).toEqual(['fmList']);
-        expect(await which({ operator: 'equals', key: 'k', value: '2.0' })).toEqual(['fmList']);
+        expect(await which({ operator: 'equals', key: 'k', value: 'x' })).toEqual(['rootList']);
+        expect(await which({ operator: 'equals', key: 'k', value: '2.0' })).toEqual(['rootList']);
     });
 
     it('equals nothing with no value: an empty value finds the empty text alone', async () => {
@@ -153,7 +154,7 @@ describe('a property condition', () => {
     it('notContains: contains in none of the items, a task with no value or without the property too', async () => {
         expect(await which({ operator: 'notContains', key: 'k', value: 'a' })).toEqual([
             'one', 'oneDot', 'ten', 'hex', 'num123', 'text123', 'trueCap', 'trueLow', 'upperKey',
-            'emptyText', 'noValue', 'nullWord', 'fmList', 'fmEmptyList', 'fmNoValue', 'hidden', 'missing',
+            'emptyText', 'noValue', 'nullWord', 'rootList', 'rootNoValue', 'hidden', 'fmKey', 'missing',
         ]);
         expect(await which({ operator: 'notContains', key: 'k', value: 'ul' })).toHaveLength(Object.keys(NOTES).length);
     });

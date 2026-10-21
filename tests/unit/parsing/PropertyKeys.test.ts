@@ -33,9 +33,7 @@ const shownBy = (t: DisplayTask, key: string) => {
 /** How a property's key is read, matched and shown, layer by layer and reader by reader. */
 describe('a property key', () => {
     const note = [
-        '---',
-        'zone: north',
-        '---',
+        '- zone:: north',
         '# A',
         '- Area:: lab',
         '- [ ] t',
@@ -58,7 +56,7 @@ describe('a property key', () => {
     });
 
     it('of a task overrides the same key above it, written the same way', () => {
-        const [t] = tasks(['---', 'area: desk', '---', '- [ ] t', '    - area:: lab']);
+        const [t] = tasks(['- area:: desk', '', '- [ ] t', '    - area:: lab']);
         expect(shownBy(t, 'area')).toBe('lab');
         expect(Object.keys(normalizeTask(t, noRow).properties)).toEqual(['area']);
     });
@@ -99,7 +97,7 @@ describe('a property key, its case aside', () => {
     };
 
     it('is one property across the layers: the nearer layer wins, shown as that layer writes it', () => {
-        const [t] = tasks(['---', 'area: desk', 'zone: north', '---', '# A', '- ZONE:: south', '- [ ] t', '    - Area:: lab']);
+        const [t] = tasks(['- area:: desk', '- zone:: north', '# A', '- ZONE:: south', '- [ ] t', '    - Area:: lab']);
         expect(shownBy(t, 'area')).toBe('lab');
         expect(shownBy(t, 'zone')).toBe('south');
         expect(normalizeTask(t, noRow).properties).toEqual({ ZONE: 'south', Area: 'lab' });
@@ -125,18 +123,25 @@ describe('a property key, its case aside', () => {
     it('written twice by one owner, in two cases, is an error on each line and read on neither', () => {
         const lines = ['- [ ] t', '    - Area:: a', '    - area:: b', '    - other:: c'];
         expect(findings(lines, 0)).toEqual([['duplicate-key', 1, 'Area'], ['duplicate-key', 2, 'area']]);
-        const [t] = tasks(['---', 'area: fm', '---', ...lines]);
-        expect(shownBy(t, 'area')).toBe('fm');
+        const [t] = tasks(['- area:: root', '', ...lines]);
+        expect(shownBy(t, 'area')).toBe('root');
         expect(shownBy(t, 'other')).toBe('c');
         const [s] = tasks(['# A', '- Tags:: #a', '- tags:: #b', '- [ ] s']);
         expect(s.cascadeContext?.tags).toBeUndefined();
     });
 
-    it('written twice by the frontmatter, in two cases, is read on neither; its other keys are read', () => {
-        const [t] = tasks(['---', 'Area: lab', 'area: desk', 'TV-COLOR: red', 'tv-color: blue', 'zone: north', '---', '- [ ] t']);
-        expect(shownBy(t, 'area')).toBeUndefined();
+    it('written twice by the frontmatter, in two cases, is read on neither; its other built-ins are read', () => {
+        const [t] = tasks(['---', 'TV-COLOR: red', 'tv-color: blue', 'tv-mask: "***"', '---', '- [ ] t']);
         expect(t.cascadeContext?.color).toBeUndefined();
-        expect(normalizeTask(t, noRow).properties).toEqual({ zone: 'north' });
+        expect(t.inheritedFrom?.fields.color).toBeUndefined();
+        expect(t.cascadeContext?.mask).toBe('***');
+    });
+
+    it('of the frontmatter, other than a built-in, is the note\'s own and no task\'s, in any case', () => {
+        const [t] = tasks(['---', 'Area: lab', 'zone: north', '---', '- area:: root', '', '- [ ] t']);
+        expect(shownBy(t, 'area')).toBe('root');
+        expect(shownBy(t, 'zone')).toBeUndefined();
+        expect(normalizeTask(t, noRow).properties).toEqual({ area: 'root' });
     });
 
     it('of the frontmatter\'s tags, written twice, takes the first key\'s tags, as Obsidian does', () => {
@@ -146,7 +151,7 @@ describe('a property key, its case aside', () => {
     });
 
     it('keeps the width of its characters: a full-width key is another key, and `ｔａｇｓ` no tags', () => {
-        const [t] = tasks(['---', 'area: half', '---', '- [ ] t', '    - ａｒｅａ:: full', '    - 担当１:: x', '    - ｔａｇｓ:: #a']);
+        const [t] = tasks(['- area:: half', '', '- [ ] t', '    - ａｒｅａ:: full', '    - 担当１:: x', '    - ｔａｇｓ:: #a']);
         expect(shownBy(t, 'area')).toBe('half');
         expect(shownBy(t, 'ａｒｅａ')).toBe('full');
         expect(shownBy(t, 'ＡＲＥＡ')).toBe('full');

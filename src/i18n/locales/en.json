@@ -575,6 +575,7 @@
       "withinEnd": "Moves the rows to the end of the heading {{heading}}",
       "withinMade": "Makes the heading {{heading}} at the end of the note and moves the rows under it",
       "frontmatter": "Values to write into the frontmatter",
+      "root": "Values to write at the top of the note",
       "fromFrontmatter": "frontmatter",
       "fromHeading": "heading {{heading}}",
       "fromTop": "before the first heading",

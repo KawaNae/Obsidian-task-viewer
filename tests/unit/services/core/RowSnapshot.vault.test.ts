@@ -12,8 +12,8 @@ import { DEFAULT_SETTINGS } from '../../../../src/types';
  */
 
 const FILE = 'note.md';
-const NOTE = ['---', 'owner: me', '---', '## Work', '- [ ] A @2026-09-21', '    - [ ] child', '- [ ] B @2026-09-21', ''];
-const OUTSIDE = ['---', 'owner: me', '---', '## Work', 'メモ', '- [ ] A @2026-09-21', '    - [ ] child', '- [ ] B @2026-09-21', ''];
+const NOTE = ['---', 'tv-color: red', '---', '## Work', '- [ ] A @2026-09-21', '    - [ ] child', '- [ ] B @2026-09-21', ''];
+const OUTSIDE = ['---', 'tv-color: red', '---', '## Work', 'メモ', '- [ ] A @2026-09-21', '    - [ ] child', '- [ ] B @2026-09-21', ''];
 
 let live: VaultSession | undefined;
 afterEach(() => { live?.dispose(); live = undefined; });
@@ -40,7 +40,7 @@ describe('rowSnapshot', () => {
     it('what the row inherits is read off the snapshot, for a child row as well', async () => {
         const { session } = await open();
         const snapshot = (await session.ops.rowSnapshot(idOf(session, 'child')))!;
-        expect(inheritedAt(snapshot.lines, snapshot.task.line, DEFAULT_SETTINGS).map(v => v.yaml)).toEqual([['owner: me']]);
+        expect(inheritedAt(snapshot.lines, snapshot.task.line, DEFAULT_SETTINGS).map(v => v.lines)).toEqual([['tv-color: red']]);
     });
 
     it('over an edit from outside no scan read: none, told once, and the next name has one', async () => {
