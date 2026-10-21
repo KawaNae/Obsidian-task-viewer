@@ -3,7 +3,9 @@
  * Dev vault: a property with no value (`- tv-color::`, the frontmatter's
  * `tv-linestyle:`) hides the value above it, and a value the plugin cannot
  * read (`- tv-linestyle:: wavy`) is read as not written, letting the value
- * above it through.
+ * above it through. A value written above the first heading wins over the
+ * frontmatter's and reaches every task; a custom key of the frontmatter
+ * reaches none.
  *
  * The tasks are in April 2027, in a note of the test's own; a Timeline is
  * opened on that day. A card is found by the name its text starts with; its
@@ -29,8 +31,10 @@ const NOTE = [
     'tv-color: "#ff0000"',
     'tv-linestyle: dashed',
     'tv-mask: fm-mask',
-    'area: lab',
+    'note-only: x',
     '---',
+    '- area:: lab',
+    '- tv-mask:: root-mask',
     `- [ ] cn-inherit @${DAY}`,
     `- [ ] cn-own-none @${DAY}`,
     '    - tv-color::',
@@ -110,16 +114,17 @@ describe('a card shows a style hidden with no value, and the one above an unread
     it('masks', () => {
         openView('cn-mask', 'timeline-view', { date: DAY, daysToShow: 3, showSidebar: false, maskMode: true });
         // A card's text ends in its note's link, which the mask leaves.
-        const shown = texts('cn-mask').map(text => text.match(/^(fm-mask|cn-[a-z-]+)/)?.[1]);
-        // The frontmatter's mask on every card but those that hide it.
-        expect(shown).toEqual(['cn-own-none', 'cn-section-none', 'fm-mask', 'fm-mask', 'fm-mask']);
+        const shown = texts('cn-mask').map(text => text.match(/^(fm-mask|root-mask|cn-[a-z-]+)/)?.[1]);
+        // The mask above the first heading, over the frontmatter's, on every card but those that hide it.
+        expect(shown).toEqual(['cn-own-none', 'cn-section-none', 'root-mask', 'root-mask', 'root-mask']);
     });
 
-    it('the API gives a custom property hidden with no value as null', () => {
+    it('the API gives a custom property hidden with no value as null, and none of the frontmatter\'s custom keys', () => {
         const r = cliList({ file: FILE, 'output-fields': 'content,color,linestyle,properties' });
         const by = Object.fromEntries(r.tasks.map(t => [t.content, t]));
         expect(by['cn-own-none'].properties).toEqual({ area: null });
         expect(by['cn-inherit'].properties).toEqual({ area: 'lab' });
+        expect(by['cn-overridden'].properties).toEqual({ area: 'lab' });
         expect(by['cn-own-none'].color).toBeNull();
         expect(by['cn-section-none'].linestyle).toBeNull();
     });

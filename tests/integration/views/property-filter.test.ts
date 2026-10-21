@@ -2,7 +2,9 @@
  * A property condition in the running Dev vault: the CLI's `property=`, a
  * filter file and the API's filter compare a property's value by its type,
  * a text in any case, a list item by item, and `isNotSet` finds no value
- * as it finds no key; the API gives each value as its type says.
+ * as it finds no key; a value written above the first heading is every
+ * task's of the note, and a custom key of the frontmatter is none's; the
+ * API gives each value as its type says.
  *
  * The tasks are in notes of the test's own, removed at the end.
  *
@@ -18,6 +20,7 @@ import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFi
 
 const FILE = 'test-int-property-filter.md';
 const FM_FILE = 'test-int-property-filter-fm.md';
+const ROOT_FILE = 'test-int-property-filter-root.md';
 const FILTER_FILE = 'test-int-property-filter.json';
 const KEY = 'tvpf';
 
@@ -46,14 +49,26 @@ const NOTE = [
     '',
 ].join('\n');
 
-const FM_NOTE = ['---', `${KEY}:`, '---', '- [ ] pf-fm-none', ''].join('\n');
+const FM_NOTE = ['---', `${KEY}: lab`, '---', '- [ ] pf-fm-only', ''].join('\n');
+
+const ROOT_NOTE = [
+    '---', `${KEY}: desk`, '---',
+    `- ${KEY}:: Lab`,
+    '',
+    '## S',
+    '- [ ] pf-root',
+    '## T',
+    `- ${KEY}::`,
+    '- [ ] pf-root-hidden',
+    '',
+].join('\n');
 
 const FIELDS = { 'output-fields': 'id,content,file,properties', limit: 'all' };
 
 /** The names of the test's rows among `tasks`. */
 function names(tasks: Record<string, unknown>[]): string[] {
     return tasks
-        .filter(t => t.file === FILE || t.file === FM_FILE)
+        .filter(t => t.file === FILE || t.file === FM_FILE || t.file === ROOT_FILE)
         .map(t => String(t.content))
         .sort();
 }
@@ -82,14 +97,17 @@ beforeAll(async () => {
     }
     expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
     expect(await writeIndexedTestFile(FM_FILE, FM_NOTE)).toBe(true);
+    expect(await writeIndexedTestFile(ROOT_FILE, ROOT_NOTE)).toBe(true);
 });
 
 afterAll(async () => {
     deleteTestFile(FILE);
     deleteTestFile(FM_FILE);
+    deleteTestFile(ROOT_FILE);
     deleteTestFile(FILTER_FILE);
     await waitForFileDeindexed(FILE);
     await waitForFileDeindexed(FM_FILE);
+    await waitForFileDeindexed(ROOT_FILE);
 });
 
 describe('a property condition compares by type', () => {
@@ -99,7 +117,7 @@ describe('a property condition compares by type', () => {
         expect(which('equals', '123')).toEqual(['pf-num123', 'pf-text123']);
         expect(which('equals', '"123"')).toEqual(['pf-text123']);
         expect(which('equals', 'TRUE')).toEqual(['pf-true']);
-        expect(which('equals', 'lab')).toEqual(['pf-lab']);
+        expect(which('equals', 'lab')).toEqual(['pf-lab', 'pf-root']);
         expect(which('equals', 'bee')).toEqual(['pf-list']);
     });
 
@@ -107,11 +125,16 @@ describe('a property condition compares by type', () => {
         expect(which('contains', 'x1f')).toEqual(['pf-hex']);
         expect(which('contains', 'a, b')).toEqual([]);
         expect(names(cliList({ ...FIELDS, property: `${KEY}:EE` }).tasks)).toEqual(['pf-list']);
-        expect(names(cliList({ ...FIELDS, property: `${KEY.toUpperCase()}:la` }).tasks)).toEqual(['pf-lab']);
+        expect(names(cliList({ ...FIELDS, property: `${KEY.toUpperCase()}:la` }).tasks)).toEqual(['pf-lab', 'pf-root']);
     });
 
-    it('isNotSet: no value on a line or in the frontmatter, and no key', () => {
-        expect(which('isNotSet')).toEqual(['pf-fm-none', 'pf-missing', 'pf-none']);
+    it('isNotSet: no value on a line or hiding the value above, and no key, the frontmatter\'s custom key being none', () => {
+        expect(which('isNotSet')).toEqual(['pf-fm-only', 'pf-missing', 'pf-none', 'pf-root-hidden']);
+    });
+
+    it('a value above the first heading reaches the tasks under the headings; the frontmatter\'s custom key reaches none', () => {
+        expect(which('equals', 'desk')).toEqual([]);
+        expect(which('isSet').filter(name => name.startsWith('pf-root') || name.startsWith('pf-fm'))).toEqual(['pf-root']);
     });
 });
 
@@ -124,5 +147,8 @@ describe('the API gives a property as its type says', () => {
         expect(props('pf-list')).toEqual({ [KEY]: ['a', 'Bee'] });
         expect(props('pf-none')).toEqual({ [KEY]: null });
         expect(props('pf-lab')).toEqual({ [KEY.toUpperCase()]: 'Lab' });
+        const fromRoot = cliList({ ...FIELDS, file: ROOT_FILE }).tasks;
+        expect(fromRoot.find(t => t.content === 'pf-root')?.properties).toEqual({ [KEY]: 'Lab' });
+        expect(cliList({ ...FIELDS, file: FM_FILE }).tasks.find(t => t.content === 'pf-fm-only')?.properties).toEqual({});
     });
 });

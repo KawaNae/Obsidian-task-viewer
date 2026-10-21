@@ -2,7 +2,9 @@
  * The hub opens the line a value is written on, in the running Dev vault:
  * an inherited value's source label and a finding's button open the row's
  * note with the cursor on that line, and a frontmatter key the Properties
- * view shows is lit there. A line our own write moved is followed.
+ * view shows is lit there. A value written above the first heading is said
+ * to be the file's, as the frontmatter's is, and its line opens as a
+ * section's does. A line our own write moved is followed.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
@@ -17,8 +19,10 @@ const TEST_FILE = 'test-int-hub-source-line.md';
 
 const LINES = [
     '---',
+    'tv-mask: "***"',
     'owner: me',
     '---',
+    '- 時給:: 1450',
     '# 見出し',
     '- area:: lab',
     '- tv-color:: red',
@@ -94,6 +98,15 @@ describe('the hub opens the line a value is written on', () => {
     it('opens a section\'s property line from its source label', () => {
         openHub('親');
         const line = run<number>(`rowOf('area').querySelector('.task-hub__source').click(); return await cursorLine();`);
+        expect(line).toBe(6);
+    });
+
+    it('says a value above the first heading is the file\'s, a section\'s the section\'s, and opens its line', () => {
+        openHub('親');
+        const labels = run<string[]>(`return JSON.stringify(['時給', 'area'].map(key => rowOf(key).querySelector('.task-hub__source').textContent));`);
+        expect(labels).toEqual(['継承: ファイル', '継承: セクション']);
+        expect(run<boolean>(`return !rowOf('owner');`)).toBe(true);
+        const line = run<number>(`rowOf('時給').querySelector('.task-hub__source').click(); return await cursorLine();`);
         expect(line).toBe(4);
     });
 
@@ -103,17 +116,17 @@ describe('the hub opens the line a value is written on', () => {
             hub().querySelector('.tv-form__input-with-picker--color').closest('.tv-form__row').querySelector('.task-hub__source').click();
             return await cursorLine();
         `);
-        expect(color).toBe(5);
+        expect(color).toBe(7);
         closeAll();
         openHub('親');
         const tag = run<number>(`hub().querySelector('.task-hub__tag-chip--cascade').click(); return await cursorLine();`);
-        expect(tag).toBe(6);
+        expect(tag).toBe(8);
     });
 
     it('opens a finding\'s line from its button', () => {
         openHub('親');
         const line = run<number>(`rowOf('memo').nextElementSibling.querySelector('.tv-form__issue-action').click(); return await cursorLine();`);
-        expect(line).toBe(10);
+        expect(line).toBe(12);
     });
 
     it('opens a finding\'s line where a write of ours moved it', () => {
@@ -125,17 +138,17 @@ describe('the hub opens the line a value is written on', () => {
             rowOf('memo').nextElementSibling.querySelector('.tv-form__issue-action').click();
             return await cursorLine();
         `);
-        expect(line).toBe(9);
+        expect(line).toBe(11);
     });
 
     it('lights a frontmatter key in the Properties view, or puts the cursor on its line in source mode', () => {
         openHub('親');
         const shown = run<{ lit: boolean; cursor: number; properties: boolean }>(`
-            rowOf('owner').querySelector('.task-hub__source').click();
+            rowOf('マスク').querySelector('.task-hub__source').click();
             await until(() => noteView() && !hub());
             await sleep(200);
             const view = noteView();
-            const property = view.containerEl.querySelector('.metadata-property[data-property-key="owner"]');
+            const property = view.containerEl.querySelector('.metadata-property[data-property-key="tv-mask"]');
             return JSON.stringify({
                 properties: !!property && property.offsetParent !== null,
                 lit: !!property?.classList.contains('is-flashing'),
