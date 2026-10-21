@@ -5,7 +5,9 @@
  * as an empty field that says so, and its × takes the line out, so the
  * value above comes through. The style fields do the same, and show a no
  * value a section above wrote as the property fields do: an empty field
- * that says so, with the line it is written on to open.
+ * that says so, with the line it is written on to open. A value written
+ * above the first heading is hidden so too, its source said to be the
+ * file's.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
@@ -149,6 +151,26 @@ describe('the hub hides an inherited value', () => {
             return 'ok';
         `);
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 8));
+    });
+
+    it('hides a value inherited from above the first heading, its source and an inherited no value from there said to be the file\'s', async () => {
+        const lines = ['- 時給:: 1450', '- tv-mask::', '', '# 見出し', '- [ ] 根の下 @2026-10-01', ''];
+        await writeIndexedTestFile(TEST_FILE, lines.join('\n'));
+        openHub('根の下');
+        const before = run<Record<string, unknown>>(`
+            const wage = rowOf('時給');
+            const mask = rowOf(${JSON.stringify(tr('modal.hub.mask'))});
+            return JSON.stringify({
+                wage: [wage.querySelector('input').value, wage.querySelector('.task-hub__source').textContent, !!wage.querySelector('.task-hub__hide')],
+                mask: [mask.querySelector('input[type=text]').placeholder, mask.querySelector('.task-hub__source').textContent],
+            });
+        `);
+        expect(before).toEqual({
+            wage: ['1450', tr('modal.hub.inheritedFromFile'), true],
+            mask: [tr('modal.hub.noValue'), tr('modal.hub.inheritedFromFile')],
+        });
+        run(`rowOf('時給').querySelector('.task-hub__hide').click(); await sleep(600); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(['- 時給:: 1450', '- tv-mask::', '', '# 見出し', '- [ ] 根の下 @2026-10-01', '\t- 時給::', ''].join('\n'));
     });
 
     it('shows a style\'s inherited no value as the property fields do, its source to open and no ×', () => {

@@ -28,8 +28,9 @@ const TEST_FILE = 'test-tags-properties.md';
 // 金額:2000 → 1 / 店舗:コンビニ → 1 / content 課金 → 3 / all unchecked.
 const FIXTURE_CONTENT = [
     '---',
-    'customProperty: 継承テスト',
+    'customProperty: ノートのメタデータ',
     '---',
+    '- rootProperty:: 継承テスト',
     '',
     '# タグ・プロパティ フィルタテスト',
     '',
@@ -160,11 +161,13 @@ describe('list — custom property filter', () => {
         expect(props['メモ']).toBe('月パス');
     });
 
-    it('tasks with only inherited properties have frontmatter properties', () => {
+    it('tasks with only inherited properties have the ones above the first heading, and none of the frontmatter\'s custom keys', () => {
         const r = cliList({ content: 'タグなしテスト', 'output-fields': 'content,properties' });
         expect(r.count).toBe(1);
-        // タグなしテスト has no inline properties, but inherits frontmatter customProperty
-        expect(r.tasks[0].properties).toHaveProperty('customProperty');
+        // タグなしテスト has no inline properties, but inherits rootProperty from the line above the first heading
+        expect(r.tasks[0].properties).toEqual({ rootProperty: '継承テスト' });
+        expect(cliList({ property: 'customProperty:ノート', file: TEST_FILE }).count).toBe(0);
+        expect(cliList({ property: 'rootProperty:継承', file: TEST_FILE }).count).toBe(10);
     });
 });
 

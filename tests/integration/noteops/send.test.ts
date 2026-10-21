@@ -35,10 +35,10 @@ interface Sent {
 
 /**
  * Send the row of `SRC` whose text is `name` to `to`, through the plugin's
- * `NoteOps`, with `frontmatter` — after `prelude` (statements) has run in
+ * `NoteOps`, with the values `values` — after `prelude` (statements) has run in
  * Obsidian — and answer what came of it, with the notices it raised.
  */
-function send(name: string, to: unknown, frontmatter: unknown[] = [], prelude = ''): Sent {
+function send(name: string, to: unknown, values: unknown[] = [], prelude = ''): Sent {
     const result = obsidianEval(`(async () => {
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
         const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
@@ -48,7 +48,7 @@ function send(name: string, to: unknown, frontmatter: unknown[] = [], prelude = 
         const sent = await plugin.getNoteOps().send({
             rows: [{ taskId: task.id, base: task.subtreeLines }],
             to: ${JSON.stringify(to)},
-            frontmatter: ${JSON.stringify(frontmatter)},
+            values: ${JSON.stringify(values)},
         });
         await new Promise(r => setTimeout(r, 300));
         // Those raised since, by the elements: one raised before may be gone by now.
@@ -82,7 +82,7 @@ describe('sending a row', () => {
         await writeIndexedTestFile(SRC, ['# 送り元', '- [ ] 設計 @2026-09-29 ^e2e', '    - [ ] 下書き', '    メモ', '- [ ] 残る', ''].join('\n'));
 
         const sent = send('設計', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION },
-            [{ key: 'tv-color', yaml: ['tv-color: "blue"'], from: [], obsidian: false }]);
+            [{ key: 'tv-color', to: 'frontmatter', lines: ['tv-color: "blue"'], from: [] }]);
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
         expect(sent.notices).toHaveLength(1);
@@ -97,8 +97,8 @@ describe('sending a row', () => {
         await writeIndexedTestFile(SRC, ['1. [ ] 手順 ^s1', '    - [ ] 子', '2. [ ] 次', ''].join('\n'));
 
         const sent = send('手順', { note: { kind: 'existing', path: DST }, section: SECTION }, [
-            { key: 'tv-color', yaml: ['tv-color: "blue"'], from: [], obsidian: false },
-            { key: 'tags', yaml: ['tags:', '  - e2e'], from: [], obsidian: false },
+            { key: 'tv-color', to: 'frontmatter', lines: ['tv-color: "blue"'], from: [] },
+            { key: 'tags', to: 'frontmatter', lines: ['tags:', '  - e2e'], from: [] },
         ]);
 
         expect(sent.result).toEqual({ kind: 'done', note: DST });
@@ -106,9 +106,9 @@ describe('sending a row', () => {
         expect(readTestFile(SRC)).toBe([`1. [[${DST.replace(/\.md$/, '')}]]`, '2. [ ] 次', ''].join('\n'));
     });
 
-    it('with the values it inherits: no value as the key with none, a quoted value with its quotes', async () => {
+    it('with the values it inherits: a built-in in the frontmatter, a custom value above the first heading as spelt, no value as none, the frontmatter\'s custom keys none', async () => {
         deleteTestFile(`${NEW}.md`);
-        await writeIndexedTestFile(SRC, ['---', 'area: lab', 'tv-color: red', '---', '## S', '- area::', "- sq:: 'abc'", '- id:: "123"', '- tv-color:: null', '- [ ] 値', ''].join('\n'));
+        await writeIndexedTestFile(SRC, ['---', 'tv-color: red', 'note-only: x', '---', '- area:: lab', '## S', '- area::', "- sq:: 'abc'", '- id:: "123"', '- tv-color:: null', '- [ ] 値', ''].join('\n'));
 
         const candidates = obsidianEval(`(async () => {
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
@@ -119,7 +119,7 @@ describe('sending a row', () => {
         const sent = send('値', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION }, candidates);
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
-        expect(readTestFile(`${NEW}.md`)).toBe(['---', 'tv-color:', 'area:', "sq: 'abc'", 'id: "123"', '---', '', '## Tasks', '- [ ] 値', ''].join('\n'));
+        expect(readTestFile(`${NEW}.md`)).toBe(['---', 'tv-color:', '---', '- area::', "- sq:: 'abc'", '- id:: "123"', '', '## Tasks', '- [ ] 値', ''].join('\n'));
         deleteTestFile(`${NEW}.md`);
     });
 
@@ -332,6 +332,47 @@ describe('the send dialog', () => {
         `);
         expect(sent).toEqual({ open: false, notices: 0 });
         expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす', '    - [ ] 子2', '- [x] 済み', ''].join('\n'));
+    });
+
+    it('lists the values the row inherits under where they are written, the frontmatter\'s before those above the first heading, and writes them there', async () => {
+        deleteTestFile(`${NEW}.md`);
+        await writeIndexedTestFile(SRC, ['---', 'tv-color: red', '体重[kg]: 60', '---', 'Inherit properties:', '- 時給:: 1450', '', '## 勤務', '- who::', '    - a', '- [ ] 働く', ''].join('\n'));
+        expect(openDialog('働く').open).toBe(true);
+
+        const listed = onDialog<{ groups: { label: string; rows: [string, string, boolean][] }[]; canSend: boolean }>(`
+            const [note, heading] = inputs();
+            note.value = ${JSON.stringify(NEW)};
+            note.dispatchEvent(new Event('input', { bubbles: true }));
+            heading.value = 'Tasks';
+            heading.dispatchEvent(new Event('input', { bubbles: true }));
+            await until(() => state().canSend && panel().querySelectorAll('.tv-send__candidates').length === 2);
+            const groups = [...panel().querySelectorAll('.tv-send__candidates')].map(group => ({
+                label: group.previousElementSibling.textContent,
+                rows: [...group.querySelectorAll('.tv-form__row')].map(row => [
+                    row.querySelector('.tv-form__label').textContent,
+                    row.querySelector('.tv-send__value').textContent,
+                    row.querySelector('input').checked,
+                ]),
+            }));
+            return JSON.stringify({ groups, canSend: state().canSend });
+        `);
+        expect(listed).toEqual({
+            groups: [
+                { label: 'frontmatter に書く値', rows: [['tv-color', 'red', true]] },
+                { label: 'ノートの先頭に書く値', rows: [['時給', '1450', true], ['who', 'a', true]] },
+            ],
+            canSend: true,
+        });
+
+        const sent = onDialog<DialogState>(`
+            panel().querySelector('.tv-form__buttons .mod-cta').click();
+            await until(() => !panel());
+            await sleep(300);
+            return JSON.stringify(state());
+        `);
+        expect(sent.open).toBe(false);
+        expect(readTestFile(`${NEW}.md`)).toBe(['---', 'tv-color: red', '---', '- 時給:: 1450', '- who::', '    - a', '', '## Tasks', '- [ ] 働く', ''].join('\n'));
+        deleteTestFile(`${NEW}.md`);
     });
 
     it('says why each row\'s draft cannot be written under that row, two rows of the same reason each', async () => {
