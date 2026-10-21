@@ -1,18 +1,17 @@
 import type { Properties, PropertyValue, ScopeKeys } from '../../../types';
 import { TagExtractor } from '../utils/TagExtractor';
-import { TagRule } from '../utils/TagRule';
 import { builtinKey, builtinsByKey, readBuiltin, type Builtin } from '../utils/BuiltinValues';
 import { PropertyValues } from '../utils/PropertyValues';
 import { reservedPropertyKeys } from '../utils/FrontmatterPolicy';
 import type { ScalarField } from './Sections';
 
 /**
- * One layer's properties, the built-ins put apart. A built-in's field is
- * undefined where the layer says nothing of it (no key, or a value it
- * cannot read), and null where it says it has none (`- tv-color::`), which
- * hides the value above it.
+ * One layer's built-in values. A built-in's field is undefined where the
+ * layer says nothing of it (no key, or a value it cannot read), and null
+ * where it says it has none (`- tv-color::`), which hides the value above
+ * it.
  */
-export interface ExtractedProperties {
+export interface ExtractedBuiltins {
     color?: string | null;
     linestyle?: string | null;
     mask?: string | null;
@@ -22,6 +21,10 @@ export interface ExtractedProperties {
     endDate?: string | null;
     endTime?: string | null;
     due?: string | null;
+}
+
+/** One layer's properties, the built-ins put apart (`ExtractedBuiltins`). */
+export interface ExtractedProperties extends ExtractedBuiltins {
     /** Custom properties by key folded, each with its key as this layer writes it. */
     properties: Properties;
 }
@@ -41,34 +44,39 @@ export function fieldKey(field: ScalarField | 'tags', keys: ScopeKeys): string {
 
 /**
  * The built-in values of one layer's properties, put into their own fields,
- * and the rest as custom properties: the frontmatter's
- * ({@link BuiltinPropertyExtractor.fromFrontmatter}), a section's and a
- * task's alike, so a key means one thing on every layer. Which key is which
- * built-in, a key's case aside, and how its value reads (no value, a value,
- * or one not read) is `BuiltinValues`'s: `TV-COLOR::` is the color,
- * `Tags::` the tags. The frontmatter's tags are Obsidian's `tags` key, read
- * off the YAML before its values are made text
- * ({@link BuiltinPropertyExtractor.fromFrontmatter}).
+ * and the rest as custom properties: a section's and a task's alike, so a
+ * key means one thing on every layer. Which key is which built-in, a key's
+ * case aside, and how its value reads (no value, a value, or one not read)
+ * is `BuiltinValues`'s: `TV-COLOR::` is the color, `Tags::` the tags. The
+ * frontmatter gives its built-ins alone
+ * ({@link BuiltinPropertyExtractor.fromFrontmatter}): its other keys are
+ * the note's own, which no task inherits.
  */
 export class BuiltinPropertyExtractor {
     /**
-     * The built-ins and custom properties of a note's frontmatter, as its
-     * YAML gave it. A key written twice, its case aside (`Area` and
-     * `area`), is read on neither (`PropertyValues.fromFrontmatter`). Its
-     * tags are Obsidian's (`TagExtractor.fromFrontmatter`): the first key
-     * that is `tags` whatever its case, `Tags` beside it or not, and of its
-     * items those YAML read as text (`tags: [true, a]` holds `a`), which the
-     * values made text no longer tell apart. Every key Obsidian could read
-     * tags from is the tags' and no custom property, as `tags` is on any
-     * layer.
+     * The built-ins of a note's frontmatter, as its YAML gave it, read as a
+     * section's are. A key written twice, its case aside (`TV-COLOR` and
+     * `tv-color`), is read on neither (`PropertyValues.fromFrontmatter`).
+     * Its tags are Obsidian's (`TagExtractor.fromFrontmatter`): the first
+     * key that is `tags` whatever its case, `Tags` beside it or not, and of
+     * its items those YAML read as text (`tags: [true, a]` holds `a`),
+     * which the values made text no longer tell apart.
+     *
+     * Its other keys are no task's: the frontmatter is the note's own
+     * metadata, which other plugins and scripts write and read as they
+     * mean them (a daily note's `体重[kg]:`). A value every task of the note
+     * inherits is a property line above the note's first heading.
      */
     static fromFrontmatter(
         frontmatter: Record<string, unknown> | undefined,
         keys: ScopeKeys
-    ): ExtractedProperties {
-        const values = PropertyValues.fromFrontmatter(frontmatter);
-        for (const [folded, { key }] of Object.entries(values)) if (TagRule.isFrontmatterKey(key)) delete values[folded];
-        const result = this.extract(values, keys);
+    ): ExtractedBuiltins {
+        const result: ExtractedBuiltins = {};
+        const builtinOf = builtinsByKey(keys);
+        for (const [key, property] of Object.entries(PropertyValues.fromFrontmatter(frontmatter))) {
+            const builtin = builtinOf.get(key);
+            if (builtin && builtin !== 'tags') this.readBuiltin(builtin, property.value, result);
+        }
         const tags = TagExtractor.fromFrontmatter(frontmatter);
         if (tags.length > 0) result.tags = tags;
         return result;
@@ -98,7 +106,7 @@ export class BuiltinPropertyExtractor {
         return result;
     }
 
-    private static readBuiltin(builtin: Builtin, pv: PropertyValue, result: ExtractedProperties): void {
+    private static readBuiltin(builtin: Builtin, pv: PropertyValue, result: ExtractedBuiltins): void {
         const read = readBuiltin(builtin, pv);
         if (read === undefined) return;
         if (read === null) {

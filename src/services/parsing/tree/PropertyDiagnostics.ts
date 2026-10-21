@@ -19,7 +19,7 @@ import { ITEM_TEXT, PropertyLines, type PropertyFinding, type PropertyFindingKin
 const MESSAGES: Record<PropertyFindingKind, string> = {
     'duplicate-key':
         '`{{key}}::` is written on more than one line of the same task or section (a key\'s case aside), so none of them is read. '
-        + 'A value the task or section inherits from a section or the frontmatter is used instead. Keep one line',
+        + 'A value the task or section inherits from a section, the lines above the first heading or the frontmatter is used instead. Keep one line',
     'date-key-under-task':
         '`{{key}}::` under a task is not read. Write a task\'s dates in the date block (@…) on its own line',
     'lines-under-value':
@@ -33,7 +33,7 @@ const MESSAGES: Record<PropertyFindingKind, string> = {
         + 'a task, an item with no value (`-`, `- null`), a line under an item and a line that is no item are left out',
     'unreadable-value':
         'The value of `{{key}}::` is not one `{{key}}` can read (a list is none), so the line is read as if it were not written. '
-        + 'A value the task or section inherits from a section or the frontmatter is used instead. '
+        + 'A value the task or section inherits from a section, the lines above the first heading or the frontmatter is used instead. '
         + 'Write a value `{{key}}` reads, or leave `{{key}}::` empty with nothing under it to have no value',
 };
 
@@ -70,7 +70,7 @@ export function propertyFindingDiagnostic(finding: PropertyFinding, lineText: st
 /**
  * The editor's diagnostics on a note's property lines: every finding of
  * every owner the parser reads property lines for (`PropertyLines.read`),
- * each section's (the one above the first heading too) and each task's,
+ * each section's (the root's, above the first heading, too) and each task's,
  * with the scope keys the parser reads the note with. A finding of the
  * reading is a diagnostic, and nothing else is.
  */

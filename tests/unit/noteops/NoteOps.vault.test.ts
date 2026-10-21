@@ -90,24 +90,28 @@ describe('previewSend: the note field by default', () => {
 });
 
 describe('previewSend: candidates and links', () => {
-    it('offers what the row inherits, Obsidian\'s own keys marked', async () => {
-        const note = await open(['---', 'aliases: [x]', 'k: 1', '---', '- [ ] A', '']);
+    it('offers what the row inherits, each where it is written: a built-in in the frontmatter, a custom value above the first heading', async () => {
+        const note = await open(['---', 'aliases: [x]', 'k: 1', 'tv-color: red', '---', '- area:: lab', '', '## S', '- [ ] A', '']);
 
         const preview = (await note.ops.previewSend([note.idOf('A')]))!;
 
-        expect(preview.candidates.map(one => [one.key, one.obsidian])).toEqual([['aliases', true], ['k', false]]);
+        expect(preview.candidates.map(one => [one.key, one.to, one.lines])).toEqual([
+            ['tv-color', 'frontmatter', ['tv-color: red']],
+            ['area', 'root', ['- area:: lab']],
+        ]);
     });
 
     it('of more than one row, only the keys every row inherits alike', async () => {
         const note = await open([
-            '---', 'k: 1', '---',
+            '---', 'tv-color: red', '---',
+            '- k:: 1',
             '## a', '- same:: s', '- differ:: 1', '- only:: o', '- [ ] A',
             '## b', '- same:: s', '- differ:: 2', '- [ ] B', '',
         ]);
 
         const preview = (await note.ops.previewSend([note.idOf('A'), note.idOf('B')]))!;
 
-        expect(preview.candidates.map(one => one.key)).toEqual(['k', 'same']);
+        expect(preview.candidates.map(one => one.key)).toEqual(['tv-color', 'k', 'same']);
     });
 
     it('the links to a block of the rows\' subtrees, from elsewhere and from the rest of the note', async () => {
@@ -201,10 +205,14 @@ describe('destinationFacts', () => {
         expect(await facts(['- [ ] A', ''], { note: typed('note') }, { 'b.md': ['- [ ] B', ''] }, ['A', 'B'])).toMatchObject({ kind: 'existing' });
     });
 
-    it('the keys offered that the note has already', async () => {
-        const found = await facts(['---', 'k: 1', 'm: 2', '---', '- [ ] A', ''], { note: typed('Plan') }, { 'Plan.md': ['---', 'm: 9', '---', ''] });
+    it('the keys offered that the note says already: a built-in in its frontmatter or above its first heading, a custom value above its first heading', async () => {
+        const found = await facts(
+            ['---', 'tv-color: red', 'tv-mask: x', 'tv-linestyle: dashed', '---', '- k:: 1', '- m:: 2', '- z:: 3', '', '- [ ] A', ''],
+            { note: typed('Plan') },
+            { 'Plan.md': ['---', 'tv-mask: y', 'z: 1', '---', '- M:: 9', '- TV-COLOR:: blue', '', '## S', '- k:: 2', ''] },
+        );
 
-        expect(found).toMatchObject({ present: ['m'] });
+        expect(found).toMatchObject({ present: ['tv-color', 'tv-mask', 'm'] });
     });
 
     it('a note the index does not read', async () => {
@@ -252,7 +260,7 @@ describe('send', () => {
         const sent = await note.ops.send({
             rows: preview.rows.map(({ task }) => ({ taskId: task.id, base: task.subtreeLines! })),
             to: facts.to,
-            frontmatter: [],
+            values: [],
         });
 
         expect(sent.kind === 'done' && sent.note.path).toBe(FILE);
@@ -262,7 +270,7 @@ describe('send', () => {
     it('within the rows\' own note: not told', async () => {
         const note = await open(['- [ ] A', '## Tasks', '']);
 
-        await note.ops.send({ rows: [note.row('A')], to: { note: { kind: 'existing', path: FILE }, section: SECTION }, frontmatter: [] });
+        await note.ops.send({ rows: [note.row('A')], to: { note: { kind: 'existing', path: FILE }, section: SECTION }, values: [] });
 
         expect(Notice.messages).toEqual([]);
     });
@@ -270,17 +278,20 @@ describe('send', () => {
     it('to a new note: made, and told once, with the undo it cannot take back whole', async () => {
         const note = await open(['- [ ] A', '']);
 
-        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('Projects/設計.md'), frontmatter: [{ key: 'k', yaml: ['k: 1'], from: [], obsidian: false }] });
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('Projects/設計.md'), values: [
+            { key: 'tv-color', to: 'frontmatter', lines: ['tv-color: red'], from: [] },
+            { key: '時給', to: 'root', lines: ['- 時給:: 1450'], from: [] },
+        ] });
 
         expect(sent.kind === 'done' && sent.note.path).toBe('Projects/設計.md');
-        expect(note.contents.get('Projects/設計.md')).toBe('---\nk: 1\n---\n\n## Tasks\n- [ ] A\n');
+        expect(note.contents.get('Projects/設計.md')).toBe('---\ntv-color: red\n---\n- 時給:: 1450\n\n## Tasks\n- [ ] A\n');
         expect(Notice.messages).toEqual([t('notice.sent', { subject: 'A', note: 'Projects/設計.md' })]);
     });
 
     it('to a new note by the path a note has in another case: to that note', async () => {
         const note = await open(['- [ ] A', ''], { 'Projects/Plan.md': ['# p', ''] });
 
-        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('projects/plan.md'), frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('projects/plan.md'), values: [] });
 
         expect(sent.kind === 'done' && sent.note.path).toBe('Projects/Plan.md');
         expect(note.contents.get('Projects/Plan.md')).toBe('# p\n\n## Tasks\n- [ ] A\n');
@@ -290,7 +301,7 @@ describe('send', () => {
     it('of two rows: told once for both', async () => {
         const note = await open(['- [ ] A', '- [ ] B', '']);
 
-        await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X.md'), frontmatter: [] });
+        await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X.md'), values: [] });
 
         expect(Notice.messages).toEqual([t('notice.sentRows', { count: 2, note: 'X.md' })]);
     });
@@ -299,7 +310,7 @@ describe('send', () => {
         const note = await open(['- [ ] A', '']);
         refuseNext(note, FILE);
 
-        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), values: [] });
 
         const why = [
             t('notice.notSent'),
@@ -314,7 +325,7 @@ describe('send', () => {
         const note = await open(['- [ ] A', ''], { 'b.md': ['- [ ] B', ''] });
         refuseNext(note, 'b.md');
 
-        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X.md'), frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X.md'), values: [] });
 
         expect(sent.kind === 'partly' && [sent.note.path, sent.refused]).toEqual(['X.md', ['b.md']]);
         expect(Notice.messages).toEqual([[
@@ -327,7 +338,7 @@ describe('send', () => {
         const note = await open(['- [ ] A', '']);
         refuseNext(note, FILE, () => note.contents.set('X.md', note.contents.get('X.md') + 'typed\n'));
 
-        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), values: [] });
 
         expect(sent.kind === 'partly' && sent.refused).toEqual([FILE]);
         expect(Notice.messages).toEqual([[
@@ -339,11 +350,11 @@ describe('send', () => {
 
     it('asked wrongly — a path no note can be made at, a key given twice — is not made', async () => {
         const note = await open(['- [ ] A', '']);
-        const key = { key: 'k', yaml: ['k: 1'], from: [], obsidian: false };
+        const key = { key: 'k', to: 'root' as const, lines: ['- k:: 1'], from: [] };
 
         const wrongly = { kind: 'not-done', why: t('notice.notSent') };
-        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('a|b.md'), frontmatter: [] })).toEqual(wrongly);
-        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), frontmatter: [key, key] })).toEqual(wrongly);
+        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('a|b.md'), values: [] })).toEqual(wrongly);
+        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), values: [key, key] })).toEqual(wrongly);
         expect([...note.contents.keys()]).toEqual([FILE]);
         expect(Notice.messages).toEqual([]);
     });
@@ -356,13 +367,13 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
         const note = await open(['- [ ] A', ''], { 'Plan.md': ['## Tasks', '### tasks', ''] });
         const to = { note: { kind: 'existing' as const, path: 'Plan.md' }, section: SECTION };
 
-        const sent = await note.ops.send({ rows: [note.row('A')], to, frontmatter: [] }, quiet);
+        const sent = await note.ops.send({ rows: [note.row('A')], to, values: [] }, quiet);
 
         // Said of the row sent, though the note sent to holds none of the rows.
         expect(sent).toEqual({ kind: 'not-done', why: refusalNotice({ file: 'Plan.md', reason: { kind: 'headings', name: 'Tasks', count: 2 }, subject: 'A' }) });
         expect(Notice.messages).toEqual([]);
         // Told by default, in the same words.
-        expect(await note.ops.send({ rows: [note.row('A')], to, frontmatter: [] })).toEqual(sent);
+        expect(await note.ops.send({ rows: [note.row('A')], to, values: [] })).toEqual(sent);
         expect(Notice.messages).toEqual([sent.kind === 'not-done' && sent.why]);
     });
 
@@ -370,7 +381,7 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
         const note = await open(['- [ ] A', '    ```', '    x', '    ```', 'para', '']);
         const row = { ...note.row('A'), draft: { text: '- [ ] A', children: [{ text: '    ```', was: 1 }, { text: '    x', was: 2 }] } };
 
-        const sent = await note.ops.send({ rows: [row], to: NEW('X.md'), frontmatter: [] }, quiet);
+        const sent = await note.ops.send({ rows: [row], to: NEW('X.md'), values: [] }, quiet);
 
         expect(sent).toMatchObject({ kind: 'not-done', why: expect.stringContaining('A') });
         expect(note.contents.has('X.md')).toBe(false);
@@ -383,7 +394,7 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
         // Changed from outside, and the index never told.
         note.contents.set(FILE, '- [ ] A2\n');
 
-        const sent = await note.ops.send({ rows: [row], to: NEW('X.md'), frontmatter: [] }, quiet);
+        const sent = await note.ops.send({ rows: [row], to: NEW('X.md'), values: [] }, quiet);
 
         expect(sent).toEqual({ kind: 'not-done', why: t('notice.readAgain', { subject: 'A' }) });
         expect(Notice.messages).toEqual([]);
@@ -395,7 +406,7 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
         const note = await open(['- [ ] A', '']);
         refuseNext(note, FILE);
 
-        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), frontmatter: [] }, quiet);
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('X.md'), values: [] }, quiet);
 
         expect(sent).toEqual({
             kind: 'not-done',
@@ -409,7 +420,7 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
         const note = await open(['- [ ] A', ''], { 'b.md': ['- [ ] B', ''] });
         refuseNext(note, 'b.md');
 
-        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X.md'), frontmatter: [] }, quiet);
+        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X.md'), values: [] }, quiet);
 
         expect(sent.kind === 'partly' && sent.why).toBe(Notice.messages[0]);
         expect(Notice.messages).toHaveLength(1);

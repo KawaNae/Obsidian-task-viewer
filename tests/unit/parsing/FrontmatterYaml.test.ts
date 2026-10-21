@@ -76,14 +76,12 @@ describe('the frontmatter as Obsidian reads its YAML', () => {
     });
 });
 
-describe('the frontmatter\'s values as properties', () => {
-    const layer = (yaml: string[]) => {
-        const frontmatter = frontmatterOf(yaml);
-        return BuiltinPropertyExtractor.extract(PropertyValues.fromFrontmatter(frontmatter), DEFAULT_SCOPE_KEYS);
-    };
+describe('the frontmatter\'s values', () => {
+    /** The frontmatter's built-ins, as the sections' base reads them. */
+    const layer = (yaml: string[]) => BuiltinPropertyExtractor.fromFrontmatter(frontmatterOf(yaml), DEFAULT_SCOPE_KEYS);
 
     it('reads `1_000` and `10:30` under an ordinary key as text', () => {
-        const { properties } = layer(['n: 1_000', 't: 10:30', 'm: 1000']);
+        const properties = PropertyValues.fromFrontmatter(frontmatterOf(['n: 1_000', 't: 10:30', 'm: 1000']));
         expect(properties.n.value).toMatchObject({ type: 'text', text: '1_000', spelling: '1_000' });
         expect(properties.t.value).toMatchObject({ type: 'text', text: '10:30', spelling: '10:30' });
         expect(properties.m.value).toMatchObject({ type: 'number', number: 1000 });

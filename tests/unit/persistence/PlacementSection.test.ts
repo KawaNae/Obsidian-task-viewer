@@ -223,3 +223,45 @@ describe('Placement.into, at the head of a section with property lines', () => {
         expect(endOf(['## S', '- tv-color:: red'], 'S').at).toBe(2);
     });
 });
+
+/**
+ * A line put at the head of the root, the section of the whole note, goes
+ * past the property lines written above the first heading and its first
+ * task, as at a heading's head (`SectionNode.head`), and the root reads it
+ * among them.
+ */
+describe('Placement.rootHead', () => {
+    const rootEntries = (lines: string[]) => NoteSections.read(Outline.read(lines)).properties.lines.map(line => [line.key, line.written]);
+    /** The spot at the root's head, and the lines with `line` put there. */
+    const putAtRoot = (lines: string[], line = '- k:: v') => {
+        const spot = Placement.rootHead(Outline.read(lines), line);
+        const put = [...lines.slice(0, spot.at), `${spot.indent}${line}`, ...lines.slice(spot.at)];
+        return { spot, put };
+    };
+
+    it('goes past the property lines above the first heading, and the root reads it among them', () => {
+        const { spot, put } = putAtRoot(['---', 'a: 1', '---', '- area:: x', '- who::', '    - a', '', '## S', '- [ ] t']);
+        expect(spot).toEqual({ at: 6, parent: null, indent: '' });
+        expect(rootEntries(put)).toEqual([['area', 'x'], ['who', ''], ['k', 'v']]);
+    });
+
+    it('goes below a label written above the lines, with or without lines below it', () => {
+        expect(putAtRoot(['Inherit properties:', '- area:: x', '', '## S']).spot.at).toBe(2);
+        const { spot, put } = putAtRoot(['Inherit properties:', '', '## S']);
+        expect(spot.at).toBe(1);
+        expect(rootEntries(put)).toEqual([['k', 'v']]);
+        expect(putAtRoot(['Inherit properties:', '', '- [ ] t', '## S']).put).toEqual(['Inherit properties:', '- k:: v', '', '- [ ] t', '## S']);
+    });
+
+    it('is at the top of the body when the note opens on a heading or has no body', () => {
+        expect(putAtRoot(['---', 'a: 1', '---', '## S', '- area:: x']).spot.at).toBe(3);
+        expect(putAtRoot(['## S']).spot.at).toBe(0);
+        expect(putAtRoot([]).spot.at).toBe(0);
+    });
+
+    it('goes above the first task and does not go past it to the property lines below it', () => {
+        const { spot, put } = putAtRoot(['- [ ] t', '- area:: x', '## S']);
+        expect(spot.at).toBe(0);
+        expect(rootEntries(put)).toEqual([['k', 'v'], ['area', 'x']]);
+    });
+});

@@ -8,7 +8,7 @@ import { namesOutsideIndex } from '../../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS, type Task } from '../../../../src/types';
 
 interface Read {
-    sections: SectionNode[];
+    root: SectionNode;
     bodyStartLine: number;
     outline: OutlineReading;
     tasks: Task[];
@@ -16,11 +16,11 @@ interface Read {
 
 function read(lines: string[]): Read {
     const outline = Outline.read(lines);
-    const sections = NoteSections.read(outline);
-    const tasks = NoteTasks.extract(outline, sections, {
+    const root = NoteSections.read(outline);
+    const tasks = NoteTasks.extract(outline, root, {
         filePath: 'test.md', scopeKeys: DEFAULT_SCOPE_KEYS, parsers: lineParsers(DEFAULT_SETTINGS), name: namesOutsideIndex('test.md'),
     });
-    return { sections, bodyStartLine: outline.bodyStart, outline, tasks };
+    return { root, bodyStartLine: outline.bodyStart, outline, tasks };
 }
 
 function buildFromBody(bodyLines: string[]): Read {
@@ -57,59 +57,100 @@ function entries(section: SectionNode): [string, string][] {
 /** The top-level rows whose innermost section is `section`. */
 function blocksOf(doc: Read, section: SectionNode): RowView[] {
     return doc.tasks
-        .filter(task => task.parentId === undefined && NoteSections.at(doc.sections, task.line) === section)
+        .filter(task => task.parentId === undefined && NoteSections.at(doc.root, task.line) === section)
         .map(task => view(doc, task));
 }
 
 describe('NoteSections', () => {
     describe('節の木', () => {
-        it('見出しなし → 暗黙ルートセクション1つ', () => {
+        it('見出しなし → 根だけで、本文全体が根の行', () => {
             const doc = buildFromBody([
                 '- [ ] task1 @2026-03-24',
                 '- [ ] task2 @2026-03-25',
             ]);
-            expect(doc.sections).toHaveLength(1);
-            expect(doc.sections[0].heading).toBeNull();
-            expect(doc.sections[0].startLine).toBe(0);
-            expect(doc.sections[0].endLine).toBe(2);
+            expect(doc.root.heading).toBeNull();
+            expect(doc.root.children).toHaveLength(0);
+            expect(doc.root.startLine).toBe(0);
+            expect(doc.root.endLine).toBe(2);
+            expect(doc.root.head).toBe(0);
         });
 
-        it('単一見出し → 1セクション', () => {
+        it('本文が空でも根が1つある', () => {
+            const doc = buildFromBody([]);
+            expect(doc.root.heading).toBeNull();
+            expect(doc.root.children).toHaveLength(0);
+            expect(doc.root.startLine).toBe(0);
+            expect(doc.root.endLine).toBe(0);
+            expect(doc.root.head).toBe(0);
+            expect(NoteSections.at(doc.root, 0)).toBeUndefined();
+        });
+
+        it('frontmatter だけのノートの根は、閉じの次の行から始まる空の範囲', () => {
+            const doc = buildWithFrontmatter(['---', 'tv-color: red', '---']);
+            expect(doc.root.startLine).toBe(3);
+            expect(doc.root.endLine).toBe(3);
+            expect(doc.root.head).toBe(3);
+            expect(NoteSections.at(doc.root, 1)).toBeUndefined();
+        });
+
+        it('最初の行が見出し → 根の自分の行は無く、見出しは根の子', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(doc.sections).toHaveLength(1);
-            expect(doc.sections[0].heading!.level).toBe(2);
-            expect(doc.sections[0].heading!.text).toBe('Section');
-            expect(doc.sections[0].heading!.line).toBe(0);
+            expect(doc.root.startLine).toBe(0);
+            expect(doc.root.endLine).toBe(2);
+            expect(doc.root.head).toBe(0);
+            expect(entries(doc.root)).toEqual([]);
+            expect(doc.root.children).toHaveLength(1);
+            const [section] = doc.root.children;
+            expect(section.heading!.level).toBe(2);
+            expect(section.heading!.text).toBe('Section');
+            expect(section.heading!.line).toBe(0);
+            expect(NoteSections.at(doc.root, 1)).toBe(section);
         });
 
-        it('見出し前に行がある → 暗黙ルート + 名前付きセクション', () => {
+        it('見出しの前に行がある → 根の自分の行は最初の見出しの手前までで、根はノート全体に及ぶ', () => {
             const doc = buildFromBody([
                 'Some text',
                 '- [ ] orphan @2026-03-24',
                 '## Section',
                 '- [ ] task @2026-03-25',
             ]);
-            expect(doc.sections).toHaveLength(2);
-            expect(doc.sections[0].heading).toBeNull();
-            expect(doc.sections[0].startLine).toBe(0);
-            expect(doc.sections[0].endLine).toBe(2);
-            expect(doc.sections[1].heading!.text).toBe('Section');
+            expect(doc.root.startLine).toBe(0);
+            expect(doc.root.endLine).toBe(4);
+            expect(doc.root.children.map(s => s.heading!.text)).toEqual(['Section']);
+            expect(NoteSections.at(doc.root, 1)).toBe(doc.root);
+            expect(NoteSections.at(doc.root, 3)).toBe(doc.root.children[0]);
         });
 
-        it('同レベルの見出し → 兄弟セクション', () => {
+        it('根のプロパティ行は最初の見出しより上の行で、頭はその後ろ', () => {
+            const doc = buildFromBody([
+                'Inherit properties:',  // 0
+                '- area:: home',        // 1
+                '- 時給:: 1450',        // 2
+                '',                     // 3
+                '## A',                 // 4
+                '- b:: x',              // 5
+                '- [ ] task',           // 6
+            ]);
+            expect(entries(doc.root)).toEqual([['area', 'home'], ['時給', '1450']]);
+            expect(doc.root.head).toBe(3);
+            expect(entries(doc.root.children[0])).toEqual([['b', 'x']]);
+        });
+
+        it('同レベルの見出し → 根の下の兄弟セクション', () => {
             const doc = buildFromBody([
                 '## A',
                 '- [ ] task1 @2026-03-24',
                 '## B',
                 '- [ ] task2 @2026-03-25',
             ]);
-            expect(doc.sections).toHaveLength(2);
-            expect(doc.sections[0].heading!.text).toBe('A');
-            expect(doc.sections[0].endLine).toBe(2);
-            expect(doc.sections[1].heading!.text).toBe('B');
+            const sections = doc.root.children;
+            expect(sections).toHaveLength(2);
+            expect(sections[0].heading!.text).toBe('A');
+            expect(sections[0].endLine).toBe(2);
+            expect(sections[1].heading!.text).toBe('B');
         });
 
         it('ネストした見出し → 子セクション', () => {
@@ -119,10 +160,22 @@ describe('NoteSections', () => {
                 '### Child',
                 '- [ ] child task @2026-03-25',
             ]);
-            expect(doc.sections).toHaveLength(1);
-            expect(doc.sections[0].heading!.text).toBe('Parent');
-            expect(doc.sections[0].children).toHaveLength(1);
-            expect(doc.sections[0].children[0].heading!.text).toBe('Child');
+            const sections = doc.root.children;
+            expect(sections).toHaveLength(1);
+            expect(sections[0].heading!.text).toBe('Parent');
+            expect(sections[0].children).toHaveLength(1);
+            expect(sections[0].children[0].heading!.text).toBe('Child');
+        });
+
+        it('最初の見出しより浅い見出しも根の子', () => {
+            const doc = buildFromBody([
+                '### Deep',
+                '- [ ] a',
+                '# Top',
+                '- [ ] b',
+            ]);
+            expect(doc.root.children.map(s => s.heading!.text)).toEqual(['Deep', 'Top']);
+            expect(doc.root.endLine).toBe(4);
         });
 
         it('深いネスト: ## → ### → ####', () => {
@@ -132,8 +185,8 @@ describe('NoteSections', () => {
                 '#### L4',
                 '- [ ] deep @2026-03-24',
             ]);
-            expect(doc.sections).toHaveLength(1);
-            const l2 = doc.sections[0];
+            expect(doc.root.children).toHaveLength(1);
+            const l2 = doc.root.children[0];
             expect(l2.heading!.level).toBe(2);
             expect(l2.children).toHaveLength(1);
             const l3 = l2.children[0];
@@ -151,12 +204,13 @@ describe('NoteSections', () => {
                 '## B',
                 '- [ ] b @2026-03-25',
             ]);
-            expect(doc.sections).toHaveLength(2);
-            expect(doc.sections[0].heading!.text).toBe('A');
-            expect(doc.sections[0].children).toHaveLength(1);
-            expect(doc.sections[0].children[0].heading!.text).toBe('A1');
-            expect(doc.sections[1].heading!.text).toBe('B');
-            expect(doc.sections[1].children).toHaveLength(0);
+            const sections = doc.root.children;
+            expect(sections).toHaveLength(2);
+            expect(sections[0].heading!.text).toBe('A');
+            expect(sections[0].children).toHaveLength(1);
+            expect(sections[0].children[0].heading!.text).toBe('A1');
+            expect(sections[1].heading!.text).toBe('B');
+            expect(sections[1].children).toHaveLength(0);
         });
 
         it('endLine が子孫の範囲を含む（3段ネスト）', () => {
@@ -166,9 +220,10 @@ describe('NoteSections', () => {
                 '#### L4',     // 2
                 '- [ ] deep @2026-03-24', // 3
             ]);
-            const l2 = doc.sections[0];
+            const l2 = doc.root.children[0];
             const l3 = l2.children[0];
             const l4 = l3.children[0];
+            expect(doc.root.endLine).toBe(4);
             expect(l2.endLine).toBe(4);
             expect(l3.endLine).toBe(4);
             expect(l4.endLine).toBe(4);
@@ -183,7 +238,7 @@ describe('NoteSections', () => {
                 '#### GrandB', // 4
                 '- [ ] b @2026-03-25', // 5
             ]);
-            const parent = doc.sections[0];
+            const parent = doc.root.children[0];
             const child = parent.children[0];
             expect(parent.endLine).toBe(6);
             expect(child.endLine).toBe(6);
@@ -201,8 +256,15 @@ describe('NoteSections', () => {
             ];
             const doc = buildWithFrontmatter(lines);
             expect(doc.bodyStartLine).toBe(3);
-            expect(doc.sections).toHaveLength(1);
-            expect(doc.sections[0].heading!.line).toBe(3);
+            expect(doc.root.startLine).toBe(3);
+            expect(doc.root.endLine).toBe(5);
+            expect(doc.root.children).toHaveLength(1);
+            expect(doc.root.children[0].heading!.line).toBe(3);
+        });
+
+        it('all は根から、書かれた順に返す', () => {
+            const doc = buildFromBody(['- a:: 1', '## A', '### A1', '## B']);
+            expect(NoteSections.all(doc.root).map(s => s.heading?.text ?? null)).toEqual([null, 'A', 'A1', 'B']);
         });
     });
 
@@ -212,7 +274,7 @@ describe('NoteSections', () => {
                 '## Section',
                 '- [ ] task @2026-03-24',
             ]);
-            const blocks = blocksOf(doc, doc.sections[0]);
+            const blocks = blocksOf(doc, doc.root.children[0]);
             expect(blocks).toHaveLength(1);
             const tb = blocks[0];
             expect(tb.rawLine).toBe('- [ ] task @2026-03-24');
@@ -225,7 +287,7 @@ describe('NoteSections', () => {
                 '    - [ ] child @2026-03-25',
                 '    - note:: something',
             ]);
-            const tb = blocksOf(doc, doc.sections[0])[0];
+            const tb = blocksOf(doc, doc.root)[0];
             expect(tb.childRawLines).toHaveLength(2);
             expect(tb.childRawLines[0]).toBe('    - [ ] child @2026-03-25');
             expect(tb.childRawLines[1]).toBe('    - note:: something');
@@ -241,7 +303,7 @@ describe('NoteSections', () => {
                 '```',
                 '- [ ] real task @2026-03-25',
             ]);
-            const blocks = blocksOf(doc, doc.sections[0]);
+            const blocks = blocksOf(doc, doc.root);
             expect(blocks).toHaveLength(1);
             expect(blocks[0].rawLine).toBe('- [ ] real task @2026-03-25');
         });
@@ -254,7 +316,7 @@ describe('NoteSections', () => {
                 '    ```',
                 '    - [ ] real child @2026-03-26',
             ]);
-            const tb = blocksOf(doc, doc.sections[0])[0];
+            const tb = blocksOf(doc, doc.root)[0];
             expect(tb.childRawLines).toHaveLength(4);
             expect(tb.childRawLines[1]).toBe('    - [ ] fenced sample @2026-03-25');
             expect(tb.childRows).toHaveLength(1);
@@ -271,7 +333,7 @@ describe('NoteSections', () => {
                 '- tags:: work',
                 '- [ ] real task @2026-03-24',
             ]);
-            const section = doc.sections[0];
+            const section = doc.root.children[0];
             expect(entries(section).map(([key]) => key)).toEqual(['tv-color', 'tags']);
             expect(blocksOf(doc, section)).toHaveLength(1);
         });
@@ -286,7 +348,7 @@ describe('NoteSections', () => {
                 '\t```',
                 '\t- [ ] real child @2026-03-26',
             ]);
-            const tb = blocksOf(doc, doc.sections[0])[0];
+            const tb = blocksOf(doc, doc.root)[0];
             expect(tb.childRawLines).toHaveLength(4);
             expect(tb.childRows).toHaveLength(1);
             expect(tb.childRows[0].rawLine).toBe('\t- [ ] real child @2026-03-26');
@@ -299,7 +361,7 @@ describe('NoteSections', () => {
                 '~~~',
                 '- [ ] real task @2026-03-24',
             ]);
-            expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
+            expect(blocksOf(doc, doc.root)).toHaveLength(1);
         });
 
         it('子タスクブロックを再帰的に検出', () => {
@@ -308,7 +370,7 @@ describe('NoteSections', () => {
                 '    - [ ] child @2026-03-25',
                 '        - tv-color:: 333333',
             ]);
-            const tb = blocksOf(doc, doc.sections[0])[0];
+            const tb = blocksOf(doc, doc.root)[0];
             expect(tb.childRows).toHaveLength(1);
             expect(tb.childRows[0].rawLine).toBe('    - [ ] child @2026-03-25');
             expect(tb.childRows[0].childRawLines).toHaveLength(1);
@@ -321,8 +383,8 @@ describe('NoteSections', () => {
                 '- custom-prop:: 2000',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0])).toEqual([['tv-color', 'ffffff'], ['custom-prop', '2000']]);
-            expect(doc.sections[0].head).toBe(3);
+            expect(entries(doc.root.children[0])).toEqual([['tv-color', 'ffffff'], ['custom-prop', '2000']]);
+            expect(doc.root.children[0].head).toBe(3);
         });
 
         it('`- properties::` はまとめの形でなく、ふつうのプロパティ行で、下の項目はそのリストの項目', () => {
@@ -333,13 +395,13 @@ describe('NoteSections', () => {
                 '    - custom-prop:: 2000',
                 '- [ ] task @2026-03-24',
             ]);
-            const [line] = doc.sections[0].properties.lines;
-            expect(entries(doc.sections[0])).toEqual([['properties', '']]);
+            const [line] = doc.root.children[0].properties.lines;
+            expect(entries(doc.root.children[0])).toEqual([['properties', '']]);
             expect(line.value).toEqual({ type: 'list', items: [
                 { type: 'text', text: 'tv-color:: ffffff', spelling: 'tv-color:: ffffff' },
                 { type: 'text', text: 'custom-prop:: 2000', spelling: 'custom-prop:: 2000' },
             ] });
-            expect(doc.sections[0].head).toBe(4);
+            expect(doc.root.children[0].head).toBe(4);
         });
 
         it('プロパティなしのセクション → プロパティ行なし、頭は見出しのすぐ下', () => {
@@ -347,8 +409,8 @@ describe('NoteSections', () => {
                 '## Section',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0])).toEqual([]);
-            expect(doc.sections[0].head).toBe(1);
+            expect(entries(doc.root.children[0])).toEqual([]);
+            expect(doc.root.children[0].head).toBe(1);
         });
 
         it('最初のタスクより下のプロパティ行も節のもの。頭は最初のタスクより上の行の後ろ', () => {
@@ -358,10 +420,10 @@ describe('NoteSections', () => {
                 '- [ ] task @2026-03-24',
                 '- custom:: after-task',
             ]);
-            expect(entries(doc.sections[0])).toEqual([['tv-color', 'red'], ['custom', 'after-task']]);
-            expect(doc.sections[0].head).toBe(2);
+            expect(entries(doc.root.children[0])).toEqual([['tv-color', 'red'], ['custom', 'after-task']]);
+            expect(doc.root.children[0].head).toBe(2);
             // text/property 行は block にしない: タスクのみ
-            expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
+            expect(blocksOf(doc, doc.root.children[0])).toHaveLength(1);
         });
 
         it('空行を挟んだプロパティも収集 (Markdown loose list)', () => {
@@ -372,7 +434,7 @@ describe('NoteSections', () => {
                 '- custom:: after-blank',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0])).toEqual([['tv-color', 'red'], ['custom', 'after-blank']]);
+            expect(entries(doc.root.children[0])).toEqual([['tv-color', 'red'], ['custom', 'after-blank']]);
         });
 
         it('見出し直後の空行を挟んでも property block を検出', () => {
@@ -383,8 +445,8 @@ describe('NoteSections', () => {
                 '- custom:: value',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0])).toHaveLength(2);
-            expect(doc.sections[0].head).toBe(4);
+            expect(entries(doc.root.children[0])).toHaveLength(2);
+            expect(doc.root.children[0].head).toBe(4);
         });
 
         it('連続する複数空行を許容', () => {
@@ -398,7 +460,7 @@ describe('NoteSections', () => {
                 '- custom:: value',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0])).toHaveLength(2);
+            expect(entries(doc.root.children[0])).toHaveLength(2);
         });
 
         it('wikilink 行を挟んだ property も拾う', () => {
@@ -409,7 +471,7 @@ describe('NoteSections', () => {
                 '- custom:: still-collected',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0]).map(([key]) => key)).toEqual(['tv-color', 'custom']);
+            expect(entries(doc.root.children[0]).map(([key]) => key)).toEqual(['tv-color', 'custom']);
         });
 
         it('plain text を挟んだ property も拾う', () => {
@@ -420,7 +482,7 @@ describe('NoteSections', () => {
                 '- custom:: still-collected',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0]).map(([key]) => key)).toEqual(['tv-color', 'custom']);
+            expect(entries(doc.root.children[0]).map(([key]) => key)).toEqual(['tv-color', 'custom']);
         });
 
         it('テキスト行のみのセクション → block もプロパティ行も作らない', () => {
@@ -430,9 +492,9 @@ describe('NoteSections', () => {
                 'More text',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0])).toEqual([]);
+            expect(entries(doc.root.children[0])).toEqual([]);
             // text 行は block 化しない: タスクのみ
-            expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
+            expect(blocksOf(doc, doc.root.children[0])).toHaveLength(1);
         });
 
         it('暗黙ルートの末尾の property も根の節のもの', () => {
@@ -441,7 +503,7 @@ describe('NoteSections', () => {
                 '- [ ] preTask @2026-05-27T10:00',
                 '- post_tag:: beta',
             ]);
-            expect(entries(doc.sections[0]).map(([key]) => key)).toEqual(['root_tag', 'post_tag']);
+            expect(entries(doc.root).map(([key]) => key)).toEqual(['root_tag', 'post_tag']);
         });
 
         it('インデントされた property 行は section に昇格しない (indent 0 のみ)', () => {
@@ -452,7 +514,7 @@ describe('NoteSections', () => {
                 '- tv-color:: red',
                 '- [ ] task @2026-03-24',
             ]);
-            expect(entries(doc.sections[0])).toEqual([['tv-color', 'red']]);
+            expect(entries(doc.root.children[0])).toEqual([['tv-color', 'red']]);
         });
 
         it('ネストセクションのブロックが正しく分離', () => {
@@ -462,7 +524,7 @@ describe('NoteSections', () => {
                 '### Child',
                 '- [ ] child-task @2026-03-25',
             ]);
-            const parent = doc.sections[0];
+            const parent = doc.root.children[0];
             const child = parent.children[0];
             expect(blocksOf(doc, parent)).toHaveLength(1);
             expect(blocksOf(doc, parent)[0].rawLine).toBe('- [ ] parent-task @2026-03-24');
@@ -484,7 +546,7 @@ describe('NoteSections', () => {
                 '- tags:: #出/りそな',                 // 9
                 '- [ ] risona @2026-03-27',           // 10
             ]);
-            const expenses = doc.sections[0];
+            const expenses = doc.root.children[0];
             const epos = expenses.children[0];
             const normal = epos.children[0];
             const special = epos.children[1];
@@ -527,10 +589,10 @@ describe('NoteSections', () => {
                 ' ## Indented ##',
                 '- [ ] b @2026-03-25',
             ]);
-            expect(doc.sections.map(s => s.heading && { level: s.heading.level, text: s.heading.text, line: s.heading.line }))
-                .toEqual([null, { level: 2, text: 'Setext', line: 2 }, { level: 2, text: 'Indented', line: 6 }]);
-            expect(doc.sections[0].endLine).toBe(2);
-            expect(blocksOf(doc, doc.sections[1]).map(b => b.rawLine)).toEqual(['- [ ] a @2026-03-24']);
+            expect(doc.root.children.map(s => ({ level: s.heading!.level, text: s.heading!.text, line: s.heading!.line })))
+                .toEqual([{ level: 2, text: 'Setext', line: 2 }, { level: 2, text: 'Indented', line: 6 }]);
+            expect(entries(doc.root)).toEqual([['p', 'root']]);
+            expect(blocksOf(doc, doc.root.children[0]).map(b => b.rawLine)).toEqual(['- [ ] a @2026-03-24']);
         });
 
         it('項目の中の見出しでは節を区切らない', () => {
@@ -539,8 +601,7 @@ describe('NoteSections', () => {
                 '  ## Inside',
                 '- [ ] b @2026-03-25',
             ]);
-            expect(doc.sections).toHaveLength(1);
-            expect(doc.sections[0].heading).toBeNull();
+            expect(doc.root.children).toHaveLength(0);
         });
     });
 });

@@ -56,8 +56,8 @@ describe('PropertyUpdatePlanner', () => {
         expect(plan(task, { properties: props({ k: list('a', 'b') }) })).toEqual([]);
     });
 
-    it('writes an inherited value as the task\'s own, the same value too, the frontmatter\'s text quoted as it reads', () => {
-        const task = taskOf(['---', 'id: "123"', 'area: lab', '---', '- [ ] T'], 'T');
+    it('writes an inherited value as the task\'s own, the same value too, a text quoted as it reads', () => {
+        const task = taskOf(['- id:: "123"', '- area:: lab', '', '- [ ] T'], 'T');
         const inherited = getEffectiveProperties(task);
         expect(plan(task, { properties: { area: inherited.area } })).toEqual([{ key: 'area', op: 'set', value: { text: 'lab' } }]);
         expect(plan(task, { properties: { id: inherited.id } })).toEqual([{ key: 'id', op: 'set', value: { text: '"123"' } }]);

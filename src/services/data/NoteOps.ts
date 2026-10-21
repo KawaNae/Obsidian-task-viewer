@@ -13,7 +13,7 @@ import { Outline } from '../parsing/utils/Outline';
 import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { Destination, type Section } from '../persistence/Destination';
 import { splitLines } from '../persistence/FileLines';
-import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
+import { saidIn } from '../persistence/writers/SendWriter';
 import { Placement, type HeadingLookup } from '../persistence/utils/Placement';
 import type { SubtreeReplacement } from '../persistence/TaskOps';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
@@ -43,18 +43,19 @@ export interface SendRequest {
     rows: readonly SendRow[];
     to: SendDestination;
     /**
-     * The keys to write into the note's frontmatter, those the user chose of
-     * the values the rows inherit (`InheritedValues`); none for a send to
-     * the rows' own note, which holds them already.
+     * The values to write into the note, those the user chose of the values
+     * the rows inherit (`InheritedValues`), each where it says: a key of the
+     * frontmatter, or a property line above the first heading. None for a
+     * send to the rows' own note, which holds them already.
      */
-    frontmatter: readonly InheritedValue[];
+    values: readonly InheritedValue[];
 }
 
 /**
  * What the send dialog opens on (`NoteOps.previewSend`): the rows it sends,
  * each once and in the order they stand, each with its note's lines as the
  * disk holds them; where they go unless the user says otherwise; the values
- * they inherit, to offer as the note's frontmatter; and the links that break
+ * they inherit, to offer to write into the note; and the links that break
  * when they leave their note.
  */
 export interface SendPreview {
@@ -70,11 +71,11 @@ export interface SendPreview {
      */
     defaults: { note: NoteAsk; section: Section };
     /**
-     * The values the rows inherit, each said as a frontmatter key
-     * (`inheritedAt`), in the order the first row's are: the frontmatter the
-     * dialog offers to write into the note. Of more than one row, only the
-     * keys every row inherits alike, line for line. Which to check by
-     * default is `obsidian`'s to say.
+     * The values the rows inherit, each said as a note says it to its rows
+     * (`inheritedAt`): a built-in as a frontmatter key, a custom property as
+     * a property line above the first heading. In the order the first row's
+     * are: what the dialog offers to write into the note. Of more than one
+     * row, only the values every row inherits alike, line for line.
      */
     candidates: readonly InheritedValue[];
     /**
@@ -116,7 +117,7 @@ export type DestinationFacts =
  * and `namesakes` the vault's other notes by its name, which a link to it
  * has to tell it from (`NoteAt`). `existing`: one of the vault's, the rows'
  * own note or not. `same`: the note every row stands in, where the rows are
- * carried and nothing is written into the frontmatter.
+ * carried and no value is written into the note.
  */
 export type NoteFacts = NoteFactsOf<
     | { kind: 'new'; by: 'name' | 'path'; folderMade: string | null; namesakes: readonly TFile[] }
@@ -133,7 +134,7 @@ type NoteFactsOf<K> = K & {
     heading: HeadingLookup;
     /** The names of the note's headings, in the order they stand: those the heading field offers. */
     headings: readonly string[];
-    /** The keys of `SendPreview.candidates` the note's frontmatter has already: a send does not write them. */
+    /** The keys of `SendPreview.candidates` the note says already (`saidIn`): a send does not write them. */
     present: readonly string[];
     /** The note is one the index does not read (`tv-ignore`): the rows are not seen there. */
     ignored: boolean;
@@ -322,7 +323,7 @@ export class NoteOps {
             to: { note: { kind: 'existing', path }, section },
             heading: found,
             headings: outline.headings.map(h => h.text),
-            present: preview.candidates.filter(one => FrontmatterLineEditor.hasKey(lines, one.key)).map(one => one.key),
+            present: preview.candidates.filter(saidIn(lines)).map(one => one.key),
             ignored: FileParsePipeline.resolveSections(lines, settings) === null,
             shared: anchorsIn(rows.filter(row => row.task.file !== path).flatMap(row => row.task.subtreeLines ?? []))
                 .filter(id => inNote.has(id)),
@@ -396,10 +397,10 @@ export class NoteOps {
         } else {
             path = note.path;
         }
-        const keys = req.frontmatter.map(one => one.key);
+        const keys = req.values.map(one => one.key);
         // `Area` and `area` are one key (`PropertyKey`).
         if (new Set(keys.map(PropertyKey.fold)).size !== keys.length) {
-            logWarn(`[NoteOps] send: a frontmatter key is given twice: ${keys.join(', ')}`);
+            logWarn(`[NoteOps] send: a key is given twice: ${keys.join(', ')}`);
             return wrongly;
         }
         const sending = await this.sendingTo(req.rows, path, create);
@@ -411,7 +412,7 @@ export class NoteOps {
         }
         const went = new Map(sending.from.map(note => [note.path, [...TaskLineClassifier.blockIdCounts(note.sent).keys()]]));
         const landed = (from: string) => this.deps.timers()?.follow(from, path, went.get(from) ?? []);
-        const written = await this.operations.send(req.rows, { path, create, section, frontmatter: req.frontmatter }, { ...opts, landed });
+        const written = await this.operations.send(req.rows, { path, create, section, values: req.values }, { ...opts, landed });
         if (written.kind === 'not-done') return written.refused ? { kind: 'not-done', why: refusalNotice(written.refused) } : wrongly;
         return this.tell(written, req.rows.length, opts.tellRefusal !== false);
     }
@@ -515,10 +516,10 @@ function withDescendants(rows: readonly RowSnapshot[], settings: TaskViewerSetti
     return tasks.filter(task => spans.some(span => task.line >= span.start && task.line < span.end));
 }
 
-/** The values of `each[0]` every list holds alike: the same key, said in the same lines. */
+/** The values of `each[0]` every list holds alike: the same key, said in the same place in the same lines. */
 function commonValues(each: readonly (readonly InheritedValue[])[]): InheritedValue[] {
     const [first = [], ...rest] = each;
     const same = (a: InheritedValue, b: InheritedValue) =>
-        a.key === b.key && a.yaml.length === b.yaml.length && a.yaml.every((line, i) => line === b.yaml[i]);
+        a.key === b.key && a.to === b.to && a.lines.length === b.lines.length && a.lines.every((line, i) => line === b.lines[i]);
     return first.filter(one => rest.every(other => other.some(value => same(value, one))));
 }

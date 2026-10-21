@@ -1,18 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { BuiltinPropertyExtractor } from '../../../src/services/parsing/tree/BuiltinPropertyExtractor';
+import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 import { valuesOf } from '../helpers/properties';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
-/**
- * The frontmatter as the sections' base reads it: normalized, then its
- * built-ins put apart; its custom properties under their keys as written.
- */
-const frontmatterLayer = (fm: Record<string, unknown> | undefined, k: typeof keys) => {
-    const result = BuiltinPropertyExtractor.fromFrontmatter(fm, k);
-    return { ...result, properties: valuesOf(result.properties) };
-};
+/** The frontmatter as the sections' base reads it: its built-ins alone. */
+const frontmatterLayer = (fm: Record<string, unknown> | undefined, k: typeof keys) =>
+    BuiltinPropertyExtractor.fromFrontmatter(fm, k);
+
+/** The frontmatter's values as the YAML gave them, under their keys as written. */
+const frontmatterValues = (fm: Record<string, unknown> | undefined) => valuesOf(PropertyValues.fromFrontmatter(fm));
 
 describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () => {
     describe('builtin keys', () => {
@@ -52,25 +51,27 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
         });
     });
 
-    describe('custom properties', () => {
-        it('ScopeKeys に該当しないキーを properties に格納', () => {
+    describe('custom keys', () => {
+        it('ScopeKeys に該当しないキーは読まない: タスクに受け継がせるのは組み込みのキーだけ', () => {
             const result = frontmatterLayer({
                 'tv-color': 'ff0000',
                 'custom1': 'value1',
                 'custom2': 42,
+                '体重[kg]': null,
             }, keys);
-            expect(result.properties['custom1']).toEqual({ type: 'text', text: 'value1', spelling: 'value1' });
-            expect(result.properties['custom2']).toEqual({ type: 'number', number: 42, spelling: '42' });
-            expect(result.properties['tv-color']).toBeUndefined();
+            expect(result).toEqual({ color: 'ff0000' });
         });
+    });
+
+    describe('the values the YAML gave (PropertyValues.fromFrontmatter)', () => {
 
         it('boolean / number / array / string を type 推定', () => {
-            const result = frontmatterLayer({
+            const result = { properties: frontmatterValues({
                 'b': true,
                 'n': 3.14,
                 'a': ['x', 'y'],
                 's': 'hello',
-            }, keys);
+            }) };
             expect(result.properties['b']).toEqual({ type: 'boolean', boolean: true, spelling: 'true' });
             expect(result.properties['n']).toEqual({ type: 'number', number: 3.14, spelling: '3.14' });
             expect(result.properties['a']).toEqual({ type: 'list', items: [
@@ -81,32 +82,33 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
         });
 
         it('null / undefined 値は値のないプロパティ', () => {
-            const result = frontmatterLayer({
+            const result = { properties: frontmatterValues({
                 'a': null,
                 'b': undefined,
                 'c': 'kept',
-            }, keys);
+            }) };
             expect(result.properties['a']).toEqual({ type: 'null', spelling: '' });
             expect(result.properties['b']).toEqual({ type: 'null', spelling: '' });
             expect(result.properties['c']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
         });
 
         it('reads no property from a mapping, nor an item from a list or a mapping in a list', () => {
-            const result = frontmatterLayer({
+            const fm = {
                 'map': { p: 1 },
                 'mixed': ['a', ['b'], { c: 1 }, null, 2],
                 'tv-color': { red: true },
-            }, keys);
-            expect(result.properties['map']).toBeUndefined();
-            expect(result.properties['mixed']).toEqual({ type: 'list', items: [
+            };
+            const values = frontmatterValues(fm);
+            expect(values['map']).toBeUndefined();
+            expect(values['mixed']).toEqual({ type: 'list', items: [
                 { type: 'text', text: 'a', spelling: 'a' },
                 { type: 'number', number: 2, spelling: '2' },
             ] });
-            expect(result.color).toBeUndefined();
+            expect(frontmatterLayer(fm, keys).color).toBeUndefined();
         });
 
         it('spells a text a line would read as something else in quotes, and a number as YAML does', () => {
-            const result = frontmatterLayer({ id: '123', flag: 'true', plain: 'a b', inf: -Infinity, nan: NaN }, keys);
+            const result = { properties: frontmatterValues({ id: '123', flag: 'true', plain: 'a b', inf: -Infinity, nan: NaN }) };
             expect(result.properties['id']).toEqual({ type: 'text', text: '123', spelling: '"123"' });
             expect(result.properties['flag']).toEqual({ type: 'text', text: 'true', spelling: '"true"' });
             expect(result.properties['plain']).toEqual({ type: 'text', text: 'a b', spelling: 'a b' });
@@ -114,22 +116,22 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
             expect(result.properties['nan']).toMatchObject({ type: 'number', spelling: '.nan' });
         });
 
-        it('Obsidian 内部キー (position) を properties から除外', () => {
-            const result = frontmatterLayer({
+        it('Obsidian 内部キー (position) は対応表なので値にしない', () => {
+            const values = frontmatterValues({
                 'position': { start: { line: 0 }, end: { line: 5 } },
                 'real-prop': 'kept',
-            }, keys);
-            expect(result.properties['position']).toBeUndefined();
-            expect(result.properties['real-prop']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
+            });
+            expect(values['position']).toBeUndefined();
+            expect(values['real-prop']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
         });
 
-        it('tags キーは properties に含めない (専用フィールドへ)', () => {
-            const result = frontmatterLayer({
-                'tags': ['a', 'b'],
-                'custom': 'kept',
-            }, keys);
-            expect(result.properties['tags']).toBeUndefined();
-            expect(result.properties['custom']).toEqual({ type: 'text', text: 'kept', spelling: 'kept' });
+        it('keeps a number a number', () => {
+            expect(frontmatterValues({ n: 630 }).n).toEqual({ type: 'number', number: 630, spelling: '630' });
+        });
+
+        it('大小違いの重複は、値のないキーでも読まない', () => {
+            expect(frontmatterValues({ Area: 'lab', area: null, other: 1 })).toEqual({ other: { type: 'number', number: 1, spelling: '1' } });
+            expect(frontmatterLayer({ 'TV-COLOR': 'red', 'tv-color': null }, keys).color).toBeUndefined();
         });
     });
 
@@ -163,8 +165,7 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
         // Obsidian の parseFrontMatterTags と同じく、キーは大文字と小文字を区別しない
         it('Tags / TAGS も tags のキーとして読み、カスタムプロパティにしない', () => {
             const result = frontmatterLayer({ 'Tags': ['x'], 'custom': 'kept' }, keys);
-            expect(result.tags).toEqual(['x']);
-            expect(result.properties['Tags']).toBeUndefined();
+            expect(result).toEqual({ tags: ['x'] });
             expect(frontmatterLayer({ 'TAGS': 'y' }, keys).tags).toEqual(['y']);
         });
 
@@ -188,16 +189,12 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
             expect(result.endTime).toBeUndefined();
             expect(result.due).toBe('2026-09-30');
         });
-
-        it('keeps a number under another key a number', () => {
-            expect(frontmatterLayer({ n: 630 }, keys).properties.n).toEqual({ type: 'number', number: 630, spelling: '630' });
-        });
     });
 
     describe('edge cases', () => {
         it('frontmatter が undefined なら empty result', () => {
             const result = frontmatterLayer(undefined, keys);
-            expect(result).toEqual({ properties: {} });
+            expect(result).toEqual({});
         });
 
         it('frontmatter が空 object なら empty result', () => {
@@ -206,7 +203,7 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
             expect(result.linestyle).toBeUndefined();
             expect(result.mask).toBeUndefined();
             expect(result.tags).toBeUndefined();
-            expect(result.properties).toEqual({});
+            expect(result).toEqual({});
         });
 
         it('全フィールドを統合的に抽出', () => {
@@ -217,15 +214,15 @@ describe('the frontmatter layer (BuiltinPropertyExtractor.fromFrontmatter)', () 
                 'tags': ['t1', 't2'],
                 'position': { internal: true },
                 'fm-prop': 'fm-value',
-                'tv-start': '2026-05-02', // builtin key (excluded)
+                'tv-start': '2026-05-02',
             }, keys);
             expect(result.color).toBe('abcdef');
             expect(result.linestyle).toBe('dotted');
             expect(result.mask).toBe('mask-val');
             expect(result.tags).toEqual(['t1', 't2']);
-            expect(result.properties['position']).toBeUndefined();
-            expect(result.properties['tv-start']).toBeUndefined();
-            expect(result.properties['fm-prop']).toEqual({ type: 'text', text: 'fm-value', spelling: 'fm-value' });
+            expect(result.startDate).toBe('2026-05-02');
+            expect(result).not.toHaveProperty('properties');
+            expect(Object.keys(result).sort()).toEqual(['color', 'linestyle', 'mask', 'startDate', 'tags']);
         });
     });
 });

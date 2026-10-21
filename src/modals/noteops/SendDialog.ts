@@ -10,6 +10,8 @@ import type { AnchorLink } from '../../services/data/NoteRefs';
 import type { UnresolvedReference } from '../../services/flow/FlowReferences';
 import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { Outline } from '../../services/parsing/utils/Outline';
+import { PropertyLines } from '../../services/parsing/utils/PropertyLines';
+import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
 import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor, EditorOnHooks } from '../form/source/SourceEditor';
 import type { FormIssue, Tone } from '../form/FormIssue';
@@ -19,7 +21,7 @@ import { DraftGuard } from '../form/DraftGuard';
  * The send dialog: rows and their subtrees sent to a section of a note.
  * This is its logic, apart from the DOM: what it
  * opens on, what it says of the destination the fields name, which values
- * it offers for the note's frontmatter, whether a send may be asked, what
+ * it offers to write into the note, whether a send may be asked, what
  * a send asks, and whether the dialog may close. What it looks like is the
  * surface's (`SendModal`).
  *
@@ -30,10 +32,12 @@ import { DraftGuard } from '../form/DraftGuard';
  *   changes (`SendHost.facts`), and only the answer to the last asking is
  *   taken: a send is not offered until the answer is for what the fields
  *   hold now.
- * - The values offered for the frontmatter are checked by default but
- *   Obsidian's own keys; a check the user changed stays as they left it
- *   whichever note the fields name. A key the note has already is not
- *   written, and is offered as such. The rows' own note is offered none.
+ * - The values offered to write into the note are checked by default; a
+ *   check the user changed stays as they left it whichever note the fields
+ *   name. Each says where it is written (`CandidateView.to`): a built-in
+ *   into the frontmatter, a custom property on a line above the first
+ *   heading. A key the note says already is not written (`NoteFacts.present`),
+ *   and is offered as such. The rows' own note is offered none.
  * - The open timers are asked whether they let the send be made
  *   (`SendHost.timers`) whenever the dialog shows it, with the drafts as
  *   they are: a send that would leave a timer without its lines is not
@@ -63,12 +67,14 @@ import { DraftGuard } from '../form/DraftGuard';
 /** Where the dialog is: open to a send, sending, or past a send made for some rows only. */
 export type SendPhase = 'open' | 'sending' | 'spent';
 
-/** A value offered for the note's frontmatter, as the surface lists it. */
+/** A value offered to write into the note, as the surface lists it. */
 export interface CandidateView {
     key: string;
-    /** The value the frontmatter will hold, read from the lines written (`yamlValue`). */
+    /** Where it is written: the note's frontmatter, or a property line above its first heading. */
+    to: InheritedValue['to'];
+    /** The value the note will hold, read from the lines written (`yamlValue`, `lineValue`). */
     value: string;
-    /** Where the rows inherit it from: the frontmatter, or a heading's section. */
+    /** Where the rows inherit it from: the frontmatter, the lines above the first heading, or a heading's section. */
     from: string;
     checked: boolean;
     /** Why it cannot be chosen; null when it can. */
@@ -83,7 +89,7 @@ export interface SendViewState {
     phase: SendPhase;
     /** The headings of the note the fields name, for the heading field to offer. */
     headings: readonly string[];
-    /** The values offered for the frontmatter; null when none is offered. */
+    /** The values offered to write into the note, in the order the rows inherit them; null when none is offered. */
     candidates: readonly CandidateView[] | null;
     /**
      * What the dialog says: why a send cannot be asked (errors), what it can
@@ -130,11 +136,6 @@ export interface SendHost {
 type OpenedRow =
     | { kind: 'editor'; taskId: string; frame: SubtreeFrame; editor: DraftEditor }
     | { kind: 'fixed'; taskId: string; base: readonly string[] };
-
-/** Obsidian's own keys are `InheritedValue.obsidian`: not checked unless the user checks them. */
-function checkedByDefault(candidate: InheritedValue): boolean {
-    return !candidate.obsidian;
-}
 
 export class SendDialog {
     private readonly rows: OpenedRow[] = [];
@@ -274,7 +275,7 @@ export class SendDialog {
         return {
             rows,
             to: facts.to,
-            frontmatter: facts.kind === 'same' ? [] : this.preview.candidates.filter(one => this.isChecked(one) && !facts.present.includes(one.key)),
+            values: facts.kind === 'same' ? [] : this.preview.candidates.filter(one => this.isChecked(one) && !facts.present.includes(one.key)),
         };
     }
 
@@ -367,7 +368,7 @@ export class SendDialog {
     }
 
     private isChecked(candidate: InheritedValue): boolean {
-        return this.checks.get(candidate.key) ?? checkedByDefault(candidate);
+        return this.checks.get(candidate.key) ?? true;
     }
 
     /** The values offered, as the note the fields name has them; none for the rows' own note. */
@@ -377,7 +378,8 @@ export class SendDialog {
             const has = present?.present.includes(one.key) ?? false;
             return {
                 key: one.key,
-                value: yamlValue(one.yaml),
+                to: one.to,
+                value: one.to === 'frontmatter' ? yamlValue(one.lines) : lineValue(one.lines),
                 from: one.from.map(sourceLabel).join(t('modal.send.fromJoin')),
                 checked: has ? false : this.isChecked(one),
                 shut: has ? t('modal.send.present', { note: present!.path }) : null,
@@ -535,6 +537,16 @@ export function yamlValue(yaml: readonly string[]): string {
         // shown as written, below
     }
     return writtenValue(yaml);
+}
+
+/**
+ * A property line and the items under it as the value they hold reads, as
+ * the note will read them (`PropertyLines`): a text without its quotes, a
+ * list as its items joined with `, ` (`PropertyValues.display`).
+ */
+export function lineValue(lines: readonly string[]): string {
+    const [line] = PropertyLines.ofSection(Outline.read(lines), null, 0, lines.length).lines;
+    return line ? PropertyValues.display(line.value) : lines.join(' ');
 }
 
 /** A YAML scalar as its value reads; null for a list or a mapping. */

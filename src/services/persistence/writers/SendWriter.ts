@@ -1,5 +1,8 @@
 import { type App, TFile } from 'obsidian';
 import { indentUnit } from '../../../utils/ObsidianConfig';
+import { NoteSections } from '../../parsing/tree/NoteSections';
+import { Outline } from '../../parsing/utils/Outline';
+import { PropertyKey } from '../../parsing/utils/PropertyKey';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { carryTo, putNumbered, subtreeBlock } from '../Carry';
 import type { Section } from '../Destination';
@@ -14,7 +17,7 @@ import type { SubtreeReplacement } from '../TaskOps';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { ListNumber } from '../utils/ListNumber';
 import { noteLink } from '../../../utils/NoteLink';
-import { Placement, type PlacedLine, type Spot } from '../utils/Placement';
+import { Block, Placement, type PlacedLine, type Spot } from '../utils/Placement';
 import type { InlineTaskWriter } from './InlineTaskWriter';
 
 /**
@@ -27,10 +30,16 @@ export interface SentRow {
     draft?: SubtreeReplacement;
 }
 
-/** A key a send writes into its note's frontmatter: its name, and its lines (the key's line and what continues it). */
-export interface FrontmatterKey {
+/**
+ * A value a send writes into its note, said as the note says a value to
+ * every row it holds: a key of its frontmatter (`frontmatter`; `lines` the
+ * key's line and what continues it), or a property line of its root, above
+ * its first heading (`root`; `lines` the line and the items of its list).
+ */
+export interface NoteValue {
     key: string;
-    yaml: readonly string[];
+    to: 'frontmatter' | 'root';
+    lines: readonly string[];
 }
 
 /** Where a send goes: a note, made by the send when `create` says so, and the section of it. */
@@ -39,8 +48,21 @@ export interface SendTo {
     /** No note is at `path`, and the send makes one. */
     create: boolean;
     section: Section;
-    /** Keys to write into the note's frontmatter, each only where the note has none by its name. */
-    frontmatter: readonly FrontmatterKey[];
+    /** Values to write into the note, each only where the note does not say its key already ({@link saidIn}). */
+    values: readonly NoteValue[];
+}
+
+/**
+ * Which values the note of `lines` says already, so that one written there
+ * would add nothing a row of it reads: a root's value where a property line
+ * of its root has the key, and a frontmatter's where its frontmatter or a
+ * property line of its root has it, since the root's value wins over the
+ * frontmatter's. Keys are matched their case aside (`PropertyKey`).
+ */
+export function saidIn(lines: readonly string[]): (value: NoteValue) => boolean {
+    const root = NoteSections.read(Outline.read(lines)).properties.lines;
+    return (value) => root.some(line => PropertyKey.same(line.key, value.key))
+        || (value.to === 'frontmatter' && FrontmatterLineEditor.hasKey(lines, value.key));
 }
 
 /** Whether a line rewritten completes its row, and the fire of a completed row of the note at `path` (the flow layer's). */
@@ -140,9 +162,9 @@ export class SendWriter {
      *    it would leave of each row once the drafts and fires are written is
      *    what goes to the note. Refused, nothing is written, and the refusal
      *    is told.
-     * 2. The note is written: made of those rows, the frontmatter keys and
-     *    its heading (`Notes.createNote`), or written in one write,
-     *    with the keys it has none of and its own rows carried. Refused,
+     * 2. The note is written: made of those rows, the values and its
+     *    heading (`Notes.createNote`), or written in one write, with the
+     *    values it does not say ({@link saidIn}) and its own rows carried. Refused,
      *    nothing is written anywhere, and the refusal is told.
      *
      *    A refusal of 1 or 2 is told as any write's is, through the channel
@@ -278,8 +300,8 @@ export class SendWriter {
     }
 
     /**
-     * Make the note `to` of the rows `items` sends and the frontmatter keys,
-     * put in an empty note (`createNote`). Or why it is not, told through
+     * Make the note `to` of the rows `items` sends and the values, put in
+     * an empty note (`createNote`). Or why it is not, told through
      * `channel`.
      */
     private async makeNote(
@@ -298,8 +320,8 @@ export class SendWriter {
     }
 
     /**
-     * Write the note `to`, one there is, in one write: the keys it has none
-     * of, and the rows `items` makes of `own`, its own rows as their drafts
+     * Write the note `to`, one there is, in one write: the values it does
+     * not say, and the rows `items` makes of `own`, its own rows as their drafts
      * and fires leave them, carried, and every other one put. Or why it is
      * refused, told through `channel`: of the send's `subject`, the first
      * row's text, when the write refuses before it asks for a row of its own
@@ -331,17 +353,24 @@ export class SendWriter {
     }
 
     /**
-     * Inside the note's write: add the frontmatter keys it has none of, and
-     * put the rows `items` makes in the section, in their order (see
-     * {@link send}). Answers what the write leaves, or null when it is
-     * refused, the reason said through the session.
+     * Inside the note's write: add the values it does not say
+     * ({@link saidIn}), the frontmatter's keys and then the root's lines
+     * at the root's head (`Placement.rootHead`: past the property lines
+     * there, or below a label above them), and put the rows `items` makes
+     * in the section, in their order (see {@link send}). Answers what the
+     * write leaves, or null when it is refused, the reason said through
+     * the session.
      */
     private placeInNote(draft: LineDraft, session: WriteSession, items: readonly Item[], to: SendTo): Placed | null {
-        const missing = to.frontmatter.filter(one => !FrontmatterLineEditor.hasKey(draft.lines, one.key));
-        if (missing.length > 0) {
+        const said = saidIn(draft.lines);
+        const missing = to.values.filter(one => !said(one));
+        const keys = missing.filter(one => one.to === 'frontmatter');
+        if (keys.length > 0) {
             const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
-            FrontmatterLineEditor.applyUpdates(draft, fmEnd, Object.fromEntries(missing.map(one => [one.key, [...one.yaml]])));
+            FrontmatterLineEditor.applyUpdates(draft, fmEnd, Object.fromEntries(keys.map(one => [one.key, [...one.lines]])));
         }
+        const root = missing.filter(one => one.to === 'root').flatMap(one => one.lines);
+        if (root.length > 0) draft.put(Placement.rootHead(draft.reading(), root[0]), Block.read(root));
         // Where each row's first line is, once put: the row itself when it
         // was carried, the line marked when it was put new.
         const heads: RowTarget[] = [];

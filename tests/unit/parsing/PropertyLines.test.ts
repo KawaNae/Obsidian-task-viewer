@@ -169,8 +169,9 @@ describe('PropertyLines', () => {
         });
 
         it('lets the value above come through, for a task and for a section', () => {
-            const [t] = tasks(['---', 'area: fm', '---', '## S', '- area:: s1', '- area:: s2', '- [ ] t', '    - k:: 1', '    - k:: 2']);
-            expect(t.cascadeContext?.properties?.area?.value).toEqual(text('fm'));
+            const [t] = tasks(['---', 'tv-color: red', '---', '- area:: root', '## S', '- area:: s1', '- area:: s2', '- tv-color:: a', '- tv-color:: b', '- [ ] t', '    - k:: 1', '    - k:: 2']);
+            expect(t.cascadeContext?.properties?.area?.value).toEqual(text('root'));
+            expect(t.cascadeContext?.color).toBe('red');
             expect(t.properties).toEqual({});
         });
 
@@ -243,9 +244,9 @@ describe('PropertyLines', () => {
             expect(all.map(task => task.cascadeContext?.properties?.area?.value)).toEqual([text('lab'), text('lab'), undefined]);
         });
 
-        it('the root section\'s values reach its own tasks only', () => {
-            const all = tasks(['- [ ] a', '- area:: lab', '## S', '- [ ] b']);
-            expect(all.map(task => task.cascadeContext?.properties?.area?.value)).toEqual([text('lab'), undefined]);
+        it('the root\'s values, above the first heading, reach every task of the note', () => {
+            const all = tasks(['- [ ] a', '- area:: lab', '## S', '- [ ] b', '### T', '- [ ] c']);
+            expect(all.map(task => task.cascadeContext?.properties?.area?.value)).toEqual([text('lab'), text('lab'), text('lab')]);
         });
 
         it('`- properties::` is a property of its own, of any owner', () => {
