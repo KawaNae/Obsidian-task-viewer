@@ -66,4 +66,26 @@ describe('CascadeSource', () => {
         expect(CascadeSource.lineOfTag(task('row'), 'file')).toEqual({ line: 1, frontmatterKey: 'tags' });
         expect(CascadeSource.lineOfProperty(task('row'), 'OWNER')).toEqual({ line: 8 });
     });
+
+    it('says a value above the first heading is the file\'s, as the frontmatter\'s is, and opens its line', () => {
+        const root = rows([
+            '---',
+            'tv-color: red',
+            '---',
+            'Inherit properties:',
+            '- 時給:: 1450',
+            '- tv-mask:: ***',
+            '- tags:: #top',
+            '## Section',
+            '- tv-color:: blue',
+            '- [ ] under',
+        ].join('\n'));
+        expect(CascadeSource.forProperty(root('under'), '時給')).toBe('file');
+        expect(CascadeSource.forStyleField(root('under'), 'mask')).toBe('file');
+        expect(CascadeSource.forStyleField(root('under'), 'color')).toBe('section');
+        expect(CascadeSource.forTag(root('under'), 'top')).toBe('file');
+        expect(CascadeSource.lineOfProperty(root('under'), '時給')).toEqual({ line: 4 });
+        expect(CascadeSource.lineOfStyleField(root('under'), 'mask', 'tv-mask')).toEqual({ line: 5 });
+        expect(CascadeSource.lineOfTag(root('under'), 'top')).toEqual({ line: 6 });
+    });
 });
