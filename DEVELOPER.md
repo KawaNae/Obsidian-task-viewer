@@ -11,7 +11,7 @@ src/views/taskcard/
   ChildRenderItemMapper.ts         # Maps child data to ChildRenderItem[]
   ChildSectionRenderer.ts          # Child markdown/toggle rendering
   CardMarkdown.ts                  # The one call of MarkdownRenderer.render for a card
-  CheckboxWiring.ts                # Parent/child checkbox interaction and status menu
+  CheckboxWiring.ts                # Checkbox interaction and status menu
   NotationUtils.ts                 # @notation label formatting helpers
   TaskLinkInteractionManager.ts    # Internal link click/hover handling
   TaskViewHoverParent.ts           # HoverParent decoupling Page Preview popovers from the WorkspaceLeaf
@@ -24,7 +24,7 @@ src/views/taskcard/
 
 1. `TaskCardRenderer` is the entry point used by Timeline/Schedule renderers.
 2. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
-3. `CheckboxWiring` owns all checkbox event binding. Every checkbox, parent or child, is a task, so every write goes through `Operations.updateTask(taskId, { statusChar })`.
+3. `CheckboxWiring` owns all checkbox event binding. Every checkbox, parent or child, is a task and is wired the same: every write goes through `Operations.updateTask(taskId, { statusChar })`, and the click marks the status it writes as `data-task` on the box and its list item at once, where `_checkboxes.css` reads a status from. A tick alone would be drawn in Obsidian's checked look (the theme's accent) until the card is drawn again from the file. A write not made puts back the tick and both marks.
 4. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
 5. A card is drawn whole when `TaskCardRenderer.render` returns: it is synchronous, and lays the body, the children, their notation, the links and the mask in one go. No view waits on a card. `renderCardMarkdown` is the one call of `MarkdownRenderer.render`; that the body is in the element when the call returns is how Obsidian's renderer behaves, not what its API promises, so an empty element right after the call is logged once a session. The promise the call returns tells only when truly asynchronous content (images, embeds, math, code, mermaid, other plugins' post-processors) is in; the mask is laid again then, if the card still shows that draw.
 6. How a card is drawn is said by `RenderOptions`, one field per policy: `expandChildren` (no collapsed section), `alwaysLinks` (links live whatever `enableCardFileLink` says), `doubleTap`, `mask`. The renderer has no branch for any caller; the hub's preview passes its set and puts its own `task-card--in-hub-preview` class on the card.

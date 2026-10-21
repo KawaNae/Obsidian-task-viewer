@@ -6,8 +6,9 @@ import type { ChildRenderItem } from '../../../src/views/taskcard/types';
 import type { TaskViewerSettings } from '../../../src/types';
 
 /**
- * checkbox のクリックが書けなかったら、箱の見た目（checked と data-task）を
- * クリック前に戻す。書けたなら触らない。
+ * checkbox のクリックは、親の箱でも子の箱でも、書く状態をその場で箱と li の
+ * data-task に付ける。書けなかったら、箱の見た目（checked と、箱と li の
+ * data-task）をクリック前に戻す。書けたなら触らない。
  *
  * unit の environment は node で jsdom も無いので、CheckboxWiring が触る分だけを
  * 持つ代役で組む。ブラウザはクリックの前に checked を反転させるので、代役でも
@@ -69,10 +70,27 @@ function childBox(initial: { checked: boolean; dataTask?: string }) {
     return { box, li, container, items };
 }
 
+function parentBox() {
+    const li = new FakeAttrs();
+    const box = new FakeCheckbox(li);
+    return { box, li };
+}
+
 describe('parent checkbox', () => {
-    it('puts the tick back when the write was not made', async () => {
+    it('marks the status it writes on the box and its item before the write answers', () => {
+        const { wiring } = wiringAnswering(true);
+        const { box, li } = parentBox();
+        wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
+
+        box.click();
+
+        expect(box.getAttribute('data-task')).toBe('x');
+        expect(li.getAttribute('data-task')).toBe('x');
+    });
+
+    it('puts the tick and the marks back when the write was not made', async () => {
         const { wiring, calls } = wiringAnswering(false);
-        const box = new FakeCheckbox(new FakeAttrs());
+        const { box, li } = parentBox();
         wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
 
         box.click();
@@ -81,22 +99,42 @@ describe('parent checkbox', () => {
 
         expect(calls).toEqual([{ id: 'parent-1', updates: { statusChar: 'x' } }]);
         expect(box.checked).toBe(false);
+        expect(box.getAttribute('data-task')).toBeNull();
+        expect(li.getAttribute('data-task')).toBeNull();
     });
 
-    it('keeps the tick when the write was made', async () => {
+    it('puts back a status only its item marked, as Obsidian draws it', async () => {
+        const { wiring, calls } = wiringAnswering(false);
+        const { box, li } = parentBox();
+        box.checked = true;
+        li.setAttribute('data-task', '/');
+        wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
+
+        box.click();
+        expect(li.getAttribute('data-task')).toBeNull();
+        await settle();
+
+        expect(calls).toEqual([{ id: 'parent-1', updates: { statusChar: ' ' } }]);
+        expect(box.checked).toBe(true);
+        expect(box.getAttribute('data-task')).toBeNull();
+        expect(li.getAttribute('data-task')).toBe('/');
+    });
+
+    it('keeps the tick and the marks when the write was made', async () => {
         const { wiring } = wiringAnswering(true);
-        const box = new FakeCheckbox(new FakeAttrs());
+        const { box, li } = parentBox();
         wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
 
         box.click();
         await settle();
 
         expect(box.checked).toBe(true);
+        expect(li.getAttribute('data-task')).toBe('x');
     });
 
     it('leaves a box that is no longer on the page alone', async () => {
         const { wiring } = wiringAnswering(false);
-        const box = new FakeCheckbox(new FakeAttrs());
+        const { box, li } = parentBox();
         wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
 
         box.click();
@@ -104,6 +142,7 @@ describe('parent checkbox', () => {
         await settle();
 
         expect(box.checked).toBe(true);
+        expect(li.getAttribute('data-task')).toBe('x');
     });
 });
 
