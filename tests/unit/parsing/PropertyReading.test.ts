@@ -75,22 +75,21 @@ describe('a property with no value written', () => {
     };
 
     it('on a line, is a value that hides the one above it', () => {
-        expect(shown(['---', 'k: x', '---', '- k::', '- [ ] t'], 'k')).toBe('');
+        expect(shown(['- k:: x', '## S', '- k::', '- [ ] t'], 'k')).toBe('');
         expect(shown(['- k:: x', '- [ ] t', '    - k::'], 'k')).toBe('');
-        expect(shown(['---', 'k: x', '---', '- k:: null', '- [ ] t'], 'k')).toBe('null');
+        expect(shown(['- k:: x', '## S', '- k:: null', '- [ ] t'], 'k')).toBe('null');
     });
 
-    it('in the frontmatter, is a value too, whatever its spelling', () => {
-        for (const spelling of ['', 'null', '~']) {
-            expect(shown(['---', `k: ${spelling}`, '---', '- [ ] t'], 'k'), spelling).toBe('');
+    it('in the frontmatter, under a custom key, is the note\'s own and no task\'s, whatever its spelling', () => {
+        for (const spelling of ['', 'null', '~', '""', 'x']) {
+            expect(shown(['---', `k: ${spelling}`, '---', '- [ ] t'], 'k'), spelling).toBeUndefined();
         }
-        expect(shown(['---', 'k: ""', '---', '- [ ] t'], 'k')).toBe('');
     });
 
-    it('goes out of the API as null, from the frontmatter as from a line', () => {
+    it('goes out of the API as null, from the lines above the first heading as from a section\'s', () => {
         const record = (lines: string[]) => taskToRecord(task(lines) as DisplayTask, ['properties'], () => undefined).properties;
-        expect(record(['---', 'area:', 'k: ~', '---', '- [ ] t'])).toEqual({ area: null, k: null });
-        expect(record(['---', 'area: lab', '---', '- area::', '- [ ] t'])).toEqual({ area: null });
+        expect(record(['- area::', '- k::', '', '- [ ] t'])).toEqual({ area: null, k: null });
+        expect(record(['- area:: lab', '## S', '- area::', '- [ ] t'])).toEqual({ area: null });
     });
 
     it('under a built-in key, hides the value above it as well', () => {

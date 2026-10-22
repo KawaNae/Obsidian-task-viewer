@@ -98,7 +98,7 @@ describe('a timer whose lines all go', () => {
         const timer = await note.start('器', 'child');
         const tail = timer.tail!;
 
-        const sent = await note.ops.send({ rows: [note.row('器')], to: NEW('X'), frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('器')], to: NEW('X'), values: [] });
         await note.settle();
 
         expect(sent.kind).toBe('done');
@@ -122,7 +122,7 @@ describe('a timer whose lines all go', () => {
         const tb = await note.start('B', 'child');
         refuseNext(note, 'b.md');
 
-        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X'), frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('X'), values: [] });
         await note.settle();
 
         expect(sent.kind === 'partly' && sent.refused).toEqual(['b.md']);
@@ -170,7 +170,7 @@ describe('a timer the send would leave without its lines', () => {
         expect(timer.session.kind).toBe('pending');
         const before = note.text('a.md');
 
-        const sent = await note.ops.send({ rows: [note.row('器')], to: NEW('X'), frontmatter: [] }, { tellRefusal: false });
+        const sent = await note.ops.send({ rows: [note.row('器')], to: NEW('X'), values: [] }, { tellRefusal: false });
 
         const why = [t('notice.notSent'), t('notice.sendTimerSplit', { timer: '器', sent: targetOf(timer), kept: timer.tail! })].join(' ');
         expect(sent).toEqual({ kind: 'not-done', why });
@@ -184,7 +184,7 @@ describe('a timer the send would leave without its lines', () => {
         const note = await open({ 'a.md': ['- [x] 器', ''] });
         await note.start('器', 'sibling');
 
-        const sent = await note.ops.send({ rows: [note.row('器')], to: NEW('X'), frontmatter: [] });
+        const sent = await note.ops.send({ rows: [note.row('器')], to: NEW('X'), values: [] });
 
         expect(sent.kind).toBe('not-done');
         expect(Notice.messages).toEqual([sent.kind === 'not-done' && sent.why]);
@@ -195,7 +195,7 @@ describe('a timer the send would leave without its lines', () => {
         const timer = await note.start('器', 'child');
         note.contents.set('X.md', `- 写し ^${timer.tail}\n`);
 
-        const sent = await note.ops.send({ rows: [note.row('器')], to: { note: { kind: 'existing', path: 'X.md' }, section: SECTION }, frontmatter: [] }, { tellRefusal: false });
+        const sent = await note.ops.send({ rows: [note.row('器')], to: { note: { kind: 'existing', path: 'X.md' }, section: SECTION }, values: [] }, { tellRefusal: false });
 
         expect(sent).toEqual({
             kind: 'not-done',

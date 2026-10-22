@@ -339,8 +339,8 @@ export class Operations {
      * operation (`NoteOps.send`). Each row is `SendRow`: named by its id,
      * with the subtree the dialog was opened on (`base`) and the draft the
      * user wrote of it, if any. `to` is the note, made by the send when
-     * `create` says so, its section, and the keys to write into its
-     * frontmatter where it has none by their name.
+     * `create` says so, its section, and the values to write into it where
+     * it does not say them (`SendWriter.saidIn`).
      *
      * Planned as every write that names a row: once the writes already
      * asked of each row are done (`onRow`), from copies the disk still reads

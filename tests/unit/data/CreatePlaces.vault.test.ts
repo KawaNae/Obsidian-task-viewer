@@ -54,6 +54,17 @@ describe('a daily note as a place', () => {
         expect(facts).toMatchObject({ note: 'existing', heading: { kind: 'none' }, inherits: { due: '2031-01-20' } });
     });
 
+    it('inherits a value written above the first heading, and none of the frontmatter\'s custom keys', async () => {
+        const { places: p } = await places({
+            [NOTE]: ['---', 'tv-color: ff0000', '体重[kg]:', 'owner: me', '---', 'Inherit properties:', '- 時給:: 1450', '- tv-color:: 00ff00', '', '## Tasks', '- [ ] 既存', ''].join('\n'),
+        });
+        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
+        if (facts.kind !== 'dailyNote') throw new Error(facts.kind);
+        expect(facts.inherits.color).toBe('00ff00');
+        expect(Object.keys(facts.inherits.properties ?? {})).toEqual(['時給']);
+        expect(facts.inherits.properties?.['時給']?.value).toMatchObject({ type: 'number', number: 1450 });
+    });
+
     it('with the heading twice: no one place, and nothing inherited', async () => {
         const { places: p } = await places({ [NOTE]: '## Tasks\n## Tasks\n' });
         const facts = await p.facts({ kind: 'dailyNote', date: DAY });

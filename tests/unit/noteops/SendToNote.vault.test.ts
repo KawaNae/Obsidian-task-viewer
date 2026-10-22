@@ -4,7 +4,7 @@ import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 import type { SubtreeLine } from '../../../src/services/persistence/TaskOps';
 import type { SendRow } from '../../../src/services/core/TaskIndex';
-import type { FrontmatterKey } from '../../../src/services/persistence/writers/SendWriter';
+import type { NoteValue } from '../../../src/services/persistence/writers/SendWriter';
 import { NoteSections } from '../../../src/services/parsing/tree/NoteSections';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 
@@ -57,12 +57,12 @@ async function open(files: Record<string, string | string[]>) {
                 ...(draft ? { draft: { text: draft.text, children: draft.children.map(([text, was]): SubtreeLine => ({ text, was })) } } : {}),
             };
         },
-        send: async (rows: SendRow[], to: { path: string; create?: boolean; frontmatter?: FrontmatterKey[]; heading?: string; side?: 'head' | 'end' }) => {
+        send: async (rows: SendRow[], to: { path: string; create?: boolean; values?: NoteValue[]; heading?: string; side?: 'head' | 'end' }) => {
             const answer = await session.ops.send(rows, {
                 path: to.path,
                 create: to.create ?? false,
                 section: { heading: to.heading ?? 'Tasks', level: 2, side: to.side ?? 'head' },
-                frontmatter: to.frontmatter ?? [],
+                values: to.values ?? [],
             });
             await session.flowSettled(...contents.keys());
             return answer;
@@ -76,7 +76,7 @@ describe('to a new note', () => {
 
         const sent = await note.send([note.row('設計')], {
             path: 'Projects/設計.md', create: true,
-            frontmatter: [{ key: 'tv-start', yaml: ['tv-start: "2026-09-28"'] }, { key: 'tags', yaml: ['tags:', '  - work'] }],
+            values: [{ key: 'tv-start', to: 'frontmatter', lines: ['tv-start: "2026-09-28"'] }, { key: 'tags', to: 'frontmatter', lines: ['tags:', '  - work'] }],
         });
 
         expect(sent).toMatchObject({ kind: 'done', subject: '設計', landed: ['src.md'], refused: [], takenBack: true });
@@ -212,7 +212,7 @@ describe('to a note there is', () => {
 
         await note.send([note.row('A')], {
             path: 'dst.md',
-            frontmatter: [{ key: 'tags', yaml: ['tags:', '  - new'] }, { key: 'j', yaml: ['j: 2'] }],
+            values: [{ key: 'tags', to: 'frontmatter', lines: ['tags:', '  - new'] }, { key: 'j', to: 'frontmatter', lines: ['j: 2'] }],
         });
 
         expect(note.lines('dst.md')).toEqual(['---', 'tags:', '  - old', 'k: 1', 'j: 2', '---', '# d', '', '## Tasks', '- [ ] A', '']);
@@ -221,7 +221,7 @@ describe('to a note there is', () => {
     it('makes a frontmatter for the keys when it has none', async () => {
         const note = await open({ 'src.md': ['- [ ] A', ''], 'dst.md': ['## Tasks', '- [ ] x', ''] });
 
-        await note.send([note.row('A')], { path: 'dst.md', frontmatter: [{ key: 'j', yaml: ['j: 2'] }] });
+        await note.send([note.row('A')], { path: 'dst.md', values: [{ key: 'j', to: 'frontmatter', lines: ['j: 2'] }] });
 
         expect(note.lines('dst.md')).toEqual(['---', 'j: 2', '---', '## Tasks', '- [ ] A', '- [ ] x', '']);
     });
@@ -236,6 +236,74 @@ describe('to a note there is', () => {
         expect(sections.find(s => s.heading?.text === 'Section')?.properties.lines.map(line => line.key)).toEqual(['tv-color']);
         expect(note.task('A').cascadeContext?.color).toBe('ffffff');
         expect(note.task('x').cascadeContext?.color).toBe('ffffff');
+    });
+
+    it('writes a value above the first heading at the root\'s head: past the lines there, below a label written above them', async () => {
+        const note = await open({
+            'src.md': ['- [ ] A', ''],
+            'dst.md': ['---', 'tv-color: red', '---', 'Inherit properties:', '- area:: x', '', '## Tasks', '- [ ] x', ''],
+        });
+
+        await note.send([note.row('A')], {
+            path: 'dst.md',
+            values: [
+                { key: '時給', to: 'root', lines: ['- 時給:: 1450'] },
+                { key: 'who', to: 'root', lines: ['- who::', '    - a', '    - b'] },
+                { key: 'tv-mask', to: 'frontmatter', lines: ['tv-mask: "***"'] },
+            ],
+        });
+
+        expect(note.lines('dst.md')).toEqual([
+            '---', 'tv-color: red', 'tv-mask: "***"', '---',
+            'Inherit properties:', '- area:: x', '- 時給:: 1450', '- who::', '    - a', '    - b', '',
+            '## Tasks', '- [ ] A', '- [ ] x', '',
+        ]);
+        const props = note.task('A').cascadeContext?.properties;
+        expect(props?.['時給']?.value).toMatchObject({ type: 'number', number: 1450 });
+        expect(props?.who?.value).toMatchObject({ type: 'list' });
+        expect(props?.area?.value).toMatchObject({ text: 'x' });
+        expect(note.task('A').cascadeContext?.mask).toBe('***');
+    });
+
+    it('a value above the first heading where none is: below a label alone, or at the top of the body', async () => {
+        const note = await open({
+            'src.md': ['- [ ] A', '- [ ] B', ''],
+            'label.md': ['Inherit properties:', '', '## Tasks', ''],
+            'top.md': ['---', 'k: 1', '---', '## Tasks', '- [ ] x', ''],
+        });
+        const value = { key: '時給', to: 'root' as const, lines: ['- 時給:: 1450'] };
+
+        await note.send([note.row('A')], { path: 'label.md', values: [value] });
+        await note.send([note.row('B')], { path: 'top.md', values: [value] });
+
+        expect(note.lines('label.md')).toEqual(['Inherit properties:', '- 時給:: 1450', '', '## Tasks', '- [ ] A', '']);
+        expect(note.lines('top.md')).toEqual(['---', 'k: 1', '---', '- 時給:: 1450', '## Tasks', '- [ ] B', '- [ ] x', '']);
+        expect(note.task('A').cascadeContext?.properties?.['時給']).toBeDefined();
+        expect(note.task('B').cascadeContext?.properties?.['時給']).toBeDefined();
+    });
+
+    it('writes no value the note says already: a line above its first heading for either, its frontmatter for a built-in', async () => {
+        const note = await open({
+            'src.md': ['- [ ] A', ''],
+            'dst.md': ['---', 'tv-mask: x', 'area: fm', '---', '- 時給:: 1000', '- TV-COLOR:: blue', '', '## Tasks', '- tv-linestyle:: dotted', ''],
+        });
+
+        await note.send([note.row('A')], {
+            path: 'dst.md',
+            values: [
+                { key: '時給', to: 'root', lines: ['- 時給:: 1450'] },
+                { key: 'area', to: 'root', lines: ['- area:: lab'] },
+                { key: 'tv-color', to: 'frontmatter', lines: ['tv-color: red'] },
+                { key: 'tv-mask', to: 'frontmatter', lines: ['tv-mask: y'] },
+                { key: 'tv-linestyle', to: 'frontmatter', lines: ['tv-linestyle: dashed'] },
+            ],
+        });
+
+        expect(note.lines('dst.md')).toEqual([
+            '---', 'tv-mask: x', 'area: fm', 'tv-linestyle: dashed', '---',
+            '- 時給:: 1000', '- TV-COLOR:: blue', '- area:: lab', '',
+            '## Tasks', '- tv-linestyle:: dotted', '- [ ] A', '',
+        ]);
     });
 
     it('with two headings of the name: refused before anything is written, told once', async () => {
@@ -319,7 +387,7 @@ describe('a note the rows came from, refused once the note is written', () => {
         const before = note.text('dst.md');
         note.beforeWrite('src.md', () => { throw new Error('EIO'); });
 
-        const sent = await note.send([note.row('A')], { path: 'dst.md', frontmatter: [{ key: 'j', yaml: ['j: 2'] }] });
+        const sent = await note.send([note.row('A')], { path: 'dst.md', values: [{ key: 'j', to: 'frontmatter', lines: ['j: 2'] }] });
 
         expect(sent).toMatchObject({ kind: 'done', landed: [], refused: [{ file: 'src.md', reason: { kind: 'failed' } }], takenBack: true });
         expect(note.text('dst.md')).toBe(before);
@@ -342,7 +410,7 @@ describe('a note the rows came from, refused once the note is written', () => {
         note.beforeWrite('b.md', () => note.contents.set('b.md', '- [ ] B\n- [ ] typed\n'));
 
         const sent = await note.send([note.row('A'), note.row('B'), note.row('C')], {
-            path: 'dst.md', create: true, frontmatter: [{ key: 'j', yaml: ['j: 2'] }],
+            path: 'dst.md', create: true, values: [{ key: 'j', to: 'frontmatter', lines: ['j: 2'] }],
         });
 
         expect(sent).toMatchObject({ kind: 'done', landed: ['a.md', 'c.md'], refused: [{ file: 'b.md' }], takenBack: true });

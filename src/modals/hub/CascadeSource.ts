@@ -13,7 +13,9 @@ export type CascadeSourceKind = 'file' | 'section';
  * 解決だけであり、ここで層をたどり直したり metadataCache の frontmatter を
  * 読み直したりしない。キャッシュはタスクを読んだ版より古いことがあり、
  * 読み直せば別の版の出所を言うことになる（structure の「読みの鮮度」）。
- * 見出し単位の特定はしない（ユーザー決定: file / section の粗い区別で十分）。
+ * 見出し単位の特定はしない（file / section の粗い区別で十分）。frontmatter と
+ * 根（最初の見出しより上のプロパティ行、ノート全体に届く）は、どちらもノートの値
+ * なので file と言う。どちらの行かは、ラベルから行を開けば分かる。
  */
 export class CascadeSource {
     /**
@@ -58,13 +60,17 @@ export class CascadeSource {
     }
 }
 
-/** A layer's line as the hub opens it: a frontmatter key by its key too, which the Properties view shows. */
+/** A layer's line as the hub opens it: a frontmatter key by its key too, which the Properties view shows; a property line, the root's too, by its line. */
 function targetOf(source: ValueSource | undefined, key: string): LineTarget | null {
     if (!source) return null;
     return source.kind === 'frontmatter' ? { line: source.line, frontmatterKey: key } : { line: source.line };
 }
 
-/** 記録がない値は節の値として言う（記録はすべての継承値にあるので、起きるのは記録を持たないタスクだけ）。 */
+/**
+ * frontmatter と根の行はノートの値、見出しのセクションの行は節の値。記録がない値は
+ * 節の値として言う（記録はすべての継承値にあるので、起きるのは記録を持たないタスクだけ）。
+ */
 function kindOf(source: ValueSource | undefined): CascadeSourceKind {
-    return source?.kind === 'frontmatter' ? 'file' : 'section';
+    if (!source) return 'section';
+    return source.kind === 'frontmatter' || source.heading === null ? 'file' : 'section';
 }

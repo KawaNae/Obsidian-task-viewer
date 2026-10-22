@@ -1,6 +1,6 @@
 import { SCALAR_FIELDS, type ResolvedSources, type ScalarField, type SectionNode, type ValueSource } from './Sections';
 import type { ScopeKeys } from '../../../types';
-import { BuiltinPropertyExtractor, fieldKey, type ExtractedProperties } from './BuiltinPropertyExtractor';
+import { BuiltinPropertyExtractor, fieldKey, type ExtractedBuiltins, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { TagExtractor } from '../utils/TagExtractor';
 import { PropertyKey } from '../utils/PropertyKey';
 import { PropertyLines } from '../utils/PropertyLines';
@@ -16,10 +16,13 @@ interface Resolved {
 /**
  * Section-scope property resolver.
  *
- * Cascades properties along the section tree (frontmatter → parent section →
- * child section, child-wins). The frontmatter is the base: its values read
- * by the same extractor as a section's, its built-ins put apart from its
- * custom properties (`BuiltinPropertyExtractor.fromFrontmatter`).
+ * Cascades properties along the section tree (frontmatter → root → parent
+ * section → child section, child-wins): the root is the section of the
+ * whole note, so a property line above the first heading reaches every
+ * row, and wins over the frontmatter as any section does. The frontmatter
+ * is the base, its built-ins alone, read by the same extractor as a
+ * section's (`BuiltinPropertyExtractor.fromFrontmatter`): its other keys
+ * are the note's own, and no row inherits them.
  *
  * The nearest layer that says a value wins, and a layer that says it has
  * none (`- area::`, `tv-color:`) wins as one with a value does: it hides
@@ -37,27 +40,22 @@ interface Resolved {
 export class SectionPropertyResolver {
     static resolve(
         outline: OutlineReading,
-        sections: readonly SectionNode[],
+        root: SectionNode,
         frontmatter: Record<string, any> | undefined,
         keys: ScopeKeys
     ): void {
-        const values = BuiltinPropertyExtractor.fromFrontmatter(frontmatter, keys);
-        const root: Resolved = { values, sources: this.frontmatterSources(outline, values, keys) };
-
-        for (const section of sections) {
-            this.resolveSection(section, root, keys);
-        }
+        const builtins = BuiltinPropertyExtractor.fromFrontmatter(frontmatter, keys);
+        const base: Resolved = { values: { ...builtins, properties: {} }, sources: this.frontmatterSources(outline, builtins, keys) };
+        this.resolveSection(root, base, keys);
     }
 
     /** Every value the frontmatter says is the frontmatter's, by the line of its key. */
-    private static frontmatterSources(outline: OutlineReading, values: ExtractedProperties, keys: ScopeKeys): ResolvedSources {
+    private static frontmatterSources(outline: OutlineReading, values: ExtractedBuiltins, keys: ScopeKeys): ResolvedSources {
         const fmEnd = outline.bodyStart - 1;
         const at = (key: string): ValueSource => ({ kind: 'frontmatter', line: frontmatterKeyRange(outline.lines, fmEnd, key)?.[0] ?? null });
         const fields: Partial<Record<ScalarField, ValueSource>> = {};
         for (const field of SCALAR_FIELDS) if (values[field] !== undefined) fields[field] = at(fieldKey(field, keys));
-        const properties: Record<string, ValueSource> = {};
-        for (const [folded, { key }] of Object.entries(values.properties)) properties[folded] = at(key);
-        return { fields, tags: values.tags ? [{ from: at(fieldKey('tags', keys)), tags: values.tags }] : [], properties };
+        return { fields, tags: values.tags ? [{ from: at(fieldKey('tags', keys)), tags: values.tags }] : [], properties: {} };
     }
 
     private static resolveSection(

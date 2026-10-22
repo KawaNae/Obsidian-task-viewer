@@ -8,8 +8,10 @@ import { touchCard } from './CardHold';
 /**
  * Wires checkbox interactions for parent and child items.
  *
- * Every checkbox, parent or child, is a task and writes through updateTask.
- * A box is kept while its card shows the same thing, across readings of the
+ * Every checkbox, parent or child, is a task and is wired the same: a click
+ * writes through updateTask, and the box shows the status it writes from the
+ * click on (`markStatus`), until the card is drawn from the file again; a
+ * write not made puts the box back. A box is kept while its card shows the same thing, across readings of the
  * file that rename its task, so a handler never holds the name: it asks for
  * it when it writes (`CardHold`).
  */
@@ -40,7 +42,7 @@ export class CheckboxWiring {
         readOnly = false
     ): void {
         if (readOnly) return;
-        this.wireTaskCheckbox(checkbox, nameOf, settings, false);
+        this.wireTaskCheckbox(checkbox, nameOf, settings);
     }
 
     /**
@@ -67,35 +69,30 @@ export class CheckboxWiring {
             if (!items[i].handler) continue;
 
             const index = i;
-            this.wireTaskCheckbox(checkbox, () => nameAt(index), settings, true);
+            this.wireTaskCheckbox(checkbox, () => nameAt(index), settings);
         }
     }
 
-    /**
-     * @param child whether the box is a child item's, whose `data-task` the
-     *   click sets ahead of the write (a parent box's is drawn from the task)
-     */
     private wireTaskCheckbox(
         checkbox: Element,
         nameOf: () => string | undefined,
-        settings: TaskViewerSettings,
-        child: boolean
+        settings: TaskViewerSettings
     ): void {
         checkbox.addEventListener('click', () => {
-            // The click has changed the box already.
+            // The click has turned the tick already; the marks still show the
+            // status the box had.
             touchCard(checkbox);
             const input = checkbox as HTMLInputElement;
-            const isChecked = input.checked;
-            const newStatusChar = isChecked ? 'x' : ' ';
-            const previousChar = child ? (input.getAttribute('data-task') ?? ' ') : null;
-            if (child) this.updateCheckboxDataTask(input, newStatusChar);
+            const before = lookOf(input, !input.checked);
+            const statusChar = input.checked ? 'x' : ' ';
+            markStatus(input, statusChar);
             const name = nameOf();
             if (name === undefined) {
-                this.putBack(input, !isChecked, previousChar);
+                putBack(input, before);
                 return;
             }
-            void this.operations.updateTask(name, { statusChar: newStatusChar }).then(({ written }) => {
-                if (!written) this.putBack(input, !isChecked, previousChar);
+            void this.operations.updateTask(name, { statusChar }).then(({ written }) => {
+                if (!written) putBack(input, before);
             });
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -129,41 +126,52 @@ export class CheckboxWiring {
             }
         }, { kind: 'position', x: e.pageX, y: e.pageY });
     }
+}
 
-    /**
-     * Undo what a click did to the box when its write was not made. The index
-     * has put its copy back and the user has been told why; a card that
-     * re-renders from the copy replaces this element anyway, but one that does
-     * not would keep showing a status the file does not hold.
-     */
-    private putBack(input: HTMLInputElement, checked: boolean, dataTask: string | null): void {
-        if (!input.isConnected) return;
-        input.checked = checked;
-        if (dataTask !== null) this.updateCheckboxDataTask(input, dataTask);
+/**
+ * What a box shows of its task's status: its tick, and the `data-task` of the
+ * elements the stylesheet reads a status from, the box's own and its list
+ * item's (`_checkboxes.css`). Obsidian's markdown puts it on the item only.
+ */
+interface BoxLook {
+    checked: boolean;
+    marks: { el: Element; task: string | null }[];
+}
+
+/** The elements that mark the status of `input`. */
+function markersOf(input: HTMLInputElement): Element[] {
+    const item = input.closest('li');
+    return item ? [input, item] : [input];
+}
+
+/** What `input` shows, its tick taken as `checked`. */
+function lookOf(input: HTMLInputElement, checked: boolean): BoxLook {
+    return { checked, marks: markersOf(input).map(el => ({ el, task: el.getAttribute('data-task') })) };
+}
+
+/**
+ * Mark the status a click writes on the box, ahead of the write, so the box
+ * is drawn as that status at once: a tick alone would be drawn as Obsidian's
+ * checked box until the card is drawn from the file again.
+ */
+function markStatus(input: HTMLInputElement, statusChar: string): void {
+    for (const el of markersOf(input)) {
+        if (statusChar === ' ') el.removeAttribute('data-task');
+        else el.setAttribute('data-task', statusChar);
     }
+}
 
-    private updateCheckboxDataTask(el: HTMLElement, newChar: string): void {
-        const value = newChar === ' ' ? '' : newChar;
-        const input = el.matches('input.task-list-item-checkbox')
-            ? el
-            : (el.closest('input.task-list-item-checkbox') as HTMLElement | null);
-        const listItem = el.closest('li');
-
-        if (input) {
-            if (value) {
-                input.setAttribute('data-task', value);
-            } else {
-                input.removeAttribute('data-task');
-            }
-        }
-
-        if (listItem) {
-            if (value) {
-                listItem.setAttribute('data-task', value);
-            } else {
-                listItem.removeAttribute('data-task');
-            }
-        }
+/**
+ * Undo what a click did to the box when its write was not made. The index
+ * has put its copy back and the user has been told why; a card that is drawn
+ * again from the copy replaces this element anyway, but one that is not would
+ * keep showing a status the file does not hold.
+ */
+function putBack(input: HTMLInputElement, look: BoxLook): void {
+    if (!input.isConnected) return;
+    input.checked = look.checked;
+    for (const { el, task } of look.marks) {
+        if (task === null) el.removeAttribute('data-task');
+        else el.setAttribute('data-task', task);
     }
-
 }

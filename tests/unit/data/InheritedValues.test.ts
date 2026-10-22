@@ -12,21 +12,24 @@ const byKey = (values: InheritedValue[]) => Object.fromEntries(values.map(v => [
 const rowOf = (lines: string[], text: string) => lines.findIndex(line => line.includes(text));
 
 describe('inheritedAt', () => {
-    it('aliases の配列を綴りのまま写し、Obsidian のキーと印す', () => {
+    it('frontmatter のカスタムキーは出さず、組み込みのキーと tags を frontmatter に書く値にする', () => {
         const lines = [
             '---',
             'aliases:',
             '  - 別名',
-            '  - "two: words"',
             'owner: me',
+            '体重[kg]:',
+            'tv-color: red',
+            'tags: [project]',
             '---',
             '- [ ] task',
         ];
-        const values = byKey(inheritedAt(lines, 6, DEFAULT_SETTINGS));
-        expect(values.aliases.yaml).toEqual(['aliases:', '  - 別名', '  - "two: words"']);
-        expect(values.aliases.obsidian).toBe(true);
-        expect(values.aliases.from).toEqual([{ kind: 'frontmatter', line: 1 }]);
-        expect(values.owner).toMatchObject({ yaml: ['owner: me'], obsidian: false });
+        const values = inheritedAt(lines, 8, DEFAULT_SETTINGS);
+        expect(values.map(v => [v.key, v.to, v.lines])).toEqual([
+            ['tv-color', 'frontmatter', ['tv-color: red']],
+            ['tags', 'frontmatter', ['tags:', '  - project']],
+        ]);
+        expect(byKey(values)['tv-color'].from).toEqual([{ kind: 'frontmatter', line: 5 }]);
     });
 
     it('tv-ignore、position、ファイルタスクの旧キーは出さない', () => {
@@ -37,12 +40,31 @@ describe('inheritedAt', () => {
             'tv-status: done',
             'tv-content: old',
             'tv-timer-target-id: abc',
-            'kept: yes',
             '---',
+            '- tv-status:: done',
+            '- kept:: yes',
+            '',
             '- [ ] task',
         ];
-        const keys = inheritedAt(lines, 8, DEFAULT_SETTINGS).map(v => v.key);
+        const keys = inheritedAt(lines, 10, DEFAULT_SETTINGS).map(v => v.key);
         expect(keys).toEqual(['kept']);
+    });
+
+    it('最初の見出しより上の行の値は、見出しの下の行にも出る。カスタムの値は根の行に、組み込みのキーは frontmatter に書く', () => {
+        const lines = [
+            '---',
+            'tv-color: red',
+            '---',
+            'Inherit properties:',
+            '- 時給:: 1450',
+            '- tv-color:: 00ff00',
+            '',
+            '## Work',
+            '- [ ] task',
+        ];
+        const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
+        expect(values['時給']).toEqual({ key: '時給', to: 'root', lines: ['- 時給:: 1450'], from: [{ kind: 'section', line: 4, heading: null }] });
+        expect(values['tv-color']).toMatchObject({ to: 'frontmatter', lines: ['tv-color: 00ff00'], from: [{ kind: 'section', line: 5, heading: null }] });
     });
 
     it('子タスクの行でも、その節の値が出る（行が自分の日付を持っても）', () => {
@@ -61,9 +83,10 @@ describe('inheritedAt', () => {
         expect(task.cascadeContext?.startDate).toBeUndefined();
 
         const values = byKey(inheritedAt(lines, child, DEFAULT_SETTINGS));
-        expect(values['tv-start'].yaml).toEqual(['tv-start: 2026-09-01']);
+        expect(values['tv-start'].lines).toEqual(['tv-start: 2026-09-01']);
         expect(values['tv-color']).toMatchObject({
-            yaml: ['tv-color: ff0000'],
+            to: 'frontmatter',
+            lines: ['tv-color: ff0000'],
             from: [{ kind: 'section', line: 4, heading: { text: 'Work' } }],
         });
     });
@@ -78,7 +101,7 @@ describe('inheritedAt', () => {
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, 5, DEFAULT_SETTINGS));
-        expect(values['tv-start'].yaml).toEqual(['tv-start: 2026-09-28T11:00']);
+        expect(values['tv-start'].lines).toEqual(['tv-start: 2026-09-28T11:00']);
         expect(values['tv-start'].from).toEqual([
             { kind: 'frontmatter', line: 1 },
             { kind: 'section', line: 4, heading: expect.objectContaining({ text: 'Morning' }) },
@@ -95,85 +118,85 @@ describe('inheritedAt', () => {
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, 5, DEFAULT_SETTINGS));
-        expect(values.tags.yaml).toEqual(['tags:', '  - project', '  - 出/クレカ']);
+        expect(values.tags.lines).toEqual(['tags:', '  - project', '  - 出/クレカ']);
         expect(values.tags.from).toHaveLength(2);
     });
 
-    it('見出しのプロパティ行の値は、行が付けた型の YAML で書く', () => {
+    it('見出しのプロパティ行のカスタムの値は、根の行に `- key:: value` で、値を綴りのまま写す', () => {
         const lines = [
             '## S',
             '- priority:: 3',
             '- code:: 007',
             '- note:: a: b # c',
-            '- day:: 2026-09-29',
+            '* star:: x',
+            '+ plus:: y',
             '- done:: True',
-            '- off:: False',
-            '- word:: true',
             '- area:: lab, desk',
-            '- pair:: [x, y]',
             '- link:: [[x]]',
-            '- links:: [[a]], [[b|B, c]]',
-            '- none:: ,',
             '- hex:: 0x1F',
             '- id:: "123"',
             "- sq:: 'abc'",
+            '- nul:: null',
             '- empty::',
             '- tv-color:: 007700',
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
-        expect(values.priority.yaml).toEqual(['priority: 3']);
-        expect(values.code.yaml).toEqual(['code: 007']);
-        expect(values.note.yaml).toEqual(['note: "a: b # c"']);
-        expect(values.day.yaml).toEqual(['day: 2026-09-29']);
-        expect(values.done.yaml).toEqual(['done: true']);
-        expect(values.off.yaml).toEqual(['off: false']);
-        // `true` is a boolean on a line as in YAML, and is written as one.
-        expect(values.word.yaml).toEqual(['word: true']);
-        // A line writes no list: `,` and brackets are text, which YAML reads
-        // plain or is told by quotes, as Obsidian writes them.
-        expect(values.area.yaml).toEqual(['area: lab, desk']);
-        expect(values.pair.yaml).toEqual(['pair: "[x, y]"']);
-        expect(values.link.yaml).toEqual(['link: "[[x]]"']);
-        expect(values.links.yaml).toEqual(['links: "[[a]], [[b|B, c]]"']);
-        expect(values.none.yaml).toEqual(['none: ","']);
-        expect(values.hex.yaml).toEqual(['hex: 0x1F']);
-        // A quoted line value is text, and goes with its quotes as written.
-        expect(values.id.yaml).toEqual(['id: "123"']);
-        expect(values.sq.yaml).toEqual(["sq: 'abc'"]);
+        const root = (key: string) => {
+            expect(values[key].to, key).toBe('root');
+            return values[key].lines;
+        };
+        expect(root('priority')).toEqual(['- priority:: 3']);
+        expect(root('code')).toEqual(['- code:: 007']);
+        expect(root('note')).toEqual(['- note:: a: b # c']);
+        // The list marker is made `-`.
+        expect(root('star')).toEqual(['- star:: x']);
+        expect(root('plus')).toEqual(['- plus:: y']);
+        expect(root('done')).toEqual(['- done:: True']);
+        expect(root('area')).toEqual(['- area:: lab, desk']);
+        expect(root('link')).toEqual(['- link:: [[x]]']);
+        expect(root('hex')).toEqual(['- hex:: 0x1F']);
+        expect(root('id')).toEqual(['- id:: "123"']);
+        expect(root('sq')).toEqual(["- sq:: 'abc'"]);
+        expect(root('nul')).toEqual(['- nul:: null']);
         // No value goes as no value, which hides the value above there too.
-        expect(values.empty.yaml).toEqual(['empty:']);
-        // The plugin's own keys are read as text: a color is not a number.
-        expect(values['tv-color'].yaml).toEqual(['tv-color: "007700"']);
+        expect(root('empty')).toEqual(['- empty::']);
+        // A built-in goes into the frontmatter, read as text: a color is not a number.
+        expect(values['tv-color']).toMatchObject({ to: 'frontmatter', lines: ['tv-color: "007700"'] });
     });
 
-    it('見出しのプロパティ行のリストは YAML のリストで、組み込みのキーのリストは読めない値なので送らない。最初のタスクより下の行も節の値', () => {
+    it('見出しのプロパティ行のリストは、行と項目を字下げの差を保って写し、組み込みのキーのリストは読めない値なので送らない。最初のタスクより下の行も節の値', () => {
         const lines = [
             '## S',
             '- [ ] task',
             '- list::',
             '  - a',
             '  - 12',
+            '',
             '  - "12"',
             "  - 'x y'",
             '  - "a\\b"',
+            '- tabs::',
+            '\t- one',
             '- tv-mask::',
             '  - x',
             '  - y',
         ];
         const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
-        // A quoted item goes with its quotes, unless YAML would read them otherwise (a backslash).
-        expect(values.list.yaml).toEqual(['list:', '  - a', '  - 12', '  - "12"', "  - 'x y'", '  - a\\b']);
+        expect(values.list).toMatchObject({ to: 'root', lines: ['- list::', '  - a', '  - 12', '  - "12"', "  - 'x y'", '  - "a\\b"'] });
+        expect(values.tabs.lines).toEqual(['- tabs::', '\t- one']);
         expect(values['tv-mask']).toBeUndefined();
     });
 
-    it('値のない値は値のない値として送る: 見出しの行は値のない行と同じ形で、frontmatter の行はそのまま', () => {
+    it('値のない値は値のない値として送る: 組み込みのキーは frontmatter の値のないキーで、frontmatter の行はそのまま、カスタムの値は値のない行', () => {
         const lines = [
             '---',
             'tv-color: red',
             'tv-start: 2026-09-01',
-            'area:',
+            'tv-linestyle:',
+            'area: lab',
             '---',
+            '- area::',
             '## S',
             '- tv-color::',
             '- tv-mask:: null',
@@ -181,10 +204,11 @@ describe('inheritedAt', () => {
             '- [ ] task',
         ];
         const values = byKey(inheritedAt(lines, rowOf(lines, 'task'), DEFAULT_SETTINGS));
-        expect(values['tv-color']).toMatchObject({ yaml: ['tv-color:'], from: [{ kind: 'section', line: 6 }] });
-        expect(values['tv-mask'].yaml).toEqual(['tv-mask:']);
-        expect(values['tv-start']).toMatchObject({ yaml: ['tv-start:'], from: [{ kind: 'section', line: 8 }] });
-        expect(values.area).toMatchObject({ yaml: ['area:'], from: [{ kind: 'frontmatter', line: 3 }] });
+        expect(values['tv-color']).toMatchObject({ lines: ['tv-color:'], from: [{ kind: 'section', line: 8 }] });
+        expect(values['tv-mask'].lines).toEqual(['tv-mask:']);
+        expect(values['tv-start']).toMatchObject({ lines: ['tv-start:'], from: [{ kind: 'section', line: 10 }] });
+        expect(values['tv-linestyle']).toMatchObject({ lines: ['tv-linestyle:'], from: [{ kind: 'frontmatter', line: 3 }] });
+        expect(values.area).toMatchObject({ to: 'root', lines: ['- area::'], from: [{ kind: 'section', line: 6, heading: null }] });
     });
 
     it('tv-ignore のノートは行を持たないので、何も答えない', () => {
@@ -192,13 +216,11 @@ describe('inheritedAt', () => {
     });
 });
 
-describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノートで、送った行は同じ値を受け継ぐ', () => {
+describe('inheritedAt の受け入れ: 候補をそれぞれの書く先に書いたノートで、送った行は同じ値を受け継ぐ', () => {
     /**
      * What a row inherits, as the views read it. A property is its type and
      * what that type means: an array its items, a boolean its truth, a
-     * number its number. The spelling alone may change where YAML spells a
-     * type its own way (`True` as `true`, `1.50` as `1.5`); what reads it
-     * gets the same either way.
+     * number its number.
      */
     function inherited(task: Task) {
         const cc = task.cascadeContext ?? {};
@@ -231,10 +253,12 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
         const before = FileParsePipeline.parse('from.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('from.md')).tasks.find(t => t.line === row)!;
         const block = before.subtreeLines!;
         const indent = block[0].length - block[0].trimStart().length;
+        const values = inheritedAt(lines, row, DEFAULT_SETTINGS);
         const note = [
             '---',
-            ...inheritedAt(lines, row, DEFAULT_SETTINGS).flatMap(v => v.yaml),
+            ...values.filter(v => v.to === 'frontmatter').flatMap(v => v.lines),
             '---',
+            ...values.filter(v => v.to === 'root').flatMap(v => v.lines),
             '## Tasks',
             ...block.map(line => line.slice(indent)),
         ];
@@ -249,11 +273,12 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
         'tv-color: red',
         'tags:',
         '  - project',
-        'owner: me',
-        'links:',
-        '  - "[[a]]"',
-        '  - "[[b]]"',
+        'author: me',
         '---',
+        '- owner:: me',
+        '- links::',
+        '    - "[[a]]"',
+        '    - "[[b]]"',
         '## Plan',
         '- tv-start:: 10:30',
         '- tv-mask:: ***',
@@ -286,23 +311,16 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
         expect(inherited(after)).toEqual(inherited(before));
     });
 
-    it('型を保ち、YAML に型の綴りがない形は文字もそのまま', () => {
+    it('カスタムの値は型も綴りもそのまま', () => {
         const { before, after } = send(SOURCE, rowOf(SOURCE, 'parent'));
         const was = valuesOf(getEffectiveProperties(before));
-        const is = valuesOf(getEffectiveProperties(after));
-        for (const key of Object.keys(was)) expect(is[key]?.type, key).toBe(was[key].type);
-        for (const key of ['priority', 'memo', 'area', 'pair', 'quoted', 'link', 'refs', 'day', 'word', 'links', 'owner']) {
-            expect(is[key], key).toEqual(was[key]);
-        }
+        expect(valuesOf(getEffectiveProperties(after))).toEqual(was);
+        expect(Object.keys(was)).not.toContain('author');
         expect(was.done).toEqual({ type: 'boolean', boolean: true, spelling: 'True' });
-        expect(is.done).toEqual({ type: 'boolean', boolean: true, spelling: 'true' });
-        expect(is.links).toEqual({ type: 'list', items: [
-            { type: 'text', text: '[[a]]', spelling: '[[a]]' },
-            { type: 'text', text: '[[b]]', spelling: '[[b]]' },
+        expect(was.links).toEqual({ type: 'list', items: [
+            { type: 'text', text: '[[a]]', spelling: '"[[a]]"' },
+            { type: 'text', text: '[[b]]', spelling: '"[[b]]"' },
         ] });
-        // The frontmatter's number is spelled as YAML gives it back.
-        expect(is.hex).toEqual({ type: 'number', number: 31, spelling: '31' });
-        expect(is.size).toEqual({ type: 'number', number: 1.5, spelling: '1.5' });
     });
 
     it('子タスクの行を単独で送っても', () => {

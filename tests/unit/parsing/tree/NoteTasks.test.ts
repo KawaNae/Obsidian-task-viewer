@@ -21,9 +21,9 @@ const defaultCtx: TaskExtractionContext = {
 
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
     const outline = Outline.read(bodyLines);
-    const sections = NoteSections.read(outline);
-    SectionPropertyResolver.resolve(outline, sections, frontmatter, DEFAULT_SCOPE_KEYS);
-    return NoteTasks.extract(outline, sections, { ...defaultCtx, ...ctx });
+    const root = NoteSections.read(outline);
+    SectionPropertyResolver.resolve(outline, root, frontmatter, DEFAULT_SCOPE_KEYS);
+    return NoteTasks.extract(outline, root, { ...defaultCtx, ...ctx });
 }
 
 describe('NoteTasks', () => {
@@ -179,6 +179,40 @@ describe('NoteTasks', () => {
         });
     });
 
+    describe('ノートの層: frontmatter と最初の見出しより上の行', () => {
+        it('frontmatter のカスタムキーはどのタスクにも届かず、組み込みのキーは届く', () => {
+            const tasks = extractTasks(['- [ ] top', '## A', '- [ ] under'], { owner: 'me', '体重[kg]': null, 'tv-color': 'red', tags: ['fm'] });
+            for (const task of tasks) {
+                expect(getEffectiveProperties(task), task.content).toEqual({});
+                expect(getEffectiveColor(task)).toBe('red');
+                expect(getEffectiveTags(task)).toEqual(['fm']);
+            }
+        });
+
+        it('最初の見出しより上の行の値は、見出しの下のタスクに届き、frontmatter に勝ち、セクションとタスクに負ける', () => {
+            const tasks = extractTasks([
+                '- 時給:: 1450',
+                '- tv-color:: 00ff00',
+                '- [ ] top',
+                '## A',
+                '- [ ] a',
+                '## B',
+                '- 時給:: 1600',
+                '- [ ] b',
+                '- [ ] own',
+                '    - tv-color:: 0000ff',
+            ], { 'tv-color': 'red' });
+            const of = (content: string) => tasks.find(task => task.content === content)!;
+            const wage = (content: string) => getEffectiveProperties(of(content))['時給']?.value;
+            expect(wage('top')).toMatchObject({ number: 1450 });
+            expect(wage('a')).toMatchObject({ number: 1450 });
+            expect(wage('b')).toMatchObject({ number: 1600 });
+            expect(getEffectiveColor(of('a'))).toBe('00ff00');
+            expect(getEffectiveColor(of('own'))).toBe('0000ff');
+            expect(of('a').inheritedFrom?.properties['時給']).toEqual({ kind: 'section', line: 0, heading: null });
+        });
+    });
+
     describe('値のない値と読めない値', () => {
         it('タスクの値のない組み込みのキーは、節の値を隠す', () => {
             const tasks = extractTasks([
@@ -211,10 +245,12 @@ describe('NoteTasks', () => {
             expect(tasks[0].inheritedFrom?.fields.startDate).toMatchObject({ kind: 'section', line: 2 });
         });
 
-        it('frontmatter の値のないキーは、タスクに値のないプロパティとして届く', () => {
-            const tasks = extractTasks(['## Section', '- [ ] task'], { area: null, 'tv-color': null });
-            expect(getEffectiveProperties(tasks[0]).area?.value).toEqual({ type: 'null', spelling: '' });
+        it('frontmatter の値のない組み込みのキーは値なしとして届き、カスタムのキーは値があってもなくても届かない', () => {
+            const tasks = extractTasks(['## Section', '- [ ] task'], { area: null, owner: 'me', 'tv-color': null });
+            expect(getEffectiveProperties(tasks[0])).toEqual({});
             expect(getEffectiveColor(tasks[0])).toBeUndefined();
+            expect(tasks[0].inheritedFrom?.fields.color).toMatchObject({ kind: 'frontmatter' });
+            expect(tasks[0].inheritedFrom?.properties).toEqual({});
         });
 
         it('タスクの値のないカスタムのキーは、節の値を隠す', () => {

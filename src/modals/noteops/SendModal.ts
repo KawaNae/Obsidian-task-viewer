@@ -9,12 +9,12 @@ import { IssueBoard } from '../form/FormIssue';
 import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/SourceEditor';
 import { FormActions } from '../form/FormActions';
 import { DestinationField } from './DestinationField';
-import { SendDialog, initialAsk, type SendField, type SendSurface, type SendViewState } from './SendDialog';
+import { SendDialog, initialAsk, type CandidateView, type SendField, type SendSurface, type SendViewState } from './SendDialog';
 
 /**
  * The send dialog as it looks: the rows to send
  * in the source editor, the destination's fields, what the send does, the
- * values offered for the note's frontmatter, what keeps a send from being
+ * values offered to write into the note, what keeps a send from being
  * asked and what it is asked in spite of, each said next to what it is of
  * (`IssueBoard`: under the note, the heading or a row, or above the
  * buttons), and cancel and send. It draws
@@ -25,7 +25,8 @@ import { SendDialog, initialAsk, type SendField, type SendSurface, type SendView
  * the rows, the destination and the values offered are sections
  * (`tv-form__group`) the form divides with a line, the fields are form rows
  * (`createFormRow`) with their icons, the values offered stand under a
- * section label as the hub's properties do, and the row of buttons is the
+ * section label as the hub's properties do (one for the frontmatter's
+ * keys, one for the lines above the first heading), and the row of buttons is the
  * one the hub's source mode asks in (`tv-form__buttons`).
  *
  * It stands on an overlay (`OverlayShell`, centered), which keeps
@@ -41,8 +42,8 @@ export class SendModal implements SendSurface {
     private rowsEl!: HTMLElement;
     /** The line under each row, in the order of the rows. */
     private readonly rowSays: HTMLElement[] = [];
-    private candidatesLabel!: HTMLElement;
-    private candidatesEl!: HTMLElement;
+    /** The values offered, a section for each place they are written in, in the order the note holds them. */
+    private readonly candidateGroups: { to: CandidateView['to']; label: HTMLElement; el: HTMLElement }[] = [];
     private formSays!: HTMLElement;
     private issues!: IssueBoard<SendField>;
     private actions!: FormActions;
@@ -95,8 +96,13 @@ export class SendModal implements SendSurface {
 
         // Put in and taken out rather than hidden (renderCandidates): the
         // last group in the form draws no divider under it.
-        this.candidatesLabel = bodyEl.createEl('h4', { cls: 'tv-form__section-label', text: t('modal.send.frontmatter') });
-        this.candidatesEl = bodyEl.createDiv({ cls: 'tv-form__group tv-send__candidates' });
+        for (const [to, text] of [['frontmatter', t('modal.send.frontmatter')], ['root', t('modal.send.root')]] as const) {
+            this.candidateGroups.push({
+                to,
+                label: bodyEl.createEl('h4', { cls: 'tv-form__section-label', text }),
+                el: bodyEl.createDiv({ cls: `tv-form__group tv-send__candidates tv-send__candidates--${to}` }),
+            });
+        }
 
         this.formSays = bodyEl.createDiv({ cls: 'tv-form__says tv-form__says--form' });
         this.issues = new IssueBoard<SendField>({
@@ -155,31 +161,35 @@ export class SendModal implements SendSurface {
     }
 
     /**
-     * The values offered for the frontmatter, a form row each, as the hub's
-     * properties are: the key in the label's place, and the box, the value
-     * and where it comes from in the control's. Their section stands after
-     * the destination's while there are any, and is out of the form while
-     * there are none.
+     * The values offered to write into the note, a form row each, as the
+     * hub's properties are: the key in the label's place, and the box, the
+     * value and where it comes from in the control's. They stand under the
+     * place they are written in, the frontmatter's section and then that of
+     * the lines above the first heading, after the destination's; a section
+     * is out of the form while it has none.
      */
     private renderCandidates(candidates: SendViewState['candidates']): void {
-        this.candidatesEl.empty();
-        if (candidates === null) {
-            this.candidatesLabel.detach();
-            this.candidatesEl.detach();
-            return;
+        for (const group of this.candidateGroups) {
+            group.el.empty();
+            group.label.detach();
+            group.el.detach();
+            const ones = candidates?.filter(one => one.to === group.to) ?? [];
+            if (ones.length === 0) continue;
+            this.formSays.before(group.label, group.el);
+            for (const one of ones) this.renderCandidate(group.el, one);
         }
-        if (!this.candidatesEl.isConnected) this.formSays.before(this.candidatesLabel, this.candidatesEl);
-        for (const one of candidates) {
-            const { row } = createFormRow(this.candidatesEl, one.key, { alignStart: true });
-            const label = row.createEl('label', { cls: 'tv-send__candidate' });
-            const box = label.createEl('input', { type: 'checkbox' });
-            box.checked = one.checked;
-            box.disabled = one.shut !== null;
-            box.addEventListener('change', () => this.dialog?.check(one.key, box.checked));
-            label.createSpan({ cls: 'tv-send__value', text: one.value });
-            label.createSpan({ cls: 'tv-send__from', text: one.from });
-            if (one.shut) label.createSpan({ cls: 'tv-send__from', text: one.shut });
-        }
+    }
+
+    private renderCandidate(groupEl: HTMLElement, one: CandidateView): void {
+        const { row } = createFormRow(groupEl, one.key, { alignStart: true });
+        const label = row.createEl('label', { cls: 'tv-send__candidate' });
+        const box = label.createEl('input', { type: 'checkbox' });
+        box.checked = one.checked;
+        box.disabled = one.shut !== null;
+        box.addEventListener('change', () => this.dialog?.check(one.key, box.checked));
+        label.createSpan({ cls: 'tv-send__value', text: one.value });
+        label.createSpan({ cls: 'tv-send__from', text: one.from });
+        if (one.shut) label.createSpan({ cls: 'tv-send__from', text: one.shut });
     }
 
     /** Asked, first or again: back takes the focus, where cancel was. */

@@ -40,9 +40,10 @@ export interface TaskExtractionContext {
 }
 
 /**
- * The rows of a note, read off its one reading (`Outline.read`) and its
- * sections with their values resolved (`NoteSections.read`,
- * `SectionPropertyResolver.resolve`).
+ * The rows of a note, read off its one reading (`Outline.read`) and the
+ * tree of its sections with their values resolved (`NoteSections.read`,
+ * `SectionPropertyResolver.resolve`): every row stands in one, the root
+ * at least.
  */
 export class NoteTasks {
     /**
@@ -73,7 +74,7 @@ export class NoteTasks {
      *   row says itself (`getEffective*` puts the two together), and where
      *   each value of it came from to `inheritedFrom`.
      */
-    static extract(outline: OutlineReading, sections: readonly SectionNode[], ctx: TaskExtractionContext): Task[] {
+    static extract(outline: OutlineReading, root: SectionNode, ctx: TaskExtractionContext): Task[] {
         const rows = new Map<number, Task>();
         for (const line of this.taskLines(outline)) {
             // The chain ends in tv-inline, which reads every task line: no
@@ -89,7 +90,7 @@ export class NoteTasks {
                 task.parentId = parent.id;
                 parent.childIds.push(task.id);
             }
-            this.fill(task, outline, NoteSections.at(sections, line)!, rows, ctx.scopeKeys);
+            this.fill(task, outline, NoteSections.at(root, line)!, rows, ctx.scopeKeys);
         }
         return [...rows.values()];
     }

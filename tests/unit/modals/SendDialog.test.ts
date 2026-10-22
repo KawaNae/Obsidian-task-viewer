@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { t } from '../../../src/i18n';
-import { SendDialog, initialAsk, yamlValue, type SendHost, type SendViewState } from '../../../src/modals/noteops/SendDialog';
+import { SendDialog, initialAsk, lineValue, yamlValue, type SendHost, type SendViewState } from '../../../src/modals/noteops/SendDialog';
 import type { DraftEditor, EditorOnHooks, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { InheritedValue } from '../../../src/services/data/InheritedValues';
@@ -44,8 +44,16 @@ class FakeEditor implements DraftEditor {
     type(parent: string): void { this.parent = parent; this.hooks.edited(); }
 }
 
+/** A value the rows inherit: a frontmatter key by default, a line above the first heading when `to` says so. */
 function value(key: string, opts: Partial<InheritedValue> = {}): InheritedValue {
-    return { key, yaml: [`${key}: v`], from: [{ kind: 'frontmatter' }], obsidian: false, ...opts };
+    const to = opts.to ?? 'frontmatter';
+    return {
+        key,
+        to,
+        lines: to === 'frontmatter' ? [`${key}: v`] : [`- ${key}:: v`],
+        from: [to === 'frontmatter' ? { kind: 'frontmatter', line: null } : { kind: 'section', line: 0, heading: null }],
+        ...opts,
+    };
 }
 
 function previewOf(opts: { subtree?: string[]; candidates?: InheritedValue[]; links?: SendPreview['links']; defaults?: SendPreview['defaults'] } = {}): SendPreview {
@@ -253,31 +261,33 @@ describe('where in the note the send puts the rows, said under the heading', () 
     });
 });
 
-describe('the values offered for the frontmatter', () => {
-    const candidates = [value('project'), value('aliases', { obsidian: true }), value('cssclasses', { obsidian: true })];
+describe('the values offered to write into the note', () => {
+    const candidates = [value('tv-color'), value('aliases', { to: 'root' }), value('時給', { to: 'root' })];
 
-    it('are checked but Obsidian\'s own keys, and the checked ones sent', async () => {
+    it('are checked, each saying where it is written, and the checked ones sent', async () => {
         const h = await answered(facts(), { preview: previewOf({ candidates }) });
 
-        expect(h.state().candidates?.map(one => [one.key, one.checked, one.shut])).toEqual([
-            ['project', true, null], ['aliases', false, null], ['cssclasses', false, null],
+        expect(h.state().candidates?.map(one => [one.key, one.to, one.checked, one.shut])).toEqual([
+            ['tv-color', 'frontmatter', true, null], ['aliases', 'root', true, null], ['時給', 'root', true, null],
         ]);
-        expect(h.dialog.request()?.frontmatter.map(one => one.key)).toEqual(['project']);
+        expect(h.dialog.request()?.values.map(one => one.key)).toEqual(['tv-color', 'aliases', '時給']);
+        h.dialog.check('aliases', false);
+        expect(h.dialog.request()?.values).toEqual([candidates[0], candidates[2]]);
     });
 
     it('a key the note has already: not to be chosen, saying why, and not sent', async () => {
-        const h = await answered(facts({ kind: 'existing', path: 'Plan.md', present: ['project'] }), { preview: previewOf({ candidates }) });
+        const h = await answered(facts({ kind: 'existing', path: 'Plan.md', present: ['tv-color'] }), { preview: previewOf({ candidates }) });
 
-        expect(h.state().candidates?.[0]).toMatchObject({ key: 'project', checked: false, shut: t('modal.send.present', { note: 'Plan.md' }) });
-        h.dialog.check('aliases', true);
-        expect(h.dialog.request()?.frontmatter.map(one => one.key)).toEqual(['aliases']);
+        expect(h.state().candidates?.[0]).toMatchObject({ key: 'tv-color', checked: false, shut: t('modal.send.present', { note: 'Plan.md' }) });
+        h.dialog.check('aliases', false);
+        expect(h.dialog.request()?.values.map(one => one.key)).toEqual(['時給']);
     });
 
     it('none for the rows\' own note, and none sent', async () => {
         const h = await answered(facts({ kind: 'same', path: 'note.md' }), { preview: previewOf({ candidates }) });
 
         expect(h.state().candidates).toBeNull();
-        expect(h.dialog.request()?.frontmatter).toEqual([]);
+        expect(h.dialog.request()?.values).toEqual([]);
     });
 
     it('none when the rows inherit nothing', async () => {
@@ -286,20 +296,40 @@ describe('the values offered for the frontmatter', () => {
 
     it('keep the user\'s checks whichever note the fields name', async () => {
         const h = await answered(facts(), { preview: previewOf({ candidates }) });
-        h.dialog.check('project', false);
+        h.dialog.check('tv-color', false);
+        h.dialog.check('aliases', false);
         h.dialog.check('aliases', true);
         h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
         await h.answer(facts({ kind: 'existing', path: 'Plan.md' }));
 
-        expect(h.state().candidates?.map(one => [one.key, one.checked])).toEqual([['project', false], ['aliases', true], ['cssclasses', false]]);
+        expect(h.state().candidates?.map(one => [one.key, one.checked])).toEqual([['tv-color', false], ['aliases', true], ['時給', true]]);
+    });
+
+    it('show the value a line above the first heading will hold, read as the note reads it', async () => {
+        const h = await answered(facts(), {
+            preview: previewOf({
+                candidates: [
+                    value('id', { to: 'root', lines: ['- id:: "123"'], from: [{ kind: 'section', line: 3, heading: { level: 2, text: '設計', line: 2 } }] }),
+                    value('who', { to: 'root', lines: ['- who::', '    - a', '    - "b"'] }),
+                    value('none', { to: 'root', lines: ['- none::'] }),
+                ],
+            }),
+        });
+
+        expect(h.state().candidates?.map(one => [one.value, one.from])).toEqual([
+            ['123', t('modal.send.fromHeading', { heading: '設計' })],
+            ['a, b', t('modal.send.fromTop')],
+            ['', t('modal.send.fromTop')],
+        ]);
+        expect(lineValue(['- n:: 0x1F'])).toBe('0x1F');
     });
 
     it('show the value the frontmatter will hold, and where it came from', async () => {
         const h = await answered(facts(), {
             preview: previewOf({
                 candidates: [
-                    value('tv-start', { yaml: ['tv-start: "2026-09-29"'], from: [{ kind: 'section', line: 3, heading: { level: 2, text: '設計', line: 2 } }] }),
-                    value('tags', { yaml: ['tags:', '  - a', '  - b'], from: [{ kind: 'frontmatter' }, { kind: 'section', line: 1, heading: null }] }),
+                    value('tv-start', { lines: ['tv-start: "2026-09-29"'], from: [{ kind: 'section', line: 3, heading: { level: 2, text: '設計', line: 2 } }] }),
+                    value('tags', { lines: ['tags:', '  - a', '  - b'], from: [{ kind: 'frontmatter', line: null }, { kind: 'section', line: 1, heading: null }] }),
                 ],
             }),
         });
@@ -508,7 +538,7 @@ describe('a send', () => {
         expect(h.send).toHaveBeenCalledWith({
             rows: [{ taskId: 'row-1', base: SUBTREE, draft: { text: '- [ ] A2', children: [{ text: '    - [ ] a', was: 1 }] } }],
             to: f.to,
-            frontmatter: [value('project')],
+            values: [value('project')],
         });
     });
 

@@ -123,7 +123,7 @@ export class CreatePlaces {
         }
         const read = FileParsePipeline.resolveSections(working, settings);
         if (!read) return { ...facts, ignored: true, inherits: {} };
-        const landed = NoteSections.at(read.sections, at);
+        const landed = NoteSections.at(read.root, at);
         return { ...facts, ignored: false, inherits: landed ? NoteTasks.inheritance(landed) : {} };
     }
 
@@ -150,6 +150,6 @@ export class CreatePlaces {
 /** What a line standing at `row` of `lines` inherits: its section's resolved values; none in a note the index does not read. */
 function inheritsAt(lines: readonly string[], row: number, settings: TaskViewerSettings): Inherits {
     const read = FileParsePipeline.resolveSections(lines, settings);
-    const section = read ? NoteSections.at(read.sections, row) : undefined;
+    const section = read ? NoteSections.at(read.root, row) : undefined;
     return section ? NoteTasks.inheritance(section) : {};
 }

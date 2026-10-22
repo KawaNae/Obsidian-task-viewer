@@ -29,12 +29,12 @@ describe('a task\'s properties in the API', () => {
     });
 
     it('are each under its key as the layer whose value it is spells it', () => {
-        const record = properties(['---', 'Area: desk', 'Zone: north', '---', '- [ ] t', '    - AREA:: lab']);
+        const record = properties(['- Area:: desk', '- Zone:: north', '', '- [ ] t', '    - AREA:: lab']);
         expect(record.properties).toEqual({ Zone: 'north', AREA: 'lab' });
     });
 
     it('in the CLI\'s JSON, give a number JSON cannot write as its spelling, apart from no value', () => {
-        const record = properties(['---', 'big: .inf', 'none:', '---', '- [ ] t']);
+        const record = properties(['- big:: .inf', '- none::', '', '- [ ] t']);
         expect(pickFields(record, ['properties']).properties).toEqual({ big: '.inf', none: null });
     });
 });
