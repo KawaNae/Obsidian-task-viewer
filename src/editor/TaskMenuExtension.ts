@@ -1,5 +1,5 @@
 import { ViewPlugin, type ViewUpdate, Decoration, WidgetType, type EditorView, type DecorationSet } from '@codemirror/view';
-import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
+import { StateEffect, RangeSet, type Extension, type Transaction, type TransactionSpec } from '@codemirror/state';
 import { editorInfoField, setIcon, MarkdownView, Notice } from 'obsidian';
 import type { App } from 'obsidian';
 import type { IndexReads } from '../services/core/TaskIndex';
@@ -27,6 +27,53 @@ import type { TaskOp } from '../services/persistence/TaskOps';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
+
+/**
+ * Ask an editor to draw its buttons again, `why` being the index or the
+ * settings changed: a transaction of ours, unless the IME is composing in
+ * the editor.
+ *
+ * While a composition is under way, CodeMirror on iOS reads what the IME
+ * puts in the document only on the next frame (Chrome on Windows does too,
+ * at a composition's start), and a transaction dispatched before that frame
+ * drops what it had not read: the browser loses the composition, and the
+ * reading the keyboard still holds is typed again behind what it left
+ * (かんてn観点). The index changes on a save, every two seconds while typing,
+ * at no moment of the input's choosing. So an editor composing is only told
+ * to hold the change (`hold`), and draws its buttons at its first update once
+ * the composition is over (`redrawsOn`).
+ */
+export function askToRedraw(
+    view: { readonly compositionStarted: boolean; dispatch(spec: TransactionSpec): void },
+    why: StateEffect<void>,
+    hold: () => void,
+): void {
+    if (view.compositionStarted) {
+        hold();
+        return;
+    }
+    view.dispatch({ effects: why });
+}
+
+/**
+ * Whether an editor's update draws its buttons again: the document, the
+ * part shown, the index or the settings changed, or a change was held while
+ * the editor composed (`held`) and the composition is over.
+ */
+export function redrawsOn(
+    update: {
+        readonly docChanged: boolean;
+        readonly viewportChanged: boolean;
+        readonly transactions: readonly Transaction[];
+        readonly view: { readonly compositionStarted: boolean };
+    },
+    held: boolean,
+): boolean {
+    return update.docChanged
+        || update.viewportChanged
+        || update.transactions.some(tr => tr.effects.some(e => e.is(taskIndexChanged) || e.is(settingsChanged)))
+        || (held && !update.view.compositionStarted);
+}
 
 class TaskMenuWidget extends WidgetType {
     constructor(
@@ -218,20 +265,19 @@ export function createTaskMenuExtension(
     const plugin = ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
+            /** A change held while the editor composed (`askToRedraw`), not drawn yet. */
+            held = false;
 
             constructor(view: EditorView) {
                 this.decorations = buildDecorations(view);
             }
 
             update(update: ViewUpdate) {
-                if (
-                    update.docChanged ||
-                    update.viewportChanged ||
-                    update.transactions.some(tr =>
-                        tr.effects.some(e => e.is(taskIndexChanged) || e.is(settingsChanged))
-                    )
-                ) {
+                if (redrawsOn(update, this.held)) {
+                    // Drawn from the index and the settings as they are now,
+                    // so nothing held is left behind.
                     this.decorations = buildDecorations(update.view);
+                    this.held = false;
                 }
             }
         },
@@ -240,25 +286,22 @@ export function createTaskMenuExtension(
         }
     );
 
-    const unsubscribe = index.onChange(() => {
+    const redrawAll = (why: StateEffect<void>) => {
         app.workspace.iterateAllLeaves((leaf) => {
             if (leaf.view instanceof MarkdownView) {
                 const cm = editorCm(leaf.view.editor);
-                if (cm) {
-                    cm.dispatch({ effects: taskIndexChanged.of(undefined) });
-                }
-            }
-        });
-    });
-
-    const notifySettingsChanged = () => {
-        app.workspace.iterateAllLeaves((leaf) => {
-            if (leaf.view instanceof MarkdownView) {
-                const cm = editorCm(leaf.view.editor);
-                cm?.dispatch({ effects: settingsChanged.of(undefined) });
+                if (!cm) return;
+                askToRedraw(cm, why, () => {
+                    const drawn = cm.plugin(plugin);
+                    if (drawn) drawn.held = true;
+                });
             }
         });
     };
+
+    const unsubscribe = index.onChange(() => redrawAll(taskIndexChanged.of(undefined)));
+
+    const notifySettingsChanged = () => redrawAll(settingsChanged.of(undefined));
 
     return {
         extension: plugin,
