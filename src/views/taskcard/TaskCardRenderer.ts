@@ -103,6 +103,16 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 ] as const;
 
 const SHAPE_CLASS = 'task-card__shape';
+
+/** The link to the task's note at the end of the parent's line, with its separator (`appendFileLink`). */
+const FILE_LINK_CLASS = 'task-card__file-link';
+
+/**
+ * The parent's list item in a card's content: the first line Obsidian drew,
+ * however the card is drawn (compact, with its children under the line, with
+ * them collapsed, or alone).
+ */
+const PARENT_ITEM = ':scope > ul > li';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { Operations } from '../../services/operations/Operations';
 import type { IndexReads } from '../../services/core/TaskIndex';
@@ -120,7 +130,7 @@ import type { TaskMenuHooks } from '../../interaction/menu/MenuHandler';
 import { ExpandedCards, stampCardKey, type CardKey } from './CardKey';
 import { holdCard, type CardHold } from './CardHold';
 import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
-import { renderCardMarkdown, type LateContent } from './CardMarkdown';
+import { appendToLine, renderCardMarkdown, type LateContent } from './CardMarkdown';
 
 /**
  * Draws a card's top right (`composeTopRight`), each piece with the class of
@@ -414,6 +424,7 @@ export class TaskCardRenderer extends Component {
             late = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
+        this.appendFileLink(contentContainer, task);
         this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
         this.bindParentCheckbox(contentContainer, hold, settings, task.isReadOnly);
 
@@ -505,6 +516,11 @@ export class TaskCardRenderer extends Component {
         return { completed, total };
     }
 
+    /**
+     * The parent's line for Obsidian to draw: its status, its overdue mark
+     * and its name, the user's markdown. The link to its note is put in
+     * after the draw (`appendFileLink`).
+     */
     private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {
         const statusChar = task.statusChar || ' ';
 
@@ -516,14 +532,39 @@ export class TaskCardRenderer extends Component {
             ? ''
             : this.getOverdueIcon(task, settings);
 
-        const filePath = task.file.replace(/\.md$/, '');
-        const fileBaseName = getFileBaseName(task.file) || filePath;
-        const fileLink = `[[${filePath}|${fileBaseName}]]`;
-        if (hasTaskContent(task)) {
-            return `- [${statusChar}] ${overdueIcon}${task.content} : ${fileLink}`;
-        }
+        // The space after the box stays with no name: Obsidian draws `- [ ] `
+        // as a task item, `- [ ]` as a list item that reads `[ ]`.
+        return `- [${statusChar}] ${overdueIcon}${hasTaskContent(task) ? task.content : ''}`;
+    }
 
-        return `- [${statusChar}] ${overdueIcon}${fileLink}`;
+    /**
+     * Put the link to the task's note at the end of the parent's line
+     * (`appendToLine`): ` : ` and the link after a name, the link alone when
+     * the task has none. The link is the `a.internal-link` Obsidian draws for
+     * `[[path|basename]]`, so the links bound next (`bindInternalLinks`) take
+     * it with the user's.
+     */
+    private appendFileLink(contentContainer: HTMLElement, task: DisplayTask): void {
+        const item = contentContainer.querySelector<HTMLElement>(PARENT_ITEM);
+        if (!item) return;
+
+        const target = task.file.replace(/\.md$/, '');
+        const span = document.createElement('span');
+        span.className = FILE_LINK_CLASS;
+        if (hasTaskContent(task)) span.appendText(' : ');
+        span.createEl('a', {
+            cls: 'internal-link',
+            text: getFileBaseName(task.file) || target,
+            attr: {
+                'data-href': target,
+                href: target,
+                'aria-label': target,
+                'data-tooltip-position': 'top',
+                target: '_blank',
+                rel: 'noopener nofollow',
+            },
+        });
+        appendToLine(item, span);
     }
 
     /**
@@ -588,15 +629,16 @@ export class TaskCardRenderer extends Component {
         settings: TaskViewerSettings,
         readOnly?: boolean
     ): void {
-        const mainCheckbox = contentContainer.querySelector(':scope > ul > li > input[type="checkbox"]');
+        const mainCheckbox = contentContainer.querySelector(`${PARENT_ITEM} > input[type="checkbox"]`);
         if (mainCheckbox) {
             this.checkboxWiring.wireParentCheckbox(mainCheckbox, () => hold.name, settings, readOnly);
         }
     }
 
     /**
-     * Replace card-visible text with the mask string and hide any wikilinks /
-     * internal links so the file name itself does not leak. Operates on the
+     * Replace card-visible text with the mask string and hide the links, so
+     * no note's name shows: the link to the task's note with its separator,
+     * and every internal link the user wrote. Operates on the
      * `.task-card__content` subtree only (other card chrome — time, child
      * count, checkbox — stays legible). Every draw starts from a freshly
      * built content subtree, so no restore is necessary. Laying it again on
@@ -623,8 +665,7 @@ export class TaskCardRenderer extends Component {
 
         for (const textNode of textNodes) {
             const parent = textNode.parentElement;
-            if (parent?.closest('.task-card__time, .task-card__child-notation, input')) continue;
-            if (parent?.closest('.internal-link')) continue;
+            if (parent?.closest(`.task-card__time, .task-card__child-notation, input, .${FILE_LINK_CLASS}, .internal-link`)) continue;
             if (!textNode.textContent?.trim()) continue;
 
             if (!replaced) {
@@ -635,15 +676,8 @@ export class TaskCardRenderer extends Component {
             }
         }
 
-        // Hide internal links entirely and clear any preceding " : " separator
-        // so the line doesn't end with a dangling colon.
-        const links = Array.from(listItem.querySelectorAll<HTMLElement>('.internal-link'));
-        for (const link of links) {
-            link.style.display = 'none';
-            const prev = link.previousSibling;
-            if (prev?.nodeType === Node.TEXT_NODE && prev.textContent?.includes(':')) {
-                prev.textContent = '';
-            }
+        for (const el of Array.from(listItem.querySelectorAll<HTMLElement>(`.${FILE_LINK_CLASS}, .internal-link`))) {
+            el.style.display = 'none';
         }
     }
 }
