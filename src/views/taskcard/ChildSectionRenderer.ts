@@ -6,7 +6,7 @@ import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 import { touchCard } from './CardHold';
 import type { CardKey, ExpandedCards } from './CardKey';
-import { renderCardMarkdown, type LateContent } from './CardMarkdown';
+import { appendToLine, renderCardMarkdown, type LateContent } from './CardMarkdown';
 import { t } from '../../i18n';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
@@ -173,20 +173,7 @@ export class ChildSectionRenderer {
                 continue;
             }
 
-            const targetItem = taskListItems[domIndex] as HTMLElement;
-            const notationHost = this.findNotationHost(targetItem);
-
-            if (notationHost !== targetItem) {
-                notationHost.appendChild(el);
-                continue;
-            }
-
-            const nestedBoundary = this.findNestedBoundary(targetItem);
-            if (nestedBoundary) {
-                targetItem.insertBefore(el, nestedBoundary);
-            } else {
-                targetItem.appendChild(el);
-            }
+            appendToLine(taskListItems[domIndex] as HTMLElement, el);
         }
     }
 
@@ -231,36 +218,5 @@ export class ChildSectionRenderer {
             }
             liIdx++;
         }
-    }
-
-    private findNotationHost(taskListItem: HTMLElement): HTMLElement {
-        const hostCandidates = [
-            ':scope > .task-list-item-description',
-            ':scope > p',
-            ':scope > label',
-        ];
-
-        for (const selector of hostCandidates) {
-            const host = taskListItem.querySelector<HTMLElement>(selector);
-            if (host) {
-                return host;
-            }
-        }
-
-        return taskListItem;
-    }
-
-    private findNestedBoundary(taskListItem: HTMLElement): HTMLElement | null {
-        for (const child of Array.from(taskListItem.children) as HTMLElement[]) {
-            if (child.matches('ul, ol')) {
-                return child;
-            }
-
-            if (child.querySelector('ul, ol')) {
-                return child;
-            }
-        }
-
-        return null;
     }
 }

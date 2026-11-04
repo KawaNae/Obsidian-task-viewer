@@ -44,3 +44,33 @@ export function renderCardMarkdown(
         logError(`[TaskCardRenderer] markdown render failed: ${e instanceof Error ? e.message : String(e)}`, { notice: false });
     });
 }
+
+/** Where Obsidian puts the text of a list item's line, when not in the item itself. */
+const LINE_HOSTS = [
+    ':scope > .task-list-item-description',
+    ':scope > p',
+    ':scope > label',
+] as const;
+
+/**
+ * Put `el` at the end of the line of `item`, a list item `renderCardMarkdown`
+ * drew: after the item's text, before a list nested in it, and inside the
+ * paragraph that holds the text when the list is loose.
+ *
+ * What a card puts after a line's text (the link to the task's note, a
+ * child's notation or menu button) is put into the drawn DOM here, never
+ * written into the markdown. Written after the user's text, it would be read
+ * with that text as one inline: an `_` in a task's name and one in its
+ * note's path make an emphasis that takes the link apart.
+ */
+export function appendToLine(item: HTMLElement, el: HTMLElement): void {
+    for (const selector of LINE_HOSTS) {
+        const host = item.querySelector<HTMLElement>(selector);
+        if (host) {
+            host.appendChild(el);
+            return;
+        }
+    }
+    const nested = Array.from(item.children).find(child => child.matches('ul, ol') || child.querySelector('ul, ol') !== null);
+    item.insertBefore(el, nested ?? null);
+}
