@@ -234,12 +234,12 @@ describe.each([
         expect(shape).toEqual({ shapes: 1, surface: true });
     });
 
-    it('says in the card that a note is not there, under the last name its link writes, and offers no note to open', () => {
+    it('says in the card that a note is not there, under the last name its link writes, and offers no note to open, but to choose its section again', () => {
         const r = op(name, '', 0);
         expect(r.frames.gone.name).toBe('Child');
         expect(r.frames.gone.missing).toBe(tr('sidebar.noteNotFound'));
         expect(r.frames.gone.text).toBeNull();
-        expect(moreTitles(name, 'gone')).toEqual([tr('menu.moveUp'), tr('menu.remove')]);
+        expect(moreTitles(name, 'gone')).toEqual([tr('sidebar.relinkSection'), tr('menu.moveUp'), tr('menu.remove')]);
     });
 
     it('keeps every body as it is when the tasks change and the panel draws its lists anew', async () => {
@@ -295,8 +295,8 @@ describe.each([
         expect(r.opened).toBe(TASKS);
     });
 
-    it('offers its note, the moves there are and Remove in its ⋯ menu, and moves among the lists', () => {
-        const all = [tr('sidebar.openNote'), tr('menu.moveUp'), tr('menu.moveDown'), tr('menu.remove')];
+    it('offers its note, to choose its section again, the moves there are and Remove in its ⋯ menu, and moves among the lists', () => {
+        const all = [tr('sidebar.openNote'), tr('sidebar.relinkSection'), tr('menu.moveUp'), tr('menu.moveDown'), tr('menu.remove')];
         expect(moreTitles(name, 'memo')).toEqual(all);
 
         let r = op(name, `mark(); ${more('memo', tr('menu.moveUp'))}`);
