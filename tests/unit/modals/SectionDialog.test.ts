@@ -94,6 +94,13 @@ describe('the section the fields name, and its link', () => {
         expect(chosenSection(PATH, headings, pickedAt(5))).toMatchObject({ heading: { line: 5 } });
         expect(chosenSection(PATH, headings, pickedAt(5, 'Other.md'))).toMatchObject({ heading: { line: 2 } });
     });
+
+    it('takes a pick only while its line holds a heading of the name picked, the note read again', () => {
+        // `Log › Tasks` picked on line 5, then a line put above it: line 5 is `# Log` now.
+        const again = frameHeadings(['intro', ...NOTE]);
+        expect(chosenSection(PATH, again, pickedAt(5))).toMatchObject({ kind: 'heading', subpath: 'Tasks', heading: { line: 3 } });
+        expect(chosenSection(PATH, again, { text: 'Log', picked: { path: PATH, line: 5 } })).toMatchObject({ heading: { line: 5, text: 'Log' } });
+    });
 });
 
 describe('what the heading field offers', () => {
@@ -197,22 +204,30 @@ describe('the note the note field names', () => {
     });
 });
 
+/** Let the dialog take an answer handed to it. */
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
 describe('the section dialog', () => {
     /** A dialog whose host answers each asking of the note when the test says, with what it was handed. */
     function dialogOf(initial = emptySectionAsk()) {
-        const asked: { text: string; answer: (note: SectionNote) => Promise<void> }[] = [];
+        const asked: { text: string; answer: (note: SectionNote) => Promise<void>; fail: (e: Error) => Promise<void> }[] = [];
         const chosen: string[] = [];
         let closed = 0;
         let shown: SectionViewState | null = null;
+        let renders = 0;
         const host: SectionHost = {
-            note: (ask) => new Promise((resolve) => {
-                asked.push({ text: ask.text, answer: async (note) => { resolve(note); await Promise.resolve(); } });
+            note: (ask) => new Promise((resolve, reject) => {
+                asked.push({
+                    text: ask.text,
+                    answer: async (note) => { resolve(note); await settle(); },
+                    fail: async (e) => { reject(e); await settle(); },
+                });
             }),
             chosen: link => chosen.push(link),
             close: () => { closed++; },
         };
-        const dialog = new SectionDialog(initial, host, { render: (state) => { shown = state; } });
-        return { dialog, asked, chosen, closed: () => closed, shown: () => shown! };
+        const dialog = new SectionDialog(initial, host, { render: (state) => { shown = state; renders++; } });
+        return { dialog, asked, chosen, closed: () => closed, shown: () => shown!, renders: () => renders };
     }
     const found: SectionNote = { kind: 'note', path: PATH, headings };
 
@@ -282,6 +297,40 @@ describe('the section dialog', () => {
         d.dialog.noteChanged({ text: 'foo.md', picked: 'foo.md.md' });
         await d.asked[2].answer({ kind: 'unlinkable', path: 'foo.md.md' });
         expect(d.shown().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.section.noteUnlinkable', { note: 'foo.md.md' }) }]);
+    });
+
+    it('says a note that could not be read, in place of the note answered before, and chooses nothing', async () => {
+        const d = dialogOf();
+        d.dialog.noteChanged({ text: 'Note', picked: null });
+        await d.asked[1].answer(found);
+        d.dialog.noteChanged({ text: 'Broken', picked: null });
+        await d.asked[2].fail(new Error('gone'));
+        expect(d.shown()).toEqual({
+            path: null,
+            choices: [],
+            canChoose: false,
+            issues: [{ at: 'note', tone: 'error', text: t('modal.section.noteUnreadable', { name: 'Broken' }) }],
+        });
+        d.dialog.choose();
+        expect(d.chosen).toEqual([]);
+    });
+
+    it('takes no answer once it is disposed, and chooses nothing then', async () => {
+        const d = dialogOf();
+        d.dialog.noteChanged({ text: 'Note', picked: null });
+        d.dialog.dispose();
+        const before = d.renders();
+        await d.asked[1].answer(found);
+        await d.asked[0].fail(new Error('gone'));
+        expect(d.renders()).toBe(before);
+        d.dialog.choose();
+
+        const late = dialogOf();
+        await late.asked[0].answer(found);
+        expect(late.shown().canChoose).toBe(true);
+        late.dialog.dispose();
+        late.dialog.choose();
+        expect([d.chosen, late.chosen, d.closed(), late.closed()]).toEqual([[], [], 0, 0]);
     });
 
     it('opens on the fields it is given, and asks the note they name at once', () => {

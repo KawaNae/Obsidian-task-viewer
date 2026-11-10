@@ -605,6 +605,7 @@
       "noteMissing": "No note is named {{name}}",
       "noteUnlinkableHash": "A link cannot name {{note}}: its path has a #, where a link is cut and read as a heading.",
       "noteUnlinkable": "A link cannot name {{note}}: a link to it names another file.",
+      "noteUnreadable": "{{name}} could not be read.",
       "wholeNoteShown": "Shows the whole note",
       "headingShown": "Shows the section of the heading {{heading}}",
       "noHeading": "{{note}} has no heading {{heading}}",

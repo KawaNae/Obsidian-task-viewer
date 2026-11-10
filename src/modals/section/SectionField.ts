@@ -62,7 +62,7 @@ export class SectionField {
             if (this.picked && this.headingInput.value !== this.picked.text) this.picked = null;
             opts.headingChanged();
         });
-        this.suggest = new SectionChoiceSuggest(app, this.headingInput, (choice, path) => {
+        this.suggest = new SectionChoiceSuggest(app, this.headingInput, ({ choice, path }) => {
             if (choice.kind === 'note') {
                 this.picked = null;
                 this.headingInput.value = '';
@@ -104,6 +104,12 @@ export class SectionField {
     }
 }
 
+/** A choice of the heading field, and the path of the note whose it is. */
+interface OfferedChoice {
+    choice: SectionChoice;
+    path: string;
+}
+
 /**
  * The choices of the heading field, as Obsidian's `[[note#` draws a heading
  * (`renderComplex`: the text, its level beside it). With nothing typed,
@@ -112,23 +118,29 @@ export class SectionField {
  * without the headings above them, so each says those under its text. A
  * heading no link names is drawn faded, says so under its text, and picks
  * nothing: the list stays open.
+ *
+ * Each candidate carries the path of the note it is a heading of, as it was
+ * offered when the list was drawn: a pick names that note's heading,
+ * whatever the form has offered since.
  */
-class SectionChoiceSuggest extends ShownSuggest<SectionChoice> {
+class SectionChoiceSuggest extends ShownSuggest<OfferedChoice> {
     offered: { path: string | null; choices: readonly SectionChoice[] } = { path: null, choices: [] };
 
     constructor(
         app: App,
         private readonly field: HTMLInputElement,
-        private readonly picked: (choice: SectionChoice, path: string) => void,
+        private readonly picked: (offered: OfferedChoice) => void,
     ) {
         super(app, field);
     }
 
-    protected getSuggestions(query: string): SectionChoice[] {
-        return offeredChoices(this.offered.choices, query);
+    protected getSuggestions(query: string): OfferedChoice[] {
+        const { path } = this.offered;
+        if (path === null) return [];
+        return offeredChoices(this.offered.choices, query).map(choice => ({ choice, path }));
     }
 
-    renderSuggestion(choice: SectionChoice, el: HTMLElement): void {
+    renderSuggestion({ choice }: OfferedChoice, el: HTMLElement): void {
         el.addClass('tv-section-choice');
         if (choice.kind === 'note') {
             renderComplex(el, { title: t('modal.section.wholeNote'), titleMatches: null, note: '', noteMatches: null, flair: null, downranked: false });
@@ -151,10 +163,9 @@ class SectionChoiceSuggest extends ShownSuggest<SectionChoice> {
         });
     }
 
-    protected pick(choice: SectionChoice): void {
-        const { path } = this.offered;
-        if (path === null || (choice.kind === 'heading' && choice.subpath === null)) return;
-        this.picked(choice, path);
+    protected pick(offered: OfferedChoice): void {
+        if (offered.choice.kind === 'heading' && offered.choice.subpath === null) return;
+        this.picked(offered);
         this.close();
     }
 }

@@ -13,6 +13,8 @@ export interface SectionModalOptions {
     initial: SectionAsk;
     /** A section was chosen: the link that names it. The dialog closes itself. */
     chosen(link: string): void;
+    /** The dialog closed, a section chosen or not. */
+    closed?(): void;
 }
 
 /**
@@ -24,7 +26,8 @@ export interface SectionModalOptions {
  * It is built of the form's shared pieces, as the send dialog is
  * (`_form.css`), and stands on an overlay (`OverlayShell`, centered). It
  * opens with the focus on the heading field when the note field names a
- * note picked, and on the note field otherwise.
+ * note picked, and on the note field otherwise. Whoever opened it may
+ * close it ({@link close}): the view it chooses for closing.
  */
 export class SectionModal implements SectionSurface {
     private readonly overlay = new OverlayShell();
@@ -49,8 +52,14 @@ export class SectionModal implements SectionSurface {
             onClose: () => {
                 this.dialog?.dispose();
                 this.dialog = null;
+                this.opts.closed?.();
             },
         });
+    }
+
+    /** Close the dialog, choosing nothing. */
+    close(): void {
+        this.overlay.close();
     }
 
     private build(bodyEl: HTMLElement): void {
