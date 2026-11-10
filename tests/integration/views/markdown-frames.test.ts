@@ -11,7 +11,7 @@
  * of the settings that moves the visual day; the checkboxes of a body,
  * which do not toggle, but for those of a Dataview query; and a body wider
  * than the sidebar, whose long URL wraps and whose wide table scrolls
- * inside it.
+ * inside it; and a body's headings, sized and spaced for the card.
  *
  * The frames are put into the view's state as the workspace hands it over
  * (`openView`); what they show is read from their DOM, and what the view
@@ -821,6 +821,67 @@ describe.each([
         const m = measure('table');
         expect(m.client).toBeGreaterThan(0);
         expect(m.scroll).toBeGreaterThan(m.client);
+    });
+});
+
+describe.each([
+    ['Timeline', 'timeline-view', 'tl'],
+    ['Calendar', 'calendar-view', 'cal'],
+])("%s's markdown frame's headings", (_label, type, key) => {
+    const name = `mf-headings-${key}`;
+    const HEADED = `${PREFIX}-headings-${key}`;
+    // Each heading but the `####` follows a paragraph; the `####` follows a heading.
+    const HEADED_NOTE = [
+        'body',
+        '',
+        '## Two',
+        'two',
+        '',
+        '### Three',
+        '#### Four',
+        'four',
+        '',
+    ].join('\n');
+
+    beforeAll(() => {
+        ev(`(async () => { ${NOTES} await writeNote(${JSON.stringify(`${HEADED}.md`)}, ${JSON.stringify(HEADED_NOTE)}); return JSON.stringify(true); })()`);
+        openView(name, type, {
+            showSidebar: true,
+            sidebar: [{ kind: 'markdown', id: 'headed', link: HEADED }],
+        });
+    });
+
+    interface Heading { tag: string; size: number; top: number }
+
+    /** The body's text size, and each heading's text size and space above it, in pixels. */
+    function measure(): { body: number; headings: Heading[] } {
+        return ev(`(async () => {
+            ${names(name)}
+            await wait(${SETTLE_MS});
+            const body = bodyOf('headed');
+            const px = (v) => parseFloat(v);
+            return JSON.stringify({
+                body: px(getComputedStyle(body).fontSize),
+                headings: [...body.querySelectorAll('h1, h2, h3, h4, h5, h6')].map(h => {
+                    const s = getComputedStyle(h);
+                    return { tag: h.tagName.toLowerCase(), size: px(s.fontSize), top: px(s.marginBlockStart) };
+                }),
+            });
+        })()`);
+    }
+
+    it('sizes an ## and a ### a little larger than the body, and an #### as the body', () => {
+        const m = measure();
+        expect(m.body).toBeGreaterThan(0);
+        expect(m.headings.map(h => h.tag)).toEqual(['h2', 'h3', 'h4']);
+        const [two, three, four] = m.headings;
+        expect(two.size).toBeCloseTo(m.body * 1.15, 1);
+        expect(three.size).toBeCloseTo(m.body * 1.08, 1);
+        expect(four.size).toBeCloseTo(m.body, 1);
+    });
+
+    it('spaces every heading 12px from what is above it, a paragraph or a heading', () => {
+        expect(measure().headings.map(h => h.top)).toEqual([12, 12, 12]);
     });
 });
 
