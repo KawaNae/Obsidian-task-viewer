@@ -841,7 +841,10 @@
     "imageSaved": "Image saved to {{path}}"
   },
   "sidebar": {
-    "empty": "Nothing added yet."
+    "empty": "Nothing added yet.",
+    "openNote": "Open note",
+    "noteNotFound": "Note not found",
+    "sectionNotFound": "Section not found"
   },
   "pinnedList": {
     "addList": "Add List",

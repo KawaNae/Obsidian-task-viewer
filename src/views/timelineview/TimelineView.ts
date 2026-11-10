@@ -69,7 +69,7 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
-    private linkInteractionManager: TaskLinkInteractionManager;
+    private readonly linkInteractionManager: TaskLinkInteractionManager;
 
     // ==================== DOM ====================
     private container: HTMLElement;
@@ -164,11 +164,14 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             if ('date' in patch && patch.date !== prev.date) this.days.settle(this.state.date);
         });
 
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.sidebarFrames = new SidebarFrames({
             plugin: this.plugin,
             readService: this.readService,
             index: this.index,
             taskRenderer: this.taskRenderer,
+            links: this.linkInteractionManager,
+            getHoverParent: () => this.hoverParent,
         }, {
             state: () => this.state,
             subscribe: (listener) => this.store.subscribe(listener),
@@ -190,8 +193,6 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             getStartHour: () => this.plugin.settings.startHour,
         });
         this.selectionController = new SelectionController(this.handleManager);
-
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
@@ -416,9 +417,10 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.sidebarManager.applyOpen(open, { animate: true });
     }
 
-    /** Settings were saved: the window is read anew, and a view following today pulls anew. */
+    /** Settings were saved: the window is read anew, a view following today pulls anew, and the sidebar's frames read their notes anew. */
     override redraw(): void {
         this.days.settle(this.state.date);
+        this.sidebarFrames.settingsSaved();
         this.requestDraw();
     }
 

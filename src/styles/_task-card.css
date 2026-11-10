@@ -58,8 +58,11 @@
    cards still tint with the theme's interactive-accent.
    Declared on the host so the content overflow extension (section 8) can
    paint the same surface without restating the mix — the two boxes must
-   match exactly or the overlap stops reading as one shape. */
-.task-card {
+   match exactly or the overlap stops reading as one shape.
+   A markdown frame's card (_markdown-frame.css) holds a `__shape` too, and
+   takes the same surface. `:is()` weighs as one class, so the rules weigh
+   what they did. */
+:is(.task-card, .markdown-frame__card) {
     --task-card-surface: color-mix(
         in srgb,
         var(--tv-bg-card) 90%,
@@ -126,7 +129,8 @@
     border-radius: 0;
 }
 
-/* --- Accent border (linestyle bar) --- */
+/* --- Accent border (linestyle bar) ---
+   Drawn on a markdown frame's card too, by the same data attribute. */
 .task-card__shape::before {
     content: '';
     position: absolute;
@@ -139,13 +143,13 @@
     border-radius: 4px 0 0 4px;
 }
 
-.task-card[data-file-linestyle='solid'] .task-card__shape::before {
+:is(.task-card, .markdown-frame__card)[data-file-linestyle='solid'] .task-card__shape::before {
     width: var(--task-card-accent-solid-width, 4px);
     background-color: var(--file-accent, var(--tv-accent));
     background-image: none;
 }
 
-.task-card[data-file-linestyle='dashed'] .task-card__shape::before {
+:is(.task-card, .markdown-frame__card)[data-file-linestyle='dashed'] .task-card__shape::before {
     width: var(--task-card-accent-dashed-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -155,7 +159,7 @@
     background-repeat: repeat-y;
 }
 
-.task-card[data-file-linestyle='dotted'] .task-card__shape::before {
+:is(.task-card, .markdown-frame__card)[data-file-linestyle='dotted'] .task-card__shape::before {
     width: var(--task-card-accent-dotted-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,
@@ -165,7 +169,7 @@
     background-repeat: repeat-y;
 }
 
-.task-card[data-file-linestyle='double'] .task-card__shape::before {
+:is(.task-card, .markdown-frame__card)[data-file-linestyle='double'] .task-card__shape::before {
     width: calc(
         var(--task-card-accent-double-left-width, 1px) +
         var(--task-card-accent-double-gap, 2px) +
@@ -180,7 +184,7 @@
     background-repeat: no-repeat;
 }
 
-.task-card[data-file-linestyle='dashdotted'] .task-card__shape::before {
+:is(.task-card, .markdown-frame__card)[data-file-linestyle='dashdotted'] .task-card__shape::before {
     width: var(--task-card-accent-dashdotted-width, 4px);
     background-color: transparent;
     background-image: repeating-linear-gradient(to bottom,

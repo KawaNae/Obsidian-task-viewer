@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { frameLink, frameTarget, readFrameContent } from '../../../src/services/data/MarkdownFrames';
+import { frameLink, frameLinkAt, frameTarget, frameTitle, readFrameContent } from '../../../src/services/data/MarkdownFrames';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { headingLinks } from '../../../src/services/parsing/utils/HeadingLinks';
 import { DEFAULT_SETTINGS } from '../../../src/types';
@@ -32,6 +32,56 @@ describe('the link of a markdown frame', () => {
     it('names the whole note without a subpath', () => {
         expect(frameLink('Folder/Note', null)).toBe('Folder/Note');
         expect(frameLink('Folder/Note', '')).toBe('Folder/Note');
+    });
+});
+
+describe('the link of a frame whose note was renamed or moved', () => {
+    it('names the note by its new path, without the extension, and keeps the section', () => {
+        expect(frameLinkAt('Folder/Note#Memo', 'Other/Renamed.md')).toBe('Other/Renamed#Memo');
+        expect(frameLinkAt('Folder/Note#Parent#Child', 'Renamed.md')).toBe('Renamed#Parent#Child');
+    });
+
+    it('names the whole note still, for a link that named the whole note', () => {
+        expect(frameLinkAt('Folder/Note', 'Other/Renamed.md')).toBe('Other/Renamed');
+        expect(frameLinkAt('Folder/Note#', 'Other/Renamed.md')).toBe('Other/Renamed');
+    });
+
+    it('writes the path whole where the link had a shorter name', () => {
+        expect(frameLinkAt('Dashboard#Today', 'Home/Boards/Dashboard 2.md')).toBe('Home/Boards/Dashboard 2#Today');
+    });
+
+    it('is cut back into the new note and the same section', () => {
+        const before = frameTarget('Folder/Note#Parent#Child');
+        expect(frameTarget(frameLinkAt('Folder/Note#Parent#Child', 'A/B.md'))).toEqual({ path: 'A/B', subpath: before.subpath });
+    });
+
+    it('takes off only the extension at the end of the path', () => {
+        expect(frameLinkAt('Note#H', 'a.md/b.md.md')).toBe('a.md/b.md#H');
+    });
+});
+
+describe('the name the row of a frame shows', () => {
+    const body = { markdown: '', color: null, linestyle: null };
+
+    it('is the heading\'s text as the note writes it, for a heading\'s section', () => {
+        expect(frameTitle('Folder/Note#bold link', { kind: 'heading', title: '**Bold** [[Link]]', ...body }, 'Note')).toBe('**Bold** [[Link]]');
+    });
+
+    it('is the note\'s name, for the whole note', () => {
+        expect(frameTitle('Folder/Note', { kind: 'note', ...body }, 'Note')).toBe('Note');
+        // A shorter name the link resolved: the note found names the row.
+        expect(frameTitle('dash', { kind: 'note', ...body }, 'Dashboard')).toBe('Dashboard');
+    });
+
+    it('is the last heading the link names, when the section or the note is not there', () => {
+        expect(frameTitle('Folder/Note#Parent#Child', { kind: 'no-heading' }, 'Note')).toBe('Child');
+        expect(frameTitle('Folder/Note#Memo', { kind: 'no-note' }, null)).toBe('Memo');
+    });
+
+    it('is the last part of the note\'s path, when the link names no heading and the note is not there', () => {
+        expect(frameTitle('Folder/Sub/Note', { kind: 'no-note' }, null)).toBe('Note');
+        expect(frameTitle('Note', { kind: 'no-note' }, null)).toBe('Note');
+        expect(frameTitle('Folder/Note#', { kind: 'no-note' }, null)).toBe('Note');
     });
 });
 
