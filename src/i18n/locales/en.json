@@ -596,6 +596,20 @@
       "namesakes": "Notes of the same name are in other folders: {{notes}}",
       "send": "Send",
       "sending": "Sending…"
+    },
+    "section": {
+      "addTitle": "Add a section",
+      "relinkTitle": "Choose the section again",
+      "wholeNote": "Whole note",
+      "note": "The note {{note}}",
+      "noteMissing": "No note is named {{name}}",
+      "wholeNoteShown": "Shows the whole note",
+      "headingShown": "Shows the section of the heading {{heading}}",
+      "noHeading": "{{note}} has no heading {{heading}}",
+      "unlinkable": "A link cannot name this {{heading}}: a heading of that name comes before it, under headings of the same names. Only the first can be chosen.",
+      "unlinkableShort": "A link cannot name it",
+      "add": "Add",
+      "relink": "Choose"
     }
   },
   "issue": {

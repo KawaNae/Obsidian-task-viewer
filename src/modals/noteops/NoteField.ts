@@ -8,6 +8,8 @@ import { createFormRow } from '../form/formRow';
 /** What a {@link NoteField} opens with, and whom it tells. */
 export interface NoteFieldOptions {
     initial: NoteAsk;
+    /** Whether the targets of unresolved links are offered: a name of a note the form may make. */
+    offersUnresolved: boolean;
     /** The field was typed in, or a candidate picked. */
     onChange: () => void;
     /** Enter in the field, when it is not picking from its list. */
@@ -16,14 +18,16 @@ export interface NoteFieldOptions {
 
 /**
  * The field that names a note: a form row with its icon, as the hub's rows
- * are, searched by name or folder among the vault's notes, aliases and
- * unresolved links, as Obsidian's `[[` lists them (`NoteSuggest`).
+ * are, searched by name or folder among the vault's notes and aliases, and
+ * the unresolved links for a form that may make the note one names, as
+ * Obsidian's `[[` lists them (`NoteSuggest`). The send dialog and the
+ * sidebar's section dialog name a note with it.
  *
  * It holds the text typed and the note picked (`NoteAsk`). A note picked,
  * or an alias of one, puts the note's name in the field and is held as
  * picked, so that a name other notes share still names that note; once the
  * text is changed, what was picked is let go and the text is read on its
- * own. An unresolved link puts its text in, which names the note a send
+ * own. An unresolved link puts its text in, which names the note the form
  * makes. Which note that is, and what is said of it under the row
  * ({@link says}), is the form's to find out.
  */
@@ -50,7 +54,7 @@ export class NoteField {
             opts.onChange();
         });
         this.suggest = new NoteSuggest(app, this.input, {
-            kinds: { attachments: false, aliases: true, unresolved: true },
+            kinds: { attachments: false, aliases: true, unresolved: opts.offersUnresolved },
             pick: (candidate) => {
                 if (candidate.kind === 'unresolved') {
                     this.picked = null;

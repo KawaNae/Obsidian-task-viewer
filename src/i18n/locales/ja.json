@@ -596,6 +596,20 @@
       "namesakes": "別のフォルダに同じ名前のノートがあります: {{notes}}",
       "send": "送る",
       "sending": "送っています…"
+    },
+    "section": {
+      "addTitle": "セクションを追加",
+      "relinkTitle": "セクションを選び直す",
+      "wholeNote": "ノート全体",
+      "note": "ノート {{note}}",
+      "noteMissing": "{{name}} という名前のノートはありません",
+      "wholeNoteShown": "ノート全体を表示します",
+      "headingShown": "見出し {{heading}} のセクションを表示します",
+      "noHeading": "{{note}} に見出し {{heading}} はありません",
+      "unlinkable": "この {{heading}} はリンクで指せません。同じ名前の見出しが、同じ名前の見出しの下に先にあります。選べるのは先頭だけです",
+      "unlinkableShort": "リンクで指せません",
+      "add": "追加",
+      "relink": "選び直す"
     }
   },
   "issue": {
