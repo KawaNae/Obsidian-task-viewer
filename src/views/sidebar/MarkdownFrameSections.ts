@@ -29,7 +29,9 @@
  * dialog (`SectionModal`), which this opens: what is chosen there is
  * written through the placement, a new frame at the end of the stack
  * (`append`) and a frame's new link by its id (`relink`), and reaches the
- * frames as any change of the state does.
+ * frames as any change of the state does. A dialog still open when the
+ * frames close is closed with them: what it would choose has no view's
+ * state to go to.
  */
 
 import type { EventRef, HoverParent, Menu } from 'obsidian';
@@ -91,6 +93,8 @@ export class MarkdownFrameSections {
     /** The markdown frames, by frame id. One lives while its frame is in the state. */
     private readonly frames = new Map<string, MarkdownFramePair>();
     private readonly heard: EventRef[] = [];
+    /** The section dialogs this opened that are open still. */
+    private readonly dialogs = new Set<SectionModal>();
     private opened = false;
     /** Whether the plugin's stylesheet was seen applied to the container. It stays applied while the plugin runs. */
     private styled = false;
@@ -123,11 +127,13 @@ export class MarkdownFrameSections {
         workspace.onLayoutReady(() => this.followNotes());
     }
 
-    /** Stop following, and end every frame. */
+    /** Stop following, close the section dialogs open, and end every frame. */
     close(): void {
         this.opened = false;
         const { vault } = this.deps.plugin.app;
         for (const ref of this.heard.splice(0)) vault.offref(ref);
+        for (const dialog of [...this.dialogs]) dialog.close();
+        this.dialogs.clear();
         this.stopAwaitingStylesheet?.();
         for (const frame of this.frames.values()) this.end(frame);
         this.frames.clear();
@@ -247,7 +253,14 @@ export class MarkdownFrameSections {
     }
 
     private openDialog(purpose: 'add' | 'relink', initial: SectionAsk, chosen: (link: string) => void): void {
-        new SectionModal(this.deps.plugin.app, { purpose, initial, chosen }).open();
+        const dialog: SectionModal = new SectionModal(this.deps.plugin.app, {
+            purpose,
+            initial,
+            chosen,
+            closed: () => this.dialogs.delete(dialog),
+        });
+        this.dialogs.add(dialog);
+        dialog.open();
     }
 
     private end({ reader, view }: MarkdownFramePair): void {

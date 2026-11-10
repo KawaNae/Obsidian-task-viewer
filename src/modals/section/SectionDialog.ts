@@ -22,14 +22,16 @@ import type { FormIssue } from '../form/FormIssue';
  *   picked, the one note by a name, the note at a path or the one whose
  *   path ends in it. A name no note has, or more than one note has, names
  *   none, and nothing can be chosen until one is picked. Nor can it be for a
- *   note no link names (`frameLinkNames`: a path with a `#`).
+ *   note no link names (`frameLinkNames`: a path with a `#`), or one that
+ *   could not be read.
  * - The heading field offers the whole note first, then the note's
  *   headings, each as deep as the headings it stands under. A heading no
  *   subpath names (`headingLinks`) is offered but cannot be picked.
  * - The heading field left empty names the whole note. A heading picked
- *   names that heading while the field holds what the pick put in and the
- *   note is the one it was picked in; anything else typed names the first
- *   heading of its name, compared as a link compares them (`headingKey`).
+ *   names that heading while the field holds what the pick put in, the
+ *   note is the one it was picked in and its line there has a heading of
+ *   that name still; anything else typed names the first heading of its
+ *   name, compared as a link compares them (`headingKey`).
  * - The link is the note's path and the heading's subpath
  *   (`noteFrameLink`), the subpath being the one `headingLinks` gives: a
  *   link written here is read back as the section chosen.
@@ -61,14 +63,16 @@ export interface SectionAsk {
 /**
  * The note the note field names: none while it is empty, a name no note has
  * (`missing`), more than one note (`ambiguous`, by their paths), a note no
- * link names (`unlinkable`), or the note, with its headings and the subpath
- * that names each.
+ * link names (`unlinkable`), a note that could not be read (`unreadable`,
+ * by the name typed), or the note, with its headings and the subpath that
+ * names each.
  */
 export type SectionNote =
     | { kind: 'empty' }
     | { kind: 'missing'; name: string }
     | { kind: 'ambiguous'; name: string; paths: readonly string[] }
     | { kind: 'unlinkable'; path: string }
+    | { kind: 'unreadable'; name: string }
     | { kind: 'note'; path: string; headings: readonly HeadingLink[] };
 
 /**
@@ -166,8 +170,11 @@ export function chosenSection(path: string, headings: readonly HeadingLink[], as
     if (ask.text.trim() === '') return { kind: 'note' };
     const { picked } = ask;
     const key = headingKey(ask.text);
-    const named = (picked && picked.path === path ? headings.find(one => one.heading.line === picked.line) : undefined)
-        ?? headings.find(one => headingKey(one.heading.text) === key);
+    const ofKey = (one: HeadingLink) => headingKey(one.heading.text) === key;
+    // A pick is of a line of the note as it was read then; read again, the
+    // line may hold another heading.
+    const named = (picked && picked.path === path ? headings.find(one => one.heading.line === picked.line && ofKey(one)) : undefined)
+        ?? headings.find(ofKey);
     if (!named) return { kind: 'no-heading', text: ask.text.trim() };
     return named.subpath === null
         ? { kind: 'unlinkable', heading: named.heading }
@@ -267,6 +274,9 @@ export class SectionDialog {
             case 'unlinkable':
                 say('note', 'error', t(note.path.includes('#') ? 'modal.section.noteUnlinkableHash' : 'modal.section.noteUnlinkable', { note: note.path }));
                 break;
+            case 'unreadable':
+                say('note', 'error', t('modal.section.noteUnreadable', { name: note.name }));
+                break;
         }
         if (note?.kind !== 'note') return { path: null, choices: [], issues, canChoose: false };
 
@@ -313,16 +323,21 @@ export class SectionDialog {
         this.disposed = true;
     }
 
-    /** Ask which note the note field names; the answer is taken only if no asking came after. */
+    /**
+     * Ask which note the note field names; the answer is taken only if no
+     * asking came after. A note that could not be read is said to be so,
+     * in place of what the last answer said.
+     */
     private async lookUp(): Promise<void> {
         const seq = ++this.asked;
+        const ask = { ...this.ask.note };
         this.render();
         let note: SectionNote;
         try {
-            note = await this.host.note({ ...this.ask.note });
+            note = await this.host.note(ask);
         } catch (e) {
             logWarn(`[SectionDialog] the note could not be read: ${String(e)}`);
-            return;
+            note = { kind: 'unreadable', name: ask.text.trim() };
         }
         if (this.disposed || seq !== this.asked) return;
         this.answer = { seq, note };

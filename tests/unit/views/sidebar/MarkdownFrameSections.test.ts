@@ -15,11 +15,17 @@ import { makeFile } from '../../helpers/vaultSession';
  */
 const views = vi.hoisted(() => ({ made: [] as unknown[], dialogs: [] as unknown[] }));
 
-/** The section dialog, stood in for: what it was opened with, and its answer, given by the test. */
+/** The section dialog, stood in for: what it was opened with, its answer, given by the test, and whether it is open. */
 vi.mock('../../../../src/modals/section/SectionModal', () => ({
     SectionModal: class {
-        constructor(_app: unknown, readonly opts: unknown) {}
-        open() { views.dialogs.push(this.opts); }
+        isOpen = false;
+        constructor(_app: unknown, readonly opts: { closed?(): void }) {}
+        open() { this.isOpen = true; views.dialogs.push(this); }
+        close() {
+            if (!this.isOpen) return;
+            this.isOpen = false;
+            this.opts.closed?.();
+        }
     },
 }));
 
@@ -41,9 +47,13 @@ vi.mock('../../../../src/views/sidebar/MarkdownFrameView', () => ({
 }));
 
 interface StandInDialog {
-    purpose: 'add' | 'relink';
-    initial: SectionAsk;
-    chosen(link: string): void;
+    opts: {
+        purpose: 'add' | 'relink';
+        initial: SectionAsk;
+        chosen(link: string): void;
+    };
+    isOpen: boolean;
+    close(): void;
 }
 
 interface StandInView {
@@ -344,13 +354,14 @@ describe('the markdown frames of a sidebar', () => {
         await settle();
         expect(frames.reads).toEqual([note, note]);
     });
+
     it('adds the section chosen in an empty dialog as a new frame at the end of the stack, and makes its frame', async () => {
         const frames = framesOver();
         frames.note('Note.md', '# Memo\nbody');
         frames.sections.open();
         frames.show([memo('m', 'Note#Memo'), LIST]);
         frames.sections.add();
-        const [dialog] = frames.dialogs();
+        const [{ opts: dialog }] = frames.dialogs();
         expect(dialog).toMatchObject({ purpose: 'add', initial: { note: { text: '', picked: null }, heading: { text: '', picked: null } } });
 
         dialog.chosen('Note');
@@ -373,7 +384,7 @@ describe('the markdown frames of a sidebar', () => {
 
         a.host.relink();
         m.host.relink();
-        const [ofA, ofM] = frames.dialogs();
+        const [ofA, ofM] = frames.dialogs().map(d => d.opts);
         expect(ofA).toMatchObject({ purpose: 'relink', initial: { note: { text: 'Note', picked: 'Folder/Note.md' }, heading: { text: 'Gone', picked: null } } });
         expect(ofM.initial).toEqual({ note: { text: 'Gone', picked: null }, heading: { text: 'Memo', picked: null } });
 
@@ -387,13 +398,19 @@ describe('the markdown frames of a sidebar', () => {
         expect(a.shown.at(-1)).toMatchObject({ reading: { kind: 'heading', markdown: 'other' } });
     });
 
-    it('writes nothing when the section is chosen for a frame removed meanwhile', () => {
+    it('closes the section dialogs open still when it closes, and not one closed already', () => {
         const frames = framesOver();
         frames.sections.open();
         frames.show([memo('m', 'Gone#Memo')]);
+        frames.sections.add();
         frames.views()[0].host.relink();
-        frames.show([]);
-        frames.dialogs()[0].chosen('Note#Memo');
-        expect(frames.frames()).toEqual([]);
+        frames.sections.add();
+        const [add, relink, closedBefore] = frames.dialogs();
+        closedBefore.close();
+        const close = vi.spyOn(closedBefore, 'close');
+
+        frames.sections.close();
+        expect([add.isOpen, relink.isOpen]).toEqual([false, false]);
+        expect(close).not.toHaveBeenCalled();
     });
 });
