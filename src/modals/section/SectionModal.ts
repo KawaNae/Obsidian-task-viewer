@@ -27,7 +27,8 @@ export interface SectionModalOptions {
  * (`_form.css`), and stands on an overlay (`OverlayShell`, centered). It
  * opens with the focus on the heading field when the note field names a
  * note picked, and on the note field otherwise. Whoever opened it may
- * close it ({@link close}): the view it chooses for closing.
+ * close it ({@link close}), choosing nothing: the sidebar's frames close
+ * the dialogs they opened when their view closes.
  */
 export class SectionModal implements SectionSurface {
     private readonly overlay = new OverlayShell();
