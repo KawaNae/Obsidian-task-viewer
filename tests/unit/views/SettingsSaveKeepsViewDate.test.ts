@@ -5,9 +5,9 @@ import { ViewEvents } from '../../../src/views/sharedLogic/ViewEvents';
 /**
  * Saving settings redraws the views in place; a changed visual day moves
  * them first, and they still redraw, since what they draw from was saved.
- * Both used to go through one `refresh()`, and Timeline and Schedule
- * answered it by going back to today, so every settings save (including the
- * timer widget's pomodoro minutes) moved them off the day the user was on.
+ * Timeline and Schedule answer a new day by going to today; a settings save
+ * that leaves the day where it is (the timer widget's pomodoro minutes, for
+ * one) must not move them off the day the user is on.
  */
 function setup(today: string) {
     const view = { redraw: vi.fn(), onDayRolled: vi.fn(), onMinute: vi.fn() };
