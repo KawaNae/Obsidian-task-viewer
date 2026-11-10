@@ -3,10 +3,8 @@
  * of what it shows, which folds the frame, and under it a card holding the
  * section's body as rendered markdown.
  *
- * The frame finds its note as a link finds one (`noteAt`), reads the note's
- * lines and shows the section its link names (`readFrameContent`). When to
- * look again is the panel's to say (`SidebarFrames`, which hears the vault):
- * `follow` for which file the link names, `read` for what the file holds.
+ * What it shows is what the frame's reader read (`MarkdownFrameReader`),
+ * handed to `show`; the view looks nothing up and reads no file.
  *
  * The card is styled as a task of the section is: the section's color and
  * line style go on it through the properties a task card takes
@@ -20,8 +18,8 @@
  * itself up to date between them. Each render has an element of its own, so
  * one that ends late adds nothing to the one that took its place.
  *
- * While the view masks (`MarkdownFrameHost.masked`), a section that has a
- * mask shows it in place of its body, as a masked task card shows it in
+ * While the view masks (`MarkdownFrameViewHost.masked`), a section that has
+ * a mask shows it in place of its body, as a masked task card shows it in
  * place of its text: the body is taken out, and rendered again once the
  * view stops masking or the mask is gone. The row's name and the style stay.
  *
@@ -34,20 +32,16 @@
  * in by `paint`, which takes out what the card showed before.
  */
 
-import { Component, MarkdownRenderer, type App, type TAbstractFile, type TFile } from 'obsidian';
+import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { t } from '../../i18n';
 import { logError } from '../../log/log';
-import { frameTarget, frameTitle, readFrameContent, type FrameReading } from '../../services/data/MarkdownFrames';
-import { splitLines } from '../../services/persistence/FileLines';
-import type { MarkdownFrame, TaskViewerSettings } from '../../types';
-import { noteAt } from '../../utils/NoteLink';
 import { renderSectionHeader, type SectionHeaderClasses, type SectionHeaderHandle } from '../sharedUI/ListSectionRenderer';
 import { TaskStyling } from '../sharedUI/TaskStyling';
+import type { FrameRead } from './MarkdownFrameReader';
 
-/** What a frame is handed of the panel that holds it. */
-export interface MarkdownFrameHost {
+/** What a frame's view is handed of the panel that holds it: what every frame shares, and what is its own frame's. */
+export interface MarkdownFrameViewHost {
     app: App;
-    settings(): TaskViewerSettings;
     /** The look of the header row, which every frame of the panel shares. */
     rowClasses: SectionHeaderClasses;
     /**
@@ -62,14 +56,14 @@ export interface MarkdownFrameHost {
      * leave a link it already took alone.
      */
     bindLinks(el: HTMLElement, sourcePath: string): void;
-    /** Keep whether the frame `id` is collapsed; the frame already shows it. */
-    setCollapsed(id: string, collapsed: boolean): void;
     /** Whether the view masks now: a section's mask is shown in place of its body. */
     masked(): boolean;
-    /** Show the ⋯ menu of `frame`. */
-    showMenu(frame: MarkdownFrameView, event: MouseEvent): void;
-    /** Take the frame `id` out of the sidebar. */
-    remove(id: string): void;
+    /** The frame was folded or unfolded from its row; it already shows it. */
+    collapsedChanged(collapsed: boolean): void;
+    /** Show the frame's ⋯ menu. */
+    showMenu(event: MouseEvent): void;
+    /** Take the frame out of the sidebar. */
+    remove(): void;
 }
 
 /**
@@ -100,54 +94,40 @@ function sameContent(a: CardContent, b: CardContent): boolean {
 }
 
 export class MarkdownFrameView {
-    readonly id: string;
     readonly root: HTMLElement;
     private readonly row: SectionHeaderHandle;
     private readonly card: HTMLElement;
 
-    private frameLink: string;
     private collapsed: boolean;
-    /** Whether `follow` was called: before it, the note is not looked for. */
-    private following = false;
-    /**
-     * The note the link names, and the path it had when it was found: a
-     * body is resolved against the path, so the same file at a new path is
-     * another note to show.
-     */
-    private found: { file: TFile; path: string } | null = null;
     /** What was read last; null before the first reading. */
-    private reading: FrameReading | null = null;
-    /** Counts the readings begun, so that one overtaken by a later one is dropped. */
-    private reads = 0;
-
+    private read: FrameRead | null = null;
     /** What the card shows; null while it shows nothing. */
     private shown: CardShown | null = null;
 
     /**
-     * Build the frame's element, with the name its link gives it and no
-     * body. `follow` turns it to its note; the caller puts `root` in place.
+     * Build the frame `id`'s element, its row named `title`, with no body:
+     * `show` gives it what was read. The caller puts `root` in place.
      */
     constructor(
-        private readonly host: MarkdownFrameHost,
-        frame: MarkdownFrame,
+        private readonly host: MarkdownFrameViewHost,
+        id: string,
+        title: string,
         collapsed: boolean,
     ) {
-        this.id = frame.id;
-        this.frameLink = frame.link;
         this.collapsed = collapsed;
 
         this.root = document.createElement('div');
         this.root.addClass('markdown-frame');
-        this.root.dataset.frameId = frame.id;
+        this.root.dataset.frameId = id;
 
         this.row = renderSectionHeader(this.root, {
             classes: host.rowClasses,
-            name: frameTitle(frame.link, { kind: 'no-note' }, null),
+            name: title,
             collapsed,
-            onMoreClick: (_anchorEl, event) => host.showMenu(this, event),
+            onMoreClick: (_anchorEl, event) => host.showMenu(event),
             onCollapsedChange: (next) => {
                 this.applyCollapsed(next);
-                host.setCollapsed(this.id, next);
+                host.collapsedChanged(next);
             },
         });
 
@@ -155,21 +135,15 @@ export class MarkdownFrameView {
         this.card.createDiv('task-card__shape');
     }
 
-    /** The link the frame shows the section of. */
-    get link(): string {
-        return this.frameLink;
-    }
+    /** Show `read`: its name, its style, and in the card what it gives. */
+    show(read: FrameRead): void {
+        this.read = read;
+        this.row.nameEl.setText(read.title);
 
-    /** The note found for the link; null when there is none, or it was not looked for yet. */
-    get note(): TFile | null {
-        return this.found?.file ?? null;
-    }
-
-    /** The frame's link is `link` now: its note is looked for and read anew. */
-    setLink(link: string): void {
-        if (link === this.frameLink) return;
-        this.frameLink = link;
-        if (this.following) this.turnTo(noteAt(this.host.app.metadataCache, frameTarget(link).path));
+        const section = 'markdown' in read.reading ? read.reading : null;
+        TaskStyling.applyTaskColor(this.card, section?.color ?? null);
+        TaskStyling.applyTaskLinestyle(this.card, section?.linestyle ?? null);
+        this.paint();
     }
 
     /** Show the frame collapsed or not, as the view's state has it. */
@@ -180,42 +154,13 @@ export class MarkdownFrameView {
     }
 
     /**
-     * Turn to the note the link names now, and read it, unless it is the
-     * note already shown, at the path it was found at. Called first once
-     * the vault's files are known, and whenever a file made, moved or
-     * deleted may have changed which note that is.
-     */
-    follow(): void {
-        const file = noteAt(this.host.app.metadataCache, frameTarget(this.frameLink).path);
-        if (this.following && file === this.note && file?.path === this.found?.path) return;
-        this.following = true;
-        this.turnTo(file);
-    }
-
-    /** Read the note again and show what the link names of it now. */
-    async read(): Promise<void> {
-        const { found } = this;
-        if (!found) return;
-        const turn = ++this.reads;
-        let content: string;
-        try {
-            content = await this.host.app.vault.cachedRead(found.file);
-        } catch (e) {
-            logError(`[MarkdownFrame] reading ${found.path} failed: ${e instanceof Error ? e.message : String(e)}`, { notice: false });
-            return;
-        }
-        if (turn !== this.reads) return;
-        this.show(readFrameContent(splitLines(content).lines, frameTarget(this.frameLink).subpath, this.host.settings()));
-    }
-
-    /**
      * Have the card show what the frame shows now (`wanted`), unless it
      * shows that already. A body waits while the frame is folded or cannot
-     * be rendered yet (`MarkdownFrameHost.canRender`), and the card keeps
-     * what it shows until then; the rest is shown at once. Called when what
-     * was read changes, at the unfold, when the panel can render, and at
-     * each draw of the panel, which is where a change of the view's masking
-     * comes in.
+     * be rendered yet (`MarkdownFrameViewHost.canRender`), and the card
+     * keeps what it shows until then; the rest is shown at once. Called
+     * when what was read changes, at the unfold, when the panel can render,
+     * and at each draw of the panel, which is where a change of the view's
+     * masking comes in.
      */
     paint(): void {
         const wanted = this.wanted();
@@ -237,50 +182,25 @@ export class MarkdownFrameView {
         }
     }
 
-    /** End what the body's render registered, and drop a reading under way. The caller takes `root` out. */
+    /** End what the body's render registered. The caller takes `root` out. */
     close(): void {
-        this.reads++;
         this.clearCard();
-    }
-
-    /** Whether the note shown is `file`. */
-    shows(file: TAbstractFile): boolean {
-        return this.found?.file === file;
-    }
-
-    /** Show `file` as the frame's note, read anew; null for no note. A reading under way is dropped. */
-    private turnTo(file: TFile | null): void {
-        this.reads++;
-        this.found = file ? { file, path: file.path } : null;
-        if (file) void this.read();
-        else this.show({ kind: 'no-note' });
-    }
-
-    /** Show `reading`: its name, its style, and in the card what it gives. */
-    private show(reading: FrameReading): void {
-        this.reading = reading;
-        this.row.nameEl.setText(frameTitle(this.frameLink, reading, this.note?.basename ?? null));
-
-        const section = 'markdown' in reading ? reading : null;
-        TaskStyling.applyTaskColor(this.card, section?.color ?? null);
-        TaskStyling.applyTaskLinestyle(this.card, section?.linestyle ?? null);
-        this.paint();
     }
 
     /**
      * What the card is to show of what was read: the mask while the view
-     * masks and the section has one, else the body; or what is not there.
-     * Null before the first reading.
+     * masks and the section has one, else the body, resolved against the
+     * path the note was found at; or what is not there. Null before the
+     * first reading.
      */
     private wanted(): CardContent | null {
-        const { reading, found } = this;
-        if (!reading) return null;
-        if (!('markdown' in reading)) return { kind: 'missing', what: reading.kind };
-        if (!found) return null;
-        if (reading.mask !== null && this.host.masked()) return { kind: 'mask', text: reading.mask };
-        return { kind: 'body', markdown: reading.markdown, path: found.path };
+        const { read } = this;
+        if (!read) return null;
+        if (read.path === null) return { kind: 'missing', what: 'no-note' };
+        if (!('markdown' in read.reading)) return { kind: 'missing', what: read.reading.kind };
+        if (read.reading.mask !== null && this.host.masked()) return { kind: 'mask', text: read.reading.mask };
+        return { kind: 'body', markdown: read.reading.markdown, path: read.path };
     }
-
     /** Render `body` into an element of its own in the card, with a Component of its own. */
     private renderBody(body: CardContent & { kind: 'body' }): CardShown {
         const el = this.card.createDiv('markdown-frame__content markdown-rendered');
@@ -308,7 +228,7 @@ export class MarkdownFrameView {
             text: t(what === 'no-note' ? 'sidebar.noteNotFound' : 'sidebar.sectionNotFound'),
         });
         const removeBtn = el.createEl('button', { cls: 'markdown-frame__missing-remove', text: t('menu.remove') });
-        removeBtn.addEventListener('click', () => this.host.remove(this.id));
+        removeBtn.addEventListener('click', () => this.host.remove());
         return el;
     }
 

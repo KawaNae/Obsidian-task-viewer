@@ -43,7 +43,8 @@ import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 import type { ListSectionClasses, SectionHeaderClasses } from '../sharedUI/ListSectionRenderer';
 import { TaskListSections, newList, type ListDrawContext, type ListSectionDeps } from '../sharedUI/TaskListSections';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { MarkdownFrameView, type MarkdownFrameHost } from './MarkdownFrameView';
+import { MarkdownFrameReader } from './MarkdownFrameReader';
+import { MarkdownFrameView } from './MarkdownFrameView';
 
 /** What the panel draws its frames with: what the lists read, and how a link a markdown frame draws is opened and previewed. */
 export interface SidebarFramesDeps extends ListSectionDeps {
@@ -116,12 +117,17 @@ export function stackInOrder(parent: Pick<HTMLElement, 'children' | 'insertBefor
     });
 }
 
+/** One markdown frame: what reads its note, and what draws it. */
+interface MarkdownFramePair {
+    reader: MarkdownFrameReader;
+    view: MarkdownFrameView;
+}
+
 export class SidebarFrames {
     private readonly el: HTMLElement;
     private readonly sections: TaskListSections;
-    /** The markdown frames drawn, by frame id. One lives while its frame is in the stack. */
-    private readonly markdownFrames = new Map<string, MarkdownFrameView>();
-    private readonly markdownHost: MarkdownFrameHost;
+    /** The markdown frames drawn, by frame id: what each reads, and its view. One lives while its frame is in the stack. */
+    private readonly markdownFrames = new Map<string, MarkdownFramePair>();
     /** The window's animation frames, in which a requested draw runs. */
     private readonly animationFrames = new HostFrameScheduler(() => this.el);
     private pendingDraw: number | null = null;
@@ -148,21 +154,6 @@ export class SidebarFrames {
             insertCopy: (list, copy) => this.insertBelow(list.id, listFrame(copy)),
             appendMenuItems: (menu, list) => this.appendFrameMenuItems(menu, list.id),
         });
-        this.markdownHost = {
-            app: deps.plugin.app,
-            settings: () => deps.plugin.settings,
-            rowClasses: MARKDOWN_FRAME_ROW_CLASSES,
-            canRender: () => this.canRenderMarkdown(),
-            bindLinks: (el, sourcePath) => deps.links.bind(el, {
-                sourcePath,
-                hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
-                hoverParent: deps.getHoverParent(),
-            }),
-            setCollapsed: (id, collapsed) => this.setCollapsed(id, collapsed),
-            masked: () => this.host.state().maskMode ?? false,
-            showMenu: (frame, event) => this.showMarkdownFrameMenu(frame, event),
-            remove: (id) => this.removeFrame(id),
-        };
     }
 
     /**
@@ -174,8 +165,8 @@ export class SidebarFrames {
         const { vault, workspace } = this.deps.plugin.app;
         const heard = [
             vault.on('modify', (file) => {
-                for (const frame of this.markdownFrames.values()) {
-                    if (frame.shows(file)) void frame.read();
+                for (const { reader } of this.markdownFrames.values()) {
+                    if (reader.shows(file)) void reader.read();
                 }
             }),
             vault.on('create', () => this.followNotes()),
@@ -218,7 +209,7 @@ export class SidebarFrames {
      */
     settingsSaved(): void {
         if (!this.opened) return;
-        for (const frame of this.markdownFrames.values()) void frame.read();
+        for (const { reader } of this.markdownFrames.values()) void reader.read();
     }
 
     /**
@@ -317,7 +308,7 @@ export class SidebarFrames {
             case 'list':
                 return this.sections.drawList(this.el, frame, lists);
             case 'markdown':
-                return this.markdownFrameOf(frame, lists.collapsed[frame.id] ?? false).root;
+                return this.markdownFrameOf(frame, lists.collapsed[frame.id] ?? false).view.root;
         }
     }
 
@@ -329,7 +320,7 @@ export class SidebarFrames {
         const kept = new Set<Element>();
         for (const [id, frame] of this.markdownFrames) {
             if (ids.has(id)) {
-                kept.add(frame.root);
+                kept.add(frame.view.root);
             } else {
                 this.endMarkdownFrame(frame);
                 this.markdownFrames.delete(id);
@@ -343,23 +334,45 @@ export class SidebarFrames {
      * the frame's link and fold, and its card showing what the state asks
      * now: a change of the view's masking is shown here.
      */
-    private markdownFrameOf(frame: MarkdownFrame, collapsed: boolean): MarkdownFrameView {
+    private markdownFrameOf(frame: MarkdownFrame, collapsed: boolean): MarkdownFramePair {
         const drawn = this.markdownFrames.get(frame.id);
         if (drawn) {
-            drawn.setLink(frame.link);
-            drawn.setCollapsed(collapsed);
-            drawn.paint();
+            drawn.reader.setLink(frame.link);
+            drawn.view.setCollapsed(collapsed);
+            drawn.view.paint();
             return drawn;
         }
-        const made = new MarkdownFrameView(this.markdownHost, frame, collapsed);
-        this.markdownFrames.set(frame.id, made);
-        if (this.notesKnown()) made.follow();
+        const { id } = frame;
+        const { plugin, links, getHoverParent } = this.deps;
+        const reader = new MarkdownFrameReader(
+            { app: plugin.app, settings: () => plugin.settings },
+            frame.link,
+            read => view.show(read),
+        );
+        const view: MarkdownFrameView = new MarkdownFrameView({
+            app: plugin.app,
+            rowClasses: MARKDOWN_FRAME_ROW_CLASSES,
+            canRender: () => this.canRenderMarkdown(),
+            bindLinks: (el, sourcePath) => links.bind(el, {
+                sourcePath,
+                hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
+                hoverParent: getHoverParent(),
+            }),
+            masked: () => this.host.state().maskMode ?? false,
+            collapsedChanged: next => this.setCollapsed(id, next),
+            showMenu: event => this.showMarkdownFrameMenu(id, reader, event),
+            remove: () => this.removeFrame(id),
+        }, id, reader.untitled(), collapsed);
+        const made = { reader, view };
+        this.markdownFrames.set(id, made);
+        if (this.notesKnown()) reader.follow();
         return made;
     }
 
-    private endMarkdownFrame(frame: MarkdownFrameView): void {
-        frame.close();
-        frame.root.remove();
+    private endMarkdownFrame({ reader, view }: MarkdownFramePair): void {
+        reader.close();
+        view.close();
+        view.root.remove();
     }
 
     /**
@@ -374,7 +387,7 @@ export class SidebarFrames {
     /** Have every markdown frame look for the note its link names now. */
     private followNotes(): void {
         if (!this.notesKnown()) return;
-        for (const frame of this.markdownFrames.values()) frame.follow();
+        for (const { reader } of this.markdownFrames.values()) reader.follow();
     }
 
     /**
@@ -388,7 +401,7 @@ export class SidebarFrames {
         if (isNote(file)) {
             let moved = false;
             const frames = this.frames().map((frame) => {
-                if (frame.kind !== 'markdown' || !this.markdownFrames.get(frame.id)?.shows(file)) return frame;
+                if (frame.kind !== 'markdown' || !this.markdownFrames.get(frame.id)?.reader.shows(file)) return frame;
                 const link = frameLinkAt(frame.link, file.path);
                 if (link === frame.link) return frame;
                 moved = true;
@@ -396,7 +409,7 @@ export class SidebarFrames {
             });
             if (moved) {
                 for (const frame of frames) {
-                    if (frame.kind === 'markdown') this.markdownFrames.get(frame.id)?.setLink(frame.link);
+                    if (frame.kind === 'markdown') this.markdownFrames.get(frame.id)?.reader.setLink(frame.link);
                 }
                 this.writeFrames(frames);
             }
@@ -441,20 +454,20 @@ export class SidebarFrames {
     private paintMarkdownFrames(): void {
         if (this.markdownFrames.size === 0 || !this.canRenderMarkdown()) return;
         this.stopAwaitingStylesheet?.();
-        for (const frame of this.markdownFrames.values()) frame.paint();
+        for (const { view } of this.markdownFrames.values()) view.paint();
     }
 
     /** The ⋯ menu of a markdown frame: open its note, when there is one, then the items every frame has. */
-    private showMarkdownFrameMenu(frame: MarkdownFrameView, event: MouseEvent): void {
+    private showMarkdownFrameMenu(id: string, reader: MarkdownFrameReader, event: MouseEvent): void {
         const { plugin } = this.deps;
         plugin.menuPresenter.present((menu) => {
-            if (frame.note) {
+            if (reader.note) {
                 menu.addItem(item => item
                     .setTitle(t('sidebar.openNote'))
                     .setIcon('file-text')
-                    .onClick(() => openLink(plugin.app, frame.link, '', plugin.settings.reuseExistingTab)));
+                    .onClick(() => openLink(plugin.app, reader.link, '', plugin.settings.reuseExistingTab)));
             }
-            this.appendFrameMenuItems(menu, frame.id);
+            this.appendFrameMenuItems(menu, id);
         }, { kind: 'mouseEvent', event });
     }
 
