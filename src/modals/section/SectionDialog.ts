@@ -1,6 +1,7 @@
 import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import { logWarn } from '../../log/log';
+import { frameLinkNames } from '../../services/data/MarkdownFrameNotes';
 import { frameHeadings, frameTarget, noteFrameLink } from '../../services/data/MarkdownFrames';
 import { NoteName, type NoteAsk } from '../../services/data/NoteName';
 import { splitLines } from '../../services/persistence/FileLines';
@@ -20,7 +21,8 @@ import type { FormIssue } from '../form/FormIssue';
  * - The note is found as the send dialog's is (`NoteName.find`): the note
  *   picked, the one note by a name, the note at a path or the one whose
  *   path ends in it. A name no note has, or more than one note has, names
- *   none, and nothing can be chosen until one is picked.
+ *   none, and nothing can be chosen until one is picked. Nor can it be for a
+ *   note no link names (`frameLinkNames`: a path with a `#`).
  * - The heading field offers the whole note first, then the note's
  *   headings, each as deep as the headings it stands under. A heading no
  *   subpath names (`headingLinks`) is offered but cannot be picked.
@@ -58,13 +60,15 @@ export interface SectionAsk {
 
 /**
  * The note the note field names: none while it is empty, a name no note has
- * (`missing`), more than one note (`ambiguous`, by their paths), or the
- * note, with its headings and the subpath that names each.
+ * (`missing`), more than one note (`ambiguous`, by their paths), a note no
+ * link names (`unlinkable`), or the note, with its headings and the subpath
+ * that names each.
  */
 export type SectionNote =
     | { kind: 'empty' }
     | { kind: 'missing'; name: string }
     | { kind: 'ambiguous'; name: string; paths: readonly string[] }
+    | { kind: 'unlinkable'; path: string }
     | { kind: 'note'; path: string; headings: readonly HeadingLink[] };
 
 /**
@@ -112,7 +116,7 @@ export interface SectionHost {
 }
 
 /** The note `ask` names, and its headings, read off its lines. */
-export async function readSectionNote(app: Pick<App, 'vault'>, ask: NoteAsk): Promise<SectionNote> {
+export async function readSectionNote(app: Pick<App, 'vault' | 'metadataCache'>, ask: NoteAsk): Promise<SectionNote> {
     const name = ask.text.trim();
     if (name === '' && ask.picked === null) return { kind: 'empty' };
     // A name no note has is not a new note here: the folder it would be made in does not matter.
@@ -123,6 +127,11 @@ export async function readSectionNote(app: Pick<App, 'vault'>, ask: NoteAsk): Pr
         case 'ambiguous':
             return { kind: 'ambiguous', name: at.name, paths: at.files.map(file => file.path) };
         case 'existing': {
+            // The link is the frame's whatever section is chosen: its note is
+            // the part before the first `#`, which no heading's subpath changes.
+            if (!frameLinkNames(app.metadataCache, noteFrameLink(at.file.path, null), at.file)) {
+                return { kind: 'unlinkable', path: at.file.path };
+            }
             const { lines } = splitLines(await app.vault.cachedRead(at.file));
             return { kind: 'note', path: at.file.path, headings: frameHeadings(lines) };
         }
@@ -248,10 +257,16 @@ export class SectionDialog {
         const issues: FormIssue<SectionDialogField>[] = [];
         const say = (at: SectionDialogField, tone: FormIssue<SectionDialogField>['tone'], text: string) => issues.push({ at, tone, text });
 
-        if (note?.kind === 'missing') {
-            say('note', 'error', t('modal.section.noteMissing', { name: note.name }));
-        } else if (note?.kind === 'ambiguous') {
-            say('note', 'error', t('modal.noteAmbiguous', { name: note.name, count: String(note.paths.length), notes: note.paths.join(', ') }));
+        switch (note?.kind) {
+            case 'missing':
+                say('note', 'error', t('modal.section.noteMissing', { name: note.name }));
+                break;
+            case 'ambiguous':
+                say('note', 'error', t('modal.noteAmbiguous', { name: note.name, count: String(note.paths.length), notes: note.paths.join(', ') }));
+                break;
+            case 'unlinkable':
+                say('note', 'error', t(note.path.includes('#') ? 'modal.section.noteUnlinkableHash' : 'modal.section.noteUnlinkable', { note: note.path }));
+                break;
         }
         if (note?.kind !== 'note') return { path: null, choices: [], issues, canChoose: false };
 

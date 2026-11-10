@@ -4,7 +4,7 @@
  * no element; what it reads is handed to `onRead`, which has the frame's
  * view (`MarkdownFrameView`) show it.
  *
- * The note is found as a link finds one (`noteAt`), and the section read as
+ * The note is found as a link finds one (`frameNote`), and the section read as
  * `readFrameContent` reads it. When to look again is the caller's to say,
  * since the caller hears the vault for every frame: `follow` for which file
  * the link names, `read` for what the file holds.
@@ -18,9 +18,10 @@
 import type { App, TAbstractFile, TFile } from 'obsidian';
 import { logError } from '../../log/log';
 import { frameTarget, frameTitle, readFrameContent, type FrameContent } from '../../services/data/MarkdownFrames';
+import { frameNote } from '../../services/data/MarkdownFrameNotes';
 import { splitLines } from '../../services/persistence/FileLines';
 import type { TaskViewerSettings } from '../../types';
-import { isNote, noteAt } from '../../utils/NoteLink';
+import { isNote } from '../../utils/NoteLink';
 
 /**
  * What a frame read, with the name its row shows of it. A section of a note
@@ -136,7 +137,7 @@ export class MarkdownFrameReader {
     }
 
     private lookUp(): TFile | null {
-        return noteAt(this.host.app.metadataCache, frameTarget(this.frameLink).path);
+        return frameNote(this.host.app.metadataCache, this.frameLink);
     }
 
     /** Take `file` as the frame's note, read anew; null for no note. A reading under way is dropped. */

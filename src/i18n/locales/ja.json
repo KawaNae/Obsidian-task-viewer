@@ -603,6 +603,8 @@
       "wholeNote": "ノート全体",
       "note": "ノート {{note}}",
       "noteMissing": "{{name}} という名前のノートはありません",
+      "noteUnlinkableHash": "{{note}} はリンクで指せません。パスに # が含まれ、リンクはそこで切れて、後ろを見出しとして読みます",
+      "noteUnlinkable": "{{note}} はリンクで指せません。このノートへのリンクは、別のファイルを指します",
       "wholeNoteShown": "ノート全体を表示します",
       "headingShown": "見出し {{heading}} のセクションを表示します",
       "noHeading": "{{note}} に見出し {{heading}} はありません",

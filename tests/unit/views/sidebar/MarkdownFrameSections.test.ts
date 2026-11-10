@@ -281,6 +281,28 @@ describe('the markdown frames of a sidebar', () => {
         expect(loading.links()).toEqual({ m: 'Note#Memo' });
     });
 
+    it('leaves the link of a frame whose note moved where no link names it, and shows no other note of the new link', async () => {
+        const frames = framesOver();
+        const note = frames.note('Note.md', '# Memo\nbody');
+        const named = frames.note('Kept.md', '# Memo\nkept');
+        frames.note('C.md', '# Memo\nanother');
+        frames.sections.open();
+        frames.show([memo('m', 'Note#Memo'), memo('k', 'Kept')]);
+        await settle();
+
+        // `C#/Note#Memo` would be read as the note `C`.
+        frames.rename(note, 'C#/Note.md');
+        // `C# memo` would be read as a note `C` too.
+        frames.rename(named, 'C# memo.md');
+        expect(frames.relinked).toEqual([]);
+        expect(frames.links()).toEqual({ m: 'Note#Memo', k: 'Kept' });
+        await settle();
+        expect(frames.views().map(v => v.shown.at(-1))).toMatchObject([
+            { reading: { kind: 'no-note' }, path: null },
+            { reading: { kind: 'no-note' }, path: null },
+        ]);
+    });
+
     it('does not follow its note to another extension: the frame says the note is not there', async () => {
         const frames = framesOver();
         const note = frames.note('Note.md', '# Memo\nbody');

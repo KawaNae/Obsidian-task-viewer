@@ -139,13 +139,23 @@ describe('the fields a dialog opens with', () => {
 });
 
 describe('the note the note field names', () => {
-    const vault = (files: Record<string, string>) => ({
-        vault: {
-            getMarkdownFiles: () => Object.keys(files).map(makeFile),
-            getAllFolders: () => [],
-            cachedRead: async (file: { path: string }) => files[file.path],
-        },
-    }) as never;
+    /**
+     * A vault of `files`, whose links resolve as Obsidian's do: the file at
+     * the path a link writes, else the one at that path with `.md`.
+     */
+    const vault = (files: Record<string, string>) => {
+        const made = new Map(Object.keys(files).map(path => [path, makeFile(path)]));
+        return {
+            vault: {
+                getMarkdownFiles: () => [...made.values()].filter(file => file.extension === 'md'),
+                getAllFolders: () => [],
+                cachedRead: async (file: { path: string }) => files[file.path],
+            },
+            metadataCache: {
+                getFirstLinkpathDest: (linkpath: string) => made.get(linkpath) ?? made.get(`${linkpath}.md`) ?? null,
+            },
+        } as never;
+    };
 
     it('is a note there is, with its headings', async () => {
         const note = await readSectionNote(vault({ 'Folder/Note.md': '# A\n## B' }), { text: 'Note', picked: null });
@@ -159,6 +169,31 @@ describe('the note the note field names', () => {
         expect(await readSectionNote(files, { text: 'Later', picked: null })).toEqual({ kind: 'missing', name: 'Later' });
         expect(await readSectionNote(files, { text: 'Dup', picked: null })).toEqual({ kind: 'ambiguous', name: 'Dup', paths: ['a/Dup.md', 'b/Dup.md'] });
         expect(await readSectionNote(files, { text: 'Dup', picked: 'b/Dup.md' })).toMatchObject({ kind: 'note', path: 'b/Dup.md' });
+    });
+
+    it('is a note no link names when the link written for it is read as another note, or none', async () => {
+        const files = vault({
+            'C#/Note.md': '# A',
+            'C.md': '',
+            'C# memo.md': '# A',
+            'foo.md': '',
+            'foo.md.md': '# A',
+            'x.pdf': '',
+            'x.pdf.md': '',
+        });
+        // Cut at the `#`: the folder's link names `C`, the file's `C` too, or nothing.
+        expect(await readSectionNote(files, { text: 'Note', picked: null })).toEqual({ kind: 'unlinkable', path: 'C#/Note.md' });
+        expect(await readSectionNote(files, { text: 'C# memo', picked: null })).toEqual({ kind: 'unlinkable', path: 'C# memo.md' });
+        // `foo.md` is the link of `foo.md.md`, and the path of `foo.md`.
+        expect(await readSectionNote(files, { text: 'foo.md', picked: 'foo.md.md' })).toEqual({ kind: 'unlinkable', path: 'foo.md.md' });
+        expect(await readSectionNote(files, { text: 'x.pdf', picked: 'x.pdf.md' })).toEqual({ kind: 'unlinkable', path: 'x.pdf.md' });
+    });
+
+    it('is a note a link names when nothing else is at its path without `.md`', async () => {
+        const files = vault({ 'Folder/Note.md': '# A', 'only.md.md': '# B', 'C.md': '' });
+        expect(await readSectionNote(files, { text: 'Note', picked: null })).toMatchObject({ kind: 'note', path: 'Folder/Note.md' });
+        expect(await readSectionNote(files, { text: 'only.md', picked: 'only.md.md' })).toMatchObject({ kind: 'note', path: 'only.md.md' });
+        expect(await readSectionNote(files, { text: 'C', picked: null })).toMatchObject({ kind: 'note', path: 'C.md' });
     });
 });
 
@@ -229,6 +264,24 @@ describe('the section dialog', () => {
         expect(d.shown().issues).toContainEqual({ at: 'heading', tone: 'error', text: t('modal.section.noHeading', { note: PATH, heading: 'Nowhere' }) });
         d.dialog.choose();
         expect(d.chosen).toEqual([]);
+    });
+
+    it('says a note no link names under the note field, why if its path has a `#`, and chooses nothing', async () => {
+        const d = dialogOf();
+        d.dialog.noteChanged({ text: 'Note', picked: null });
+        await d.asked[1].answer({ kind: 'unlinkable', path: 'C#/Note.md' });
+        expect(d.shown()).toEqual({
+            path: null,
+            choices: [],
+            canChoose: false,
+            issues: [{ at: 'note', tone: 'error', text: t('modal.section.noteUnlinkableHash', { note: 'C#/Note.md' }) }],
+        });
+        d.dialog.choose();
+        expect([d.chosen, d.closed()]).toEqual([[], 0]);
+
+        d.dialog.noteChanged({ text: 'foo.md', picked: 'foo.md.md' });
+        await d.asked[2].answer({ kind: 'unlinkable', path: 'foo.md.md' });
+        expect(d.shown().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.section.noteUnlinkable', { note: 'foo.md.md' }) }]);
     });
 
     it('opens on the fields it is given, and asks the note they name at once', () => {

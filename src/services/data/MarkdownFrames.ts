@@ -5,8 +5,8 @@
  * style.
  *
  * Nothing here looks a note up or reads a file: which note the link's path
- * names, and that note's lines, are the caller's to find
- * (`views/sidebar/MarkdownFrameReader.ts`).
+ * names is asked of the vault in `MarkdownFrameNotes.ts`, and the note's
+ * lines are the caller's to read (`views/sidebar/MarkdownFrameReader.ts`).
  */
 
 import { parseLinktext } from 'obsidian';
@@ -50,7 +50,9 @@ export function frameLink(path: string, subpath: string | null): string {
  * The link that names the section `subpath` of the note at `path` (a file's
  * path, with its `.md`): the path written whole, without the extension, so
  * the link names that note whatever other notes have its name. `subpath` is
- * as {@link frameLink} takes it.
+ * as {@link frameLink} takes it. Not every note is named so: a path with a
+ * `#` is cut there when the link is read. Whether the link names the note
+ * is asked of the vault (`frameLinkNames`).
  */
 export function noteFrameLink(path: string, subpath: string | null): string {
     return frameLink(path.replace(/\.md$/i, ''), subpath);
@@ -59,7 +61,7 @@ export function noteFrameLink(path: string, subpath: string | null): string {
 /**
  * `link` turned to the note at `path` (a file's path, with its `.md`), the
  * section it names kept: what a frame's link becomes when its note is
- * renamed or moved.
+ * renamed or moved, if it names the note there (`frameLinkNames`).
  */
 export function frameLinkAt(link: string, path: string): string {
     return noteFrameLink(path, frameTarget(link).subpath.replace(/^#/, ''));

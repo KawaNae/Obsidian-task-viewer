@@ -36,6 +36,7 @@ import type { EventRef, HoverParent, Menu } from 'obsidian';
 import { t } from '../../i18n';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import type { PluginContext } from '../../PluginContext';
+import { frameLinkNames } from '../../services/data/MarkdownFrameNotes';
 import { frameLinkAt, frameTarget } from '../../services/data/MarkdownFrames';
 import { emptySectionAsk, sectionAskOf, type SectionAsk } from '../../modals/section/SectionDialog';
 import { SectionModal } from '../../modals/section/SectionModal';
@@ -278,17 +279,25 @@ export class MarkdownFrameSections {
      * whichever file was reported: a folder renamed is reported first, its
      * notes' paths still old, and then each of its notes, once its path is
      * new.
+     *
+     * A note moved to a path no link names (`frameLinkNames`: a path with
+     * a `#`) has its frame's link left as it was: the frame then looks for
+     * the note of the old link, as a link of Obsidian would, rather than
+     * show whichever note the new link would name.
+     *
      * Every frame then looks for its note again, since a name a link
      * resolved may name another file now.
      */
     private noteMoved(): void {
         if (!this.notesKnown()) return;
+        const { metadataCache } = this.deps.plugin.app;
         const moved = new Map<string, string>();
         for (const [id, { reader }] of this.frames) {
             const path = reader.movedTo();
-            if (path === null) continue;
+            const note = reader.note;
+            if (path === null || note === null) continue;
             const link = frameLinkAt(reader.link, path);
-            if (link !== reader.link) moved.set(id, link);
+            if (link !== reader.link && frameLinkNames(metadataCache, link, note)) moved.set(id, link);
         }
         if (moved.size > 0) this.placement.relink(moved);
         this.followNotes();
