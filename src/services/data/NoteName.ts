@@ -27,9 +27,9 @@ export type NameCheck =
     | { ok: false; why: 'dot'; at: 'name' | 'folder' };
 
 /**
- * What the send dialog's note field holds: the text typed, and the note a
- * candidate picked from its list named, while the text is what the pick put
- * in.
+ * What a note field holds (see `NoteField`, in the send dialog and the
+ * section dialog): the text typed, and the note a candidate picked from its
+ * list named, while the text is what the pick put in.
  */
 export interface NoteAsk {
     text: string;

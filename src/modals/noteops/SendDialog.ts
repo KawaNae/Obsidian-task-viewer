@@ -201,7 +201,7 @@ export class SendDialog {
         if (facts?.kind === 'unnamed') {
             error('note', nameError(facts.why));
         } else if (facts?.kind === 'ambiguous') {
-            error('note', t('modal.send.noteAmbiguous', { name: facts.name, count: String(facts.files.length), notes: facts.files.map(file => file.path).join(', ') }));
+            error('note', t('modal.noteAmbiguous', { name: facts.name, count: String(facts.files.length), notes: facts.files.map(file => file.path).join(', ') }));
         } else if (note && note.heading.kind === 'many') {
             error('heading', t('modal.send.headings', { note: note.path, heading: note.to.section.heading, count: String(note.heading.count) }));
         }

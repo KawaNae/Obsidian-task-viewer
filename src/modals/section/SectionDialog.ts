@@ -251,7 +251,7 @@ export class SectionDialog {
         if (note?.kind === 'missing') {
             say('note', 'error', t('modal.section.noteMissing', { name: note.name }));
         } else if (note?.kind === 'ambiguous') {
-            say('note', 'error', t('modal.send.noteAmbiguous', { name: note.name, count: String(note.paths.length), notes: note.paths.join(', ') }));
+            say('note', 'error', t('modal.noteAmbiguous', { name: note.name, count: String(note.paths.length), notes: note.paths.join(', ') }));
         }
         if (note?.kind !== 'note') return { path: null, choices: [], issues, canChoose: false };
 

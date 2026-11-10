@@ -48,7 +48,7 @@ export class SectionField {
             onEnter: opts.onEnter,
         });
 
-        const { row, says } = createFormRow(container, t('modal.send.heading'), { icon: 'heading' });
+        const { row, says } = createFormRow(container, t('modal.heading'), { icon: 'heading' });
         this.headingSays = says;
         this.headingInput = row.createEl('input', {
             type: 'text',

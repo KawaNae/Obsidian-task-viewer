@@ -382,7 +382,7 @@ describe('what keeps a send from being asked', () => {
         const h = await answered({ kind: 'ambiguous', name: '本', files }, { timers });
 
         expect(h.state().canSend).toBe(false);
-        expect(h.state().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.send.noteAmbiguous', { name: '本', count: '2', notes: 'a/本.md, b/本.md' }) }]);
+        expect(h.state().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.noteAmbiguous', { name: '本', count: '2', notes: 'a/本.md, b/本.md' }) }]);
         expect(h.state().headings).toEqual([]);
         expect(h.dialog.request()).toBeNull();
         expect(timers).not.toHaveBeenCalled();
