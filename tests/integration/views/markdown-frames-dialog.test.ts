@@ -213,6 +213,9 @@ describe.each([
     /** A note that links to a note there is not. */
     const LINKER = `${PREFIX}-linker-${key}`;
     const GHOST = `${SHORT}-ghost`;
+    /** A note whose name has a `#`: a link to it is cut there. */
+    const HASHED = `${PREFIX}-hash-${key}#note`;
+    const HASHED_SHORT = HASHED.slice(HASHED.lastIndexOf('/') + 1);
     const LIST = {
         id: 'list',
         name: 'Tasks',
@@ -234,6 +237,7 @@ describe.each([
             ${write(NOTE, SECTIONS)}
             ${write(OTHER_NOTE, OTHER)}
             ${write(LINKER, `[[${GHOST}]]\n`)}
+            ${write(HASHED, '# A\nh01\n')}
             for (let i = 0; i < 40 && !app.metadataCache.getFileCache(app.vault.getAbstractFileByPath(${JSON.stringify(`${NOTE}.md`)}))?.headings; i++) await new Promise(r => setTimeout(r, 100));
             for (let i = 0; i < 40 && !app.metadataCache.unresolvedLinks[${JSON.stringify(`${LINKER}.md`)}]?.[${JSON.stringify(GHOST)}]; i++) await new Promise(r => setTimeout(r, 100));
             return JSON.stringify(true);
@@ -407,6 +411,57 @@ describe.each([
         expect(onDialog<boolean>(name, `return JSON.stringify(!!panel());`)).toBe(true);
     });
 
+    it('says under the note field that a note whose name has a # cannot be linked, and adds nothing', () => {
+        const before = op('');
+        const s = onDialog<DialogState>(name, `
+            await openAdd();
+            typeIn(inputs()[0], ${JSON.stringify(HASHED_SHORT)});
+            const item = () => items().find(e => e.querySelector('.suggestion-title')?.textContent === ${JSON.stringify(HASHED_SHORT)});
+            if (!(await until(() => item()))) throw new Error('the note is not offered');
+            item().click();
+            if (!(await until(() => state().noteErrors))) throw new Error('nothing is said of the note');
+            await wait(200);
+            const s = state();
+            cta().click();
+            await wait(200);
+            return JSON.stringify(s);
+        `);
+        expect(s.noteErrors).toBe(tr('modal.section.noteUnlinkableHash', { note: `${HASHED}.md` }));
+        expect(s.noteSays).toBeNull();
+        expect(s.canChoose).toBe(false);
+        // The button is off: its click chose nothing, and the dialog stays.
+        expect(onDialog<boolean>(name, `return JSON.stringify(!!panel());`)).toBe(true);
+        expect(op('').sidebar).toEqual(before.sidebar);
+    });
+
+    it('closes the heading field\'s list alone on Escape, the dialog left open', () => {
+        const r = onDialog<{ listed: boolean; closed: boolean; open: boolean; focused: boolean }>(name, `
+            await openAdd();
+            await pickNote(${JSON.stringify(SHORT)}, ${JSON.stringify(SHORT)});
+            await openHeadings();
+            const listed = choiceItems().length > 0;
+            pressKey(inputs()[1], 'Escape', 27);
+            await wait(300);
+            return JSON.stringify({ listed, closed: !document.querySelector('.suggestion-container'), open: !!panel(), focused: document.activeElement === inputs()[1] });
+        `);
+        expect(r).toEqual({ listed: true, closed: true, open: true, focused: true });
+    });
+
+    it('closes a dialog left open when its view is closed', () => {
+        const other = `${name}-closed`;
+        openView(other, type, { showSidebar: true, sidebar: [LIST] });
+        const r = onDialog<{ opened: boolean; closed: boolean }>(other, `
+            await openAdd();
+            await pickNote(${JSON.stringify(SHORT)}, ${JSON.stringify(SHORT)});
+            const opened = !!panel();
+            R[${JSON.stringify(other)}].detach();
+            delete R[${JSON.stringify(other)}];
+            const closed = await until(() => !document.querySelector('.tv-overlay .tv-section'));
+            return JSON.stringify({ opened, closed });
+        `);
+        expect(r).toEqual({ opened: true, closed: true });
+    });
+
     it('offers in the note field the notes there are, and no note an unresolved link names', () => {
         const titles = onDialog<string[]>(name, `
             await openAdd();
@@ -477,7 +532,15 @@ describe.each([
     });
 
     it('keeps the frames added once the view is opened again from its saved state', () => {
+        // A frame of its own, so the view opened again has one to keep whatever ran before.
+        onDialog(name, `
+            await openAdd();
+            await pickNote(${JSON.stringify(SHORT)}, ${JSON.stringify(SHORT)});
+            await choose();
+            return JSON.stringify(true);
+        `);
         const r = op('');
+        expect(r.sidebar.filter(one => one.kind === 'markdown').length).toBeGreaterThan(0);
         const restarted = `${name}-2`;
         restartView(name, restarted);
         const again = readFrames(PREFIX, restarted, '');
@@ -486,6 +549,32 @@ describe.each([
             expect(again.frames[f.id].text).toBe(r.frames[f.id].text);
         }
         ev(`(async () => { const R = window.__tvE2E; R[${JSON.stringify(restarted)}].detach(); delete R[${JSON.stringify(restarted)}]; return JSON.stringify(true); })()`);
+    });
+
+    describe('a note moved to a name with a #', () => {
+        const MOVED = `${PREFIX}-moved-${key}`;
+        /** A note at the part of the new name before its `#`, with the heading after it. */
+        const DECOY = `${PREFIX}-decoy-${key}`;
+
+        beforeAll(() => {
+            ev(`(async () => {
+                ${NOTES}
+                ${write(MOVED, 'm00\n')}
+                ${write(DECOY, '# x\nd01\n')}
+                return JSON.stringify(true);
+            })()`);
+            openView(name, type, { showSidebar: true, sidebar: [{ kind: 'markdown', id: 'moved', link: MOVED }] });
+        });
+
+        it('keeps its frame\'s link, and the frame shows no other note: it says the note is not there', () => {
+            expect(op('').frames.moved.text).toBe('m00');
+            const r = op(`await renameNote(${JSON.stringify(`${MOVED}.md`)}, ${JSON.stringify(`${DECOY}#x.md`)});`);
+            // What the test rests on: the note is at the new name.
+            expect(ev<boolean>(`(() => JSON.stringify(!!app.vault.getAbstractFileByPath(${JSON.stringify(`${DECOY}#x.md`)})))()`)).toBe(true);
+            expect(frameLinks(r)).toEqual({ moved: MOVED });
+            expect(r.frames.moved.missing).toBe(tr('sidebar.noteNotFound'));
+            expect(r.frames.moved.text).toBeNull();
+        });
     });
 
     describe('choosing a frame\'s section again', () => {
