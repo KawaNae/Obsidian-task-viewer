@@ -775,7 +775,7 @@ Three things more than one view draws are drawn by one part each.
 
 | Placement | Holds | Its own |
 |---|---|---|
-| `SidebarFrames` (Timeline, Calendar) | `sidebar` (the sidebar's frames), `sidebarCollapsed` | The add button (a new list's name is edited once it is drawn), Move up / Move down, Remove. A copy goes right below its list |
+| `SidebarFrames` (Timeline, Calendar) | `sidebar` (the sidebar's frames), `sidebarCollapsed` | The add button (a new list's name is edited once it is drawn), Move up / Move down (offered by where the frame stands as the menu opens, and made on the frames as they are when the item is chosen, the frame found again by its id), Remove. A copy goes right below its list |
 | `KanbanView` | `grid`, `gridCollapsed` | Insert a row or a column, remove one (never the last). A copy goes right of its list, and the other rows get a new list in that column |
 
 - The sidebar of Timeline and Calendar stacks frames (`SidebarFrame`, `types/ViewConfig.ts`), in the order `sidebar` holds them. A frame says what it shows in `kind`, and every kind keeps its `id` at the top; nothing else is common to the kinds. Kanban's cells are lists, not frames, and hold the bare definition
