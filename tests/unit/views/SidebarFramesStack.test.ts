@@ -4,19 +4,27 @@ import { t } from '../../../src/i18n';
 import { listFrame, type PinnedListDefinition, type SidebarFrame } from '../../../src/types';
 import { SidebarFrames, stackInOrder, type SidebarFramesDeps, type SidebarFramesState } from '../../../src/views/sidebar/SidebarFrames';
 import type { ListPlacement } from '../../../src/views/sharedUI/TaskListSections';
+import type { MarkdownFramePlacement } from '../../../src/views/sidebar/MarkdownFrameSections';
 import { FakeEl } from '../helpers/fakeDom';
 
 /**
  * The stack of a sidebar that holds a markdown frame among its lists: the
  * panel adds below, moves, removes and collapses a frame by its id, whatever
- * its kind. The lists' drawing is stood in for, and hands the test the
- * placement the panel is.
+ * its kind, and writes a markdown frame's link. The drawing of the lists and
+ * of the markdown frames is stood in for, and hands the test the placements
+ * the panel is.
  */
-const drawn = vi.hoisted(() => ({ placement: null as unknown }));
+const drawn = vi.hoisted(() => ({ placement: null as unknown, markdownPlacement: null as unknown }));
 
 vi.mock('../../../src/views/sharedUI/TaskListSections', () => ({
     TaskListSections: class {
         constructor(_deps: unknown, placement: unknown) { drawn.placement = placement; }
+    },
+}));
+
+vi.mock('../../../src/views/sidebar/MarkdownFrameSections', () => ({
+    MarkdownFrameSections: class {
+        constructor(_deps: unknown, placement: unknown) { drawn.markdownPlacement = placement; }
     },
 }));
 
@@ -29,12 +37,14 @@ const MEMO: SidebarFrame = { kind: 'markdown', id: 'm', link: 'Folder/Note#Memo'
 /** A panel over `sidebar`, with what it wrote into the view's state. */
 function panelOver(sidebar: SidebarFrame[]) {
     let state: SidebarFramesState = { sidebar, sidebarCollapsed: { a: true } };
+    let writes = 0;
     new SidebarFrames({ plugin: { app: {} } } as unknown as SidebarFramesDeps, {
         state: () => state,
         subscribe: () => () => {},
-        write: patch => { state = { ...state, ...patch }; },
+        write: patch => { writes++; state = { ...state, ...patch }; },
     });
     const placement = drawn.placement as ListPlacement;
+    const markdown = drawn.markdownPlacement as MarkdownFramePlacement;
     /** Choose `title` in the items the panel adds to the menu of the frame `id`. */
     const choose = (id: string, title: string) => open(id)(title);
     /** Open the menu of the frame `id`: what it gives chooses one of its items, then or later. */
@@ -62,7 +72,7 @@ function panelOver(sidebar: SidebarFrame[]) {
     };
     /** Change the frames from outside the menu, as a rename of a note does. */
     const set = (frames: SidebarFrame[]) => { state = { ...state, sidebar: frames }; };
-    return { placement, choose, open, set, ids: () => state.sidebar?.map(f => f.id), state: () => state };
+    return { placement, markdown, choose, open, set, ids: () => state.sidebar?.map(f => f.id), state: () => state, writes: () => writes };
 }
 
 describe("the stack of a sidebar that holds a markdown frame", () => {
@@ -131,6 +141,28 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
         const panel = panelOver([A, MEMO, B]);
         panel.placement.insertCopy(A, list('copy'));
         expect(panel.state().sidebar).toEqual([A, listFrame(list('copy')), MEMO, B]);
+    });
+
+    it('writes the links it is given into the markdown frames of their ids, at once, and into no list', () => {
+        const other: SidebarFrame = { kind: 'markdown', id: 'n', link: 'Other#Note' };
+        const panel = panelOver([A, MEMO, other, B]);
+        panel.markdown.relink(new Map([['m', 'Moved/Note#Memo'], ['a', 'Not/A#List']]));
+        expect(panel.state().sidebar).toEqual([A, { ...MEMO, link: 'Moved/Note#Memo' }, other, B]);
+        expect(panel.writes()).toBe(1);
+    });
+
+    it('writes nothing for links that change no frame: a link a frame has already, or an id no markdown frame has', () => {
+        const panel = panelOver([A, MEMO]);
+        panel.markdown.relink(new Map([['m', MEMO.link], ['gone', 'Gone#Memo']]));
+        expect(panel.writes()).toBe(0);
+    });
+
+    it('collapses and removes a markdown frame by its id, through the place the markdown frames are handed', () => {
+        const panel = panelOver([A, MEMO, B]);
+        panel.markdown.setCollapsed('m', true);
+        expect(panel.state().sidebarCollapsed).toEqual({ a: true, m: true });
+        panel.markdown.remove('m');
+        expect(panel.state().sidebar).toEqual([A, B]);
     });
 
     it('writes a change of a list into the list frame of its id, and into no markdown frame', () => {

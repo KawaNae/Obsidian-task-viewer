@@ -106,8 +106,8 @@
 }
 
 /* The frames stacked down the panel's body. The custom property says this
-   stylesheet is applied: the panel reads it before it renders what measures
-   the room it has (SidebarFrames). */
+   stylesheet is applied: the markdown frames read it before they render
+   what measures the room it has (MarkdownFrameSections). */
 .tv-sidebar__frames {
     --tv-sidebar-frames-styled: 1;
     padding: 0 4px;
