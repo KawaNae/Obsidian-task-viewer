@@ -29,6 +29,12 @@
  * place of its text: the body is taken out, and rendered again once the
  * view stops masking or the mask is gone. The row's name and the style stay.
  *
+ * A checkbox the body's markdown draws (`- [ ] …`) does not toggle on a
+ * click: the render draws it with nothing that writes the note, so a click
+ * would only change how it looks. A checkbox a block of another plugin
+ * draws (a Dataview task list) is that plugin's, which writes the note
+ * itself, and is left alone.
+ *
  * A frame whose note or section is not there says which, in its card, and
  * offers to remove itself. It is shown again once the note or the section
  * is found.
@@ -89,6 +95,24 @@ interface CardShown {
     content: CardContent;
     el: HTMLElement;
     component: Component | null;
+}
+
+/**
+ * The block a plugin draws for a fenced code block of its language
+ * (`block-language-dataview`): what is in it is the plugin's.
+ */
+const CODE_BLOCK = '[class^="block-language-"], [class*=" block-language-"]';
+
+/**
+ * Whether `target` is a task's checkbox the markdown of `body` drew, and
+ * not one a code block in it drew. Asked by selector, not by class: an
+ * element of a pop-out window is not an instance of this window's classes.
+ */
+function isMarkdownCheckbox(target: EventTarget | null, body: HTMLElement): boolean {
+    const el = target as Element | null;
+    if (typeof el?.matches !== 'function' || !el.matches('input.task-list-item-checkbox')) return false;
+    const block = el.closest(CODE_BLOCK);
+    return block === null || !body.contains(block);
 }
 
 function sameContent(a: CardContent, b: CardContent): boolean {
@@ -225,6 +249,9 @@ export class MarkdownFrameView {
         const observer = new MutationObserver(() => this.host.bindLinks(el, body.path));
         observer.observe(el, { childList: true, subtree: true });
         component.register(() => observer.disconnect());
+        component.registerDomEvent(el, 'click', (event) => {
+            if (isMarkdownCheckbox(event.target, el)) event.preventDefault();
+        });
 
         MarkdownRenderer.render(this.host.app, body.markdown, el, body.path, component)
             .catch((e: unknown) => {
