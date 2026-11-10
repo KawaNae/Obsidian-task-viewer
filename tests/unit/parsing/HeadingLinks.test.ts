@@ -145,6 +145,16 @@ describe('headingLinks', () => {
         expect(linksOf(['# Q', '## P', '### X', '# P', '## X'])).toEqual(['Q', 'P', 'X', null, null]);
     });
 
+    it('names no heading that its name finds an earlier heading by and its names above it find none by', () => {
+        const note = ['# X', '### P', '# P', '## X'];
+        expect(linksOf(note)).toEqual(['X', 'P', null, null]);
+        // `X` finds the `# X`, and `P#X` finds nothing: `### P` has no deeper `X` below it.
+        expect(lineOf(note, 'X')).toBe(0);
+        expect(lineOf(note, 'P#X')).toBeNull();
+        // A subpath of another form still names the last `X`.
+        expect(lineOf(note, 'X#X')).toBe(3);
+    });
+
     it('writes a name without what would cut a link', () => {
         const note = ['## C# notes | v2', '## [[Note]] and ^caret', '## 100%% sure', '## a\\b: c', '## Hello, World! (draft)'];
         expect(linksOf(note)).toEqual(['C notes v2', 'Note and caret', '100 sure', 'a b c', 'Hello, World! (draft)']);

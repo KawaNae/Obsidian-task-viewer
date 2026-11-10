@@ -106,11 +106,13 @@ export interface HeadingLink {
  *   the name
  * - otherwise the names of the headings it stands under, outermost first,
  *   and its own, when those name it
- * - otherwise none: by its name and by the names above it alike, a link
- *   finds an earlier heading. The earlier one need not stand under headings
- *   of the same names, since the walk takes the first deeper heading of the
- *   next name wherever it stands: of `# P`, `## Q`, `### X`, `## X`, the
- *   second `X` is named by none, `P#X` finding `### X`
+ * - otherwise none: neither of the two finds it. Each finds another heading
+ *   or nothing, since the walk takes the first heading of a name and then
+ *   the first deeper one of the next name wherever it stands: of `# P`,
+ *   `## Q`, `### X`, `## X`, `P#X` finds `### X`, and of `# X`, `### P`,
+ *   `# P`, `## X`, `P#X` finds nothing, `### P` having no deeper `X`. Other
+ *   subpaths may still name it (`X#X` names the last `X`), but none is
+ *   looked for
  *
  * A subpath names a heading when {@link resolveHeading} finds that heading
  * by it, so what is written here is read back as the heading it was written

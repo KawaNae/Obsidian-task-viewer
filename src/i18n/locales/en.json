@@ -609,8 +609,8 @@
       "wholeNoteShown": "Shows the whole note",
       "headingShown": "Shows the section of the heading {{heading}}",
       "noHeading": "{{note}} has no heading {{heading}}",
-      "unlinkable": "A link cannot name this {{heading}}: looked for by its name, or by the headings above it, a link finds an earlier heading. Only the earlier one can be chosen.",
-      "unlinkableShort": "A link cannot name it",
+      "unlinkable": "This dialog cannot write a link to this {{heading}}: neither a link of its name nor one of the headings above it and its name finds it.",
+      "unlinkableShort": "This dialog cannot link to it",
       "add": "Add",
       "relink": "Choose"
     }
