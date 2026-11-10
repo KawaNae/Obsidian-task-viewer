@@ -732,8 +732,11 @@ describe.each([
             const v = V(${JSON.stringify(name)});
             const win = el.win ?? window;
             const raf = win.requestAnimationFrame;
+            const caf = win.cancelAnimationFrame;
             const frames = [];
-            win.requestAnimationFrame = (cb) => { frames.push(cb); return -frames.length; };
+            let heldCount = 0;
+            win.requestAnimationFrame = (cb) => { frames.push(cb); heldCount++; return -frames.length; };
+            win.cancelAnimationFrame = (id) => { if (id < 0) frames[-id - 1] = null; else caf.call(win, id); };
             let atRename = null;
             const ref = app.vault.on('rename', () => { atRename ??= { connected: !!el.querySelector('.markdown-frame[data-frame-id="added"]') }; });
             try {
@@ -743,11 +746,12 @@ describe.each([
                 const root = v.sidebarFrames.markdown.elementOf('added');
                 const before = { connected: root.isConnected, body: !!root.querySelector('.markdown-frame__content') };
                 await renameNote(${JSON.stringify(`${ADDED}.md`)}, ${JSON.stringify(`${ADDED}-moved.md`)});
-                return JSON.stringify({ before, atRename, frames: frames.length });
+                return JSON.stringify({ before, atRename, frames: heldCount });
             } finally {
                 app.vault.offref(ref);
                 win.requestAnimationFrame = raf;
-                for (const cb of frames) raf.call(win, cb);
+                win.cancelAnimationFrame = caf;
+                for (const cb of frames) if (cb) raf.call(win, cb);
             }
         })()`);
         // What the test rests on: no draw ran between the adding and the rename.
@@ -766,11 +770,11 @@ describe.each([
     /**
      * The visual day moves on a save only when the start hour is set across
      * the hour now: to an hour still ahead, or to 0 before the start hour.
-     * Skipped near the end of the day, when no hour ahead is left.
+     * The hour ahead is two on, so the test may run past the end of this
+     * one; skipped from 22:00, when two on is no hour of the day.
      */
-    const now = new Date();
-    const h = now.getHours();
-    it.skipIf(h === 23 || (h === 22 && now.getMinutes() >= 50))('reads its note again when a save of the settings moves the visual day', () => {
+    const h = new Date().getHours();
+    it.skipIf(h >= 22)('reads its note again when a save of the settings moves the visual day', () => {
         const { startHour, scopeKeys } = readSettings(['startHour', 'scopeKeys']) as { startHour: number; scopeKeys: Record<string, string> };
         const rolledHour = h < startHour ? 0 : h + 2;
         expect(visualDay(rolledHour)).not.toBe(visualDay(startHour));
@@ -862,10 +866,13 @@ describe.each([
         if (!dataview) throw new Error('Dataview is not enabled in the Dev vault');
         const line = (r: { notes: Record<string, string> }) => r.notes[`${QUERIED}.md`].split('\n')[0];
 
-        let r = clickBox('box in a query', 1500);
+        // Dataview refreshes its lists an interval after a note changed. The
+        // second click waits that out, so it is on the list as Dataview has
+        // it for the note the first click wrote.
+        const refreshMs = ev<number>(`(() => JSON.stringify(app.plugins.plugins.dataview.settings.refreshInterval ?? 2500))()`);
+        let r = clickBox('box in a query', refreshMs + 1000);
         expect(r.found).toBe(true);
         expect(line(r)).toMatch(/^- \[x\] box in a query/);
-        // Dataview draws the list anew once the note changed: the checkbox is found again.
         r = clickBox('box in a query', 1500);
         expect(r.found).toBe(true);
         expect(line(r)).toMatch(/^- \[ \] box in a query/);
