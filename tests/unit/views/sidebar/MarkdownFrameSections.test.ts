@@ -5,6 +5,7 @@ import type { FrameRead } from '../../../../src/views/sidebar/MarkdownFrameReade
 import { MarkdownFrameSections, type MarkdownFrameDeps, type MarkdownFramePlacement } from '../../../../src/views/sidebar/MarkdownFrameSections';
 import type { SectionAsk } from '../../../../src/modals/section/SectionDialog';
 import { makeFile } from '../../helpers/vaultSession';
+import { t } from '../../../../src/i18n';
 
 /**
  * The markdown frames of a sidebar, over a vault of the test's: the frames
@@ -57,7 +58,7 @@ interface StandInDialog {
 }
 
 interface StandInView {
-    host: { relink(): void };
+    host: { relink(): void; showMenu(event: MouseEvent): void };
     id: string;
     title: string;
     shown: FrameRead[];
@@ -104,11 +105,34 @@ function framesOver(options: { ready?: boolean } = {}) {
         },
         setCollapsed: () => {},
         remove: () => {},
-        appendMenuItems: () => {},
+        appendMenuItems: (menu) => { menu.addItem(item => item.setTitle('placement')); },
         masked: () => false,
     };
+    /** A menu, stood in for: the titles of its items, and what a click of each does. */
+    const menus: { title: string; click: () => void }[][] = [];
+    const menuPresenter = {
+        present: (build: (menu: unknown) => void) => {
+            const items: { title: string; click: () => void }[] = [];
+            const menu = {
+                addItem(make: (item: unknown) => void) {
+                    const item = { title: '', click: () => {} };
+                    const handle = {
+                        setTitle: (title: string) => { item.title = title; return handle; },
+                        setIcon: () => handle,
+                        onClick: (click: () => void) => { item.click = click; return handle; },
+                    };
+                    make(handle);
+                    items.push(item);
+                    return menu;
+                },
+                addSeparator: () => menu,
+            };
+            build(menu);
+            menus.push(items);
+        },
+    };
     const deps = {
-        plugin: { app, settings: DEFAULT_SETTINGS },
+        plugin: { app, settings: DEFAULT_SETTINGS, menuPresenter },
         links: {},
         getHoverParent: () => ({}),
     } as unknown as MarkdownFrameDeps;
@@ -135,6 +159,11 @@ function framesOver(options: { ready?: boolean } = {}) {
         rename,
         reads,
         relinked,
+        /** The items of the ⋯ menu of the frame `view` shows, opened now. */
+        menuOf(view: StandInView) {
+            view.host.showMenu({} as MouseEvent);
+            return menus.at(-1)!;
+        },
         /** The state's links, by frame id. */
         links: () => Object.fromEntries(state.frames.flatMap(f => f.kind === 'markdown' ? [[f.id, f.link]] : [])),
         views: () => views.made as StandInView[],
@@ -396,6 +425,25 @@ describe('the markdown frames of a sidebar', () => {
         expect(new Set(a.folds)).toEqual(new Set([true]));
         await settle();
         expect(a.shown.at(-1)).toMatchObject({ reading: { kind: 'heading', markdown: 'other' } });
+    });
+
+    it('offers in its ⋯ menu to choose its section again, found or not, after Open note and before the placement\'s items', async () => {
+        const frames = framesOver();
+        frames.note('Folder/Note.md', '# Memo\nbody\n# Other\nother');
+        frames.sections.open();
+        frames.show([memo('a', 'Folder/Note#Memo'), memo('m', 'Gone#Memo'), LIST], { a: true });
+        await settle();
+        const [a, m] = frames.views();
+
+        expect(frames.menuOf(a).map(item => item.title)).toEqual([t('sidebar.openNote'), t('sidebar.relinkSection'), 'placement']);
+        expect(frames.menuOf(m).map(item => item.title)).toEqual([t('sidebar.relinkSection'), 'placement']);
+
+        frames.menuOf(a).find(item => item.title === t('sidebar.relinkSection'))!.click();
+        const [dialog] = frames.dialogs();
+        expect(dialog.opts).toMatchObject({ purpose: 'relink', initial: { note: { text: 'Note', picked: 'Folder/Note.md' }, heading: { text: 'Memo', picked: null } } });
+        dialog.opts.chosen('Folder/Note#Other');
+        expect(frames.frames()).toEqual([memo('a', 'Folder/Note#Other'), memo('m', 'Gone#Memo'), LIST]);
+        expect(new Set(a.folds)).toEqual(new Set([true]));
     });
 
     it('closes the section dialogs open still when it closes, and not one closed already', () => {

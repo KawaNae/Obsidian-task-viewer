@@ -864,7 +864,8 @@
     "openNote": "Open note",
     "noteNotFound": "Note not found",
     "sectionNotFound": "Section not found",
-    "relink": "Choose again"
+    "relink": "Choose again",
+    "relinkSection": "Choose section again"
   },
   "pinnedList": {
     "addList": "Add List",

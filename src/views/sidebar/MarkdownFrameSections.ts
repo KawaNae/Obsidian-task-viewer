@@ -349,9 +349,13 @@ export class MarkdownFrameSections {
     }
 
     /**
-     * The ⋯ menu of the frame `id`: open its note, when there is one, then
-     * the placement's items. The note opened is the one the frame found, at
-     * the section its link names, not what the link would resolve to anew.
+     * The ⋯ menu of the frame `id`: open its note, when there is one; choose
+     * its section again, as the card's button of a frame not found does;
+     * then the placement's items. The note opened is the one the frame
+     * found, at the section its link names, not what the link would resolve
+     * to anew. Choosing again is offered whether the section is found or
+     * not, and folded or not: a frame that shows another section than was
+     * meant is found, and a folded frame's card is hidden.
      */
     private showMenu(id: string, reader: MarkdownFrameReader, event: MouseEvent): void {
         const { plugin } = this.deps;
@@ -367,6 +371,10 @@ export class MarkdownFrameSections {
                         void openFile(plugin.app, note.path, plugin.settings.reuseExistingTab, subpath ? { subpath } : undefined);
                     }));
             }
+            menu.addItem(item => item
+                .setTitle(t('sidebar.relinkSection'))
+                .setIcon('pencil')
+                .onClick(() => this.relink(id, reader)));
             this.placement.appendMenuItems(menu, id);
         }, { kind: 'mouseEvent', event });
     }
