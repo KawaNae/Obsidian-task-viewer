@@ -1,8 +1,8 @@
 /**
  * The section dialog of Timeline's and Calendar's sidebar, in the running
  * Dev vault, driven as the user drives it: opened from the add button's
- * menu to add a markdown frame, and from the card of a frame whose note or
- * section is not there to choose its section again. The fields are typed
+ * menu to add a markdown frame, and from a frame's ⋯ menu, or the card of
+ * a frame whose note or section is not there, to choose its section again. The fields are typed
  * in as a person types (the text, then its `input` event), the items of
  * their lists clicked, or chosen with the arrow keys and Enter.
  *
@@ -586,6 +586,10 @@ describe.each([
         ];
         const relinkOf = (id: string) => `frame(${JSON.stringify(id)}).querySelector('.markdown-frame__missing-relink').click();
             if (!(await until(() => panel()))) throw new Error('no section dialog');`;
+        /** Open the dialog from the ⋯ menu of the frame `id`, as the user does: its item picked from the menu Obsidian holds. */
+        const relinkFromMenu = (id: string) => `await openMenu(${JSON.stringify(id)});
+            menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.relinkSection'))});
+            if (!(await until(() => panel()))) throw new Error('no section dialog');`;
 
         beforeAll(() => {
             openView(name, type, { showSidebar: true, sidebar: [LIST, ...FRAMES], sidebarCollapsed: { folded: true } });
@@ -619,15 +623,15 @@ describe.each([
             expect(r.frames.renamed.text).toBe('s05');
         });
 
-        it('keeps a folded frame folded when its section is chosen again', () => {
-            // The card, which holds the button, is hidden while the frame is folded: the button is clicked through the DOM.
+        it('chooses again from its ⋯ menu the section of a folded frame not found, which stays folded', () => {
+            // The card, which holds the button, is hidden while the frame is folded: the ⋯ menu of its row is there.
             let r = op(write(NOTE, SECTIONS.replace('### Detail', '### Details').replace('# Log', '# Journal')));
             expect(r.frames.folded.collapsed).toBe(true);
             expect(r.frames.folded.missing).toBe(tr('sidebar.sectionNotFound'));
             const before = r;
 
             onDialog(name, `
-                ${relinkOf('folded')}
+                ${relinkFromMenu('folded')}
                 await until(() => state().noteSays);
                 await openHeadings('Journal');
                 await pickChoice('Journal');
@@ -669,6 +673,32 @@ describe.each([
             expect(r.frames.gone.missing).toBeNull();
             expect(r.frames.gone.name).toBe(OTHER_SHORT);
             expect(r.frames.gone.text).toBe('o00 Other o01');
+        });
+
+        it('chooses again from its ⋯ menu the section of a frame that is found: only its link is written, its id, place and fold kept', () => {
+            const before = op('');
+            expect(before.frames.renamed.missing).toBeNull();
+            expect(before.frames.renamed.name).toBe('Details');
+
+            const s = onDialog<DialogState>(name, `
+                ${relinkFromMenu('renamed')}
+                await until(() => state().noteSays);
+                const s = state();
+                await openHeadings('Plan');
+                await pickChoice('Plan');
+                await choose();
+                return JSON.stringify(s);
+            `);
+            expect(s.title).toBe(tr('modal.section.relinkTitle'));
+            expect(s.note).toBe(SHORT);
+
+            const r = op('');
+            expect(ids(r)).toEqual(ids(before));
+            expect(r.order).toEqual(before.order);
+            expect(r.collapsed).toEqual(before.collapsed);
+            expect(frameLinks(r)).toEqual({ ...frameLinks(before), renamed: `${NOTE}#Plan` });
+            expect(r.frames.renamed.name).toBe('Plan');
+            expect(r.frames.renamed.text).toBe('s01 Tasks s02');
         });
     });
 });
