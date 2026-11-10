@@ -608,7 +608,7 @@
       "wholeNoteShown": "Shows the whole note",
       "headingShown": "Shows the section of the heading {{heading}}",
       "noHeading": "{{note}} has no heading {{heading}}",
-      "unlinkable": "A link cannot name this {{heading}}: a heading of that name comes before it, under headings of the same names. Only the first can be chosen.",
+      "unlinkable": "A link cannot name this {{heading}}: looked for by its name, or by the headings above it, a link finds an earlier heading. Only the earlier one can be chosen.",
       "unlinkableShort": "A link cannot name it",
       "add": "Add",
       "relink": "Choose"
