@@ -61,10 +61,10 @@ const PANEL_FIELDS: readonly (keyof SidebarFramesState)[] = ['sidebar', 'sidebar
 
 /** The header row of a frame, whatever its kind: a compact row in the sidebar. */
 const ROW_CLASSES = {
-    header: 'pinned-list__header',
-    toggle: 'pinned-list__toggle',
-    name: 'pinned-list__name',
-    button: 'pinned-list__header-btn',
+    header: 'sidebar-frame__header',
+    toggle: 'sidebar-frame__toggle',
+    name: 'sidebar-frame__name',
+    button: 'sidebar-frame__header-btn',
 };
 
 /** A list frame: the row, and the cards under it with no card frame. */

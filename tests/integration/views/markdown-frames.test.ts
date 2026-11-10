@@ -136,7 +136,7 @@ function names(name: string): string {
         ${PRELUDE}
         ${NOTES}
         const el = V(${JSON.stringify(name)}).contentEl;
-        const C = { root: 'markdown-frame', header: 'pinned-list__header' };
+        const C = { root: 'markdown-frame', header: 'sidebar-frame__header' };
         const frame = (id) => {
             const f = el.querySelector('.markdown-frame[data-frame-id="' + id + '"]');
             if (!f) throw new Error('no frame ' + id);
@@ -167,7 +167,7 @@ function op(name: string, body: string, settleMs = SETTLE_MS): Reading {
             const body = f.querySelector('.markdown-frame__content');
             frames[f.dataset.frameId] = {
                 id: f.dataset.frameId,
-                name: f.querySelector('.pinned-list__name')?.textContent ?? null,
+                name: f.querySelector('.sidebar-frame__name')?.textContent ?? null,
                 collapsed: f.classList.contains('markdown-frame--collapsed'),
                 shown: getComputedStyle(card).display !== 'none',
                 text: body ? text(body) : null,

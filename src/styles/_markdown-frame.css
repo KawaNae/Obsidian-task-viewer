@@ -2,8 +2,8 @@
    Markdown Frames — Sidebar frames drawing a section of a note
    ========================================================================== */
 
-/* One frame. Its header row is a list frame's (`pinned-list__header`,
-   `__toggle`, `__name`, `__header-btn`, _pinned-list.css). */
+/* One frame. Its header row is every frame's (`sidebar-frame__header`,
+   `__toggle`, `__name`, `__header-btn`, _sidebar-frame.css). */
 .markdown-frame {
     margin-bottom: 8px;
 }

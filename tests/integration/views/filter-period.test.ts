@@ -47,8 +47,8 @@ function note(): string {
 
 const C = {
     root: 'pinned-list',
-    header: 'pinned-list__header',
-    name: 'pinned-list__name',
+    header: 'sidebar-frame__header',
+    name: 'sidebar-frame__name',
     nameInput: 'pinned-list__name-input',
     count: 'pinned-list__count',
     body: 'pinned-list__body',
