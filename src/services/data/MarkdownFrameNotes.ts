@@ -12,7 +12,7 @@
 
 import type { MetadataCache, TFile } from 'obsidian';
 import { noteAt } from '../../utils/NoteLink';
-import { frameTarget } from './MarkdownFrames';
+import { frameTarget, noteFrameLink } from './MarkdownFrames';
 
 type LinkpathCache = Pick<MetadataCache, 'getFirstLinkpathDest'>;
 
@@ -22,14 +22,23 @@ export function frameNote(metadataCache: LinkpathCache, link: string): TFile | n
 }
 
 /**
- * Whether the frame link `link`, written for the note `note`, names that
- * note when it is read. One that does not names another note, or none:
+ * Why a frame link written for a note does not name it when it is read:
  *
- * - a path with a `#` (`C#/Note`, `C# memo`): a link is cut at its first
- *   `#`, so the rest is read as a heading, as Obsidian reads its own links
- * - a name that, its `.md` taken off, is the path of another file
+ * - `cut`: the note part read is shorter than the path written, a link
+ *   being cut at its first `#` and the rest read as a heading, as Obsidian
+ *   reads its own links (`C#/Note`, `C# memo`)
+ * - `other`: the note part is read whole and names another file, or none:
+ *   a name that, its `.md` taken off, is the path of another file
  *   (`foo.md.md` beside `foo.md`, `x.pdf.md` beside `x.pdf`)
  */
-export function frameLinkNames(metadataCache: LinkpathCache, link: string, note: TFile): boolean {
-    return frameNote(metadataCache, link) === note;
+export type FrameLinkMiss = 'cut' | 'other';
+
+/**
+ * Why the frame link `link`, written for the note `note` (by
+ * `noteFrameLink` or `frameLinkAt`, its path whole), does not name that
+ * note when it is read; null when it names it.
+ */
+export function frameLinkMiss(metadataCache: LinkpathCache, link: string, note: TFile): FrameLinkMiss | null {
+    if (frameNote(metadataCache, link) === note) return null;
+    return frameTarget(link).path === noteFrameLink(note.path, null) ? 'other' : 'cut';
 }

@@ -87,7 +87,7 @@ describe('the reader of a markdown frame', () => {
         expect(frame.pending).toHaveLength(2);
     });
 
-    it('tells the path its note moved to: none while it is where it was found, none once it is no note', () => {
+    it('tells the note it found once it moved, at its new path: none while it is where it was found, none once it is no note', () => {
         const frame = readerOver('Note#Memo');
         expect(frame.reader.movedTo()).toBeNull();
         const note = frame.name('Note', 'Note.md');
@@ -95,7 +95,7 @@ describe('the reader of a markdown frame', () => {
         expect(frame.reader.movedTo()).toBeNull();
 
         note.path = 'Moved/Note.md';
-        expect(frame.reader.movedTo()).toBe('Moved/Note.md');
+        expect(frame.reader.movedTo()?.path).toBe('Moved/Note.md');
 
         note.path = 'Moved/Note.txt';
         note.extension = 'txt';

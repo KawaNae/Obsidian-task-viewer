@@ -1,7 +1,7 @@
 import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import { logWarn } from '../../log/log';
-import { frameLinkNames } from '../../services/data/MarkdownFrameNotes';
+import { frameLinkMiss, type FrameLinkMiss } from '../../services/data/MarkdownFrameNotes';
 import { frameHeadings, frameTarget, noteFrameLink } from '../../services/data/MarkdownFrames';
 import { NoteName, type NoteAsk } from '../../services/data/NoteName';
 import { splitLines } from '../../services/persistence/FileLines';
@@ -22,8 +22,8 @@ import type { FormIssue } from '../form/FormIssue';
  *   picked, the one note by a name, the note at a path or the one whose
  *   path ends in it. A name no note has, or more than one note has, names
  *   none, and nothing can be chosen until one is picked. Nor can it be for a
- *   note no link names (`frameLinkNames`: a path with a `#`), or one that
- *   could not be read.
+ *   note no link names (`frameLinkMiss`, which says why), or one that could
+ *   not be read.
  * - The heading field offers the whole note first, then the note's
  *   headings, each as deep as the headings it stands under. A heading no
  *   subpath names (`headingLinks`) is offered but cannot be picked.
@@ -63,7 +63,8 @@ export interface SectionAsk {
 /**
  * The note the note field names: none while it is empty, a name no note has
  * (`missing`), more than one note (`ambiguous`, by their paths), a note no
- * link names (`unlinkable`), a note that could not be read (`unreadable`,
+ * link names (`unlinkable`, with why its link does not name it), a note
+ * that could not be read (`unreadable`,
  * by the name typed), or the note, with its headings and the subpath that
  * names each.
  */
@@ -71,7 +72,7 @@ export type SectionNote =
     | { kind: 'empty' }
     | { kind: 'missing'; name: string }
     | { kind: 'ambiguous'; name: string; paths: readonly string[] }
-    | { kind: 'unlinkable'; path: string }
+    | { kind: 'unlinkable'; path: string; miss: FrameLinkMiss }
     | { kind: 'unreadable'; name: string }
     | { kind: 'note'; path: string; headings: readonly HeadingLink[] };
 
@@ -131,11 +132,11 @@ export async function readSectionNote(app: Pick<App, 'vault' | 'metadataCache'>,
         case 'ambiguous':
             return { kind: 'ambiguous', name: at.name, paths: at.files.map(file => file.path) };
         case 'existing': {
-            // The link is the frame's whatever section is chosen: its note is
-            // the part before the first `#`, which no heading's subpath changes.
-            if (!frameLinkNames(app.metadataCache, noteFrameLink(at.file.path, null), at.file)) {
-                return { kind: 'unlinkable', path: at.file.path };
-            }
+            // Whichever heading is chosen, the link's note part is the same:
+            // it is what comes before the first `#`, and a subpath only adds
+            // to what comes after. The whole note's link is asked for all.
+            const miss = frameLinkMiss(app.metadataCache, noteFrameLink(at.file.path, null), at.file);
+            if (miss !== null) return { kind: 'unlinkable', path: at.file.path, miss };
             const { lines } = splitLines(await app.vault.cachedRead(at.file));
             return { kind: 'note', path: at.file.path, headings: frameHeadings(lines) };
         }
@@ -272,7 +273,7 @@ export class SectionDialog {
                 say('note', 'error', t('modal.noteAmbiguous', { name: note.name, count: String(note.paths.length), notes: note.paths.join(', ') }));
                 break;
             case 'unlinkable':
-                say('note', 'error', t(note.path.includes('#') ? 'modal.section.noteUnlinkableHash' : 'modal.section.noteUnlinkable', { note: note.path }));
+                say('note', 'error', t(note.miss === 'cut' ? 'modal.section.noteUnlinkableHash' : 'modal.section.noteUnlinkable', { note: note.path }));
                 break;
             case 'unreadable':
                 say('note', 'error', t('modal.section.noteUnreadable', { name: note.name }));

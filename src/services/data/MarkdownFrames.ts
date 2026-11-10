@@ -52,7 +52,7 @@ export function frameLink(path: string, subpath: string | null): string {
  * the link names that note whatever other notes have its name. `subpath` is
  * as {@link frameLink} takes it. Not every note is named so: a path with a
  * `#` is cut there when the link is read. Whether the link names the note
- * is asked of the vault (`frameLinkNames`).
+ * is asked of the vault (`frameLinkMiss`).
  */
 export function noteFrameLink(path: string, subpath: string | null): string {
     return frameLink(path.replace(/\.md$/i, ''), subpath);
@@ -61,7 +61,7 @@ export function noteFrameLink(path: string, subpath: string | null): string {
 /**
  * `link` turned to the note at `path` (a file's path, with its `.md`), the
  * section it names kept: what a frame's link becomes when its note is
- * renamed or moved, if it names the note there (`frameLinkNames`).
+ * renamed or moved, if it names the note there (`frameLinkMiss`).
  */
 export function frameLinkAt(link: string, path: string): string {
     return noteFrameLink(path, frameTarget(link).subpath.replace(/^#/, ''));
