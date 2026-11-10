@@ -844,7 +844,6 @@
     "empty": "まだ何も追加されていません"
   },
   "pinnedList": {
-    "pinnedLists": "ピン留めリスト",
     "addList": "リストを追加",
     "newList": "新しいリスト",
     "showMore": "さらに表示（残り{{remaining}}件）",

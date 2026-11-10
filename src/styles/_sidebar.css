@@ -1,6 +1,6 @@
 /* =============================================================================
    tv-sidebar — Shared layout for views with a right-side panel of frames.
-   Single block with __main, __backdrop, __panel, __panel-{header,body,title,add-btn},
+   Single block with __main, __backdrop, __panel, __panel-{header,body,add-btn},
    __frames elements and --mobile / --animate / __main--open /
    __backdrop--visible / __panel--hidden / __frames--empty modifiers.
    ============================================================================= */
@@ -71,21 +71,15 @@
     transition: opacity 0.2s ease;
 }
 
-/* Sidebar panel header */
+/* Sidebar panel header: its buttons sit at the right end */
 .tv-sidebar__panel-header {
     padding: 2px 8px;
     margin: 0;
     height: var(--header-height);
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 8px;
-}
-
-.tv-sidebar__panel-title {
-    margin: 0;
-    font-size: 0.8em;
-    color: var(--tv-text-muted);
-    flex: 1;
 }
 
 /* button を付けて (0,2,1) にし、tv-icon-btn のタブレットの余白の規則

@@ -117,9 +117,8 @@ export class SidebarFrames {
         this.el.remove();
     }
 
-    /** Put the panel into a sidebar the view built: the title and the add button, and the frames. */
+    /** Put the panel into a sidebar the view built: the add button into its header, the frames into its body. */
     mount(header: HTMLElement, body: HTMLElement): void {
-        header.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
         const addBtn = header.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
         setIcon(addBtn, 'plus');
         addBtn.appendText(t('pinnedList.addList'));
