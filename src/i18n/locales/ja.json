@@ -864,7 +864,8 @@
     "openNote": "ノートを開く",
     "noteNotFound": "ノートが見つかりません",
     "sectionNotFound": "セクションが見つかりません",
-    "relink": "選び直す"
+    "relink": "選び直す",
+    "relinkSection": "セクションを選び直す"
   },
   "pinnedList": {
     "addList": "リストを追加",
