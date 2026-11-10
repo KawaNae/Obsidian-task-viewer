@@ -34,12 +34,13 @@
  * in by `paint`, which takes out what the card showed before.
  */
 
-import { Component, MarkdownRenderer, TFile, type App, type TAbstractFile } from 'obsidian';
+import { Component, MarkdownRenderer, type App, type TAbstractFile, type TFile } from 'obsidian';
 import { t } from '../../i18n';
 import { logError } from '../../log/log';
 import { frameTarget, frameTitle, readFrameContent, type FrameReading } from '../../services/data/MarkdownFrames';
 import { splitLines } from '../../services/persistence/FileLines';
 import type { MarkdownFrame, TaskViewerSettings } from '../../types';
+import { noteAt } from '../../utils/NoteLink';
 import { renderSectionHeader, type SectionHeaderClasses, type SectionHeaderHandle } from '../sharedUI/ListSectionRenderer';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 
@@ -69,21 +70,6 @@ export interface MarkdownFrameHost {
     showMenu(frame: MarkdownFrameView, event: MouseEvent): void;
     /** Take the frame `id` out of the sidebar. */
     remove(id: string): void;
-}
-
-/** Whether `file` is a note: a markdown file. */
-export function isNote(file: TAbstractFile | null): file is TFile {
-    return file instanceof TFile && file.extension === 'md';
-}
-
-/**
- * The note `path` names as a link names one: a full path without its `.md`,
- * or a shorter name a link would resolve. Null when it names none, or a
- * file that is no note.
- */
-export function noteAt(app: App, path: string): TFile | null {
-    const file = app.metadataCache.getFirstLinkpathDest(path, '');
-    return isNote(file) ? file : null;
 }
 
 /**
@@ -183,7 +169,7 @@ export class MarkdownFrameView {
     setLink(link: string): void {
         if (link === this.frameLink) return;
         this.frameLink = link;
-        if (this.following) this.turnTo(noteAt(this.host.app, frameTarget(link).path));
+        if (this.following) this.turnTo(noteAt(this.host.app.metadataCache, frameTarget(link).path));
     }
 
     /** Show the frame collapsed or not, as the view's state has it. */
@@ -200,7 +186,7 @@ export class MarkdownFrameView {
      * deleted may have changed which note that is.
      */
     follow(): void {
-        const file = noteAt(this.host.app, frameTarget(this.frameLink).path);
+        const file = noteAt(this.host.app.metadataCache, frameTarget(this.frameLink).path);
         if (this.following && file === this.note && file?.path === this.found?.path) return;
         this.following = true;
         this.turnTo(file);
