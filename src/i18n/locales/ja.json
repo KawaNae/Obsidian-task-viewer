@@ -609,8 +609,8 @@
       "wholeNoteShown": "ノート全体を表示します",
       "headingShown": "見出し {{heading}} のセクションを表示します",
       "noHeading": "{{note}} に見出し {{heading}} はありません",
-      "unlinkable": "この {{heading}} はリンクで指せません。名前で探しても、上の見出しの並びで探しても、先にある別の見出しに当たります。選べるのは先の見出しです",
-      "unlinkableShort": "リンクで指せません",
+      "unlinkable": "この {{heading}} を指すリンクを、このダイアログは書けません。名前だけのリンクも、上の見出しの並びに名前を足したリンクも、この見出しに当たりません",
+      "unlinkableShort": "このダイアログでは指せません",
       "add": "追加",
       "relink": "選び直す"
     }
