@@ -679,10 +679,11 @@ const SUBPATHS = [
  * renderer a note's reading view has, and of the plugin, which draws a frame
  * of each link in a Timeline kept as `name`. An answer is the m-lines shown,
  * in order; null where the link names no heading (Obsidian's embed then
- * shows the whole note, the frame says the section is not there).
+ * shows the whole note, the frame says the section is not there). A frame
+ * not drawn in time, or that says something else, fails the ask.
  */
 function askHeadings(name: string, NOTE: string, lines: string[], subpaths: string[]): { frames: Record<string, string | null>; embeds: Record<string, string | null> } {
-    const r = ev<{ frames: (string | null)[]; embeds: (string | null)[] }>(`(async () => {
+    const r = ev<{ frames: ({ marks: string } | { missing: string } | null)[]; embeds: (string | null)[] }>(`(async () => {
         ${PRELUDE}
         ${NOTES}
         const path = ${JSON.stringify(`${NOTE}.md`)};
@@ -725,15 +726,26 @@ function askHeadings(name: string, NOTE: string, lines: string[], subpaths: stri
         const el = frameLeaf.view.contentEl;
         const drawn = () => [...el.querySelectorAll('.markdown-frame')].filter(f => f.querySelector('.markdown-frame__content, .markdown-frame__missing-reason'));
         for (let i = 0; i < 50 && drawn().length < subpaths.length; i++) await wait(100);
+        if (drawn().length !== subpaths.length) throw new Error(drawn().length + ' frames drawn of ' + subpaths.length + ' links');
         await wait(300);
         const frames = subpaths.map((s, i) => {
-            const body = el.querySelector('.markdown-frame[data-frame-id="h' + i + '"] .markdown-frame__content');
-            return body ? marks(body) : null;
+            const frame = el.querySelector('.markdown-frame[data-frame-id="h' + i + '"]');
+            const body = frame?.querySelector('.markdown-frame__content');
+            if (body) return { marks: marks(body) };
+            const missing = frame?.querySelector('.markdown-frame__missing-reason');
+            return missing ? { missing: missing.textContent } : null;
         });
         return JSON.stringify({ frames, embeds });
     })()`);
+    // A frame that names no heading says so; one that shows neither a body nor that was not drawn.
+    const frames = r.frames.map((frame, i) => {
+        if (frame === null) throw new Error(`the frame of ${subpaths[i]} shows neither a body nor what is missing`);
+        if ('marks' in frame) return frame.marks;
+        if (frame.missing !== tr('sidebar.sectionNotFound')) throw new Error(`the frame of ${subpaths[i]} says "${frame.missing}"`);
+        return null;
+    });
     const bySubpath = (found: (string | null)[]) => Object.fromEntries(subpaths.map((s, i) => [s, found[i] ?? null]));
-    return { frames: bySubpath(r.frames), embeds: bySubpath(r.embeds) };
+    return { frames: bySubpath(frames), embeds: bySubpath(r.embeds) };
 }
 
 describe('the heading a link names', () => {
