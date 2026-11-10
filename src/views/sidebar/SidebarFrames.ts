@@ -4,14 +4,14 @@
  * The panel holds the frames (`SidebarFrame`): it stacks them down the
  * sidebar in the order of the view's state, adds one, moves and removes one,
  * writes which are collapsed and writes a markdown frame's link, each by the
- * frame's id. Its add button offers a frame of each kind. What a frame
- * shows is its kind's (`drawFrame`). A list frame is
- * a saved list, drawn by `TaskListSections`; a markdown frame is a section
- * of a note, drawn by `MarkdownFrameSections`. The panel is the placement of
- * both. The panel draws itself on a change of its fields of the state and of
- * the tasks, so a change of the frames does not draw the view. The markdown
- * frames take a change of the frames or folds at once, not at the draw,
- * which only puts their elements in place.
+ * frame's id. Its add button offers a frame of each kind. What a frame shows
+ * is its kind's (`drawFrame`). A list frame is a saved list, drawn by
+ * `TaskListSections`; a markdown frame is a section of a note, drawn by
+ * `MarkdownFrameSections`. The panel is the placement of both. The panel
+ * draws itself on a change of its fields of the state and of the tasks, so a
+ * change of the frames does not draw the view. The markdown frames take a
+ * change of the frames or folds at once, not at the draw, which only puts
+ * their elements in place.
  *
  * A draw makes every list frame anew, its cards kept by key, and leaves a
  * markdown frame's element where it stands: what a note's blocks drew in it
@@ -191,9 +191,11 @@ export class SidebarFrames {
     }
 
     /**
-     * The add button's menu: a frame of each kind. Each kind adds its own
-     * frame at the end of the stack: a list, its name edited once it is
-     * drawn, and a section, chosen in the dialog the markdown frames open.
+     * The add button's menu: a frame of each kind, put at the end of the
+     * stack. A list the panel puts there itself (`addList`), its name edited
+     * once it is drawn; a section is chosen in the dialog the markdown frames
+     * open (`MarkdownFrameSections.add`), which put its frame there through
+     * the placement (`append`).
      */
     private showAddMenu(button: HTMLElement): void {
         this.deps.plugin.menuPresenter.present((menu) => {

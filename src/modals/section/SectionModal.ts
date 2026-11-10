@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { FormActions } from '../form/FormActions';
 import { IssueBoard } from '../form/FormIssue';
-import { SectionDialog, readSectionNote, type SectionAsk, type SectionField as SectionFieldName, type SectionSurface, type SectionViewState } from './SectionDialog';
+import { SectionDialog, readSectionNote, type SectionAsk, type SectionDialogField, type SectionSurface, type SectionViewState } from './SectionDialog';
 import { SectionField } from './SectionField';
 
 /** What a {@link SectionModal} is opened for, and what it opens with. */
@@ -30,7 +30,7 @@ export class SectionModal implements SectionSurface {
     private readonly overlay = new OverlayShell();
     private dialog: SectionDialog | null = null;
     private field!: SectionField;
-    private issues!: IssueBoard<SectionFieldName>;
+    private issues!: IssueBoard<SectionDialogField>;
     private actions!: FormActions;
 
     constructor(
@@ -67,7 +67,7 @@ export class SectionModal implements SectionSurface {
         });
 
         const formSays = bodyEl.createDiv({ cls: 'tv-form__says tv-form__says--form' });
-        this.issues = new IssueBoard<SectionFieldName>({
+        this.issues = new IssueBoard<SectionDialogField>({
             field: (at) => this.field.slot(at),
             form: formSays,
         });

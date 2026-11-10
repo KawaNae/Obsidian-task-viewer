@@ -37,8 +37,8 @@ import type { FormIssue } from '../form/FormIssue';
  *   holds now.
  */
 
-/** What the dialog's issues are said of. */
-export type SectionField = 'note' | 'heading';
+/** What the dialog's issues are said of: the note field, or the heading field. */
+export type SectionDialogField = 'note' | 'heading';
 
 /**
  * What the heading field holds: the text, and the heading a pick from its
@@ -94,7 +94,7 @@ export interface SectionViewState {
     path: string | null;
     /** What the heading field offers; none while the fields name no note. */
     choices: readonly SectionChoice[];
-    issues: readonly FormIssue<SectionField>[];
+    issues: readonly FormIssue<SectionDialogField>[];
     canChoose: boolean;
 }
 
@@ -245,8 +245,8 @@ export class SectionDialog {
      */
     state(): SectionViewState {
         const note = this.answer?.note ?? null;
-        const issues: FormIssue<SectionField>[] = [];
-        const say = (at: SectionField, tone: FormIssue<SectionField>['tone'], text: string) => issues.push({ at, tone, text });
+        const issues: FormIssue<SectionDialogField>[] = [];
+        const say = (at: SectionDialogField, tone: FormIssue<SectionDialogField>['tone'], text: string) => issues.push({ at, tone, text });
 
         if (note?.kind === 'missing') {
             say('note', 'error', t('modal.section.noteMissing', { name: note.name }));
