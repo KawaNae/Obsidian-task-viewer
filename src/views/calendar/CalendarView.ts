@@ -128,6 +128,8 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             readService: this.readService,
             index: this.index,
             taskRenderer: this.taskRenderer,
+            links: this.linkInteractionManager,
+            getHoverParent: () => this.hoverParent,
         }, {
             state: () => this.state,
             subscribe: (listener) => this.store.subscribe(listener),
@@ -216,6 +218,12 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             this.unsubscribeDelete = null;
         }
         this.scrollRestorer.dispose();
+    }
+
+    /** Settings were saved: the grid is drawn anew, and the sidebar's frames read their notes anew. */
+    override redraw(): void {
+        this.sidebarFrames.settingsSaved();
+        super.redraw();
     }
 
     /** Draw the grid, keeping the scroll. */

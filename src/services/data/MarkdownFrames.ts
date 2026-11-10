@@ -5,7 +5,8 @@
  * style.
  *
  * Nothing here looks a note up or reads a file: which note the link's path
- * names, and that note's lines, are the caller's to find.
+ * names, and that note's lines, are the caller's to find
+ * (`views/sidebar/MarkdownFrameView.ts`).
  */
 
 import { parseLinktext } from 'obsidian';
@@ -45,6 +46,16 @@ export function frameLink(path: string, subpath: string | null): string {
     return subpath === null || subpath === '' ? path : `${path}#${subpath}`;
 }
 
+/**
+ * `link` turned to the note at `path` (a file's path, with its `.md`), the
+ * section it names kept: what a frame's link becomes when its note is
+ * renamed or moved. The path is written whole, without the extension, so the
+ * link names that note whatever other notes have its name.
+ */
+export function frameLinkAt(link: string, path: string): string {
+    return frameLink(path.replace(/\.md$/i, ''), frameTarget(link).subpath.replace(/^#/, ''));
+}
+
 /** What a frame shows of its section, whichever it is. */
 interface FrameBody {
     /** The section's lines, joined: the markdown the card draws. */
@@ -68,6 +79,29 @@ export type FrameContent =
     | ({ kind: 'heading'; title: string } & FrameBody)
     | ({ kind: 'note' } & FrameBody)
     | { kind: 'no-heading' };
+
+/**
+ * What a frame shows: of its note ({@link FrameContent}), or that the note
+ * its link names is not there (`no-note`).
+ */
+export type FrameReading = FrameContent | { kind: 'no-note' };
+
+/**
+ * The name the row of the frame of `link` shows, for what the frame shows:
+ *
+ * - a heading's section: the heading's text, as the note writes it
+ * - the whole note: the note's name (`noteName`, the file's without its
+ *   extension)
+ * - nothing found: the last thing the link names, which is the last heading
+ *   of its subpath, or the last part of the note's path when it names none
+ */
+export function frameTitle(link: string, reading: FrameReading, noteName: string | null): string {
+    if (reading.kind === 'heading') return reading.title;
+    if (reading.kind === 'note' && noteName !== null) return noteName;
+    const { path, subpath } = frameTarget(link);
+    const names = headingNames(subpath);
+    return (names.length > 0 ? names[names.length - 1] : path.slice(path.lastIndexOf('/') + 1)).trim();
+}
 
 /**
  * What a frame shows of the note `lines`, for the section `subpath` names

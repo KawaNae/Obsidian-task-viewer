@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { App, MarkdownView, TFile } from 'obsidian';
-import { openFile, openTaskInEditor } from '../../../src/utils/NavigationUtils';
+import { openFile, openLink, openTaskInEditor } from '../../../src/utils/NavigationUtils';
 import type { Task } from '../../../src/types';
 
 /**
@@ -73,6 +73,50 @@ describe('openFile', () => {
 
         expect(await openFile(app, 'gone.md', true)).toBeNull();
         expect(newLeaf.openFile).not.toHaveBeenCalled();
+    });
+});
+
+describe('openLink', () => {
+    /** An app in which the link path `a` names `Folder/a.md`, with the tabs `open`. */
+    function linking(open: ReturnType<typeof leafShowing>[]) {
+        const { app } = appWith({ files: ['Folder/a.md'], open });
+        app.metadataCache.getFirstLinkpathDest = ((path: string) => (path === 'a' ? fileAt('Folder/a.md') : null)) as any;
+        app.workspace.openLinkText = vi.fn(async () => {});
+        return app;
+    }
+
+    it('focuses a tab already showing the note and moves it to the section the link names', () => {
+        const tab = leafShowing('Folder/a.md');
+        const app = linking([tab]);
+
+        openLink(app, 'a#Parent#Child', 'from.md', true);
+
+        expect(app.workspace.setActiveLeaf).toHaveBeenCalledWith(tab, { focus: true });
+        expect(tab.setEphemeralState).toHaveBeenCalledWith({ subpath: '#Parent#Child' });
+        expect(app.workspace.openLinkText).not.toHaveBeenCalled();
+    });
+
+    it('focuses the tab and leaves it where it is for a link that names no section', () => {
+        const tab = leafShowing('Folder/a.md');
+        const app = linking([tab]);
+
+        openLink(app, 'a|shown as', 'from.md', true);
+
+        expect(app.workspace.setActiveLeaf).toHaveBeenCalledWith(tab, { focus: true });
+        expect(tab.setEphemeralState).not.toHaveBeenCalled();
+    });
+
+    it('opens the link in a new tab when no tab shows the note, or tabs are not reused', () => {
+        const tab = leafShowing('Folder/a.md');
+        const none = linking([leafShowing('b.md')]);
+        openLink(none, 'a#Child', 'from.md', true);
+        expect(none.workspace.openLinkText).toHaveBeenCalledWith('a#Child', 'from.md', true);
+
+        const fresh = linking([tab]);
+        openLink(fresh, 'a#Child', 'from.md', false);
+        expect(fresh.workspace.openLinkText).toHaveBeenCalledWith('a#Child', 'from.md', true);
+        expect(tab.setEphemeralState).not.toHaveBeenCalled();
+        expect(fresh.workspace.setActiveLeaf).not.toHaveBeenCalled();
     });
 });
 
