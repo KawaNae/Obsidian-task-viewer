@@ -190,6 +190,9 @@ export class SidebarFrames {
             case 'list':
                 this.sections.drawList(this.el, frame, lists);
                 break;
+            case 'markdown':
+                // Held in the stack, by its id, and not drawn.
+                break;
         }
     }
 

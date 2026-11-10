@@ -26,8 +26,8 @@ import { hasConditions } from '../filter/FilterTypes';
 import { FilterSerializer, filterIssueText, type FilterRead } from '../filter/FilterSerializer';
 import { SortSerializer, sortIssueText } from '../sort/SortSerializer';
 import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
-import { listFrame, type PinnedListDefinition, type SidebarFrame, type AstronomyDisplay } from '../../types';
-import { newListId } from './ListIds';
+import { listFrame, type MarkdownFrame, type PinnedListDefinition, type SidebarFrame, type AstronomyDisplay } from '../../types';
+import { newListId, newMarkdownFrameId } from './ListIds';
 
 interface FieldOptions {
     readonly legacyKeys?: readonly string[];
@@ -199,8 +199,9 @@ export const F = {
     /**
      * The frames of a sidebar, in their order (`SidebarFrame[]`). An entry
      * says its kind in `kind`; a list is written as its definition alone,
-     * without one, and an entry without one is read as a list. An entry of a
-     * kind that is not known is skipped, as an entry that cannot be read is.
+     * without one, and an entry without one is read as a list. A markdown
+     * frame is written as its kind, its id and its link. An entry of a kind
+     * that is not known is skipped, as an entry that cannot be read is.
      * A list's filterState is serialized via FilterSerializer.toJSON (so the
      * persisted form is plain JSON, not the runtime object).
      */
@@ -386,6 +387,7 @@ export const T = {
 function serializeFrame(frame: SidebarFrame): Record<string, unknown> {
     switch (frame.kind) {
         case 'list': return serializePinnedList(frame);
+        case 'markdown': return { kind: frame.kind, id: frame.id, link: frame.link };
     }
 }
 
@@ -440,9 +442,19 @@ function parseFrame(obj: Record<string, unknown>, report?: ReportIssue): Sidebar
             const list = parsePinnedList(obj, report);
             return list && listFrame(list);
         }
+        case 'markdown':
+            return parseMarkdownFrame(obj);
         default:
             return undefined;
     }
+}
+
+/** The markdown frame `obj` holds, or undefined when it has no link. One stored without an id is given a new one, as a list is. */
+function parseMarkdownFrame(obj: Record<string, unknown>): MarkdownFrame | undefined {
+    const link = typeof obj.link === 'string' ? obj.link : '';
+    if (!link) return undefined;
+    const id = (typeof obj.id === 'string' && obj.id) ? obj.id : newMarkdownFrameId();
+    return { kind: 'markdown', id, link };
 }
 
 function parsePinnedLists(raw: unknown[], report?: ReportIssue): PinnedListDefinition[] {

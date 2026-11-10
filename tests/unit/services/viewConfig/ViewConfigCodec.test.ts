@@ -226,6 +226,65 @@ describe('ViewConfigCodec', () => {
             expect(pins.fromUriParam!(withUnknown)?.map(f => f.id)).toEqual(['pl-2']);
         });
 
+        describe('a markdown frame', () => {
+            const memo = { kind: 'markdown', id: 'md-1', link: 'Folder/Note#Parent#Memo' };
+            const whole = { kind: 'markdown', id: 'md-2', link: 'Dashboard' };
+
+            it('is read as its kind, its id and its link, and written back as it was stored', () => {
+                const frames = pins.parse([memo, whole]);
+                expect(frames).toEqual([memo, whole]);
+                expect(JSON.stringify(pins.serialize(frames))).toBe(JSON.stringify([memo, whole]));
+            });
+
+            it('keeps nothing else an entry holds', () => {
+                const frames = pins.parse([{ ...memo, name: 'Memo', filterState: today.filterState }]);
+                expect(frames).toEqual([memo]);
+            });
+
+            it('is skipped without a report when its link is not a text, or is empty', () => {
+                const reported: string[] = [];
+                const frames = pins.parse([
+                    { kind: 'markdown', id: 'a' },
+                    { kind: 'markdown', id: 'b', link: '' },
+                    { kind: 'markdown', id: 'c', link: 3 },
+                    { kind: 'markdown', id: 'd', link: null },
+                    whole,
+                ], text => reported.push(text));
+                expect(frames).toEqual([whole]);
+                expect(reported).toEqual([]);
+                expect(pins.parse([{ kind: 'markdown', id: 'a' }])).toBeUndefined();
+            });
+
+            it('stored without an id is given one of its own', () => {
+                const frames = pins.parse([{ kind: 'markdown', link: 'A' }, { kind: 'markdown', id: '', link: 'B' }])!;
+                expect(frames.map(f => f.kind === 'markdown' && f.link)).toEqual(['A', 'B']);
+                expect(frames[0].id).toBeTruthy();
+                expect(frames[1].id).toBeTruthy();
+                expect(frames[0].id).not.toBe(frames[1].id);
+            });
+
+            it('keeps its place among the lists, each written in its own form', () => {
+                const stored = [memo, today, whole, next];
+                const frames = pins.parse(stored)!;
+                expect(frames.map(f => f.id)).toEqual(['md-1', 'pl-1', 'md-2', 'pl-2']);
+                expect(frames.map(f => f.kind)).toEqual(['markdown', 'list', 'markdown', 'list']);
+                expect(JSON.stringify(pins.serialize(frames))).toBe(JSON.stringify(stored));
+            });
+
+            it('is carried by a URI in the stored form, and read back', () => {
+                const frames = pins.parse([today, memo, whole])!;
+                const param = pins.toUriParam!(frames);
+                expect(param).toBe(unicodeBtoa(JSON.stringify([today, memo, whole])));
+                expect(pins.fromUriParam!(param!)).toEqual(frames);
+                const japanese = { kind: 'markdown', id: 'md-3', link: 'SyncIgnore/見本#メモ' };
+                expect(pins.fromUriParam!(pins.toUriParam!(pins.parse([japanese])!)!)).toEqual([japanese]);
+            });
+
+            it("is no cell of Kanban's grid", () => {
+                expect(F.grid('grid').parse([[memo, today]])).toEqual([[today]]);
+            });
+        });
+
         it("Kanban's cells are lists, not frames: a cell is read without a kind, whatever the entry says", () => {
             const cells = F.grid('grid').parse([[today, { ...next, kind: 'note' }]]);
             expect(cells).toEqual([[today, next]]);
