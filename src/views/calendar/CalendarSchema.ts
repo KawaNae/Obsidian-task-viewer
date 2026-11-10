@@ -6,7 +6,7 @@ import { F, T } from '../../services/viewConfig/FieldCodecs';
 import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
+import { listFramesOf, type SidebarFrame, type AstronomyDisplay } from '../../types';
 
 export interface CalendarConfig {
     customName?: string;
@@ -14,7 +14,8 @@ export interface CalendarConfig {
     maskMode?: boolean;
     astronomyDisplay?: Partial<AstronomyDisplay>;
     showSidebar?: boolean;
-    pinnedLists?: PinnedListDefinition[];
+    /** The frames of the sidebar, in the order they are stacked. */
+    pinnedLists?: SidebarFrame[];
 }
 
 export interface CalendarTransient {
@@ -25,6 +26,7 @@ export interface CalendarTransient {
     date?: string;
     /** How many weeks the grid was moved from `date`'s month grid; absent is 0. */
     weekOffset?: number;
+    /** Which frames of the sidebar are collapsed, by frame id. */
     pinnedListCollapsed?: Record<string, boolean>;
 }
 
@@ -48,7 +50,7 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
     },
     anchorKey: 'date',
     anchorOffsetKeys: ['weekOffset'],
-    listsOf: (config) => config.pinnedLists ?? [],
+    listsOf: (config) => listFramesOf(config.pinnedLists ?? []),
     transient: {
         date:                T.dateString('date'),
         weekOffset:          T.int('weekOffset'),

@@ -1,31 +1,35 @@
 /**
- * The pinned lists of Timeline and Calendar: the sidebar's panel.
+ * The frames of Timeline's and Calendar's sidebar: the sidebar's panel.
  *
- * The panel is the lists' placement (`TaskListSections`): it stacks them
- * down the sidebar, adds a list, reorders and removes them, and writes the
- * lists and which are collapsed into the view's state. It draws itself on a
- * change of its fields of the state and of the tasks, so a change of the
- * lists does not draw the view.
+ * The panel holds the frames (`SidebarFrame`): it stacks them down the
+ * sidebar in the order of the view's state, adds one, moves and removes one
+ * and writes which are collapsed, each by the frame's id. What a frame shows
+ * is its kind's (`drawFrame`). A list frame is a saved list, drawn by
+ * `TaskListSections`, whose placement the panel is. The panel draws itself
+ * on a change of its fields of the state and of the tasks, so a change of
+ * the frames does not draw the view.
  *
  * The panel's element outlives the view's draws: the view takes it out
  * before it empties its DOM (`lift`) and puts it back into the sidebar it
- * built (`mount`), so the pages and the opened cards are kept.
+ * built (`mount`), so the pages and the opened cards are kept. A draw
+ * empties the element and draws every frame anew; the cards are kept by key.
  */
 
 import { setIcon, type Menu } from 'obsidian';
 import { t } from '../../i18n';
-import type { PinnedListDefinition } from '../../types';
+import { listFrame, listFramesOf, type SidebarFrame } from '../../types';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from './CardReconciler';
 import { shouldRenderForChanges } from './RenderScheduler';
 import type { ListSectionClasses } from './ListSectionRenderer';
-import { TaskListSections, newList, type ListSectionDeps } from './TaskListSections';
+import { TaskListSections, newList, type ListDrawContext, type ListSectionDeps } from './TaskListSections';
 
 /** The fields of a view's state the panel reads and writes. */
 export interface PinnedListsState {
-    pinnedLists?: PinnedListDefinition[];
-    /** Which lists are collapsed, by list id. */
+    /** The frames, in the order they are stacked. */
+    pinnedLists?: SidebarFrame[];
+    /** Which frames are collapsed, by frame id. */
     pinnedListCollapsed?: Record<string, boolean>;
     filterState?: FilterState;
     maskMode?: boolean;
@@ -58,8 +62,9 @@ const PINNED_LIST_CLASSES: ListSectionClasses = {
 export class PinnedListPanel {
     private readonly el: HTMLElement;
     private readonly sections: TaskListSections;
-    private readonly frames = new HostFrameScheduler(() => this.el);
-    private pendingFrame: number | null = null;
+    /** The window's animation frames, in which a requested draw runs. */
+    private readonly animationFrames = new HostFrameScheduler(() => this.el);
+    private pendingDraw: number | null = null;
     private readonly unsubscribers: (() => void)[] = [];
 
     constructor(
@@ -71,16 +76,12 @@ export class PinnedListPanel {
         this.sections = new TaskListSections(deps, {
             classes: PINNED_LIST_CLASSES,
             scopePrefix: 'pl',
-            replaceList: (id, patch) => this.writeLists(this.lists().map(l => l.id === id ? { ...l, ...patch } : l)),
-            setCollapsed: (id, collapsed) => this.host.write({
-                pinnedListCollapsed: { ...this.host.state().pinnedListCollapsed, [id]: collapsed },
-            }),
-            insertCopy: (list, copy) => {
-                const next = [...this.lists()];
-                next.splice(next.findIndex(l => l.id === list.id) + 1, 0, copy);
-                this.writeLists(next);
-            },
-            appendMenuItems: (menu, list) => this.appendMenuItems(menu, list),
+            replaceList: (id, patch) => this.writeFrames(this.frames().map(
+                frame => frame.kind === 'list' && frame.id === id ? { ...frame, ...patch } : frame,
+            )),
+            setCollapsed: (id, collapsed) => this.setCollapsed(id, collapsed),
+            insertCopy: (list, copy) => this.insertBelow(list.id, listFrame(copy)),
+            appendMenuItems: (menu, list) => this.appendFrameMenuItems(menu, list.id),
         });
     }
 
@@ -97,26 +98,26 @@ export class PinnedListPanel {
         this.draw();
     }
 
-    /** Stop drawing, and close the popovers the lists opened. */
+    /** Stop drawing, and close the popovers the frames opened. */
     close(): void {
         for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
-        if (this.pendingFrame !== null) {
-            this.frames.cancel(this.pendingFrame);
-            this.pendingFrame = null;
+        if (this.pendingDraw !== null) {
+            this.animationFrames.cancel(this.pendingDraw);
+            this.pendingDraw = null;
         }
         this.sections.close();
     }
 
     /**
-     * Take the lists out of the view's DOM. The view calls it before it
-     * gathers its own cards and empties its DOM, so the lists' cards are
+     * Take the frames out of the view's DOM. The view calls it before it
+     * gathers its own cards and empties its DOM, so the frames' cards are
      * neither taken for the view's nor lost.
      */
     lift(): void {
         this.el.remove();
     }
 
-    /** Put the panel into a sidebar the view built: the title and the add button, and the lists. */
+    /** Put the panel into a sidebar the view built: the title and the add button, and the frames. */
     mount(header: HTMLElement, body: HTMLElement): void {
         header.createEl('p', { cls: 'tv-sidebar__panel-title', text: t('pinnedList.pinnedLists') });
         const addBtn = header.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
@@ -126,56 +127,81 @@ export class PinnedListPanel {
             const list = newList();
             // Its name is edited once it is drawn.
             this.sections.scheduleRename(list.id);
-            this.writeLists([...this.lists(), list]);
+            this.writeFrames([...this.frames(), listFrame(list)]);
         });
         body.appendChild(this.el);
     }
 
-    private lists(): PinnedListDefinition[] {
+    private frames(): SidebarFrame[] {
         return this.host.state().pinnedLists ?? [];
     }
 
-    private writeLists(lists: PinnedListDefinition[]): void {
-        this.host.write({ pinnedLists: lists });
+    private writeFrames(frames: SidebarFrame[]): void {
+        this.host.write({ pinnedLists: frames });
+    }
+
+    /** Put `frame` right below the frame `id`. */
+    private insertBelow(id: string, frame: SidebarFrame): void {
+        const next = [...this.frames()];
+        next.splice(next.findIndex(f => f.id === id) + 1, 0, frame);
+        this.writeFrames(next);
+    }
+
+    /** Write whether the frame `id` is collapsed. */
+    private setCollapsed(id: string, collapsed: boolean): void {
+        this.host.write({
+            pinnedListCollapsed: { ...this.host.state().pinnedListCollapsed, [id]: collapsed },
+        });
     }
 
     private requestDraw(): void {
-        if (this.pendingFrame !== null) return;
-        this.pendingFrame = this.frames.request(() => {
-            this.pendingFrame = null;
+        if (this.pendingDraw !== null) return;
+        this.pendingDraw = this.animationFrames.request(() => {
+            this.pendingDraw = null;
             this.draw();
         });
     }
 
     private draw(): void {
-        // Keep the cards already shown: a list added, removed or moved
+        // Keep the cards already shown: a frame added, removed or moved
         // reuses them by key.
         const reconciler = new CardReconciler();
         reconciler.detach(this.el);
         this.el.empty();
 
         const state = this.host.state();
-        const lists = state.pinnedLists ?? [];
-        if (lists.length === 0) {
+        const frames = state.pinnedLists ?? [];
+        if (frames.length === 0) {
             this.el.createDiv('tv-sidebar__pinned-lists--empty').setText(t('pinnedList.noPinnedLists'));
         } else {
-            this.sections.draw(this.el, lists, {
+            const lists: ListDrawContext = {
                 reconciler,
                 collapsed: state.pinnedListCollapsed ?? {},
                 viewFilter: state.filterState,
-            });
+            };
+            this.sections.keepPagesOf(listFramesOf(frames));
+            for (const frame of frames) this.drawFrame(frame, lists);
         }
         reconciler.forEachStale(card => this.deps.taskRenderer.dispose(card));
     }
 
-    /** Move up and down, and remove. */
-    private appendMenuItems(menu: Menu, list: PinnedListDefinition): void {
-        const lists = this.lists();
-        const index = lists.findIndex(l => l.id === list.id);
+    /** Draw `frame` at the end of the panel, as its kind is drawn. `lists` is what a list frame's draw reads. */
+    private drawFrame(frame: SidebarFrame, lists: ListDrawContext): void {
+        switch (frame.kind) {
+            case 'list':
+                this.sections.drawList(this.el, frame, lists);
+                break;
+        }
+    }
+
+    /** The items every frame's menu has: move up and down, and remove. */
+    private appendFrameMenuItems(menu: Menu, id: string): void {
+        const frames = this.frames();
+        const index = frames.findIndex(f => f.id === id);
         const swap = (a: number, b: number) => {
-            const next = [...lists];
+            const next = [...frames];
             [next[a], next[b]] = [next[b], next[a]];
-            this.writeLists(next);
+            this.writeFrames(next);
         };
 
         menu.addSeparator();
@@ -185,7 +211,7 @@ export class PinnedListPanel {
                 .setIcon('arrow-up')
                 .onClick(() => swap(index - 1, index)));
         }
-        if (index >= 0 && index < lists.length - 1) {
+        if (index >= 0 && index < frames.length - 1) {
             menu.addItem(item => item
                 .setTitle(t('menu.moveDown'))
                 .setIcon('arrow-down')
@@ -195,7 +221,7 @@ export class PinnedListPanel {
         menu.addItem(item => {
             item.setTitle(t('menu.remove'))
                 .setIcon('trash')
-                .onClick(() => this.writeLists(lists.filter(l => l.id !== list.id)));
+                .onClick(() => this.writeFrames(frames.filter(f => f.id !== id)));
             item.dom?.addClass('is-danger');
         });
     }

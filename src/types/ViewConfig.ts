@@ -1,6 +1,7 @@
 /**
- * Configuration a view persists: what its pinned lists hold, what a card's
- * top-right corner says, and what a saved view template carries.
+ * Configuration a view persists: what its saved lists and the frames of its
+ * sidebar hold, what a card's top-right corner says, and what a saved view
+ * template carries.
  *
  * A view's own state does not live here — it is the config and transient
  * fields of the view's schema, held by the view (`views/base/ViewStore.ts`).
@@ -22,6 +23,33 @@ export interface PinnedListDefinition {
     sortState?: SortState;
     applyViewFilter: boolean;
     topRight?: TopRightConfig;
+}
+
+/**
+ * A frame of the sidebar of Timeline and Calendar that shows a saved list:
+ * the list's definition itself, marked with its kind. Kanban's cells are
+ * lists, not frames, and hold the bare definition.
+ */
+export interface ListFrame extends PinnedListDefinition {
+    kind: 'list';
+}
+
+/**
+ * One frame of the sidebar. The sidebar stacks its frames in the order the
+ * view's state holds them, and `kind` says what a frame shows. Every kind
+ * keeps its `id` and its `name` at the top, so a frame is collapsed, moved
+ * and removed by its id without its kind being read.
+ */
+export type SidebarFrame = ListFrame;
+
+/** `list` as a frame of the sidebar. */
+export function listFrame(list: PinnedListDefinition): ListFrame {
+    return { ...list, kind: 'list' };
+}
+
+/** The frames among `frames` that show a list, in their order. */
+export function listFramesOf(frames: readonly SidebarFrame[]): ListFrame[] {
+    return frames.filter((frame): frame is ListFrame => frame.kind === 'list');
 }
 
 export interface ViewTemplateSummary {

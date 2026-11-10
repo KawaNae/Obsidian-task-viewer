@@ -8,7 +8,8 @@ import {
 import type { ViewType } from '../../../../src/views/ViewDescriptors';
 import type { ConfigIssue } from '../../../../src/services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../../../src/services/filter/FilterTypes';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../../../src/types';
+import { unicodeBtoa } from '../../../../src/utils/base64';
+import { listFrame, type PinnedListDefinition, type SidebarFrame, type AstronomyDisplay } from '../../../../src/types';
 
 interface TestConfig {
     name?: string;
@@ -17,7 +18,7 @@ interface TestConfig {
     rate?: number;
     span?: number;
     filter?: FilterState;
-    pins?: PinnedListDefinition[];
+    pins?: SidebarFrame[];
     grid?: PinnedListDefinition[][];
     sky?: Partial<AstronomyDisplay>;
     cursor?: string;
@@ -66,6 +67,7 @@ const fullFixture: TestConfig = {
         logic: 'and',
     },
     pins: [{
+        kind: 'list',
         id: 'pl-1',
         name: 'Today',
         filterState: { filters: [{ property: 'due', operator: 'equals', value: '2026-05-22' }], logic: 'and' },
@@ -161,8 +163,74 @@ describe('ViewConfigCodec', () => {
         });
 
         it('false is written, not omitted', () => {
-            const json = codec.serializeConfig({ pins: [{ ...list, applyViewFilter: false } as PinnedListDefinition] });
+            const json = codec.serializeConfig({ pins: [listFrame({ ...list, applyViewFilter: false } as PinnedListDefinition)] });
             expect((json.pins as Record<string, unknown>[])[0].applyViewFilter).toBe(false);
+        });
+    });
+
+    describe('the frames of a sidebar', () => {
+        const pins = F.pinnedLists('pins');
+        // Two lists as they are stored, the second with every field a list can hold.
+        const today = {
+            id: 'pl-1',
+            name: 'Today',
+            filterState: { logic: 'and', filters: [{ property: 'tag', operator: 'includes', value: ['x'] }] },
+            applyViewFilter: false,
+        };
+        const next = {
+            id: 'pl-2',
+            name: 'Next',
+            filterState: { logic: 'and', filters: [{ property: 'parent', operator: 'isNotSet' }] },
+            applyViewFilter: true,
+            sortState: { rules: [{ property: 'due', direction: 'asc' }] },
+            topRight: { fields: ['due'], separator: ' ', prefix: '(', suffix: ')' },
+        };
+
+        it('an entry stored without a kind is read as a list frame', () => {
+            expect(pins.parse([today, next])).toEqual([
+                { kind: 'list', ...today },
+                { kind: 'list', ...next },
+            ]);
+        });
+
+        it("an entry of the kind 'list' is read as the same frame", () => {
+            expect(pins.parse([{ kind: 'list', ...today }])).toEqual(pins.parse([today]));
+            expect(pins.parse([{ ...today, kind: 'list' }])).toEqual([{ kind: 'list', ...today }]);
+        });
+
+        it('an entry of a kind that is not known is skipped without a report, and the lists around it are kept', () => {
+            const note = { kind: 'note', id: 'n-1', name: 'Memo', path: 'Dashboard.md' };
+            // Readable as a list but for its kind: the kind decides.
+            const listLike = { ...today, kind: 'note', id: 'n-2', name: 'Not a list' };
+            const noKind = { ...today, kind: null, id: 'n-3', name: 'Null kind' };
+            const reported: string[] = [];
+            const frames = pins.parse([today, note, listLike, noKind, next], text => reported.push(text));
+            expect(frames?.map(f => f.id)).toEqual(['pl-1', 'pl-2']);
+            expect(reported).toEqual([]);
+            expect(pins.parse([note])).toBeUndefined();
+        });
+
+        it('a list frame is written as the list alone: what was read is written back as it was stored', () => {
+            const stored = [today, next];
+            const written = pins.serialize(pins.parse(stored));
+            expect(JSON.stringify(written)).toBe(JSON.stringify(stored));
+            expect(JSON.stringify(pins.serialize(pins.parse([{ kind: 'list', ...today }])))).toBe(JSON.stringify([today]));
+        });
+
+        it('a URI carries the same form, and is read as the stored form is', () => {
+            const frames = pins.parse([today, next])!;
+            const param = pins.toUriParam!(frames);
+            expect(param).toBe(unicodeBtoa(JSON.stringify([today, next])));
+            expect(pins.fromUriParam!(param!)).toEqual(frames);
+            const withUnknown = unicodeBtoa(JSON.stringify([{ kind: 'note', id: 'n-1', name: 'Memo' }, next]));
+            expect(pins.fromUriParam!(withUnknown)?.map(f => f.id)).toEqual(['pl-2']);
+        });
+
+        it("Kanban's cells are lists, not frames: a cell is read without a kind, whatever the entry says", () => {
+            const cells = F.grid('grid').parse([[today, { ...next, kind: 'note' }]]);
+            expect(cells).toEqual([[today, next]]);
+            expect(cells?.[0][0]).not.toHaveProperty('kind');
+            expect(JSON.stringify(F.grid('grid').serialize(cells))).toBe(JSON.stringify([[today, next]]));
         });
     });
 

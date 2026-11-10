@@ -1,13 +1,16 @@
 /**
- * The saved lists of a view, drawn from their definitions: the pinned lists
- * of Timeline and Calendar (`PinnedListPanel`) and the cells of Kanban.
+ * The saved lists of a view, drawn from their definitions: the list frames
+ * of Timeline's and Calendar's sidebar (`PinnedListPanel`) and the cells of
+ * Kanban.
  *
  * One list is one section (`ListSectionRenderer`): which tasks it shows
  * (`PinnedListQuery`), its pages, its cards, its sort and filter popovers,
  * its rename, the top-right editor and the items its ⋯ menu shares. What
  * differs is only where the lists sit, and that is the placement's: it holds
  * the lists, writes them, and adds its own menu items (reorder and remove in
- * the sidebar, rows and columns on the board).
+ * the sidebar, rows and columns on the board). A placement that holds
+ * nothing but lists draws them all at once (`draw`); one that draws other
+ * things between them draws each where it stands (`drawList`).
  */
 
 import type { Menu } from 'obsidian';
@@ -106,13 +109,20 @@ export class TaskListSections {
         this.pendingRenameId = id;
     }
 
-    /**
-     * Draw `lists` into `container`, in order, one section each. The page a
-     * list was paged to is kept while the list is there.
-     */
+    /** Draw `lists`, all the lists of the placement, into `container`, in order, one section each. */
     draw(container: HTMLElement, lists: readonly PinnedListDefinition[], ctx: ListDrawContext): void {
-        this.paging.pruneRemovedLists(new Set(lists.map(l => l.id)));
+        this.keepPagesOf(lists);
         for (const list of lists) this.drawList(container, list, ctx);
+    }
+
+    /**
+     * Forget the page of every list that is not among `lists`: the page a
+     * list was paged to is kept while the list is there. A placement that
+     * draws its lists one by one calls it with all of them, before it draws
+     * them.
+     */
+    keepPagesOf(lists: readonly PinnedListDefinition[]): void {
+        this.paging.pruneRemovedLists(new Set(lists.map(l => l.id)));
     }
 
     /** Close the popovers the lists opened. */
@@ -121,7 +131,8 @@ export class TaskListSections {
         this.filterMenu.close();
     }
 
-    private drawList(container: HTMLElement, list: PinnedListDefinition, ctx: ListDrawContext): void {
+    /** Draw `list` as one section at the end of `container`. */
+    drawList(container: HTMLElement, list: PinnedListDefinition, ctx: ListDrawContext): void {
         const { classes } = this.placement;
         const query = PinnedListQuery.resolve(list, ctx.viewFilter);
         const tasks = this.deps.readService.getFilteredTasks(query.filter, query.sort);
