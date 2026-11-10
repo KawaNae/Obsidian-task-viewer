@@ -23,9 +23,13 @@ export class ViewEvents {
         this.lastVisualDate = this.visualToday();
     }
 
-    /** Settings were saved. A new start hour can move the day; then the views follow it. */
+    /**
+     * Settings were saved. A new start hour can move the day; then the views
+     * follow it first. Either way they redraw in place, since what they draw
+     * from may have changed with the day (the keys a note is read by).
+     */
     settingsChanged(): void {
-        if (this.rollIfChanged()) return;
+        this.rollIfChanged();
         this.views().forEach(redrawView);
     }
 
