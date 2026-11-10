@@ -856,9 +856,12 @@
   },
   "sidebar": {
     "empty": "まだ何も追加されていません",
+    "add": "追加",
+    "addSection": "セクションを追加",
     "openNote": "ノートを開く",
     "noteNotFound": "ノートが見つかりません",
-    "sectionNotFound": "セクションが見つかりません"
+    "sectionNotFound": "セクションが見つかりません",
+    "relink": "選び直す"
   },
   "pinnedList": {
     "addList": "リストを追加",

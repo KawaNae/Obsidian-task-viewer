@@ -5,7 +5,7 @@ import { listFrame, type PinnedListDefinition, type SidebarFrame } from '../../.
 import { SidebarFrames, stackInOrder, type SidebarFramesDeps, type SidebarFramesState } from '../../../src/views/sidebar/SidebarFrames';
 import type { ListPlacement } from '../../../src/views/sharedUI/TaskListSections';
 import type { MarkdownFramePlacement } from '../../../src/views/sidebar/MarkdownFrameSections';
-import { FakeEl } from '../helpers/fakeDom';
+import { FakeEl, asEl } from '../helpers/fakeDom';
 
 /**
  * The stack of a sidebar that holds a markdown frame among its lists: the
@@ -17,6 +17,10 @@ import { FakeEl } from '../helpers/fakeDom';
 const drawn = vi.hoisted(() => ({
     placement: null as unknown,
     markdownPlacement: null as unknown,
+    /** How many times the markdown frames were asked to open the dialog that adds one. */
+    sectionsAdded: 0,
+    /** The lists the list frames were told to have their names edited when next drawn. */
+    renames: [] as string[],
     /** What the markdown frames were had take, in order: the frames' ids and the folds. */
     synced: [] as { ids: string[]; collapsed: Record<string, boolean> }[],
     /** How many draws were requested of the window. */
@@ -24,8 +28,10 @@ const drawn = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../src/views/sharedUI/TaskListSections', () => ({
+    newList: () => ({ id: 'list-new', name: 'New List', filterState: { filters: [], logic: 'and' }, applyViewFilter: false }),
     TaskListSections: class {
         constructor(_deps: unknown, placement: unknown) { drawn.placement = placement; }
+        scheduleRename(id: string) { drawn.renames.push(id); }
         keepPagesOf() {}
         drawList() { return {}; }
         close() {}
@@ -43,6 +49,8 @@ vi.mock('../../../src/views/sidebar/MarkdownFrameSections', () => ({
         holds() { return false; }
         elementOf() { return {}; }
         paint() {}
+        placed() {}
+        add() { drawn.sectionsAdded++; }
     },
 }));
 
@@ -66,6 +74,33 @@ const A = listFrame(list('a'));
 const B = listFrame(list('b'));
 const MEMO: SidebarFrame = { kind: 'markdown', id: 'm', link: 'Folder/Note#Memo' };
 
+/** A menu that records its items by title: `choose` runs the item of a title, then or later. */
+function menuOf() {
+    const items = new Map<string, () => void>();
+    const menu = {
+        addSeparator: () => menu,
+        addItem(build: (item: unknown) => void) {
+            let named = '';
+            const item = {
+                setTitle: (text: string) => { named = text; return item; },
+                setIcon: () => item,
+                onClick: (run: () => void) => { items.set(named, run); return item; },
+            };
+            build(item);
+            return menu;
+        },
+    };
+    return {
+        menu: menu as unknown as Menu,
+        titles: () => [...items.keys()],
+        choose(title: string) {
+            const run = items.get(title);
+            if (!run) throw new Error(`no item "${title}" among ${[...items.keys()].join(', ')}`);
+            run();
+        },
+    };
+}
+
 /** A panel over `sidebar`, with what it wrote into the view's state. Its listeners hear a write at once, as a view's store tells it. */
 function panelOver(sidebar: SidebarFrame[]) {
     let state: SidebarFramesState = { sidebar, sidebarCollapsed: { a: true } };
@@ -75,8 +110,9 @@ function panelOver(sidebar: SidebarFrame[]) {
         state = { ...state, ...patch };
         for (const listener of listeners) listener(patch);
     };
+    let addMenu: ReturnType<typeof menuOf> | null = null;
     const frames = new SidebarFrames({
-        plugin: { app: {} },
+        plugin: { app: {}, menuPresenter: { present: (build: (menu: Menu) => void) => { addMenu = menuOf(); build(addMenu.menu); } } },
         index: { onChange: () => () => {} },
     } as unknown as SidebarFramesDeps, {
         state: () => state,
@@ -92,31 +128,23 @@ function panelOver(sidebar: SidebarFrame[]) {
     const choose = (id: string, title: string) => open(id)(title);
     /** Open the menu of the frame `id`: what it gives chooses one of its items, then or later. */
     const open = (id: string) => {
-        const items = new Map<string, () => void>();
-        const menu = {
-            addSeparator: () => menu,
-            addItem(build: (item: unknown) => void) {
-                let named = '';
-                const item = {
-                    setTitle: (text: string) => { named = text; return item; },
-                    setIcon: () => item,
-                    onClick: (run: () => void) => { items.set(named, run); return item; },
-                };
-                build(item);
-                return menu;
-            },
-        };
-        placement.appendMenuItems(menu as unknown as Menu, { id } as PinnedListDefinition);
-        return (title: string) => {
-            const run = items.get(title);
-            if (!run) throw new Error(`no item "${title}" among ${[...items.keys()].join(', ')}`);
-            run();
-        };
+        const { menu, choose: chooseIn } = menuOf();
+        placement.appendMenuItems(menu, { id } as PinnedListDefinition);
+        return chooseIn;
+    };
+    /** Put the panel into a sidebar and click its add button: what it gives chooses one of the items of the menu it opened. */
+    const add = () => {
+        const header = new FakeEl();
+        frames.mount(asEl(header), { appendChild() {} } as unknown as HTMLElement);
+        const button = header.find('tv-sidebar__panel-add-btn')!;
+        Object.assign(button, { getBoundingClientRect: () => ({}) });
+        button.dispatchEvent(new Event('click'));
+        return { label: button.textContent, items: addMenu!.titles(), choose: addMenu!.choose };
     };
     /** Change the frames from outside the menu, as a rename of a note does. */
     const set = (frames: SidebarFrame[]) => { state = { ...state, sidebar: frames }; };
     return {
-        frames, placement, markdown, choose, open, set, update,
+        frames, placement, markdown, choose, open, add, set, update,
         ids: () => state.sidebar?.map(f => f.id), state: () => state, writes: () => writes,
     };
 }
@@ -209,6 +237,32 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
         expect(panel.state().sidebarCollapsed).toEqual({ a: true, m: true });
         panel.markdown.remove('m');
         expect(panel.state().sidebar).toEqual([A, B]);
+    });
+
+    it('offers a list and a section from its add button, and puts a new list at the end of the stack, its name edited once drawn', () => {
+        drawn.renames = [];
+        const panel = panelOver([A, MEMO]);
+        const menu = panel.add();
+        expect(menu.label).toBe(t('sidebar.add'));
+        expect(menu.items).toEqual([t('pinnedList.addList'), t('sidebar.addSection')]);
+        menu.choose(t('pinnedList.addList'));
+        const added = panel.state().sidebar?.[2];
+        expect(panel.state().sidebar?.slice(0, 2)).toEqual([A, MEMO]);
+        expect(added).toMatchObject({ kind: 'list', id: 'list-new' });
+        expect(drawn.renames).toEqual(['list-new']);
+    });
+
+    it('has the markdown frames open the dialog that adds a section, and puts the frame they hand it at the end of the stack', () => {
+        drawn.sectionsAdded = 0;
+        const panel = panelOver([A, MEMO]);
+        panel.add().choose(t('sidebar.addSection'));
+        expect(drawn.sectionsAdded).toBe(1);
+        expect(panel.writes()).toBe(0);
+
+        const added: SidebarFrame = { kind: 'markdown', id: 'md-new', link: 'Other#Memo' };
+        panel.markdown.append(added);
+        expect(panel.state().sidebar).toEqual([A, MEMO, added]);
+        expect(panel.state().sidebarCollapsed).toEqual({ a: true });
     });
 
     it('writes a change of a list into the list frame of its id, and into no markdown frame', () => {
