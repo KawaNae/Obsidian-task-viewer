@@ -208,6 +208,16 @@ export function parseLinktext(linktext: string): { path: string; subpath: string
     return hash < 0 ? { path: linktext, subpath: '' } : { path: linktext.slice(0, hash), subpath: linktext.slice(hash) };
 }
 
+/** A heading's text as Obsidian compares it with a link's: its marks read as a space, spaces run together (Obsidian 1.15.0's own). */
+export function stripHeading(heading: string): string {
+    return heading.replace(/[!"#$%&()*+,.:;<=>?@^`{|}~\/\[\]\\\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** A heading's text as Obsidian writes it into a link: what would cut the link read as a space (Obsidian 1.15.0's own). */
+export function stripHeadingForLink(heading: string): string {
+    return heading.replace(/([:#|^\\\r\n]|%%|\[\[|]])/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** The aliases a frontmatter names, as Obsidian reads them: a list, or one string; null for none. */
 export function parseFrontMatterAliases(frontmatter: any | null): string[] | null {
     const raw = frontmatter?.aliases ?? frontmatter?.alias;

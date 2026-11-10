@@ -35,6 +35,35 @@ describe.each([
         });
     });
 
+    describe('a markdown frame among the lists', () => {
+        const memo = { kind: 'markdown', id: 'md-1', link: 'Folder/Note#Memo' };
+
+        it('is read from `sidebar` and written back under it, in its place', () => {
+            const config = codec.parseConfig({ sidebar: [stored('a'), memo, stored('b')] });
+            expect(config.sidebar).toEqual([frame('a'), memo, frame('b')]);
+            expect(codec.serializeConfig(config)).toEqual({ sidebar: [stored('a'), memo, stored('b')] });
+        });
+
+        it('leaves the older key read as it was: its lists, where `sidebar` is not there', () => {
+            expect(codec.parseConfig({ pinnedLists: [stored('a'), stored('b')] }).sidebar).toEqual([frame('a'), frame('b')]);
+            const both = codec.parseConfig({ sidebar: [memo], pinnedLists: [stored('old')] });
+            expect(both.sidebar).toEqual([memo]);
+        });
+
+        it('is collapsed by its id, as a list is', () => {
+            expect(codec.parseTransient({ sidebarCollapsed: { 'md-1': true, a: true } }).sidebarCollapsed)
+                .toEqual({ 'md-1': true, a: true });
+        });
+
+        it('is carried by a copied URI, and read back', () => {
+            const config = codec.parseConfig({ sidebar: [memo, stored('a')] });
+            const uri = ViewUriBuilder.build(viewType, { configParams: codec.toUriParams(config) });
+            const query = Object.fromEntries(new URL(uri.replace('obsidian://', 'http://x/')).searchParams);
+            expect(query).toEqual({ view, sidebar: base64([memo, stored('a')]) });
+            expect(codec.fromUriParams(query).sidebar).toEqual([memo, frame('a')]);
+        });
+    });
+
     describe('which frames are collapsed', () => {
         it('is read from a state that holds only the older key `pinnedListCollapsed`', () => {
             expect(codec.parseTransient({ pinnedListCollapsed: { a: true, b: false } }).sidebarCollapsed).toEqual({ a: true });

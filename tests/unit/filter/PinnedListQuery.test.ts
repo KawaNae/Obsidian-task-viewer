@@ -44,6 +44,18 @@ describe("the lists of a view's config (listsOf)", () => {
         expect(TimelineSchema.listsOf?.({ sidebar })).toEqual([listFrame(a), listFrame(b)]);
         expect(CalendarSchema.listsOf?.({ sidebar })).toEqual([listFrame(a), listFrame(b)]);
         expect(TimelineSchema.listsOf?.({ sidebar: [other] })).toEqual([]);
+    });
+
+    it('are not the markdown frames of the sidebar', () => {
+        const memo: SidebarFrame = { kind: 'markdown', id: 'md-1', link: 'Folder/Note#Memo' };
+        const sidebar = [memo, listFrame(a), memo, listFrame(b)];
+        expect(TimelineSchema.listsOf?.({ sidebar })).toEqual([listFrame(a), listFrame(b)]);
+        expect(CalendarSchema.listsOf?.({ sidebar })).toEqual([listFrame(a), listFrame(b)]);
+        expect(TimelineSchema.listsOf?.({ sidebar: [memo] })).toEqual([]);
+        expect(CalendarSchema.listsOf?.({ sidebar: [memo] })).toEqual([]);
+    });
+
+    it('are none where the sidebar holds nothing', () => {
         expect(TimelineSchema.listsOf?.({})).toEqual([]);
         expect(CalendarSchema.listsOf?.({})).toEqual([]);
     });
@@ -71,6 +83,18 @@ describe('PinnedListQuery.fromTemplate', () => {
         const missing = PinnedListQuery.fromTemplate(t, 'memo');
         expect('listError' in missing && missing.listError('list'))
             .toBe('Pinned list "memo" not found. Available: first, second');
+    });
+
+    it.each(['timeline', 'calendar'])('names the lists of a %s template whose sidebar holds markdown frames, and no markdown frame', (viewType) => {
+        const memo = { kind: 'markdown', id: 'md-1', link: 'Folder/Note#first' };
+        const t = template(viewType, [memo, stored('first', 'a'), { kind: 'markdown', id: 'md-2', link: 'Dashboard' }, stored('second', 'b')]);
+        expect(PinnedListQuery.fromTemplate(t, 'first')).toEqual({ query: { filter: tagIs('a') } });
+        const unnamed = PinnedListQuery.fromTemplate(t);
+        expect('listError' in unnamed && unnamed.listError('list'))
+            .toBe("Template has pinned lists. Name one with 'list': first, second");
+        const missing = PinnedListQuery.fromTemplate(t, 'Dashboard');
+        expect('listError' in missing && missing.listError('list'))
+            .toBe('Pinned list "Dashboard" not found. Available: first, second');
     });
 
     it.each(['timeline', 'calendar'])('names the lists of a %s template saved under the older key `pinnedLists`', (viewType) => {

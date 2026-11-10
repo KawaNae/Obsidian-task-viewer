@@ -35,12 +35,30 @@ export interface ListFrame extends PinnedListDefinition {
 }
 
 /**
+ * A frame of the sidebar that shows a section of a note as markdown: one
+ * heading's, or the whole note. It has no name of its own: its row shows
+ * the heading's text, or the note's name.
+ */
+export interface MarkdownFrame {
+    kind: 'markdown';
+    id: string;
+    /**
+     * What it shows, written as a link's destination is: the note before
+     * the first `#`, the heading after it (`Folder/Note#Heading`, or
+     * `Note#Parent#Child` for a heading named from one above it). Without a
+     * `#` it is the whole note. The note is found as a link's is, so a full
+     * path without its `.md` and a shorter name both name one.
+     */
+    link: string;
+}
+
+/**
  * One frame of the sidebar. The sidebar stacks its frames in the order the
  * view's state holds them, and `kind` says what a frame shows. Every kind
- * keeps its `id` and its `name` at the top, so a frame is collapsed, moved
- * and removed by its id without its kind being read.
+ * keeps its `id` at the top, so a frame is collapsed, moved and removed by
+ * its id without its kind being read. Nothing else is common to the kinds.
  */
-export type SidebarFrame = ListFrame;
+export type SidebarFrame = ListFrame | MarkdownFrame;
 
 /** `list` as a frame of the sidebar. */
 export function listFrame(list: PinnedListDefinition): ListFrame {

@@ -19,6 +19,13 @@ export interface FileParseResult {
     genBlocks: Map<string, GenBlock>;
 }
 
+/** A note's reading, the tree of its sections with their values resolved, and its frontmatter. */
+export interface NoteSectionsRead {
+    outline: OutlineReading;
+    root: SectionNode;
+    frontmatter: Record<string, any> | undefined;
+}
+
 /**
  * File → Task[] parse pipeline — the single place that knows the parse
  * order contract:
@@ -102,14 +109,40 @@ export class FileParsePipeline {
         lines: readonly string[],
         settings: TaskViewerSettings,
         reading?: OutlineReading,
-    ): { outline: OutlineReading; root: SectionNode; frontmatter: Record<string, any> | undefined } | null {
+    ): NoteSectionsRead | null {
+        const { outline, frontmatter } = this.readFrontmatter(lines, reading);
+        if (this.isIgnoredByFrontmatter(frontmatter, lines, outline.bodyStart, settings)) return null;
+        return this.resolved(outline, frontmatter, settings);
+    }
+
+    /**
+     * What `resolveSections` answers, for a tv-ignore'd note too: for a
+     * reader of the note's sections that asks for none of its rows (a frame
+     * of a sidebar that draws a section's body, `readFrameContent`). The
+     * note has no rows, and its sections still say what a row there would
+     * inherit.
+     */
+    static sectionsOf(
+        lines: readonly string[],
+        settings: TaskViewerSettings,
+        reading?: OutlineReading,
+    ): NoteSectionsRead {
+        const { outline, frontmatter } = this.readFrontmatter(lines, reading);
+        return this.resolved(outline, frontmatter, settings);
+    }
+
+    /** The note's reading (`reading` when it is one of these lines) and its frontmatter as the YAML parser reads it. */
+    private static readFrontmatter(
+        lines: readonly string[],
+        reading: OutlineReading | undefined,
+    ): { outline: OutlineReading; frontmatter: Record<string, any> | undefined } {
         const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
 
         // The same reading a write takes of where the body begins
         // (`Placement`): a line the parser reads as body is one a write may
         // place a line at.
         const { bodyStart } = outline;
-        let frontmatterObj: Record<string, any> | undefined;
+        let frontmatter: Record<string, any> | undefined;
         if (bodyStart > 0) {
             try {
                 const yamlContent = lines.slice(1, bodyStart - 1).join('\n');
@@ -117,18 +150,24 @@ export class FileParsePipeline {
                 // A block that reads as anything but a mapping (a list, a
                 // text) is no frontmatter: Obsidian's metadata worker keeps a
                 // block only when it reads as one.
-                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) frontmatterObj = parsed as Record<string, any>;
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) frontmatter = parsed as Record<string, any>;
             } catch {
                 // A malformed block reads as no frontmatter, as metadataCache
                 // reads it.
             }
         }
+        return { outline, frontmatter };
+    }
 
-        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStart, settings)) return null;
-
+    /** The sections of the note `outline` reads, their values resolved on the frontmatter's. */
+    private static resolved(
+        outline: OutlineReading,
+        frontmatter: Record<string, any> | undefined,
+        settings: TaskViewerSettings,
+    ): NoteSectionsRead {
         const root = NoteSections.read(outline);
-        SectionPropertyResolver.resolve(outline, root, frontmatterObj, settings.scopeKeys);
-        return { outline, root, frontmatter: frontmatterObj };
+        SectionPropertyResolver.resolve(outline, root, frontmatter, settings.scopeKeys);
+        return { outline, root, frontmatter };
     }
 
     /**
