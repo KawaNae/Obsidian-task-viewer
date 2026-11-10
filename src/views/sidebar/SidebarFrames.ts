@@ -4,7 +4,8 @@
  * The panel holds the frames (`SidebarFrame`): it stacks them down the
  * sidebar in the order of the view's state, adds one, moves and removes one,
  * writes which are collapsed and writes a markdown frame's link, each by the
- * frame's id. What a frame shows is its kind's (`drawFrame`). A list frame is
+ * frame's id. Its add button offers a frame of each kind. What a frame
+ * shows is its kind's (`drawFrame`). A list frame is
  * a saved list, drawn by `TaskListSections`; a markdown frame is a section
  * of a note, drawn by `MarkdownFrameSections`. The panel is the placement of
  * both. The panel draws itself on a change of its fields of the state and of
@@ -122,6 +123,7 @@ export class SidebarFrames {
         });
         this.markdown = new MarkdownFrameSections(deps, {
             rowClasses: MARKDOWN_FRAME_ROW_CLASSES,
+            append: frame => this.writeFrames([...this.frames(), frame]),
             relink: links => this.relink(links),
             setCollapsed: (id, collapsed) => this.setCollapsed(id, collapsed),
             remove: id => this.removeFrame(id),
@@ -181,16 +183,36 @@ export class SidebarFrames {
     mount(header: HTMLElement, body: HTMLElement): void {
         const addBtn = header.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
         setIcon(addBtn, 'plus');
-        addBtn.appendText(t('pinnedList.addList'));
-        addBtn.addEventListener('click', () => {
-            const list = newList();
-            // Its name is edited once it is drawn.
-            this.sections.scheduleRename(list.id);
-            this.writeFrames([...this.frames(), listFrame(list)]);
-        });
+        addBtn.appendText(t('sidebar.add'));
+        addBtn.addEventListener('click', () => this.showAddMenu(addBtn));
         body.appendChild(this.el);
         // A body that waited for the panel to stand in a sidebar is rendered now.
         this.markdown.placed();
+    }
+
+    /**
+     * The add button's menu: a frame of each kind. Each kind adds its own
+     * frame at the end of the stack: a list, its name edited once it is
+     * drawn, and a section, chosen in the dialog the markdown frames open.
+     */
+    private showAddMenu(button: HTMLElement): void {
+        this.deps.plugin.menuPresenter.present((menu) => {
+            menu.addItem(item => item
+                .setTitle(t('pinnedList.addList'))
+                .setIcon('list')
+                .onClick(() => this.addList()));
+            menu.addItem(item => item
+                .setTitle(t('sidebar.addSection'))
+                .setIcon('file-text')
+                .onClick(() => this.markdown.add()));
+        }, { kind: 'belowRect', rect: button.getBoundingClientRect() });
+    }
+
+    /** Put a new list at the end of the stack; its name is edited once it is drawn. */
+    private addList(): void {
+        const list = newList();
+        this.sections.scheduleRename(list.id);
+        this.writeFrames([...this.frames(), listFrame(list)]);
     }
 
     /** Have the markdown frames be the state's, folded as it says. */

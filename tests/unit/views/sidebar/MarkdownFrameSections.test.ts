@@ -3,6 +3,7 @@ import type { TFile } from 'obsidian';
 import { DEFAULT_SETTINGS, type SidebarFrame } from '../../../../src/types';
 import type { FrameRead } from '../../../../src/views/sidebar/MarkdownFrameReader';
 import { MarkdownFrameSections, type MarkdownFrameDeps, type MarkdownFramePlacement } from '../../../../src/views/sidebar/MarkdownFrameSections';
+import type { SectionAsk } from '../../../../src/modals/section/SectionDialog';
 import { makeFile } from '../../helpers/vaultSession';
 
 /**
@@ -12,7 +13,15 @@ import { makeFile } from '../../helpers/vaultSession';
  * it is handed. The placement holds the state's frames as the panel does,
  * and has the frames take them whenever it writes them.
  */
-const views = vi.hoisted(() => ({ made: [] as unknown[] }));
+const views = vi.hoisted(() => ({ made: [] as unknown[], dialogs: [] as unknown[] }));
+
+/** The section dialog, stood in for: what it was opened with, and its answer, given by the test. */
+vi.mock('../../../../src/modals/section/SectionModal', () => ({
+    SectionModal: class {
+        constructor(_app: unknown, readonly opts: unknown) {}
+        open() { views.dialogs.push(this.opts); }
+    },
+}));
 
 vi.mock('../../../../src/views/sidebar/MarkdownFrameView', () => ({
     MarkdownFrameView: class {
@@ -31,7 +40,14 @@ vi.mock('../../../../src/views/sidebar/MarkdownFrameView', () => ({
     },
 }));
 
+interface StandInDialog {
+    purpose: 'add' | 'relink';
+    initial: SectionAsk;
+    chosen(link: string): void;
+}
+
 interface StandInView {
+    host: { relink(): void };
     id: string;
     title: string;
     shown: FrameRead[];
@@ -47,6 +63,7 @@ const LIST: SidebarFrame = { kind: 'list', id: 'l', name: 'L', filterState: { fi
 function framesOver(options: { ready?: boolean } = {}) {
     let state: { frames: SidebarFrame[]; collapsed: Record<string, boolean> } = { frames: [], collapsed: {} };
     views.made = [];
+    views.dialogs = [];
     const files = new Map<string, TFile>();
     const handlers = new Map<string, (file: TFile) => void>();
     const layoutReady: (() => void)[] = [];
@@ -68,6 +85,7 @@ function framesOver(options: { ready?: boolean } = {}) {
     const relinked: Map<string, string>[] = [];
     const placement: MarkdownFramePlacement = {
         rowClasses: { header: 'h', toggle: 't', name: 'n', button: 'b', collapsed: 'c' },
+        append: (frame) => show([...state.frames, frame], state.collapsed),
         relink: (links) => {
             relinked.push(new Map(links));
             const frames = state.frames.map(frame =>
@@ -110,6 +128,9 @@ function framesOver(options: { ready?: boolean } = {}) {
         /** The state's links, by frame id. */
         links: () => Object.fromEntries(state.frames.flatMap(f => f.kind === 'markdown' ? [[f.id, f.link]] : [])),
         views: () => views.made as StandInView[],
+        dialogs: () => views.dialogs as StandInDialog[],
+        /** The state's frames, in order. */
+        frames: () => state.frames,
         /** A note at `path`, which a link names by its path without `.md`, holding `text`. */
         note(path: string, text = '') {
             const file = makeFile(path);
@@ -300,5 +321,57 @@ describe('the markdown frames of a sidebar', () => {
         frames.sections.settingsSaved();
         await settle();
         expect(frames.reads).toEqual([note, note]);
+    });
+    it('adds the section chosen in an empty dialog as a new frame at the end of the stack, and makes its frame', async () => {
+        const frames = framesOver();
+        frames.note('Note.md', '# Memo\nbody');
+        frames.sections.open();
+        frames.show([memo('m', 'Note#Memo'), LIST]);
+        frames.sections.add();
+        const [dialog] = frames.dialogs();
+        expect(dialog).toMatchObject({ purpose: 'add', initial: { note: { text: '', picked: null }, heading: { text: '', picked: null } } });
+
+        dialog.chosen('Note');
+        const added = frames.frames()[2];
+        expect(frames.frames().slice(0, 2)).toEqual([memo('m', 'Note#Memo'), LIST]);
+        expect(added).toMatchObject({ kind: 'markdown', link: 'Note' });
+        expect(added.id).toMatch(/^md-/);
+        expect(frames.views().map(v => v.id)).toEqual(['m', added.id]);
+        await settle();
+        expect(frames.views()[1].shown.at(-1)).toMatchObject({ reading: { kind: 'note', markdown: '# Memo\nbody' } });
+    });
+
+    it('chooses again the section of a frame from its card: only its link is written, its id, place and fold kept', async () => {
+        const frames = framesOver();
+        frames.note('Folder/Note.md', '# Memo\nbody\n# Other\nother');
+        frames.sections.open();
+        frames.show([memo('a', 'Folder/Note#Gone'), memo('m', 'Gone#Memo'), LIST], { a: true });
+        await settle();
+        const [a, m] = frames.views();
+
+        a.host.relink();
+        m.host.relink();
+        const [ofA, ofM] = frames.dialogs();
+        expect(ofA).toMatchObject({ purpose: 'relink', initial: { note: { text: 'Note', picked: 'Folder/Note.md' }, heading: { text: 'Gone', picked: null } } });
+        expect(ofM.initial).toEqual({ note: { text: 'Gone', picked: null }, heading: { text: 'Memo', picked: null } });
+
+        ofA.chosen('Folder/Note#Other');
+        expect(frames.relinked).toEqual([new Map([['a', 'Folder/Note#Other']])]);
+        expect(frames.frames()).toEqual([memo('a', 'Folder/Note#Other'), memo('m', 'Gone#Memo'), LIST]);
+        expect(frames.views()).toHaveLength(2);
+        // Folded as it was made, and never unfolded.
+        expect(new Set(a.folds)).toEqual(new Set([true]));
+        await settle();
+        expect(a.shown.at(-1)).toMatchObject({ reading: { kind: 'heading', markdown: 'other' } });
+    });
+
+    it('writes nothing when the section is chosen for a frame removed meanwhile', () => {
+        const frames = framesOver();
+        frames.sections.open();
+        frames.show([memo('m', 'Gone#Memo')]);
+        frames.views()[0].host.relink();
+        frames.show([]);
+        frames.dialogs()[0].chosen('Note#Memo');
+        expect(frames.frames()).toEqual([]);
     });
 });

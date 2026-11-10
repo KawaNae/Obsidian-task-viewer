@@ -24,6 +24,12 @@
  *
  * A body that measures the room it has (a chart) is rendered once the panel
  * stands in a document, styled by the plugin's stylesheet (`canRender`).
+ *
+ * A frame is added, and a frame's section chosen again, in the section
+ * dialog (`SectionModal`), which this opens: what is chosen there is
+ * written through the placement, a new frame at the end of the stack
+ * (`append`) and a frame's new link by its id (`relink`), and reaches the
+ * frames as any change of the state does.
  */
 
 import type { EventRef, HoverParent, Menu } from 'obsidian';
@@ -31,7 +37,10 @@ import { t } from '../../i18n';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import type { PluginContext } from '../../PluginContext';
 import { frameLinkAt, frameTarget } from '../../services/data/MarkdownFrames';
-import type { SidebarFrame } from '../../types';
+import { emptySectionAsk, sectionAskOf, type SectionAsk } from '../../modals/section/SectionDialog';
+import { SectionModal } from '../../modals/section/SectionModal';
+import { newMarkdownFrameId } from '../../services/viewConfig/ListIds';
+import type { MarkdownFrame, SidebarFrame } from '../../types';
 import { openFile } from '../../utils/NavigationUtils';
 import type { SectionHeaderClasses } from '../sharedUI/ListSectionRenderer';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -51,6 +60,8 @@ export interface MarkdownFrameDeps {
 export interface MarkdownFramePlacement {
     /** The look of a frame's header row in this place. */
     rowClasses: SectionHeaderClasses;
+    /** Put `frame`, a new markdown frame, at the end of the stack. */
+    append(frame: MarkdownFrame): void;
     /** Write the markdown frames `links` names with the links it gives, by id, at once. */
     relink(links: ReadonlyMap<string, string>): void;
     /** Write whether the frame `id` is collapsed; the frame already shows it. */
@@ -158,6 +169,11 @@ export class MarkdownFrameSections {
         }
     }
 
+    /** Open the section dialog, empty; a section chosen there is a new frame, put at the end of the stack. */
+    add(): void {
+        this.openDialog('add', emptySectionAsk(), link => this.placement.append({ kind: 'markdown', id: newMarkdownFrameId(), link }));
+    }
+
     /** The element of the frame `id`; it has to be among the frames last synced. */
     elementOf(id: string): HTMLElement {
         const frame = this.frames.get(id);
@@ -213,9 +229,24 @@ export class MarkdownFrameSections {
             collapsedChanged: next => this.placement.setCollapsed(id, next),
             showMenu: event => this.showMenu(id, reader, event),
             remove: () => this.placement.remove(id),
+            relink: () => this.relink(id, reader),
         }, id, reader.untitled(), collapsed);
         this.frames.set(id, { reader, view });
         if (this.notesKnown()) reader.follow();
+    }
+
+    /**
+     * Open the section dialog on the section the frame `id` shows: the note
+     * it found, or its link's note as typed, and the last heading its link
+     * names. A section chosen there is written as the frame's link; its id,
+     * its place and its fold stay. A frame gone meanwhile is written nothing.
+     */
+    private relink(id: string, reader: MarkdownFrameReader): void {
+        this.openDialog('relink', sectionAskOf(reader.link, reader.note), link => this.placement.relink(new Map([[id, link]])));
+    }
+
+    private openDialog(purpose: 'add' | 'relink', initial: SectionAsk, chosen: (link: string) => void): void {
+        new SectionModal(this.deps.plugin.app, { purpose, initial, chosen }).open();
     }
 
     private end({ reader, view }: MarkdownFramePair): void {

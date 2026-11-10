@@ -81,7 +81,7 @@
 }
 
 /* The note or the section is not there: the card says which, and offers to
-   remove the frame. */
+   choose the section again and to remove the frame. */
 .markdown-frame__missing {
     display: flex;
     align-items: center;
@@ -95,6 +95,13 @@
     min-width: 0;
 }
 
+.markdown-frame__missing-actions {
+    flex: none;
+    display: flex;
+    gap: 4px;
+}
+
+.markdown-frame__missing-relink,
 .markdown-frame__missing-remove {
     flex: none;
     height: 22px;

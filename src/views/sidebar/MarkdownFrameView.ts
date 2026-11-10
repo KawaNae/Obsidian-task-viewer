@@ -36,8 +36,8 @@
  * itself, and is left alone.
  *
  * A frame whose note or section is not there says which, in its card, and
- * offers to remove itself. It is shown again once the note or the section
- * is found.
+ * offers to choose its section again and to remove itself. It is shown
+ * again once the note or the section is found.
  *
  * What the card shows is one of the three (`CardContent`), decided in one
  * place (`wanted`) from what was read and whether the view masks, and put
@@ -76,6 +76,8 @@ export interface MarkdownFrameViewHost {
     showMenu(event: MouseEvent): void;
     /** Take the frame out of the sidebar. */
     remove(): void;
+    /** Choose again the section the frame shows. */
+    relink(): void;
 }
 
 /**
@@ -260,14 +262,17 @@ export class MarkdownFrameView {
         return { content: body, el, component };
     }
 
-    /** Say in the card that the note (`no-note`) or the section (`no-heading`) is not there, and offer Remove. */
+    /** Say in the card that the note (`no-note`) or the section (`no-heading`) is not there, and offer Choose again and Remove. */
     private drawMissing(what: 'no-note' | 'no-heading'): HTMLElement {
         const el = this.card.createDiv('markdown-frame__missing');
         el.createDiv({
             cls: 'markdown-frame__missing-reason',
             text: t(what === 'no-note' ? 'sidebar.noteNotFound' : 'sidebar.sectionNotFound'),
         });
-        const removeBtn = el.createEl('button', { cls: 'markdown-frame__missing-remove', text: t('menu.remove') });
+        const actions = el.createDiv('markdown-frame__missing-actions');
+        const relinkBtn = actions.createEl('button', { cls: 'markdown-frame__missing-relink', text: t('sidebar.relink') });
+        relinkBtn.addEventListener('click', () => this.host.relink());
+        const removeBtn = actions.createEl('button', { cls: 'markdown-frame__missing-remove', text: t('menu.remove') });
         removeBtn.addEventListener('click', () => this.host.remove());
         return el;
     }
