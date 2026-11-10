@@ -10,7 +10,7 @@ import { F, T } from '../../services/viewConfig/FieldCodecs';
 import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
+import { listFramesOf, type SidebarFrame, type AstronomyDisplay } from '../../types';
 
 /** Timeline days-per-screen bounds. Single constant closes the upper limit
  *  everywhere it's checked (schema, toolbar stepper, CLI export-image). At
@@ -26,7 +26,8 @@ export interface TimelineConfig {
     maskMode?: boolean;
     astronomyDisplay?: Partial<AstronomyDisplay>;
     showSidebar?: boolean;
-    pinnedLists?: PinnedListDefinition[];
+    /** The frames of the sidebar, in the order they are stacked. */
+    pinnedLists?: SidebarFrame[];
     daysToShow?: number;
     zoomLevel?: number;
     /** Per-view override of all-day section visibility. undefined = follow global. */
@@ -43,6 +44,7 @@ export interface TimelineTransient {
      * `anchor-date` set it.
      */
     date?: string;
+    /** Which frames of the sidebar are collapsed, by frame id. */
     pinnedListCollapsed?: Record<string, boolean>;
 }
 
@@ -71,7 +73,7 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         showTimeline:     F.boolean('showTimeline'),
     },
     anchorKey: 'date',
-    listsOf: (config) => config.pinnedLists ?? [],
+    listsOf: (config) => listFramesOf(config.pinnedLists ?? []),
     transient: {
         date:                    T.dateString('date'),
         pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),

@@ -26,7 +26,7 @@ import { hasConditions } from '../filter/FilterTypes';
 import { FilterSerializer, filterIssueText, type FilterRead } from '../filter/FilterSerializer';
 import { SortSerializer, sortIssueText } from '../sort/SortSerializer';
 import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
+import { listFrame, type PinnedListDefinition, type SidebarFrame, type AstronomyDisplay } from '../../types';
 import { newListId } from './ListIds';
 
 interface FieldOptions {
@@ -197,36 +197,40 @@ export const F = {
     },
 
     /**
-     * PinnedList[] with nested FilterState. Each list's filterState is
-     * serialized via FilterSerializer.toJSON (so the persisted form is plain
-     * JSON, not the runtime object).
+     * The frames of a sidebar, in their order (`SidebarFrame[]`). An entry
+     * says its kind in `kind`; a list is written as its definition alone,
+     * without one, and an entry without one is read as a list. An entry of a
+     * kind that is not known is skipped, as an entry that cannot be read is.
+     * A list's filterState is serialized via FilterSerializer.toJSON (so the
+     * persisted form is plain JSON, not the runtime object).
      */
-    pinnedLists(key: string, opts: FieldOptions = {}): ConfigField<PinnedListDefinition[]> {
+    pinnedLists(key: string, opts: FieldOptions = {}): ConfigField<SidebarFrame[]> {
         return {
             key,
             legacyKeys: opts.legacyKeys,
             parse(raw, report) {
                 if (!Array.isArray(raw)) return undefined;
-                const result = parsePinnedLists(raw, report);
+                const result = parseFrames(raw, report);
                 return result.length > 0 ? result : undefined;
             },
             serialize(value) {
                 if (!Array.isArray(value) || value.length === 0) return undefined;
-                return value.map(serializePinnedList);
+                return value.map(serializeFrame);
             },
             toUriParam(value) {
                 if (!Array.isArray(value) || value.length === 0) return undefined;
-                return encodeBase64Json(value.map(serializePinnedList));
+                return encodeBase64Json(value.map(serializeFrame));
             },
             fromUriParam(raw, report) {
                 const decoded = tryDecodeBase64Json(raw);
                 if (!Array.isArray(decoded)) return undefined;
-                const result = parsePinnedLists(decoded, report);
+                const result = parseFrames(decoded, report);
                 return result.length > 0 ? result : undefined;
             },
         };
     },
 
+    /** Kanban's rows of cells. A cell is a saved list, written as a list of a sidebar is. */
     grid(key: string, opts: FieldOptions = {}): ConfigField<PinnedListDefinition[][]> {
         return {
             key,
@@ -325,7 +329,8 @@ export const T = {
     },
 
     /**
-     * Which lists are collapsed, by list id. Only `true` entries are kept.
+     * Which of a view's sections are collapsed (the frames of a sidebar,
+     * Kanban's cells), by id. Only `true` entries are kept.
      *
      * An older layout names each list `<legacyPrefix>::<id>` (the
      * view's name, put on to keep views apart that never shared the map);
@@ -378,6 +383,13 @@ export const T = {
 
 // ── Internal helpers (pinnedLists / grid) ──
 
+function serializeFrame(frame: SidebarFrame): Record<string, unknown> {
+    switch (frame.kind) {
+        case 'list': return serializePinnedList(frame);
+    }
+}
+
+/** A saved list as it is stored: its definition's fields and nothing else. */
 function serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> {
     const result: Record<string, unknown> = {
         id: pl.id,
@@ -401,49 +413,80 @@ function reportedFilter(read: FilterRead, report: ReportIssue | undefined, where
     return read.state;
 }
 
-function parsePinnedLists(raw: unknown[], report?: ReportIssue): PinnedListDefinition[] {
-    const result: PinnedListDefinition[] = [];
+/** The entries of `raw` that `parse` reads, in their order; the others are skipped. */
+function parseEntries<T>(raw: unknown[], parse: (entry: Record<string, unknown>) => T | undefined): T[] {
+    const result: T[] = [];
     for (const entry of raw) {
         if (!entry || typeof entry !== 'object') continue;
-        const obj = entry as Record<string, unknown>;
-        const name = typeof obj.name === 'string' ? obj.name : '';
-        if (!name) continue;
-        const id = (typeof obj.id === 'string' && obj.id)
-            ? obj.id
-            : newListId();
-
-        if (!obj.filterState || typeof obj.filterState !== 'object') continue;
-        const where = `list "${name}" `;
-        const filterState = reportedFilter(FilterSerializer.parse(obj.filterState), report, where);
-
-        // A list saved before the toggle was touched has no key: it reads as
-        // false (the view filter is not applied). This is the one place the
-        // default lives; everything past the codec sees a boolean.
-        const applyViewFilter = obj.applyViewFilter === true;
-        const def: PinnedListDefinition = { id, name, filterState, applyViewFilter };
-
-        if (obj.sortState && typeof obj.sortState === 'object') {
-            const sort = SortSerializer.parse(obj.sortState);
-            for (const issue of sort.issues) report?.(`${where}sort ${sortIssueText(issue)}`);
-            def.sortState = sort.state;
-        }
-        if (obj.topRight && typeof obj.topRight === 'object') {
-            const tr = obj.topRight as Record<string, unknown>;
-            if (Array.isArray(tr.fields)) {
-                const fields = (tr.fields as unknown[]).filter((f): f is string => typeof f === 'string');
-                if (fields.length > 0) {
-                    def.topRight = {
-                        fields,
-                        separator: typeof tr.separator === 'string' ? tr.separator : '',
-                        ...(typeof tr.prefix === 'string' && tr.prefix ? { prefix: tr.prefix } : {}),
-                        ...(typeof tr.suffix === 'string' && tr.suffix ? { suffix: tr.suffix } : {}),
-                    };
-                }
-            }
-        }
-        result.push(def);
+        const parsed = parse(entry as Record<string, unknown>);
+        if (parsed !== undefined) result.push(parsed);
     }
     return result;
+}
+
+function parseFrames(raw: unknown[], report?: ReportIssue): SidebarFrame[] {
+    return parseEntries(raw, obj => parseFrame(obj, report));
+}
+
+/**
+ * The frame `obj` holds, by its `kind`. Without a `kind` it is a list, which
+ * is written without one. A kind that is not known here is not read, so the
+ * other frames of its sidebar are kept.
+ */
+function parseFrame(obj: Record<string, unknown>, report?: ReportIssue): SidebarFrame | undefined {
+    switch (obj.kind) {
+        case undefined:
+        case 'list': {
+            const list = parsePinnedList(obj, report);
+            return list && listFrame(list);
+        }
+        default:
+            return undefined;
+    }
+}
+
+function parsePinnedLists(raw: unknown[], report?: ReportIssue): PinnedListDefinition[] {
+    return parseEntries(raw, obj => parsePinnedList(obj, report));
+}
+
+/** The saved list `obj` holds, or undefined when it has no name or no filter. */
+function parsePinnedList(obj: Record<string, unknown>, report?: ReportIssue): PinnedListDefinition | undefined {
+    const name = typeof obj.name === 'string' ? obj.name : '';
+    if (!name) return undefined;
+    const id = (typeof obj.id === 'string' && obj.id)
+        ? obj.id
+        : newListId();
+
+    if (!obj.filterState || typeof obj.filterState !== 'object') return undefined;
+    const where = `list "${name}" `;
+    const filterState = reportedFilter(FilterSerializer.parse(obj.filterState), report, where);
+
+    // A list saved before the toggle was touched has no key: it reads as
+    // false (the view filter is not applied). This is the one place the
+    // default lives; everything past the codec sees a boolean.
+    const applyViewFilter = obj.applyViewFilter === true;
+    const def: PinnedListDefinition = { id, name, filterState, applyViewFilter };
+
+    if (obj.sortState && typeof obj.sortState === 'object') {
+        const sort = SortSerializer.parse(obj.sortState);
+        for (const issue of sort.issues) report?.(`${where}sort ${sortIssueText(issue)}`);
+        def.sortState = sort.state;
+    }
+    if (obj.topRight && typeof obj.topRight === 'object') {
+        const tr = obj.topRight as Record<string, unknown>;
+        if (Array.isArray(tr.fields)) {
+            const fields = (tr.fields as unknown[]).filter((f): f is string => typeof f === 'string');
+            if (fields.length > 0) {
+                def.topRight = {
+                    fields,
+                    separator: typeof tr.separator === 'string' ? tr.separator : '',
+                    ...(typeof tr.prefix === 'string' && tr.prefix ? { prefix: tr.prefix } : {}),
+                    ...(typeof tr.suffix === 'string' && tr.suffix ? { suffix: tr.suffix } : {}),
+                };
+            }
+        }
+    }
+    return def;
 }
 
 function parseGrid(raw: unknown[], report?: ReportIssue): PinnedListDefinition[][] {
