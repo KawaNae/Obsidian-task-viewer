@@ -30,9 +30,9 @@ import type { EventRef, HoverParent, Menu } from 'obsidian';
 import { t } from '../../i18n';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import type { PluginContext } from '../../PluginContext';
-import { frameLinkAt } from '../../services/data/MarkdownFrames';
+import { frameLinkAt, frameTarget } from '../../services/data/MarkdownFrames';
 import type { SidebarFrame } from '../../types';
-import { openLink } from '../../utils/NavigationUtils';
+import { openFile } from '../../utils/NavigationUtils';
 import type { SectionHeaderClasses } from '../sharedUI/ListSectionRenderer';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { MarkdownFrameReader } from './MarkdownFrameReader';
@@ -296,7 +296,11 @@ export class MarkdownFrameSections {
         };
     }
 
-    /** The ⋯ menu of the frame `id`: open its note, when there is one, then the placement's items. */
+    /**
+     * The ⋯ menu of the frame `id`: open its note, when there is one, then
+     * the placement's items. The note opened is the one the frame found, at
+     * the section its link names, not what the link would resolve to anew.
+     */
     private showMenu(id: string, reader: MarkdownFrameReader, event: MouseEvent): void {
         const { plugin } = this.deps;
         plugin.menuPresenter.present((menu) => {
@@ -304,7 +308,12 @@ export class MarkdownFrameSections {
                 menu.addItem(item => item
                     .setTitle(t('sidebar.openNote'))
                     .setIcon('file-text')
-                    .onClick(() => openLink(plugin.app, reader.link, '', plugin.settings.reuseExistingTab)));
+                    .onClick(() => {
+                        const note = reader.note;
+                        if (!note) return;
+                        const { subpath } = frameTarget(reader.link);
+                        void openFile(plugin.app, note.path, plugin.settings.reuseExistingTab, subpath ? { subpath } : undefined);
+                    }));
             }
             this.placement.appendMenuItems(menu, id);
         }, { kind: 'mouseEvent', event });
