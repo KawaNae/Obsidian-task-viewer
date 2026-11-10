@@ -1,6 +1,6 @@
 /**
  * The pinned lists of Timeline's and Calendar's sidebar, in the running Dev
- * vault, driven as the user clicks them: the Add List button, each list's
+ * vault, driven as the user clicks them: the add button's Add List, each list's
  * header (collapse), its sort, filter and ⋯ buttons, the menus and popovers
  * they open, and Show more. What a list shows is read from its DOM, what the
  * view keeps from `getState` (`sidebar`, `sidebarCollapsed`).
@@ -166,7 +166,7 @@ describe.each([
         openView(name, type, { showSidebar: true, sidebar: [] });
     });
 
-    it('says that nothing is added yet while it holds nothing, under a header that holds the Add List button alone, at its right end', () => {
+    it('says that nothing is added yet while it holds nothing, under a header that holds the add button alone, at its right end', () => {
         const r = ev<{ empty: string | null; header: string[]; width: number; gap: number; padding: number }>(`(() => {
             ${PRELUDE}
             const el = V(${JSON.stringify(name)}).contentEl;
@@ -186,8 +186,24 @@ describe.each([
         expect(r.gap).toBeCloseTo(r.padding, 0);
     });
 
-    it('adds a list with the Add List button and starts editing its name, which Enter keeps', () => {
-        let r = op(name, `el.querySelector('.tv-sidebar__panel-add-btn').click();`, 300);
+    it('offers a list and a section in the add button\'s menu', () => {
+        const titles = ev<string[]>(`(async () => {
+            ${PRELUDE}
+            V(${JSON.stringify(name)}).contentEl.querySelector('.tv-sidebar__panel-add-btn').click();
+            await wait(100);
+            const titles = menuItems().map(it => it.titleEl?.textContent ?? '');
+            closeMenus();
+            return JSON.stringify(titles);
+        })()`);
+        expect(titles).toEqual([tr('pinnedList.addList'), tr('sidebar.addSection')]);
+    });
+
+    it('adds a list from the add button\'s menu and starts editing its name, which Enter keeps', () => {
+        let r = op(name, `
+            el.querySelector('.tv-sidebar__panel-add-btn').click();
+            await wait(100);
+            menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('pinnedList.addList'))});
+        `, 300);
         expect(r.lists).toHaveLength(1);
         expect(r.lists[0].name).toBe(tr('pinnedList.newList'));
         expect(r.lists[0].filterState).toEqual({ logic: 'and', filters: [TOP_LEVEL] });
