@@ -2,13 +2,47 @@
 type RestoreFn = () => void;
 
 /**
- * Shared export utilities. Limited to "expand the clone so the full content is
- * captured" plus capture/download helpers. The previous visible-area simulation
+ * Shared export utilities: make the clone show what the view shows and expand
+ * it so the full content is captured, plus capture/download helpers. The previous visible-area simulation
  * (margin-top trick on the first non-sticky child) is gone — OS screenshot is
  * the right tool for "the pixels currently on screen", and masking is now a
  * render-time concern handled by TaskCardRenderer rather than a clone-walk.
  */
 export class ExportUtils {
+    /**
+     * Draw each canvas under `source` into its counterpart under `clone`, a
+     * deep clone of `source` made just before: a cloned canvas keeps its size
+     * but not its picture, so a chart in the view would be captured empty.
+     * Canvases pair up in document order, as the clone has them.
+     *
+     * A canvas that cannot be copied is left empty in the clone, and the rest
+     * of the export goes on:
+     * - one of no width or height, which `drawImage` refuses
+     * - one holding a picture from another origin: drawn, it would taint the
+     *   clone's canvas, and capturing that canvas would throw, failing the
+     *   whole export, so it is replaced with an empty one
+     * - a WebGL canvas whose buffer is not kept after it is shown is drawn as
+     *   it reads then, which may be empty
+     */
+    static copyCanvases(source: HTMLElement, clone: HTMLElement): void {
+        const originals = source.querySelectorAll('canvas');
+        const copies = clone.querySelectorAll('canvas');
+        if (originals.length !== copies.length) return;
+        originals.forEach((original, i) => {
+            const copy = copies[i];
+            if (original.width === 0 || original.height === 0) return;
+            const ctx = copy.getContext('2d');
+            if (!ctx) return;
+            try {
+                ctx.drawImage(original, 0, 0);
+                // Reading a pixel throws on a tainted canvas.
+                ctx.getImageData(0, 0, 1, 1);
+            } catch {
+                copy.replaceWith(copy.cloneNode(false));
+            }
+        });
+    }
+
     /** Expand a single scroll area to its full scrollHeight. */
     static expandScrollArea(area: HTMLElement, restoreFns: RestoreFn[]): void {
         const origOverflow = area.style.overflow;
