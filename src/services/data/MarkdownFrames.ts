@@ -6,7 +6,7 @@
  *
  * Nothing here looks a note up or reads a file: which note the link's path
  * names, and that note's lines, are the caller's to find
- * (`views/sidebar/MarkdownFrameView.ts`).
+ * (`views/sidebar/MarkdownFrameReader.ts`).
  */
 
 import { parseLinktext } from 'obsidian';
