@@ -166,13 +166,24 @@ describe.each([
         openView(name, type, { showSidebar: true, sidebar: [] });
     });
 
-    it('says that nothing is added yet while it holds nothing', () => {
-        const empty = ev<string | null>(`(() => {
+    it('says that nothing is added yet while it holds nothing, under a header that holds the Add List button alone, at its right end', () => {
+        const r = ev<{ empty: string | null; header: string[]; width: number; gap: number; padding: number }>(`(() => {
             ${PRELUDE}
             const el = V(${JSON.stringify(name)}).contentEl;
-            return JSON.stringify(el.querySelector('.tv-sidebar__frames > .tv-sidebar__frames--empty')?.textContent ?? null);
+            const header = el.querySelector('.tv-sidebar__panel-header');
+            const button = header.querySelector('.tv-sidebar__panel-add-btn');
+            return JSON.stringify({
+                empty: el.querySelector('.tv-sidebar__frames > .tv-sidebar__frames--empty')?.textContent ?? null,
+                header: [...header.children].map(c => c.tagName),
+                width: header.getBoundingClientRect().width,
+                gap: header.getBoundingClientRect().right - button.getBoundingClientRect().right,
+                padding: parseFloat(getComputedStyle(header).paddingRight),
+            });
         })()`);
-        expect(empty).toBe(tr('sidebar.empty'));
+        expect(r.empty).toBe(tr('sidebar.empty'));
+        expect(r.header).toEqual(['BUTTON']);
+        expect(r.width).toBeGreaterThan(0);
+        expect(r.gap).toBeCloseTo(r.padding, 0);
     });
 
     it('adds a list with the Add List button and starts editing its name, which Enter keeps', () => {

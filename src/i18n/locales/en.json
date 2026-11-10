@@ -844,7 +844,6 @@
     "empty": "Nothing added yet."
   },
   "pinnedList": {
-    "pinnedLists": "Pinned Lists",
     "addList": "Add List",
     "newList": "New List",
     "showMore": "Show more ({{remaining}})",
