@@ -154,12 +154,12 @@ describe('ViewConfigCodec', () => {
         const list = { id: 'pl-1', name: 'L', filterState: { filters: [], logic: 'and' } };
 
         it('a list saved without the key reads as false', () => {
-            expect(F.sidebarFrames('pins').parse([list])?.[0].applyViewFilter).toBe(false);
+            expect(F.sidebarFrames('pins').parse([list])?.[0]).toMatchObject({ kind: 'list', applyViewFilter: false });
             expect(F.grid('grid').parse([[list]])?.[0][0].applyViewFilter).toBe(false);
         });
 
         it('a value that is not a boolean reads as false', () => {
-            expect(F.sidebarFrames('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0].applyViewFilter).toBe(false);
+            expect(F.sidebarFrames('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0]).toMatchObject({ kind: 'list', applyViewFilter: false });
         });
 
         it('false is written, not omitted', () => {
