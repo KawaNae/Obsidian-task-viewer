@@ -18,6 +18,12 @@
  * itself up to date between them. Each render has an element of its own, so
  * one that ends late adds nothing to the one that took its place.
  *
+ * Only a body waits to be rendered. While it waits, the card keeps what it
+ * shows only when that is a body rendered against the same path, which may
+ * be an older version of it; anything else is taken out at once. A body
+ * rendered against the path a renamed note had resolved its links, and had
+ * them bound, against that path.
+ *
  * While the view masks (`MarkdownFrameViewHost.masked`), a section that has
  * a mask shows it in place of its body, as a masked task card shows it in
  * place of its text: the body is taken out, and rendered again once the
@@ -158,16 +164,21 @@ export class MarkdownFrameView {
      * shows that already. A body waits while the frame is folded, while its
      * element stands in no document (the frame is made as the state takes
      * it, before the panel puts it in place), or while it cannot be
-     * rendered yet (`MarkdownFrameViewHost.canRender`), and the card keeps
-     * what it shows until then; the rest is shown at once. Called when what
-     * was read changes, at the unfold, when the panel can render, and at
-     * each draw of the panel, which is where a change of the view's masking
-     * comes in.
+     * rendered yet (`MarkdownFrameViewHost.canRender`); until then the card
+     * keeps what it shows only if that is a body rendered against the same
+     * path, and else shows nothing. The rest is shown at once. Called when
+     * what was read changes, at the unfold, when the panel can render, and
+     * at each draw of the panel, which is where a change of the view's
+     * masking comes in.
      */
     paint(): void {
         const wanted = this.wanted();
         if (!wanted || (this.shown && sameContent(this.shown.content, wanted))) return;
-        if (wanted.kind === 'body' && (this.collapsed || !this.root.isConnected || !this.host.canRender())) return;
+        if (wanted.kind === 'body' && (this.collapsed || !this.root.isConnected || !this.host.canRender())) {
+            const { shown } = this;
+            if (shown && !(shown.content.kind === 'body' && shown.content.path === wanted.path)) this.clearCard();
+            return;
+        }
 
         this.clearCard();
         this.root.toggleClass('markdown-frame--missing', wanted.kind === 'missing');
@@ -248,5 +259,6 @@ export class MarkdownFrameView {
         this.shown.component?.unload();
         this.shown.el.remove();
         this.shown = null;
+        this.root.removeClass('markdown-frame--missing');
     }
 }
