@@ -460,28 +460,38 @@ export class SidebarFrames {
         this.writeFrames(this.frames().filter(f => f.id !== id));
     }
 
-    /** The items every frame's menu has: move up and down, and remove. */
+    /**
+     * Swap the frame `id` with the one `by` places from it, in the frames
+     * the state holds now: the frames may have changed since the menu that
+     * asks it was opened (a note renamed meanwhile rewrites a link). Nothing
+     * moves when the frame is gone or at that end.
+     */
+    private moveFrame(id: string, by: -1 | 1): void {
+        const next = [...this.frames()];
+        const from = next.findIndex(f => f.id === id);
+        const to = from + by;
+        if (from < 0 || to < 0 || to >= next.length) return;
+        [next[from], next[to]] = [next[to], next[from]];
+        this.writeFrames(next);
+    }
+
+    /** The items every frame's menu has: move up and down, offered by where the frame stands as the menu opens, and remove. */
     private appendFrameMenuItems(menu: Menu, id: string): void {
         const frames = this.frames();
         const index = frames.findIndex(f => f.id === id);
-        const swap = (a: number, b: number) => {
-            const next = [...frames];
-            [next[a], next[b]] = [next[b], next[a]];
-            this.writeFrames(next);
-        };
 
         menu.addSeparator();
         if (index > 0) {
             menu.addItem(item => item
                 .setTitle(t('menu.moveUp'))
                 .setIcon('arrow-up')
-                .onClick(() => swap(index - 1, index)));
+                .onClick(() => this.moveFrame(id, -1)));
         }
         if (index >= 0 && index < frames.length - 1) {
             menu.addItem(item => item
                 .setTitle(t('menu.moveDown'))
                 .setIcon('arrow-down')
-                .onClick(() => swap(index, index + 1)));
+                .onClick(() => this.moveFrame(id, 1)));
         }
         menu.addSeparator();
         menu.addItem(item => {

@@ -36,7 +36,9 @@ function panelOver(sidebar: SidebarFrame[]) {
     });
     const placement = drawn.placement as ListPlacement;
     /** Choose `title` in the items the panel adds to the menu of the frame `id`. */
-    const choose = (id: string, title: string) => {
+    const choose = (id: string, title: string) => open(id)(title);
+    /** Open the menu of the frame `id`: what it gives chooses one of its items, then or later. */
+    const open = (id: string) => {
         const items = new Map<string, () => void>();
         const menu = {
             addSeparator: () => menu,
@@ -52,11 +54,15 @@ function panelOver(sidebar: SidebarFrame[]) {
             },
         };
         placement.appendMenuItems(menu as unknown as Menu, { id } as PinnedListDefinition);
-        const run = items.get(title);
-        if (!run) throw new Error(`no item "${title}" among ${[...items.keys()].join(', ')}`);
-        run();
+        return (title: string) => {
+            const run = items.get(title);
+            if (!run) throw new Error(`no item "${title}" among ${[...items.keys()].join(', ')}`);
+            run();
+        };
     };
-    return { placement, choose, ids: () => state.sidebar?.map(f => f.id), state: () => state };
+    /** Change the frames from outside the menu, as a rename of a note does. */
+    const set = (frames: SidebarFrame[]) => { state = { ...state, sidebar: frames }; };
+    return { placement, choose, open, set, ids: () => state.sidebar?.map(f => f.id), state: () => state };
 }
 
 describe("the stack of a sidebar that holds a markdown frame", () => {
@@ -76,6 +82,28 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
         panel.choose('m', t('menu.moveDown'));
         expect(panel.ids()).toEqual(['a', 'b', 'm']);
         expect(panel.state().sidebar?.[2]).toEqual(MEMO);
+    });
+
+    it('moves the frames the state holds when the item is chosen, not those it held when the menu opened', () => {
+        const panel = panelOver([A, MEMO, B]);
+        const choose = panel.open('b');
+        const renamed: SidebarFrame = { ...MEMO, link: 'Moved/Note#Memo' };
+        panel.set([A, renamed, B]);
+        choose(t('menu.moveUp'));
+        expect(panel.state().sidebar).toEqual([A, B, renamed]);
+    });
+
+    it('finds the frame again by its id when the item is chosen, and moves nothing once it is gone or at the end', () => {
+        const panel = panelOver([A, MEMO, B]);
+        const up = panel.open('b');
+        panel.set([B, A, MEMO]);
+        up(t('menu.moveUp'));
+        expect(panel.ids()).toEqual(['b', 'a', 'm']);
+
+        const down = panel.open('a');
+        panel.set([B, MEMO]);
+        down(t('menu.moveDown'));
+        expect(panel.ids()).toEqual(['b', 'm']);
     });
 
     it('offers no move past the ends of the stack', () => {
