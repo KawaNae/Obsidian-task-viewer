@@ -241,18 +241,38 @@ describe('ViewConfigCodec', () => {
                 expect(frames).toEqual([memo]);
             });
 
-            it('is skipped without a report when its link is not a text, or is empty', () => {
+            it('is skipped, and the reason reported, when its link is missing, is not a text, or names no note', () => {
                 const reported: string[] = [];
                 const frames = pins.parse([
                     { kind: 'markdown', id: 'a' },
                     { kind: 'markdown', id: 'b', link: '' },
                     { kind: 'markdown', id: 'c', link: 3 },
                     { kind: 'markdown', id: 'd', link: null },
+                    { kind: 'markdown', id: 'e', link: '#Heading' },
+                    { kind: 'markdown', link: '#' },
                     whole,
                 ], text => reported.push(text));
                 expect(frames).toEqual([whole]);
-                expect(reported).toEqual([]);
+                expect(reported).toEqual([
+                    'markdown frame "a" link: missing',
+                    'markdown frame "b" link: "" names no note',
+                    'markdown frame "c" link: not a text',
+                    'markdown frame "d" link: not a text',
+                    'markdown frame "e" link: "#Heading" names no note',
+                    'markdown frame link: "#" names no note',
+                ]);
                 expect(pins.parse([{ kind: 'markdown', id: 'a' }])).toBeUndefined();
+            });
+
+            it('names no note with a heading alone, and names one with a note before the heading', () => {
+                expect(pins.parse([{ kind: 'markdown', id: 'h', link: '#Memo' }])).toBeUndefined();
+                expect(pins.parse([{ kind: 'markdown', id: 'h', link: 'Note#Memo' }])).toEqual([{ kind: 'markdown', id: 'h', link: 'Note#Memo' }]);
+            });
+
+            it('is reported through the config it is read with, under its field', () => {
+                const issues: ConfigIssue[] = [];
+                codec.parseConfig({ pins: [{ kind: 'markdown', id: 'a', link: 3 }, whole] }, issues);
+                expect(issues).toEqual([{ field: 'pins', text: 'markdown frame "a" link: not a text' }]);
             });
 
             it('stored without an id is given one of its own', () => {
@@ -282,6 +302,66 @@ describe('ViewConfigCodec', () => {
 
             it("is no cell of Kanban's grid", () => {
                 expect(F.grid('grid').parse([[memo, today]])).toEqual([[today]]);
+            });
+        });
+
+        describe('ids', () => {
+            const memo = { kind: 'markdown', id: 'pl-1', link: 'Folder/Note#Memo' };
+
+            it('a frame stored under the id of a frame of its kind before it is kept, under a new id of its kind', () => {
+                const frames = pins.parse([today, { ...next, id: 'pl-1' }, today])!;
+                expect(frames.map(f => f.kind === 'list' && f.name)).toEqual(['Today', 'Next', 'Today']);
+                expect(frames[0].id).toBe('pl-1');
+                expect(new Set(frames.map(f => f.id)).size).toBe(3);
+                expect(frames[1].id).toMatch(/^list-/);
+                expect(frames[2].id).toMatch(/^list-/);
+
+                const twice = pins.parse([{ ...memo, id: 'md-1' }, { ...memo, id: 'md-1' }])!;
+                expect(twice.map(f => f.kind === 'markdown' && f.link)).toEqual(['Folder/Note#Memo', 'Folder/Note#Memo']);
+                expect(twice[0].id).toBe('md-1');
+                expect(twice[1].id).toMatch(/^md-/);
+                expect(twice[1].id).not.toBe('md-1');
+            });
+
+            it('a frame stored under the id of a frame of another kind is kept, under a new id of its own kind', () => {
+                const frames = pins.parse([today, memo])!;
+                expect(frames.map(f => f.kind)).toEqual(['list', 'markdown']);
+                expect(frames[0].id).toBe('pl-1');
+                expect(frames[1].id).toMatch(/^md-/);
+
+                const listAfter = pins.parse([memo, today])!;
+                expect(listAfter[0].id).toBe('pl-1');
+                expect(listAfter[1].id).toMatch(/^list-/);
+            });
+
+            it('frames of ids of their own keep them, and so does every road the sidebar is read by', () => {
+                const stored = [today, { ...memo, id: 'md-1' }, next];
+                expect(pins.parse(stored)!.map(f => f.id)).toEqual(['pl-1', 'md-1', 'pl-2']);
+                expect(pins.fromUriParam!(unicodeBtoa(JSON.stringify(stored)))!.map(f => f.id)).toEqual(['pl-1', 'md-1', 'pl-2']);
+
+                const repeated = [today, memo];
+                const ids = (frames: SidebarFrame[] | undefined) => frames?.map(f => f.id) ?? [];
+                // The sidebar's field as Timeline and Calendar declare it, read under its older key too.
+                const sidebar = new ViewConfigCodec<{ sidebar?: SidebarFrame[] }>({
+                    viewType: 'test-view' as ViewType,
+                    shortName: 'test',
+                    defaults: {},
+                    config: { sidebar: F.sidebarFrames('sidebar', { legacyKeys: ['pinnedLists'] }) },
+                    transient: {},
+                });
+                for (const frames of [
+                    pins.fromUriParam!(unicodeBtoa(JSON.stringify(repeated))),
+                    sidebar.parseConfig({ sidebar: repeated }).sidebar,
+                    sidebar.parseConfig({ pinnedLists: repeated }).sidebar,
+                    sidebar.fromUriParams({ pinnedLists: unicodeBtoa(JSON.stringify(repeated)) }).sidebar,
+                ]) {
+                    expect(new Set(ids(frames)).size).toBe(2);
+                    expect(ids(frames)[0]).toBe('pl-1');
+                }
+            });
+
+            it("leaves Kanban's cells as they are stored", () => {
+                expect(F.grid('grid').parse([[today, today]])).toEqual([[today, today]]);
             });
         });
 

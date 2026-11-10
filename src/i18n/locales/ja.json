@@ -803,7 +803,7 @@
     "failedToLoadTemplate": "テンプレートの読み込みに失敗しました。",
     "noContentToExport": "エクスポートするコンテンツがありません。",
     "templateNotFound": "ビューテンプレート「{{name}}」が見つかりません。",
-    "unreadableConditions": "読めないフィルタまたは並べ替えの条件を {{count}} 件外しました。内容はログにあります。",
+    "unreadableConfigParts": "ビューの設定のうち読めない部分（フィルタや並べ替えの条件、サイドバーの枠）を {{count}} 件外しました。内容はログにあります。",
     "timerRecorded": "{{icon}} {{kind}}記録完了！（{{duration}}）",
     "flowDeleteDidNotFire": "フローが発火しなかったため、タスクは削除されませんでした: {{reason}}（{{file}}）",
     "flowNotRun": "完了にしましたが、フローは実行しませんでした: {{reason}}（{{subject}}）",

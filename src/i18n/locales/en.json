@@ -803,7 +803,7 @@
     "failedToLoadTemplate": "Failed to load template.",
     "noContentToExport": "No content to export.",
     "templateNotFound": "View template \"{{name}}\" not found.",
-    "unreadableConditions": "Removed {{count}} filter or sort condition(s) that could not be read. The log lists them.",
+    "unreadableConfigParts": "Removed {{count}} part(s) of the view's settings that could not be read (a filter or sort condition, a sidebar frame). The log lists them.",
     "timerRecorded": "{{icon}} {{kind}} recorded! ({{duration}})",
     "flowDeleteDidNotFire": "The flow did not fire, so the task was not deleted: {{reason}} ({{file}})",
     "flowNotRun": "The task was completed, but its flow was not run: {{reason}} ({{subject}})",

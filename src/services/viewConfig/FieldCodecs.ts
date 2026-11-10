@@ -27,6 +27,7 @@ import { FilterSerializer, filterIssueText, type FilterRead } from '../filter/Fi
 import { SortSerializer, sortIssueText } from '../sort/SortSerializer';
 import { unicodeBtoa, unicodeAtob } from '../../utils/base64';
 import { listFrame, type MarkdownFrame, type PinnedListDefinition, type SidebarFrame, type AstronomyDisplay } from '../../types';
+import { frameTarget } from '../data/MarkdownFrames';
 import { newListId, newMarkdownFrameId } from './ListIds';
 
 interface FieldOptions {
@@ -200,8 +201,10 @@ export const F = {
      * The frames of a sidebar, in their order (`SidebarFrame[]`). An entry
      * says its kind in `kind`; a list is written as its definition alone,
      * without one, and an entry without one is read as a list. A markdown
-     * frame is written as its kind, its id and its link. An entry of a kind
-     * that is not known is skipped, as an entry that cannot be read is.
+     * frame is written as its kind, its id and its link, and one whose link
+     * names no note is skipped and reported. An entry of a kind that is not
+     * known is skipped, as an entry that cannot be read is. Every frame read
+     * has an id no other frame read has.
      * A list's filterState is serialized via FilterSerializer.toJSON (so the
      * persisted form is plain JSON, not the runtime object).
      */
@@ -426,8 +429,28 @@ function parseEntries<T>(raw: unknown[], parse: (entry: Record<string, unknown>)
     return result;
 }
 
+/**
+ * The frames `raw` holds, in their order, each under an id no other of them
+ * has. The sidebar finds a frame by its id (its element, its fold, the list
+ * a change is written into), so a frame stored under the id of one before
+ * it, of its kind or another, is given a new id of its kind, as a frame
+ * stored without one is. No frame is dropped for it.
+ */
 function parseFrames(raw: unknown[], report?: ReportIssue): SidebarFrame[] {
-    return parseEntries(raw, obj => parseFrame(obj, report));
+    const seen = new Set<string>();
+    return parseEntries(raw, obj => parseFrame(obj, report)).map((frame) => {
+        const own = seen.has(frame.id) ? { ...frame, id: newFrameId(frame) } : frame;
+        seen.add(own.id);
+        return own;
+    });
+}
+
+/** A new id for a frame of `frame`'s kind. */
+function newFrameId(frame: SidebarFrame): string {
+    switch (frame.kind) {
+        case 'list': return newListId();
+        case 'markdown': return newMarkdownFrameId();
+    }
 }
 
 /**
@@ -443,18 +466,29 @@ function parseFrame(obj: Record<string, unknown>, report?: ReportIssue): Sidebar
             return list && listFrame(list);
         }
         case 'markdown':
-            return parseMarkdownFrame(obj);
+            return parseMarkdownFrame(obj, report);
         default:
             return undefined;
     }
 }
 
-/** The markdown frame `obj` holds, or undefined when it has no link. One stored without an id is given a new one, as a list is. */
-function parseMarkdownFrame(obj: Record<string, unknown>): MarkdownFrame | undefined {
-    const link = typeof obj.link === 'string' ? obj.link : '';
-    if (!link) return undefined;
-    const id = (typeof obj.id === 'string' && obj.id) ? obj.id : newMarkdownFrameId();
-    return { kind: 'markdown', id, link };
+/**
+ * The markdown frame `obj` holds, or undefined, with the reason told to
+ * `report`, when its link is missing, is not a text, or names no note (the
+ * part before its first `#` is empty, as in `#Heading` or an empty text).
+ * One stored without an id is given a new one, as a list is.
+ */
+function parseMarkdownFrame(obj: Record<string, unknown>, report?: ReportIssue): MarkdownFrame | undefined {
+    const stored = typeof obj.id === 'string' && obj.id ? obj.id : undefined;
+    const drop = (reason: string) => {
+        report?.(`markdown frame ${stored === undefined ? '' : `"${stored}" `}link: ${reason}`);
+        return undefined;
+    };
+    if (obj.link === undefined) return drop('missing');
+    if (typeof obj.link !== 'string') return drop('not a text');
+    const { link } = obj;
+    if (frameTarget(link).path === '') return drop(`"${link}" names no note`);
+    return { kind: 'markdown', id: stored ?? newMarkdownFrameId(), link };
 }
 
 function parsePinnedLists(raw: unknown[], report?: ReportIssue): PinnedListDefinition[] {
