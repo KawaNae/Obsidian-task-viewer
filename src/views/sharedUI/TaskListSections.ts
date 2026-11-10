@@ -131,8 +131,12 @@ export class TaskListSections {
         this.filterMenu.close();
     }
 
-    /** Draw `list` as one section at the end of `container`. */
-    drawList(container: HTMLElement, list: PinnedListDefinition, ctx: ListDrawContext): void {
+    /**
+     * Draw `list` as one section at the end of `container`, and give back
+     * the section's element: a placement that stacks other things with its
+     * lists puts it where the list stands among them.
+     */
+    drawList(container: HTMLElement, list: PinnedListDefinition, ctx: ListDrawContext): HTMLElement {
         const { classes } = this.placement;
         const query = PinnedListQuery.resolve(list, ctx.viewFilter);
         const tasks = this.deps.readService.getFilteredTasks(query.filter, query.sort);
@@ -169,6 +173,7 @@ export class TaskListSections {
                 if (el) this.startRename(el, list);
             }, 50);
         }
+        return section.root;
     }
 
     private drawCards(

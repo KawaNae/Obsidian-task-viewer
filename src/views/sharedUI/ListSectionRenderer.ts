@@ -6,6 +6,11 @@
  * stacked down the sidebar (`SidebarFrames`) and Kanban's cells on its
  * grid, one per cell.
  *
+ * The header row is a part of its own (`renderSectionHeader`): the mark of
+ * the fold, the name and the ⋯ button, and the fold a click on the row
+ * works. A section that is no list (a markdown frame of the sidebar) is
+ * headed by the same row.
+ *
  * The BEM block name is a parameter rather than something this module decides.
  * What genuinely differs between the two is how the section looks — a compact
  * sidebar row versus a card with its own background and border — and the block
@@ -18,21 +23,43 @@ import { hasConditions, type FilterState } from '../../services/filter/FilterTyp
 import { hasSortRules, type SortState } from '../../services/sort/SortTypes';
 import { onFormEnter } from '../../modals/form/formEnter';
 
-/** DOM class names for one variant of the section. */
-export interface ListSectionClasses {
-    /** Outermost element. */
-    root: string;
-    /** Added to `root` while collapsed. */
+/** DOM class names of a section's header row, and of the fold it works. */
+export interface SectionHeaderClasses {
+    /** Added to the section's outermost element while collapsed. */
     collapsed: string;
     header: string;
     toggle: string;
     name: string;
-    count: string;
-    /** Shared by the sort, filter and more buttons. */
+    /** The ⋯ button's, shared with whatever other buttons the row is given. */
     button: string;
+}
+
+/** DOM class names for one variant of the section. */
+export interface ListSectionClasses extends SectionHeaderClasses {
+    /** Outermost element. */
+    root: string;
+    count: string;
     body: string;
     /** Replaces `name` while an inline rename is in progress. */
     nameInput: string;
+}
+
+export interface SectionHeaderParams {
+    classes: SectionHeaderClasses;
+    name: string;
+    collapsed: boolean;
+    /** Put what the section shows between its name and the ⋯ button into the row. */
+    fill?: (header: HTMLElement) => void;
+    onMoreClick: (anchorEl: HTMLElement, event: MouseEvent) => void;
+    /** The row was clicked, and shows the section collapsed or not already. */
+    onCollapsedChange: (collapsed: boolean) => void;
+}
+
+export interface SectionHeaderHandle {
+    header: HTMLElement;
+    nameEl: HTMLElement;
+    /** Show the section collapsed or not: the class on its outermost element, and the row's mark. */
+    setCollapsed(collapsed: boolean): void;
 }
 
 export interface ListSectionParams {
@@ -68,6 +95,43 @@ export interface ListSectionHandle {
 }
 
 /**
+ * Build the header row of a section into `root`, the section's outermost
+ * element: the mark of the fold, the name, what `fill` puts in, and the ⋯
+ * button. A click on the row folds or unfolds the section, on `root`, and
+ * then tells the caller, whose it is to fill what was unfolded and to keep
+ * the fold.
+ */
+export function renderSectionHeader(root: HTMLElement, params: SectionHeaderParams): SectionHeaderHandle {
+    const { classes } = params;
+
+    const header = root.createDiv(classes.header);
+    const toggle = header.createSpan({ cls: classes.toggle });
+    const nameEl = header.createSpan({ text: params.name, cls: classes.name });
+    params.fill?.(header);
+
+    const moreBtn = makeHeaderButton(header, classes.button, 'more-horizontal');
+    moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        params.onMoreClick(moreBtn, e as MouseEvent);
+    });
+
+    const setCollapsed = (collapsed: boolean) => {
+        if (collapsed) root.addClass(classes.collapsed);
+        else root.removeClass(classes.collapsed);
+        toggle.textContent = collapsed ? '▶' : '▼';
+    };
+    setCollapsed(params.collapsed);
+
+    header.addEventListener('click', () => {
+        const collapsed = !root.classList.contains(classes.collapsed);
+        setCollapsed(collapsed);
+        params.onCollapsedChange(collapsed);
+    });
+
+    return { header, nameEl, setCollapsed };
+}
+
+/**
  * Build one section into `container` and return its parts, so callers can
  * reach the name element (for rename) or the body (for paging).
  */
@@ -78,53 +142,41 @@ export function renderListSection(
     const { classes } = params;
 
     const root = container.createDiv(classes.root);
-    if (params.collapsed) root.addClass(classes.collapsed);
+    const { header, nameEl } = renderSectionHeader(root, {
+        classes,
+        name: params.name,
+        collapsed: params.collapsed,
+        fill: (row) => {
+            row.createSpan({ text: `(${params.taskCount})`, cls: classes.count });
 
-    const header = root.createDiv(classes.header);
-    const toggle = header.createSpan({ text: params.collapsed ? '▶' : '▼', cls: classes.toggle });
-    const nameEl = header.createSpan({ text: params.name, cls: classes.name });
-    header.createSpan({ text: `(${params.taskCount})`, cls: classes.count });
+            const sortBtn = makeHeaderButton(row, classes.button, 'arrow-up-down');
+            if (params.sortState && hasSortRules(params.sortState)) sortBtn.addClass('is-sorted');
+            sortBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.onSortClick(sortBtn);
+            });
 
-    const sortBtn = makeHeaderButton(header, classes.button, 'arrow-up-down');
-    if (params.sortState && hasSortRules(params.sortState)) sortBtn.addClass('is-sorted');
-    sortBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        params.onSortClick(sortBtn);
-    });
-
-    const filterBtn = makeHeaderButton(header, classes.button, 'filter');
-    if (params.filterState && hasConditions(params.filterState)) filterBtn.addClass('is-filtered');
-    filterBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        params.onFilterClick(filterBtn);
-    });
-
-    const moreBtn = makeHeaderButton(header, classes.button, 'more-horizontal');
-    moreBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        params.onMoreClick(moreBtn, e as MouseEvent);
+            const filterBtn = makeHeaderButton(row, classes.button, 'filter');
+            if (params.filterState && hasConditions(params.filterState)) filterBtn.addClass('is-filtered');
+            filterBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.onFilterClick(filterBtn);
+            });
+        },
+        onMoreClick: params.onMoreClick,
+        onCollapsedChange: (collapsed) => {
+            // First expansion: the body was never filled, so paint it now.
+            if (!collapsed && body.childElementCount === 0 && params.taskCount > 0) {
+                params.renderBody(body, { resetPaging: true });
+            }
+            params.onCollapsedChange(collapsed);
+        },
     });
 
     const body = root.createDiv(classes.body);
     if (!params.collapsed) {
         params.renderBody(body, { resetPaging: false });
     }
-
-    header.addEventListener('click', () => {
-        const nextCollapsed = !root.classList.contains(classes.collapsed);
-        if (nextCollapsed) {
-            root.addClass(classes.collapsed);
-            toggle.textContent = '▶';
-        } else {
-            root.removeClass(classes.collapsed);
-            toggle.textContent = '▼';
-            // First expansion: the body was never filled, so paint it now.
-            if (body.childElementCount === 0 && params.taskCount > 0) {
-                params.renderBody(body, { resetPaging: true });
-            }
-        }
-        params.onCollapsedChange(nextCollapsed);
-    });
 
     return { root, header, nameEl, body };
 }

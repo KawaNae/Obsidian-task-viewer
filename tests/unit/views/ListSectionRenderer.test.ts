@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
     renderListSection,
+    renderSectionHeader,
     startListSectionRename,
     type ListSectionClasses,
     type ListSectionParams,
@@ -145,6 +146,66 @@ function render(overrides: Partial<ListSectionParams> = {}) {
     const handle = renderListSection(container as unknown as HTMLElement, params);
     return { container, calls, handle: handle as unknown as { root: FakeEl; body: FakeEl; nameEl: FakeEl } };
 }
+
+describe('renderSectionHeader', () => {
+    function header(collapsed = false, fill?: (row: FakeEl) => void) {
+        iconTargets.length = 0;
+        const root = new FakeEl('div', 'sec');
+        const calls = { collapsed: [] as boolean[], more: [] as string[] };
+        const handle = renderSectionHeader(root as unknown as HTMLElement, {
+            classes: CLASSES,
+            name: 'Notes',
+            collapsed,
+            fill: fill && ((row) => fill(row as unknown as FakeEl)),
+            onMoreClick: (el) => calls.more.push((el as unknown as FakeEl).tag),
+            onCollapsedChange: (c) => calls.collapsed.push(c),
+        });
+        return { root, calls, handle: handle as unknown as { header: FakeEl; nameEl: FakeEl; setCollapsed(collapsed: boolean): void } };
+    }
+
+    it('makes a row of the mark of the fold, the name and the ⋯ button, with nothing between when nothing is put there', () => {
+        const { root, handle } = header();
+        expect(root.children).toEqual([handle.header]);
+        expect(handle.header.children.map(c => [...c.classes][0] ?? c.tag)).toEqual(['sec__toggle', 'sec__name', 'tv-icon-btn']);
+        expect(handle.nameEl.textContent).toBe('Notes');
+        expect(root.find('sec__toggle').textContent).toBe('▼');
+        expect(iconTargets.map(t => t.icon)).toEqual(['more-horizontal']);
+    });
+
+    it('puts what the section adds between the name and the ⋯ button', () => {
+        const { handle } = header(false, row => { row.createSpan('extra'); });
+        expect(handle.header.children.map(c => [...c.classes][0])).toEqual(['sec__toggle', 'sec__name', 'extra', 'tv-icon-btn']);
+    });
+
+    it('folds and unfolds the section on a click of the row, and then says so', () => {
+        const { root, calls, handle } = header();
+        handle.header.fire('click');
+        expect(root.classes.has('sec--collapsed')).toBe(true);
+        expect(root.find('sec__toggle').textContent).toBe('▶');
+        handle.header.fire('click');
+        expect(root.classes.has('sec--collapsed')).toBe(false);
+        expect(root.find('sec__toggle').textContent).toBe('▼');
+        expect(calls.collapsed).toEqual([true, false]);
+    });
+
+    it('shows a fold it is told of, without saying so back', () => {
+        const { root, calls, handle } = header(true);
+        expect(root.classes.has('sec--collapsed')).toBe(true);
+        handle.setCollapsed(false);
+        expect(root.classes.has('sec--collapsed')).toBe(false);
+        expect(root.find('sec__toggle').textContent).toBe('▼');
+        expect(calls.collapsed).toEqual([]);
+    });
+
+    it('opens the ⋯ menu from its button, which does not fold the section', () => {
+        const { calls, handle } = header();
+        let stopped = false;
+        handle.header.children[2].fire('click', { stopPropagation: () => { stopped = true; } });
+        expect(calls.more).toEqual(['button']);
+        expect(stopped).toBe(true);
+        expect(calls.collapsed).toEqual([]);
+    });
+});
 
 describe('renderListSection header', () => {
     it('lays out the toggle, name and count', () => {
