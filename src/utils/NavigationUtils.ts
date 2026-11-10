@@ -41,8 +41,7 @@ export async function openFile(
  * Opens what a link names from `sourcePath`, in a new tab. With `reuseTab`,
  * a tab already showing the note is focused instead, and moved to the
  * section the link names (its subpath), when it names one. A link drawn on
- * a card or in a frame of the sidebar, and the note of such a frame, are
- * opened through here.
+ * a card or in a frame of the sidebar is opened through here.
  */
 export function openLink(app: App, linktext: string, sourcePath: string, reuseTab: boolean): void {
     const { path, subpath } = parseLinktext(linktext.split('|')[0]);
