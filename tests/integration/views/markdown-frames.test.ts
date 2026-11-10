@@ -8,8 +8,10 @@
  * Then the frames as their notes move: a folder renamed, a note renamed
  * while its frame is folded, and one renamed before the panel draws the
  * frame just added (the window's animation frames held meanwhile); a save
- * of the settings that moves the visual day; and the checkboxes of a body,
- * which do not toggle, but for those of a Dataview query.
+ * of the settings that moves the visual day; the checkboxes of a body,
+ * which do not toggle, but for those of a Dataview query; and a body wider
+ * than the sidebar, whose long URL wraps and whose wide table scrolls
+ * inside it.
  *
  * The frames are put into the view's state as the workspace hands it over
  * (`openView`); what they show is read from their DOM, and what the view
@@ -756,6 +758,69 @@ describe.each([
         expect(r.found).toBe(true);
         expect(line(r)).toMatch(/^- \[ \] box in a query/);
         expect(r.notes[`${BOXES}.md`]).toBe(BOXES_NOTE);
+    });
+});
+
+describe.each([
+    ['Timeline', 'timeline-view', 'tl'],
+    ['Calendar', 'calendar-view', 'cal'],
+])("%s's markdown frame's body wider than the sidebar", (_label, type, key) => {
+    const name = `mf-wide-${key}`;
+    const WIDE = `${PREFIX}-wide-${key}`;
+    // A URL has no space to break at; a cell of a table, no break at all.
+    const URL = `https://example.com/${'x'.repeat(240)}`;
+    const CELL = 'c'.repeat(24);
+    const WIDE_NOTE = [
+        '## Url',
+        'short',
+        '',
+        URL,
+        '',
+        '## Table',
+        `| ${Array(6).fill(CELL).join(' | ')} |`,
+        `|${Array(6).fill('---').join('|')}|`,
+        `| ${Array(6).fill('cell').join(' | ')} |`,
+        '',
+    ].join('\n');
+
+    beforeAll(() => {
+        ev(`(async () => { ${NOTES} await writeNote(${JSON.stringify(`${WIDE}.md`)}, ${JSON.stringify(WIDE_NOTE)}); return JSON.stringify(true); })()`);
+        openView(name, type, {
+            showSidebar: true,
+            sidebar: [
+                { kind: 'markdown', id: 'url', link: `${WIDE}#Url` },
+                { kind: 'markdown', id: 'table', link: `${WIDE}#Table` },
+            ],
+        });
+    });
+
+    /** The body of the frame `id`: how wide it is drawn and how wide what it holds is, and the heights of its paragraphs. */
+    function measure(id: string): { client: number; scroll: number; paragraphs: number[] } {
+        return ev(`(async () => {
+            ${names(name)}
+            await wait(${SETTLE_MS});
+            const body = bodyOf(${JSON.stringify(id)});
+            return JSON.stringify({
+                client: body.clientWidth,
+                scroll: body.scrollWidth,
+                paragraphs: [...body.querySelectorAll('p')].map(p => p.getBoundingClientRect().height),
+            });
+        })()`);
+    }
+
+    it('wraps a long URL inside the body, which then does not scroll sideways', () => {
+        const m = measure('url');
+        expect(m.client).toBeGreaterThan(0);
+        expect(m.scroll).toBeLessThanOrEqual(m.client);
+        // The URL's paragraph runs over more lines than the short one's.
+        const [short, url] = m.paragraphs;
+        expect(url).toBeGreaterThan(short * 2);
+    });
+
+    it('scrolls a table wider than the body sideways inside the body', () => {
+        const m = measure('table');
+        expect(m.client).toBeGreaterThan(0);
+        expect(m.scroll).toBeGreaterThan(m.client);
     });
 });
 

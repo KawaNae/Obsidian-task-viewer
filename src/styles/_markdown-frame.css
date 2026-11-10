@@ -33,9 +33,15 @@
 
 /* A table or a chart wider than the sidebar scrolls inside the card. A
    table's cells take the card's text size: Obsidian sizes them from the
-   note's, which is larger than the card's. */
+   note's, which is larger than the card's.
+   A word longer than the card is broken, as Obsidian's reading view
+   (`.markdown-preview-view`) breaks it, so a long URL wraps rather than
+   scroll the whole body. `break-word`, not `anywhere`: it leaves a cell's
+   word whole when the table's columns are sized, so a wide table keeps its
+   columns and scrolls. */
 .markdown-frame__content {
     overflow-x: auto;
+    overflow-wrap: break-word;
     --table-text-size: 1em;
     --table-header-size: 1em;
 }
