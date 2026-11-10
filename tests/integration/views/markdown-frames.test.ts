@@ -5,6 +5,12 @@
  * markdown under a header row, kept across the panel's draws, and following
  * its note as the note is written to, renamed, deleted and made again.
  *
+ * Then the frames as their notes move: a folder renamed, a note renamed
+ * while its frame is folded, and one renamed before the panel draws the
+ * frame just added (the window's animation frames held meanwhile); a save
+ * of the settings that moves the visual day; and the checkboxes of a body,
+ * which do not toggle, but for those of a Dataview query.
+ *
  * The frames are put into the view's state as the workspace hands it over
  * (`openView`); what they show is read from their DOM, and what the view
  * keeps from `getState` (`sidebar`, `sidebarCollapsed`, `maskMode`). Whether a body was
@@ -20,6 +26,7 @@
  * Prerequisites:
  *   - Obsidian is running with the Dev vault open, with the current build
  *     loaded (`npm run build`, then reload the plugin)
+ *   - Dataview enabled in the vault, for its task list in a body
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/markdown-frames.test.ts
  */
@@ -27,7 +34,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
-    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, type HeldSettings,
+    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay, type HeldSettings,
 } from '../helpers/view-helper';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
@@ -215,13 +222,38 @@ function links(r: Reading): Record<string, string | undefined> {
     return Object.fromEntries(r.sidebar.filter(f => f.kind === 'markdown').map(f => [f.id, f.link]));
 }
 
-/** Delete the notes of the test the vault still has. */
+/**
+ * Delete the notes of the test the vault still has, and its folders, the
+ * deepest first. A note deleted off the disk (`deleteTestFile`) may still
+ * be listed by the vault for a moment: it is left to the vault to drop.
+ */
 function deleteNotes(): void {
     ev(`(async () => {
         for (const f of app.vault.getMarkdownFiles()) {
-            if (f.path.startsWith(${JSON.stringify(PREFIX)})) await app.vault.delete(f);
+            if (f.path.startsWith(${JSON.stringify(PREFIX)}) && await app.vault.adapter.exists(f.path)) await app.vault.delete(f);
         }
+        const folders = app.vault.getAllLoadedFiles()
+            .filter(f => f.children && f.path.startsWith(${JSON.stringify(PREFIX)}))
+            .sort((a, b) => b.path.length - a.path.length);
+        for (const f of folders) await app.vault.delete(f, true);
         return JSON.stringify(true);
+    })()`);
+}
+
+/**
+ * The path a link of the body of the frame `id` is previewed from, as a
+ * hover over it tells: the path the body was resolved against.
+ */
+function hoverSource(name: string, id: string): string | null {
+    return ev<string | null>(`(async () => {
+        ${names(name)}
+        const link = bodyOf(${JSON.stringify(id)})?.querySelector('a.internal-link');
+        if (!link) return JSON.stringify(null);
+        let source = null;
+        const ref = app.workspace.on('hover-link', (p) => { source = p.sourcePath; });
+        link.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        app.workspace.offref(ref);
+        return JSON.stringify(source);
     })()`);
 }
 
@@ -597,6 +629,247 @@ describe.each([
         expect(r.empty).toBe(false);
         expect(r.order).toEqual(['memo']);
         expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+    });
+});
+
+describe.each([
+    ['Timeline', 'timeline-view', 'tl'],
+    ['Calendar', 'calendar-view', 'cal'],
+])("%s's markdown frames, as their notes move and the day rolls", (_label, type, key) => {
+    const name = `mf-moves-${key}`;
+    /** A folder of two notes, one in a folder of its own. */
+    const DIR = `${PREFIX}-dir-${key}`;
+    const DIR_MOVED = `${DIR}-moved`;
+    /** The note of the frame folded while it changes. */
+    const FOLD = `${PREFIX}-fold-${key}`;
+    const FOLD_MOVED = `${FOLD}-moved`;
+    /** The note of the frame added and renamed before it is drawn. */
+    const ADDED = `${PREFIX}-added-${key}`;
+    const MEMO = 'memo one test-int-mdframes-tasks Deep deep text';
+    const writeAt = (path: string, parts: NoteParts = {}) => `await writeNote(${JSON.stringify(`${path}.md`)}, ${JSON.stringify(note(parts))});`;
+    /** Fold or unfold the frame `id` from its row, unless it is so already. */
+    const fold = (id: string, collapsed: boolean) => `
+        if (frame(${JSON.stringify(id)}).classList.contains('markdown-frame--collapsed') !== ${collapsed}) {
+            frame(${JSON.stringify(id)}).querySelector('.' + C.header).click();
+        }
+    `;
+
+    beforeAll(() => {
+        ev(`(async () => {
+            ${NOTES}
+            await app.vault.createFolder(${JSON.stringify(`${DIR}/sub`)}).catch(() => {});
+            ${writeAt(`${DIR}/a`)}
+            ${writeAt(`${DIR}/sub/b`)}
+            ${writeAt(FOLD)}
+            ${writeAt(ADDED)}
+            return JSON.stringify(true);
+        })()`);
+        openView(name, type, {
+            showSidebar: true,
+            sidebar: [
+                { kind: 'markdown', id: 'a', link: `${DIR}/a#Memo` },
+                { kind: 'markdown', id: 'b', link: `${DIR}/sub/b` },
+                { kind: 'markdown', id: 'fold', link: `${FOLD}#Memo` },
+            ],
+        });
+    });
+
+    it('follows the notes of a folder renamed: each link names its note\'s new path, and its body is drawn from there', () => {
+        const before = op(name, 'mark();');
+        expect([before.frames.a.text, before.frames.b.name]).toEqual([MEMO, 'b']);
+
+        const r = op(name, `await renameNote(${JSON.stringify(DIR)}, ${JSON.stringify(DIR_MOVED)});`);
+        expect(links(r)).toMatchObject({ a: `${DIR_MOVED}/a#Memo`, b: `${DIR_MOVED}/sub/b` });
+        expect([r.frames.a.missing, r.frames.b.missing]).toEqual([null, null]);
+        expect(r.frames.a.text).toBe(MEMO);
+        expect(r.frames.b.text).toContain(MEMO);
+        // Each body is resolved against its note's new path.
+        expect([r.frames.a.kept, r.frames.b.kept]).toEqual([false, false]);
+        expect(hoverSource(name, 'a')).toBe(`${DIR_MOVED}/a.md`);
+        expect(hoverSource(name, 'b')).toBe(`${DIR_MOVED}/sub/b.md`);
+    });
+
+    it('keeps no body of a folded frame whose note is renamed, and draws it from the new path once unfolded', () => {
+        let r = op(name, `mark(); ${fold('fold', true)}`);
+        expect([r.frames.fold.collapsed, r.frames.fold.kept]).toEqual([true, true]);
+
+        r = op(name, `await renameNote(${JSON.stringify(`${FOLD}.md`)}, ${JSON.stringify(`${FOLD_MOVED}.md`)});`);
+        expect(links(r).fold).toBe(`${FOLD_MOVED}#Memo`);
+        expect(r.frames.fold.collapsed).toBe(true);
+        // The body resolved against the old path is taken out, though the frame is folded.
+        expect(r.frames.fold.text).toBeNull();
+
+        r = op(name, fold('fold', false));
+        expect(r.frames.fold.collapsed).toBe(false);
+        expect(r.frames.fold.text).toBe(MEMO);
+        expect(hoverSource(name, 'fold')).toBe(`${FOLD_MOVED}.md`);
+    });
+
+    it('keeps no mask and no "not there" in a folded frame that is to show its body, and draws the body once unfolded', () => {
+        // The mask, shown while the view masks, is taken out when it stops, the frame folded.
+        let r = op(name, `${writeAt(FOLD_MOVED, { mask: 'fold masked' })} setMask(true);`);
+        expect(r.frames.fold.mask).toBe('fold masked');
+        r = op(name, `${fold('fold', true)} setMask(false);`);
+        expect(r.maskMode).toBe(false);
+        expect([r.frames.fold.collapsed, r.frames.fold.mask, r.frames.fold.text]).toEqual([true, null, null]);
+        r = op(name, fold('fold', false));
+        expect(r.frames.fold.text).toBe(MEMO);
+
+        // That the note is not there is taken out when the note is made again, the frame folded.
+        r = op(name, `await deleteNote(${JSON.stringify(`${FOLD_MOVED}.md`)});`);
+        expect(r.frames.fold.missing).toBe(tr('sidebar.noteNotFound'));
+        r = op(name, `${fold('fold', true)} ${writeAt(FOLD_MOVED)}`);
+        expect([r.frames.fold.collapsed, r.frames.fold.missing, r.frames.fold.text]).toEqual([true, null, null]);
+        r = op(name, fold('fold', false));
+        expect([r.frames.fold.missing, r.frames.fold.text]).toEqual([null, MEMO]);
+    });
+
+    it('follows the note of a frame added and renamed before the panel draws, and renders its body only once the frame is in place', () => {
+        // The window's animation frames, in which the panel draws, are held
+        // from the frame's adding until the rename has been told.
+        const held = ev<{ before: { connected: boolean; body: boolean }; atRename: { connected: boolean } | null; frames: number }>(`(async () => {
+            ${names(name)}
+            const v = V(${JSON.stringify(name)});
+            const win = el.win ?? window;
+            const raf = win.requestAnimationFrame;
+            const frames = [];
+            win.requestAnimationFrame = (cb) => { frames.push(cb); return -frames.length; };
+            let atRename = null;
+            const ref = app.vault.on('rename', () => { atRename ??= { connected: !!el.querySelector('.markdown-frame[data-frame-id="added"]') }; });
+            try {
+                v.update({ sidebar: [...(v.state.sidebar ?? []), { kind: 'markdown', id: 'added', link: ${JSON.stringify(`${ADDED}#Memo`)} }] }, { draw: false });
+                // Its note is read meanwhile; its element, in no document yet, is reached through the panel.
+                await wait(300);
+                const root = v.sidebarFrames.markdown.elementOf('added');
+                const before = { connected: root.isConnected, body: !!root.querySelector('.markdown-frame__content') };
+                await renameNote(${JSON.stringify(`${ADDED}.md`)}, ${JSON.stringify(`${ADDED}-moved.md`)});
+                return JSON.stringify({ before, atRename, frames: frames.length });
+            } finally {
+                app.vault.offref(ref);
+                win.requestAnimationFrame = raf;
+                for (const cb of frames) raf.call(win, cb);
+            }
+        })()`);
+        // What the test rests on: no draw ran between the adding and the rename.
+        expect(held.frames).toBeGreaterThan(0);
+        expect(held.atRename).toEqual({ connected: false });
+        // A body is not rendered while its frame is in no document.
+        expect(held.before).toEqual({ connected: false, body: false });
+
+        const r = op(name, '');
+        expect(links(r).added).toBe(`${ADDED}-moved#Memo`);
+        expect(r.order).toEqual(['a', 'b', 'fold', 'added']);
+        expect([r.frames.added.missing, r.frames.added.text]).toEqual([null, MEMO]);
+        expect(hoverSource(name, 'added')).toBe(`${ADDED}-moved.md`);
+    });
+
+    /**
+     * The visual day moves on a save only when the start hour is set across
+     * the hour now: to an hour still ahead, or to 0 before the start hour.
+     * Skipped near the end of the day, when no hour ahead is left.
+     */
+    const now = new Date();
+    const h = now.getHours();
+    it.skipIf(h === 23 || (h === 22 && now.getMinutes() >= 50))('reads its note again when a save of the settings moves the visual day', () => {
+        const { startHour, scopeKeys } = readSettings(['startHour', 'scopeKeys']) as { startHour: number; scopeKeys: Record<string, string> };
+        const rolledHour = h < startHour ? 0 : h + 2;
+        expect(visualDay(rolledHour)).not.toBe(visualDay(startHour));
+
+        // One save moves the day and renames the key a color is declared by.
+        const saved = overrideSettings({ startHour: rolledHour, scopeKeys: { ...scopeKeys, color: 'tvmdf-color' } });
+        try {
+            const r = op(name, '');
+            expect(r.frames.a.color).toBeNull();
+            expect(r.frames.a.linestyle).toBe('dashed');
+        } finally {
+            saved.restore();
+        }
+        const r = op(name, '');
+        expect(r.frames.a.color).toBe('teal');
+    });
+});
+
+describe.each([
+    ['Timeline', 'timeline-view', 'tl'],
+    ['Calendar', 'calendar-view', 'cal'],
+])("%s's markdown frame's checkboxes", (_label, type, key) => {
+    const name = `mf-boxes-${key}`;
+    const BOXES = `${PREFIX}-boxes-${key}`;
+    const EMBEDDED = `${PREFIX}-embedded-${key}`;
+    const QUERIED = `${PREFIX}-queried-${key}`;
+    const BOXES_NOTE = [
+        '- [ ] box in the body',
+        '',
+        '> [!note]',
+        '> - [ ] box in a callout',
+        '',
+        `![[${EMBEDDED.slice(EMBEDDED.lastIndexOf('/') + 1)}]]`,
+        '',
+        '```dataview',
+        `TASK FROM "${QUERIED}"`,
+        '```',
+        '',
+    ].join('\n');
+    const EMBEDDED_NOTE = '- [ ] box in an embed\n';
+    const QUERIED_NOTE = '- [ ] box in a query\n';
+
+    beforeAll(() => {
+        ev(`(async () => {
+            ${NOTES}
+            await writeNote(${JSON.stringify(`${EMBEDDED}.md`)}, ${JSON.stringify(EMBEDDED_NOTE)});
+            await writeNote(${JSON.stringify(`${QUERIED}.md`)}, ${JSON.stringify(QUERIED_NOTE)});
+            await writeNote(${JSON.stringify(`${BOXES}.md`)}, ${JSON.stringify(BOXES_NOTE)});
+            return JSON.stringify(true);
+        })()`);
+        openView(name, type, { showSidebar: true, sidebar: [{ kind: 'markdown', id: 'boxes', link: BOXES }] });
+    });
+
+    /**
+     * Click the checkbox of the body of the frame whose task's text is
+     * `text`, found anew; give whether it is checked right after the click
+     * and the notes as they are once the click has been answered.
+     */
+    function clickBox(text: string, settleMs = SETTLE_MS): { found: boolean; checked: boolean | null; notes: Record<string, string> } {
+        return ev(`(async () => {
+            ${names(name)}
+            const box = () => [...bodyOf('boxes').querySelectorAll('input.task-list-item-checkbox')]
+                .find(b => b.closest('li')?.textContent.includes(${JSON.stringify(text)}));
+            // A query is drawn by its plugin some time after the body.
+            for (let i = 0; i < 50 && !box(); i++) await wait(100);
+            const b = box();
+            let checked = null;
+            if (b) { b.click(); checked = b.checked; }
+            await wait(${settleMs});
+            const notes = {};
+            for (const path of ${JSON.stringify([`${BOXES}.md`, `${EMBEDDED}.md`, `${QUERIED}.md`])}) notes[path] = await app.vault.read(noteAt(path));
+            return JSON.stringify({ found: !!b, checked, notes });
+        })()`);
+    }
+
+    it.each([
+        ['the body\'s markdown', 'box in the body'],
+        ['a callout', 'box in a callout'],
+        ['a note embedded in the body', 'box in an embed'],
+    ])('does not toggle a checkbox of %s, and leaves the notes as they are', (_where, text) => {
+        const r = clickBox(text);
+        expect(r.found).toBe(true);
+        expect(r.checked).toBe(false);
+        expect(r.notes).toEqual({ [`${BOXES}.md`]: BOXES_NOTE, [`${EMBEDDED}.md`]: EMBEDDED_NOTE, [`${QUERIED}.md`]: QUERIED_NOTE });
+    });
+
+    it('leaves a checkbox of a Dataview task list to Dataview, which writes the note on each click', () => {
+        const dataview = ev<boolean>(`(() => JSON.stringify(!!app.plugins.plugins.dataview))()`);
+        if (!dataview) throw new Error('Dataview is not enabled in the Dev vault');
+        const line = (r: { notes: Record<string, string> }) => r.notes[`${QUERIED}.md`].split('\n')[0];
+
+        let r = clickBox('box in a query', 1500);
+        expect(r.found).toBe(true);
+        expect(line(r)).toMatch(/^- \[x\] box in a query/);
+        // Dataview draws the list anew once the note changed: the checkbox is found again.
+        r = clickBox('box in a query', 1500);
+        expect(r.found).toBe(true);
+        expect(line(r)).toMatch(/^- \[ \] box in a query/);
+        expect(r.notes[`${BOXES}.md`]).toBe(BOXES_NOTE);
     });
 });
 
