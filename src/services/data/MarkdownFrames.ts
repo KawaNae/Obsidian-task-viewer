@@ -129,10 +129,9 @@ export function frameTitle(link: string, reading: FrameReading, noteName: string
  * `resolvedMask`): the frontmatter, the lines above the first heading, the
  * headings above and the section's own property lines, the nearest winning,
  * no value hiding the value above and a value that does not read saying
- * nothing. A property line of a heading
- * nested in the section is not the section's, and does not style or mask
- * the frame. The whole note's are those of a task written above its first
- * heading.
+ * nothing. A property line of a heading nested in the section is not the
+ * section's, and does not style or mask the frame. The whole note's are
+ * those of a task written above its first heading.
  *
  * A tv-ignore'd note is read as any other: it has no rows, and its body is
  * still its body.

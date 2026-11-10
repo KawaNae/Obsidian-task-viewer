@@ -210,10 +210,13 @@ export class SidebarFrames {
         this.markdownFrames.clear();
     }
 
-    /** The settings were saved: the keys a section's style is read by may have changed, so the notes are read again. */
+    /**
+     * The settings were saved: the keys a section's style is read by may
+     * have changed, so the notes are read again. Which note a link names
+     * reads no setting, so the frames do not look for their notes again.
+     */
     settingsSaved(): void {
         if (!this.opened) return;
-        this.followNotes();
         for (const frame of this.markdownFrames.values()) void frame.read();
     }
 
