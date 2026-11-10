@@ -69,7 +69,7 @@ function op(name: string, body = ''): Drawn {
             state: V(${JSON.stringify(name)}).getState(),
             cards: [...el.querySelectorAll('.task-card')].filter(c => !c.closest('.pinned-list')).length,
             lists: [...el.querySelectorAll('.pinned-list')].map(s => ({
-                name: s.querySelector('.pinned-list__name')?.textContent ?? null,
+                name: s.querySelector('.sidebar-frame__name')?.textContent ?? null,
                 count: s.querySelector('.pinned-list__count')?.textContent ?? null,
             })),
         });
