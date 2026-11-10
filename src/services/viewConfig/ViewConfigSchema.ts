@@ -20,8 +20,9 @@ import type { ViewType } from '../../views/ViewDescriptors';
 
 /**
  * Tells of a part of a value a field read but dropped (a filter condition, a
- * sort rule), in an English sentence. A field reads what it can and reports
- * the rest; a value it cannot read at all is undefined, as before.
+ * sort rule, a sidebar frame), in an English sentence. A field reads what
+ * it can and reports the rest; a value it cannot read at all is undefined,
+ * as before.
  */
 export type ReportIssue = (text: string) => void;
 
