@@ -6,7 +6,7 @@ import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
 import type { IssueSlot } from '../form/FormIssue';
 import { NoteField } from '../noteops/NoteField';
-import { offeredChoices, trailOf, type HeadingAsk, type SectionAsk, type SectionChoice } from './SectionDialog';
+import { offeredChoices, trailOf, type HeadingAsk, type SectionAsk, type SectionChoice, type SectionDialogField } from './SectionDialog';
 
 /** What a {@link SectionField} opens with, and whom it tells. */
 export interface SectionFieldOptions {
@@ -92,14 +92,14 @@ export class SectionField {
     }
 
     /** Where what is said of the note, or of the heading, goes: its input and the line under its row. */
-    slot(at: 'note' | 'heading'): IssueSlot {
+    slot(at: SectionDialogField): IssueSlot {
         return at === 'note'
             ? { input: this.note.input, message: this.note.says }
             : { input: this.headingInput, message: this.headingSays };
     }
 
     /** The input of the note field, or of the heading field. */
-    input(at: 'note' | 'heading'): HTMLInputElement {
+    input(at: SectionDialogField): HTMLInputElement {
         return at === 'note' ? this.note.input : this.headingInput;
     }
 }
