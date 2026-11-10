@@ -9,7 +9,8 @@ import { makeFile } from '../../helpers/vaultSession';
  * The markdown frames of a sidebar, over a vault of the test's: the frames
  * the state holds are made, kept and ended by id, and follow their notes as
  * the vault reports them. A frame's view is stood in for, and records what
- * it is handed.
+ * it is handed. The placement holds the state's frames as the panel does,
+ * and has the frames take them whenever it writes them.
  */
 const views = vi.hoisted(() => ({ made: [] as unknown[] }));
 
@@ -44,6 +45,7 @@ const LIST: SidebarFrame = { kind: 'list', id: 'l', name: 'L', filterState: { fi
 
 /** Markdown frames over a vault whose files are known once `ready` is, with what they wrote through their placement. */
 function framesOver(options: { ready?: boolean } = {}) {
+    let state: { frames: SidebarFrame[]; collapsed: Record<string, boolean> } = { frames: [], collapsed: {} };
     views.made = [];
     const files = new Map<string, TFile>();
     const handlers = new Map<string, (file: TFile) => void>();
@@ -66,7 +68,12 @@ function framesOver(options: { ready?: boolean } = {}) {
     const relinked: Map<string, string>[] = [];
     const placement: MarkdownFramePlacement = {
         rowClasses: { header: 'h', toggle: 't', name: 'n', button: 'b', collapsed: 'c' },
-        relink: links => { relinked.push(new Map(links)); },
+        relink: (links) => {
+            relinked.push(new Map(links));
+            const frames = state.frames.map(frame =>
+                frame.kind === 'markdown' && links.has(frame.id) ? { ...frame, link: links.get(frame.id)! } : frame);
+            show(frames, state.collapsed);
+        },
         setCollapsed: () => {},
         remove: () => {},
         appendMenuItems: () => {},
@@ -78,10 +85,30 @@ function framesOver(options: { ready?: boolean } = {}) {
         getHoverParent: () => ({}),
     } as unknown as MarkdownFrameDeps;
     const sections = new MarkdownFrameSections(deps, placement, {} as HTMLElement);
+    /** The state's frames are `frames` now, folded as `collapsed` says: the panel has the frames take them at once. */
+    const show = (frames: SidebarFrame[], collapsed: Record<string, boolean> = {}) => {
+        state = { frames, collapsed };
+        sections.sync(frames, collapsed);
+    };
+    /** Rename `file` to `path`, as Obsidian does: its path is new when the vault reports it. */
+    const rename = (file: TFile, path: string) => {
+        files.delete(file.path.replace(/\.md$/, ''));
+        texts.set(path, texts.get(file.path) ?? '');
+        file.path = path;
+        file.name = path.split('/').pop()!;
+        file.basename = file.name.replace(/\.[^.]+$/, '');
+        file.extension = file.name.split('.').pop() ?? '';
+        files.set(path.replace(/\.md$/, ''), file);
+        handlers.get('rename')?.(file);
+    };
     return {
         sections,
+        show,
+        rename,
         reads,
         relinked,
+        /** The state's links, by frame id. */
+        links: () => Object.fromEntries(state.frames.flatMap(f => f.kind === 'markdown' ? [[f.id, f.link]] : [])),
         views: () => views.made as StandInView[],
         /** A note at `path`, which a link names by its path without `.md`, holding `text`. */
         note(path: string, text = '') {
@@ -90,14 +117,14 @@ function framesOver(options: { ready?: boolean } = {}) {
             texts.set(path, text);
             return file;
         },
-        /** Rename `file` to `path` and have the vault report it, as Obsidian does. */
-        rename(file: TFile, path: string) {
-            files.delete(file.path.replace(/\.md$/, ''));
-            texts.set(path, texts.get(file.path) ?? '');
-            file.path = path;
-            file.basename = path.split('/').pop()!.replace(/\.md$/, '');
-            files.set(path.replace(/\.md$/, ''), file);
-            handlers.get('rename')?.(file);
+        /**
+         * Rename the folder `from` to `to`, as Obsidian does: the folder is
+         * reported first, its notes' paths still old, and then each note,
+         * its path made new just before it is reported.
+         */
+        renameFolder(from: string, to: string, notes: TFile[]) {
+            handlers.get('rename')?.({ path: to, name: to.split('/').pop() } as unknown as TFile);
+            for (const note of notes) rename(note, to + note.path.slice(from.length));
         },
         modify: (file: TFile) => handlers.get('modify')?.(file),
         heard: () => [...handlers.keys()],
@@ -117,7 +144,7 @@ describe('the markdown frames of a sidebar', () => {
         const frames = framesOver();
         const note = frames.note('Folder/Note.md', '# Memo\nbody');
         frames.sections.open();
-        frames.sections.sync([LIST, memo('m', 'Folder/Note#Memo')], { m: true });
+        frames.show([LIST, memo('m', 'Folder/Note#Memo')], { m: true });
         expect(frames.views().map(v => [v.id, v.title, v.folds])).toEqual([['m', 'Memo', [true]]]);
         await settle();
         expect(frames.reads).toEqual([note]);
@@ -129,10 +156,10 @@ describe('the markdown frames of a sidebar', () => {
         frames.note('Folder/Note.md', '# Memo\none');
         frames.note('Other.md', '# Memo\ntwo');
         frames.sections.open();
-        frames.sections.sync([memo('m', 'Folder/Note#Memo'), memo('g', 'Folder/Note#Memo')], {});
+        frames.show([memo('m', 'Folder/Note#Memo'), memo('g', 'Folder/Note#Memo')], {});
         const [m, g] = frames.views();
 
-        frames.sections.sync([memo('m', 'Other#Memo')], { m: true });
+        frames.show([memo('m', 'Other#Memo')], { m: true });
         expect(frames.views()).toHaveLength(2);
         expect(m.folds).toEqual([false, true]);
         expect([g.closed, g.root.removed]).toEqual([true, true]);
@@ -145,7 +172,7 @@ describe('the markdown frames of a sidebar', () => {
         const frames = framesOver({ ready: false });
         const note = frames.note('Note.md', '# Memo\nbody');
         frames.sections.open();
-        frames.sections.sync([memo('m', 'Note#Memo')], {});
+        frames.show([memo('m', 'Note#Memo')], {});
         await settle();
         expect(frames.reads).toEqual([]);
         frames.ready();
@@ -158,7 +185,7 @@ describe('the markdown frames of a sidebar', () => {
         const one = frames.note('One.md', '# Memo\na');
         const two = frames.note('Two.md', '# Memo\nb');
         frames.sections.open();
-        frames.sections.sync([memo('a', 'One#Memo'), memo('b', 'Two#Memo')], {});
+        frames.show([memo('a', 'One#Memo'), memo('b', 'Two#Memo')], {});
         await settle();
         frames.modify(one);
         await settle();
@@ -170,7 +197,7 @@ describe('the markdown frames of a sidebar', () => {
         const note = frames.note('Folder/Note.md', '# Memo\nbody');
         frames.note('Else.md', '# Memo\nelse');
         frames.sections.open();
-        frames.sections.sync([memo('m', 'Folder/Note#Memo'), memo('n', 'Note#Memo'), memo('e', 'Else#Memo')], {});
+        frames.show([memo('m', 'Folder/Note#Memo'), memo('n', 'Note#Memo'), memo('e', 'Else#Memo')], {});
         await settle();
 
         frames.rename(note, 'Moved/Renamed.md');
@@ -181,11 +208,87 @@ describe('the markdown frames of a sidebar', () => {
         expect(m.shown.at(-1)?.path).toBe('Moved/Renamed.md');
     });
 
+    it('follows a note renamed right after its frame was added, before anything was read or drawn', async () => {
+        const frames = framesOver();
+        const note = frames.note('Note.md', '# Memo\nbody');
+        frames.sections.open();
+        frames.show([memo('m', 'Note#Memo')]);
+
+        frames.rename(note, 'Moved/Note.md');
+        expect(frames.links()).toEqual({ m: 'Moved/Note#Memo' });
+        await settle();
+        expect(frames.views()[0].shown.at(-1)).toMatchObject({ reading: { markdown: 'body' }, path: 'Moved/Note.md' });
+    });
+
+    it('follows each note of a renamed folder as it is reported, and writes nothing at the folder', async () => {
+        const frames = framesOver();
+        const one = frames.note('Old/One.md', '# Memo\none');
+        const two = frames.note('Old/Two.md', '# Memo\ntwo');
+        frames.sections.open();
+        frames.show([memo('a', 'Old/One#Memo'), memo('b', 'Old/Two#Memo')]);
+        await settle();
+
+        frames.renameFolder('Old', 'New', [one, two]);
+        // One write per note reported, each once its path is new; none at the folder.
+        expect(frames.relinked).toEqual([
+            new Map([['a', 'New/One#Memo']]),
+            new Map([['b', 'New/Two#Memo']]),
+        ]);
+        expect(frames.links()).toEqual({ a: 'New/One#Memo', b: 'New/Two#Memo' });
+        await settle();
+        expect(frames.views().map(v => v.shown.at(-1))).toMatchObject([
+            { reading: { markdown: 'one' }, path: 'New/One.md' },
+            { reading: { markdown: 'two' }, path: 'New/Two.md' },
+        ]);
+    });
+
+    it('writes nothing for a note no frame shows, nor for one renamed before the vault\'s files are known', async () => {
+        const frames = framesOver();
+        frames.note('Note.md', '# Memo\nbody');
+        const other = frames.note('Other.md');
+        frames.sections.open();
+        frames.show([memo('m', 'Note#Memo')]);
+        frames.rename(other, 'Elsewhere/Other.md');
+        expect(frames.relinked).toEqual([]);
+
+        const loading = framesOver({ ready: false });
+        const note = loading.note('Note.md', '# Memo\nbody');
+        loading.sections.open();
+        loading.show([memo('m', 'Note#Memo')]);
+        loading.rename(note, 'Moved/Note.md');
+        expect(loading.relinked).toEqual([]);
+        expect(loading.links()).toEqual({ m: 'Note#Memo' });
+    });
+
+    it('does not follow its note to another extension: the frame says the note is not there', async () => {
+        const frames = framesOver();
+        const note = frames.note('Note.md', '# Memo\nbody');
+        frames.sections.open();
+        frames.show([memo('m', 'Note#Memo')]);
+        await settle();
+        frames.rename(note, 'Note.txt');
+        expect(frames.relinked).toEqual([]);
+        expect(frames.views()[0].shown.at(-1)).toMatchObject({ reading: { kind: 'no-note' }, path: null });
+    });
+
+    it('reads the note a link names once the state\'s link is changed from outside', async () => {
+        const frames = framesOver();
+        frames.note('One.md', '# Memo\none');
+        const two = frames.note('Two.md', '# Memo\ntwo');
+        frames.sections.open();
+        frames.show([memo('m', 'One#Memo')]);
+        await settle();
+        frames.show([memo('m', 'Two#Memo')]);
+        await settle();
+        expect(frames.reads.at(-1)).toBe(two);
+        expect(frames.views()[0].shown.at(-1)).toMatchObject({ reading: { markdown: 'two' }, path: 'Two.md' });
+    });
+
     it('reads again at a saved setting, and stops hearing the vault and ends its frames at close', async () => {
         const frames = framesOver();
         const note = frames.note('Note.md', '# Memo\nbody');
         frames.sections.open();
-        frames.sections.sync([memo('m', 'Note#Memo')], {});
+        frames.show([memo('m', 'Note#Memo')], {});
         await settle();
         frames.sections.settingsSaved();
         await settle();

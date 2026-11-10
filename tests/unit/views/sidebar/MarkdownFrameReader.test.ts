@@ -87,6 +87,21 @@ describe('the reader of a markdown frame', () => {
         expect(frame.pending).toHaveLength(2);
     });
 
+    it('tells the path its note moved to: none while it is where it was found, none once it is no note', () => {
+        const frame = readerOver('Note#Memo');
+        expect(frame.reader.movedTo()).toBeNull();
+        const note = frame.name('Note', 'Note.md');
+        frame.reader.follow();
+        expect(frame.reader.movedTo()).toBeNull();
+
+        note.path = 'Moved/Note.md';
+        expect(frame.reader.movedTo()).toBe('Moved/Note.md');
+
+        note.path = 'Moved/Note.txt';
+        note.extension = 'txt';
+        expect(frame.reader.movedTo()).toBeNull();
+    });
+
     it('drops a reading that ends after a later one began', async () => {
         const frame = readerOver('Folder/Note#Memo');
         frame.name('Folder/Note', 'Folder/Note.md');

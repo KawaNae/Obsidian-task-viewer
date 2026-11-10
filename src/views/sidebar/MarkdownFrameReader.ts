@@ -20,7 +20,7 @@ import { logError } from '../../log/log';
 import { frameTarget, frameTitle, readFrameContent, type FrameContent } from '../../services/data/MarkdownFrames';
 import { splitLines } from '../../services/persistence/FileLines';
 import type { TaskViewerSettings } from '../../types';
-import { noteAt } from '../../utils/NoteLink';
+import { isNote, noteAt } from '../../utils/NoteLink';
 
 /**
  * What a frame read, with the name its row shows of it. A section of a note
@@ -111,6 +111,17 @@ export class MarkdownFrameReader {
         if (turn !== this.reads) return;
         const reading = readFrameContent(splitLines(content).lines, frameTarget(this.frameLink).subpath, this.host.settings());
         this.onRead({ reading, title: frameTitle(this.frameLink, reading, found.file.basename), path: found.path });
+    }
+
+    /**
+     * The path the note found is at now, when it was renamed or moved since
+     * it was found and is a note still; null otherwise. A note renamed to
+     * another extension is not one: the frame does not follow it there.
+     */
+    movedTo(): string | null {
+        const { found } = this;
+        if (!found || found.file.path === found.path || !isNote(found.file)) return null;
+        return found.file.path;
     }
 
     /** Whether the note found is `file`. */

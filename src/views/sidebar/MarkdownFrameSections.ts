@@ -9,28 +9,30 @@
  * in the view's state and stacks their elements; what the panel does for
  * them is its placement's (`MarkdownFramePlacement`), the only way a frame
  * writes anything. The panel has the frames take the state's frames and
- * folds (`sync`), and asks for each frame's element where it stands
+ * folds (`sync`) as soon as the state changes, before it draws, so a frame
+ * in the state always has its reader, which knows the note it found and
+ * the path it found it at. `sync` is the one way a link or a fold reaches a
+ * frame. The panel's draw asks for each frame's element where it stands
  * (`elementOf`).
  *
  * The frames follow their notes through this, which hears the vault once
- * for all of them: a note written to is read again, a note renamed or moved
- * has its frame's link written to the new path, through the placement, and
- * a note made, moved or deleted has every frame look again for the note its
- * link names. A saved setting has them read again, since the keys a
- * section's style is read by are settings.
+ * for all of them: a note written to is read again, a note a frame found
+ * that is at another path now has the frame's link written to that path,
+ * through the placement, and a note made, moved or deleted has every frame
+ * look again for the note its link names. A saved setting has them read
+ * again, since the keys a section's style is read by are settings.
  *
  * A body that measures the room it has (a chart) is rendered once the panel
  * stands in a document, styled by the plugin's stylesheet (`canRender`).
  */
 
-import type { EventRef, HoverParent, Menu, TAbstractFile } from 'obsidian';
+import type { EventRef, HoverParent, Menu } from 'obsidian';
 import { t } from '../../i18n';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import type { PluginContext } from '../../PluginContext';
 import { frameLinkAt } from '../../services/data/MarkdownFrames';
 import type { SidebarFrame } from '../../types';
 import { openLink } from '../../utils/NavigationUtils';
-import { isNote } from '../../utils/NoteLink';
 import type { SectionHeaderClasses } from '../sharedUI/ListSectionRenderer';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { MarkdownFrameReader } from './MarkdownFrameReader';
@@ -102,7 +104,7 @@ export class MarkdownFrameSections {
             }),
             vault.on('create', () => this.followNotes()),
             vault.on('delete', () => this.followNotes()),
-            vault.on('rename', (file) => this.noteMoved(file)),
+            vault.on('rename', () => this.noteMoved()),
         );
         // A view opened with the workspace is opened before the vault's
         // files are all known: the notes are looked for once they are.
@@ -133,7 +135,8 @@ export class MarkdownFrameSections {
      * Have the frames be those of `frames`, the state's: a frame that is
      * not among them is ended and its element taken out, one that is new is
      * made and follows its note once the notes are known, and one that is
-     * kept takes its link and its fold (`collapsed`, by id).
+     * kept takes its link and its fold (`collapsed`, by id). Called whenever
+     * the state's frames or folds change, and when the panel opens.
      */
     sync(frames: readonly SidebarFrame[], collapsed: Readonly<Record<string, boolean>>): void {
         const markdown = frames.filter(frame => frame.kind === 'markdown');
@@ -237,28 +240,26 @@ export class MarkdownFrameSections {
     }
 
     /**
-     * `file` was renamed or moved. A frame that shows it keeps showing it:
-     * its link is written to the note's new path, through the placement.
+     * A file was renamed or moved. A frame whose note is at another path
+     * than it was found at keeps showing it: its link is written to the new
+     * path, through the placement, which has the frames take it at once
+     * (`sync`). Which frames those are is asked of what each frame found,
+     * whichever file was reported: a folder renamed is reported first, its
+     * notes' paths still old, and then each of its notes, once its path is
+     * new.
      * Every frame then looks for its note again, since a name a link
      * resolved may name another file now.
      */
-    private noteMoved(file: TAbstractFile): void {
+    private noteMoved(): void {
         if (!this.notesKnown()) return;
-        if (isNote(file)) {
-            const moved = new Map<string, string>();
-            for (const [id, { reader }] of this.frames) {
-                if (!reader.shows(file)) continue;
-                const link = frameLinkAt(reader.link, file.path);
-                if (link !== reader.link) moved.set(id, link);
-            }
-            if (moved.size > 0) {
-                // The state's links reach the frames at the panel's next
-                // draw, after the frames look for their notes below: a
-                // frame looking by its old link would find no note.
-                for (const [id, link] of moved) this.frames.get(id)?.reader.setLink(link);
-                this.placement.relink(moved);
-            }
+        const moved = new Map<string, string>();
+        for (const [id, { reader }] of this.frames) {
+            const path = reader.movedTo();
+            if (path === null) continue;
+            const link = frameLinkAt(reader.link, path);
+            if (link !== reader.link) moved.set(id, link);
         }
+        if (moved.size > 0) this.placement.relink(moved);
         this.followNotes();
     }
 
