@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { headingSubpath, noteLink, pickedLink, type PickedTarget } from '../../../src/utils/NoteLink';
+import { TFolder, type TFile } from 'obsidian';
+import { headingSubpath, isNote, noteAt, noteLink, pickedLink, type PickedTarget } from '../../../src/utils/NoteLink';
 import { linkApp, linkFile } from '../helpers/linkApp';
 import { linkDouble, type LinkSettings } from '../helpers/linkDouble';
 import { makeFile } from '../helpers/vaultSession';
@@ -153,5 +154,48 @@ describe('pickedLink: what Obsidian\'s [[ writes for a candidate picked', () => 
             expect(link({ kind: 'heading', file: file('Unique.md'), linkpath: 'Unique', heading: '見出し' })).toBe('[見出し](Unique.md#見出し)');
             expect(link({ kind: 'heading', file: file('src.md'), linkpath: '', heading: '見出し' })).toBe('[見出し](#見出し)');
         });
+    });
+});
+
+/**
+ * Which note a link names (`noteAt`): what the metadata cache resolves the
+ * path to from the vault's root, when that is a note.
+ */
+describe('noteAt and isNote', () => {
+    const note = makeFile('Folder/Note.md');
+    const image = makeFile('Folder/Picture.png');
+    const folder = new TFolder();
+    folder.path = 'Folder';
+
+    /** A metadata cache that resolves `names` to their files, and tells which source path it was asked from. */
+    function cacheOf(names: Record<string, TFile>) {
+        const asked: string[] = [];
+        return {
+            asked,
+            getFirstLinkpathDest(path: string, sourcePath: string): TFile | null {
+                asked.push(sourcePath);
+                return names[path] ?? null;
+            },
+        };
+    }
+
+    it('a markdown file is a note; a file of another kind, a folder and nothing are not', () => {
+        expect(isNote(note)).toBe(true);
+        expect(isNote(image)).toBe(false);
+        expect(isNote(folder)).toBe(false);
+        expect(isNote(null)).toBe(false);
+    });
+
+    it('gives the note the path resolves to, by its full path or a shorter name, from the vault\'s root', () => {
+        const cache = cacheOf({ 'Folder/Note': note, Note: note });
+        expect(noteAt(cache, 'Folder/Note')).toBe(note);
+        expect(noteAt(cache, 'Note')).toBe(note);
+        expect(cache.asked).toEqual(['', '']);
+    });
+
+    it('gives null for a path that resolves to nothing, or to a file that is no note', () => {
+        const cache = cacheOf({ 'Folder/Picture.png': image });
+        expect(noteAt(cache, 'Missing')).toBeNull();
+        expect(noteAt(cache, 'Folder/Picture.png')).toBeNull();
     });
 });

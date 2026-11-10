@@ -37,12 +37,13 @@ import { frameLinkAt } from '../../services/data/MarkdownFrames';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { openLink } from '../../utils/NavigationUtils';
+import { isNote } from '../../utils/NoteLink';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
 import type { ListSectionClasses, SectionHeaderClasses } from '../sharedUI/ListSectionRenderer';
 import { TaskListSections, newList, type ListDrawContext, type ListSectionDeps } from '../sharedUI/TaskListSections';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { MarkdownFrameView, isNote, type MarkdownFrameHost } from './MarkdownFrameView';
+import { MarkdownFrameView, type MarkdownFrameHost } from './MarkdownFrameView';
 
 /** What the panel draws its frames with: what the lists read, and how a link a markdown frame draws is opened and previewed. */
 export interface SidebarFramesDeps extends ListSectionDeps {
