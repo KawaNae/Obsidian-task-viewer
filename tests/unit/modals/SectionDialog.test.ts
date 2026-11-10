@@ -96,10 +96,12 @@ describe('the section the fields name, and its link', () => {
     });
 
     it('takes a pick only while its line holds a heading of the name picked, the note read again', () => {
-        // `Log › Tasks` picked on line 5, then a line put above it: line 5 is `# Log` now.
+        // A line put above the note's: `Log › Tasks` is on line 6 now, and line 5 is `# Log`.
         const again = frameHeadings(['intro', ...NOTE]);
+        // The line picked holds another heading: the first `Tasks` is named, not what the line holds.
         expect(chosenSection(PATH, again, pickedAt(5))).toMatchObject({ kind: 'heading', subpath: 'Tasks', heading: { line: 3 } });
-        expect(chosenSection(PATH, again, { text: 'Log', picked: { path: PATH, line: 5 } })).toMatchObject({ heading: { line: 5, text: 'Log' } });
+        // The line picked holds a `Tasks`: that one is named, not the first `Tasks`.
+        expect(chosenSection(PATH, again, { text: 'Tasks', picked: { path: PATH, line: 6 } })).toMatchObject({ kind: 'heading', subpath: 'Log#Tasks', heading: { line: 6 } });
     });
 });
 
@@ -147,8 +149,10 @@ describe('the fields a dialog opens with', () => {
 
 describe('the note the note field names', () => {
     /**
-     * A vault of `files`, whose links resolve as Obsidian's do: the file at
-     * the path a link writes, else the one at that path with `.md`.
+     * A vault of `files`, whose `getFirstLinkpathDest` finds a file by its
+     * whole path alone: the file at the path a link writes, else the one at
+     * that path with `.md`. A link written for a note here is its whole path,
+     * so no file is looked for by its name.
      */
     const vault = (files: Record<string, string>) => {
         const made = new Map(Object.keys(files).map(path => [path, makeFile(path)]));
@@ -319,22 +323,24 @@ describe('the section dialog', () => {
         expect(d.chosen).toEqual([]);
     });
 
-    it('takes no answer once it is disposed, and chooses nothing then', async () => {
+    it('takes no answer once it is disposed, draws nothing more, and chooses nothing then', async () => {
         const d = dialogOf();
         d.dialog.noteChanged({ text: 'Note', picked: null });
         d.dialog.dispose();
         const before = d.renders();
+        // The answer is to the last asking: only the dialog being disposed keeps it from being taken.
         await d.asked[1].answer(found);
-        await d.asked[0].fail(new Error('gone'));
+        expect(d.dialog.link()).toBeNull();
+        d.dialog.headingChanged(pickedAt(4));
         expect(d.renders()).toBe(before);
-        d.dialog.choose();
 
+        // An answer taken before it is disposed is not chosen after.
         const late = dialogOf();
         await late.asked[0].answer(found);
         expect(late.shown().canChoose).toBe(true);
         late.dialog.dispose();
         late.dialog.choose();
-        expect([d.chosen, late.chosen, d.closed(), late.closed()]).toEqual([[], [], 0, 0]);
+        expect([late.chosen, late.closed()]).toEqual([[], 0]);
     });
 
     it('opens on the fields it is given, and asks the note they name at once', () => {
