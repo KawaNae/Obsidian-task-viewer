@@ -15,7 +15,7 @@ const file = (path: string) => Object.assign(new TFile(), { path, basename: path
 function fieldOf(initial = { text: '', picked: null as string | null }) {
     const container = new FakeEl();
     let changes = 0;
-    const field = new NoteField({ scope: {}, keymap: { pushScope() { }, popScope() { } } } as never, asEl(container), { initial, onChange: () => { changes++; }, onEnter: () => { } });
+    const field = new NoteField({ scope: {}, keymap: { pushScope() { }, popScope() { } } } as never, asEl(container), { initial, offersUnresolved: true, onChange: () => { changes++; }, onEnter: () => { } });
     const input = field.input as unknown as FakeEl;
     const pick = (candidate: NoteCandidate) => (field as unknown as { suggest: { selectSuggestion(c: NoteCandidate, e: Event): void } }).suggest
         .selectSuggestion(candidate, { type: 'click' } as Event);

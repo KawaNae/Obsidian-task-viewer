@@ -1,0 +1,20 @@
+/* ======================================================
+   Section dialog (tv-section): a note and a heading of it
+   chosen for a markdown frame of the sidebar (SectionModal).
+   Its frame is the form's shared pieces (_form.css), as the
+   send dialog's is. This file holds what only this dialog
+   has: how the heading field's list draws its choices.
+   ====================================================== */
+
+/* A heading, as deep as the headings it stands under. The list is
+   Obsidian's, on the document's body, so its items are named by their own
+   class. */
+.suggestion-item.tv-section-choice {
+    padding-inline-start: calc(var(--size-4-3) + var(--tv-section-depth, 0) * var(--size-4-4));
+}
+
+/* A heading no link names: offered, faded, and picked by nothing. */
+.suggestion-item.tv-section-choice--shut {
+    opacity: 0.5;
+    cursor: default;
+}

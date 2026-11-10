@@ -39,6 +39,8 @@ export class DestinationField {
     constructor(app: App, container: HTMLElement, opts: DestinationFieldOptions) {
         this.note = new NoteField(app, container, {
             initial: opts.initial.note,
+            // A send makes the note an unresolved link names.
+            offersUnresolved: true,
             onChange: opts.onChange,
             onEnter: opts.onEnter,
         });

@@ -14,7 +14,7 @@ import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { NoteSections } from '../parsing/tree/NoteSections';
 import type { SectionNode } from '../parsing/tree/Sections';
-import { headingNames, resolveHeading } from '../parsing/utils/HeadingLinks';
+import { headingLinks, headingNames, resolveHeading, type HeadingLink } from '../parsing/utils/HeadingLinks';
 import { Outline } from '../parsing/utils/Outline';
 
 /** What the link of a markdown frame names. */
@@ -47,13 +47,31 @@ export function frameLink(path: string, subpath: string | null): string {
 }
 
 /**
+ * The link that names the section `subpath` of the note at `path` (a file's
+ * path, with its `.md`): the path written whole, without the extension, so
+ * the link names that note whatever other notes have its name. `subpath` is
+ * as {@link frameLink} takes it.
+ */
+export function noteFrameLink(path: string, subpath: string | null): string {
+    return frameLink(path.replace(/\.md$/i, ''), subpath);
+}
+
+/**
  * `link` turned to the note at `path` (a file's path, with its `.md`), the
  * section it names kept: what a frame's link becomes when its note is
- * renamed or moved. The path is written whole, without the extension, so the
- * link names that note whatever other notes have its name.
+ * renamed or moved.
  */
 export function frameLinkAt(link: string, path: string): string {
-    return frameLink(path.replace(/\.md$/i, ''), frameTarget(link).subpath.replace(/^#/, ''));
+    return noteFrameLink(path, frameTarget(link).subpath.replace(/^#/, ''));
+}
+
+/**
+ * The headings of the note `lines`, each with the subpath that names it
+ * (`headingLinks`), among the headings {@link readFrameContent} finds a
+ * link's in: a heading's subpath here is read back as that heading.
+ */
+export function frameHeadings(lines: readonly string[]): HeadingLink[] {
+    return headingLinks(Outline.read(lines).headings);
 }
 
 /** What a frame shows of its section, whichever it is. */

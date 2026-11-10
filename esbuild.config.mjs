@@ -116,6 +116,7 @@ const copyStaticFiles = {
           '_task-hub.css',
           '_source-editor.css',
           '_send-dialog.css',
+          '_section-dialog.css',
           '_timer-offset-dialog.css',
           '_filter-popover.css',
           '_sort-popover.css',
