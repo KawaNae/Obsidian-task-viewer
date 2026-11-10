@@ -106,7 +106,7 @@ function bars(view: string, name: string): Bar[] {
         ${PRELUDE}
         const el = V(${JSON.stringify(view)}).contentEl;
         const cards = [...el.querySelectorAll('.cal-week-row .task-card, .allday-section .task-card')]
-            .filter(c => !c.closest('.tv-sidebar__pinned-lists'))
+            .filter(c => !c.closest('.tv-sidebar__frames'))
             .filter(c => (c.querySelector('.task-card__content')?.textContent ?? c.textContent).includes(${JSON.stringify(name)}));
         return JSON.stringify(cards.map(c => ({
             week: c.closest('.cal-week-row')?.dataset.weekStart ?? null,

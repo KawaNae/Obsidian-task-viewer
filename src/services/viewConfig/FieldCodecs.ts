@@ -204,7 +204,7 @@ export const F = {
      * A list's filterState is serialized via FilterSerializer.toJSON (so the
      * persisted form is plain JSON, not the runtime object).
      */
-    pinnedLists(key: string, opts: FieldOptions = {}): ConfigField<SidebarFrame[]> {
+    sidebarFrames(key: string, opts: FieldOptions = {}): ConfigField<SidebarFrame[]> {
         return {
             key,
             legacyKeys: opts.legacyKeys,
@@ -381,7 +381,7 @@ export const T = {
     },
 };
 
-// ── Internal helpers (pinnedLists / grid) ──
+// ── Internal helpers (sidebarFrames / grid) ──
 
 function serializeFrame(frame: SidebarFrame): Record<string, unknown> {
     switch (frame.kind) {

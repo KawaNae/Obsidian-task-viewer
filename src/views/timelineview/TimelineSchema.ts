@@ -27,7 +27,7 @@ export interface TimelineConfig {
     astronomyDisplay?: Partial<AstronomyDisplay>;
     showSidebar?: boolean;
     /** The frames of the sidebar, in the order they are stacked. */
-    pinnedLists?: SidebarFrame[];
+    sidebar?: SidebarFrame[];
     daysToShow?: number;
     zoomLevel?: number;
     /** Per-view override of all-day section visibility. undefined = follow global. */
@@ -45,7 +45,7 @@ export interface TimelineTransient {
      */
     date?: string;
     /** Which frames of the sidebar are collapsed, by frame id. */
-    pinnedListCollapsed?: Record<string, boolean>;
+    sidebarCollapsed?: Record<string, boolean>;
 }
 
 /** The view's state: its config and transient fields as one value (`ViewStore`). */
@@ -66,17 +66,17 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         maskMode:         F.boolean('maskMode'),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
         showSidebar:      F.boolean('showSidebar'),
-        pinnedLists:      F.pinnedLists('pinnedLists'),
+        sidebar:          F.sidebarFrames('sidebar', { legacyKeys: ['pinnedLists'] }),
         daysToShow:       F.int('daysToShow', { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW, legacyKeys: ['days'] }),
         zoomLevel:        F.float('zoomLevel', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
         showAllDay:       F.boolean('showAllDay'),
         showTimeline:     F.boolean('showTimeline'),
     },
     anchorKey: 'date',
-    listsOf: (config) => listFramesOf(config.pinnedLists ?? []),
+    listsOf: (config) => listFramesOf(config.sidebar ?? []),
     transient: {
-        date:                    T.dateString('date'),
-        pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),
+        date:             T.dateString('date'),
+        sidebarCollapsed: T.collapsedKeys('sidebarCollapsed', 'timeline', { legacyKeys: ['pinnedListCollapsed'] }),
     },
 };
 

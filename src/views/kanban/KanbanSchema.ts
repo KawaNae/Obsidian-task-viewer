@@ -4,7 +4,7 @@
  * Kanban has no astronomy overlay (no time axis) so astronomyDisplay is not
  * a field. Its lists are the cells of a 2D `grid` (PinnedListDefinition[][]),
  * where Timeline and Calendar hold theirs as frames of a sidebar
- * (`pinnedLists`).
+ * (`sidebar`).
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';

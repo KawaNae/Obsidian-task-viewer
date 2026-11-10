@@ -1,8 +1,8 @@
 /* =============================================================================
-   tv-sidebar — Shared layout for views with a right-side pinned-list panel.
-   Single block with __main, __backdrop, __panel, __panel-{header,body,title,add-btn}
-   elements and --mobile / --animate / __main--open / __backdrop--visible /
-   __panel--hidden modifiers.
+   tv-sidebar — Shared layout for views with a right-side panel of frames.
+   Single block with __main, __backdrop, __panel, __panel-{header,body,title,add-btn},
+   __frames elements and --mobile / --animate / __main--open /
+   __backdrop--visible / __panel--hidden / __frames--empty modifiers.
    ============================================================================= */
 
 /* 2-Column Layout Wrapper */
@@ -109,6 +109,19 @@
     flex: 1;
     overflow-y: auto;
     padding: 10px;
+}
+
+/* The frames stacked down the panel's body */
+.tv-sidebar__frames {
+    padding: 0 4px;
+}
+
+/* No frame yet */
+.tv-sidebar__frames--empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--tv-text-muted);
+    font-size: 0.85em;
 }
 
 /* Mobile / narrow layout overrides */

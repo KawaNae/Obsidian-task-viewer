@@ -42,7 +42,7 @@ const SCHEMA: ViewSchema<TestConfig, TestTransient> = {
         rate: F.float('rate', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
         span: F.int('span', { min: 1, max: 30, legacyKeys: ['spanLegacy'] }),
         filter: F.filter('filter', { legacyKeys: ['filterState'] }),
-        pins: F.pinnedLists('pins'),
+        pins: F.sidebarFrames('pins'),
         grid: F.grid('grid'),
         sky: F.astronomyDisplay('sky', { legacyKeys: ['astronomyDisplay'] }),
         cursor: F.dateString('cursor'),
@@ -154,12 +154,12 @@ describe('ViewConfigCodec', () => {
         const list = { id: 'pl-1', name: 'L', filterState: { filters: [], logic: 'and' } };
 
         it('a list saved without the key reads as false', () => {
-            expect(F.pinnedLists('pins').parse([list])?.[0].applyViewFilter).toBe(false);
+            expect(F.sidebarFrames('pins').parse([list])?.[0].applyViewFilter).toBe(false);
             expect(F.grid('grid').parse([[list]])?.[0][0].applyViewFilter).toBe(false);
         });
 
         it('a value that is not a boolean reads as false', () => {
-            expect(F.pinnedLists('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0].applyViewFilter).toBe(false);
+            expect(F.sidebarFrames('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0].applyViewFilter).toBe(false);
         });
 
         it('false is written, not omitted', () => {
@@ -169,7 +169,7 @@ describe('ViewConfigCodec', () => {
     });
 
     describe('the frames of a sidebar', () => {
-        const pins = F.pinnedLists('pins');
+        const pins = F.sidebarFrames('pins');
         // Two lists as they are stored, the second with every field a list can hold.
         const today = {
             id: 'pl-1',

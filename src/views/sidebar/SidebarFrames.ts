@@ -20,31 +20,31 @@ import { t } from '../../i18n';
 import { listFrame, listFramesOf, type SidebarFrame } from '../../types';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { HostFrameScheduler } from '../../utils/HostWindow';
-import { CardReconciler } from './CardReconciler';
-import { shouldRenderForChanges } from './RenderScheduler';
-import type { ListSectionClasses } from './ListSectionRenderer';
-import { TaskListSections, newList, type ListDrawContext, type ListSectionDeps } from './TaskListSections';
+import { CardReconciler } from '../sharedUI/CardReconciler';
+import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
+import type { ListSectionClasses } from '../sharedUI/ListSectionRenderer';
+import { TaskListSections, newList, type ListDrawContext, type ListSectionDeps } from '../sharedUI/TaskListSections';
 
 /** The fields of a view's state the panel reads and writes. */
-export interface PinnedListsState {
+export interface SidebarFramesState {
     /** The frames, in the order they are stacked. */
-    pinnedLists?: SidebarFrame[];
+    sidebar?: SidebarFrame[];
     /** Which frames are collapsed, by frame id. */
-    pinnedListCollapsed?: Record<string, boolean>;
+    sidebarCollapsed?: Record<string, boolean>;
     filterState?: FilterState;
     maskMode?: boolean;
 }
 
 /** What the panel is handed of its view. */
-export interface PinnedListPanelHost {
-    state(): Readonly<PinnedListsState>;
-    subscribe(listener: (patch: Readonly<Partial<PinnedListsState>>) => void): () => void;
+export interface SidebarFramesHost {
+    state(): Readonly<SidebarFramesState>;
+    subscribe(listener: (patch: Readonly<Partial<SidebarFramesState>>) => void): () => void;
     /** Change the view's state without drawing the view: the panel draws itself. */
-    write(patch: Partial<PinnedListsState>): void;
+    write(patch: Partial<SidebarFramesState>): void;
 }
 
 /** The fields whose change the panel shows. */
-const PANEL_FIELDS: readonly (keyof PinnedListsState)[] = ['pinnedLists', 'pinnedListCollapsed', 'filterState', 'maskMode'];
+const PANEL_FIELDS: readonly (keyof SidebarFramesState)[] = ['sidebar', 'sidebarCollapsed', 'filterState', 'maskMode'];
 
 /** A compact row in the sidebar, with no card frame. */
 const PINNED_LIST_CLASSES: ListSectionClasses = {
@@ -59,7 +59,7 @@ const PINNED_LIST_CLASSES: ListSectionClasses = {
     nameInput: 'pinned-list__name-input',
 };
 
-export class PinnedListPanel {
+export class SidebarFrames {
     private readonly el: HTMLElement;
     private readonly sections: TaskListSections;
     /** The window's animation frames, in which a requested draw runs. */
@@ -69,10 +69,10 @@ export class PinnedListPanel {
 
     constructor(
         private readonly deps: ListSectionDeps,
-        private readonly host: PinnedListPanelHost,
+        private readonly host: SidebarFramesHost,
     ) {
         this.el = document.createElement('div');
-        this.el.addClass('tv-sidebar__pinned-lists');
+        this.el.addClass('tv-sidebar__frames');
         this.sections = new TaskListSections(deps, {
             classes: PINNED_LIST_CLASSES,
             scopePrefix: 'pl',
@@ -133,11 +133,11 @@ export class PinnedListPanel {
     }
 
     private frames(): SidebarFrame[] {
-        return this.host.state().pinnedLists ?? [];
+        return this.host.state().sidebar ?? [];
     }
 
     private writeFrames(frames: SidebarFrame[]): void {
-        this.host.write({ pinnedLists: frames });
+        this.host.write({ sidebar: frames });
     }
 
     /** Put `frame` right below the frame `id`. */
@@ -150,7 +150,7 @@ export class PinnedListPanel {
     /** Write whether the frame `id` is collapsed. */
     private setCollapsed(id: string, collapsed: boolean): void {
         this.host.write({
-            pinnedListCollapsed: { ...this.host.state().pinnedListCollapsed, [id]: collapsed },
+            sidebarCollapsed: { ...this.host.state().sidebarCollapsed, [id]: collapsed },
         });
     }
 
@@ -170,13 +170,13 @@ export class PinnedListPanel {
         this.el.empty();
 
         const state = this.host.state();
-        const frames = state.pinnedLists ?? [];
+        const frames = state.sidebar ?? [];
         if (frames.length === 0) {
-            this.el.createDiv('tv-sidebar__pinned-lists--empty').setText(t('pinnedList.noPinnedLists'));
+            this.el.createDiv('tv-sidebar__frames--empty').setText(t('sidebar.empty'));
         } else {
             const lists: ListDrawContext = {
                 reconciler,
-                collapsed: state.pinnedListCollapsed ?? {},
+                collapsed: state.sidebarCollapsed ?? {},
                 viewFilter: state.filterState,
             };
             this.sections.keepPagesOf(listFramesOf(frames));

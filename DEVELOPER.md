@@ -144,10 +144,10 @@ src/
 │   ├── calendar/              # CalendarView, MiniCalendarView, CalendarGrid, WeekNumberCell
 │   ├── kanban/                # Kanban view
 │   ├── taskcard/              # Task card rendering (see section above)
-│   ├── sharedUI/              # Shared UI components (ViewToolbar, TaskListSections, PinnedListPanel, DateGridLane, PeriodicNoteLink, etc.)
+│   ├── sharedUI/              # Shared UI components (ViewToolbar, TaskListSections, DateGridLane, PeriodicNoteLink, etc.)
 │   ├── sharedLogic/           # Shared logic (ViewEvents, MinuteClock, ViewUriBuilder, GridTaskLayout, etc.)
 │   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
-│   ├── sidebar/               # SidebarManager, SidebarToggleButton
+│   ├── sidebar/               # SidebarManager, SidebarToggleButton, SidebarFrames
 │   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup / Interval)
 ├── timer/                     # Timer widget and all timer services (including AudioUtils, TimerTargetIdUtils)
 ├── interaction/
@@ -273,7 +273,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup / Interval) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
-| **SidebarManager** | `views/sidebar/SidebarManager.ts` | The sidebar of Timeline and Calendar: its layout, and whether it is open (closed at narrow width until the toggle opens it). What it holds is the panel of the sidebar's frames (`PinnedListPanel`) |
+| **SidebarManager** | `views/sidebar/SidebarManager.ts` | The sidebar of Timeline and Calendar: its layout, and whether it is open (closed at narrow width until the toggle opens it). What it holds is the panel of the sidebar's frames (`SidebarFrames`, `views/sidebar/SidebarFrames.ts`) |
 | **CreateDialog / CreateModal** | `modals/create/` | The create dialog: a new task line and the place it goes (`CreatePlace`: a daily note's task section, or the head of a row's children), its logic (`CreateDialog`) apart from how it looks (`CreateModal`), as the send dialog's is. It asks the place what it is (`CreatePlaces.facts`, `services/data/`) and says where the line goes; its placeholders and date rules read only what a line there inherits (the reading's answer, never a daily note's day). Opens on the name field and creates nothing while the name is empty; waits for the write, closing once written and saying why above its buttons when refused |
 | **SendDialog / NoteField** | `modals/noteops/` | The send dialog: rows and their subtrees sent to a heading of a note, its logic (`SendDialog`) apart from how it looks (`SendModal`). The note is one field (`NoteField`) searched among the vault's notes, aliases and unresolved links (`NoteSuggest`); it holds the text and the note picked (`NoteAsk`), a pick let go once the text changes. `NoteName.find` reads it as a link's text is read: the note picked; a name, the vault's one note by it or a new note in the folder for new notes; a path, the note at it from the root or the one whose path ends in it, or a new note there. More than one note is no note, and no send until one is picked. Under the field the dialog always says which note the rows go to; under the heading, where in it |
 | **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`. Its fields' lists are Obsidian's (`ValueSuggest`), its status button opens the card menu's statuses (`addStatusItems`). Entry: card double-tap, menu Properties items (with field focus). Its property fields: 「ハブのプロパティの欄」 |
@@ -775,15 +775,16 @@ Three things more than one view draws are drawn by one part each.
 
 | Placement | Holds | Its own |
 |---|---|---|
-| `PinnedListPanel` (Timeline, Calendar) | `pinnedLists` (the sidebar's frames), `pinnedListCollapsed` | The add button (a new list's name is edited once it is drawn), Move up / Move down, Remove. A copy goes right below its list |
+| `SidebarFrames` (Timeline, Calendar) | `sidebar` (the sidebar's frames), `sidebarCollapsed` | The add button (a new list's name is edited once it is drawn), Move up / Move down, Remove. A copy goes right below its list |
 | `KanbanView` | `grid`, `gridCollapsed` | Insert a row or a column, remove one (never the last). A copy goes right of its list, and the other rows get a new list in that column |
 
-- The sidebar of Timeline and Calendar stacks frames (`SidebarFrame`, `types/ViewConfig.ts`), in the order `pinnedLists` holds them. A frame says what it shows in `kind`, and every kind keeps its `id` and its `name` at the top. The one kind is the list frame (`ListFrame`): a saved list's definition with `kind: 'list'`. Kanban's cells are lists, not frames, and hold the bare definition
+- The sidebar of Timeline and Calendar stacks frames (`SidebarFrame`, `types/ViewConfig.ts`), in the order `sidebar` holds them. A frame says what it shows in `kind`, and every kind keeps its `id` and its `name` at the top. The one kind is the list frame (`ListFrame`): a saved list's definition with `kind: 'list'`. Kanban's cells are lists, not frames, and hold the bare definition
 - The panel handles a frame by its id, whatever its kind: it adds one, puts one below another, moves one up or down, removes one, and writes which are collapsed. What a frame shows is drawn by its kind (`drawFrame`): a list frame by `TaskListSections.drawList`, at the place its frame has in the stack. Before it draws the frames, the panel names all its lists (`keepPagesOf`), so the page of a list that is gone is forgotten. Kanban, which holds nothing but lists, hands them all to `draw`, which does both
 - A kind is added in three places: a member of `SidebarFrame`, its reading and writing in the codec (`parseFrame`, `serializeFrame` in `FieldCodecs.ts`), and its drawing in the panel (`drawFrame`)
-- The codec (`F.pinnedLists`) writes a list frame as the list's definition alone, without a `kind`, and reads an entry without a `kind`, or with `kind: 'list'`, as a list frame. An entry of a kind it does not know is skipped without a report, as an entry without a name or a filter is, and the other frames are kept. A cell of Kanban's `grid` is read and written as a bare definition
+- The codec (`F.sidebarFrames`) writes a list frame as the list's definition alone, without a `kind`, and reads an entry without a `kind`, or with `kind: 'list'`, as a list frame. An entry of a kind it does not know is skipped without a report, as an entry without a name or a filter is, and the other frames are kept. A cell of Kanban's `grid` is read and written as a bare definition
 - A schema's `listsOf` gives the saved lists of a config: the list frames of the sidebar (`listFramesOf`), or Kanban's cells. A template's lists are found through it (`PinnedListQuery.fromTemplate`, so the API's and the CLI's `list`), whatever else the sidebar holds
 - A change of a list is a new list written into the view's state; nothing changes a definition in place. A rename writes the new name and the list is drawn with it
+- The frames are stored under `sidebar` (in a template, the workspace and a URI), and which of them are collapsed under `sidebarCollapsed` (in the workspace). The older keys `pinnedLists` and `pinnedListCollapsed` are read (the fields' `legacyKeys`) and never written; where both are there, the new key is read, and the older one only when the new one gives nothing that can be read
 - Which frames, or which cells, are collapsed is kept by id. An older layout names them `timeline::<id>` or `calendar::<id>`; the codec reads that as `<id>` (`T.collapsedKeys`)
 - A new list's id is made by `newListId` (`services/viewConfig/ListIds.ts`), also for a list read without one. A new list shows every task that is not a child (`createDefaultListFilterState()`, `parent isNotSet`) and does not apply the view's filter. A copy shares its filter, sort and top-right values, which are never changed in place
 - The panel draws itself, on a change of its fields of the state and of the tasks; it writes with `update(patch, { draw: false })`, so a change of a frame does not draw the view. A draw empties the panel's element and draws every frame anew; the cards are kept by key. Its element outlives the view's draws: the view takes it out before it gathers its own cards (`lift`) and puts it into the sidebar it built (`mount`), so the pages and the opened cards are kept. Kanban draws its cells in its own draw
@@ -1056,8 +1057,8 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 | `weekOffset` | integer | Calendar and MiniCalendar: the weeks the grid is moved from `date`'s month grid (from today's while `date` is absent). Absent, 0 | `-2` |
 | `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
 | `filterState` (alias `filter`) | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
-| `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
-| `template` | string | View template name (URL-encoded). When set, `filterState`/`pinnedLists` are omitted | `My%20Template` |
+| `sidebar` (alias `pinnedLists`) | base64 | The sidebar's frames as JSON (`SidebarFrame[]`; a list is its `PinnedListDefinition`) | `W3siaWQiOiJwbC0xIi...` |
+| `template` | string | View template name (URL-encoded). When set, `filterState`/`sidebar` are omitted | `My%20Template` |
 | `timerViewMode` (alias `mode`) | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
 | `intervalTemplate` | string | Timer: the interval template's name (URL-encoded) | `Deep%20Work` |
 
@@ -1079,8 +1080,8 @@ obsidian://task-viewer?view=timeline
 # With view params and custom name
 obsidian://task-viewer?view=timeline&position=right&name=Work%20Timeline&days=3&zoom=1.5&showSidebar=true
 
-# With filter and pinned lists
-obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base64>&pinnedLists=<base64>
+# With filter and the sidebar's lists
+obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base64>&sidebar=<base64>
 
 # Markdown link format (generated by "Copy as link")
 [Work Timeline](obsidian://task-viewer?view=timeline&position=right&name=Work%20Timeline&days=3)
@@ -1124,11 +1125,11 @@ Each view's toolbar has a gear icon (settings) button. The menu is built once fo
 
 ### Copy URI parameters per view
 
-- **TimelineView**: `filterState`, `daysToShow`, `zoomLevel`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
-- **CalendarView**: `filterState`, `pinnedLists`, `showSidebar`, and the rest of its config, `position`, `name`
+- **TimelineView**: `filterState`, `daysToShow`, `zoomLevel`, `sidebar`, `showSidebar`, and the rest of its config, `position`, `name`
+- **CalendarView**: `filterState`, `sidebar`, `showSidebar`, and the rest of its config, `position`, `name`
 - **ScheduleView**: `filterState`, `position`, `name`
 - **TimerView**: `timerViewMode`, `intervalTemplate`, `position`, `name` (no `template`: the timer keeps no view templates)
-- Every view that keeps templates supports `template` (when set, `filterState`/`pinnedLists` are omitted from URI). Copy URI writes the config only: where a view is (the date it looks at, Calendar's week offset) is not in it
+- Every view that keeps templates supports `template` (when set, `filterState`/`sidebar` are omitted from URI). Copy URI writes the config only: where a view is (the date it looks at, Calendar's week offset) is not in it
 
 ### Toolbar icon order
 
@@ -1144,7 +1145,7 @@ ScheduleView omits view-mode, zoom, and sidebar-toggle.
 - Invalid `position` value → ignored, falls back to default behavior
 - `name` → used as-is
 - A value that cannot be read (above) → ignored, the field takes the template's value or the view's default
-- `filterState` or `pinnedLists` that is not base64 JSON, or holds a condition that cannot be read → the view opens without it, and a notice says how many parts were dropped (`UriViewOpener`, `noticeConfigIssues`; each one is logged)
+- `filterState` or `sidebar` that is not base64 JSON, or holds a condition that cannot be read → the view opens without it, and a notice says how many parts were dropped (`UriViewOpener`, `noticeConfigIssues`; each one is logged)
 - `template` not found → a notice, and the view opens on its defaults
 
 ---

@@ -214,7 +214,7 @@ describe("a pinned list's date filter and sort", () => {
             sortState: { rules: [{ property: 'endDate', direction: 'asc' }] },
             applyViewFilter: false,
         };
-        openView('sw-pl', 'timeline-view', { showSidebar: true, pinnedLists: [list] });
+        openView('sw-pl', 'timeline-view', { showSidebar: true, sidebar: [list] });
         const shown = ev<string[]>(`(async () => {
             ${PRELUDE}
             await wait(300);

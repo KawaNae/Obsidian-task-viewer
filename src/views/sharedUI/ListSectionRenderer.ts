@@ -3,7 +3,7 @@
  * task count and sort / filter / more buttons, plus a body of task cards.
  *
  * `TaskListSections` builds every saved list with it: the pinned lists
- * stacked down the sidebar (`PinnedListPanel`) and Kanban's cells on its
+ * stacked down the sidebar (`SidebarFrames`) and Kanban's cells on its
  * grid, one per cell.
  *
  * The BEM block name is a parameter rather than something this module decides.

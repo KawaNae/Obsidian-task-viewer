@@ -15,7 +15,7 @@ export interface CalendarConfig {
     astronomyDisplay?: Partial<AstronomyDisplay>;
     showSidebar?: boolean;
     /** The frames of the sidebar, in the order they are stacked. */
-    pinnedLists?: SidebarFrame[];
+    sidebar?: SidebarFrame[];
 }
 
 export interface CalendarTransient {
@@ -27,7 +27,7 @@ export interface CalendarTransient {
     /** How many weeks the grid was moved from `date`'s month grid; absent is 0. */
     weekOffset?: number;
     /** Which frames of the sidebar are collapsed, by frame id. */
-    pinnedListCollapsed?: Record<string, boolean>;
+    sidebarCollapsed?: Record<string, boolean>;
 }
 
 /** The view's state: its config and transient fields as one value (`ViewStore`). */
@@ -46,15 +46,15 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
         maskMode:         F.boolean('maskMode'),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
         showSidebar:      F.boolean('showSidebar'),
-        pinnedLists:      F.pinnedLists('pinnedLists'),
+        sidebar:          F.sidebarFrames('sidebar', { legacyKeys: ['pinnedLists'] }),
     },
     anchorKey: 'date',
     anchorOffsetKeys: ['weekOffset'],
-    listsOf: (config) => listFramesOf(config.pinnedLists ?? []),
+    listsOf: (config) => listFramesOf(config.sidebar ?? []),
     transient: {
-        date:                T.dateString('date'),
-        weekOffset:          T.int('weekOffset'),
-        pinnedListCollapsed: T.collapsedKeys('pinnedListCollapsed', 'calendar'),
+        date:             T.dateString('date'),
+        weekOffset:       T.int('weekOffset'),
+        sidebarCollapsed: T.collapsedKeys('sidebarCollapsed', 'calendar', { legacyKeys: ['pinnedListCollapsed'] }),
     },
 };
 
