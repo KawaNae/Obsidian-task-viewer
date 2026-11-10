@@ -9,7 +9,7 @@ export interface ViewUriOptions {
     /**
      * Every persisted ViewConfig field encoded as URI params, produced by
      * `codec.toUriParams` — the single source for days/zoom/date/showSidebar/
-     * filter/pinnedLists/grid/maskMode/astronomyDisplay/... Omitted when
+     * filter/sidebar/grid/maskMode/astronomyDisplay/... Omitted when
      * `template` is set (config then lives in the referenced .md file).
      */
     configParams?: Record<string, string>;
@@ -23,7 +23,7 @@ export interface ViewUriOptions {
  * (codec.toUriParams), so this builder shares the single codec vocabulary with
  * the read path (codec.fromUriParams), template files, and workspace state —
  * one schema declaration drives all boundaries. Old URIs (days/zoom/date/
- * filter) remain readable via the codec's legacyKeys.
+ * filter/pinnedLists) remain readable via the codec's legacyKeys.
  */
 export class ViewUriBuilder {
     static build(viewType: string, options?: ViewUriOptions): string {

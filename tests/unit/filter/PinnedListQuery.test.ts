@@ -40,10 +40,10 @@ describe("the lists of a view's config (listsOf)", () => {
     const other = { kind: 'note', id: 'n', name: 'N' } as unknown as SidebarFrame;
 
     it("are the list frames of Timeline's and Calendar's sidebar, in their order", () => {
-        const pinnedLists = [listFrame(a), other, listFrame(b)];
-        expect(TimelineSchema.listsOf?.({ pinnedLists })).toEqual([listFrame(a), listFrame(b)]);
-        expect(CalendarSchema.listsOf?.({ pinnedLists })).toEqual([listFrame(a), listFrame(b)]);
-        expect(TimelineSchema.listsOf?.({ pinnedLists: [other] })).toEqual([]);
+        const sidebar = [listFrame(a), other, listFrame(b)];
+        expect(TimelineSchema.listsOf?.({ sidebar })).toEqual([listFrame(a), listFrame(b)]);
+        expect(CalendarSchema.listsOf?.({ sidebar })).toEqual([listFrame(a), listFrame(b)]);
+        expect(TimelineSchema.listsOf?.({ sidebar: [other] })).toEqual([]);
         expect(TimelineSchema.listsOf?.({})).toEqual([]);
         expect(CalendarSchema.listsOf?.({})).toEqual([]);
     });
@@ -55,8 +55,8 @@ describe("the lists of a view's config (listsOf)", () => {
 
 describe('PinnedListQuery.fromTemplate', () => {
     const stored = (name: string, tag: string) => ({ id: `pl-${name}`, name, filterState: tagIs(tag), applyViewFilter: false });
-    const template = (viewType: string, pinnedLists: unknown[]): ViewTemplate =>
-        ({ filePath: 'templates/t.md', name: 'T', viewType, config: { pinnedLists } });
+    const template = (viewType: string, sidebar: unknown[]): ViewTemplate =>
+        ({ filePath: 'templates/t.md', name: 'T', viewType, config: { sidebar } });
 
     it.each(['timeline', 'calendar'])('names the lists of a %s template whose sidebar holds a frame of another kind too', (viewType) => {
         const t = template(viewType, [
@@ -71,5 +71,13 @@ describe('PinnedListQuery.fromTemplate', () => {
         const missing = PinnedListQuery.fromTemplate(t, 'memo');
         expect('listError' in missing && missing.listError('list'))
             .toBe('Pinned list "memo" not found. Available: first, second');
+    });
+
+    it.each(['timeline', 'calendar'])('names the lists of a %s template saved under the older key `pinnedLists`', (viewType) => {
+        const t: ViewTemplate = {
+            filePath: 'templates/t.md', name: 'T', viewType,
+            config: { pinnedLists: [stored('first', 'a'), stored('second', 'b')] },
+        };
+        expect(PinnedListQuery.fromTemplate(t, 'second')).toEqual({ query: { filter: tagIs('b') } });
     });
 });

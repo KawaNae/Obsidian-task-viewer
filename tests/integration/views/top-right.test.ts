@@ -52,7 +52,7 @@ function tops(view: string, pinned = false): Record<string, Array<string | null>
         const el = V(${JSON.stringify(view)}).contentEl;
         const out = {};
         for (const card of el.querySelectorAll('.task-card')) {
-            if (!!card.closest('.tv-sidebar__pinned-lists, .pinned-list') !== ${pinned}) continue;
+            if (!!card.closest('.tv-sidebar__frames, .pinned-list') !== ${pinned}) continue;
             const text = card.querySelector('.task-card__content')?.textContent ?? '';
             const name = text.match(/tr-[a-z0-9]+/)?.[0];
             if (!name) continue;
@@ -88,7 +88,7 @@ afterAll(async () => {
 
 describe('a pinned list and a Kanban cell show the stated dates', () => {
     it('shows no end the rules fill in, and the end a line writes', () => {
-        openView('tr-pl', 'timeline-view', { date: DAY, showSidebar: true, pinnedLists: [list('tr-end', ['end'])] });
+        openView('tr-pl', 'timeline-view', { date: DAY, showSidebar: true, sidebar: [list('tr-end', ['end'])] });
         const r = tops('tr-pl', true);
         expect(r['tr-allday']).toEqual([null]);
         expect(r['tr-at10']).toEqual([null]);
@@ -99,7 +99,7 @@ describe('a pinned list and a Kanban cell show the stated dates', () => {
     });
 
     it('shows no start time for a bare date, and the start time a section gives', () => {
-        openView('tr-pl', 'timeline-view', { date: DAY, showSidebar: true, pinnedLists: [list('tr-st', ['startTime'])] });
+        openView('tr-pl', 'timeline-view', { date: DAY, showSidebar: true, sidebar: [list('tr-st', ['startTime'])] });
         const r = tops('tr-pl', true);
         expect(r['tr-allday']).toEqual([null]);
         expect(r['tr-range']).toEqual([null]);

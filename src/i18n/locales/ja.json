@@ -840,8 +840,10 @@
     "logCopyFailed": "ログのコピーに失敗しました",
     "imageSaved": "画像を {{path}} に保存しました"
   },
+  "sidebar": {
+    "empty": "まだ何も追加されていません"
+  },
   "pinnedList": {
-    "noPinnedLists": "ピン留めリストがありません。",
     "pinnedLists": "ピン留めリスト",
     "addList": "リストを追加",
     "newList": "新しいリスト",

@@ -85,7 +85,7 @@ function op(name: string, body: string, settleMs = SETTLE_MS): Reading {
         };
         ${body}
         await wait(${settleMs});
-        const list = V(${JSON.stringify(name)}).getState().pinnedLists[0];
+        const list = V(${JSON.stringify(name)}).getState().sidebar[0];
         const body = sec().querySelector('.' + C.body);
         return JSON.stringify({
             filterState: list.filterState,
@@ -122,7 +122,7 @@ describe("a pinned list's period and range conditions", () => {
     beforeAll(() => {
         openView(name, 'timeline-view', {
             showSidebar: true,
-            pinnedLists: [{ id: 'fp', name: 'Period', filterState: { logic: 'and', filters: [TAGGED] } }],
+            sidebar: [{ id: 'fp', name: 'Period', filterState: { logic: 'and', filters: [TAGGED] } }],
         });
     });
 

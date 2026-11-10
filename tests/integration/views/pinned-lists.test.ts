@@ -3,7 +3,7 @@
  * vault, driven as the user clicks them: the Add List button, each list's
  * header (collapse), its sort, filter and ⋯ buttons, the menus and popovers
  * they open, and Show more. What a list shows is read from its DOM, what the
- * view keeps from `getState` (`pinnedLists`, `pinnedListCollapsed`).
+ * view keeps from `getState` (`sidebar`, `sidebarCollapsed`).
  *
  * The lists count the tasks of a note of the test's own, tagged so that only
  * they pass. Menu items are picked by the text the vault's locale shows.
@@ -90,8 +90,8 @@ function op(name: string, body: string, settleMs = SETTLE_MS): Reading {
         await wait(${settleMs});
         const state = V(${JSON.stringify(name)}).getState();
         return JSON.stringify({
-            lists: state.pinnedLists ?? [],
-            collapsed: state.pinnedListCollapsed ?? {},
+            lists: state.sidebar ?? [],
+            collapsed: state.sidebarCollapsed ?? {},
             sections: [...el.querySelectorAll('.' + C.root)].map(s => readSection(C, s)),
         });
     })()`);
@@ -117,6 +117,14 @@ function moreTitles(name: string, i: number): string[] {
         const titles = menuItems().map(it => it.titleEl?.textContent ?? '');
         closeMenus();
         return JSON.stringify(titles);
+    })()`);
+}
+
+/** The keys of the state the view `name` saves (`getState`). */
+function stateKeys(name: string): string[] {
+    return ev<string[]>(`(() => {
+        ${PRELUDE}
+        return JSON.stringify(Object.keys(V(${JSON.stringify(name)}).getState()));
     })()`);
 }
 
@@ -155,7 +163,16 @@ describe.each([
     let alpha: string;
 
     beforeAll(() => {
-        openView(name, type, { showSidebar: true, pinnedLists: [] });
+        openView(name, type, { showSidebar: true, sidebar: [] });
+    });
+
+    it('says that nothing is added yet while it holds nothing', () => {
+        const empty = ev<string | null>(`(() => {
+            ${PRELUDE}
+            const el = V(${JSON.stringify(name)}).contentEl;
+            return JSON.stringify(el.querySelector('.tv-sidebar__frames > .tv-sidebar__frames--empty')?.textContent ?? null);
+        })()`);
+        expect(empty).toBe(tr('sidebar.empty'));
     });
 
     it('adds a list with the Add List button and starts editing its name, which Enter keeps', () => {
@@ -395,5 +412,35 @@ describe.each([
         const r = op(name, more(1, tr('menu.remove')));
         expect(r.lists.map(l => l.id)).toEqual([alpha]);
         expect(r.sections.map(s => s.id)).toEqual([alpha]);
+    });
+});
+
+describe.each([
+    ['Timeline', 'timeline-view', 'pl-tl-old', 'timeline'],
+    ['Calendar', 'calendar-view', 'pl-cal-old', 'calendar'],
+])('%s opened with a state saved under the older keys', (_label, type, name, prefix) => {
+    it('draws its lists, collapsed as they were saved, and saves them under the new keys', () => {
+        const a = { id: 'old-a', name: 'Old A', filterState: { logic: 'and', filters: [TOP_LEVEL, TAG_A] } };
+        const b = { id: 'old-b', name: 'Old B', filterState: { logic: 'and', filters: [TOP_LEVEL, TAG_B] } };
+        openView(name, type, {
+            showSidebar: true,
+            pinnedLists: [a, b],
+            // The older form of an id, the view's name before it.
+            pinnedListCollapsed: { [`${prefix}::old-a`]: true },
+        });
+
+        const r = op(name, '');
+        expect(r.sections.map(s => s.name)).toEqual(['Old A', 'Old B']);
+        expect(r.sections.map(s => s.collapsed)).toEqual([true, false]);
+        expect(r.sections[0].cards).toBe(0);
+        expect(r.sections[1].count).toBe(4);
+        expect(r.sections[1].cards).toBe(4);
+
+        expect(r.lists.map(l => l.id)).toEqual(['old-a', 'old-b']);
+        expect(r.collapsed).toEqual({ 'old-a': true });
+        const keys = stateKeys(name);
+        expect(keys).toEqual(expect.arrayContaining(['sidebar', 'sidebarCollapsed']));
+        expect(keys).not.toContain('pinnedLists');
+        expect(keys).not.toContain('pinnedListCollapsed');
     });
 });

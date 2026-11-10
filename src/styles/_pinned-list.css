@@ -2,10 +2,6 @@
    Pinned Lists — Sidebar list sections with independent filters
    ========================================================================== */
 
-.tv-sidebar__pinned-lists {
-    padding: 0 4px;
-}
-
 /* Individual list section */
 .pinned-list {
     margin-bottom: 8px;
@@ -99,14 +95,6 @@
 /* Collapsed state: hide the task list */
 .pinned-list--collapsed .pinned-list__body {
     display: none;
-}
-
-/* Empty state */
-.tv-sidebar__pinned-lists--empty {
-    padding: 16px;
-    text-align: center;
-    color: var(--tv-text-muted);
-    font-size: 0.85em;
 }
 
 /* Danger menu item (Remove) — used across all Obsidian menus */

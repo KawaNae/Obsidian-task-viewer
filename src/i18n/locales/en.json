@@ -840,8 +840,10 @@
     "logCopyFailed": "Failed to copy log",
     "imageSaved": "Image saved to {{path}}"
   },
+  "sidebar": {
+    "empty": "Nothing added yet."
+  },
   "pinnedList": {
-    "noPinnedLists": "No pinned lists.",
     "pinnedLists": "Pinned Lists",
     "addList": "Add List",
     "newList": "New List",

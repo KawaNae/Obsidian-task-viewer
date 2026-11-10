@@ -1,6 +1,6 @@
 /**
  * The saved lists of a view, drawn from their definitions: the list frames
- * of Timeline's and Calendar's sidebar (`PinnedListPanel`) and the cells of
+ * of Timeline's and Calendar's sidebar (`SidebarFrames`) and the cells of
  * Kanban.
  *
  * One list is one section (`ListSectionRenderer`): which tasks it shows

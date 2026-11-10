@@ -55,20 +55,20 @@ function makePinnedList(name: string, applyViewFilter?: boolean): PinnedListDefi
 
 /**
  * Build a ViewTemplate fixture. Pre-refactor tests passed `filterState`,
- * `pinnedLists`, `grid` as flat fields; post-refactor those live in
+ * `sidebar`, `grid` as flat fields; post-refactor those live in
  * `template.config`. This helper packs flat-style overrides into `config`
  * automatically so existing test bodies keep working.
  */
 function makeTemplate(filePath: string, overrides: {
     filterState?: FilterState;
-    pinnedLists?: PinnedListDefinition[];
+    sidebar?: PinnedListDefinition[];
     grid?: PinnedListDefinition[][];
     name?: string;
 } = {}): ViewTemplate {
     const config: Record<string, unknown> = {};
     if (overrides.filterState) config.filterState = overrides.filterState;
-    if (overrides.pinnedLists) {
-        config.pinnedLists = overrides.pinnedLists.map(pl => ({
+    if (overrides.sidebar) {
+        config.sidebar = overrides.sidebar.map(pl => ({
             id: pl.id ?? `pl-${pl.name}`,
             name: pl.name,
             filterState: pl.filterState,
@@ -215,7 +215,7 @@ describe('loadFilterFile', () => {
         it('returns error when pinned lists exist but list name not specified', async () => {
             const app = makeApp({ 'templates/lists.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
-                pinnedLists: [makePinnedList('urgent'), makePinnedList('backlog')],
+                sidebar: [makePinnedList('urgent'), makePinnedList('backlog')],
             }));
 
             expect(await listError(app, 'templates/lists.md')).toEqual({
@@ -229,7 +229,7 @@ describe('loadFilterFile', () => {
             const pinnedList = makePinnedList('urgent');
             const app = makeApp({ 'templates/lists.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
-                pinnedLists: [pinnedList, makePinnedList('backlog')],
+                sidebar: [pinnedList, makePinnedList('backlog')],
             }));
 
             const result = await load(app, 'templates/lists.md', 'urgent');
@@ -239,7 +239,7 @@ describe('loadFilterFile', () => {
         it('returns error when list name does not match', async () => {
             const app = makeApp({ 'templates/lists.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/lists.md', {
-                pinnedLists: [makePinnedList('urgent')],
+                sidebar: [makePinnedList('urgent')],
             }));
 
             const error = await listError(app, 'templates/lists.md', 'missing');
@@ -266,7 +266,7 @@ describe('loadFilterFile', () => {
             const app = makeApp({ 'templates/merged.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/merged.md', {
                 filterState: viewFilter,
-                pinnedLists: [pinnedList],
+                sidebar: [pinnedList],
             }));
 
             const result = await load(app, 'templates/merged.md', 'urgent');
@@ -286,7 +286,7 @@ describe('loadFilterFile', () => {
             const app = makeApp({ 'templates/no-merge.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/no-merge.md', {
                 filterState: viewFilter,
-                pinnedLists: [pinnedList],
+                sidebar: [pinnedList],
             }));
 
             const result = await load(app, 'templates/no-merge.md', 'urgent');
@@ -301,7 +301,7 @@ describe('loadFilterFile', () => {
             const app = makeApp({ 'templates/untouched.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/untouched.md', {
                 filterState: makeFilterState(),
-                pinnedLists: [pinnedList],
+                sidebar: [pinnedList],
             }));
 
             const result = await load(app, 'templates/untouched.md', 'urgent');
@@ -312,7 +312,7 @@ describe('loadFilterFile', () => {
         // key its view does not keep is not read.
         it('reads the lists its view keeps, and no other key', async () => {
             const app = makeApp({ 'templates/timeline.md': '' });
-            const template = makeTemplate('templates/timeline.md', { pinnedLists: [makePinnedList('kept')] });
+            const template = makeTemplate('templates/timeline.md', { sidebar: [makePinnedList('kept')] });
             template.config!.grid = [[{ id: 'g', name: 'grid-cell', filterState: makeFilterState() }]];
             mockLoadFullTemplate.mockResolvedValue(template);
 
@@ -320,7 +320,7 @@ describe('loadFilterFile', () => {
                 .toBe('Pinned list "grid-cell" not found. Available: kept');
         });
 
-        it('uses grid flat() when pinnedLists is undefined', async () => {
+        it('uses grid flat() when sidebar is undefined', async () => {
             const pinnedList = makePinnedList('col1');
             const app = makeApp({ 'templates/grid.md': '' });
             mockLoadFullTemplate.mockResolvedValue(makeTemplate('templates/grid.md', {
