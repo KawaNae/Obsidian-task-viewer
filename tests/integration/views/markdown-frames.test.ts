@@ -7,7 +7,7 @@
  *
  * The frames are put into the view's state as the workspace hands it over
  * (`openView`); what they show is read from their DOM, and what the view
- * keeps from `getState` (`sidebar`, `sidebarCollapsed`). Whether a body was
+ * keeps from `getState` (`sidebar`, `sidebarCollapsed`, `maskMode`). Whether a body was
  * rendered anew is told by a mark put on its element: an element made anew
  * does not have it. The notes are the test's own, under `SyncIgnore/`, and
  * are written, renamed and deleted through the vault, as Obsidian does it.
@@ -49,11 +49,13 @@ interface NoteParts {
     plain?: string;
     /** Whether the note has its `## Memo` heading. */
     memoHeading?: boolean;
+    /** The mask `## Memo` declares; none when not given. */
+    mask?: string;
 }
 
 /** A note of two sections, the first with a nested heading and its own style, under a frontmatter that colors the note. */
 function note(parts: NoteParts = {}): string {
-    const { memo = 'memo one', color = 'teal', plain = '## Plain **bold** [[Link]]', memoHeading = true } = parts;
+    const { memo = 'memo one', color = 'teal', plain = '## Plain **bold** [[Link]]', memoHeading = true, mask } = parts;
     return [
         '---',
         'tv-color: purple',
@@ -63,6 +65,7 @@ function note(parts: NoteParts = {}): string {
         ...(memoHeading ? ['## Memo'] : []),
         `- tv-color:: ${color}`,
         '- tv-linestyle:: dashed',
+        ...(mask === undefined ? [] : [`- tv-mask:: ${mask}`]),
         '',
         `${memo} [[test-int-mdframes-tasks]]`,
         '',
@@ -97,6 +100,8 @@ interface Frame {
     linestyle: string | null;
     /** What the card says is not there; null when the section is found. */
     missing: string | null;
+    /** The mask the card shows in place of the body; null when it shows none. */
+    mask: string | null;
 }
 
 interface Reading {
@@ -109,6 +114,8 @@ interface Reading {
     listCount: number | null;
     /** Whether the panel says that nothing is added. */
     empty: boolean;
+    /** Whether the view masks. */
+    maskMode: boolean;
 }
 
 /** The test's notes, written, renamed and deleted through the vault. A path that is not the test's is refused. */
@@ -138,6 +145,11 @@ function names(name: string): string {
         const bodyOf = (id) => frame(id).querySelector('.markdown-frame__content');
         const mark = () => el.querySelectorAll('.markdown-frame__content').forEach(b => { b.__tvE2EMark = true; });
         const openMenu = async (id) => { headerBtn(C, frame(id), 'more-horizontal').click(); await wait(100); };
+        // Turn the view's masking on or off from its toolbar, as the user does.
+        const setMask = (on) => {
+            const btn = el.querySelector('.view-toolbar__btn--icon[aria-pressed]');
+            if ((btn.getAttribute('aria-pressed') === 'true') !== on) btn.click();
+        };
     `;
 }
 
@@ -163,6 +175,7 @@ function op(name: string, body: string, settleMs = SETTLE_MS): Reading {
                 color: card.style.getPropertyValue('--file-accent') || null,
                 linestyle: card.dataset.fileLinestyle ?? null,
                 missing: f.querySelector('.markdown-frame__missing-reason')?.textContent ?? null,
+                mask: f.querySelector('.markdown-frame__mask')?.textContent ?? null,
             };
         }
         const count = el.querySelector('.pinned-list .pinned-list__count')?.textContent;
@@ -173,6 +186,7 @@ function op(name: string, body: string, settleMs = SETTLE_MS): Reading {
             frames,
             listCount: count ? Number(count.replace(/[()]/g, '')) : null,
             empty: !!el.querySelector('.tv-sidebar__frames--empty'),
+            maskMode: state.maskMode ?? false,
         });
     })()`);
 }
@@ -525,6 +539,45 @@ describe.each([
         const r = op(name, '');
         expect(r.frames.memo.color).toBe('teal');
         expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+    });
+
+    it('shows a section\'s mask in place of its body while the view masks, and the body again once it does not', () => {
+        // A property line is no part of a body: the mask written renders nothing anew.
+        let r = op(name, `mark(); ${write({ memo: 'memo four', mask: 'memo masked' })}`);
+        expect(r.frames.memo.mask).toBeNull();
+        expect(r.frames.memo.kept).toBe(true);
+
+        r = op(name, `mark(); setMask(true);`);
+        expect(r.maskMode).toBe(true);
+        expect(r.frames.memo.mask).toBe('memo masked');
+        expect(r.frames.memo.text).toBeNull();
+        // The row's name and the card's style stay.
+        expect(r.frames.memo.name).toBe('Memo');
+        expect([r.frames.memo.color, r.frames.memo.linestyle]).toEqual(['teal', 'dashed']);
+        // A section without a mask keeps its body, the element it was; one not there is said as before.
+        expect([r.frames.whole.mask, r.frames.plain.mask]).toEqual([null, null]);
+        expect([r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true]);
+        expect(r.frames.gone.missing).toBe(tr('sidebar.noteNotFound'));
+
+        r = op(name, `setMask(false);`);
+        expect(r.maskMode).toBe(false);
+        expect(r.frames.memo.mask).toBeNull();
+        expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+        expect([r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true]);
+    });
+
+    it('shows the mask the note writes while the view masks: a new value, and the body once the line is gone', () => {
+        let r = op(name, `setMask(true); ${write({ memo: 'memo four', mask: 'memo masked again' })}`);
+        expect(r.frames.memo.mask).toBe('memo masked again');
+        expect(r.frames.memo.text).toBeNull();
+
+        r = op(name, write({ memo: 'memo four' }));
+        expect(r.maskMode).toBe(true);
+        expect(r.frames.memo.mask).toBeNull();
+        expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+
+        r = op(name, `setMask(false);`);
+        expect(r.maskMode).toBe(false);
     });
 
     it('is removed from its ⋯ menu, and from the card of a frame that is not there', () => {

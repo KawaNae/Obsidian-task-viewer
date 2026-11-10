@@ -14,6 +14,10 @@ const styleOf = (lines: string[], subpath: string) => {
     const content = read(lines, subpath);
     return content.kind === 'no-heading' ? undefined : [content.color, content.linestyle];
 };
+const maskOf = (lines: string[], subpath: string) => {
+    const content = read(lines, subpath);
+    return content.kind === 'no-heading' ? undefined : content.mask;
+};
 
 describe('the link of a markdown frame', () => {
     it('is cut at its first `#` into the note and the section', () => {
@@ -100,7 +104,7 @@ describe('readFrameContent: the section of a heading', () => {
             'other',
         ];
         expect(read(note, '#Today')).toEqual({
-            kind: 'heading', title: 'Today', markdown: 'text\n### Detail\n- item', color: null, linestyle: null,
+            kind: 'heading', title: 'Today', markdown: 'text\n### Detail\n- item', color: null, linestyle: null, mask: null,
         });
         expect(markdownOf(note, '#Tomorrow')).toBe('next');
         expect(markdownOf(note, '#Detail')).toBe('- item');
@@ -192,12 +196,43 @@ describe('readFrameContent: the section of a heading', () => {
 
     it('takes no style where the nearest layer says there is none, and looks past a value that does not read', () => {
         const note = ['---', 'tv-color: red', 'tv-linestyle: dashed', '---', '## Hidden', '- tv-color::', '- tv-linestyle:: wavy'];
-        expect(read(note, '#Hidden')).toEqual({ kind: 'heading', title: 'Hidden', markdown: '', color: null, linestyle: 'dashed' });
+        expect(read(note, '#Hidden')).toEqual({ kind: 'heading', title: 'Hidden', markdown: '', color: null, linestyle: 'dashed', mask: null });
+    });
+
+    it('takes the mask a task of the section inherits: the section\'s own line, a heading above, the frontmatter, the lines above the first heading', () => {
+        const note = [
+            '---',
+            'tv-mask: from frontmatter',
+            '---',
+            '## Inherits',
+            'a',
+            '# Top',
+            '- tv-mask:: from top',
+            '## Under top',
+            'b',
+            '## Own',
+            '- tv-mask:: own',
+            '### Sub',
+            '- tv-mask:: from sub',
+        ];
+        expect(maskOf(note, '#Inherits')).toBe('from frontmatter');
+        expect(maskOf(note, '#Top')).toBe('from top');
+        expect(maskOf(note, '#Under top')).toBe('from top');
+        // A nested heading's mask masks the nested section, not the one around it.
+        expect(maskOf(note, '#Own')).toBe('own');
+        expect(maskOf(note, '#Sub')).toBe('from sub');
+        expect(maskOf(['- tv-mask:: from above', '', '## A', 'a'], '#A')).toBe('from above');
+        expect(maskOf(['## A', 'a'], '#A')).toBeNull();
+    });
+
+    it('takes no mask where the nearest layer hides it with no value', () => {
+        const note = ['---', 'tv-mask: secret', '---', '## Hidden', '- tv-mask::', '', 'text'];
+        expect(read(note, '#Hidden')).toEqual({ kind: 'heading', title: 'Hidden', markdown: 'text', color: null, linestyle: null, mask: null });
     });
 
     it('reads a tv-ignore\'d note as any other', () => {
         const note = ['---', 'tv-ignore: true', 'tv-color: red', '---', '## A', 'body'];
-        expect(read(note, '#A')).toEqual({ kind: 'heading', title: 'A', markdown: 'body', color: 'red', linestyle: null });
+        expect(read(note, '#A')).toEqual({ kind: 'heading', title: 'A', markdown: 'body', color: 'red', linestyle: null, mask: null });
     });
 
     it('says so when the note has no heading the subpath names', () => {
@@ -213,7 +248,7 @@ describe('readFrameContent: the section of a heading', () => {
 describe('readFrameContent: the whole note', () => {
     it('shows the note past its frontmatter, with no title of its own', () => {
         const note = ['---', 'aliases: [x]', '---', '', 'intro', '# A', 'a', '## B', 'b', ''];
-        expect(read(note, '')).toEqual({ kind: 'note', markdown: 'intro\n# A\na\n## B\nb', color: null, linestyle: null });
+        expect(read(note, '')).toEqual({ kind: 'note', markdown: 'intro\n# A\na\n## B\nb', color: null, linestyle: null, mask: null });
         expect(read(note, '')).not.toHaveProperty('title');
     });
 
@@ -225,7 +260,7 @@ describe('readFrameContent: the whole note', () => {
 
     it('shows a note without a frontmatter from its first line, and an empty note as nothing', () => {
         expect(markdownOf(['one', 'two'], '')).toBe('one\ntwo');
-        expect(read([], '')).toEqual({ kind: 'note', markdown: '', color: null, linestyle: null });
+        expect(read([], '')).toEqual({ kind: 'note', markdown: '', color: null, linestyle: null, mask: null });
         expect(markdownOf(['---', 'a: 1', '---'], '')).toBe('');
     });
 
@@ -267,8 +302,15 @@ describe('readFrameContent: the whole note', () => {
         expect(styleOf(['---', 'tv-color: red', '---', '- tv-color::', '# A'], '')).toEqual([null, null]);
     });
 
+    it('takes the mask a task above the first heading inherits', () => {
+        expect(maskOf(['---', 'tv-mask: secret', '---', '- tv-mask:: above', '## A', '- tv-mask:: a'], '')).toBe('above');
+        expect(maskOf(['---', 'tv-mask: secret', '---', 'intro', '## A', '- tv-mask:: a'], '')).toBe('secret');
+        expect(maskOf(['intro', '## A', '- tv-mask:: a'], '')).toBeNull();
+        expect(maskOf(['---', 'tv-mask: secret', '---', '- tv-mask::', '# A'], '')).toBeNull();
+    });
+
     it('reads a tv-ignore\'d note as any other', () => {
         const note = ['---', 'tv-ignore: true', 'tv-color: red', '---', 'intro', '## A', 'body'];
-        expect(read(note, '')).toEqual({ kind: 'note', markdown: 'intro\n## A\nbody', color: 'red', linestyle: null });
+        expect(read(note, '')).toEqual({ kind: 'note', markdown: 'intro\n## A\nbody', color: 'red', linestyle: null, mask: null });
     });
 });

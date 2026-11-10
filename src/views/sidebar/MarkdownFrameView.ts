@@ -20,9 +20,18 @@
  * itself up to date between them. Each render has an element of its own, so
  * one that ends late adds nothing to the one that took its place.
  *
+ * While the view masks (`MarkdownFrameHost.masked`), a section that has a
+ * mask shows it in place of its body, as a masked task card shows it in
+ * place of its text: the body is taken out, and rendered again once the
+ * view stops masking or the mask is gone. The row's name and the style stay.
+ *
  * A frame whose note or section is not there says which, in its card, and
  * offers to remove itself. It is shown again once the note or the section
  * is found.
+ *
+ * What the card shows is one of the three (`CardContent`), decided in one
+ * place (`wanted`) from what was read and whether the view masks, and put
+ * in by `paint`, which takes out what the card showed before.
  */
 
 import { Component, MarkdownRenderer, TFile, type App, type TAbstractFile } from 'obsidian';
@@ -54,6 +63,8 @@ export interface MarkdownFrameHost {
     bindLinks(el: HTMLElement, sourcePath: string): void;
     /** Keep whether the frame `id` is collapsed; the frame already shows it. */
     setCollapsed(id: string, collapsed: boolean): void;
+    /** Whether the view masks now: a section's mask is shown in place of its body. */
+    masked(): boolean;
     /** Show the ⋯ menu of `frame`. */
     showMenu(frame: MarkdownFrameView, event: MouseEvent): void;
     /** Take the frame `id` out of the sidebar. */
@@ -75,13 +86,38 @@ export function noteAt(app: App, path: string): TFile | null {
     return isNote(file) ? file : null;
 }
 
+/**
+ * What a frame's card shows under its shape:
+ *
+ * - `body`: the section's markdown, rendered against the note's path
+ * - `mask`: the section's mask, in place of the body, while the view masks
+ * - `missing`: that the note, or the section, is not there
+ */
+type CardContent =
+    | { kind: 'body'; markdown: string; path: string }
+    | { kind: 'mask'; text: string }
+    | { kind: 'missing'; what: 'no-note' | 'no-heading' };
+
+/** What a card shows, and the element it is drawn in; for a body, what its render registered too. */
+interface CardShown {
+    content: CardContent;
+    el: HTMLElement;
+    component: Component | null;
+}
+
+function sameContent(a: CardContent, b: CardContent): boolean {
+    switch (a.kind) {
+        case 'body': return b.kind === 'body' && a.markdown === b.markdown && a.path === b.path;
+        case 'mask': return b.kind === 'mask' && a.text === b.text;
+        case 'missing': return b.kind === 'missing' && a.what === b.what;
+    }
+}
+
 export class MarkdownFrameView {
     readonly id: string;
     readonly root: HTMLElement;
     private readonly row: SectionHeaderHandle;
     private readonly card: HTMLElement;
-    /** Says what is not there, in the card; empty while the section is found. */
-    private readonly missing: HTMLElement;
 
     private frameLink: string;
     private collapsed: boolean;
@@ -98,8 +134,8 @@ export class MarkdownFrameView {
     /** Counts the readings begun, so that one overtaken by a later one is dropped. */
     private reads = 0;
 
-    /** The body the card holds: its element, what was rendered into it, and what the render registered. */
-    private body: { el: HTMLElement; markdown: string; path: string; component: Component } | null = null;
+    /** What the card shows; null while it shows nothing. */
+    private shown: CardShown | null = null;
 
     /**
      * Build the frame's element, with the name its link gives it and no
@@ -131,7 +167,6 @@ export class MarkdownFrameView {
 
         this.card = this.root.createDiv('markdown-frame__card');
         this.card.createDiv('task-card__shape');
-        this.missing = this.card.createDiv('markdown-frame__missing');
     }
 
     /** The link the frame shows the section of. */
@@ -188,38 +223,38 @@ export class MarkdownFrameView {
     }
 
     /**
-     * Render the body, unless the card holds it already, the frame is
-     * folded, or it cannot be rendered yet (`MarkdownFrameHost.canRender`).
+     * Have the card show what the frame shows now (`wanted`), unless it
+     * shows that already. A body waits while the frame is folded or cannot
+     * be rendered yet (`MarkdownFrameHost.canRender`), and the card keeps
+     * what it shows until then; the rest is shown at once. Called when what
+     * was read changes, at the unfold, when the panel can render, and at
+     * each draw of the panel, which is where a change of the view's masking
+     * comes in.
      */
     paint(): void {
-        const { reading, found } = this;
-        if (this.collapsed || !found || !reading || !('markdown' in reading)) return;
-        const { markdown } = reading;
-        if (this.body?.markdown === markdown && this.body.path === found.path) return;
-        if (!this.host.canRender()) return;
+        const wanted = this.wanted();
+        if (!wanted || (this.shown && sameContent(this.shown.content, wanted))) return;
+        if (wanted.kind === 'body' && (this.collapsed || !this.host.canRender())) return;
 
-        this.dropBody();
-        const el = this.card.createDiv('markdown-frame__content markdown-rendered');
-        const component = new Component();
-        component.load();
-        this.body = { el, markdown, path: found.path, component };
-
-        // The links are taken as they come into the body: with the render,
-        // and whenever a block in it draws itself again later.
-        const observer = new MutationObserver(() => this.host.bindLinks(el, found.path));
-        observer.observe(el, { childList: true, subtree: true });
-        component.register(() => observer.disconnect());
-
-        MarkdownRenderer.render(this.host.app, markdown, el, found.path, component)
-            .catch((e: unknown) => {
-                logError(`[MarkdownFrame] markdown render failed: ${e instanceof Error ? e.message : String(e)}`, { notice: false });
-            });
+        this.clearCard();
+        this.root.toggleClass('markdown-frame--missing', wanted.kind === 'missing');
+        switch (wanted.kind) {
+            case 'body':
+                this.shown = this.renderBody(wanted);
+                break;
+            case 'mask':
+                this.shown = { content: wanted, el: this.card.createDiv({ cls: 'markdown-frame__mask', text: wanted.text }), component: null };
+                break;
+            case 'missing':
+                this.shown = { content: wanted, el: this.drawMissing(wanted.what), component: null };
+                break;
+        }
     }
 
     /** End what the body's render registered, and drop a reading under way. The caller takes `root` out. */
     close(): void {
         this.reads++;
-        this.dropBody();
+        this.clearCard();
     }
 
     /** Whether the note shown is `file`. */
@@ -235,7 +270,7 @@ export class MarkdownFrameView {
         else this.show({ kind: 'no-note' });
     }
 
-    /** Show `reading`: its name, its style, and its body or what is not there. */
+    /** Show `reading`: its name, its style, and in the card what it gives. */
     private show(reading: FrameReading): void {
         this.reading = reading;
         this.row.nameEl.setText(frameTitle(this.frameLink, reading, this.note?.basename ?? null));
@@ -243,20 +278,52 @@ export class MarkdownFrameView {
         const section = 'markdown' in reading ? reading : null;
         TaskStyling.applyTaskColor(this.card, section?.color ?? null);
         TaskStyling.applyTaskLinestyle(this.card, section?.linestyle ?? null);
-        this.root.toggleClass('markdown-frame--missing', !section);
-        this.missing.empty();
-        if (section) {
-            this.paint();
-            return;
-        }
+        this.paint();
+    }
 
-        this.dropBody();
-        this.missing.createDiv({
+    /**
+     * What the card is to show of what was read: the mask while the view
+     * masks and the section has one, else the body; or what is not there.
+     * Null before the first reading.
+     */
+    private wanted(): CardContent | null {
+        const { reading, found } = this;
+        if (!reading) return null;
+        if (!('markdown' in reading)) return { kind: 'missing', what: reading.kind };
+        if (!found) return null;
+        if (reading.mask !== null && this.host.masked()) return { kind: 'mask', text: reading.mask };
+        return { kind: 'body', markdown: reading.markdown, path: found.path };
+    }
+
+    /** Render `body` into an element of its own in the card, with a Component of its own. */
+    private renderBody(body: CardContent & { kind: 'body' }): CardShown {
+        const el = this.card.createDiv('markdown-frame__content markdown-rendered');
+        const component = new Component();
+        component.load();
+
+        // The links are taken as they come into the body: with the render,
+        // and whenever a block in it draws itself again later.
+        const observer = new MutationObserver(() => this.host.bindLinks(el, body.path));
+        observer.observe(el, { childList: true, subtree: true });
+        component.register(() => observer.disconnect());
+
+        MarkdownRenderer.render(this.host.app, body.markdown, el, body.path, component)
+            .catch((e: unknown) => {
+                logError(`[MarkdownFrame] markdown render failed: ${e instanceof Error ? e.message : String(e)}`, { notice: false });
+            });
+        return { content: body, el, component };
+    }
+
+    /** Say in the card that the note (`no-note`) or the section (`no-heading`) is not there, and offer Remove. */
+    private drawMissing(what: 'no-note' | 'no-heading'): HTMLElement {
+        const el = this.card.createDiv('markdown-frame__missing');
+        el.createDiv({
             cls: 'markdown-frame__missing-reason',
-            text: t(reading.kind === 'no-note' ? 'sidebar.noteNotFound' : 'sidebar.sectionNotFound'),
+            text: t(what === 'no-note' ? 'sidebar.noteNotFound' : 'sidebar.sectionNotFound'),
         });
-        const removeBtn = this.missing.createEl('button', { cls: 'markdown-frame__missing-remove', text: t('menu.remove') });
+        const removeBtn = el.createEl('button', { cls: 'markdown-frame__missing-remove', text: t('menu.remove') });
         removeBtn.addEventListener('click', () => this.host.remove(this.id));
+        return el;
     }
 
     private applyCollapsed(collapsed: boolean): void {
@@ -267,11 +334,11 @@ export class MarkdownFrameView {
         if (!collapsed) this.paint();
     }
 
-    /** Take the body out of the card, and end what its render registered. */
-    private dropBody(): void {
-        if (!this.body) return;
-        this.body.component.unload();
-        this.body.el.remove();
-        this.body = null;
+    /** Take out what the card shows, and end what a body's render registered. */
+    private clearCard(): void {
+        if (!this.shown) return;
+        this.shown.component?.unload();
+        this.shown.el.remove();
+        this.shown = null;
     }
 }
