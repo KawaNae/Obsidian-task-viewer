@@ -40,12 +40,12 @@ export class NoteField {
     private picked: { path: string; text: string } | null;
 
     constructor(app: App, container: HTMLElement, opts: NoteFieldOptions) {
-        const { row, says } = createFormRow(container, t('modal.send.note'), { icon: 'file-text' });
+        const { row, says } = createFormRow(container, t('modal.note'), { icon: 'file-text' });
         this.says = says;
         this.input = row.createEl('input', {
             type: 'text',
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
-            placeholder: t('modal.send.notePlaceholder'),
+            placeholder: t('modal.notePlaceholder'),
         });
         this.input.value = opts.initial.text;
         this.picked = opts.initial.picked === null ? null : { path: opts.initial.picked, text: opts.initial.text };
