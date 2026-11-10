@@ -138,6 +138,13 @@ describe('headingLinks', () => {
         expect(linksOf(['## Plan: v2', '## plan v2'])).toEqual(['Plan v2', null]);
     });
 
+    it('names no heading that its names above it find an earlier heading by, under other headings', () => {
+        // `P#X` finds the `### X` below `P` and deeper than it, under `Q`.
+        expect(linksOf(['# P', '## Q', '### X', '## X'])).toEqual(['P', 'Q', 'X', null]);
+        // `P` finds the `## P` under `Q`, and `P#X` the `### X` below it.
+        expect(linksOf(['# Q', '## P', '### X', '# P', '## X'])).toEqual(['Q', 'P', 'X', null, null]);
+    });
+
     it('writes a name without what would cut a link', () => {
         const note = ['## C# notes | v2', '## [[Note]] and ^caret', '## 100%% sure', '## a\\b: c', '## Hello, World! (draft)'];
         expect(linksOf(note)).toEqual(['C notes v2', 'Note and caret', '100 sure', 'a b c', 'Hello, World! (draft)']);
