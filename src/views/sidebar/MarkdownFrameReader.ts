@@ -115,14 +115,15 @@ export class MarkdownFrameReader {
     }
 
     /**
-     * The path the note found is at now, when it was renamed or moved since
-     * it was found and is a note still; null otherwise. A note renamed to
-     * another extension is not one: the frame does not follow it there.
+     * The note found, when it was renamed or moved since it was found and is
+     * a note still (its path is where it is now); null otherwise. A note
+     * renamed to another extension is not one: the frame does not follow it
+     * there.
      */
-    movedTo(): string | null {
+    movedTo(): TFile | null {
         const { found } = this;
         if (!found || found.file.path === found.path || !isNote(found.file)) return null;
-        return found.file.path;
+        return found.file;
     }
 
     /** Whether the note found is `file`. */

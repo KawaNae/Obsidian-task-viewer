@@ -189,11 +189,11 @@ describe('the note the note field names', () => {
             'x.pdf.md': '',
         });
         // Cut at the `#`: the folder's link names `C`, the file's `C` too, or nothing.
-        expect(await readSectionNote(files, { text: 'Note', picked: null })).toEqual({ kind: 'unlinkable', path: 'C#/Note.md' });
-        expect(await readSectionNote(files, { text: 'C# memo', picked: null })).toEqual({ kind: 'unlinkable', path: 'C# memo.md' });
+        expect(await readSectionNote(files, { text: 'Note', picked: null })).toEqual({ kind: 'unlinkable', path: 'C#/Note.md', miss: 'cut' });
+        expect(await readSectionNote(files, { text: 'C# memo', picked: null })).toEqual({ kind: 'unlinkable', path: 'C# memo.md', miss: 'cut' });
         // `foo.md` is the link of `foo.md.md`, and the path of `foo.md`.
-        expect(await readSectionNote(files, { text: 'foo.md', picked: 'foo.md.md' })).toEqual({ kind: 'unlinkable', path: 'foo.md.md' });
-        expect(await readSectionNote(files, { text: 'x.pdf', picked: 'x.pdf.md' })).toEqual({ kind: 'unlinkable', path: 'x.pdf.md' });
+        expect(await readSectionNote(files, { text: 'foo.md', picked: 'foo.md.md' })).toEqual({ kind: 'unlinkable', path: 'foo.md.md', miss: 'other' });
+        expect(await readSectionNote(files, { text: 'x.pdf', picked: 'x.pdf.md' })).toEqual({ kind: 'unlinkable', path: 'x.pdf.md', miss: 'other' });
     });
 
     it('is a note a link names when nothing else is at its path without `.md`', async () => {
@@ -281,10 +281,10 @@ describe('the section dialog', () => {
         expect(d.chosen).toEqual([]);
     });
 
-    it('says a note no link names under the note field, why if its path has a `#`, and chooses nothing', async () => {
+    it('says a note no link names under the note field, with why its link misses it, and chooses nothing', async () => {
         const d = dialogOf();
         d.dialog.noteChanged({ text: 'Note', picked: null });
-        await d.asked[1].answer({ kind: 'unlinkable', path: 'C#/Note.md' });
+        await d.asked[1].answer({ kind: 'unlinkable', path: 'C#/Note.md', miss: 'cut' });
         expect(d.shown()).toEqual({
             path: null,
             choices: [],
@@ -295,8 +295,12 @@ describe('the section dialog', () => {
         expect([d.chosen, d.closed()]).toEqual([[], 0]);
 
         d.dialog.noteChanged({ text: 'foo.md', picked: 'foo.md.md' });
-        await d.asked[2].answer({ kind: 'unlinkable', path: 'foo.md.md' });
+        await d.asked[2].answer({ kind: 'unlinkable', path: 'foo.md.md', miss: 'other' });
         expect(d.shown().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.section.noteUnlinkable', { note: 'foo.md.md' }) }]);
+        // Why is the answer's, not the path's: a path with a `#` the link is not cut short of is said as any other.
+        d.dialog.noteChanged({ text: 'a#b', picked: null });
+        await d.asked[3].answer({ kind: 'unlinkable', path: 'a#b.md', miss: 'other' });
+        expect(d.shown().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.section.noteUnlinkable', { note: 'a#b.md' }) }]);
     });
 
     it('says a note that could not be read, in place of the note answered before, and chooses nothing', async () => {
