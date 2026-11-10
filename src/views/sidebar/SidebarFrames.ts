@@ -8,7 +8,9 @@
  * a saved list, drawn by `TaskListSections`; a markdown frame is a section
  * of a note, drawn by `MarkdownFrameSections`. The panel is the placement of
  * both. The panel draws itself on a change of its fields of the state and of
- * the tasks, so a change of the frames does not draw the view.
+ * the tasks, so a change of the frames does not draw the view. The markdown
+ * frames take a change of the frames or folds at once, not at the draw,
+ * which only puts their elements in place.
  *
  * A draw makes every list frame anew, its cards kept by key, and leaves a
  * markdown frame's element where it stands: what a note's blocks drew in it
@@ -130,15 +132,20 @@ export class SidebarFrames {
 
     /**
      * Start drawing: now, and again on a change of the tasks or of the
-     * panel's fields. Start following the notes of the markdown frames.
+     * panel's fields. Start following the notes of the markdown frames,
+     * which take the state's frames and folds now and at once whenever they
+     * change, ahead of the draw: a note renamed before the draw is followed
+     * by the frame that shows it.
      */
     open(): void {
         this.markdown.open();
+        this.syncMarkdown();
         this.unsubscribers.push(
             this.deps.index.onChange((_taskId, changes) => {
                 if (shouldRenderForChanges(changes)) this.requestDraw();
             }),
             this.host.subscribe((patch) => {
+                if ('sidebar' in patch || 'sidebarCollapsed' in patch) this.syncMarkdown();
                 if (PANEL_FIELDS.some(key => key in patch)) this.requestDraw();
             }),
         );
@@ -186,6 +193,12 @@ export class SidebarFrames {
         this.markdown.placed();
     }
 
+    /** Have the markdown frames be the state's, folded as it says. */
+    private syncMarkdown(): void {
+        const state = this.host.state();
+        this.markdown.sync(state.sidebar ?? [], state.sidebarCollapsed ?? {});
+    }
+
     private frames(): SidebarFrame[] {
         return this.host.state().sidebar ?? [];
     }
@@ -226,9 +239,9 @@ export class SidebarFrames {
         const frames = state.sidebar ?? [];
 
         // What is drawn anew goes; what a markdown frame still in the stack
-        // drew stays where it stands.
+        // drew stays where it stands. The markdown frames are the state's
+        // already: they took it when it changed.
         const collapsed = state.sidebarCollapsed ?? {};
-        this.markdown.sync(frames, collapsed);
         for (const child of Array.from(this.el.children)) {
             if (!this.markdown.holds(child)) child.remove();
         }
@@ -244,7 +257,9 @@ export class SidebarFrames {
             this.sections.keepPagesOf(listFramesOf(frames));
             stackInOrder(this.el, frames.map(frame => this.drawFrame(frame, lists)));
         }
-        // A change of the view's masking is shown here.
+        // A change of the view's masking is shown here, and a body made
+        // before its frame stood in the panel is rendered now, at the width
+        // it has there.
         this.markdown.paint();
         reconciler.forEachStale(card => this.deps.taskRenderer.dispose(card));
     }
@@ -253,7 +268,8 @@ export class SidebarFrames {
      * Draw `frame` as its kind is drawn, and give back its element, which
      * the caller puts in its place. `lists` is what a list frame's draw
      * reads. A list frame is made anew; a markdown frame's element is the
-     * one kept for its id, which has taken the frame's link and fold.
+     * one kept for its id, which took the frame's link and fold when the
+     * state changed.
      */
     private drawFrame(frame: SidebarFrame, lists: ListDrawContext): HTMLElement {
         switch (frame.kind) {

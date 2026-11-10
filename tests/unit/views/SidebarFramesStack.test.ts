@@ -14,17 +14,49 @@ import { FakeEl } from '../helpers/fakeDom';
  * of the markdown frames is stood in for, and hands the test the placements
  * the panel is.
  */
-const drawn = vi.hoisted(() => ({ placement: null as unknown, markdownPlacement: null as unknown }));
+const drawn = vi.hoisted(() => ({
+    placement: null as unknown,
+    markdownPlacement: null as unknown,
+    /** What the markdown frames were had take, in order: the frames' ids and the folds. */
+    synced: [] as { ids: string[]; collapsed: Record<string, boolean> }[],
+    /** How many draws were requested of the window. */
+    requested: 0,
+}));
 
 vi.mock('../../../src/views/sharedUI/TaskListSections', () => ({
     TaskListSections: class {
         constructor(_deps: unknown, placement: unknown) { drawn.placement = placement; }
+        keepPagesOf() {}
+        drawList() { return {}; }
+        close() {}
     },
 }));
 
 vi.mock('../../../src/views/sidebar/MarkdownFrameSections', () => ({
     MarkdownFrameSections: class {
         constructor(_deps: unknown, placement: unknown) { drawn.markdownPlacement = placement; }
+        open() {}
+        close() {}
+        sync(frames: SidebarFrame[], collapsed: Record<string, boolean>) {
+            drawn.synced.push({ ids: frames.filter(f => f.kind === 'markdown').map(f => f.id), collapsed });
+        }
+        holds() { return false; }
+        elementOf() { return {}; }
+        paint() {}
+    },
+}));
+
+vi.mock('../../../src/views/sharedUI/CardReconciler', () => ({
+    CardReconciler: class {
+        detach() {}
+        forEachStale() {}
+    },
+}));
+
+vi.mock('../../../src/utils/HostWindow', () => ({
+    HostFrameScheduler: class {
+        request() { return ++drawn.requested; }
+        cancel() {}
     },
 }));
 
@@ -34,14 +66,25 @@ const A = listFrame(list('a'));
 const B = listFrame(list('b'));
 const MEMO: SidebarFrame = { kind: 'markdown', id: 'm', link: 'Folder/Note#Memo' };
 
-/** A panel over `sidebar`, with what it wrote into the view's state. */
+/** A panel over `sidebar`, with what it wrote into the view's state. Its listeners hear a write at once, as a view's store tells it. */
 function panelOver(sidebar: SidebarFrame[]) {
     let state: SidebarFramesState = { sidebar, sidebarCollapsed: { a: true } };
     let writes = 0;
-    new SidebarFrames({ plugin: { app: {} } } as unknown as SidebarFramesDeps, {
+    const listeners: ((patch: Partial<SidebarFramesState>) => void)[] = [];
+    const update = (patch: Partial<SidebarFramesState>) => {
+        state = { ...state, ...patch };
+        for (const listener of listeners) listener(patch);
+    };
+    const frames = new SidebarFrames({
+        plugin: { app: {} },
+        index: { onChange: () => () => {} },
+    } as unknown as SidebarFramesDeps, {
         state: () => state,
-        subscribe: () => () => {},
-        write: patch => { writes++; state = { ...state, ...patch }; },
+        subscribe: (listener) => {
+            listeners.push(listener);
+            return () => listeners.splice(listeners.indexOf(listener), 1);
+        },
+        write: (patch) => { writes++; update(patch); },
     });
     const placement = drawn.placement as ListPlacement;
     const markdown = drawn.markdownPlacement as MarkdownFramePlacement;
@@ -72,7 +115,10 @@ function panelOver(sidebar: SidebarFrame[]) {
     };
     /** Change the frames from outside the menu, as a rename of a note does. */
     const set = (frames: SidebarFrame[]) => { state = { ...state, sidebar: frames }; };
-    return { placement, markdown, choose, open, set, ids: () => state.sidebar?.map(f => f.id), state: () => state, writes: () => writes };
+    return {
+        frames, placement, markdown, choose, open, set, update,
+        ids: () => state.sidebar?.map(f => f.id), state: () => state, writes: () => writes,
+    };
 }
 
 describe("the stack of a sidebar that holds a markdown frame", () => {
@@ -171,6 +217,62 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
         expect(panel.state().sidebar).toEqual([A, MEMO, { ...B, name: 'Renamed' }]);
         panel.placement.replaceList('m', { name: 'Not a list' });
         expect(panel.state().sidebar).toEqual([A, MEMO, { ...B, name: 'Renamed' }]);
+    });
+});
+
+describe('the markdown frames of a sidebar, kept to the state', () => {
+    beforeEach(() => {
+        // The panel's element, as much of it as a draw touches.
+        vi.stubGlobal('document', {
+            createElement: () => {
+                const children: unknown[] = [];
+                return {
+                    children,
+                    addClass() {},
+                    insertBefore(node: unknown) { children.push(node); return node; },
+                    createDiv: () => ({ setText() {} }),
+                };
+            },
+        });
+        drawn.synced = [];
+        drawn.requested = 0;
+    });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('have the state\'s frames and folds take as the panel opens, and at once on a change of either, ahead of the draw it requests', () => {
+        const panel = panelOver([]);
+        panel.frames.open();
+        expect(drawn.synced).toEqual([{ ids: [], collapsed: { a: true } }]);
+
+        panel.update({ sidebar: [A, MEMO] });
+        expect(drawn.synced.at(-1)).toEqual({ ids: ['m'], collapsed: { a: true } });
+        expect(drawn.requested).toBe(1);
+
+        panel.markdown.setCollapsed('m', true);
+        expect(drawn.synced.at(-1)).toEqual({ ids: ['m'], collapsed: { a: true, m: true } });
+        expect(drawn.synced).toHaveLength(3);
+    });
+
+    it('are not had take anything on a change of another field, nor once the panel is closed', () => {
+        const panel = panelOver([MEMO]);
+        panel.frames.open();
+        panel.update({ maskMode: true, filterState: { filters: [], logic: 'and' } });
+        expect(drawn.synced).toHaveLength(1);
+
+        panel.frames.close();
+        panel.update({ sidebar: [] });
+        expect(drawn.synced).toHaveLength(1);
+    });
+
+    it('take the frames the state got while the panel was closed when it opens again', () => {
+        const panel = panelOver([]);
+        panel.frames.open();
+        panel.frames.close();
+        panel.update({ sidebar: [MEMO] });
+        panel.frames.open();
+        expect(drawn.synced.at(-1)).toEqual({ ids: ['m'], collapsed: { a: true } });
     });
 });
 

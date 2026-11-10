@@ -155,17 +155,19 @@ export class MarkdownFrameView {
 
     /**
      * Have the card show what the frame shows now (`wanted`), unless it
-     * shows that already. A body waits while the frame is folded or cannot
-     * be rendered yet (`MarkdownFrameViewHost.canRender`), and the card
-     * keeps what it shows until then; the rest is shown at once. Called
-     * when what was read changes, at the unfold, when the panel can render,
-     * and at each draw of the panel, which is where a change of the view's
-     * masking comes in.
+     * shows that already. A body waits while the frame is folded, while its
+     * element stands in no document (the frame is made as the state takes
+     * it, before the panel puts it in place), or while it cannot be
+     * rendered yet (`MarkdownFrameViewHost.canRender`), and the card keeps
+     * what it shows until then; the rest is shown at once. Called when what
+     * was read changes, at the unfold, when the panel can render, and at
+     * each draw of the panel, which is where a change of the view's masking
+     * comes in.
      */
     paint(): void {
         const wanted = this.wanted();
         if (!wanted || (this.shown && sameContent(this.shown.content, wanted))) return;
-        if (wanted.kind === 'body' && (this.collapsed || !this.host.canRender())) return;
+        if (wanted.kind === 'body' && (this.collapsed || !this.root.isConnected || !this.host.canRender())) return;
 
         this.clearCard();
         this.root.toggleClass('markdown-frame--missing', wanted.kind === 'missing');
