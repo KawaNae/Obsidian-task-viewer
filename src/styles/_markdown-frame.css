@@ -72,12 +72,16 @@
     text-decoration: underline;
 }
 
-/* The note or the section is not there: the card says which, and offers to
-   remove the frame. */
-.markdown-frame__missing:empty {
-    display: none;
+/* The section's mask, shown in place of its body while the view masks: the
+   card's text, as a masked task card shows its mask, spaced as a body of one
+   paragraph is. */
+.markdown-frame__mask {
+    margin-block: 4px;
+    overflow-wrap: anywhere;
 }
 
+/* The note or the section is not there: the card says which, and offers to
+   remove the frame. */
 .markdown-frame__missing {
     display: flex;
     align-items: center;

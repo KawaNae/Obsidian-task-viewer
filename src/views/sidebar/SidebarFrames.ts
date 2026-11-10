@@ -158,6 +158,7 @@ export class SidebarFrames {
                 hoverParent: deps.getHoverParent(),
             }),
             setCollapsed: (id, collapsed) => this.setCollapsed(id, collapsed),
+            masked: () => this.host.state().maskMode ?? false,
             showMenu: (frame, event) => this.showMarkdownFrameMenu(frame, event),
             remove: (id) => this.removeFrame(id),
         };
@@ -333,12 +334,17 @@ export class SidebarFrames {
         return kept;
     }
 
-    /** The markdown frame drawn for `frame`, made when there is none, with the frame's link and fold. */
+    /**
+     * The markdown frame drawn for `frame`, made when there is none, with
+     * the frame's link and fold, and its card showing what the state asks
+     * now: a change of the view's masking is shown here.
+     */
     private markdownFrameOf(frame: MarkdownFrame, collapsed: boolean): MarkdownFrameView {
         const drawn = this.markdownFrames.get(frame.id);
         if (drawn) {
             drawn.setLink(frame.link);
             drawn.setCollapsed(collapsed);
+            drawn.paint();
             return drawn;
         }
         const made = new MarkdownFrameView(this.markdownHost, frame, collapsed);

@@ -64,6 +64,12 @@ interface FrameBody {
     color: string | null;
     /** The line style a task of the section inherits; null when it inherits none. */
     linestyle: string | null;
+    /**
+     * What a task of the section shows in place of its text while the view
+     * masks; null when it inherits none. A mask hidden with no value, or
+     * written empty, is none, as it is for a task (`NoteTasks.inheritance`).
+     */
+    mask: string | null;
 }
 
 /**
@@ -118,13 +124,15 @@ export function frameTitle(link: string, reading: FrameReading, noteName: string
  * of what the note shows. The blank lines at the body's two ends are left
  * out too, so that a blank line put between two sections changes neither.
  *
- * The style is the one a task written in the section would inherit
- * (`SectionNode.resolvedColor`, `resolvedLinestyle`): the frontmatter, the
- * lines above the first heading, the headings above and the section's own
- * property lines, the nearest winning, no value hiding the value above and
- * a value that does not read saying nothing. A property line of a heading
- * nested in the section is not the section's, and does not style the frame.
- * The whole note's style is that of a task written above its first heading.
+ * The style and the mask are the ones a task written in the section would
+ * inherit (`SectionNode.resolvedColor`, `resolvedLinestyle`,
+ * `resolvedMask`): the frontmatter, the lines above the first heading, the
+ * headings above and the section's own property lines, the nearest winning,
+ * no value hiding the value above and a value that does not read saying
+ * nothing. A property line of a heading
+ * nested in the section is not the section's, and does not style or mask
+ * the frame. The whole note's are those of a task written above its first
+ * heading.
  *
  * A tv-ignore'd note is read as any other: it has no rows, and its body is
  * still its body.
@@ -142,7 +150,7 @@ export function readFrameContent(lines: readonly string[], subpath: string, sett
     return { kind: 'heading', title: linked.heading.text, ...bodyOf(lines, section, linked.heading.end, end) };
 }
 
-/** The lines `from` to `to` of `section` as a frame shows them, and the section's style. */
+/** The lines `from` to `to` of `section` as a frame shows them, and the section's style and mask. */
 function bodyOf(lines: readonly string[], section: SectionNode, from: number, to: number): FrameBody {
     const hidden = new Set<number>();
     for (const node of NoteSections.all(section)) {
@@ -159,6 +167,7 @@ function bodyOf(lines: readonly string[], section: SectionNode, from: number, to
         markdown: withoutBlankEnds(body).join('\n'),
         color: section.resolvedColor ?? null,
         linestyle: section.resolvedLinestyle ?? null,
+        mask: section.resolvedMask || null,
     };
 }
 
