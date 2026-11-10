@@ -301,6 +301,12 @@ obsidian obsidian-task-viewer:export-image template="My Timeline"
 
 vault 相対のフォルダは vault を通して書くので、ファイルシステムでない vault でも書けます。絶対パスのフォルダはデスクトップ版でだけ書けます。テンプレートやフラグのフィルタに読めない条件があると、書き出さずにエラーを返します。
 
+画像には、ビューが描いたものを写します。サイドバーの markdown の枠の中の表や、プラグインが canvas に描いたグラフも写ります。次のものは空で写ることがあります。書き出しはそのまま続きます。
+
+- 別のオリジンの画像を描いた canvas
+- WebGL で描いた canvas
+- iframe の中身
+
 **戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-02-26", "to": "2026-03-02" } }`（上の2つめの例で、過去の表示日数が3のとき）
 
 `resolvedAnchor` はビューが見た日（追従していれば今日）、`renderedRange` は描いた範囲です。どちらも、書き出したビューが自分で報告できる場合だけ含まれます（Timeline/Calendar/Schedule。Kanban には日付レンジの概念が無いため含まれません）。値は実際に描画された範囲そのものです。Calendar の `renderedRange` は暦月ではなく、実際のグリッドが描く週開始揃えの42日ぶんです。`anchor-date` 等を渡さず既に開いているビューをそのまま書き出す場合も、開いているビューが実際に表示している範囲がそのまま返ります。
