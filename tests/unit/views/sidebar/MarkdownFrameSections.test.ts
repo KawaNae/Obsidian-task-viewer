@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TFile } from 'obsidian';
-import { DEFAULT_SETTINGS, type SidebarFrame } from '../../../../src/types';
+import { DEFAULT_SETTINGS, insertFrame, type FrameSlot, type SidebarFrame } from '../../../../src/types';
 import type { FrameRead } from '../../../../src/views/sidebar/MarkdownFrameReader';
 import { MarkdownFrameSections, type MarkdownFrameDeps, type MarkdownFramePlacement } from '../../../../src/views/sidebar/MarkdownFrameSections';
 import type { SectionAsk } from '../../../../src/modals/section/SectionDialog';
@@ -94,9 +94,14 @@ function framesOver(options: { ready?: boolean } = {}) {
         },
     };
     const relinked: Map<string, string>[] = [];
+    /** The slots the placement was asked to put a new frame in, in order. */
+    const slots: FrameSlot[] = [];
     const placement: MarkdownFramePlacement = {
         rowClasses: { header: 'h', toggle: 't', name: 'n', button: 'b', collapsed: 'c' },
-        append: (frame) => show([...state.frames, frame], state.collapsed),
+        insert: (frame, slot) => {
+            slots.push(slot);
+            show(insertFrame(state.frames, frame, slot), state.collapsed);
+        },
         relink: (links) => {
             relinked.push(new Map(links));
             const frames = state.frames.map(frame =>
@@ -159,6 +164,7 @@ function framesOver(options: { ready?: boolean } = {}) {
         rename,
         reads,
         relinked,
+        slots,
         /** The items of the ⋯ menu of the frame `view` shows, opened now. */
         menuOf(view: StandInView) {
             view.host.showMenu({} as MouseEvent);
@@ -389,11 +395,12 @@ describe('the markdown frames of a sidebar', () => {
         frames.note('Note.md', '# Memo\nbody');
         frames.sections.open();
         frames.show([memo('m', 'Note#Memo'), LIST]);
-        frames.sections.add();
+        frames.sections.add({ at: 'end' });
         const [{ opts: dialog }] = frames.dialogs();
         expect(dialog).toMatchObject({ purpose: 'add', initial: { note: { text: '', picked: null }, heading: { text: '', picked: null } } });
 
         dialog.chosen('Note');
+        expect(frames.slots).toEqual([{ at: 'end' }]);
         const added = frames.frames()[2];
         expect(frames.frames().slice(0, 2)).toEqual([memo('m', 'Note#Memo'), LIST]);
         expect(added).toMatchObject({ kind: 'markdown', link: 'Note' });
@@ -401,6 +408,17 @@ describe('the markdown frames of a sidebar', () => {
         expect(frames.views().map(v => v.id)).toEqual(['m', added.id]);
         await settle();
         expect(frames.views()[1].shown.at(-1)).toMatchObject({ reading: { kind: 'note', markdown: '# Memo\nbody' } });
+    });
+
+    it('puts the section chosen in the slot it was asked for, as the frames are when it is chosen', () => {
+        const frames = framesOver();
+        frames.sections.open();
+        frames.show([memo('m', 'Note#Memo'), LIST]);
+        frames.sections.add({ at: 'above', id: 'm' });
+        frames.show([LIST, memo('m', 'Note#Memo')]);
+        frames.dialogs()[0].opts.chosen('Other');
+        expect(frames.slots).toEqual([{ at: 'above', id: 'm' }]);
+        expect(frames.frames().map(f => f.id)).toEqual(['l', expect.stringMatching(/^md-/), 'm']);
     });
 
     it('chooses again the section of a frame from its card: only its link is written, its id, place and fold kept', async () => {
@@ -450,9 +468,9 @@ describe('the markdown frames of a sidebar', () => {
         const frames = framesOver();
         frames.sections.open();
         frames.show([memo('m', 'Gone#Memo')]);
-        frames.sections.add();
+        frames.sections.add({ at: 'end' });
         frames.views()[0].host.relink();
-        frames.sections.add();
+        frames.sections.add({ at: 'above', id: 'm' });
         const [add, relink, closedBefore] = frames.dialogs();
         closedBefore.close();
         const close = vi.spyOn(closedBefore, 'close');

@@ -432,6 +432,42 @@ describe.each([
         expect(r.sections.map(s => s.id)).toEqual([alpha, copy]);
     });
 
+    it('adds a list right above and right below a list from the submenus of its ⋯ menu, its name edited, the other lists and folds kept', () => {
+        const before = op(name, '', 0);
+        const [first, second] = before.lists.map(l => l.id);
+        const addList = (i: number, where: string) => `
+            headerBtn(C, sec(${i}), 'more-horizontal').click();
+            await wait(100);
+            const parent = menuItems().find(it => it.titleEl?.textContent === ${JSON.stringify(where)});
+            const item = parent?.submenu?.items.find(it => it.titleEl?.textContent === ${JSON.stringify(tr('pinnedList.addList'))});
+            if (!item) throw new Error('no Add List under ' + ${JSON.stringify(where)});
+            closeMenus();
+            item.callback(new MouseEvent('click'));
+        `;
+        const keepName = (i: number) => `key(sec(${i}).querySelector('.' + C.nameInput), 'Escape');`;
+
+        let r = op(name, addList(1, tr('menu.addAbove')), 300);
+        const above = r.lists[1].id;
+        expect(r.lists.map(l => l.id)).toEqual([first, above, second]);
+        expect(r.sections.map(s => s.id)).toEqual([first, above, second]);
+        expect(r.sections[1].renaming).toBe(true);
+        r = op(name, keepName(1));
+        expect(r.lists[1].name).toBe(tr('pinnedList.newList'));
+
+        r = op(name, addList(0, tr('menu.addBelow')), 300);
+        const below = r.lists[1].id;
+        expect(r.lists.map(l => l.id)).toEqual([first, below, above, second]);
+        expect(r.sections[1].renaming).toBe(true);
+        r = op(name, keepName(1));
+        expect(r.lists[0]).toEqual(before.lists[0]);
+        expect(r.lists[3]).toEqual(before.lists[1]);
+        expect(r.collapsed).toEqual(before.collapsed);
+
+        r = op(name, more(2, tr('menu.remove')));
+        r = op(name, more(1, tr('menu.remove')));
+        expect(r.lists).toEqual(before.lists);
+    });
+
     it("narrows a list by the view's filter only while its Apply view filter is on", () => {
         const viewFilter = { logic: 'and', filters: [TAG_B] };
         let r = op(name, `V(${JSON.stringify(name)}).store.update({ filterState: ${JSON.stringify(viewFilter)} });`);
