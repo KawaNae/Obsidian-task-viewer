@@ -1,6 +1,6 @@
 import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
-import { openLinkInExistingOrNewTab } from '../../utils/NavigationUtils';
+import { openLink } from '../../utils/NavigationUtils';
 import type { HoverLinkPayload, TaskLinkBindContext } from './types';
 import { logError } from '../../log/log';
 
@@ -58,11 +58,7 @@ export class TaskLinkInteractionManager {
             return;
         }
 
-        if (this.getSettings().reuseExistingTab) {
-            openLinkInExistingOrNewTab(this.app, target, context.sourcePath);
-        } else {
-            void this.app.workspace.openLinkText(target, context.sourcePath, true);
-        }
+        openLink(this.app, target, context.sourcePath, this.getSettings().reuseExistingTab);
         onNavigate?.();
     }
 

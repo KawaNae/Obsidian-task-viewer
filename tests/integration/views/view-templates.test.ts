@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, closeViews, copyUri, ev, openUri, openView, overrideSettings, readSettings, tr, visualDay,
     type HeldSettings,
@@ -33,7 +33,7 @@ const NOTE = `${FOLDER}/${NAME}.md`;
 
 /** The fields of Timeline's config (`TimelineSchema.config`): what a template holds. */
 const CONFIG_KEYS = [
-    'customName', 'filterState', 'maskMode', 'astronomyDisplay', 'showSidebar', 'pinnedLists',
+    'customName', 'filterState', 'maskMode', 'astronomyDisplay', 'showSidebar', 'sidebar',
     'daysToShow', 'zoomLevel', 'showAllDay', 'showTimeline',
 ] as const;
 
@@ -69,7 +69,7 @@ function op(name: string, body = ''): Drawn {
             state: V(${JSON.stringify(name)}).getState(),
             cards: [...el.querySelectorAll('.task-card')].filter(c => !c.closest('.pinned-list')).length,
             lists: [...el.querySelectorAll('.pinned-list')].map(s => ({
-                name: s.querySelector('.pinned-list__name')?.textContent ?? null,
+                name: s.querySelector('.sidebar-frame__name')?.textContent ?? null,
                 count: s.querySelector('.pinned-list__count')?.textContent ?? null,
             })),
         });
@@ -187,7 +187,7 @@ describe('Save view...', () => {
 
     beforeAll(() => {
         openView('vt-src', 'timeline-view', {
-            daysToShow: 4, zoomLevel: 1.5, showSidebar: true, filterState: TAGGED, pinnedLists: [LIST],
+            daysToShow: 4, zoomLevel: 1.5, showSidebar: true, filterState: TAGGED, sidebar: [LIST],
         });
     });
 
@@ -251,6 +251,35 @@ describe('Save view...', () => {
         expect(offered).toBe(NAME);
         expect(notesInFolder()).toEqual([NOTE]);
         expect(parseNote(readTestFile(NOTE)).data).toMatchObject({ daysToShow: 2, customName: NAME });
+    });
+});
+
+describe('a template saved under the older key `pinnedLists`', () => {
+    const OLDER = 'E2E older key';
+    const OLDER_NOTE = `${FOLDER}/${OLDER}.md`;
+
+    it('opens with its lists, which the view holds under `sidebar`', () => {
+        writeTestFile(OLDER_NOTE, [
+            '---', '_tv-view: timeline', `_tv-name: "${OLDER}"`, '---', '',
+            '```json', JSON.stringify({ showSidebar: true, filterState: TAGGED, pinnedLists: [LIST] }, null, 2), '```', '',
+        ].join('\n'));
+        const read = ev<boolean>(`(async () => {
+            ${PRELUDE}
+            for (let i = 0; i < 50; i++) {
+                const f = app.vault.getAbstractFileByPath(${JSON.stringify(OLDER_NOTE)});
+                if (f && app.metadataCache.getFileCache(f)?.frontmatter?.['_tv-view']) return JSON.stringify(true);
+                await wait(100);
+            }
+            return JSON.stringify(false);
+        })()`);
+        expect(read).toBe(true);
+
+        openUri('vt-older', { view: 'timeline', template: OLDER });
+        const drawn = op('vt-older');
+        expect(drawn.cards).toBe(2);
+        expect(drawn.lists).toEqual([{ name: LIST.name, count: '(1)' }]);
+        expect(drawn.state.sidebar).toEqual([{ ...LIST, applyViewFilter: false }]);
+        expect(drawn.state).not.toHaveProperty('pinnedLists');
     });
 });
 

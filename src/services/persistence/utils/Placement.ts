@@ -1,4 +1,5 @@
 import { Outline, type OutlineHeading, type OutlineReading } from '../../parsing/utils/Outline';
+import { headingKey } from '../../parsing/utils/HeadingLinks';
 import type { PlacedReading } from '../../parsing/utils/OutlineCheck';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { NoteSections } from '../../parsing/tree/NoteSections';
@@ -50,22 +51,6 @@ export type SectionLookup =
     | { kind: 'spot'; spot: Spot }
     | { kind: 'none' }
     | { kind: 'many'; count: number };
-
-/** The ASCII marks Obsidian reads as a space in a heading's name: all but `'`, `-` and `_`. */
-const HEADING_MARKS_RE = /[!"#$%&()*+,./:;<=>?@[\\\]^`{|}~]/g;
-
-/**
- * A heading's name as Obsidian compares it when it resolves a link to a
- * heading (measured in Obsidian, as the API's `stripHeading` describes it):
- * the ASCII marks but `'`, `-` and `_` read as a space, spaces run together
- * and trimmed off, and case aside. `**bold**` is `bold`, `[[Other]]` is
- * `other`, `a:b` is `a b`. Other characters (full-width ones) are compared
- * as they are. Two headings of the same name are two headings the link
- * cannot tell apart.
- */
-export function headingKey(name: string): string {
-    return name.replace(HEADING_MARKS_RE, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-}
 
 /** A line a write puts in: its text, how it is to read, and the line it is when it is one carried. */
 export interface PlacedLine extends PlacedReading {

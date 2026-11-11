@@ -101,7 +101,7 @@ const NO_RENDER_KEYS = new Set(['blockId']);
  * touching only internal keys (blockId) has zero visual effect
  * and is skipped. Single authority shared by every card-bearing view — both the
  * scheduler-backed views and the parts that draw themselves (e.g.
- * PinnedListPanel).
+ * SidebarFrames).
  */
 export function shouldRenderForChanges(changes?: string[]): boolean {
     return !(changes && changes.length > 0 && changes.every(c => NO_RENDER_KEYS.has(c)));

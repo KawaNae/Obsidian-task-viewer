@@ -33,7 +33,7 @@ describe('resetPatch', () => {
         expect(patch.zoomLevel).toBe(1.0);
         expect('customName' in patch && patch.customName === undefined).toBe(true);
         expect('filterState' in patch && patch.filterState === undefined).toBe(true);
-        expect('pinnedListCollapsed' in patch && patch.pinnedListCollapsed === undefined).toBe(true);
+        expect('sidebarCollapsed' in patch && patch.sidebarCollapsed === undefined).toBe(true);
         expect('date' in patch).toBe(false);
     });
 });

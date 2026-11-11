@@ -99,7 +99,7 @@ export const SIMPLE_FILTER_SCHEMA = {
 export const FILTER_SOURCE_SCHEMA = {
     filter:     { cli: 'hidden',     description: 'FilterState object (API only), ANDed with the other params' },
     filterFile: { value: '<path>',   description: 'FilterState JSON (.json) or view template (.md), ANDed with the other flags' },
-    list:       { value: '<name>',   description: 'Pinned list name (for .md templates with pinnedLists)' },
+    list:       { value: '<name>',   description: 'Pinned list name (for .md templates with lists)' },
 } as const satisfies ParamMap<FilterSourceParams>;
 
 export const LIST_SCHEMA = {

@@ -7,13 +7,23 @@
  *
  * Designed for composition — each view instantiates its own SidebarManager
  * and delegates layout/DOM concerns to it.
+ *
+ * While the sidebar lies open over the view (narrow width), the view behind
+ * the backdrop cannot be used, so the user's "back" (Android's back gesture,
+ * the desktop mouse's back button: `HistoryBack`) closes it as a backdrop
+ * click does. Beside the view (wide width) it leaves the back alone. The
+ * back is held while both are so, from the presentation each sync applies,
+ * and let go once either is not, or on `detach`. A hidden tab reports no
+ * width and so is not narrow: it does not take the back from the tab shown.
  */
+
+import { holdHistoryBack } from '../sharedUI/HistoryBack';
 
 export interface SidebarManagerConfig {
     mobileBreakpointPx: number;
     onPersist: () => void;
     onSyncToggleButton?: () => void;
-    /** Called when the user closes the sidebar via backdrop click or Escape key. */
+    /** Called when the user closes the sidebar via backdrop click, Escape key or the back. */
     onRequestClose: () => void;
     /** Returns the current open/close state from the view's state. */
     getIsOpen: () => boolean;
@@ -26,6 +36,8 @@ export class SidebarManager {
     private sidebarEl: HTMLElement | null = null;
     private backdropEl: HTMLElement | null = null;
     private resizeObserver: ResizeObserver | null = null;
+    /** Lets go of the back, while the sidebar lies open over the view. */
+    private releaseBack: (() => void) | null = null;
 
     constructor(private config: SidebarManagerConfig) {}
 
@@ -63,12 +75,13 @@ export class SidebarManager {
         });
     }
 
-    /** Call in onClose(). Disconnects ResizeObserver. */
+    /** Call in onClose(). Disconnects ResizeObserver and lets go of the back. */
     detach(): void {
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();
             this.resizeObserver = null;
         }
+        this.holdBack(false);
     }
 
     // ----- DOM Building -----
@@ -77,12 +90,11 @@ export class SidebarManager {
      * Creates the sidebar layout DOM inside `parent`.
      * Call every render cycle (after parent.empty()).
      *
-     * Returns references to the main content area, sidebar header, and sidebar body
-     * so the view can render its own content into them.
+     * Returns references to the main content area and the sidebar's body,
+     * which scrolls, so the view can render its own content into them.
      */
     buildLayout(parent: HTMLElement): {
         main: HTMLElement;
-        sidebarHeader: HTMLElement;
         sidebarBody: HTMLElement;
     } {
         const layout = parent.createDiv('tv-sidebar');
@@ -102,13 +114,12 @@ export class SidebarManager {
         const sidebar = layout.createDiv('tv-sidebar__panel');
         this.sidebarEl = sidebar;
 
-        const sidebarHeader = sidebar.createDiv('tv-sidebar__panel-header');
         const sidebarBody = sidebar.createDiv('tv-sidebar__panel-body');
 
         // Apply current open/closed state to freshly created elements
         this.syncPresentation(this.config.getIsOpen(), { animate: false });
 
-        return { main, sidebarHeader, sidebarBody };
+        return { main, sidebarBody };
     }
 
     // ----- DOM Application -----
@@ -146,6 +157,7 @@ export class SidebarManager {
         if (this.backdropEl) {
             this.backdropEl.classList.toggle('tv-sidebar__backdrop--visible', isOpen);
         }
+        this.holdBack(isOpen && this.isNarrow());
         this.config.onSyncToggleButton?.();
     }
 
@@ -158,6 +170,20 @@ export class SidebarManager {
     }
 
     // ----- Private Helpers -----
+
+    /** Hold the back while `held`, else let go of it; holding it twice holds it once. */
+    private holdBack(held: boolean): void {
+        if (held && !this.releaseBack) {
+            this.releaseBack = holdHistoryBack(() => {
+                if (this.config.getIsOpen()) {
+                    this.config.onRequestClose();
+                }
+            });
+        } else if (!held && this.releaseBack) {
+            this.releaseBack();
+            this.releaseBack = null;
+        }
+    }
 
     private applyResponsiveLayout(): void {
         if (!this.containerEl) return;

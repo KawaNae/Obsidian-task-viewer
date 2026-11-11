@@ -216,6 +216,15 @@ body {
     --tv-font-ui: var(--font-interface);
     --tv-radius-s: var(--radius-s);
 
+    /* The room a view leaves at its bottom for what Obsidian lays over it:
+       the phone's floating navigation bar. Obsidian answers it per device
+       (a length on a phone with the floating bar, which can go below
+       zero while the keyboard is up; a unitless 0 on other phones; nothing on
+       a tablet or the desktop), so it is read as is and only ever used as
+       the height of a spacer (_base.css), where 0 is valid and a negative
+       length counts as none. */
+    --tv-view-bottom-spacing: var(--view-bottom-spacing, 0px);
+
     /* Role tokens */
     --tv-bg-moon: var(--tv-bg-primary);
     --tv-bg-allday: var(--tv-bg-primary);
@@ -224,7 +233,7 @@ body {
     --tv-bg-axis: var(--tv-bg-secondary);
     --tv-bg-date-header: var(--tv-bg-secondary);
 
-    --tv-bg-sidebar: var(--tv-bg-secondary);
+    --tv-bg-sidebar: var(--tv-bg-primary);
 
     --tv-bg-card: var(--tv-bg-secondary);
     --tv-bg-task-handle: var(--tv-bg-primary);

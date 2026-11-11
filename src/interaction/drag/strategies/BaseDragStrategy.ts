@@ -185,13 +185,13 @@ export abstract class BaseDragStrategy implements DragStrategy {
 
     /**
      * Split segments (siblings sharing `originalId`) currently rendered for
-     * this task, outside the pinned-list sidebar. Collected on drag start so
+     * this task, outside the sidebar's frames. Collected on drag start so
      * they can be hidden together with the grabbed element.
      */
     protected collectSplitSiblings(context: DragContext, originalId: string): HTMLElement[] {
         const siblings: HTMLElement[] = [];
         context.container.querySelectorAll('.task-card').forEach(segment => {
-            if (segment instanceof HTMLElement && heldBy(segment)?.name === originalId && !segment.closest('.tv-sidebar__pinned-lists')) {
+            if (segment instanceof HTMLElement && heldBy(segment)?.name === originalId && !segment.closest('.tv-sidebar__frames')) {
                 siblings.push(segment);
             }
         });

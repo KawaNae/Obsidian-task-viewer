@@ -6,7 +6,7 @@ import { F, T } from '../../services/viewConfig/FieldCodecs';
 import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
+import { listFramesOf, type SidebarFrame, type AstronomyDisplay } from '../../types';
 
 export interface CalendarConfig {
     customName?: string;
@@ -14,7 +14,8 @@ export interface CalendarConfig {
     maskMode?: boolean;
     astronomyDisplay?: Partial<AstronomyDisplay>;
     showSidebar?: boolean;
-    pinnedLists?: PinnedListDefinition[];
+    /** The frames of the sidebar, in the order they are stacked. */
+    sidebar?: SidebarFrame[];
 }
 
 export interface CalendarTransient {
@@ -25,7 +26,8 @@ export interface CalendarTransient {
     date?: string;
     /** How many weeks the grid was moved from `date`'s month grid; absent is 0. */
     weekOffset?: number;
-    pinnedListCollapsed?: Record<string, boolean>;
+    /** Which frames of the sidebar are collapsed, by frame id. */
+    sidebarCollapsed?: Record<string, boolean>;
 }
 
 /** The view's state: its config and transient fields as one value (`ViewStore`). */
@@ -44,15 +46,15 @@ export const CalendarSchema: ViewSchema<CalendarConfig, CalendarTransient> = {
         maskMode:         F.boolean('maskMode'),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
         showSidebar:      F.boolean('showSidebar'),
-        pinnedLists:      F.pinnedLists('pinnedLists'),
+        sidebar:          F.sidebarFrames('sidebar', { legacyKeys: ['pinnedLists'] }),
     },
     anchorKey: 'date',
     anchorOffsetKeys: ['weekOffset'],
-    listsOf: (config) => config.pinnedLists ?? [],
+    listsOf: (config) => listFramesOf(config.sidebar ?? []),
     transient: {
-        date:                T.dateString('date'),
-        weekOffset:          T.int('weekOffset'),
-        pinnedListCollapsed: T.collapsedKeys('pinnedListCollapsed', 'calendar'),
+        date:             T.dateString('date'),
+        weekOffset:       T.int('weekOffset'),
+        sidebarCollapsed: T.collapsedKeys('sidebarCollapsed', 'calendar', { legacyKeys: ['pinnedListCollapsed'] }),
     },
 };
 

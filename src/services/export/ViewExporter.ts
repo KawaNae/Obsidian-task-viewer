@@ -27,7 +27,8 @@ export interface CaptureResult {
  */
 export class ViewExporter {
     /**
-     * Clone, expand scroll areas, and capture to Blob.
+     * Clone (with the pictures of its canvases), expand scroll areas, and
+     * capture to Blob.
      * Throws on failure — caller handles UX (Notice, logging).
      */
     static readonly MAX_EXPORT_ELEMENTS = 20000;
@@ -43,11 +44,16 @@ export class ViewExporter {
         }
 
         const clone = container.cloneNode(true) as HTMLElement;
+        ExportUtils.copyCanvases(container, clone);
         clone.style.position = 'absolute';
         clone.style.left = '-99999px';
         clone.style.top = '0';
         clone.style.width = `${container.offsetWidth}px`;
         clone.style.height = `${container.offsetHeight}px`;
+        // The room left under a scroll area for the phone's navigation bar
+        // is for the screen, not for the image: grown to its full height, the
+        // area would bring it in as an empty band at the bottom.
+        clone.style.setProperty('--tv-view-bottom-spacing', '0px');
         container.parentElement!.appendChild(clone);
 
         try {

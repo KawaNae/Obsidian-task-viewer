@@ -1,4 +1,4 @@
-import { type App, MarkdownView, TFile, type WorkspaceLeaf } from 'obsidian';
+import { type App, MarkdownView, TFile, parseLinktext, type WorkspaceLeaf } from 'obsidian';
 import type { Task } from '../types';
 
 /** The Markdown tab that already shows the file, in any window (pop-outs included). */
@@ -38,14 +38,18 @@ export async function openFile(
 }
 
 /**
- * リンクテキスト（wikilink等）を解決して既存タブに移動、なければ新規タブで開く。
+ * Opens what a link names from `sourcePath`, in a new tab. With `reuseTab`,
+ * a tab already showing the note is focused instead, and moved to the
+ * section the link names (its subpath), when it names one. A link drawn on
+ * a card or in a frame of the sidebar is opened through here.
  */
-export function openLinkInExistingOrNewTab(app: App, linktext: string, sourcePath: string): void {
-    const linkPath = linktext.split('#')[0].split('|')[0];
-    const resolved = app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
+export function openLink(app: App, linktext: string, sourcePath: string, reuseTab: boolean): void {
+    const { path, subpath } = parseLinktext(linktext.split('|')[0]);
+    const resolved = reuseTab ? app.metadataCache.getFirstLinkpathDest(path, sourcePath) : null;
     const existing = resolved ? findExistingTab(app, resolved.path) : null;
     if (existing) {
         app.workspace.setActiveLeaf(existing, { focus: true });
+        if (subpath) existing.setEphemeralState({ subpath });
         return;
     }
     void app.workspace.openLinkText(linktext, sourcePath, true);

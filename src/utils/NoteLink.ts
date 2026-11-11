@@ -1,13 +1,32 @@
-import type { App, FileManager, TFile } from 'obsidian';
+import { TFile, type App, type FileManager, type MetadataCache, type TAbstractFile } from 'obsidian';
 import { useMarkdownLinks } from './ObsidianConfig';
 
 /**
+ * Links to notes, both ways.
+ *
  * How the plugin spells a link to a file, in the two ways Obsidian does:
  * as it makes a link to a file ({@link noteLink}), and as its `[[` writes
  * the candidate picked ({@link pickedLink}). Both read the user's settings
  * (wikilink or Markdown, the shortest, relative or absolute path) through
  * Obsidian.
+ *
+ * And which note a link names ({@link noteAt}), as Obsidian resolves it.
  */
+
+/** Whether `file` is a note: a markdown file. */
+export function isNote(file: TAbstractFile | null): file is TFile {
+    return file instanceof TFile && file.extension === 'md';
+}
+
+/**
+ * The note `path` names as a link names one: a full path without its `.md`,
+ * or a shorter name a link would resolve, from the vault's root. Null when
+ * it names none, or a file that is no note.
+ */
+export function noteAt(metadataCache: Pick<MetadataCache, 'getFirstLinkpathDest'>, path: string): TFile | null {
+    const file = metadataCache.getFirstLinkpathDest(path, '');
+    return isNote(file) ? file : null;
+}
 
 /**
  * A link to `file`, spelt as the user's settings spell a new link

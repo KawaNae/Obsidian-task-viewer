@@ -1,9 +1,9 @@
 /**
  * The pinned lists of Timeline's and Calendar's sidebar, in the running Dev
- * vault, driven as the user clicks them: the Add List button, each list's
+ * vault, driven as the user clicks them: the add button's Add List, each list's
  * header (collapse), its sort, filter and ⋯ buttons, the menus and popovers
  * they open, and Show more. What a list shows is read from its DOM, what the
- * view keeps from `getState` (`pinnedLists`, `pinnedListCollapsed`).
+ * view keeps from `getState` (`sidebar`, `sidebarCollapsed`).
  *
  * The lists count the tasks of a note of the test's own, tagged so that only
  * they pass. Menu items are picked by the text the vault's locale shows.
@@ -36,11 +36,11 @@ function note(extra: string[] = []): string {
 const PAGE = 5;
 let held: HeldSettings<'pinnedListPageSize'>;
 
-/** The classes of a pinned list (PinnedListRenderer). */
+/** The classes of a list frame of the sidebar (SidebarFrames). */
 const C = {
     root: 'pinned-list',
-    header: 'pinned-list__header',
-    name: 'pinned-list__name',
+    header: 'sidebar-frame__header',
+    name: 'sidebar-frame__name',
     nameInput: 'pinned-list__name-input',
     count: 'pinned-list__count',
     body: 'pinned-list__body',
@@ -90,8 +90,8 @@ function op(name: string, body: string, settleMs = SETTLE_MS): Reading {
         await wait(${settleMs});
         const state = V(${JSON.stringify(name)}).getState();
         return JSON.stringify({
-            lists: state.pinnedLists ?? [],
-            collapsed: state.pinnedListCollapsed ?? {},
+            lists: state.sidebar ?? [],
+            collapsed: state.sidebarCollapsed ?? {},
             sections: [...el.querySelectorAll('.' + C.root)].map(s => readSection(C, s)),
         });
     })()`);
@@ -117,6 +117,50 @@ function moreTitles(name: string, i: number): string[] {
         const titles = menuItems().map(it => it.titleEl?.textContent ?? '');
         closeMenus();
         return JSON.stringify(titles);
+    })()`);
+}
+
+interface PanelReading {
+    /** The first class of each child of the sidebar's panel, of its body, and of the frames' element. */
+    panel: string[];
+    body: string[];
+    frames: string[];
+    empty: string | null;
+    /** The left edge of the frames' content, where each frame's row starts. */
+    framesLeft: number;
+    framesBottom: number;
+    lastFrame: { id: string | null; bottom: number } | null;
+    button: { label: string; left: number; top: number };
+}
+
+/** What the sidebar's panel of the view `name` holds, in order, and where the add button stands. */
+function panel(name: string): PanelReading {
+    return ev<PanelReading>(`(() => {
+        ${PRELUDE}
+        const el = V(${JSON.stringify(name)}).contentEl;
+        const first = (e) => [...e.children].map(c => c.classList.contains('tv-icon-btn') ? [...c.classList].find(k => k !== 'tv-icon-btn') : c.classList[0]);
+        const frames = el.querySelector('.tv-sidebar__frames');
+        const button = el.querySelector('.tv-sidebar__panel-add-btn');
+        const last = frames.lastElementChild;
+        return JSON.stringify({
+            panel: first(el.querySelector('.tv-sidebar__panel')),
+            body: first(el.querySelector('.tv-sidebar__panel-body')),
+            frames: first(frames),
+            empty: frames.querySelector(':scope > .tv-sidebar__frames--empty')?.textContent ?? null,
+            framesLeft: frames.getBoundingClientRect().left + parseFloat(getComputedStyle(frames).paddingLeft),
+            framesBottom: frames.getBoundingClientRect().bottom,
+            lastFrame: last && !last.classList.contains('tv-sidebar__frames--empty')
+                ? { id: last.dataset.listId ?? last.dataset.frameId ?? null, bottom: last.getBoundingClientRect().bottom } : null,
+            button: { label: button.textContent, left: button.getBoundingClientRect().left, top: button.getBoundingClientRect().top },
+        });
+    })()`);
+}
+
+/** The keys of the state the view `name` saves (`getState`). */
+function stateKeys(name: string): string[] {
+    return ev<string[]>(`(() => {
+        ${PRELUDE}
+        return JSON.stringify(Object.keys(V(${JSON.stringify(name)}).getState()));
     })()`);
 }
 
@@ -155,11 +199,38 @@ describe.each([
     let alpha: string;
 
     beforeAll(() => {
-        openView(name, type, { showSidebar: true, pinnedLists: [] });
+        openView(name, type, { showSidebar: true, sidebar: [] });
     });
 
-    it('adds a list with the Add List button and starts editing its name, which Enter keeps', () => {
-        let r = op(name, `el.querySelector('.tv-sidebar__panel-add-btn').click();`, 300);
+    it('says that nothing is added yet while it holds nothing, with no header row above, and its add button after that, at the frames\' left', () => {
+        const r = panel(name);
+        expect(r.empty).toBe(tr('sidebar.empty'));
+        expect(r.panel).toEqual(['tv-sidebar__panel-body']);
+        expect(r.body).toEqual(['tv-sidebar__frames', 'tv-sidebar__panel-add-btn']);
+        expect(r.frames).toEqual(['tv-sidebar__frames--empty']);
+        expect(r.button.label).toBe(tr('sidebar.add'));
+        expect(r.button.top).toBeGreaterThanOrEqual(r.framesBottom);
+        expect(r.button.left).toBeCloseTo(r.framesLeft, 0);
+    });
+
+    it('offers a list and a section in the add button\'s menu', () => {
+        const titles = ev<string[]>(`(async () => {
+            ${PRELUDE}
+            V(${JSON.stringify(name)}).contentEl.querySelector('.tv-sidebar__panel-add-btn').click();
+            await wait(100);
+            const titles = menuItems().map(it => it.titleEl?.textContent ?? '');
+            closeMenus();
+            return JSON.stringify(titles);
+        })()`);
+        expect(titles).toEqual([tr('pinnedList.addList'), tr('sidebar.addSection')]);
+    });
+
+    it('adds a list from the add button\'s menu and starts editing its name, which Enter keeps', () => {
+        let r = op(name, `
+            el.querySelector('.tv-sidebar__panel-add-btn').click();
+            await wait(100);
+            menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('pinnedList.addList'))});
+        `, 300);
         expect(r.lists).toHaveLength(1);
         expect(r.lists[0].name).toBe(tr('pinnedList.newList'));
         expect(r.lists[0].filterState).toEqual({ logic: 'and', filters: [TOP_LEVEL] });
@@ -168,6 +239,14 @@ describe.each([
         expect(r.sections[0].renaming).toBe(true);
         alpha = r.lists[0].id;
         expect(r.sections[0].id).toBe(alpha);
+
+        // The new list is the last frame, right above the button that added it.
+        const p = panel(name);
+        expect(p.body).toEqual(['tv-sidebar__frames', 'tv-sidebar__panel-add-btn']);
+        expect(p.frames).toEqual([C.root]);
+        expect(p.lastFrame!.id).toBe(alpha);
+        expect(p.button.top - p.lastFrame!.bottom).toBeGreaterThanOrEqual(0);
+        expect(p.button.top - p.lastFrame!.bottom).toBeLessThan(30);
 
         r = op(name, `
             const input = sec(0).querySelector('.' + C.nameInput);
@@ -353,6 +432,42 @@ describe.each([
         expect(r.sections.map(s => s.id)).toEqual([alpha, copy]);
     });
 
+    it('adds a list right above and right below a list from the submenus of its ⋯ menu, its name edited, the other lists and folds kept', () => {
+        const before = op(name, '', 0);
+        const [first, second] = before.lists.map(l => l.id);
+        const addList = (i: number, where: string) => `
+            headerBtn(C, sec(${i}), 'more-horizontal').click();
+            await wait(100);
+            const parent = menuItems().find(it => it.titleEl?.textContent === ${JSON.stringify(where)});
+            const item = parent?.submenu?.items.find(it => it.titleEl?.textContent === ${JSON.stringify(tr('pinnedList.addList'))});
+            if (!item) throw new Error('no Add List under ' + ${JSON.stringify(where)});
+            closeMenus();
+            item.callback(new MouseEvent('click'));
+        `;
+        const keepName = (i: number) => `key(sec(${i}).querySelector('.' + C.nameInput), 'Escape');`;
+
+        let r = op(name, addList(1, tr('menu.addAbove')), 300);
+        const above = r.lists[1].id;
+        expect(r.lists.map(l => l.id)).toEqual([first, above, second]);
+        expect(r.sections.map(s => s.id)).toEqual([first, above, second]);
+        expect(r.sections[1].renaming).toBe(true);
+        r = op(name, keepName(1));
+        expect(r.lists[1].name).toBe(tr('pinnedList.newList'));
+
+        r = op(name, addList(0, tr('menu.addBelow')), 300);
+        const below = r.lists[1].id;
+        expect(r.lists.map(l => l.id)).toEqual([first, below, above, second]);
+        expect(r.sections[1].renaming).toBe(true);
+        r = op(name, keepName(1));
+        expect(r.lists[0]).toEqual(before.lists[0]);
+        expect(r.lists[3]).toEqual(before.lists[1]);
+        expect(r.collapsed).toEqual(before.collapsed);
+
+        r = op(name, more(2, tr('menu.remove')));
+        r = op(name, more(1, tr('menu.remove')));
+        expect(r.lists).toEqual(before.lists);
+    });
+
     it("narrows a list by the view's filter only while its Apply view filter is on", () => {
         const viewFilter = { logic: 'and', filters: [TAG_B] };
         let r = op(name, `V(${JSON.stringify(name)}).store.update({ filterState: ${JSON.stringify(viewFilter)} });`);
@@ -395,5 +510,35 @@ describe.each([
         const r = op(name, more(1, tr('menu.remove')));
         expect(r.lists.map(l => l.id)).toEqual([alpha]);
         expect(r.sections.map(s => s.id)).toEqual([alpha]);
+    });
+});
+
+describe.each([
+    ['Timeline', 'timeline-view', 'pl-tl-old', 'timeline'],
+    ['Calendar', 'calendar-view', 'pl-cal-old', 'calendar'],
+])('%s opened with a state saved under the older keys', (_label, type, name, prefix) => {
+    it('draws its lists, collapsed as they were saved, and saves them under the new keys', () => {
+        const a = { id: 'old-a', name: 'Old A', filterState: { logic: 'and', filters: [TOP_LEVEL, TAG_A] } };
+        const b = { id: 'old-b', name: 'Old B', filterState: { logic: 'and', filters: [TOP_LEVEL, TAG_B] } };
+        openView(name, type, {
+            showSidebar: true,
+            pinnedLists: [a, b],
+            // The older form of an id, the view's name before it.
+            pinnedListCollapsed: { [`${prefix}::old-a`]: true },
+        });
+
+        const r = op(name, '');
+        expect(r.sections.map(s => s.name)).toEqual(['Old A', 'Old B']);
+        expect(r.sections.map(s => s.collapsed)).toEqual([true, false]);
+        expect(r.sections[0].cards).toBe(0);
+        expect(r.sections[1].count).toBe(4);
+        expect(r.sections[1].cards).toBe(4);
+
+        expect(r.lists.map(l => l.id)).toEqual(['old-a', 'old-b']);
+        expect(r.collapsed).toEqual({ 'old-a': true });
+        const keys = stateKeys(name);
+        expect(keys).toEqual(expect.arrayContaining(['sidebar', 'sidebarCollapsed']));
+        expect(keys).not.toContain('pinnedLists');
+        expect(keys).not.toContain('pinnedListCollapsed');
     });
 });

@@ -1,0 +1,56 @@
+/* ==========================================================================
+   Sidebar Frame — The header row every frame of the sidebar has
+   ==========================================================================
+
+   A list frame (_pinned-list.css) and a markdown frame (_markdown-frame.css)
+   both start with this row: the mark of the fold, the name, the buttons. */
+
+/* Header bar (clickable for collapse) */
+.sidebar-frame__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px 4px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--tv-text);
+}
+
+.sidebar-frame__header:hover {
+    color: var(--tv-text-accent);
+}
+
+/* Toggle arrow icon */
+.sidebar-frame__toggle {
+    font-size: 0.7em;
+    color: var(--tv-text-muted);
+    min-width: 10px;
+    text-align: center;
+}
+
+/* Frame name */
+.sidebar-frame__name {
+    flex: 1;
+}
+
+/* Icon button base, shared by the sort, filter, and more buttons */
+.tv-sidebar__panel .sidebar-frame__header-btn {
+    width: 22px;
+    height: 22px;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+}
+
+.tv-sidebar__panel .sidebar-frame__header-btn:hover {
+    border-color: var(--tv-border);
+}
+
+/* Filter or sort active: accent color */
+.tv-sidebar__panel .sidebar-frame__header-btn.is-filtered,
+.tv-sidebar__panel .sidebar-frame__header-btn.is-sorted {
+    color: var(--tv-text-accent);
+}

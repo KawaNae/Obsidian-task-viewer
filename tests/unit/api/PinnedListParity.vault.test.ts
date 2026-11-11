@@ -4,7 +4,7 @@ import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { PinnedListQuery } from '../../../src/services/filter/PinnedListQuery';
 import { createEmptyFilterState, type FilterState } from '../../../src/services/filter/FilterTypes';
 import { codecFor, resolveViewTypeFromShortName } from '../../../src/services/viewConfig';
-import type { PinnedListDefinition, ViewTemplate } from '../../../src/types';
+import { listFrame, type PinnedListDefinition, type SidebarFrame, type ViewTemplate } from '../../../src/types';
 import type { SortState } from '../../../src/services/sort/SortTypes';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 
@@ -63,6 +63,9 @@ const LISTS = [
     list('everything-by-content', createEmptyFilterState(), true, byContentDesc),
 ];
 
+/** The lists as Timeline and Calendar hold them: the frames of their sidebar. Kanban's cells are the lists themselves. */
+const FRAMES: SidebarFrame[] = LISTS.map(listFrame);
+
 async function open() {
     const { session } = await openLiveVault(NOTES, s => { live = s; });
     const read = new TaskReadService(session.index, () => ({ startHour: 0, weekStartDay: 1 }));
@@ -98,10 +101,10 @@ function shownByView(read: TaskReadService, path: string, name: string): string[
     const template = templates.get(path)!;
     const config = codecFor(resolveViewTypeFromShortName(template.viewType)!)!.parseConfig(template.config) as {
         filterState?: FilterState;
-        pinnedLists?: PinnedListDefinition[];
+        sidebar?: SidebarFrame[];
         grid?: PinnedListDefinition[][];
     };
-    const lists = config.grid ? config.grid.flat() : (config.pinnedLists ?? []);
+    const lists: PinnedListDefinition[] = config.grid ? config.grid.flat() : (config.sidebar ?? []);
     const listDef = lists.find(l => l.name === name)!;
     const query = PinnedListQuery.resolve(listDef, config.filterState ?? createEmptyFilterState());
     return read.getFilteredTasks(query.filter, query.sort).map(t => t.id);
@@ -118,8 +121,8 @@ function invalidIds(read: TaskReadService): Set<string> {
 }
 
 const CASES: { title: string; viewType: string; config: Record<string, unknown> }[] = [
-    { title: 'Timeline, with a view filter', viewType: 'timeline', config: { filterState: tagIs('work'), pinnedLists: LISTS } },
-    { title: 'Calendar, without a view filter', viewType: 'calendar', config: { pinnedLists: LISTS } },
+    { title: 'Timeline, with a view filter', viewType: 'timeline', config: { filterState: tagIs('work'), sidebar: FRAMES } },
+    { title: 'Calendar, without a view filter', viewType: 'calendar', config: { sidebar: FRAMES } },
     { title: 'Kanban\'s grid, with a view filter', viewType: 'kanban', config: { filterState: tagIs('work'), grid: [LISTS.slice(0, 2), LISTS.slice(2)] } },
 ];
 
@@ -141,7 +144,7 @@ describe('a pinned list shows the same tasks in its view as the API lists for it
 
     it('the queries differ: with the view filter applied, a list shows fewer tasks than alone', async () => {
         const { read } = await open();
-        saveTemplate('templates/t.md', 'timeline', { filterState: tagIs('work'), pinnedLists: LISTS });
+        saveTemplate('templates/t.md', 'timeline', { filterState: tagIs('work'), sidebar: FRAMES });
         const inView = shownByView(read, 'templates/t.md', 'urgent-in-view');
         const alone = shownByView(read, 'templates/t.md', 'urgent-alone');
         expect(inView.length).toBeGreaterThan(0);
@@ -150,7 +153,7 @@ describe('a pinned list shows the same tasks in its view as the API lists for it
 
     it('leaves out a task with a validation error, as the view does', async () => {
         const { read, api } = await open();
-        saveTemplate('templates/t.md', 'timeline', { filterState: tagIs('work'), pinnedLists: LISTS });
+        saveTemplate('templates/t.md', 'timeline', { filterState: tagIs('work'), sidebar: FRAMES });
 
         const invalid = invalidIds(read);
         expect(invalid.size).toBe(1);
@@ -164,7 +167,7 @@ describe('a pinned list shows the same tasks in its view as the API lists for it
 
     it('sorts by the list\'s own order, and by `sort` when the call names one', async () => {
         const { api } = await open();
-        saveTemplate('templates/t.md', 'calendar', { pinnedLists: LISTS });
+        saveTemplate('templates/t.md', 'calendar', { sidebar: FRAMES });
         const contents = async (sort?: { property: 'content'; direction: 'asc' | 'desc' }[]) =>
             (await api.list({ filterFile: 'templates/t.md', list: 'urgent-alone-by-content', sort })).tasks.map(t => t.content);
 
@@ -174,7 +177,7 @@ describe('a pinned list shows the same tasks in its view as the API lists for it
 
     it('answers a range query with a filter file as the list does: no task with a validation error, in the list\'s order', async () => {
         const { read, api } = await open();
-        saveTemplate('templates/t.md', 'calendar', { pinnedLists: LISTS });
+        saveTemplate('templates/t.md', 'calendar', { sidebar: FRAMES });
         const invalid = invalidIds(read);
 
         const ranged = await api.tasksForDateRange({ from: '2026-09-01', to: '2026-10-31', filterFile: 'templates/t.md', list: 'everything-by-content' });

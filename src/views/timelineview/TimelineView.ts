@@ -25,7 +25,7 @@ import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
-import { PinnedListPanel } from '../sharedUI/PinnedListPanel';
+import { SidebarFrames } from '../sidebar/SidebarFrames';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
@@ -64,12 +64,12 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     private gridRenderer: GridRenderer;
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
-    /** The sidebar's pinned lists; they draw themselves, and outlive the view's draws. */
-    private readonly pinnedLists: PinnedListPanel;
+    /** The sidebar's frames; they draw themselves, and outlive the view's draws. */
+    private readonly sidebarFrames: SidebarFrames;
     private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
-    private linkInteractionManager: TaskLinkInteractionManager;
+    private readonly linkInteractionManager: TaskLinkInteractionManager;
 
     // ==================== DOM ====================
     private container: HTMLElement;
@@ -164,11 +164,14 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             if ('date' in patch && patch.date !== prev.date) this.days.settle(this.state.date);
         });
 
-        this.pinnedLists = new PinnedListPanel({
+        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
+        this.sidebarFrames = new SidebarFrames({
             plugin: this.plugin,
             readService: this.readService,
             index: this.index,
             taskRenderer: this.taskRenderer,
+            links: this.linkInteractionManager,
+            getHoverParent: () => this.hoverParent,
         }, {
             state: () => this.state,
             subscribe: (listener) => this.store.subscribe(listener),
@@ -190,8 +193,6 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             getStartHour: () => this.plugin.settings.startHour,
         });
         this.selectionController = new SelectionController(this.handleManager);
-
-        this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
@@ -242,7 +243,7 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
         );
-        this.pinnedLists.open();
+        this.sidebarFrames.open();
         this.moonRenderer = new MoonPhaseRenderer();
 
         // Initialize DragHandler with selection callback, move callback, and the window drawn
@@ -379,7 +380,7 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.hoverParent.dispose();
         this.toolbar?.close();
         this.dragHandler.destroy();
-        this.pinnedLists.close();
+        this.sidebarFrames.close();
         if (this.unsubscribe) {
             this.unsubscribe();
         }
@@ -416,9 +417,10 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.sidebarManager.applyOpen(open, { animate: true });
     }
 
-    /** Settings were saved: the window is read anew, and a view following today pulls anew. */
+    /** Settings were saved: the window is read anew, a view following today pulls anew, and the sidebar's frames read their notes anew. */
     override redraw(): void {
         this.days.settle(this.state.date);
+        this.sidebarFrames.settingsSaved();
         this.requestDraw();
     }
 
@@ -521,10 +523,10 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
         // bound to it) survives. We re-attach it via mount() below.
         this.toolbar?.detach();
-        // The pinned lists come out before the grid's cards are gathered, so
-        // their cards are neither taken for the grid's nor lost; they go back
-        // into the sidebar built below.
-        this.pinnedLists.lift();
+        // The sidebar's frames come out before the grid's cards are gathered,
+        // so their cards are neither taken for the grid's nor lost; they go
+        // back into the sidebar built below.
+        this.sidebarFrames.lift();
 
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the scaffolding. Cards retain their inner DOM /
@@ -548,9 +550,9 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         const toolbarHost = this.container.createDiv('timeline-view__toolbar-host');
 
         // Build sidebar layout (bottom row)
-        const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
+        const { main, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
-        this.pinnedLists.mount(sidebarHeader, sidebarBody);
+        this.sidebarFrames.mount(sidebarBody);
 
         const dates = windowDates(this.window());
 

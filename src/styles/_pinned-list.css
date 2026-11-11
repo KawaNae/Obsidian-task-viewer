@@ -2,69 +2,15 @@
    Pinned Lists — Sidebar list sections with independent filters
    ========================================================================== */
 
-.tv-sidebar__pinned-lists {
-    padding: 0 4px;
-}
-
 /* Individual list section */
 .pinned-list {
     margin-bottom: 8px;
-}
-
-/* Header bar (clickable for collapse) */
-.pinned-list__header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 4px 4px;
-    cursor: pointer;
-    user-select: none;
-    font-size: 0.85em;
-    font-weight: 600;
-    color: var(--tv-text);
-}
-
-.pinned-list__header:hover {
-    color: var(--tv-text-accent);
-}
-
-/* Toggle arrow icon */
-.pinned-list__toggle {
-    font-size: 0.7em;
-    color: var(--tv-text-muted);
-    min-width: 10px;
-    text-align: center;
-}
-
-/* List name */
-.pinned-list__name {
-    flex: 1;
 }
 
 /* Task count badge */
 .pinned-list__count {
     color: var(--tv-text-muted);
     font-weight: 400;
-}
-
-/* Icon button base, shared by the sort, filter, and more buttons */
-.tv-sidebar__panel .pinned-list__header-btn {
-    width: 22px;
-    height: 22px;
-    transition:
-        background-color 120ms ease,
-        border-color 120ms ease,
-        color 120ms ease;
-}
-
-.tv-sidebar__panel .pinned-list__header-btn:hover {
-    border-color: var(--tv-border);
-}
-
-/* Filter or sort active: accent color */
-.tv-sidebar__panel .pinned-list__header-btn.is-filtered,
-.tv-sidebar__panel .pinned-list__header-btn.is-sorted {
-    color: var(--tv-text-accent);
 }
 
 /* Inline rename input */
@@ -99,14 +45,6 @@
 /* Collapsed state: hide the task list */
 .pinned-list--collapsed .pinned-list__body {
     display: none;
-}
-
-/* Empty state */
-.tv-sidebar__pinned-lists--empty {
-    padding: 16px;
-    text-align: center;
-    color: var(--tv-text-muted);
-    font-size: 0.85em;
 }
 
 /* Danger menu item (Remove) — used across all Obsidian menus */

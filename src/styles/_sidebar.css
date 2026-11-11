@@ -1,8 +1,8 @@
 /* =============================================================================
-   tv-sidebar — Shared layout for views with a right-side pinned-list panel.
-   Single block with __main, __backdrop, __panel, __panel-{header,body,title,add-btn}
-   elements and --mobile / --animate / __main--open / __backdrop--visible /
-   __panel--hidden modifiers.
+   tv-sidebar — Shared layout for views with a right-side panel of frames.
+   Single block with __main, __backdrop, __panel, __panel-{header,body,add-btn},
+   __frames elements and --mobile / --animate / __main--open /
+   __backdrop--visible / __panel--hidden / __frames--empty modifiers.
    ============================================================================= */
 
 /* 2-Column Layout Wrapper */
@@ -13,6 +13,16 @@
     width: 100%;
     overflow: hidden;
     position: relative;
+    /* How long the panel takes to slide and how it eases: what Obsidian's
+       own sidebar takes, so the two open and close alike. On desktop
+       Obsidian animates its sidebar's width by these two variables. */
+    --tv-sidebar-slide: var(--anim-duration-fast) var(--anim-motion-swing);
+}
+
+/* The mobile app slides its drawers by a time and an easing it writes on
+   the drawer itself, in no variable. */
+.is-mobile .tv-sidebar {
+    --tv-sidebar-slide: 200ms ease-in-out;
 }
 
 .tv-sidebar__main {
@@ -49,10 +59,14 @@
     box-shadow: none;
 }
 
+/* What covers the main area while the panel lies over it. Its color is the
+   one Obsidian covers the workspace with behind its own drawer: in a light
+   theme a pale veil, under which the toolbar's line above still reads as a
+   line. */
 .tv-sidebar__backdrop {
     position: absolute;
     inset: 0;
-    background-color: rgba(var(--tv-shadow-rgb), 0.35);
+    background-color: var(--background-modifier-cover);
     opacity: 0;
     pointer-events: none;
     z-index: calc(var(--z-view-drawer) - 1);
@@ -60,37 +74,29 @@
 
 /* Animation rules — applied via JS class toggle */
 .tv-sidebar--animate .tv-sidebar__main {
-    transition: margin-right 0.3s ease;
+    transition: margin-right var(--tv-sidebar-slide);
 }
 
 .tv-sidebar--animate .tv-sidebar__panel {
-    transition: transform 0.3s ease;
+    transition: transform var(--tv-sidebar-slide);
 }
 
+/* As the backdrop of Obsidian's drawer fades (`.workspace-drawer-backdrop`). */
 .tv-sidebar--animate .tv-sidebar__backdrop {
-    transition: opacity 0.2s ease;
+    transition: opacity 150ms ease-out;
 }
 
-/* Sidebar panel header */
-.tv-sidebar__panel-header {
-    padding: 2px 8px;
-    margin: 0;
-    height: var(--header-height);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.tv-sidebar__panel-title {
-    margin: 0;
-    font-size: 0.8em;
-    color: var(--tv-text-muted);
-    flex: 1;
-}
-
-/* button を付けて (0,2,1) にし、tv-icon-btn のタブレットの余白の規則
+/* The add button, after the frames, scrolled with them. Its top and left
+   margins are a frame header row's padding (_sidebar-frame.css), so its icon stands
+   under the frames' fold arrows, as far below the last frame as the next
+   frame's arrow would be. A block box as wide as its content, so no line
+   box of the body's font adds to the room above and below it.
+   button を付けて (0,2,1) にし、tv-icon-btn のタブレットの余白の規則
    （_controls.css）に後の順で勝つ */
 .tv-sidebar__panel button.tv-sidebar__panel-add-btn {
+    display: flex;
+    width: fit-content;
+    margin: 6px 4px 12px;
     height: 22px;
     gap: 4px;
     padding: 0 6px;
@@ -109,6 +115,25 @@
     flex: 1;
     overflow-y: auto;
     padding: 10px;
+}
+
+/* The frames stacked down the panel's body. The custom property says this
+   stylesheet is applied: the markdown frames read it before they render
+   what measures the room it has (MarkdownFrameSections). It holds the
+   margin under its last frame, so the add button after it stands where the
+   next frame's header row would. */
+.tv-sidebar__frames {
+    --tv-sidebar-frames-styled: 1;
+    display: flow-root;
+    padding: 0 4px;
+}
+
+/* No frame yet */
+.tv-sidebar__frames--empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--tv-text-muted);
+    font-size: 0.85em;
 }
 
 /* Mobile / narrow layout overrides */

@@ -8,7 +8,8 @@ import {
 import type { ViewType } from '../../../../src/views/ViewDescriptors';
 import type { ConfigIssue } from '../../../../src/services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../../../src/services/filter/FilterTypes';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../../../src/types';
+import { unicodeBtoa } from '../../../../src/utils/base64';
+import { listFrame, type PinnedListDefinition, type SidebarFrame, type AstronomyDisplay } from '../../../../src/types';
 
 interface TestConfig {
     name?: string;
@@ -17,7 +18,7 @@ interface TestConfig {
     rate?: number;
     span?: number;
     filter?: FilterState;
-    pins?: PinnedListDefinition[];
+    pins?: SidebarFrame[];
     grid?: PinnedListDefinition[][];
     sky?: Partial<AstronomyDisplay>;
     cursor?: string;
@@ -41,7 +42,7 @@ const SCHEMA: ViewSchema<TestConfig, TestTransient> = {
         rate: F.float('rate', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
         span: F.int('span', { min: 1, max: 30, legacyKeys: ['spanLegacy'] }),
         filter: F.filter('filter', { legacyKeys: ['filterState'] }),
-        pins: F.pinnedLists('pins'),
+        pins: F.sidebarFrames('pins'),
         grid: F.grid('grid'),
         sky: F.astronomyDisplay('sky', { legacyKeys: ['astronomyDisplay'] }),
         cursor: F.dateString('cursor'),
@@ -66,6 +67,7 @@ const fullFixture: TestConfig = {
         logic: 'and',
     },
     pins: [{
+        kind: 'list',
         id: 'pl-1',
         name: 'Today',
         filterState: { filters: [{ property: 'due', operator: 'equals', value: '2026-05-22' }], logic: 'and' },
@@ -152,17 +154,222 @@ describe('ViewConfigCodec', () => {
         const list = { id: 'pl-1', name: 'L', filterState: { filters: [], logic: 'and' } };
 
         it('a list saved without the key reads as false', () => {
-            expect(F.pinnedLists('pins').parse([list])?.[0].applyViewFilter).toBe(false);
+            expect(F.sidebarFrames('pins').parse([list])?.[0]).toMatchObject({ kind: 'list', applyViewFilter: false });
             expect(F.grid('grid').parse([[list]])?.[0][0].applyViewFilter).toBe(false);
         });
 
         it('a value that is not a boolean reads as false', () => {
-            expect(F.pinnedLists('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0].applyViewFilter).toBe(false);
+            expect(F.sidebarFrames('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0]).toMatchObject({ kind: 'list', applyViewFilter: false });
         });
 
         it('false is written, not omitted', () => {
-            const json = codec.serializeConfig({ pins: [{ ...list, applyViewFilter: false } as PinnedListDefinition] });
+            const json = codec.serializeConfig({ pins: [listFrame({ ...list, applyViewFilter: false } as PinnedListDefinition)] });
             expect((json.pins as Record<string, unknown>[])[0].applyViewFilter).toBe(false);
+        });
+    });
+
+    describe('the frames of a sidebar', () => {
+        const pins = F.sidebarFrames('pins');
+        // Two lists as they are stored, the second with every field a list can hold.
+        const today = {
+            id: 'pl-1',
+            name: 'Today',
+            filterState: { logic: 'and', filters: [{ property: 'tag', operator: 'includes', value: ['x'] }] },
+            applyViewFilter: false,
+        };
+        const next = {
+            id: 'pl-2',
+            name: 'Next',
+            filterState: { logic: 'and', filters: [{ property: 'parent', operator: 'isNotSet' }] },
+            applyViewFilter: true,
+            sortState: { rules: [{ property: 'due', direction: 'asc' }] },
+            topRight: { fields: ['due'], separator: ' ', prefix: '(', suffix: ')' },
+        };
+
+        it('an entry stored without a kind is read as a list frame', () => {
+            expect(pins.parse([today, next])).toEqual([
+                { kind: 'list', ...today },
+                { kind: 'list', ...next },
+            ]);
+        });
+
+        it("an entry of the kind 'list' is read as the same frame", () => {
+            expect(pins.parse([{ kind: 'list', ...today }])).toEqual(pins.parse([today]));
+            expect(pins.parse([{ ...today, kind: 'list' }])).toEqual([{ kind: 'list', ...today }]);
+        });
+
+        it('an entry of a kind that is not known is skipped without a report, and the lists around it are kept', () => {
+            const note = { kind: 'note', id: 'n-1', name: 'Memo', path: 'Dashboard.md' };
+            // Readable as a list but for its kind: the kind decides.
+            const listLike = { ...today, kind: 'note', id: 'n-2', name: 'Not a list' };
+            const noKind = { ...today, kind: null, id: 'n-3', name: 'Null kind' };
+            const reported: string[] = [];
+            const frames = pins.parse([today, note, listLike, noKind, next], text => reported.push(text));
+            expect(frames?.map(f => f.id)).toEqual(['pl-1', 'pl-2']);
+            expect(reported).toEqual([]);
+            expect(pins.parse([note])).toBeUndefined();
+        });
+
+        it('a list frame is written as the list alone: what was read is written back as it was stored', () => {
+            const stored = [today, next];
+            const written = pins.serialize(pins.parse(stored));
+            expect(JSON.stringify(written)).toBe(JSON.stringify(stored));
+            expect(JSON.stringify(pins.serialize(pins.parse([{ kind: 'list', ...today }])))).toBe(JSON.stringify([today]));
+        });
+
+        it('a URI carries the same form, and is read as the stored form is', () => {
+            const frames = pins.parse([today, next])!;
+            const param = pins.toUriParam!(frames);
+            expect(param).toBe(unicodeBtoa(JSON.stringify([today, next])));
+            expect(pins.fromUriParam!(param!)).toEqual(frames);
+            const withUnknown = unicodeBtoa(JSON.stringify([{ kind: 'note', id: 'n-1', name: 'Memo' }, next]));
+            expect(pins.fromUriParam!(withUnknown)?.map(f => f.id)).toEqual(['pl-2']);
+        });
+
+        describe('a markdown frame', () => {
+            const memo = { kind: 'markdown', id: 'md-1', link: 'Folder/Note#Parent#Memo' };
+            const whole = { kind: 'markdown', id: 'md-2', link: 'Dashboard' };
+
+            it('is read as its kind, its id and its link, and written back as it was stored', () => {
+                const frames = pins.parse([memo, whole]);
+                expect(frames).toEqual([memo, whole]);
+                expect(JSON.stringify(pins.serialize(frames))).toBe(JSON.stringify([memo, whole]));
+            });
+
+            it('keeps nothing else an entry holds', () => {
+                const frames = pins.parse([{ ...memo, name: 'Memo', filterState: today.filterState }]);
+                expect(frames).toEqual([memo]);
+            });
+
+            it('is skipped, and the reason reported, when its link is missing, is not a text, or names no note', () => {
+                const reported: string[] = [];
+                const frames = pins.parse([
+                    { kind: 'markdown', id: 'a' },
+                    { kind: 'markdown', id: 'b', link: '' },
+                    { kind: 'markdown', id: 'c', link: 3 },
+                    { kind: 'markdown', id: 'd', link: null },
+                    { kind: 'markdown', id: 'e', link: '#Heading' },
+                    { kind: 'markdown', link: '#' },
+                    whole,
+                ], text => reported.push(text));
+                expect(frames).toEqual([whole]);
+                expect(reported).toEqual([
+                    'markdown frame "a" link: missing',
+                    'markdown frame "b" link: "" names no note',
+                    'markdown frame "c" link: not a text',
+                    'markdown frame "d" link: not a text',
+                    'markdown frame "e" link: "#Heading" names no note',
+                    'markdown frame link: "#" names no note',
+                ]);
+                expect(pins.parse([{ kind: 'markdown', id: 'a' }])).toBeUndefined();
+            });
+
+            it('names no note with a heading alone, and names one with a note before the heading', () => {
+                expect(pins.parse([{ kind: 'markdown', id: 'h', link: '#Memo' }])).toBeUndefined();
+                expect(pins.parse([{ kind: 'markdown', id: 'h', link: 'Note#Memo' }])).toEqual([{ kind: 'markdown', id: 'h', link: 'Note#Memo' }]);
+            });
+
+            it('is reported through the config it is read with, under its field', () => {
+                const issues: ConfigIssue[] = [];
+                codec.parseConfig({ pins: [{ kind: 'markdown', id: 'a', link: 3 }, whole] }, issues);
+                expect(issues).toEqual([{ field: 'pins', text: 'markdown frame "a" link: not a text' }]);
+            });
+
+            it('stored without an id is given one of its own', () => {
+                const frames = pins.parse([{ kind: 'markdown', link: 'A' }, { kind: 'markdown', id: '', link: 'B' }])!;
+                expect(frames.map(f => f.kind === 'markdown' && f.link)).toEqual(['A', 'B']);
+                expect(frames[0].id).toBeTruthy();
+                expect(frames[1].id).toBeTruthy();
+                expect(frames[0].id).not.toBe(frames[1].id);
+            });
+
+            it('keeps its place among the lists, each written in its own form', () => {
+                const stored = [memo, today, whole, next];
+                const frames = pins.parse(stored)!;
+                expect(frames.map(f => f.id)).toEqual(['md-1', 'pl-1', 'md-2', 'pl-2']);
+                expect(frames.map(f => f.kind)).toEqual(['markdown', 'list', 'markdown', 'list']);
+                expect(JSON.stringify(pins.serialize(frames))).toBe(JSON.stringify(stored));
+            });
+
+            it('is carried by a URI in the stored form, and read back', () => {
+                const frames = pins.parse([today, memo, whole])!;
+                const param = pins.toUriParam!(frames);
+                expect(param).toBe(unicodeBtoa(JSON.stringify([today, memo, whole])));
+                expect(pins.fromUriParam!(param!)).toEqual(frames);
+                const japanese = { kind: 'markdown', id: 'md-3', link: 'SyncIgnore/見本#メモ' };
+                expect(pins.fromUriParam!(pins.toUriParam!(pins.parse([japanese])!)!)).toEqual([japanese]);
+            });
+
+            it("is no cell of Kanban's grid", () => {
+                expect(F.grid('grid').parse([[memo, today]])).toEqual([[today]]);
+            });
+        });
+
+        describe('ids', () => {
+            const memo = { kind: 'markdown', id: 'pl-1', link: 'Folder/Note#Memo' };
+
+            it('a frame stored under the id of a frame of its kind before it is kept, under a new id of its kind', () => {
+                const frames = pins.parse([today, { ...next, id: 'pl-1' }, today])!;
+                expect(frames.map(f => f.kind === 'list' && f.name)).toEqual(['Today', 'Next', 'Today']);
+                expect(frames[0].id).toBe('pl-1');
+                expect(new Set(frames.map(f => f.id)).size).toBe(3);
+                expect(frames[1].id).toMatch(/^list-/);
+                expect(frames[2].id).toMatch(/^list-/);
+
+                const twice = pins.parse([{ ...memo, id: 'md-1' }, { ...memo, id: 'md-1' }])!;
+                expect(twice.map(f => f.kind === 'markdown' && f.link)).toEqual(['Folder/Note#Memo', 'Folder/Note#Memo']);
+                expect(twice[0].id).toBe('md-1');
+                expect(twice[1].id).toMatch(/^md-/);
+                expect(twice[1].id).not.toBe('md-1');
+            });
+
+            it('a frame stored under the id of a frame of another kind is kept, under a new id of its own kind', () => {
+                const frames = pins.parse([today, memo])!;
+                expect(frames.map(f => f.kind)).toEqual(['list', 'markdown']);
+                expect(frames[0].id).toBe('pl-1');
+                expect(frames[1].id).toMatch(/^md-/);
+
+                const listAfter = pins.parse([memo, today])!;
+                expect(listAfter[0].id).toBe('pl-1');
+                expect(listAfter[1].id).toMatch(/^list-/);
+            });
+
+            it('frames of ids of their own keep them, and so does every road the sidebar is read by', () => {
+                const stored = [today, { ...memo, id: 'md-1' }, next];
+                expect(pins.parse(stored)!.map(f => f.id)).toEqual(['pl-1', 'md-1', 'pl-2']);
+                expect(pins.fromUriParam!(unicodeBtoa(JSON.stringify(stored)))!.map(f => f.id)).toEqual(['pl-1', 'md-1', 'pl-2']);
+
+                const repeated = [today, memo];
+                const ids = (frames: SidebarFrame[] | undefined) => frames?.map(f => f.id) ?? [];
+                // The sidebar's field as Timeline and Calendar declare it, read under its older key too.
+                const sidebar = new ViewConfigCodec<{ sidebar?: SidebarFrame[] }>({
+                    viewType: 'test-view' as ViewType,
+                    shortName: 'test',
+                    defaults: {},
+                    config: { sidebar: F.sidebarFrames('sidebar', { legacyKeys: ['pinnedLists'] }) },
+                    transient: {},
+                });
+                for (const frames of [
+                    pins.fromUriParam!(unicodeBtoa(JSON.stringify(repeated))),
+                    sidebar.parseConfig({ sidebar: repeated }).sidebar,
+                    sidebar.parseConfig({ pinnedLists: repeated }).sidebar,
+                    sidebar.fromUriParams({ pinnedLists: unicodeBtoa(JSON.stringify(repeated)) }).sidebar,
+                ]) {
+                    expect(new Set(ids(frames)).size).toBe(2);
+                    expect(ids(frames)[0]).toBe('pl-1');
+                }
+            });
+
+            it("leaves Kanban's cells as they are stored", () => {
+                expect(F.grid('grid').parse([[today, today]])).toEqual([[today, today]]);
+            });
+        });
+
+        it("Kanban's cells are lists, not frames: a cell is read without a kind, whatever the entry says", () => {
+            const cells = F.grid('grid').parse([[today, { ...next, kind: 'note' }]]);
+            expect(cells).toEqual([[today, next]]);
+            expect(cells?.[0][0]).not.toHaveProperty('kind');
+            expect(JSON.stringify(F.grid('grid').serialize(cells))).toBe(JSON.stringify([[today, next]]));
         });
     });
 

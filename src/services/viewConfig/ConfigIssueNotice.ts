@@ -6,8 +6,9 @@ import type { ViewConfigCodec } from './ViewConfigCodec';
 
 /**
  * Tell the user that a view's config lost parts it could not read (a filter
- * condition, a sort rule): one notice with the count, and one log line for
- * each part, saying where it was and why. The view opens on the rest.
+ * condition, a sort rule, a sidebar frame): one notice with the count, and
+ * one log line for each part, saying where it was and why. The view opens
+ * on the rest.
  *
  * Every road a config takes into a view tells through here: the workspace
  * (`setState`), a template applied from the toolbar, and a URI.
@@ -17,7 +18,7 @@ export function noticeConfigIssues(issues: readonly ConfigIssue[]): void {
     for (const issue of issues) {
         logWarn(`[config] ${issue.field}: dropped ${issue.text}`);
     }
-    new Notice(t('notice.unreadableConditions', { count: issues.length }));
+    new Notice(t('notice.unreadableConfigParts', { count: issues.length }));
 }
 
 /**

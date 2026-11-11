@@ -20,8 +20,9 @@ import type { ViewType } from '../../views/ViewDescriptors';
 
 /**
  * Tells of a part of a value a field read but dropped (a filter condition, a
- * sort rule), in an English sentence. A field reads what it can and reports
- * the rest; a value it cannot read at all is undefined, as before.
+ * sort rule, a sidebar frame), in an English sentence. A field reads what
+ * it can and reports the rest; a value it cannot read at all is undefined,
+ * as before.
  */
 export type ReportIssue = (text: string) => void;
 
@@ -81,10 +82,10 @@ export interface ViewSchema<
      */
     readonly anchorOffsetKeys?: readonly (keyof TTransient & string)[];
     /**
-     * The pinned lists a config of this view holds, in the order the view
+     * The saved lists a config of this view holds, in the order the view
      * shows them; a view without lists has none. A template's lists are read
      * through here (`PinnedListQuery.fromTemplate`), so only the schema knows
-     * where they are kept (a flat list, or Kanban's grid).
+     * where they are kept (the list frames of a sidebar, or Kanban's grid).
      */
     readonly listsOf?: (config: Partial<TConfig>) => readonly PinnedListDefinition[];
 }

@@ -2,8 +2,9 @@
  * KanbanSchema — declarative persistence schema for Kanban view.
  *
  * Kanban has no astronomy overlay (no time axis) so astronomyDisplay is not
- * a field. It uses a 2D `grid` of PinnedListDefinition[] instead of the flat
- * pinnedLists used by Timeline/Calendar.
+ * a field. Its lists are the cells of a 2D `grid` (PinnedListDefinition[][]),
+ * where Timeline and Calendar hold theirs as frames of a sidebar
+ * (`sidebar`).
  */
 
 import { F, T } from '../../services/viewConfig/FieldCodecs';

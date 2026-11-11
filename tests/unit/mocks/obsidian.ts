@@ -156,6 +156,17 @@ export class AbstractInputSuggest extends PopoverSuggest {
     }
     setValue(value: string): void { this.inputEl.value = value; }
     getValue(): string { return this.inputEl.value; }
+    /** The field's places the list was put by, in order. */
+    placements: unknown[] = [];
+    /**
+     * Obsidian 1.14.5's: opened or not, the list is put by the field's place
+     * as it is now.
+     */
+    open(): void {
+        super.open();
+        this.reposition(this.inputEl.getBoundingClientRect());
+    }
+    reposition(rect: unknown): void { this.placements.push(rect); }
 }
 
 export class Setting {
@@ -206,6 +217,16 @@ export function normalizePath(path: string) { return path; }
 export function parseLinktext(linktext: string): { path: string; subpath: string } {
     const hash = linktext.indexOf('#');
     return hash < 0 ? { path: linktext, subpath: '' } : { path: linktext.slice(0, hash), subpath: linktext.slice(hash) };
+}
+
+/** A heading's text as Obsidian compares it with a link's: its marks read as a space, spaces run together (Obsidian 1.15.0's own). */
+export function stripHeading(heading: string): string {
+    return heading.replace(/[!"#$%&()*+,.:;<=>?@^`{|}~\/\[\]\\\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** A heading's text as Obsidian writes it into a link: what would cut the link read as a space (Obsidian 1.15.0's own). */
+export function stripHeadingForLink(heading: string): string {
+    return heading.replace(/([:#|^\\\r\n]|%%|\[\[|]])/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /** The aliases a frontmatter names, as Obsidian reads them: a list, or one string; null for none. */

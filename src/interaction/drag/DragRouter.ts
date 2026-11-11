@@ -26,17 +26,17 @@ export class DragRouter {
      * pointerdown のメインルーティング。
      *
      * 帰結は次のいずれか:
-     *   - pinned-list 内 / 解決不能 → 何もしない (early return)
+     *   - サイドバーの枠の中 / 解決不能 → 何もしない (early return)
      *   - card 本体 (handle 以外) → context.onTaskClick(taskId) で selection
      *   - resize/move handle → DragSession.start で Strategy 起動
      */
     handle(e: PointerEvent): void {
         const target = e.target as HTMLElement;
 
-        // pinnedLists 内のカードクリックは selection/drag の対象外。
-        // pinnedLists は selection 状態を持たない閲覧専用 UI であり、
+        // サイドバーの枠の中のカードクリックは selection/drag の対象外。
+        // サイドバーの枠は selection 状態を持たない閲覧専用 UI であり、
         // ここで早期 return しないと main grid の同 id カードに .is-selected が漏れる。
-        if (target.closest('.tv-sidebar__pinned-lists')) return;
+        if (target.closest('.tv-sidebar__frames')) return;
 
         const handle = target.closest('.task-card__handle-btn') as HTMLElement | null;
         const isFromHandle = handle !== null;

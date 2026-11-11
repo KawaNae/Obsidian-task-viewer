@@ -28,7 +28,7 @@ import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { parseSegmentId } from '../../services/display/SegmentIds';
 import { SidebarManager } from '../sidebar/SidebarManager';
-import { PinnedListPanel } from '../sharedUI/PinnedListPanel';
+import { SidebarFrames } from '../sidebar/SidebarFrames';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { drawDateGridLane } from '../sharedUI/DateGridLane';
@@ -58,8 +58,8 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
     private handleManager: HandleManager | null = null;
     private selectionController: SelectionController | null = null;
     private sidebarManager: SidebarManager;
-    /** The sidebar's pinned lists; they draw themselves, and outlive the view's draws. */
-    private readonly pinnedLists: PinnedListPanel;
+    /** The sidebar's frames; they draw themselves, and outlive the view's draws. */
+    private readonly sidebarFrames: SidebarFrames;
     private readonly toolbar: CalendarToolbar;
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
@@ -123,11 +123,13 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             hoverParent: this.hoverParent,
         });
 
-        this.pinnedLists = new PinnedListPanel({
+        this.sidebarFrames = new SidebarFrames({
             plugin: this.plugin,
             readService: this.readService,
             index: this.index,
             taskRenderer: this.taskRenderer,
+            links: this.linkInteractionManager,
+            getHoverParent: () => this.hoverParent,
         }, {
             state: () => this.state,
             subscribe: (listener) => this.store.subscribe(listener),
@@ -165,7 +167,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             this.registerDomEvent(el, ev, handler),
         );
 
-        this.pinnedLists.open();
+        this.sidebarFrames.open();
         this.handleManager = new HandleManager(this.container, {
             getTask: (id) => this.index.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
@@ -201,7 +203,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.hoverParent.dispose();
         this.toolbar.close();
         this.sidebarManager.detach();
-        this.pinnedLists.close();
+        this.sidebarFrames.close();
 
         this.dragHandler?.destroy();
         this.dragHandler = null;
@@ -218,6 +220,12 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.scrollRestorer.dispose();
     }
 
+    /** Settings were saved: the grid is drawn anew, and the sidebar's frames read their notes anew. */
+    override redraw(): void {
+        this.sidebarFrames.settingsSaved();
+        super.redraw();
+    }
+
     /** Draw the grid, keeping the scroll. */
     protected draw(): void {
         this.scrollRestorer.save();
@@ -228,10 +236,10 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.sidebarManager.syncPresentation(this.isSidebarOpen(), { animate: false });
 
         this.toolbar.detach();
-        // The pinned lists come out before the grid's cards are gathered, so
-        // their cards are neither taken for the grid's nor lost; they go back
-        // into the sidebar built below.
-        this.pinnedLists.lift();
+        // The sidebar's frames come out before the grid's cards are gathered,
+        // so their cards are neither taken for the grid's nor lost; they go
+        // back into the sidebar built below.
+        this.sidebarFrames.lift();
 
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the month grid. Survivors are re-parented and
@@ -245,9 +253,9 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
 
         const toolbarHost = this.container.createDiv('calendar-view__toolbar-host');
         this.toolbar.mount(toolbarHost);
-        const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
+        const { main, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
-        this.pinnedLists.mount(sidebarHeader, sidebarBody);
+        this.sidebarFrames.mount(sidebarBody);
 
         const calendarHost = main.createDiv('cal-grid');
 

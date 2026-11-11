@@ -49,6 +49,23 @@ export function obsidianCli(command: string, flags: Record<string, string | bool
 }
 
 /**
+ * `code` with every character outside ASCII written as its `\uXXXX` escape,
+ * which a string, a template and a regular expression of JavaScript read as
+ * the character.
+ *
+ * A character of several bytes does not always reach Obsidian whole: one
+ * whose bytes lie across the 8048th byte of the code arrived as two U+FFFD
+ * (Obsidian 1.14.5's CLI on macOS; the code seems to be handed over in
+ * pieces of 8192 bytes, each decoded by itself). A text of the vault's
+ * locale in a snippet that long (a menu item's title) then no longer equals
+ * the text on the screen, for one length of the snippet and not for the
+ * next.
+ */
+function asciiOnly(code: string): string {
+    return code.replace(/[^\x00-\x7f]/g, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+/**
  * Evaluate `code` in the Dev vault's Obsidian (`obsidian eval`) and return
  * the value it printed, parsed as JSON when it is JSON. `code` is an
  * expression; a Promise is waited for. A thrown error comes back as
@@ -56,6 +73,7 @@ export function obsidianCli(command: string, flags: Record<string, string | bool
  * needs no quoting. Killed as a CLI call is (see {@link obsidianCli}).
  */
 export function obsidianEval(code: string): unknown {
+    code = asciiOnly(code);
     let raw: string;
     try {
         raw = process.platform === 'win32'

@@ -5,8 +5,8 @@ import { notifyDayRolled, notifyMinute, redrawView } from '../../utils/ObsidianV
  * Tells the open task viewer views what happened, keeping the events apart:
  * settings changed (redraw in place), the visual day changed (each view
  * follows the day its own way) and a minute passed (`MinuteClock`'s tick).
- * Settings and the day used to share one `refresh()`, and Timeline and
- * Schedule went back to today on every settings save.
+ * A view follows a new day by moving (Timeline and Schedule go to today),
+ * which a settings save alone must not do to the day the user is on.
  *
  * This is the one place that decides the visual day changed. `watch` starts
  * from the current day; before it, there is no day to have rolled from.
@@ -23,9 +23,13 @@ export class ViewEvents {
         this.lastVisualDate = this.visualToday();
     }
 
-    /** Settings were saved. A new start hour can move the day; then the views follow it. */
+    /**
+     * Settings were saved. A new start hour can move the day; then the views
+     * follow it first. Either way they redraw in place, since the save may
+     * have changed what they draw from besides (the keys a note is read by).
+     */
     settingsChanged(): void {
-        if (this.rollIfChanged()) return;
+        this.rollIfChanged();
         this.views().forEach(redrawView);
     }
 

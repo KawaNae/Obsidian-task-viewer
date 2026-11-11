@@ -10,7 +10,7 @@ import { F, T } from '../../services/viewConfig/FieldCodecs';
 import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
+import { listFramesOf, type SidebarFrame, type AstronomyDisplay } from '../../types';
 
 /** Timeline days-per-screen bounds. Single constant closes the upper limit
  *  everywhere it's checked (schema, toolbar stepper, CLI export-image). At
@@ -26,7 +26,8 @@ export interface TimelineConfig {
     maskMode?: boolean;
     astronomyDisplay?: Partial<AstronomyDisplay>;
     showSidebar?: boolean;
-    pinnedLists?: PinnedListDefinition[];
+    /** The frames of the sidebar, in the order they are stacked. */
+    sidebar?: SidebarFrame[];
     daysToShow?: number;
     zoomLevel?: number;
     /** Per-view override of all-day section visibility. undefined = follow global. */
@@ -43,7 +44,8 @@ export interface TimelineTransient {
      * `anchor-date` set it.
      */
     date?: string;
-    pinnedListCollapsed?: Record<string, boolean>;
+    /** Which frames of the sidebar are collapsed, by frame id. */
+    sidebarCollapsed?: Record<string, boolean>;
 }
 
 /** The view's state: its config and transient fields as one value (`ViewStore`). */
@@ -64,17 +66,17 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         maskMode:         F.boolean('maskMode'),
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
         showSidebar:      F.boolean('showSidebar'),
-        pinnedLists:      F.pinnedLists('pinnedLists'),
+        sidebar:          F.sidebarFrames('sidebar', { legacyKeys: ['pinnedLists'] }),
         daysToShow:       F.int('daysToShow', { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW, legacyKeys: ['days'] }),
         zoomLevel:        F.float('zoomLevel', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
         showAllDay:       F.boolean('showAllDay'),
         showTimeline:     F.boolean('showTimeline'),
     },
     anchorKey: 'date',
-    listsOf: (config) => config.pinnedLists ?? [],
+    listsOf: (config) => listFramesOf(config.sidebar ?? []),
     transient: {
-        date:                    T.dateString('date'),
-        pinnedListCollapsed:     T.collapsedKeys('pinnedListCollapsed', 'timeline'),
+        date:             T.dateString('date'),
+        sidebarCollapsed: T.collapsedKeys('sidebarCollapsed', 'timeline', { legacyKeys: ['pinnedListCollapsed'] }),
     },
 };
 

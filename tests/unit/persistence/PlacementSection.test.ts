@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Placement, type SectionSide, headingKey } from '../../../src/services/persistence/utils/Placement';
+import { Placement, type SectionSide } from '../../../src/services/persistence/utils/Placement';
+import { headingKey } from '../../../src/services/parsing/utils/HeadingLinks';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { NoteSections } from '../../../src/services/parsing/tree/NoteSections';
 
