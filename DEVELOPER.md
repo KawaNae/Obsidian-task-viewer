@@ -1229,6 +1229,13 @@ MIT License
 5. Keep token design effectively single-layer; only keep `theme-light`/`theme-dark` overrides for app/card background and shadow strength.
 6. Drag-and-drop visuals must separate drop-zone tokens (`--tv-drop-*`) from drag-ghost tokens (`--tv-ghost-*`).
 7. A z-index is a token of ladder [A] or [B] (`src/styles/_variables.css`), never a bare number or an inline `z-index`. A lane card's script writes only its rank, `--lane-z`; `.task-card` turns it into the z-index, capped by `--z-task-card-max`, and `.task-card.is-selected` outranks it by specificity. `.is-selected` itself is written only by `HandleManager`.
+8. Room at a view's bottom. On a phone, Obsidian's floating navigation bar lies over the bottom of the view, and Obsidian gives its height as `--view-bottom-spacing` (a length with the floating bar, `0` without it, nothing on a tablet or the desktop). `body` maps it to `--tv-view-bottom-spacing`, and the plugin does not tell devices apart itself.
+   - Each scroll area that runs to a view's bottom ends in a spacer of that height (`::after` in `_base.css`): the sidebar's body, Timeline's grid, Schedule's body, Calendar's body, Kanban's grid host and the log's list. A new area of that kind goes on the same list.
+   - It is a spacer and not padding: the value may be a unitless `0`, which a `calc()` with a length refuses, while a `height` takes it and takes a negative value (the keyboard taller than the bar) as none. It is `flex: none`, so a flex column does not shrink it.
+   - A view in a phone's drawer has none (`.workspace-drawer` sets it to `0px`): the drawer covers the bar.
+   - The image export sets it to `0px` on its clone (`ViewExporter.captureExpanded`), so the image has no empty band at its bottom.
+   - The mini calendar's body is not on the list: it fits its weeks to its height and does not scroll.
+   - The E2E suite sets `--view-bottom-spacing` on the body as Obsidian does and reads where each area's last content stops (`tests/integration/views/bottom-spacing.test.ts`).
 
 ---
 
