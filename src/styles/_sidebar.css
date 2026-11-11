@@ -13,6 +13,16 @@
     width: 100%;
     overflow: hidden;
     position: relative;
+    /* How long the panel takes to slide and how it eases: what Obsidian's
+       own sidebar takes, so the two open and close alike. On desktop
+       Obsidian animates its sidebar's width by these two variables. */
+    --tv-sidebar-slide: var(--anim-duration-fast) var(--anim-motion-swing);
+}
+
+/* The mobile app slides its drawers by a time and an easing it writes on
+   the drawer itself, in no variable. */
+.is-mobile .tv-sidebar {
+    --tv-sidebar-slide: 200ms ease-in-out;
 }
 
 .tv-sidebar__main {
@@ -60,15 +70,16 @@
 
 /* Animation rules — applied via JS class toggle */
 .tv-sidebar--animate .tv-sidebar__main {
-    transition: margin-right 0.3s ease;
+    transition: margin-right var(--tv-sidebar-slide);
 }
 
 .tv-sidebar--animate .tv-sidebar__panel {
-    transition: transform 0.3s ease;
+    transition: transform var(--tv-sidebar-slide);
 }
 
+/* As the backdrop of Obsidian's drawer fades (`.workspace-drawer-backdrop`). */
 .tv-sidebar--animate .tv-sidebar__backdrop {
-    transition: opacity 0.2s ease;
+    transition: opacity 150ms ease-out;
 }
 
 /* Sidebar panel header: its buttons sit at the right end */
