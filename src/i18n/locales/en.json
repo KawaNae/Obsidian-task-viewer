@@ -718,6 +718,8 @@
     "insertColumnRight": "Insert Column Right",
     "removeRow": "Remove Row",
     "removeColumn": "Remove Column",
+    "addAbove": "Add above",
+    "addBelow": "Add below",
     "moveUp": "Move up",
     "moveDown": "Move down",
     "remove": "Remove",

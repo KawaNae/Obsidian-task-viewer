@@ -65,6 +65,24 @@ export function listFrame(list: PinnedListDefinition): ListFrame {
     return { ...list, kind: 'list' };
 }
 
+/**
+ * Where a new frame of the sidebar goes: at the end of the stack, or right
+ * above or below the frame `id`.
+ */
+export type FrameSlot = { at: 'end' } | { at: 'above' | 'below'; id: string };
+
+/**
+ * `frames` with `frame` put in `slot`. The frame a slot is beside is found by
+ * its id in `frames`, so a slot named before the frames changed (a dialog
+ * open meanwhile) still puts it beside that frame; a frame no longer there
+ * puts it at the end.
+ */
+export function insertFrame(frames: readonly SidebarFrame[], frame: SidebarFrame, slot: FrameSlot): SidebarFrame[] {
+    const beside = slot.at === 'end' ? -1 : frames.findIndex(f => f.id === slot.id);
+    const index = beside < 0 ? frames.length : slot.at === 'below' ? beside + 1 : beside;
+    return [...frames.slice(0, index), frame, ...frames.slice(index)];
+}
+
 /** The frames among `frames` that show a list, in their order. */
 export function listFramesOf(frames: readonly SidebarFrame[]): ListFrame[] {
     return frames.filter((frame): frame is ListFrame => frame.kind === 'list');

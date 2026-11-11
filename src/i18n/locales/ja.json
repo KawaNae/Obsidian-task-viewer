@@ -718,6 +718,8 @@
     "insertColumnRight": "右に列を挿入",
     "removeRow": "行を削除",
     "removeColumn": "列を削除",
+    "addAbove": "上に追加",
+    "addBelow": "下に追加",
     "moveUp": "上に移動",
     "moveDown": "下に移動",
     "remove": "削除",

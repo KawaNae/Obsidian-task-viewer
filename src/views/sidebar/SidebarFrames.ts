@@ -4,9 +4,10 @@
  * The panel holds the frames (`SidebarFrame`): it stacks them down the
  * sidebar in the order of the view's state, adds one, moves and removes one,
  * writes which are collapsed and writes a markdown frame's link, each by the
- * frame's id. Its add button, below the frames, offers a frame of each kind,
- * which is put at the end of the stack: right above the button that added
- * it. What a frame shows
+ * frame's id. A new frame, of either kind, goes in a slot of the stack
+ * (`FrameSlot`): its add button, below the frames, puts one at the end,
+ * right above the button; a frame's ⋯ menu puts one right above or below
+ * that frame. What a frame shows
  * is its kind's (`drawFrame`). A list frame is a saved list, drawn by
  * `TaskListSections`; a markdown frame is a section of a note, drawn by
  * `MarkdownFrameSections`. The panel is the placement of both. The panel
@@ -30,7 +31,7 @@
 
 import { setIcon, type Menu } from 'obsidian';
 import { t } from '../../i18n';
-import { listFrame, listFramesOf, type SidebarFrame } from '../../types';
+import { insertFrame, listFrame, listFramesOf, type FrameSlot, type SidebarFrame } from '../../types';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from '../sharedUI/CardReconciler';
@@ -127,12 +128,12 @@ export class SidebarFrames {
                 frame => frame.kind === 'list' && frame.id === id ? { ...frame, ...patch } : frame,
             )),
             setCollapsed: (id, collapsed) => this.setCollapsed(id, collapsed),
-            insertCopy: (list, copy) => this.insertBelow(list.id, listFrame(copy)),
+            insertCopy: (list, copy) => this.insert(listFrame(copy), { at: 'below', id: list.id }),
             appendMenuItems: (menu, list) => this.appendFrameMenuItems(menu, list.id),
         });
         this.markdown = new MarkdownFrameSections(deps, {
             rowClasses: MARKDOWN_FRAME_ROW_CLASSES,
-            append: frame => this.writeFrames([...this.frames(), frame]),
+            insert: (frame, slot) => this.insert(frame, slot),
             relink: links => this.relink(links),
             setCollapsed: (id, collapsed) => this.setCollapsed(id, collapsed),
             remove: id => this.removeFrame(id),
@@ -197,31 +198,38 @@ export class SidebarFrames {
         this.markdown.placed();
     }
 
-    /**
-     * The add button's menu: a frame of each kind, put at the end of the
-     * stack. A list the panel puts there itself (`addList`), its name edited
-     * once it is drawn; a section is chosen in the dialog the markdown frames
-     * open (`MarkdownFrameSections.add`), which put its frame there through
-     * the placement (`append`).
-     */
+    /** The add button's menu: a frame of each kind, put at the end of the stack. */
     private showAddMenu(button: HTMLElement): void {
         this.deps.plugin.menuPresenter.present((menu) => {
-            menu.addItem(item => item
-                .setTitle(t('pinnedList.addList'))
-                .setIcon('list')
-                .onClick(() => this.addList()));
-            menu.addItem(item => item
-                .setTitle(t('sidebar.addSection'))
-                .setIcon('file-text')
-                .onClick(() => this.markdown.add()));
+            this.appendAddItems(menu, { at: 'end' });
         }, { kind: 'belowRect', rect: button.getBoundingClientRect() });
     }
 
-    /** Put a new list at the end of the stack; its name is edited once it is drawn. */
-    private addList(): void {
+    /**
+     * The items that add a frame of each kind in `slot`. A list the panel
+     * puts there itself (`addList`), its name edited once it is drawn; a
+     * section is chosen in the dialog the markdown frames open
+     * (`MarkdownFrameSections.add`), which put its frame there through the
+     * placement (`insert`) once it is chosen. `close` closes the menu that
+     * holds `menu` as a submenu, as an item chosen in a submenu leaves it
+     * open.
+     */
+    private appendAddItems(menu: Menu, slot: FrameSlot, close?: () => void): void {
+        menu.addItem(item => item
+            .setTitle(t('pinnedList.addList'))
+            .setIcon('list')
+            .onClick(() => { close?.(); this.addList(slot); }));
+        menu.addItem(item => item
+            .setTitle(t('sidebar.addSection'))
+            .setIcon('file-text')
+            .onClick(() => { close?.(); this.markdown.add(slot); }));
+    }
+
+    /** Put a new list in `slot`; its name is edited once it is drawn. */
+    private addList(slot: FrameSlot): void {
         const list = newList();
         this.sections.scheduleRename(list.id);
-        this.writeFrames([...this.frames(), listFrame(list)]);
+        this.insert(listFrame(list), slot);
     }
 
     /** Have the markdown frames be the state's, folded as it says. */
@@ -238,11 +246,9 @@ export class SidebarFrames {
         this.host.write({ sidebar: frames });
     }
 
-    /** Put `frame` right below the frame `id`. */
-    private insertBelow(id: string, frame: SidebarFrame): void {
-        const next = [...this.frames()];
-        next.splice(next.findIndex(f => f.id === id) + 1, 0, frame);
-        this.writeFrames(next);
+    /** Put `frame` in `slot` of the frames the state holds now. */
+    private insert(frame: SidebarFrame, slot: FrameSlot): void {
+        this.writeFrames(insertFrame(this.frames(), frame, slot));
     }
 
     /** Write whether the frame `id` is collapsed. */
@@ -345,12 +351,24 @@ export class SidebarFrames {
         this.writeFrames(next);
     }
 
-    /** The items every frame's menu has: move up and down, offered by where the frame stands as the menu opens, and remove. */
+    /**
+     * The items every frame's menu has: add a frame above and below it, each
+     * a submenu of the add button's items; move up and down, offered by
+     * where the frame stands as the menu opens; and remove.
+     */
     private appendFrameMenuItems(menu: Menu, id: string): void {
         const frames = this.frames();
         const index = frames.findIndex(f => f.id === id);
 
         menu.addSeparator();
+        menu.addItem(item => this.appendAddItems(item
+            .setTitle(t('menu.addAbove'))
+            .setIcon('list-start')
+            .setSubmenu(), { at: 'above', id }, () => menu.close()));
+        menu.addItem(item => this.appendAddItems(item
+            .setTitle(t('menu.addBelow'))
+            .setIcon('list-end')
+            .setSubmenu(), { at: 'below', id }, () => menu.close()));
         if (index > 0) {
             menu.addItem(item => item
                 .setTitle(t('menu.moveUp'))

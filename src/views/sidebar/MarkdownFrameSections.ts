@@ -27,8 +27,8 @@
  *
  * A frame is added, and a frame's section chosen again, in the section
  * dialog (`SectionModal`), which this opens: what is chosen there is
- * written through the placement, a new frame at the end of the stack
- * (`append`) and a frame's new link by its id (`relink`), and reaches the
+ * written through the placement, a new frame in the place it was asked
+ * for (`insert`) and a frame's new link by its id (`relink`), and reaches the
  * frames as any change of the state does. A dialog still open when the
  * frames close is closed with them: what it would choose has no view's
  * state to go to.
@@ -43,7 +43,7 @@ import { frameLinkAt, frameTarget } from '../../services/data/MarkdownFrames';
 import { emptySectionAsk, sectionAskOf, type SectionAsk } from '../../modals/section/SectionDialog';
 import { SectionModal } from '../../modals/section/SectionModal';
 import { newMarkdownFrameId } from '../../services/viewConfig/ListIds';
-import type { MarkdownFrame, SidebarFrame } from '../../types';
+import type { FrameSlot, MarkdownFrame, SidebarFrame } from '../../types';
 import { openFile } from '../../utils/NavigationUtils';
 import type { SectionHeaderClasses } from '../sharedUI/ListSectionRenderer';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -63,8 +63,8 @@ export interface MarkdownFrameDeps {
 export interface MarkdownFramePlacement {
     /** The look of a frame's header row in this place. */
     rowClasses: SectionHeaderClasses;
-    /** Put `frame`, a new markdown frame, at the end of the stack. */
-    append(frame: MarkdownFrame): void;
+    /** Put `frame`, a new markdown frame, in `slot` of the stack. */
+    insert(frame: MarkdownFrame, slot: FrameSlot): void;
     /** Write the markdown frames `links` names with the links it gives, by id, at once. */
     relink(links: ReadonlyMap<string, string>): void;
     /** Write whether the frame `id` is collapsed; the frame already shows it. */
@@ -176,9 +176,12 @@ export class MarkdownFrameSections {
         }
     }
 
-    /** Open the section dialog, empty; a section chosen there is a new frame, put at the end of the stack. */
-    add(): void {
-        this.openDialog('add', emptySectionAsk(), link => this.placement.append({ kind: 'markdown', id: newMarkdownFrameId(), link }));
+    /**
+     * Open the section dialog, empty; a section chosen there is a new frame,
+     * put in `slot` of the stack as the frames are when it is chosen.
+     */
+    add(slot: FrameSlot): void {
+        this.openDialog('add', emptySectionAsk(), link => this.placement.insert({ kind: 'markdown', id: newMarkdownFrameId(), link }, slot));
     }
 
     /** The element of the frame `id`; it has to be among the frames last synced. */
