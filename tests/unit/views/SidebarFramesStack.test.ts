@@ -5,7 +5,7 @@ import { listFrame, type PinnedListDefinition, type SidebarFrame } from '../../.
 import { SidebarFrames, stackInOrder, type SidebarFramesDeps, type SidebarFramesState } from '../../../src/views/sidebar/SidebarFrames';
 import type { ListPlacement } from '../../../src/views/sharedUI/TaskListSections';
 import type { MarkdownFramePlacement } from '../../../src/views/sidebar/MarkdownFrameSections';
-import { FakeEl, asEl } from '../helpers/fakeDom';
+import { FakeEl } from '../helpers/fakeDom';
 
 /**
  * The stack of a sidebar that holds a markdown frame among its lists: the
@@ -134,12 +134,15 @@ function panelOver(sidebar: SidebarFrame[]) {
     };
     /** Put the panel into a sidebar and click its add button: what it gives chooses one of the items of the menu it opened. */
     const add = () => {
-        const header = new FakeEl();
-        frames.mount(asEl(header), { appendChild() {} } as unknown as HTMLElement);
-        const button = header.find('tv-sidebar__panel-add-btn')!;
+        const placed: FakeEl[] = [];
+        frames.mount({ appendChild: (el: FakeEl) => placed.push(el) } as unknown as HTMLElement);
+        const button = placed.find(el => el.classList.contains('tv-sidebar__panel-add-btn'))!;
         Object.assign(button, { getBoundingClientRect: () => ({}) });
         button.dispatchEvent(new Event('click'));
-        return { label: button.textContent, items: addMenu!.titles(), choose: addMenu!.choose };
+        return {
+            placed: placed.map(el => el.classList.contains('tv-sidebar__frames') ? 'frames' : el === button ? 'button' : 'other'),
+            label: button.textContent, items: addMenu!.titles(), choose: addMenu!.choose,
+        };
     };
     /** Change the frames from outside the menu, as a rename of a note does. */
     const set = (frames: SidebarFrame[]) => { state = { ...state, sidebar: frames }; };
@@ -239,6 +242,10 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
         expect(panel.state().sidebar).toEqual([A, B]);
     });
 
+    it('puts its add button into the sidebar after the frames, and not among them', () => {
+        expect(panelOver([A, MEMO]).add().placed).toEqual(['frames', 'button']);
+    });
+
     it('offers a list and a section from its add button, and puts a new list at the end of the stack, its name edited once drawn', () => {
         drawn.renames = [];
         const panel = panelOver([A, MEMO]);
@@ -276,13 +283,15 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
 
 describe('the markdown frames of a sidebar, kept to the state', () => {
     beforeEach(() => {
-        // The panel's element, as much of it as a draw touches.
+        // The panel's elements, as much of them as making the panel and a draw touch.
         vi.stubGlobal('document', {
             createElement: () => {
                 const children: unknown[] = [];
                 return {
                     children,
                     addClass() {},
+                    appendText() {},
+                    addEventListener() {},
                     insertBefore(node: unknown) { children.push(node); return node; },
                     createDiv: () => ({ setText() {} }),
                 };

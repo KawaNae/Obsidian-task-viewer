@@ -120,6 +120,42 @@ function moreTitles(name: string, i: number): string[] {
     })()`);
 }
 
+interface PanelReading {
+    /** The first class of each child of the sidebar's panel, of its body, and of the frames' element. */
+    panel: string[];
+    body: string[];
+    frames: string[];
+    empty: string | null;
+    /** The left edge of the frames' content, where each frame's row starts. */
+    framesLeft: number;
+    framesBottom: number;
+    lastFrame: { id: string | null; bottom: number } | null;
+    button: { label: string; left: number; top: number };
+}
+
+/** What the sidebar's panel of the view `name` holds, in order, and where the add button stands. */
+function panel(name: string): PanelReading {
+    return ev<PanelReading>(`(() => {
+        ${PRELUDE}
+        const el = V(${JSON.stringify(name)}).contentEl;
+        const first = (e) => [...e.children].map(c => c.classList.contains('tv-icon-btn') ? [...c.classList].find(k => k !== 'tv-icon-btn') : c.classList[0]);
+        const frames = el.querySelector('.tv-sidebar__frames');
+        const button = el.querySelector('.tv-sidebar__panel-add-btn');
+        const last = frames.lastElementChild;
+        return JSON.stringify({
+            panel: first(el.querySelector('.tv-sidebar__panel')),
+            body: first(el.querySelector('.tv-sidebar__panel-body')),
+            frames: first(frames),
+            empty: frames.querySelector(':scope > .tv-sidebar__frames--empty')?.textContent ?? null,
+            framesLeft: frames.getBoundingClientRect().left + parseFloat(getComputedStyle(frames).paddingLeft),
+            framesBottom: frames.getBoundingClientRect().bottom,
+            lastFrame: last && !last.classList.contains('tv-sidebar__frames--empty')
+                ? { id: last.dataset.listId ?? last.dataset.frameId ?? null, bottom: last.getBoundingClientRect().bottom } : null,
+            button: { label: button.textContent, left: button.getBoundingClientRect().left, top: button.getBoundingClientRect().top },
+        });
+    })()`);
+}
+
 /** The keys of the state the view `name` saves (`getState`). */
 function stateKeys(name: string): string[] {
     return ev<string[]>(`(() => {
@@ -166,24 +202,15 @@ describe.each([
         openView(name, type, { showSidebar: true, sidebar: [] });
     });
 
-    it('says that nothing is added yet while it holds nothing, under a header that holds the add button alone, at its right end', () => {
-        const r = ev<{ empty: string | null; header: string[]; width: number; gap: number; padding: number }>(`(() => {
-            ${PRELUDE}
-            const el = V(${JSON.stringify(name)}).contentEl;
-            const header = el.querySelector('.tv-sidebar__panel-header');
-            const button = header.querySelector('.tv-sidebar__panel-add-btn');
-            return JSON.stringify({
-                empty: el.querySelector('.tv-sidebar__frames > .tv-sidebar__frames--empty')?.textContent ?? null,
-                header: [...header.children].map(c => c.tagName),
-                width: header.getBoundingClientRect().width,
-                gap: header.getBoundingClientRect().right - button.getBoundingClientRect().right,
-                padding: parseFloat(getComputedStyle(header).paddingRight),
-            });
-        })()`);
+    it('says that nothing is added yet while it holds nothing, with no header row above, and its add button after that, at the frames\' left', () => {
+        const r = panel(name);
         expect(r.empty).toBe(tr('sidebar.empty'));
-        expect(r.header).toEqual(['BUTTON']);
-        expect(r.width).toBeGreaterThan(0);
-        expect(r.gap).toBeCloseTo(r.padding, 0);
+        expect(r.panel).toEqual(['tv-sidebar__panel-body']);
+        expect(r.body).toEqual(['tv-sidebar__frames', 'tv-sidebar__panel-add-btn']);
+        expect(r.frames).toEqual(['tv-sidebar__frames--empty']);
+        expect(r.button.label).toBe(tr('sidebar.add'));
+        expect(r.button.top).toBeGreaterThanOrEqual(r.framesBottom);
+        expect(r.button.left).toBeCloseTo(r.framesLeft, 0);
     });
 
     it('offers a list and a section in the add button\'s menu', () => {
@@ -212,6 +239,14 @@ describe.each([
         expect(r.sections[0].renaming).toBe(true);
         alpha = r.lists[0].id;
         expect(r.sections[0].id).toBe(alpha);
+
+        // The new list is the last frame, right above the button that added it.
+        const p = panel(name);
+        expect(p.body).toEqual(['tv-sidebar__frames', 'tv-sidebar__panel-add-btn']);
+        expect(p.frames).toEqual([C.root]);
+        expect(p.lastFrame!.id).toBe(alpha);
+        expect(p.button.top - p.lastFrame!.bottom).toBeGreaterThanOrEqual(0);
+        expect(p.button.top - p.lastFrame!.bottom).toBeLessThan(30);
 
         r = op(name, `
             const input = sec(0).querySelector('.' + C.nameInput);
