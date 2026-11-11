@@ -40,3 +40,29 @@ body.is-phone.task-viewer-hide-view-header .workspace-drawer-inner:has(
 ) {
     padding-top: 0;
 }
+
+/* Bottom room: the scroll area that runs to a view's bottom ends in a
+   spacer as tall as --tv-view-bottom-spacing, so its last row, button or
+   card scrolls up clear of the phone's floating navigation bar instead of
+   staying under it. A spacer, not padding added to the area's own: the
+   value may be a unitless 0, which a calc() with a length refuses, while a
+   height takes it, and takes a negative value as none. flex: none keeps
+   it from shrinking in the flex columns (Timeline's grid, Calendar's
+   body). The mini calendar's body is no scroll area: it fits its six
+   weeks to its height. */
+.tv-sidebar__panel-body::after,
+.timeline-grid::after,
+.schedule-view__body-scroll::after,
+.cal-grid__body:not(.cal-grid__body--mini)::after,
+.kanban-view__grid-host::after,
+.tv-log-list::after {
+    content: "";
+    display: block;
+    flex: none;
+    height: var(--tv-view-bottom-spacing);
+}
+
+/* A drawer covers the navigation bar, so a view in it needs no room. */
+.workspace-drawer {
+    --tv-view-bottom-spacing: 0px;
+}

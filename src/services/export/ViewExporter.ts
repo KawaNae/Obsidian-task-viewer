@@ -50,6 +50,10 @@ export class ViewExporter {
         clone.style.top = '0';
         clone.style.width = `${container.offsetWidth}px`;
         clone.style.height = `${container.offsetHeight}px`;
+        // The room left under a scroll area for the phone's navigation bar
+        // is for the screen, not for the image: grown to its full height, the
+        // area would bring it in as an empty band at the bottom.
+        clone.style.setProperty('--tv-view-bottom-spacing', '0px');
         container.parentElement!.appendChild(clone);
 
         try {
