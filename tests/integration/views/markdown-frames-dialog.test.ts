@@ -133,6 +133,29 @@ function dialogOf(name: string): string {
             menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.addSection'))});
             if (!(await until(() => panel()))) throw new Error('no section dialog');
         };
+        /** The titles of the ⋯ menu of the frame \`id\`, a list or a markdown frame, and of its submenus as \`parent › title\`; the menu closed again. */
+        const frameMenuTitles = async (id) => {
+            const f = el.querySelector('[data-frame-id="' + id + '"], [data-list-id="' + id + '"]');
+            if (!f) throw new Error('no frame ' + id);
+            headerBtn(C, f, 'more-horizontal').click();
+            await wait(100);
+            const titles = menuItems().flatMap(it => [it.titleEl?.textContent ?? '', ...(it.submenu?.items ?? []).map(s => it.titleEl?.textContent + ' › ' + s.titleEl?.textContent)]);
+            closeMenus();
+            return titles;
+        };
+        /** Open the dialog from the submenu \`where\` (Add above, Add below) of the ⋯ menu of the frame \`id\`, as the user does. */
+        const openAddBeside = async (id, where) => {
+            const f = el.querySelector('[data-frame-id="' + id + '"], [data-list-id="' + id + '"]');
+            if (!f) throw new Error('no frame ' + id);
+            headerBtn(C, f, 'more-horizontal').click();
+            await wait(100);
+            const parent = menuItems().find(it => it.titleEl?.textContent === where);
+            const item = parent?.submenu?.items.find(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.addSection'))});
+            if (!item) throw new Error('no item to add a section under ' + where);
+            closeMenus();
+            item.callback(new MouseEvent('click'));
+            if (!(await until(() => panel()))) throw new Error('no section dialog');
+        };
         /** Type \`text\` into the note field and click the note of the list titled \`title\`; wait until the note is answered. */
         const pickNote = async (text, title) => {
             typeIn(inputs()[0], text);
@@ -699,6 +722,90 @@ describe.each([
             expect(frameLinks(r)).toEqual({ ...frameLinks(before), renamed: `${NOTE}#Plan` });
             expect(r.frames.renamed.name).toBe('Plan');
             expect(r.frames.renamed.text).toBe('s01 Tasks s02');
+        });
+    });
+
+    describe('adding a section beside a frame', () => {
+        /** A list, a folded frame, and one whose note is not there, between two frames. */
+        const FRAMES = [
+            { kind: 'markdown', id: 'top', link: `${NOTE}#Plan` },
+            { kind: 'markdown', id: 'folded', link: `${NOTE}#Log` },
+            { kind: 'markdown', id: 'gone', link: `${GONE}#Plan` },
+            { kind: 'markdown', id: 'bottom', link: OTHER_NOTE },
+        ];
+        const ABOVE = tr('menu.addAbove');
+        const BELOW = tr('menu.addBelow');
+        /** Add the section \`Plan\` of the note from the submenu \`where\` of the frame \`id\`. */
+        const addPlanBeside = (id: string, where: string, meanwhile = '') => onDialog(name, `
+            await openAddBeside(${JSON.stringify(id)}, ${JSON.stringify(where)});
+            await pickNote(${JSON.stringify(SHORT)}, ${JSON.stringify(SHORT)});
+            await openHeadings();
+            await pickChoice('Plan');
+            ${meanwhile}
+            await choose();
+            return JSON.stringify(true);
+        `);
+
+        beforeAll(() => {
+            openView(name, type, { showSidebar: true, sidebar: [FRAMES[0], LIST, ...FRAMES.slice(1)], sidebarCollapsed: { folded: true } });
+        });
+
+        it('offers in the ⋯ menu of a list, a folded frame and one whose note is not there to add a list or a section above and below it', () => {
+            const r = op('');
+            expect(r.frames.folded.collapsed).toBe(true);
+            expect(r.frames.gone.missing).toBe(tr('sidebar.noteNotFound'));
+            for (const id of ['list', 'folded', 'gone']) {
+                const titles = onDialog<string[]>(name, `return JSON.stringify(await frameMenuTitles(${JSON.stringify(id)}));`);
+                expect(titles).toEqual(expect.arrayContaining([
+                    ABOVE, `${ABOVE} › ${tr('pinnedList.addList')}`, `${ABOVE} › ${tr('sidebar.addSection')}`,
+                    BELOW, `${BELOW} › ${tr('pinnedList.addList')}`, `${BELOW} › ${tr('sidebar.addSection')}`,
+                ]));
+                expect(titles.indexOf(BELOW)).toBeLessThan(titles.indexOf(tr('menu.moveUp')));
+            }
+        });
+
+        it('adds a section right below a list and right above a folded frame, the other frames, their ids and folds kept', () => {
+            let before = op('');
+            addPlanBeside('list', BELOW);
+            let r = op('');
+            let frame = added(r, ids(before));
+            expect(frame).toMatchObject({ kind: 'markdown', link: `${NOTE}#Plan` });
+            const at = ids(before).indexOf('list') + 1;
+            expect(ids(r)).toEqual([...ids(before).slice(0, at), frame.id, ...ids(before).slice(at)]);
+            expect(r.order).toEqual(ids(r));
+            expect(r.collapsed).toEqual(before.collapsed);
+            expect(r.frames[frame.id].text).toBe('s01 Tasks s02');
+
+            before = r;
+            addPlanBeside('folded', ABOVE);
+            r = op('');
+            frame = added(r, ids(before));
+            const above = ids(before).indexOf('folded');
+            expect(ids(r)).toEqual([...ids(before).slice(0, above), frame.id, ...ids(before).slice(above)]);
+            expect(r.order).toEqual(ids(r));
+            expect(r.collapsed).toEqual(before.collapsed);
+            expect(r.frames.folded.collapsed).toBe(true);
+        });
+
+        it('puts the section beside its frame as the frames are when it is chosen, and at the end once that frame is gone', () => {
+            const store = `V(${JSON.stringify(name)}).store`;
+            let before = op('');
+            // The frames are turned around while the dialog is open.
+            const turned = [...ids(before)].reverse();
+            addPlanBeside('list', BELOW, `${store}.update({ sidebar: [...${store}.get().sidebar].reverse() }); await wait(100);`);
+            let r = op('');
+            let frame = added(r, ids(before));
+            const at = turned.indexOf('list') + 1;
+            expect(at).not.toBe(ids(before).indexOf('list') + 1);
+            expect(ids(r)).toEqual([...turned.slice(0, at), frame.id, ...turned.slice(at)]);
+            expect(r.order).toEqual(ids(r));
+
+            before = r;
+            const without = ids(before).filter(id => id !== 'bottom');
+            addPlanBeside('bottom', ABOVE, `${store}.update({ sidebar: ${store}.get().sidebar.filter(f => f.id !== 'bottom') }); await wait(100);`);
+            r = op('');
+            frame = added(r, without);
+            expect(ids(r)).toEqual([...without, frame.id]);
         });
     });
 });
