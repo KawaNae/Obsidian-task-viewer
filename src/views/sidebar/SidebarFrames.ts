@@ -4,7 +4,9 @@
  * The panel holds the frames (`SidebarFrame`): it stacks them down the
  * sidebar in the order of the view's state, adds one, moves and removes one,
  * writes which are collapsed and writes a markdown frame's link, each by the
- * frame's id. Its add button offers a frame of each kind. What a frame shows
+ * frame's id. Its add button, below the frames, offers a frame of each kind,
+ * which is put at the end of the stack: right above the button that added
+ * it. What a frame shows
  * is its kind's (`drawFrame`). A list frame is a saved list, drawn by
  * `TaskListSections`; a markdown frame is a section of a note, drawn by
  * `MarkdownFrameSections`. The panel is the placement of both. The panel
@@ -19,10 +21,11 @@
  * element taken out and put back would load what it embeds again. Only a
  * markdown frame out of its place is moved, which is one the user moved.
  *
- * The panel's element outlives the view's draws: the view takes it out
- * before it empties its DOM (`lift`) and puts it back into the sidebar it
- * built (`mount`), so the pages, the opened cards and the markdown frames'
- * bodies are kept.
+ * The panel's elements, the frames' and the add button, outlive the view's
+ * draws: the view takes them out before it empties its DOM (`lift`) and
+ * puts them back into the sidebar it built (`mount`), so the pages, the
+ * opened cards and the markdown frames' bodies are kept. The button is not
+ * a child of the frames' element, whose children are the frames alone.
  */
 
 import { setIcon, type Menu } from 'obsidian';
@@ -98,6 +101,7 @@ export function stackInOrder(parent: Pick<HTMLElement, 'children' | 'insertBefor
 
 export class SidebarFrames {
     private readonly el: HTMLElement;
+    private readonly addBtn: HTMLElement;
     private readonly sections: TaskListSections;
     private readonly markdown: MarkdownFrameSections;
     /** The window's animation frames, in which a requested draw runs. */
@@ -111,6 +115,11 @@ export class SidebarFrames {
     ) {
         this.el = document.createElement('div');
         this.el.addClass('tv-sidebar__frames');
+        this.addBtn = document.createElement('button');
+        this.addBtn.addClass('tv-icon-btn', 'tv-sidebar__panel-add-btn');
+        setIcon(this.addBtn, 'plus');
+        this.addBtn.appendText(t('sidebar.add'));
+        this.addBtn.addEventListener('click', () => this.showAddMenu(this.addBtn));
         this.sections = new TaskListSections(deps, {
             classes: PINNED_LIST_CLASSES,
             scopePrefix: 'pl',
@@ -177,15 +186,13 @@ export class SidebarFrames {
      */
     lift(): void {
         this.el.remove();
+        this.addBtn.remove();
     }
 
-    /** Put the panel into a sidebar the view built: the add button into its header, the frames into its body. */
-    mount(header: HTMLElement, body: HTMLElement): void {
-        const addBtn = header.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
-        setIcon(addBtn, 'plus');
-        addBtn.appendText(t('sidebar.add'));
-        addBtn.addEventListener('click', () => this.showAddMenu(addBtn));
+    /** Put the panel into the body of a sidebar the view built: the frames, and the add button after them. */
+    mount(body: HTMLElement): void {
         body.appendChild(this.el);
+        body.appendChild(this.addBtn);
         // A body that waited for the panel to stand in a sidebar is rendered now.
         this.markdown.placed();
     }
