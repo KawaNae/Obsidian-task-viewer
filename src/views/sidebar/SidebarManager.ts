@@ -77,12 +77,11 @@ export class SidebarManager {
      * Creates the sidebar layout DOM inside `parent`.
      * Call every render cycle (after parent.empty()).
      *
-     * Returns references to the main content area, sidebar header, and sidebar body
-     * so the view can render its own content into them.
+     * Returns references to the main content area and the sidebar's body,
+     * which scrolls, so the view can render its own content into them.
      */
     buildLayout(parent: HTMLElement): {
         main: HTMLElement;
-        sidebarHeader: HTMLElement;
         sidebarBody: HTMLElement;
     } {
         const layout = parent.createDiv('tv-sidebar');
@@ -102,13 +101,12 @@ export class SidebarManager {
         const sidebar = layout.createDiv('tv-sidebar__panel');
         this.sidebarEl = sidebar;
 
-        const sidebarHeader = sidebar.createDiv('tv-sidebar__panel-header');
         const sidebarBody = sidebar.createDiv('tv-sidebar__panel-body');
 
         // Apply current open/closed state to freshly created elements
         this.syncPresentation(this.config.getIsOpen(), { animate: false });
 
-        return { main, sidebarHeader, sidebarBody };
+        return { main, sidebarBody };
     }
 
     // ----- DOM Application -----

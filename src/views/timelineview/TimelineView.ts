@@ -550,9 +550,9 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         const toolbarHost = this.container.createDiv('timeline-view__toolbar-host');
 
         // Build sidebar layout (bottom row)
-        const { main, sidebarHeader, sidebarBody } = this.sidebarManager.buildLayout(this.container);
+        const { main, sidebarBody } = this.sidebarManager.buildLayout(this.container);
 
-        this.sidebarFrames.mount(sidebarHeader, sidebarBody);
+        this.sidebarFrames.mount(sidebarBody);
 
         const dates = windowDates(this.window());
 

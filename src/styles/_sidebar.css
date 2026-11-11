@@ -86,20 +86,17 @@
     transition: opacity 150ms ease-out;
 }
 
-/* Sidebar panel header: its buttons sit at the right end */
-.tv-sidebar__panel-header {
-    padding: 2px 8px;
-    margin: 0;
-    height: var(--header-height);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
-/* button を付けて (0,2,1) にし、tv-icon-btn のタブレットの余白の規則
+/* The add button, after the frames, scrolled with them. Its top and left
+   margins are a frame header row's padding (_sidebar-frame.css), so its icon stands
+   under the frames' fold arrows, as far below the last frame as the next
+   frame's arrow would be. A block box as wide as its content, so no line
+   box of the body's font adds to the room above and below it.
+   button を付けて (0,2,1) にし、tv-icon-btn のタブレットの余白の規則
    （_controls.css）に後の順で勝つ */
 .tv-sidebar__panel button.tv-sidebar__panel-add-btn {
+    display: flex;
+    width: fit-content;
+    margin: 6px 4px 12px;
     height: 22px;
     gap: 4px;
     padding: 0 6px;
@@ -122,9 +119,12 @@
 
 /* The frames stacked down the panel's body. The custom property says this
    stylesheet is applied: the markdown frames read it before they render
-   what measures the room it has (MarkdownFrameSections). */
+   what measures the room it has (MarkdownFrameSections). It holds the
+   margin under its last frame, so the add button after it stands where the
+   next frame's header row would. */
 .tv-sidebar__frames {
     --tv-sidebar-frames-styled: 1;
+    display: flow-root;
     padding: 0 4px;
 }
 
