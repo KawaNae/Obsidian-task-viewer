@@ -59,10 +59,14 @@
     box-shadow: none;
 }
 
+/* What covers the main area while the panel lies over it. Its color is the
+   one Obsidian covers the workspace with behind its own drawer: in a light
+   theme a pale veil, under which the toolbar's line above still reads as a
+   line. */
 .tv-sidebar__backdrop {
     position: absolute;
     inset: 0;
-    background-color: rgba(var(--tv-shadow-rgb), 0.35);
+    background-color: var(--background-modifier-cover);
     opacity: 0;
     pointer-events: none;
     z-index: calc(var(--z-view-drawer) - 1);
