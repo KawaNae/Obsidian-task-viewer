@@ -4,7 +4,7 @@
  * the note's hotkeys out while it is open, takes no Enter an IME commits a
  * conversion with, and behaves as Obsidian's lists do: the first item is
  * selected as it opens, an Enter puts the selected item in, and an Escape
- * closes the list alone.
+ * closes the list alone. A list stays on its field while the field moves.
  *
  * The hub is opened on a row as a card opens it, a note beside it active in
  * source mode; fields are typed in as a person types (the text, then its
@@ -137,6 +137,57 @@ describe('a list open under a field keeps the note\'s hotkeys out', () => {
             return JSON.stringify({ listed, line: editor.getLine(2), focused: document.activeElement === nameInput() });
         `);
         expect(result).toEqual({ listed: true, line: '- [ ] 次', focused: true });
+    });
+});
+
+describe('a list stays on its field while the field moves', () => {
+    it('the hub\'s name: as the window is narrowed, its [[ list is put by the field again, at its [[, its footer and the item selected kept', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const result = run<Record<string, unknown>>(`
+            const win = require('electron').remote.getCurrentWindow();
+            const bounds = win.getBounds();
+            try {
+                await openHub('親');
+                type(nameInput(), '親 [[test-int-suggest');
+                await until(() => list()?.items.length > 1);
+                key(nameInput(), { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 });
+                await sleep(100);
+                const box = () => document.querySelector('.suggestion-container');
+                const read = () => {
+                    const f = nameInput().getBoundingClientRect();
+                    const b = box().getBoundingClientRect();
+                    return {
+                        fieldLeft: f.left,
+                        // The list stands 5px under the field, or above it where there is no room under it.
+                        gap: Math.round(b.top >= f.bottom ? b.top - f.bottom : f.top - b.bottom),
+                        // From the field's left edge to the list's: where the [[ is in the field.
+                        atTrigger: Math.round(b.left - f.left),
+                        footer: !!box().querySelector('.task-name-suggest__footer'),
+                        selected: list().selected,
+                    };
+                };
+                const before = read();
+                // The hub stands in the middle of the window's width: a narrower window moves it.
+                win.setBounds({ ...bounds, width: bounds.width - 160 });
+                await until(() => nameInput().getBoundingClientRect().left !== before.fieldLeft);
+                await sleep(300);
+                const after = read();
+                return JSON.stringify({
+                    moved: after.fieldLeft !== before.fieldLeft,
+                    before: { ...before, fieldLeft: undefined },
+                    after: { ...after, fieldLeft: undefined },
+                });
+            } finally {
+                win.setBounds(bounds);
+                await sleep(300);
+            }
+        `);
+        const before = result.before as Record<string, unknown>;
+        expect(result.moved).toBe(true);
+        expect(before.gap).toBe(5);
+        expect(before.atTrigger).toBeGreaterThan(0);
+        expect(before.footer).toBe(true);
+        expect(result.after).toEqual(before);
     });
 });
 

@@ -470,6 +470,56 @@ describe.each([
         expect(r).toEqual({ listed: true, closed: true, open: true, focused: true });
     });
 
+    it('keeps the note field\'s list on the field as what is said under the fields moves the field, the dialog grown', () => {
+        const r = onDialog<{ moved: boolean; gap: number }>(name, `
+            await openAdd();
+            await wait(200);
+            const field = inputs()[0];
+            const box = () => document.querySelector('.suggestion-container');
+            typeIn(field, ${JSON.stringify(SHORT)});
+            // The list is put by the field as it is typed in; the note is answered after.
+            const typedAt = field.getBoundingClientRect().top;
+            if (!(await until(() => state().noteSays && box()))) throw new Error('the note is not answered: ' + JSON.stringify(state()));
+            await wait(200);
+            const f = field.getBoundingClientRect();
+            const b = box().getBoundingClientRect();
+            // 5px under the field, or above it where there is no room under it.
+            const gap = Math.round(b.top >= f.bottom ? b.top - f.bottom : f.top - b.bottom);
+            return JSON.stringify({ moved: f.top !== typedAt, gap });
+        `);
+        expect(r).toEqual({ moved: true, gap: 5 });
+    });
+
+    it('keeps the note field\'s list on the field when the room it is kept in grows a frame after the field moved, as Android\'s keyboard closing does', () => {
+        const r = onDialog<{ moved: boolean; gap: number }>(name, `
+            await openAdd();
+            await wait(200);
+            const field = inputs()[0];
+            const box = () => document.querySelector('.suggestion-container');
+            if (!(await until(() => box()))) throw new Error('no list');
+            const room = box().offsetParent ?? document.documentElement;
+            const before = field.getBoundingClientRect().top;
+            const nextFrame = () => new Promise(r => requestAnimationFrame(r));
+            try {
+                // The keyboard up: Obsidian keeps the list above the bottom safe area, here up to above the field.
+                room.style.setProperty('--safe-area-inset-bottom', Math.round(innerHeight - before + 50) + 'px');
+                await wait(200);
+                // The keyboard closing: the dialog moves the field down, and the safe area shrinks on the next frame.
+                panel().style.marginTop = '120px';
+                await nextFrame();
+                room.style.removeProperty('--safe-area-inset-bottom');
+                await wait(300);
+                const f = field.getBoundingClientRect();
+                const b = box().getBoundingClientRect();
+                return JSON.stringify({ moved: f.top !== before, gap: Math.round(b.top >= f.bottom ? b.top - f.bottom : f.top - b.bottom) });
+            } finally {
+                room.style.removeProperty('--safe-area-inset-bottom');
+                panel().style.marginTop = '';
+            }
+        `);
+        expect(r).toEqual({ moved: true, gap: 5 });
+    });
+
     it('closes a dialog left open when its view is closed', () => {
         const other = `${name}-closed`;
         openView(other, type, { showSidebar: true, sidebar: [LIST] });
