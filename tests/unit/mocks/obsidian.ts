@@ -156,6 +156,17 @@ export class AbstractInputSuggest extends PopoverSuggest {
     }
     setValue(value: string): void { this.inputEl.value = value; }
     getValue(): string { return this.inputEl.value; }
+    /** The field's places the list was put by, in order. */
+    placements: unknown[] = [];
+    /**
+     * Obsidian 1.14.5's: opened or not, the list is put by the field's place
+     * as it is now.
+     */
+    open(): void {
+        super.open();
+        this.reposition(this.inputEl.getBoundingClientRect());
+    }
+    reposition(rect: unknown): void { this.placements.push(rect); }
 }
 
 export class Setting {
