@@ -9,7 +9,7 @@
  * since the caller hears the vault for every frame: `follow` for which file
  * the link names, `read` for what the file holds.
  *
- * A note is the file found and the path it had when it was found: a body is
+ * A note is the file found and the path it had when it was found: a card is
  * resolved against the path, so the same file at a new path is another note
  * to read. Readings may end out of the order they began in; one overtaken by
  * a later one, or one that ends after `close`, is dropped.
@@ -25,7 +25,7 @@ import { isNote } from '../../utils/NoteLink';
 
 /**
  * What a frame read, with the name its row shows of it. A section of a note
- * comes with the path its body is resolved against, the note's path when it
+ * comes with the path its cards are resolved against, the note's path when it
  * was found; that the note is not there comes with no path.
  */
 export type FrameRead =
