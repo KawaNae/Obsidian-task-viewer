@@ -12,22 +12,32 @@ export interface StoredFrame {
     link?: string;
 }
 
+/** One card of a frame, as drawn. */
+export interface Card {
+    /** Whether the card is displayed: it is not while its frame is folded. */
+    shown: boolean;
+    /** The rendered markdown's text; null when the card holds none. */
+    text: string | null;
+    /** The rendered markdown's element has the mark `mark()` put on it; null when the card holds none. */
+    kept: boolean | null;
+    color: string | null;
+    linestyle: string | null;
+    /** The mask the card shows in place of its markdown; null when it shows none. */
+    mask: string | null;
+    /** The text of the heading kept above the mask; null when there is none. */
+    heading: string | null;
+}
+
 export interface Frame {
     id: string;
     name: string | null;
     collapsed: boolean;
-    /** Whether the card is displayed. */
+    /** Whether the frame's cards are displayed. */
     shown: boolean;
-    /** The body's text; null when the card holds no body. */
-    text: string | null;
-    /** The body's element has the mark `mark()` put on it; null when the card holds no body. */
-    kept: boolean | null;
-    color: string | null;
-    linestyle: string | null;
-    /** What the card says is not there; null when the section is found. */
+    /** The frame's cards, in their order. */
+    cards: Card[];
+    /** What the frame's card says is not there; null when the section is found. */
     missing: string | null;
-    /** The mask the card shows in place of the body; null when it shows none. */
-    mask: string | null;
 }
 
 export interface Reading {
@@ -70,7 +80,9 @@ export function framesOf(prefix: string, name: string): string {
             if (!f) throw new Error('no frame ' + id);
             return f;
         };
-        const bodyOf = (id) => frame(id).querySelector('.markdown-frame__content');
+        const cardsOf = (id) => [...frame(id).querySelectorAll('.markdown-frame__card')];
+        // The rendered markdown of the card at \`i\` of the frame \`id\`, the first by default.
+        const bodyOf = (id, i = 0) => cardsOf(id)[i]?.querySelector('.markdown-frame__content') ?? null;
         const mark = () => el.querySelectorAll('.markdown-frame__content').forEach(b => { b.__tvE2EMark = true; });
         const openMenu = async (id) => { headerBtn(C, frame(id), 'more-horizontal').click(); await wait(100); };
         // Turn the view's masking on or off from its toolbar, as the user does.
@@ -91,19 +103,26 @@ export function readFrames(prefix: string, name: string, body: string, settleMs 
         const text = (n) => n.textContent.replace(/\\s+/g, ' ').trim();
         const frames = {};
         for (const f of el.querySelectorAll('.markdown-frame')) {
-            const card = f.querySelector('.markdown-frame__card');
-            const body = f.querySelector('.markdown-frame__content');
+            const cards = [...f.querySelectorAll('.markdown-frame__card')].map(card => {
+                const body = card.querySelector('.markdown-frame__content');
+                const heading = card.querySelector('.markdown-frame__heading');
+                return {
+                    shown: card.getClientRects().length > 0,
+                    text: body ? text(body) : null,
+                    kept: body ? body.__tvE2EMark === true : null,
+                    color: card.style.getPropertyValue('--file-accent') || null,
+                    linestyle: card.dataset.fileLinestyle ?? null,
+                    mask: card.querySelector('.markdown-frame__mask')?.textContent ?? null,
+                    heading: heading ? text(heading) : null,
+                };
+            });
             frames[f.dataset.frameId] = {
                 id: f.dataset.frameId,
                 name: f.querySelector('.sidebar-frame__name')?.textContent ?? null,
                 collapsed: f.classList.contains('markdown-frame--collapsed'),
-                shown: getComputedStyle(card).display !== 'none',
-                text: body ? text(body) : null,
-                kept: body ? body.__tvE2EMark === true : null,
-                color: card.style.getPropertyValue('--file-accent') || null,
-                linestyle: card.dataset.fileLinestyle ?? null,
+                shown: getComputedStyle(f.querySelector('.markdown-frame__cards')).display !== 'none',
+                cards,
                 missing: f.querySelector('.markdown-frame__missing-reason')?.textContent ?? null,
-                mask: f.querySelector('.markdown-frame__mask')?.textContent ?? null,
             };
         }
         const count = el.querySelector('.pinned-list .pinned-list__count')?.textContent;
@@ -117,6 +136,21 @@ export function readFrames(prefix: string, name: string, body: string, settleMs 
             maskMode: state.maskMode ?? false,
         });
     })()`);
+}
+
+/** The text of each card of `frame`, in order: null for a card that holds no rendered markdown. */
+export function texts(frame: Frame): (string | null)[] {
+    return frame.cards.map(card => card.text);
+}
+
+/** Whether each card of `frame` holds the element it held when `mark()` ran. */
+export function kept(frame: Frame): (boolean | null)[] {
+    return frame.cards.map(card => card.kept);
+}
+
+/** The color and line style of each card of `frame`. */
+export function styles(frame: Frame): [string | null, string | null][] {
+    return frame.cards.map(card => [card.color, card.linestyle]);
 }
 
 /** The links the state of `r` holds for its markdown frames, by frame id. */
