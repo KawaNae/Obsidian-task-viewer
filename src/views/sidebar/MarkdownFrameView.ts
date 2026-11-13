@@ -78,7 +78,7 @@ interface WantedCard {
     style: CardStyle;
 }
 
-const NO_STYLE: CardStyle = { color: null, linestyle: null };
+const NO_STYLE: CardStyle = { color: null, linestyle: null, opensWithHeading: false };
 
 export class MarkdownFrameView {
     readonly root: HTMLElement;
@@ -202,7 +202,7 @@ export class MarkdownFrameView {
             content: masked && card.mask !== null
                 ? { kind: 'mask', heading: card.heading, text: card.mask, path }
                 : { kind: 'body', markdown: card.markdown, path },
-            style: { color: card.color, linestyle: card.linestyle },
+            style: { color: card.color, linestyle: card.linestyle, opensWithHeading: card.heading !== null },
         }));
     }
 

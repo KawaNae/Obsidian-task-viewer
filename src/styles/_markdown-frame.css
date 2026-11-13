@@ -55,13 +55,14 @@
    its `--h*-size` and `--h*-line-height` and spaces it from the block
    before by `--heading-spacing`, all for a note's page: there an `##` is
    half again the body, with a blank line and a half above it, larger than
-   the frame's name. In the card a heading stays a little larger than its
-   body, and below the frame's name. The heading kept over a card's mask is
-   sized as it is over its body. */
+   the frame's name. In the card a heading's size does not follow its
+   level: the heading that opens a card is the card's name, a little larger
+   than its body and below the frame's name, and any other heading in the
+   card is as large as the body, set apart by its weight. */
 :is(.markdown-frame__content, .markdown-frame__heading) {
-    --h1-size: 1.15em;
-    --h2-size: 1.15em;
-    --h3-size: 1.08em;
+    --h1-size: 1em;
+    --h2-size: 1em;
+    --h3-size: 1em;
     --h4-size: 1em;
     --h5-size: 1em;
     --h6-size: 1em;
@@ -85,6 +86,16 @@
 
 :is(.markdown-frame__content, .markdown-frame__heading) > :first-child {
     margin-block-start: 4px;
+}
+
+/* The heading that opens a card: the first line of a card the reading
+   opened with a heading nested in the frame's section
+   (`markdown-frame__card--headed`), and the heading kept over a card's
+   mask. A heading the markdown draws first in another card is not one:
+   the reading did not take it for a heading. */
+.markdown-frame__card--headed > .markdown-frame__content > :first-child:is(h1, h2, h3, h4, h5, h6),
+.markdown-frame__heading > :first-child:is(h1, h2, h3, h4, h5, h6) {
+    font-size: 1.08em;
 }
 
 .markdown-frame__content > :last-child {
