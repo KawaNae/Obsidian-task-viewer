@@ -54,11 +54,10 @@
 /* Headings, sized and spaced for the card. Obsidian sizes a heading from
    its `--h*-size` and `--h*-line-height` and spaces it from the block
    before by `--heading-spacing`, all for a note's page: there an `##` is
-   half again the body, with a blank line and a half above it, larger than
-   the frame's name. In the card a heading's size does not follow its
-   level: the heading that opens a card is the card's name, a little larger
-   than its body and below the frame's name, and any other heading in the
-   card is as large as the body, set apart by its weight. */
+   half again the body, with a blank line and a half above it. In the card
+   a heading's size does not follow its level: the heading that opens a
+   card is the card's name, a little larger than its body, and any other
+   heading in the card is as large as the body, set apart by its weight. */
 :is(.markdown-frame__content, .markdown-frame__heading) {
     --h1-size: 1em;
     --h2-size: 1em;
