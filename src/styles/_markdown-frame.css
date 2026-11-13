@@ -8,9 +8,10 @@
     margin-bottom: 8px;
 }
 
-/* The card. Its surface and accent bar are the task card's: the
-   `task-card__shape` it holds is painted by _task-card.css from the same
-   `--file-accent` and `data-file-linestyle`. */
+/* A card of the frame, one for each part of its section. Its surface and
+   accent bar are the task card's: the `task-card__shape` it holds is
+   painted by _task-card.css from the same `--file-accent` and
+   `data-file-linestyle`. The cards are spaced as a list's task cards are. */
 .markdown-frame__card {
     /* A stacking context of its own, so the shape (z-index: -1) stays
        behind the content and in front of the sidebar. */
@@ -26,8 +27,12 @@
     color: var(--tv-text);
 }
 
-/* Folded: the card is hidden, and what is drawn in it is kept. */
-.markdown-frame--collapsed .markdown-frame__card {
+.markdown-frame__card + .markdown-frame__card {
+    margin-top: var(--task-card-gap);
+}
+
+/* Folded: the cards are hidden, and what is drawn in them is kept. */
+.markdown-frame--collapsed .markdown-frame__cards {
     display: none;
 }
 
@@ -51,8 +56,9 @@
    before by `--heading-spacing`, all for a note's page: there an `##` is
    half again the body, with a blank line and a half above it, larger than
    the frame's name. In the card a heading stays a little larger than its
-   body, and below the frame's name. */
-.markdown-frame__content {
+   body, and below the frame's name. The heading kept over a card's mask is
+   sized as it is over its body. */
+:is(.markdown-frame__content, .markdown-frame__heading) {
     --h1-size: 1.15em;
     --h2-size: 1.15em;
     --h3-size: 1.08em;
@@ -72,12 +78,12 @@
    a list, a table or a code block, and by `--p-spacing` after anything
    else. In the card every heading is spaced alike above, and below as a
    paragraph is. */
-.markdown-frame__content :is(h1, h2, h3, h4, h5, h6) {
+:is(.markdown-frame__content, .markdown-frame__heading) :is(h1, h2, h3, h4, h5, h6) {
     margin-block-start: var(--heading-spacing);
     margin-block-end: 5px;
 }
 
-.markdown-frame__content > :first-child {
+:is(.markdown-frame__content, .markdown-frame__heading) > :first-child {
     margin-block-start: 4px;
 }
 
@@ -99,19 +105,20 @@
 }
 
 /* Links take the card's color, as a task card's do. */
-.markdown-frame__content a {
+:is(.markdown-frame__content, .markdown-frame__heading) a {
     color: var(--file-accent, var(--tv-link));
     text-decoration: none;
 }
 
-.markdown-frame__content a:hover {
+:is(.markdown-frame__content, .markdown-frame__heading) a:hover {
     color: var(--file-accent-hover, var(--tv-link-hover));
     text-decoration: underline;
 }
 
-/* The section's mask, shown in place of its body while the view masks: the
+/* A card's mask, shown in place of its markdown while the view masks: the
    card's text, as a masked task card shows its mask, spaced as a body of one
-   paragraph is. */
+   paragraph is. A card a heading opens keeps the heading above it, spaced
+   below as a heading of a body is. */
 .markdown-frame__mask {
     margin-block: 4px;
     overflow-wrap: anywhere;

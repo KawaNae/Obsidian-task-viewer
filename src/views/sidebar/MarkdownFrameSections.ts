@@ -22,7 +22,7 @@
  * look again for the note its link names. A saved setting has them read
  * again, since the keys a section's style is read by are settings.
  *
- * A body that measures the room it has (a chart) is rendered once the panel
+ * Markdown that measures the room it has (a chart) is rendered once the panel
  * stands in a document, styled by the plugin's stylesheet (`canRender`).
  *
  * A frame is added, and a frame's section chosen again, in the section
@@ -50,7 +50,7 @@ import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteraction
 import { MarkdownFrameReader } from './MarkdownFrameReader';
 import { MarkdownFrameView } from './MarkdownFrameView';
 
-/** What the markdown frames read and draw with: the plugin, and how a link drawn in a body is opened and previewed. */
+/** What the markdown frames read and draw with: the plugin, and how a link drawn in a card is opened and previewed. */
 export interface MarkdownFrameDeps {
     plugin: PluginContext;
     /** Opens and previews a link drawn in a markdown frame, as a link on a card. */
@@ -73,7 +73,7 @@ export interface MarkdownFramePlacement {
     remove(id: string): void;
     /** The ⋯ menu's items of this place, below the frame's own. */
     appendMenuItems(menu: Menu, id: string): void;
-    /** Whether the view masks now: a section's mask is shown in place of its body. */
+    /** Whether the view masks now: a section's mask is shown in place of its markdown. */
     masked(): boolean;
 }
 
@@ -101,7 +101,7 @@ export class MarkdownFrameSections {
     /** Ends the wait for the stylesheet; null while none is waited for. */
     private stopAwaitingStylesheet: (() => void) | null = null;
 
-    /** `container` is the element the frames are stacked in, whose place in a document and style tell when a body can be rendered. */
+    /** `container` is the element the frames are stacked in, whose place in a document and style tell when markdown can be rendered. */
     constructor(
         private readonly deps: MarkdownFrameDeps,
         private readonly placement: MarkdownFramePlacement,
@@ -201,7 +201,7 @@ export class MarkdownFrameSections {
 
     /**
      * Have every frame's card show what it shows now: a change of the
-     * view's masking comes in here, and a body that waited is rendered once
+     * view's masking comes in here, and markdown that waited is rendered once
      * it can be.
      */
     paint(): void {
@@ -209,7 +209,7 @@ export class MarkdownFrameSections {
     }
 
     /**
-     * The container may stand where a body can be rendered now: put into a
+     * The container may stand where markdown can be rendered now: put into a
      * sidebar, or styled. The frames are painted when it can, and the wait
      * for the stylesheet ends.
      */
@@ -319,7 +319,7 @@ export class MarkdownFrameSections {
     }
 
     /**
-     * Whether a body can be rendered: the container stands in a document,
+     * Whether markdown can be rendered: the container stands in a document,
      * styled by the plugin's stylesheet. Obsidian applies a plugin's
      * stylesheet after the plugin has loaded, and a view the load opens is
      * drawn before that, its sidebar as wide as the view; a chart rendered
