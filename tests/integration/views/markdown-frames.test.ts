@@ -1,9 +1,11 @@
 /**
  * The markdown frames of Timeline's and Calendar's sidebar, in the running
  * Dev vault: a frame the view's state holds (`kind: 'markdown'`, a link to a
- * heading of a note, or to the whole note) drawn as a card of the section's
- * markdown under a header row, kept across the panel's draws, and following
- * its note as the note is written to, renamed, deleted and made again.
+ * heading of a note, or to the whole note) drawn under a header row as the
+ * section's cards, one for the lines under the section's own heading and
+ * one for each heading nested one level in it, kept across the panel's
+ * draws, and following its note as the note is written to, renamed,
+ * deleted and made again.
  *
  * Then the frames as their notes move: a folder renamed, a note renamed
  * while its frame is folded, and one renamed before the panel draws the
@@ -15,9 +17,9 @@
  *
  * The frames are put into the view's state as the workspace hands it over
  * (`openView`); what they show is read from their DOM, and what the view
- * keeps from `getState` (`sidebar`, `sidebarCollapsed`, `maskMode`). Whether a body was
- * rendered anew is told by a mark put on its element: an element made anew
- * does not have it. The notes are the test's own, under `SyncIgnore/`, and
+ * keeps from `getState` (`sidebar`, `sidebarCollapsed`, `maskMode`). Whether a card's
+ * markdown was rendered anew is told by a mark put on its element: an
+ * element made anew does not have it. The notes are the test's own, under `SyncIgnore/`, and
  * are written, renamed and deleted through the vault, as Obsidian does it.
  *
  * The last part asks Obsidian itself which heading a link names: it renders
@@ -35,7 +37,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
-import { deleteNotesUnder, frameLinks as links, framesOf, notesUnder, readFrames, type Reading } from '../helpers/markdown-frames';
+import { deleteNotesUnder, frameLinks as links, framesOf, kept, notesUnder, readFrames, styles, texts, type Reading } from '../helpers/markdown-frames';
 import {
     PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay, type HeldSettings,
 } from '../helpers/view-helper';
@@ -122,13 +124,13 @@ function moreTitles(name: string, id: string): string[] {
 const deleteNotes = (): void => deleteNotesUnder(PREFIX);
 
 /**
- * The path a link of the body of the frame `id` is previewed from, as a
- * hover over it tells: the path the body was resolved against.
+ * The path the first link of the cards of the frame `id` is previewed
+ * from, as a hover over it tells: the path the card was resolved against.
  */
 function hoverSource(name: string, id: string): string | null {
     return ev<string | null>(`(async () => {
         ${names(name)}
-        const link = bodyOf(${JSON.stringify(id)})?.querySelector('a.internal-link');
+        const link = frame(${JSON.stringify(id)}).querySelector('.markdown-frame__content a.internal-link');
         if (!link) return JSON.stringify(null);
         let source = null;
         const ref = app.workspace.on('hover-link', (p) => { source = p.sourcePath; });
@@ -206,39 +208,47 @@ describe.each([
         expect(r.empty).toBe(false);
         expect(r.listCount).toBe(1);
 
-        // A heading's section: its text as the note writes it, its body without the heading and the property lines.
+        // A heading's section: its text as the note writes it; a card of the lines under the heading,
+        // without the property lines, and one for the heading nested in it, which opens with that heading.
         expect(r.frames.memo.name).toBe('Memo');
-        expect(r.frames.memo.text).toBe('memo one test-int-mdframes-tasks Deep deep text');
+        expect(texts(r.frames.memo)).toEqual(['memo one test-int-mdframes-tasks', 'Deep deep text']);
         expect(r.frames.memo.missing).toBeNull();
+        // A section with no heading nested in it is a single card.
         expect(r.frames.plain.name).toBe('Plain **bold** [[Link]]');
-        expect(r.frames.plain.text).toBe('plain text');
+        expect(texts(r.frames.plain)).toEqual(['plain text']);
 
-        // The whole note: the note's name, and the note past its frontmatter.
+        // The whole note: the note's name; the lines above its first heading, past the frontmatter,
+        // and a card for each of its headings, a deeper heading inside its card.
         expect(r.frames.whole.name).toBe(SHORT);
-        expect(r.frames.whole.text).toBe('intro of the note Memo memo one test-int-mdframes-tasks Deep deep text Plain bold Link plain text');
+        expect(texts(r.frames.whole)).toEqual([
+            'intro of the note',
+            'Memo memo one test-int-mdframes-tasks Deep deep text',
+            'Plain bold Link plain text',
+        ]);
     });
 
-    it('styles a card as a task of its section is: the section\'s own color and line style, or the note\'s', () => {
+    it('styles each card as a task of its own section is: the section\'s own color and line style, or those it inherits', () => {
         const r = op(name, '', 0);
-        expect([r.frames.memo.color, r.frames.memo.linestyle]).toEqual(['teal', 'dashed']);
-        expect([r.frames.plain.color, r.frames.plain.linestyle]).toEqual(['purple', null]);
-        expect([r.frames.whole.color, r.frames.whole.linestyle]).toEqual(['purple', null]);
-        const shape = ev<{ shapes: number; surface: boolean }>(`(() => {
+        // The nested heading declares nothing: its card takes its parent's.
+        expect(styles(r.frames.memo)).toEqual([['teal', 'dashed'], ['teal', 'dashed']]);
+        expect(styles(r.frames.plain)).toEqual([['purple', null]]);
+        // The lines above the first heading take the note's; each heading's card, its section's.
+        expect(styles(r.frames.whole)).toEqual([['purple', null], ['teal', 'dashed'], ['purple', null]]);
+        const shape = ev<{ shapes: number; surface: boolean }[]>(`(() => {
             ${names(name)}
-            const card = frame('memo').querySelector('.markdown-frame__card');
-            return JSON.stringify({
+            return JSON.stringify(cardsOf('whole').map(card => ({
                 shapes: card.querySelectorAll(':scope > .task-card__shape').length,
                 surface: getComputedStyle(card).getPropertyValue('--task-card-surface') !== '',
-            });
+            })));
         })()`);
-        expect(shape).toEqual({ shapes: 1, surface: true });
+        expect(shape).toEqual(Array(3).fill({ shapes: 1, surface: true }));
     });
 
     it('says in the card that a note is not there, under the last name its link writes, and offers no note to open, but to choose its section again', () => {
         const r = op(name, '', 0);
         expect(r.frames.gone.name).toBe('Child');
         expect(r.frames.gone.missing).toBe(tr('sidebar.noteNotFound'));
-        expect(r.frames.gone.text).toBeNull();
+        expect(texts(r.frames.gone)).toEqual([null]);
         expect(moreTitles(name, 'gone')).toEqual([tr('sidebar.relinkSection'), tr('menu.addAbove'), tr('menu.addBelow'), tr('menu.moveUp'), tr('menu.remove')]);
     });
 
@@ -247,30 +257,31 @@ describe.each([
         expect(await writeIndexedTestFile(TASKS, tasksNote(2))).toBe(true);
         const r = op(name, '');
         expect(r.listCount).toBe(2);
-        expect([r.frames.memo.kept, r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true, true]);
+        expect([kept(r.frames.memo), kept(r.frames.whole), kept(r.frames.plain)]).toEqual([[true, true], [true, true, true], [true]]);
         expect(r.order).toEqual(['list', 'memo', 'whole', 'plain', 'gone']);
     });
 
-    it('renders anew the frames whose body changed when the note is written to, and no other', () => {
+    it('renders anew the cards whose markdown changed when the note is written to, and no other card', () => {
         const r = op(name, `mark(); ${write({ memo: 'memo two' })}`);
-        expect(r.frames.memo.text).toBe('memo two test-int-mdframes-tasks Deep deep text');
-        expect(r.frames.memo.kept).toBe(false);
-        // The whole note holds the section that changed.
-        expect(r.frames.whole.text).toContain('memo two');
-        expect(r.frames.whole.kept).toBe(false);
-        expect(r.frames.plain.kept).toBe(true);
+        expect(texts(r.frames.memo)).toEqual(['memo two test-int-mdframes-tasks', 'Deep deep text']);
+        expect(kept(r.frames.memo)).toEqual([false, true]);
+        // The whole note's card of the section that changed, and no other of its cards.
+        expect(r.frames.whole.cards[1].text).toContain('memo two');
+        expect(kept(r.frames.whole)).toEqual([true, false, true]);
+        expect(kept(r.frames.plain)).toEqual([true]);
     });
 
     it('shows a new style and a new heading text without rendering the body anew', () => {
         let r = op(name, `mark(); ${write({ memo: 'memo two', color: 'blue' })}`);
-        expect(r.frames.memo.color).toBe('blue');
-        // A property line is no part of a body: neither frame's changed.
-        expect([r.frames.memo.kept, r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true, true]);
+        expect(styles(r.frames.memo)).toEqual([['blue', 'dashed'], ['blue', 'dashed']]);
+        expect(r.frames.whole.cards[1].color).toBe('blue');
+        // A property line is no part of a card's markdown: no card's changed.
+        expect([kept(r.frames.memo), kept(r.frames.whole), kept(r.frames.plain)]).toEqual([[true, true], [true, true, true], [true]]);
 
         // The heading is still the one the link names, its marks and case aside.
         r = op(name, `mark(); ${write({ memo: 'memo two', color: 'blue', plain: '## PLAIN `bold`: link' })}`);
         expect(r.frames.plain.name).toBe('PLAIN `bold`: link');
-        expect(r.frames.plain.kept).toBe(true);
+        expect(kept(r.frames.plain)).toEqual([true]);
         op(name, write({ memo: 'memo two' }));
     });
 
@@ -304,7 +315,7 @@ describe.each([
         expect(r.order).toEqual(['memo', 'list', 'whole', 'plain', 'gone']);
         expect(moreTitles(name, 'memo')).toEqual(all.filter(title => title !== tr('menu.moveUp')));
         // A frame moved, or passed by another, is the element it was.
-        expect([r.frames.memo.kept, r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true, true]);
+        expect([kept(r.frames.memo), kept(r.frames.whole), kept(r.frames.plain)]).toEqual([[true, true], [true, true, true], [true]]);
 
         r = op(name, more('plain', tr('menu.moveUp')));
         expect(r.sidebar.map(f => f.id)).toEqual(['memo', 'list', 'plain', 'whole', 'gone']);
@@ -313,7 +324,7 @@ describe.each([
         r = op(name, more('plain', tr('menu.moveDown')) + more('memo', tr('menu.moveDown')));
         expect(r.sidebar.map(f => f.id)).toEqual(['list', 'memo', 'whole', 'plain', 'gone']);
         expect(r.order).toEqual(['list', 'memo', 'whole', 'plain', 'gone']);
-        expect([r.frames.memo.kept, r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true, true]);
+        expect([kept(r.frames.memo), kept(r.frames.whole), kept(r.frames.plain)]).toEqual([[true, true], [true, true, true], [true]]);
     });
 
     it('opens its note at the heading from its ⋯ menu: in a new tab, or in the tab that shows the note already', () => {
@@ -345,22 +356,24 @@ describe.each([
         }
     });
 
-    it('folds on a click of its row, keeps its body, and renders a body that changed meanwhile when it is unfolded', () => {
+    it('folds on a click of its row, hiding every card and keeping what each holds, and renders a card that changed meanwhile when it is unfolded', () => {
         let r = op(name, `mark(); frame('memo').querySelector('.' + C.header).click();`);
         expect(r.collapsed.memo).toBe(true);
         expect(r.frames.memo.collapsed).toBe(true);
         expect(r.frames.memo.shown).toBe(false);
-        expect(r.frames.memo.kept).toBe(true);
+        expect(r.frames.memo.cards.map(card => card.shown)).toEqual([false, false]);
+        expect(kept(r.frames.memo)).toEqual([true, true]);
         expect(r.frames.whole.collapsed).toBe(false);
+        expect(r.frames.whole.cards.map(card => card.shown)).toEqual([true, true, true]);
 
-        // Written to while folded: the card is left as it is.
+        // Written to while folded: the cards are left as they are.
         r = op(name, write({ memo: 'memo three' }));
-        expect(r.frames.memo.text).toBe('memo two test-int-mdframes-tasks Deep deep text');
-        expect(r.frames.memo.kept).toBe(true);
-        expect(r.frames.whole.text).toContain('memo three');
+        expect(texts(r.frames.memo)).toEqual(['memo two test-int-mdframes-tasks', 'Deep deep text']);
+        expect(kept(r.frames.memo)).toEqual([true, true]);
+        expect(r.frames.whole.cards[1].text).toContain('memo three');
     });
 
-    it('is folded on restart, with no body until it is unfolded', () => {
+    it('is folded on restart, with no card\'s markdown rendered until it is unfolded', () => {
         const restarted = `${name}-2`;
         restartView(name, restarted);
         let r = op(restarted, '');
@@ -368,23 +381,24 @@ describe.each([
         expect(r.collapsed.memo).toBe(true);
         expect(r.frames.memo.collapsed).toBe(true);
         expect(r.frames.memo.name).toBe('Memo');
-        expect(r.frames.memo.text).toBeNull();
-        expect(r.frames.whole.text).toContain('memo three');
+        expect(texts(r.frames.memo)).toEqual([null, null]);
+        expect(r.frames.whole.cards[1].text).toContain('memo three');
 
         r = op(restarted, `frame('memo').querySelector('.' + C.header).click();`);
         // An unfolded frame is saved as no entry.
         expect(r.collapsed.memo).toBeFalsy();
         expect(r.frames.memo.shown).toBe(true);
-        expect(r.frames.memo.text).toBe('memo three test-int-mdframes-tasks Deep deep text');
+        expect(texts(r.frames.memo)).toEqual(['memo three test-int-mdframes-tasks', 'Deep deep text']);
         ev(`(async () => { ${PRELUDE} R[${JSON.stringify(restarted)}].detach(); delete R[${JSON.stringify(restarted)}]; return JSON.stringify(true); })()`);
 
         r = op(name, `frame('memo').querySelector('.' + C.header).click();`);
         expect(r.collapsed.memo).toBeFalsy();
-        expect(r.frames.memo.text).toBe('memo three test-int-mdframes-tasks Deep deep text');
-        expect(r.frames.memo.kept).toBe(false);
+        expect(texts(r.frames.memo)).toEqual(['memo three test-int-mdframes-tasks', 'Deep deep text']);
+        // Only the card that changed while folded is rendered anew.
+        expect(kept(r.frames.memo)).toEqual([false, true]);
     });
 
-    it('follows its note when the note is renamed: the link names the new path, the section kept, and the body is rendered from there', () => {
+    it('follows its note when the note is renamed: the link names the new path, the section kept, and the cards are rendered from there', () => {
         let r = op(name, `mark(); await renameNote(${JSON.stringify(`${NOTE}.md`)}, ${JSON.stringify(`${MOVED}.md`)});`);
         expect(links(r)).toEqual({
             memo: `${MOVED}#Memo`,
@@ -394,22 +408,23 @@ describe.each([
         });
         expect([r.frames.memo.missing, r.frames.whole.missing, r.frames.plain.missing]).toEqual([null, null, null]);
         expect(r.frames.whole.name).toBe(`${SHORT}-moved`);
-        expect(r.frames.memo.text).toBe('memo three test-int-mdframes-tasks Deep deep text');
-        // A body is resolved against its note's path: at a new path it is rendered anew.
-        expect(r.frames.memo.kept).toBe(false);
+        expect(texts(r.frames.memo)).toEqual(['memo three test-int-mdframes-tasks', 'Deep deep text']);
+        // A card is resolved against its note's path: at a new path every card is rendered anew.
+        expect([kept(r.frames.memo), kept(r.frames.whole), kept(r.frames.plain)]).toEqual([[false, false], [false, false, false], [false]]);
 
         r = op(name, `await renameNote(${JSON.stringify(`${MOVED}.md`)}, ${JSON.stringify(`${NOTE}.md`)});`);
         expect(links(r)).toMatchObject({ memo: `${NOTE}#Memo`, whole: NOTE, plain: `${NOTE}#plain bold link` });
         expect(r.frames.whole.name).toBe(SHORT);
-        expect(r.frames.plain.text).toBe('plain text');
+        expect(texts(r.frames.plain)).toEqual(['plain text']);
     });
 
     it('says that the section is not there once the note loses the heading, and shows it again once the note has it', () => {
         let r = op(name, write({ memo: 'memo three', memoHeading: false }));
         expect(r.frames.memo.missing).toBe(tr('sidebar.sectionNotFound'));
         expect(r.frames.memo.name).toBe('Memo');
-        expect(r.frames.memo.text).toBeNull();
-        expect([r.frames.memo.color, r.frames.memo.linestyle]).toEqual([null, null]);
+        // A single card says so, unstyled.
+        expect(texts(r.frames.memo)).toEqual([null]);
+        expect(styles(r.frames.memo)).toEqual([[null, null]]);
         expect(r.frames.whole.missing).toBeNull();
         expect(r.frames.plain.missing).toBeNull();
         // The note is there to open.
@@ -417,15 +432,15 @@ describe.each([
 
         r = op(name, write({ memo: 'memo three' }));
         expect(r.frames.memo.missing).toBeNull();
-        expect(r.frames.memo.text).toBe('memo three test-int-mdframes-tasks Deep deep text');
-        expect([r.frames.memo.color, r.frames.memo.linestyle]).toEqual(['teal', 'dashed']);
+        expect(texts(r.frames.memo)).toEqual(['memo three test-int-mdframes-tasks', 'Deep deep text']);
+        expect(styles(r.frames.memo)).toEqual([['teal', 'dashed'], ['teal', 'dashed']]);
     });
 
     it('says that the note is not there once the note is deleted, and shows it again once a note is made at the path', () => {
         let r = op(name, `await deleteNote(${JSON.stringify(`${NOTE}.md`)});`);
         for (const id of ['memo', 'whole', 'plain']) {
             expect(r.frames[id].missing).toBe(tr('sidebar.noteNotFound'));
-            expect(r.frames[id].text).toBeNull();
+            expect(texts(r.frames[id])).toEqual([null]);
         }
         expect([r.frames.memo.name, r.frames.whole.name, r.frames.plain.name]).toEqual(['Memo', SHORT, 'plain bold link']);
         expect(moreTitles(name, 'memo')).not.toContain(tr('sidebar.openNote'));
@@ -434,7 +449,7 @@ describe.each([
 
         r = op(name, write({ memo: 'memo four' }));
         expect([r.frames.memo.missing, r.frames.whole.missing, r.frames.plain.missing]).toEqual([null, null, null]);
-        expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+        expect(texts(r.frames.memo)).toEqual(['memo four test-int-mdframes-tasks', 'Deep deep text']);
         expect(r.frames.whole.name).toBe(SHORT);
         expect(r.frames.plain.name).toBe('Plain **bold** [[Link]]');
     });
@@ -444,50 +459,58 @@ describe.each([
         const keys = overrideSettings({ scopeKeys: { ...scopeKeys, color: 'tvmdf-color' } });
         try {
             const r = op(name, '');
-            expect(r.frames.memo.color).toBeNull();
-            expect(r.frames.memo.linestyle).toBe('dashed');
+            expect(styles(r.frames.memo)).toEqual([[null, 'dashed'], [null, 'dashed']]);
         } finally {
             keys.restore();
         }
         const r = op(name, '');
-        expect(r.frames.memo.color).toBe('teal');
-        expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+        expect(styles(r.frames.memo)).toEqual([['teal', 'dashed'], ['teal', 'dashed']]);
+        expect(texts(r.frames.memo)).toEqual(['memo four test-int-mdframes-tasks', 'Deep deep text']);
     });
 
-    it('shows a section\'s mask in place of its body while the view masks, and the body again once it does not', () => {
-        // A property line is no part of a body: the mask written renders nothing anew.
+    it('shows a card\'s mask in place of its markdown while the view masks, under the heading that opens the card, and the markdown again once it does not', () => {
+        // A property line is no part of a card's markdown: the mask written renders nothing anew.
         let r = op(name, `mark(); ${write({ memo: 'memo four', mask: 'memo masked' })}`);
-        expect(r.frames.memo.mask).toBeNull();
-        expect(r.frames.memo.kept).toBe(true);
+        expect(r.frames.memo.cards.map(card => card.mask)).toEqual([null, null]);
+        expect(kept(r.frames.memo)).toEqual([true, true]);
 
         r = op(name, `mark(); setMask(true);`);
         expect(r.maskMode).toBe(true);
-        expect(r.frames.memo.mask).toBe('memo masked');
-        expect(r.frames.memo.text).toBeNull();
-        // The row's name and the card's style stay.
+        // The lines under the frame's own heading show the mask alone; the nested heading,
+        // which inherits the mask, keeps its heading above it.
+        expect(r.frames.memo.cards.map(card => [card.heading, card.mask, card.text])).toEqual([
+            [null, 'memo masked', null],
+            ['Deep', 'memo masked', null],
+        ]);
+        // The row's name and the cards' style stay.
         expect(r.frames.memo.name).toBe('Memo');
-        expect([r.frames.memo.color, r.frames.memo.linestyle]).toEqual(['teal', 'dashed']);
-        // A section without a mask keeps its body, the element it was; one not there is said as before.
-        expect([r.frames.whole.mask, r.frames.plain.mask]).toEqual([null, null]);
-        expect([r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true]);
+        expect(styles(r.frames.memo)).toEqual([['teal', 'dashed'], ['teal', 'dashed']]);
+        // In the whole note, only the card of the section that has the mask shows it; the others keep
+        // their markdown, the elements they were. A frame not there is said as before.
+        expect(r.frames.whole.cards.map(card => [card.heading, card.mask])).toEqual([[null, null], ['Memo', 'memo masked'], [null, null]]);
+        expect(kept(r.frames.whole)).toEqual([true, null, true]);
+        expect(r.frames.plain.cards.map(card => card.mask)).toEqual([null]);
+        expect(kept(r.frames.plain)).toEqual([true]);
         expect(r.frames.gone.missing).toBe(tr('sidebar.noteNotFound'));
 
         r = op(name, `setMask(false);`);
         expect(r.maskMode).toBe(false);
-        expect(r.frames.memo.mask).toBeNull();
-        expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
-        expect([r.frames.whole.kept, r.frames.plain.kept]).toEqual([true, true]);
+        expect(r.frames.memo.cards.map(card => [card.heading, card.mask])).toEqual([[null, null], [null, null]]);
+        expect(texts(r.frames.memo)).toEqual(['memo four test-int-mdframes-tasks', 'Deep deep text']);
+        expect(r.frames.whole.cards[1].text).toBe('Memo memo four test-int-mdframes-tasks Deep deep text');
+        expect(kept(r.frames.whole)).toEqual([true, false, true]);
+        expect(kept(r.frames.plain)).toEqual([true]);
     });
 
-    it('shows the mask the note writes while the view masks: a new value, and the body once the line is gone', () => {
+    it('shows the mask the note writes while the view masks: a new value, and the markdown once the line is gone', () => {
         let r = op(name, `setMask(true); ${write({ memo: 'memo four', mask: 'memo masked again' })}`);
-        expect(r.frames.memo.mask).toBe('memo masked again');
-        expect(r.frames.memo.text).toBeNull();
+        expect(r.frames.memo.cards.map(card => card.mask)).toEqual(['memo masked again', 'memo masked again']);
+        expect(texts(r.frames.memo)).toEqual([null, null]);
 
         r = op(name, write({ memo: 'memo four' }));
         expect(r.maskMode).toBe(true);
-        expect(r.frames.memo.mask).toBeNull();
-        expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+        expect(r.frames.memo.cards.map(card => card.mask)).toEqual([null, null]);
+        expect(texts(r.frames.memo)).toEqual(['memo four test-int-mdframes-tasks', 'Deep deep text']);
 
         r = op(name, `setMask(false);`);
         expect(r.maskMode).toBe(false);
@@ -509,7 +532,7 @@ describe.each([
         const r = op(only, '');
         expect(r.empty).toBe(false);
         expect(r.order).toEqual(['memo']);
-        expect(r.frames.memo.text).toBe('memo four test-int-mdframes-tasks Deep deep text');
+        expect(texts(r.frames.memo)).toEqual(['memo four test-int-mdframes-tasks', 'Deep deep text']);
     });
 });
 
@@ -526,7 +549,8 @@ describe.each([
     const FOLD_MOVED = `${FOLD}-moved`;
     /** The note of the frame added and renamed before it is drawn. */
     const ADDED = `${PREFIX}-added-${key}`;
-    const MEMO = 'memo one test-int-mdframes-tasks Deep deep text';
+    /** The cards of the section `## Memo` of a note written by `note()`. */
+    const MEMO = ['memo one test-int-mdframes-tasks', 'Deep deep text'];
     const writeAt = (path: string, parts: NoteParts = {}) => `await writeNote(${JSON.stringify(`${path}.md`)}, ${JSON.stringify(note(parts))});`;
     /** Fold or unfold the frame `id` from its row, unless it is so already. */
     const fold = (id: string, collapsed: boolean) => `
@@ -555,57 +579,62 @@ describe.each([
         });
     });
 
-    it('follows the notes of a folder renamed: each link names its note\'s new path, and its body is drawn from there', () => {
+    it('follows the notes of a folder renamed: each link names its note\'s new path, and its cards are drawn from there', () => {
         const before = op(name, 'mark();');
-        expect([before.frames.a.text, before.frames.b.name]).toEqual([MEMO, 'b']);
+        expect(texts(before.frames.a)).toEqual(MEMO);
+        expect(before.frames.b.name).toBe('b');
 
         const r = op(name, `await renameNote(${JSON.stringify(DIR)}, ${JSON.stringify(DIR_MOVED)});`);
         expect(links(r)).toMatchObject({ a: `${DIR_MOVED}/a#Memo`, b: `${DIR_MOVED}/sub/b` });
         expect([r.frames.a.missing, r.frames.b.missing]).toEqual([null, null]);
-        expect(r.frames.a.text).toBe(MEMO);
-        expect(r.frames.b.text).toContain(MEMO);
-        // Each body is resolved against its note's new path.
-        expect([r.frames.a.kept, r.frames.b.kept]).toEqual([false, false]);
+        expect(texts(r.frames.a)).toEqual(MEMO);
+        expect(r.frames.b.cards[1].text).toBe(`Memo ${MEMO.join(' ')}`);
+        // Each card is resolved against its note's new path.
+        expect([kept(r.frames.a), kept(r.frames.b)]).toEqual([[false, false], [false, false, false]]);
         expect(hoverSource(name, 'a')).toBe(`${DIR_MOVED}/a.md`);
         expect(hoverSource(name, 'b')).toBe(`${DIR_MOVED}/sub/b.md`);
     });
 
-    it('keeps no body of a folded frame whose note is renamed, and draws it from the new path once unfolded', () => {
+    it('keeps no card\'s markdown in a folded frame whose note is renamed, and draws the cards from the new path once unfolded', () => {
         let r = op(name, `mark(); ${fold('fold', true)}`);
-        expect([r.frames.fold.collapsed, r.frames.fold.kept]).toEqual([true, true]);
+        expect(r.frames.fold.collapsed).toBe(true);
+        expect(kept(r.frames.fold)).toEqual([true, true]);
 
         r = op(name, `await renameNote(${JSON.stringify(`${FOLD}.md`)}, ${JSON.stringify(`${FOLD_MOVED}.md`)});`);
         expect(links(r).fold).toBe(`${FOLD_MOVED}#Memo`);
         expect(r.frames.fold.collapsed).toBe(true);
-        // The body resolved against the old path is taken out, though the frame is folded.
-        expect(r.frames.fold.text).toBeNull();
+        // What was rendered against the old path is taken out of every card, though the frame is folded.
+        expect(texts(r.frames.fold)).toEqual([null, null]);
 
         r = op(name, fold('fold', false));
         expect(r.frames.fold.collapsed).toBe(false);
-        expect(r.frames.fold.text).toBe(MEMO);
+        expect(texts(r.frames.fold)).toEqual(MEMO);
         expect(hoverSource(name, 'fold')).toBe(`${FOLD_MOVED}.md`);
     });
 
-    it('keeps no mask and no "not there" in a folded frame that is to show its body, and draws the body once unfolded', () => {
-        // The mask, shown while the view masks, is taken out when it stops, the frame folded.
+    it('keeps no mask and no "not there" in a folded frame that is to show its markdown, and draws the cards once unfolded', () => {
+        // The masks, shown while the view masks, are taken out when it stops, the frame folded.
         let r = op(name, `${writeAt(FOLD_MOVED, { mask: 'fold masked' })} setMask(true);`);
-        expect(r.frames.fold.mask).toBe('fold masked');
+        expect(r.frames.fold.cards.map(card => [card.heading, card.mask])).toEqual([[null, 'fold masked'], ['Deep', 'fold masked']]);
         r = op(name, `${fold('fold', true)} setMask(false);`);
         expect(r.maskMode).toBe(false);
-        expect([r.frames.fold.collapsed, r.frames.fold.mask, r.frames.fold.text]).toEqual([true, null, null]);
+        expect(r.frames.fold.collapsed).toBe(true);
+        expect(r.frames.fold.cards.map(card => [card.heading, card.mask, card.text])).toEqual([[null, null, null], [null, null, null]]);
         r = op(name, fold('fold', false));
-        expect(r.frames.fold.text).toBe(MEMO);
+        expect(texts(r.frames.fold)).toEqual(MEMO);
 
         // That the note is not there is taken out when the note is made again, the frame folded.
         r = op(name, `await deleteNote(${JSON.stringify(`${FOLD_MOVED}.md`)});`);
         expect(r.frames.fold.missing).toBe(tr('sidebar.noteNotFound'));
         r = op(name, `${fold('fold', true)} ${writeAt(FOLD_MOVED)}`);
-        expect([r.frames.fold.collapsed, r.frames.fold.missing, r.frames.fold.text]).toEqual([true, null, null]);
+        expect([r.frames.fold.collapsed, r.frames.fold.missing]).toEqual([true, null]);
+        expect(texts(r.frames.fold)).toEqual([null, null]);
         r = op(name, fold('fold', false));
-        expect([r.frames.fold.missing, r.frames.fold.text]).toEqual([null, MEMO]);
+        expect(r.frames.fold.missing).toBeNull();
+        expect(texts(r.frames.fold)).toEqual(MEMO);
     });
 
-    it('follows the note of a frame added and renamed before the panel draws, and renders its body only once the frame is in place', () => {
+    it('follows the note of a frame added and renamed before the panel draws, and renders its cards only once the frame is in place', () => {
         // The window's animation frames, in which the panel draws, are held
         // from the frame's adding until the rename has been told.
         const held = ev<{ before: { connected: boolean; body: boolean }; atRename: { connected: boolean } | null; frames: number }>(`(async () => {
@@ -638,13 +667,14 @@ describe.each([
         // What the test rests on: no draw ran between the adding and the rename.
         expect(held.frames).toBeGreaterThan(0);
         expect(held.atRename).toEqual({ connected: false });
-        // A body is not rendered while its frame is in no document.
+        // No card is rendered while its frame is in no document.
         expect(held.before).toEqual({ connected: false, body: false });
 
         const r = op(name, '');
         expect(links(r).added).toBe(`${ADDED}-moved#Memo`);
         expect(r.order).toEqual(['a', 'b', 'fold', 'added']);
-        expect([r.frames.added.missing, r.frames.added.text]).toEqual([null, MEMO]);
+        expect(r.frames.added.missing).toBeNull();
+        expect(texts(r.frames.added)).toEqual(MEMO);
         expect(hoverSource(name, 'added')).toBe(`${ADDED}-moved.md`);
     });
 
@@ -664,13 +694,172 @@ describe.each([
         const saved = overrideSettings({ startHour: rolledHour, scopeKeys: { ...scopeKeys, color: 'tvmdf-color' } });
         try {
             const r = op(name, '');
-            expect(r.frames.a.color).toBeNull();
-            expect(r.frames.a.linestyle).toBe('dashed');
+            expect(styles(r.frames.a)).toEqual([[null, 'dashed'], [null, 'dashed']]);
         } finally {
             saved.restore();
         }
         const r = op(name, '');
-        expect(r.frames.a.color).toBe('teal');
+        expect(styles(r.frames.a)).toEqual([['teal', 'dashed'], ['teal', 'dashed']]);
+    });
+});
+
+describe("Timeline's markdown frame of a section whose headings hold Dataview blocks", () => {
+    const name = 'mf-cards';
+    const HABITS = `${PREFIX}-habits`;
+
+    interface HabitsParts {
+        /** The paragraph of `## Drawing`. */
+        drawing?: string;
+        /** Whether the note has its `## Reading`, between `## Drawing` and `## Sleep`. */
+        reading?: boolean;
+    }
+
+    /** A block of DataviewJS that writes `text`. */
+    const block = (text: string) => ['```dataviewjs', `dv.span(${JSON.stringify(text)})`, '```'];
+
+    /**
+     * A note of a heading whose only lines are its property lines, over
+     * headings nested in it that each hold a Dataview block: two that
+     * declare their own color, one of them a mask, and one that declares
+     * nothing. A line above the first heading, and no frontmatter.
+     */
+    function habits({ drawing = 'drawing one', reading = false }: HabitsParts = {}): string {
+        return [
+            'lead of the note',
+            '',
+            '# Habits',
+            '- tv-color:: teal',
+            '',
+            '## Words',
+            '- tv-color:: orange',
+            '- tv-mask:: words masked',
+            '',
+            ...block('words block'),
+            '',
+            '## Drawing',
+            '- tv-color:: green',
+            '',
+            drawing,
+            '',
+            ...block('drawing block'),
+            '',
+            ...(reading ? ['## Reading', '', ...block('reading block'), ''] : []),
+            '## Sleep',
+            '',
+            ...block('sleep block'),
+            '',
+        ].join('\n');
+    }
+    const write = (parts: HabitsParts = {}) => `await writeNote(${JSON.stringify(`${HABITS}.md`)}, ${JSON.stringify(habits(parts))});`;
+
+    interface BlockCard {
+        /** The text of the first heading the card's markdown draws; null when it draws none. */
+        heading: string | null;
+        /** What the card's Dataview block wrote; null when the card has no block drawn. */
+        block: string | null;
+        /** Whether the block's element has the mark `markBlocks()` put on it. */
+        kept: boolean | null;
+    }
+
+    /**
+     * Run `body` in the view, wait until every Dataview block of the frame
+     * `id` has written, and read its cards: what is drawn in each, and its
+     * style. A block not written in time fails the read.
+     */
+    function blocks(id: string, body = ''): { cards: BlockCard[]; styles: [string | null, string | null][] } {
+        return ev(`(async () => {
+            ${framesOf(PREFIX, name)}
+            const markBlocks = () => el.querySelectorAll('.block-language-dataviewjs').forEach(b => { b.__tvE2EBlock = true; });
+            ${body}
+            await wait(${SETTLE_MS});
+            const unwritten = () => [...frame(${JSON.stringify(id)}).querySelectorAll('.block-language-dataviewjs')].filter(b => b.textContent.trim() === '');
+            for (let i = 0; i < 50 && unwritten().length > 0; i++) await wait(100);
+            if (unwritten().length > 0) throw new Error(unwritten().length + ' Dataview blocks not written');
+            const cards = cardsOf(${JSON.stringify(id)});
+            return JSON.stringify({
+                cards: cards.map(card => {
+                    const b = card.querySelector('.block-language-dataviewjs');
+                    return {
+                        heading: card.querySelector('.markdown-frame__content :is(h1, h2, h3, h4, h5, h6)')?.textContent ?? null,
+                        block: b ? b.textContent.trim() : null,
+                        kept: b ? b.__tvE2EBlock === true : null,
+                    };
+                }),
+                styles: cards.map(card => [card.style.getPropertyValue('--file-accent') || null, card.dataset.fileLinestyle ?? null]),
+            });
+        })()`);
+    }
+
+    beforeAll(() => {
+        const dataview = ev<boolean>(`(() => JSON.stringify(!!app.plugins.plugins.dataview?.settings.enableDataviewJs))()`);
+        if (!dataview) throw new Error('Dataview, with DataviewJS, is not enabled in the Dev vault');
+        ev(`(async () => { ${NOTES} ${write()} return JSON.stringify(true); })()`);
+        openView(name, 'timeline-view', {
+            showSidebar: true,
+            sidebar: [
+                { kind: 'markdown', id: 'habits', link: `${HABITS}#Habits` },
+                { kind: 'markdown', id: 'whole', link: HABITS },
+                { kind: 'markdown', id: 'words', link: `${HABITS}#Words` },
+            ],
+        });
+    });
+
+    it('draws a card for each heading nested one level in the section, each colored by its own section and one that declares nothing by its parent, and none for lines under the section\'s heading that are only its property lines', () => {
+        const r = blocks('habits');
+        expect(r.cards.map(c => [c.heading, c.block])).toEqual([
+            ['Words', 'words block'],
+            ['Drawing', 'drawing block'],
+            ['Sleep', 'sleep block'],
+        ]);
+        expect(r.styles).toEqual([['orange', null], ['green', null], ['teal', null]]);
+    });
+
+    it('draws the lines above the note\'s first heading as a card of their own, and a heading with no heading nested in it as a single card', () => {
+        const r = op(name, '');
+        // The whole note: the line above `# Habits`, and `# Habits` with every heading under it.
+        expect(r.frames.whole.cards).toHaveLength(2);
+        expect(r.frames.whole.cards[0].text).toBe('lead of the note');
+        expect(r.frames.whole.cards[1].text).toMatch(/^Habits Words .* Drawing drawing one .* Sleep /);
+        expect(styles(r.frames.whole)).toEqual([[null, null], ['teal', null]]);
+        expect(blocks('words').cards).toEqual([{ heading: null, block: 'words block', kept: false }]);
+        expect(styles(r.frames.words)).toEqual([['orange', null]]);
+    });
+
+    it('adds a card for a heading the note gains, the other cards\' Dataview blocks the elements they were, and renders anew only the card whose markdown changed', () => {
+        let r = blocks('habits', `markBlocks(); ${write({ reading: true })}`);
+        expect(r.cards.map(c => [c.heading, c.block, c.kept])).toEqual([
+            ['Words', 'words block', true],
+            ['Drawing', 'drawing block', true],
+            ['Reading', 'reading block', false],
+            ['Sleep', 'sleep block', true],
+        ]);
+        // A heading that declares nothing takes its parent's style.
+        expect(r.styles[2]).toEqual(['teal', null]);
+
+        r = blocks('habits', `markBlocks(); ${write({ reading: true, drawing: 'drawing two' })}`);
+        expect(r.cards.map(c => [c.heading, c.kept])).toEqual([['Words', true], ['Drawing', false], ['Reading', true], ['Sleep', true]]);
+        expect(op(name, '').frames.habits.cards[1].text).toContain('drawing two');
+
+        // The heading taken out again: its card goes, and the others stay.
+        r = blocks('habits', `markBlocks(); ${write({ drawing: 'drawing two' })}`);
+        expect(r.cards.map(c => [c.heading, c.kept])).toEqual([['Words', true], ['Drawing', true], ['Sleep', true]]);
+    });
+
+    it('shows, while the view masks, the heading and the mask on the card of the section that has one, and leaves the other cards as they are', () => {
+        let r = op(name, 'mark(); setMask(true);');
+        expect(r.maskMode).toBe(true);
+        expect(r.frames.habits.cards.map(c => [c.heading, c.mask])).toEqual([['Words', 'words masked'], [null, null], [null, null]]);
+        expect(kept(r.frames.habits)).toEqual([null, true, true]);
+        // A frame of the masked heading itself shows the mask alone, as its row keeps the name.
+        expect(r.frames.words.cards.map(c => [c.heading, c.mask, c.text])).toEqual([[null, 'words masked', null]]);
+        // The heading the mask is declared under is deeper than the whole note's cards: none of them masks.
+        expect(r.frames.whole.cards.map(c => c.mask)).toEqual([null, null]);
+        expect(kept(r.frames.whole)).toEqual([true, true]);
+
+        r = op(name, 'setMask(false);');
+        expect(r.maskMode).toBe(false);
+        expect(r.frames.habits.cards.map(c => c.mask)).toEqual([null, null, null]);
+        expect(kept(r.frames.habits)).toEqual([false, true, true]);
     });
 });
 
@@ -830,16 +1019,30 @@ describe.each([
 ])("%s's markdown frame's headings", (_label, type, key) => {
     const name = `mf-headings-${key}`;
     const HEADED = `${PREFIX}-headings-${key}`;
-    // Each heading but the `####` follows a paragraph; the `####` follows a heading.
+    /**
+     * Read as the whole note, its first card starts with an HTML heading,
+     * which the renderer draws as one and the reading does not take for a
+     * heading, and its second card is opened by the `##`. Read as the
+     * section of the `##`, its second card is opened by the `###`. In each
+     * card a heading opens, a heading follows a paragraph, and another a
+     * heading. The `###` declares a mask.
+     */
     const HEADED_NOTE = [
+        '<h2>Raw</h2>',
+        '',
         'body',
         '',
         '## Two',
         'two',
         '',
         '### Three',
+        '- tv-mask:: three masked',
+        '',
+        'three',
+        '',
         '#### Four',
-        'four',
+        '##### Five',
+        'five',
         '',
     ].join('\n');
 
@@ -847,41 +1050,88 @@ describe.each([
         ev(`(async () => { ${NOTES} await writeNote(${JSON.stringify(`${HEADED}.md`)}, ${JSON.stringify(HEADED_NOTE)}); return JSON.stringify(true); })()`);
         openView(name, type, {
             showSidebar: true,
-            sidebar: [{ kind: 'markdown', id: 'headed', link: HEADED }],
+            sidebar: [
+                { kind: 'markdown', id: 'whole', link: HEADED },
+                { kind: 'markdown', id: 'two', link: `${HEADED}#Two` },
+            ],
         });
     });
 
-    interface Heading { tag: string; size: number; top: number }
+    interface Heading { tag: string; size: number; top: number; weight: number }
+    interface Measured {
+        /** The text size of a card's markdown. */
+        body: number;
+        /** Each card's text, and its headings, in order. */
+        cards: { text: string; headings: Heading[] }[];
+    }
 
-    /** The body's text size, and each heading's text size and space above it, in pixels. */
-    function measure(): { body: number; headings: Heading[] } {
+    /** Run `body` in the view, and measure the cards of the frame `id`: each heading's text size, space above and weight, in pixels. */
+    function measure(id: string, body = ''): Measured {
         return ev(`(async () => {
             ${names(name)}
+            ${body}
             await wait(${SETTLE_MS});
-            const body = bodyOf('headed');
             const px = (v) => parseFloat(v);
+            const cards = cardsOf(${JSON.stringify(id)});
             return JSON.stringify({
-                body: px(getComputedStyle(body).fontSize),
-                headings: [...body.querySelectorAll('h1, h2, h3, h4, h5, h6')].map(h => {
-                    const s = getComputedStyle(h);
-                    return { tag: h.tagName.toLowerCase(), size: px(s.fontSize), top: px(s.marginBlockStart) };
-                }),
+                body: px(getComputedStyle(frame(${JSON.stringify(id)}).querySelector('.markdown-frame__content')).fontSize),
+                cards: cards.map(card => ({
+                    text: card.textContent.replace(/\\s+/g, ' ').trim(),
+                    headings: [...card.querySelectorAll('h1, h2, h3, h4, h5, h6')].map(h => {
+                        const s = getComputedStyle(h);
+                        return { tag: h.tagName.toLowerCase(), size: px(s.fontSize), top: px(s.marginBlockStart), weight: Number(s.fontWeight) };
+                    }),
+                })),
             });
         })()`);
     }
 
-    it('sizes an ## and a ### a little larger than the body, and an #### as the body', () => {
-        const m = measure();
-        expect(m.body).toBeGreaterThan(0);
-        expect(m.headings.map(h => h.tag)).toEqual(['h2', 'h3', 'h4']);
-        const [two, three, four] = m.headings;
-        expect(two.size).toBeCloseTo(m.body * 1.15, 1);
-        expect(three.size).toBeCloseTo(m.body * 1.08, 1);
-        expect(four.size).toBeCloseTo(m.body, 1);
+    /** Each heading of each card: its tag, and its text size as a part of the body's, to two places. */
+    const sizes = (m: Measured) => m.cards.map(card => card.headings.map(h => [h.tag, Math.round((h.size / m.body) * 100) / 100]));
+
+    it('sizes the heading that opens a card 1.08 times the body, whatever its level, and every other heading of a card as the body', () => {
+        const whole = measure('whole');
+        // What the test rests on: the `##` opens the second card, the deeper headings inside it.
+        expect(whole.cards.map(card => card.text)).toEqual(['Raw body', 'Two two Three three Four Five five']);
+        expect(whole.body).toBeGreaterThan(0);
+        expect(sizes(whole)).toEqual([
+            // An HTML heading first in a card no heading opens is not the card's name.
+            [['h2', 1]],
+            [['h2', 1.08], ['h3', 1], ['h4', 1], ['h5', 1]],
+        ]);
+
+        const two = measure('two');
+        expect(two.cards.map(card => card.text)).toEqual(['two', 'Three three Four Five five']);
+        expect(sizes(two)).toEqual([[], [['h3', 1.08], ['h4', 1], ['h5', 1]]]);
     });
 
-    it('spaces every heading 12px from what is above it, a paragraph or a heading', () => {
-        expect(measure().headings.map(h => h.top)).toEqual([12, 12, 12]);
+    it('sets every heading of a card in a bold weight, whatever its size', () => {
+        const weights = measure('whole').cards.flatMap(card => card.headings.map(h => h.weight));
+        expect(weights).toHaveLength(5);
+        for (const weight of weights) expect(weight).toBeGreaterThanOrEqual(600);
+    });
+
+    it('sizes the heading kept over a card\'s mask as the heading that opens the card', () => {
+        try {
+            const two = measure('two', 'setMask(true);');
+            const masked = ev<{ tag: string; size: number; mask: string | null }>(`(() => {
+                ${names(name)}
+                const card = cardsOf('two')[1];
+                const h = card.querySelector('.markdown-frame__heading :is(h1, h2, h3, h4, h5, h6)');
+                return JSON.stringify({ tag: h?.tagName.toLowerCase() ?? '', size: h ? parseFloat(getComputedStyle(h).fontSize) : 0, mask: card.querySelector('.markdown-frame__mask')?.textContent ?? null });
+            })()`);
+            expect(masked.mask).toBe('three masked');
+            expect(masked.tag).toBe('h3');
+            expect(masked.size).toBeCloseTo(two.body * 1.08, 1);
+        } finally {
+            measure('two', 'setMask(false);');
+        }
+    });
+
+    it('spaces the heading that opens a card 4px from the card\'s top, as any first line of a card, and a heading inside a card 12px from what is above it, a paragraph or a heading', () => {
+        const whole = measure('whole');
+        expect(whole.cards[1].headings.map(h => h.top)).toEqual([4, 12, 12, 12]);
+        expect(measure('two').cards[1].headings.map(h => h.top)).toEqual([4, 12, 12]);
     });
 });
 
@@ -963,9 +1213,10 @@ const SUBPATHS = [
  * `subpaths` names: of Obsidian, which renders an embed of each link by the
  * renderer a note's reading view has, and of the plugin, which draws a frame
  * of each link in a Timeline kept as `name`. An answer is the m-lines shown,
- * in order; null where the link names no heading (Obsidian's embed then
- * shows the whole note, the frame says the section is not there). A frame
- * not drawn in time, or that says something else, fails the ask.
+ * in order, a frame's taken through its cards in their order; null where
+ * the link names no heading (Obsidian's embed then shows the whole note, the
+ * frame says the section is not there). A frame not drawn in time, or that
+ * says something else, fails the ask.
  */
 function askHeadings(name: string, NOTE: string, lines: string[], subpaths: string[]): { frames: Record<string, string | null>; embeds: Record<string, string | null> } {
     const r = ev<{ frames: ({ marks: string } | { missing: string } | null)[]; embeds: (string | null)[] }>(`(async () => {
@@ -1015,8 +1266,8 @@ function askHeadings(name: string, NOTE: string, lines: string[], subpaths: stri
         await wait(300);
         const frames = subpaths.map((s, i) => {
             const frame = el.querySelector('.markdown-frame[data-frame-id="h' + i + '"]');
-            const body = frame?.querySelector('.markdown-frame__content');
-            if (body) return { marks: marks(body) };
+            const bodies = [...(frame?.querySelectorAll('.markdown-frame__content') ?? [])];
+            if (bodies.length > 0) return { marks: bodies.map(marks).filter(Boolean).join(' ') };
             const missing = frame?.querySelector('.markdown-frame__missing-reason');
             return missing ? { missing: missing.textContent } : null;
         });

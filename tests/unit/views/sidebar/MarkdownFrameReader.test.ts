@@ -69,7 +69,7 @@ describe('the reader of a markdown frame', () => {
         await frame.pending[0].end(MEMO_NOTE);
         expect(frame.reads).toHaveLength(1);
         expect(frame.reads[0]).toMatchObject({
-            reading: { kind: 'heading', title: 'Memo', markdown: 'first' },
+            reading: { kind: 'heading', title: 'Memo', cards: [{ heading: null, markdown: 'first' }] },
             title: 'Memo',
             path: 'Folder/Note.md',
         });
@@ -111,7 +111,7 @@ describe('the reader of a markdown frame', () => {
 
         await newer.end(['# Memo', 'new'].join('\n'));
         await older.end(['# Memo', 'old'].join('\n'));
-        expect(frame.reads.map(r => 'markdown' in r.reading ? r.reading.markdown : null)).toEqual(['new']);
+        expect(frame.reads.map(r => 'cards' in r.reading ? r.reading.cards.map(card => card.markdown) : null)).toEqual([['new']]);
     });
 
     it('hands on nothing after close, for a reading that ends later or one asked for after it', async () => {

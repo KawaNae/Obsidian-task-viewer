@@ -118,7 +118,7 @@ export class FileParsePipeline {
     /**
      * What `resolveSections` answers, for a tv-ignore'd note too: for a
      * reader of the note's sections that asks for none of its rows (a frame
-     * of a sidebar that draws a section's body, `readFrameContent`). The
+     * of a sidebar that draws a section's cards, `readFrameContent`). The
      * note has no rows, and its sections still say what a row there would
      * inherit.
      */

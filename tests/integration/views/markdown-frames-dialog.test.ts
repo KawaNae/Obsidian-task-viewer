@@ -19,7 +19,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { isObsidianRunning } from '../helpers/cli-helper';
-import { deleteNotesUnder, frameLinks, framesOf, notesUnder, readFrames, type Reading } from '../helpers/markdown-frames';
+import { deleteNotesUnder, frameLinks, framesOf, notesUnder, readFrames, texts, type Reading } from '../helpers/markdown-frames';
 import { closeViews, ev, openView, restartView, tr } from '../helpers/view-helper';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
@@ -28,7 +28,7 @@ const NOTES = notesUnder(PREFIX);
 
 /**
  * A note whose headings the dialog offers. Each heading is followed by a
- * line that names it (`s01`…), so a frame's body tells which section it
+ * line that names it (`s01`…), so a frame's cards tell which section it
  * shows. Two headings are named `Tasks`, under `Plan` and under `Log`; the
  * second `Plan`, and the `Tasks` under it, share their names with earlier
  * headings under headings of the same names, so no link names them.
@@ -300,7 +300,7 @@ describe.each([
         expect(choices[6].note).toBe(tr('modal.section.unlinkableShort'));
     });
 
-    it('adds the section of the heading picked at the end of the stack, its link naming the heading, its body drawn', () => {
+    it('adds the section of the heading picked at the end of the stack, its link naming the heading, its cards drawn', () => {
         const before = ids(op(''));
         const s = onDialog<DialogState>(name, `
             await openAdd();
@@ -321,7 +321,7 @@ describe.each([
         expect(ids(r)).toEqual([...before, frame.id]);
         expect(r.order).toEqual([...before, frame.id]);
         expect(r.frames[frame.id].name).toBe('Log');
-        expect(r.frames[frame.id].text).toBe('s03 Tasks s04 Detail s05');
+        expect(texts(r.frames[frame.id])).toEqual(['s03', 'Tasks s04 Detail s05']);
     });
 
     it('names a heading by the headings above it when an earlier one has its name, and draws that one\'s section', () => {
@@ -340,7 +340,7 @@ describe.each([
         const frame = added(r, before);
         expect(frame.link).toBe(`${NOTE}#Log#Tasks`);
         expect(r.frames[frame.id].name).toBe('Tasks');
-        expect(r.frames[frame.id].text).toBe('s04 Detail s05');
+        expect(texts(r.frames[frame.id])).toEqual(['s04', 'Detail s05']);
     });
 
     it('adds the whole note with the heading field left empty, and with the whole note picked from its list', () => {
@@ -357,7 +357,7 @@ describe.each([
         let frame = added(r, before);
         expect(frame.link).toBe(NOTE);
         expect(r.frames[frame.id].name).toBe(SHORT);
-        expect(r.frames[frame.id].text).toMatch(/^s00 Plan s01 .* s08$/);
+        expect(texts(r.frames[frame.id])).toEqual(['s00', 'Plan s01 Tasks s02', 'Log s03 Tasks s04 Detail s05', 'Plan s06 Tasks s07', 'C# and a|b s08']);
 
         before = ids(r);
         onDialog(name, `
@@ -392,7 +392,7 @@ describe.each([
         expect(frame.link!.startsWith(`${NOTE}#`)).toBe(true);
         expect(frame.link!.slice(NOTE.length + 1)).not.toMatch(/[#|]/);
         expect(r.frames[frame.id].name).toBe('C# and a|b');
-        expect(r.frames[frame.id].text).toBe('s08');
+        expect(texts(r.frames[frame.id])).toEqual(['s08']);
     });
 
     it('picks nothing on a click of a heading no link names: the list stays open and the field as it was', () => {
@@ -601,7 +601,7 @@ describe.each([
         const r = op('');
         const frame = added(r, before);
         expect(frame.link).toBe(`${NOTE}#Tasks`);
-        expect(r.frames[frame.id].text).toBe('s02');
+        expect(texts(r.frames[frame.id])).toEqual(['s02']);
     });
 
     it('keeps the frames added once the view is opened again from its saved state', () => {
@@ -619,7 +619,7 @@ describe.each([
         const again = readFrames(PREFIX, restarted, '');
         expect(again.sidebar).toEqual(r.sidebar);
         for (const f of r.sidebar.filter(one => one.kind === 'markdown')) {
-            expect(again.frames[f.id].text).toBe(r.frames[f.id].text);
+            expect(texts(again.frames[f.id])).toEqual(texts(r.frames[f.id]));
         }
         ev(`(async () => { const R = window.__tvE2E; R[${JSON.stringify(restarted)}].detach(); delete R[${JSON.stringify(restarted)}]; return JSON.stringify(true); })()`);
     });
@@ -640,13 +640,13 @@ describe.each([
         });
 
         it('keeps its frame\'s link, and the frame shows no other note: it says the note is not there', () => {
-            expect(op('').frames.moved.text).toBe('m00');
+            expect(texts(op('').frames.moved)).toEqual(['m00']);
             const r = op(`await renameNote(${JSON.stringify(`${MOVED}.md`)}, ${JSON.stringify(`${DECOY}#x.md`)});`);
             // What the test rests on: the note is at the new name.
             expect(ev<boolean>(`(() => JSON.stringify(!!app.vault.getAbstractFileByPath(${JSON.stringify(`${DECOY}#x.md`)})))()`)).toBe(true);
             expect(frameLinks(r)).toEqual({ moved: MOVED });
             expect(r.frames.moved.missing).toBe(tr('sidebar.noteNotFound'));
-            expect(r.frames.moved.text).toBeNull();
+            expect(texts(r.frames.moved)).toEqual([null]);
         });
     });
 
@@ -693,7 +693,7 @@ describe.each([
             expect(r.collapsed).toEqual(before.collapsed);
             expect(r.frames.renamed.missing).toBeNull();
             expect(r.frames.renamed.name).toBe('Details');
-            expect(r.frames.renamed.text).toBe('s05');
+            expect(texts(r.frames.renamed)).toEqual(['s05']);
         });
 
         it('chooses again from its ⋯ menu the section of a folded frame not found, which stays folded', () => {
@@ -720,7 +720,7 @@ describe.each([
             expect(r.frames.folded.name).toBe('Journal');
 
             r = op(`frame('folded').querySelector('.' + C.header).click();`);
-            expect(r.frames.folded.text).toBe('s03 Tasks s04 Details s05');
+            expect(texts(r.frames.folded)).toEqual(['s03', 'Tasks s04 Details s05']);
         });
 
         it('opens from the card of a frame whose note is not there on the note its link names, and has it show another note', () => {
@@ -745,7 +745,7 @@ describe.each([
             expect(frameLinks(r)).toEqual({ ...frameLinks(before), gone: OTHER_NOTE });
             expect(r.frames.gone.missing).toBeNull();
             expect(r.frames.gone.name).toBe(OTHER_SHORT);
-            expect(r.frames.gone.text).toBe('o00 Other o01');
+            expect(texts(r.frames.gone)).toEqual(['o00', 'Other o01']);
         });
 
         it('chooses again from its ⋯ menu the section of a frame that is found: only its link is written, its id, place and fold kept', () => {
@@ -771,7 +771,7 @@ describe.each([
             expect(r.collapsed).toEqual(before.collapsed);
             expect(frameLinks(r)).toEqual({ ...frameLinks(before), renamed: `${NOTE}#Plan` });
             expect(r.frames.renamed.name).toBe('Plan');
-            expect(r.frames.renamed.text).toBe('s01 Tasks s02');
+            expect(texts(r.frames.renamed)).toEqual(['s01', 'Tasks s02']);
         });
     });
 
@@ -824,7 +824,7 @@ describe.each([
             expect(ids(r)).toEqual([...ids(before).slice(0, at), frame.id, ...ids(before).slice(at)]);
             expect(r.order).toEqual(ids(r));
             expect(r.collapsed).toEqual(before.collapsed);
-            expect(r.frames[frame.id].text).toBe('s01 Tasks s02');
+            expect(texts(r.frames[frame.id])).toEqual(['s01', 'Tasks s02']);
 
             before = r;
             addPlanBeside('folded', ABOVE);

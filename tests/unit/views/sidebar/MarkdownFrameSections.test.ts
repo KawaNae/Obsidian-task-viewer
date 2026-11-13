@@ -214,7 +214,7 @@ describe('the markdown frames of a sidebar', () => {
         expect(frames.views().map(v => [v.id, v.title, v.folds])).toEqual([['m', 'Memo', [true]]]);
         await settle();
         expect(frames.reads).toEqual([note]);
-        expect(frames.views()[0].shown).toMatchObject([{ reading: { kind: 'heading', markdown: 'body' }, path: 'Folder/Note.md' }]);
+        expect(frames.views()[0].shown).toMatchObject([{ reading: { kind: 'heading', cards: [{ markdown: 'body' }] }, path: 'Folder/Note.md' }]);
     });
 
     it('keeps a frame by its id: its link and fold are taken, and a frame gone from the state is ended', async () => {
@@ -230,7 +230,7 @@ describe('the markdown frames of a sidebar', () => {
         expect(m.folds).toEqual([false, true]);
         expect([g.closed, g.root.removed]).toEqual([true, true]);
         await settle();
-        expect(m.shown.at(-1)).toMatchObject({ reading: { markdown: 'two' }, path: 'Other.md' });
+        expect(m.shown.at(-1)).toMatchObject({ reading: { cards: [{ markdown: 'two' }] }, path: 'Other.md' });
         expect(g.shown).toEqual([]);
     });
 
@@ -283,7 +283,7 @@ describe('the markdown frames of a sidebar', () => {
         frames.rename(note, 'Moved/Note.md');
         expect(frames.links()).toEqual({ m: 'Moved/Note#Memo' });
         await settle();
-        expect(frames.views()[0].shown.at(-1)).toMatchObject({ reading: { markdown: 'body' }, path: 'Moved/Note.md' });
+        expect(frames.views()[0].shown.at(-1)).toMatchObject({ reading: { cards: [{ markdown: 'body' }] }, path: 'Moved/Note.md' });
     });
 
     it('follows each note of a renamed folder as it is reported, and writes nothing at the folder', async () => {
@@ -303,8 +303,8 @@ describe('the markdown frames of a sidebar', () => {
         expect(frames.links()).toEqual({ a: 'New/One#Memo', b: 'New/Two#Memo' });
         await settle();
         expect(frames.views().map(v => v.shown.at(-1))).toMatchObject([
-            { reading: { markdown: 'one' }, path: 'New/One.md' },
-            { reading: { markdown: 'two' }, path: 'New/Two.md' },
+            { reading: { cards: [{ markdown: 'one' }] }, path: 'New/One.md' },
+            { reading: { cards: [{ markdown: 'two' }] }, path: 'New/Two.md' },
         ]);
     });
 
@@ -369,7 +369,7 @@ describe('the markdown frames of a sidebar', () => {
         frames.show([memo('m', 'Two#Memo')]);
         await settle();
         expect(frames.reads.at(-1)).toBe(two);
-        expect(frames.views()[0].shown.at(-1)).toMatchObject({ reading: { markdown: 'two' }, path: 'Two.md' });
+        expect(frames.views()[0].shown.at(-1)).toMatchObject({ reading: { cards: [{ markdown: 'two' }] }, path: 'Two.md' });
     });
 
     it('reads again at a saved setting, and stops hearing the vault and ends its frames at close', async () => {
@@ -407,7 +407,7 @@ describe('the markdown frames of a sidebar', () => {
         expect(added.id).toMatch(/^md-/);
         expect(frames.views().map(v => v.id)).toEqual(['m', added.id]);
         await settle();
-        expect(frames.views()[1].shown.at(-1)).toMatchObject({ reading: { kind: 'note', markdown: '# Memo\nbody' } });
+        expect(frames.views()[1].shown.at(-1)).toMatchObject({ reading: { kind: 'note', cards: [{ markdown: '# Memo\nbody' }] } });
     });
 
     it('puts the section chosen in the slot it was asked for, as the frames are when it is chosen', () => {
@@ -442,7 +442,7 @@ describe('the markdown frames of a sidebar', () => {
         // Folded as it was made, and never unfolded.
         expect(new Set(a.folds)).toEqual(new Set([true]));
         await settle();
-        expect(a.shown.at(-1)).toMatchObject({ reading: { kind: 'heading', markdown: 'other' } });
+        expect(a.shown.at(-1)).toMatchObject({ reading: { kind: 'heading', cards: [{ markdown: 'other' }] } });
     });
 
     it('offers in its ⋯ menu to choose its section again, found or not, after Open note and before the placement\'s items', async () => {
