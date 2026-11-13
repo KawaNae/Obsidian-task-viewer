@@ -1019,16 +1019,30 @@ describe.each([
 ])("%s's markdown frame's headings", (_label, type, key) => {
     const name = `mf-headings-${key}`;
     const HEADED = `${PREFIX}-headings-${key}`;
-    // The `##` opens a card; the `###` follows a paragraph in it, the `####` a heading.
+    /**
+     * Read as the whole note, its first card starts with an HTML heading,
+     * which the renderer draws as one and the reading does not take for a
+     * heading, and its second card is opened by the `##`. Read as the
+     * section of the `##`, its second card is opened by the `###`. In each
+     * card a heading opens, a heading follows a paragraph, and another a
+     * heading. The `###` declares a mask.
+     */
     const HEADED_NOTE = [
+        '<h2>Raw</h2>',
+        '',
         'body',
         '',
         '## Two',
         'two',
         '',
         '### Three',
+        '- tv-mask:: three masked',
+        '',
+        'three',
+        '',
         '#### Four',
-        'four',
+        '##### Five',
+        'five',
         '',
     ].join('\n');
 
@@ -1036,44 +1050,88 @@ describe.each([
         ev(`(async () => { ${NOTES} await writeNote(${JSON.stringify(`${HEADED}.md`)}, ${JSON.stringify(HEADED_NOTE)}); return JSON.stringify(true); })()`);
         openView(name, type, {
             showSidebar: true,
-            sidebar: [{ kind: 'markdown', id: 'headed', link: HEADED }],
+            sidebar: [
+                { kind: 'markdown', id: 'whole', link: HEADED },
+                { kind: 'markdown', id: 'two', link: `${HEADED}#Two` },
+            ],
         });
     });
 
-    interface Heading { tag: string; size: number; top: number }
+    interface Heading { tag: string; size: number; top: number; weight: number }
+    interface Measured {
+        /** The text size of a card's markdown. */
+        body: number;
+        /** Each card's text, and its headings, in order. */
+        cards: { text: string; headings: Heading[] }[];
+    }
 
-    /** The text of each card, the text size of the markdown, and each heading's text size and space above it, in pixels. */
-    function measure(): { cards: string[]; body: number; headings: Heading[] } {
+    /** Run `body` in the view, and measure the cards of the frame `id`: each heading's text size, space above and weight, in pixels. */
+    function measure(id: string, body = ''): Measured {
         return ev(`(async () => {
             ${names(name)}
+            ${body}
             await wait(${SETTLE_MS});
-            const bodies = [...frame('headed').querySelectorAll('.markdown-frame__content')];
             const px = (v) => parseFloat(v);
+            const cards = cardsOf(${JSON.stringify(id)});
             return JSON.stringify({
-                cards: bodies.map(b => b.textContent.replace(/\\s+/g, ' ').trim()),
-                body: px(getComputedStyle(bodies[0]).fontSize),
-                headings: bodies.flatMap(b => [...b.querySelectorAll('h1, h2, h3, h4, h5, h6')]).map(h => {
-                    const s = getComputedStyle(h);
-                    return { tag: h.tagName.toLowerCase(), size: px(s.fontSize), top: px(s.marginBlockStart) };
-                }),
+                body: px(getComputedStyle(frame(${JSON.stringify(id)}).querySelector('.markdown-frame__content')).fontSize),
+                cards: cards.map(card => ({
+                    text: card.textContent.replace(/\\s+/g, ' ').trim(),
+                    headings: [...card.querySelectorAll('h1, h2, h3, h4, h5, h6')].map(h => {
+                        const s = getComputedStyle(h);
+                        return { tag: h.tagName.toLowerCase(), size: px(s.fontSize), top: px(s.marginBlockStart), weight: Number(s.fontWeight) };
+                    }),
+                })),
             });
         })()`);
     }
 
-    it('sizes an ## and a ### a little larger than the body, and an #### as the body', () => {
-        const m = measure();
+    /** Each heading of each card: its tag, and its text size as a part of the body's, to two places. */
+    const sizes = (m: Measured) => m.cards.map(card => card.headings.map(h => [h.tag, Math.round((h.size / m.body) * 100) / 100]));
+
+    it('sizes the heading that opens a card 1.08 times the body, whatever its level, and every other heading of a card as the body', () => {
+        const whole = measure('whole');
         // What the test rests on: the `##` opens the second card, the deeper headings inside it.
-        expect(m.cards).toEqual(['body', 'Two two Three Four four']);
-        expect(m.body).toBeGreaterThan(0);
-        expect(m.headings.map(h => h.tag)).toEqual(['h2', 'h3', 'h4']);
-        const [two, three, four] = m.headings;
-        expect(two.size).toBeCloseTo(m.body * 1.15, 1);
-        expect(three.size).toBeCloseTo(m.body * 1.08, 1);
-        expect(four.size).toBeCloseTo(m.body, 1);
+        expect(whole.cards.map(card => card.text)).toEqual(['Raw body', 'Two two Three three Four Five five']);
+        expect(whole.body).toBeGreaterThan(0);
+        expect(sizes(whole)).toEqual([
+            // An HTML heading first in a card no heading opens is not the card's name.
+            [['h2', 1]],
+            [['h2', 1.08], ['h3', 1], ['h4', 1], ['h5', 1]],
+        ]);
+
+        const two = measure('two');
+        expect(two.cards.map(card => card.text)).toEqual(['two', 'Three three Four Five five']);
+        expect(sizes(two)).toEqual([[], [['h3', 1.08], ['h4', 1], ['h5', 1]]]);
+    });
+
+    it('sets every heading of a card in a bold weight, whatever its size', () => {
+        const weights = measure('whole').cards.flatMap(card => card.headings.map(h => h.weight));
+        expect(weights).toHaveLength(5);
+        for (const weight of weights) expect(weight).toBeGreaterThanOrEqual(600);
+    });
+
+    it('sizes the heading kept over a card\'s mask as the heading that opens the card', () => {
+        try {
+            const two = measure('two', 'setMask(true);');
+            const masked = ev<{ tag: string; size: number; mask: string | null }>(`(() => {
+                ${names(name)}
+                const card = cardsOf('two')[1];
+                const h = card.querySelector('.markdown-frame__heading :is(h1, h2, h3, h4, h5, h6)');
+                return JSON.stringify({ tag: h?.tagName.toLowerCase() ?? '', size: h ? parseFloat(getComputedStyle(h).fontSize) : 0, mask: card.querySelector('.markdown-frame__mask')?.textContent ?? null });
+            })()`);
+            expect(masked.mask).toBe('three masked');
+            expect(masked.tag).toBe('h3');
+            expect(masked.size).toBeCloseTo(two.body * 1.08, 1);
+        } finally {
+            measure('two', 'setMask(false);');
+        }
     });
 
     it('spaces the heading that opens a card 4px from the card\'s top, as any first line of a card, and a heading inside a card 12px from what is above it, a paragraph or a heading', () => {
-        expect(measure().headings.map(h => h.top)).toEqual([4, 12, 12]);
+        const whole = measure('whole');
+        expect(whole.cards[1].headings.map(h => h.top)).toEqual([4, 12, 12, 12]);
+        expect(measure('two').cards[1].headings.map(h => h.top)).toEqual([4, 12, 12]);
     });
 });
 
