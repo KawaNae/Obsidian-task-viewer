@@ -5,19 +5,19 @@ import { headingLinks } from '../../../src/services/parsing/utils/HeadingLinks';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 const read = (lines: string[], subpath: string) => readFrameContent(lines, subpath, DEFAULT_SETTINGS);
-/** The markdown of the section `subpath` names; undefined when the note has no such heading. */
-const markdownOf = (lines: string[], subpath: string) => {
+/** The cards of the section `subpath` names; undefined when the note has no such heading. */
+const cardsOf = (lines: string[], subpath: string) => {
     const content = read(lines, subpath);
-    return content.kind === 'no-heading' ? undefined : content.markdown;
+    return content.kind === 'no-heading' ? undefined : content.cards;
 };
-const styleOf = (lines: string[], subpath: string) => {
-    const content = read(lines, subpath);
-    return content.kind === 'no-heading' ? undefined : [content.color, content.linestyle];
-};
-const maskOf = (lines: string[], subpath: string) => {
-    const content = read(lines, subpath);
-    return content.kind === 'no-heading' ? undefined : content.mask;
-};
+/** Each card's markdown. */
+const markdownOf = (lines: string[], subpath: string) => cardsOf(lines, subpath)?.map(card => card.markdown);
+/** Each card's color and line style. */
+const styleOf = (lines: string[], subpath: string) => cardsOf(lines, subpath)?.map(card => [card.color, card.linestyle]);
+/** Each card's mask. */
+const maskOf = (lines: string[], subpath: string) => cardsOf(lines, subpath)?.map(card => card.mask);
+/** A card of no style and no mask. */
+const plain = (heading: string | null, markdown: string) => ({ heading, markdown, color: null, linestyle: null, mask: null });
 
 describe('the link of a markdown frame', () => {
     it('is cut at its first `#` into the note and the section', () => {
@@ -65,7 +65,7 @@ describe('the link of a frame whose note was renamed or moved', () => {
 });
 
 describe('the name the row of a frame shows', () => {
-    const body = { markdown: '', color: null, linestyle: null };
+    const body = { cards: [plain(null, '')] };
 
     it('is the heading\'s text as the note writes it, for a heading\'s section', () => {
         expect(frameTitle('Folder/Note#bold link', { kind: 'heading', title: '**Bold** [[Link]]', ...body }, 'Note')).toBe('**Bold** [[Link]]');
@@ -89,8 +89,9 @@ describe('the name the row of a frame shows', () => {
     });
 });
 
+
 describe('readFrameContent: the section of a heading', () => {
-    it('shows the heading\'s text and the lines under it, deeper headings included, up to the next heading of its level or above', () => {
+    it('cuts the section into the lines under its heading and a card for each heading nested one level in it, which holds the deeper ones', () => {
         const note = [
             '# Top',
             '## Today',
@@ -104,33 +105,61 @@ describe('readFrameContent: the section of a heading', () => {
             'other',
         ];
         expect(read(note, '#Today')).toEqual({
-            kind: 'heading', title: 'Today', markdown: 'text\n### Detail\n- item', color: null, linestyle: null, mask: null,
+            kind: 'heading',
+            title: 'Today',
+            cards: [plain(null, 'text'), plain('### Detail', '### Detail\n- item')],
         });
-        expect(markdownOf(note, '#Tomorrow')).toBe('next');
-        expect(markdownOf(note, '#Detail')).toBe('- item');
-        expect(markdownOf(note, '#Top')).toBe('## Today\ntext\n### Detail\n- item\n\n## Tomorrow\nnext');
-        expect(markdownOf(note, '#Other')).toBe('other');
+        expect(markdownOf(note, '#Tomorrow')).toEqual(['next']);
+        expect(markdownOf(note, '#Detail')).toEqual(['- item']);
+        expect(markdownOf(note, '#Top')).toEqual(['## Today\ntext\n### Detail\n- item', '## Tomorrow\nnext']);
+        expect(markdownOf(note, '#Other')).toEqual(['other']);
+    });
+
+    it('starts a card at the first heading under the section\'s, whatever its level, and the next at the next heading of its level or above', () => {
+        const note = ['# Top', '#### Deep', 'd', '### Mid', 'm', '#### Under mid', 'u', '## High', 'h'];
+        expect(cardsOf(note, '#Top')?.map(card => card.heading)).toEqual(['#### Deep', '### Mid', '## High']);
+        expect(markdownOf(note, '#Top')).toEqual(['#### Deep\nd', '### Mid\nm\n#### Under mid\nu', '## High\nh']);
+    });
+
+    it('draws the lines under the section\'s heading only when something is left of them, and a nested heading\'s card even when it is empty', () => {
+        const note = ['# Top', '', '- tv-color:: teal', '', '## A', '## B', '- tv-color:: red', '', '## C', 'c'];
+        expect(cardsOf(note, '#Top')?.map(card => [card.heading, card.markdown])).toEqual([
+            ['## A', '## A'],
+            ['## B', '## B'],
+            ['## C', '## C\nc'],
+        ]);
+        expect(markdownOf(['# Top', 'intro', '## A'], '#Top')).toEqual(['intro', '## A']);
+    });
+
+    it('is one card for a section with no heading in it, an empty one too', () => {
+        expect(read(['## A', '- tv-color:: teal'], '#A')).toEqual({ kind: 'heading', title: 'A', cards: [{ ...plain(null, ''), color: 'teal' }] });
+        expect(markdownOf(['## A'], '#A')).toEqual(['']);
+    });
+
+    it('opens a card with its heading\'s lines, a setext heading\'s two', () => {
+        const note = ['# Top', 'Under', '---', 'u'];
+        expect(cardsOf(note, '#Top')?.map(card => [card.heading, card.markdown])).toEqual([['Under\n---', 'Under\n---\nu']]);
     });
 
     it('finds the heading as a link does: named from a heading above it, case and marks aside, the first of two', () => {
         const note = ['# A', '## Memo', 'of a', '# B', '## Memo', 'of b', '## C: notes', 'c'];
-        expect(markdownOf(note, '#Memo')).toBe('of a');
-        expect(markdownOf(note, '#B#Memo')).toBe('of b');
-        expect(markdownOf(note, 'B#memo')).toBe('of b');
-        expect(read(note, '#c notes')).toMatchObject({ kind: 'heading', title: 'C: notes', markdown: 'c' });
+        expect(markdownOf(note, '#Memo')).toEqual(['of a']);
+        expect(markdownOf(note, '#B#Memo')).toEqual(['of b']);
+        expect(markdownOf(note, 'B#memo')).toEqual(['of b']);
+        expect(read(note, '#c notes')).toEqual({ kind: 'heading', title: 'C: notes', cards: [plain(null, 'c')] });
     });
 
     it('shows the title as the note writes it, a closing run of `#` left out', () => {
         expect(read(['## **Bold** title ##', 'x'], '#bold title')).toMatchObject({ kind: 'heading', title: '**Bold** title' });
     });
 
-    it('does not read a `## ` in a code block as a heading, and keeps it in the body', () => {
+    it('does not read a `## ` in a code block as a heading, and keeps it in the card', () => {
         const note = ['## A', '```md', '## not a heading', '```', 'after'];
-        expect(markdownOf(note, '#A')).toBe('```md\n## not a heading\n```\nafter');
+        expect(markdownOf(note, '#A')).toEqual(['```md\n## not a heading\n```\nafter']);
         expect(read(note, '#not a heading')).toEqual({ kind: 'no-heading' });
     });
 
-    it('leaves out the section\'s property lines and the lines under them, those of a nested heading too', () => {
+    it('leaves out the property lines of a card\'s section and of those nested in it, and the lines under them', () => {
         const note = [
             '## A',
             '- tv-color:: teal',
@@ -145,29 +174,29 @@ describe('readFrameContent: the section of a heading', () => {
             '- tv-linestyle:: dashed',
             '',
             'sub text',
-        ];
-        expect(markdownOf(note, '#A')).toBe([
-            'text',
-            '- [ ] task',
-            '    - note:: of the task',
-            '### Sub',
+            '#### Deeper',
+            '- tv-mask:: deep',
             '',
-            'sub text',
-        ].join('\n'));
-        expect(markdownOf(note, '#Sub')).toBe('sub text');
+            'deeper text',
+        ];
+        expect(markdownOf(note, '#A')).toEqual([
+            'text\n- [ ] task\n    - note:: of the task',
+            '### Sub\n\nsub text\n#### Deeper\n\ndeeper text',
+        ]);
+        expect(markdownOf(note, '#Sub')).toEqual(['sub text', '#### Deeper\n\ndeeper text']);
     });
 
     it('leaves out a line that goes on a property line\'s item with no blank line between', () => {
-        expect(markdownOf(['## A', '- tv-color:: teal', 'goes on the item', '', 'text'], '#A')).toBe('text');
+        expect(markdownOf(['## A', '- tv-color:: teal', 'goes on the item', '', 'text'], '#A')).toEqual(['text']);
     });
 
-    it('leaves out the blank lines at the two ends of the body, and keeps those inside it', () => {
-        expect(markdownOf(['## A', '', '　', 'one', '', 'two', '', ' ', '## B'], '#A')).toBe('one\n\ntwo');
-        expect(markdownOf(['## A', '', '', '## B'], '#A')).toBe('');
-        expect(markdownOf(['## A'], '#A')).toBe('');
+    it('leaves out the blank lines at the two ends of a card, and keeps those inside it', () => {
+        expect(markdownOf(['## A', '', '　', 'one', '', 'two', '', ' ', '## B'], '#A')).toEqual(['one\n\ntwo']);
+        expect(markdownOf(['# T', '', '## A', '', 'one', '', 'two', '', '## B', ''], '#T')).toEqual(['## A\n\none\n\ntwo', '## B']);
+        expect(markdownOf(['## A', '', '', '## B'], '#A')).toEqual(['']);
     });
 
-    it('takes the style a task of the section inherits: the frontmatter, the lines above the first heading, the headings above, the section, the nearest winning', () => {
+    it('styles each card as a task of its section is: the frontmatter, the lines above the first heading, the headings above, its section, the nearest winning', () => {
         const note = [
             '---',
             'tv-color: red',
@@ -179,6 +208,8 @@ describe('readFrameContent: the section of a heading', () => {
             'a',
             '# Top',
             '- tv-color:: blue',
+            '',
+            'top',
             '## Under top',
             'b',
             '## Own',
@@ -186,20 +217,20 @@ describe('readFrameContent: the section of a heading', () => {
             '### Sub',
             '- tv-color:: green',
         ];
-        expect(styleOf(note, '#Inherits')).toEqual(['red', 'dashed']);
-        expect(styleOf(note, '#Top')).toEqual(['blue', 'dashed']);
-        expect(styleOf(note, '#Under top')).toEqual(['blue', 'dashed']);
-        // A nested heading's property line styles the nested section, not the one around it.
-        expect(styleOf(note, '#Own')).toEqual(['teal', 'dashed']);
-        expect(styleOf(note, '#Sub')).toEqual(['green', 'dashed']);
+        expect(styleOf(note, '#Inherits')).toEqual([['red', 'dashed']]);
+        expect(styleOf(note, '#Top')).toEqual([['blue', 'dashed'], ['blue', 'dashed'], ['teal', 'dashed']]);
+        expect(styleOf(note, '#Under top')).toEqual([['blue', 'dashed']]);
+        // A property line of a heading deeper than the card's styles the deeper section, not the card.
+        expect(styleOf(note, '#Own')).toEqual([['green', 'dashed']]);
+        expect(styleOf(note, '#Sub')).toEqual([['green', 'dashed']]);
     });
 
     it('takes no style where the nearest layer says there is none, and looks past a value that does not read', () => {
         const note = ['---', 'tv-color: red', 'tv-linestyle: dashed', '---', '## Hidden', '- tv-color::', '- tv-linestyle:: wavy'];
-        expect(read(note, '#Hidden')).toEqual({ kind: 'heading', title: 'Hidden', markdown: '', color: null, linestyle: 'dashed', mask: null });
+        expect(read(note, '#Hidden')).toEqual({ kind: 'heading', title: 'Hidden', cards: [{ ...plain(null, ''), linestyle: 'dashed' }] });
     });
 
-    it('takes the mask a task of the section inherits: the section\'s own line, a heading above, the frontmatter, the lines above the first heading', () => {
+    it('masks each card as a task of its section is masked: its own line, a heading above, the frontmatter, the lines above the first heading', () => {
         const note = [
             '---',
             'tv-mask: from frontmatter',
@@ -214,25 +245,28 @@ describe('readFrameContent: the section of a heading', () => {
             '- tv-mask:: own',
             '### Sub',
             '- tv-mask:: from sub',
+            '#### Deep',
+            '- tv-mask:: from deep',
         ];
-        expect(maskOf(note, '#Inherits')).toBe('from frontmatter');
-        expect(maskOf(note, '#Top')).toBe('from top');
-        expect(maskOf(note, '#Under top')).toBe('from top');
-        // A nested heading's mask masks the nested section, not the one around it.
-        expect(maskOf(note, '#Own')).toBe('own');
-        expect(maskOf(note, '#Sub')).toBe('from sub');
-        expect(maskOf(['- tv-mask:: from above', '', '## A', 'a'], '#A')).toBe('from above');
-        expect(maskOf(['## A', 'a'], '#A')).toBeNull();
+        expect(maskOf(note, '#Inherits')).toEqual(['from frontmatter']);
+        expect(maskOf(note, '#Top')).toEqual(['from top', 'own']);
+        expect(maskOf(note, '#Under top')).toEqual(['from top']);
+        // A mask of a heading deeper than the card's masks the deeper section, not the card.
+        expect(maskOf(note, '#Own')).toEqual(['from sub']);
+        expect(maskOf(note, '#Sub')).toEqual(['from deep']);
+        expect(maskOf(['- tv-mask:: from above', '', '## A', 'a'], '#A')).toEqual(['from above']);
+        expect(maskOf(['## A', 'a'], '#A')).toEqual([null]);
     });
 
     it('takes no mask where the nearest layer hides it with no value', () => {
-        const note = ['---', 'tv-mask: secret', '---', '## Hidden', '- tv-mask::', '', 'text'];
-        expect(read(note, '#Hidden')).toEqual({ kind: 'heading', title: 'Hidden', markdown: 'text', color: null, linestyle: null, mask: null });
+        const note = ['---', 'tv-mask: secret', '---', '# Top', 'top', '## Hidden', '- tv-mask::', '', 'text'];
+        expect(maskOf(note, '#Top')).toEqual(['secret', null]);
+        expect(read(note, '#Hidden')).toEqual({ kind: 'heading', title: 'Hidden', cards: [plain(null, 'text')] });
     });
 
     it('reads a tv-ignore\'d note as any other', () => {
         const note = ['---', 'tv-ignore: true', 'tv-color: red', '---', '## A', 'body'];
-        expect(read(note, '#A')).toEqual({ kind: 'heading', title: 'A', markdown: 'body', color: 'red', linestyle: null, mask: null });
+        expect(read(note, '#A')).toEqual({ kind: 'heading', title: 'A', cards: [{ ...plain(null, 'body'), color: 'red' }] });
     });
 
     it('says so when the note has no heading the subpath names', () => {
@@ -246,10 +280,16 @@ describe('readFrameContent: the section of a heading', () => {
 });
 
 describe('readFrameContent: the whole note', () => {
-    it('shows the note past its frontmatter, with no title of its own', () => {
-        const note = ['---', 'aliases: [x]', '---', '', 'intro', '# A', 'a', '## B', 'b', ''];
-        expect(read(note, '')).toEqual({ kind: 'note', markdown: 'intro\n# A\na\n## B\nb', color: null, linestyle: null, mask: null });
+    it('cuts the note past its frontmatter into the lines above its first heading and a card for each heading no other is above, with no title of its own', () => {
+        const note = ['---', 'aliases: [x]', '---', '', 'intro', '## A', 'a', '### Sub', 's', '## B', 'b', ''];
+        expect(read(note, '')).toEqual({ kind: 'note', cards: [plain(null, 'intro'), plain('## A', '## A\na\n### Sub\ns'), plain('## B', '## B\nb')] });
         expect(read(note, '')).not.toHaveProperty('title');
+    });
+
+    it('is one card for a note headed by a single `#`, whose sections the frame of that heading cuts', () => {
+        const note = ['# Title', '## A', 'a', '## B', 'b'];
+        expect(markdownOf(note, '')).toEqual(['# Title\n## A\na\n## B\nb']);
+        expect(markdownOf(note, '#Title')).toEqual(['## A\na', '## B\nb']);
     });
 
     it('is what a subpath that writes no name asks for', () => {
@@ -258,13 +298,14 @@ describe('readFrameContent: the whole note', () => {
         expect(read(note, '#').kind).toBe('note');
     });
 
-    it('shows a note without a frontmatter from its first line, and an empty note as nothing', () => {
-        expect(markdownOf(['one', 'two'], '')).toBe('one\ntwo');
-        expect(read([], '')).toEqual({ kind: 'note', markdown: '', color: null, linestyle: null, mask: null });
-        expect(markdownOf(['---', 'a: 1', '---'], '')).toBe('');
+    it('shows a note without a frontmatter from its first line, and an empty note as one empty card', () => {
+        expect(markdownOf(['one', 'two'], '')).toEqual(['one\ntwo']);
+        expect(read([], '')).toEqual({ kind: 'note', cards: [plain(null, '')] });
+        expect(markdownOf(['---', 'a: 1', '---'], '')).toEqual(['']);
+        expect(markdownOf(['---', 'a: 1', '---', '', '- tv-color:: red', '## A'], '')).toEqual(['## A']);
     });
 
-    it('leaves out the property lines of every section, and the blank lines at its two ends', () => {
+    it('leaves out the property lines of every section, and the blank lines at each card\'s two ends', () => {
         const note = [
             '---',
             'tv-color: red',
@@ -284,33 +325,36 @@ describe('readFrameContent: the whole note', () => {
             'sub',
             '',
         ];
-        expect(markdownOf(note, '')).toBe('intro\n## A\n\na\n### Sub\n\nsub');
+        expect(markdownOf(note, '')).toEqual(['intro', '## A\n\na\n### Sub\n\nsub']);
     });
 
-    it('takes the style a task above the first heading inherits: the frontmatter and the property lines above the first heading', () => {
+    it('styles the card above the first heading as a task written there, and each heading\'s card as a task of its section', () => {
         const note = [
             '---',
             'tv-color: red',
             'tv-linestyle: dotted',
             '---',
             '- tv-linestyle:: dashed',
+            '',
+            'intro',
             '## A',
             '- tv-color:: teal',
+            '## B',
         ];
-        expect(styleOf(note, '')).toEqual(['red', 'dashed']);
-        expect(styleOf(['- tv-color:: blue', 'text'], '')).toEqual(['blue', null]);
-        expect(styleOf(['---', 'tv-color: red', '---', '- tv-color::', '# A'], '')).toEqual([null, null]);
+        expect(styleOf(note, '')).toEqual([['red', 'dashed'], ['teal', 'dashed'], ['red', 'dashed']]);
+        expect(styleOf(['- tv-color:: blue', 'text'], '')).toEqual([['blue', null]]);
+        expect(styleOf(['---', 'tv-color: red', '---', '- tv-color::', '# A'], '')).toEqual([[null, null]]);
     });
 
-    it('takes the mask a task above the first heading inherits', () => {
-        expect(maskOf(['---', 'tv-mask: secret', '---', '- tv-mask:: above', '## A', '- tv-mask:: a'], '')).toBe('above');
-        expect(maskOf(['---', 'tv-mask: secret', '---', 'intro', '## A', '- tv-mask:: a'], '')).toBe('secret');
-        expect(maskOf(['intro', '## A', '- tv-mask:: a'], '')).toBeNull();
-        expect(maskOf(['---', 'tv-mask: secret', '---', '- tv-mask::', '# A'], '')).toBeNull();
+    it('masks the card above the first heading as a task written there, and each heading\'s card as a task of its section', () => {
+        expect(maskOf(['---', 'tv-mask: secret', '---', '- tv-mask:: above', '', 'intro', '## A', '- tv-mask:: a', '## B'], '')).toEqual(['above', 'a', 'above']);
+        expect(maskOf(['---', 'tv-mask: secret', '---', 'intro', '## A', '- tv-mask:: a'], '')).toEqual(['secret', 'a']);
+        expect(maskOf(['intro', '## A', '- tv-mask:: a'], '')).toEqual([null, 'a']);
+        expect(maskOf(['---', 'tv-mask: secret', '---', '- tv-mask::', '# A'], '')).toEqual([null]);
     });
 
     it('reads a tv-ignore\'d note as any other', () => {
         const note = ['---', 'tv-ignore: true', 'tv-color: red', '---', 'intro', '## A', 'body'];
-        expect(read(note, '')).toEqual({ kind: 'note', markdown: 'intro\n## A\nbody', color: 'red', linestyle: null, mask: null });
+        expect(read(note, '')).toEqual({ kind: 'note', cards: [{ ...plain(null, 'intro'), color: 'red' }, { ...plain('## A', '## A\nbody'), color: 'red' }] });
     });
 });

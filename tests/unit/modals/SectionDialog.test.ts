@@ -38,7 +38,7 @@ const text = (s: string, picked: HeadingAsk['picked'] = null): HeadingAsk => ({ 
 /** The heading on line `line`, picked in the note at `path`. */
 const pickedAt = (line: number, path = PATH): HeadingAsk => ({ text: NOTE[line].replace(/^#+ /, ''), picked: { path, line } });
 
-/** The heading the link of `ask`'s section is read back as, by the walk a frame reads its link with, and the body the frame shows. */
+/** The heading the link of `ask`'s section is read back as, by the walk a frame reads its link with, and the markdown of the frame's cards, one after the other. */
 function readBack(ask: HeadingAsk) {
     const link = sectionLink(PATH, chosenSection(PATH, headings, ask));
     if (link === null) return null;
@@ -48,7 +48,7 @@ function readBack(ask: HeadingAsk) {
         link,
         path,
         line: resolveHeading(headings.map(h => h.heading), subpath)?.heading.line ?? null,
-        body: content.kind === 'no-heading' ? null : content.markdown,
+        body: content.kind === 'no-heading' ? null : content.cards.map(card => card.markdown).join('\n'),
     };
 }
 
