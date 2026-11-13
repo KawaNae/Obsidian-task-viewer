@@ -39,10 +39,17 @@ export type CardContent =
     | { kind: 'mask'; heading: string | null; text: string; path: string }
     | { kind: 'missing'; what: 'no-note' | 'no-heading' };
 
-/** How a card is styled: as a task of its section is. */
+/**
+ * How a card looks: colored and lined as a task of its section is, and
+ * whether a heading nested in the frame's section opens it, as the reading
+ * found it (`FrameCard.heading`). The heading that opens a card is sized as
+ * the card's name; one the markdown draws first in a card no heading opens
+ * is not, whatever the renderer makes of it.
+ */
 export interface CardStyle {
     color: string | null;
     linestyle: string | null;
+    opensWithHeading: boolean;
 }
 
 /** What a card is handed of the frame that holds it. */
@@ -163,6 +170,7 @@ export class MarkdownFrameCard {
     private setStyle(style: CardStyle): void {
         TaskStyling.applyTaskColor(this.el, style.color);
         TaskStyling.applyTaskLinestyle(this.el, style.linestyle);
+        this.el.toggleClass('markdown-frame__card--headed', style.opensWithHeading);
     }
 
     /**
