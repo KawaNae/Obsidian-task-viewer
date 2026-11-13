@@ -131,6 +131,14 @@ describe('readFrameContent: the section of a heading', () => {
         expect(markdownOf(['# Top', 'intro', '## A'], '#Top')).toEqual(['intro', '## A']);
     });
 
+    it('opens a card only with a heading the outline reads: an HTML heading at the top of the lines under the section\'s heading opens none', () => {
+        const note = ['# Top', '<h2>Raw</h2>', 'r', '## A', 'a'];
+        expect(cardsOf(note, '#Top')?.map(card => [card.heading, card.markdown])).toEqual([
+            [null, '<h2>Raw</h2>\nr'],
+            ['## A', '## A\na'],
+        ]);
+    });
+
     it('is one card for a section with no heading in it, an empty one too', () => {
         expect(read(['## A', '- tv-color:: teal'], '#A')).toEqual({ kind: 'heading', title: 'A', cards: [{ ...plain(null, ''), color: 'teal' }] });
         expect(markdownOf(['## A'], '#A')).toEqual(['']);

@@ -201,6 +201,18 @@ describe('the cards of a markdown frame', () => {
         ]);
     });
 
+    it('marks the cards a heading opens as the reading found them, not by what their markdown starts with, and marks a kept card anew without rendering it', async () => {
+        const f = await frameView();
+        const headed = () => f.cards().map(el => el.classes.has('markdown-frame__card--headed'));
+        f.view.show(noteOf([card(null, '<h2>Raw</h2>\nr'), card('## A', '## A\na'), card('### B', '### B\nb')]));
+        expect(headed()).toEqual([false, true, true]);
+
+        renders.length = 0;
+        f.view.show(noteOf([card('<h2>Raw</h2>', '<h2>Raw</h2>\nr'), card(null, '## A\na'), card('### B', '### B\nb')]));
+        expect(renders).toEqual([]);
+        expect(headed()).toEqual([true, false, true]);
+    });
+
     it('renders again only the card whose markdown changed, and keeps the others\' elements', async () => {
         const f = await frameView();
         f.view.show(noteOf([card('## A', '## A\na'), card('## B', '## B\nb'), card('## C', '## C\nc')]));
