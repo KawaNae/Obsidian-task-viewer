@@ -9,7 +9,7 @@ import {
 } from '../../../../src/services/lang/flow/FlowSegments';
 import { parseFlow } from '../../../../src/services/lang/flow/FlowParser';
 import { serializeFlow, serializeFlowLines } from '../../../../src/services/lang/flow/FlowSerializer';
-import { FlowProgram } from '../../../../src/services/lang/flow/FlowAst';
+import type { FlowProgram } from '../../../../src/services/lang/flow/FlowAst';
 
 function errorCodes(raws: string[]): string[] {
     return parseFlowSegments(raws).diagnostics

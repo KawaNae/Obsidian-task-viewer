@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { Diagnostic } from '../../../src/services/lang/Diagnostic';
+import type { Diagnostic } from '../../../src/services/lang/Diagnostic';
 import {
     FN_NAMES, LITERAL_WORDS, NAMESPACE_WORDS, PROP_NAMES, UNIT_KEYWORDS,
 } from '../../../src/services/lang/ExprAst';
 import { FLOW_TYPE_ENV, checkExpr, isReservedName } from '../../../src/services/lang/ExprChecker';
 import { REFUSED_EXPR_KEYWORDS, parseExpr } from '../../../src/services/lang/ExprParser';
-import { StaticType } from '../../../src/services/lang/functions';
+import type { StaticType } from '../../../src/services/lang/functions';
 import { tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
 

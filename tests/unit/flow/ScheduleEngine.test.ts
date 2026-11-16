@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
-import { DateAnchor, ScheduleRuntime, nextOccurrence } from '../../../src/services/flow/ScheduleEngine';
-import { EvalContext } from '../../../src/services/lang/ExprEvaluator';
+import { type DateAnchor, type ScheduleRuntime, nextOccurrence } from '../../../src/services/flow/ScheduleEngine';
+import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 
 // 2026-07-02 is a Thursday.
 const RT: ScheduleRuntime = { today: '2026-07-02', now: { date: '2026-07-02', time: '10:00' } };

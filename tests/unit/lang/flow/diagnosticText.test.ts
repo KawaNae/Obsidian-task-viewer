@@ -4,7 +4,7 @@ import { initI18n } from '../../../../src/i18n';
 import ja from '../../../../src/i18n/locales/ja.json';
 import { diagnosticText } from '../../../../src/services/lang/flow/diagnosticText';
 import { parseFlow } from '../../../../src/services/lang/flow/FlowParser';
-import { Diagnostic } from '../../../../src/services/lang/Diagnostic';
+import type { Diagnostic } from '../../../../src/services/lang/Diagnostic';
 import { FLOW_TYPE_ENV, checkExpr } from '../../../../src/services/lang/ExprChecker';
 import { parseExpr, splitInterpolations } from '../../../../src/services/lang/ExprParser';
 import { tokenize } from '../../../../src/services/lang/Lexer';

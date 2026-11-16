@@ -4,7 +4,7 @@ import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/fl
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
-import { DEFAULT_SETTINGS, Task } from '../../../src/types';
+import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 
 function makeExecutor() {
