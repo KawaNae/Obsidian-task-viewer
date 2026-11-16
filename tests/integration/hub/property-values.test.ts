@@ -193,17 +193,49 @@ describe('the hub writes a property as its block', () => {
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
     });
 
-    it('writes nothing over a key written twice, and says so at the form\'s end', () => {
+    it('writes nothing over a key written twice, says so at the form\'s end, and keeps what was typed in the add row', () => {
         openHub('親');
-        const said = run<string>(`
+        const after = run<{ said: string; key: string; value: string }>(`
             const key = hub().querySelector('.task-hub__prop-add .tv-form__label input');
             type(key, 'dup');
             const value = hub().querySelector('.task-hub__prop-add input.tv-form__control');
             type(value, '3');
             await leave(value);
-            return hub().textContent;
+            const row = hub().querySelector('.task-hub__prop-add');
+            const kept = { said: hub().textContent, key: row.querySelector('.tv-form__label input').value, value: row.querySelector('input.tv-form__control').value };
+            // Emptied as a person would, so that the hub closes.
+            type(row.querySelector('.tv-form__label input'), '');
+            type(row.querySelector('input.tv-form__control'), '');
+            return JSON.stringify(kept);
         `);
         expect(readTestFile(TEST_FILE)).toBe(BLOCK.join('\n'));
-        expect(said).toContain('dup');
+        expect(after.said).toContain('dup');
+        expect([after.key, after.value]).toEqual(['dup', '3']);
+    });
+
+    it('stays open on a close while the add row holds a key that cannot be written, and closes once the row is emptied', () => {
+        openHub('親');
+        const after = run<{ open: boolean; said: string; key: string; closed: boolean }>(`
+            const key = hub().querySelector('.task-hub__prop-add .tv-form__label input');
+            type(key, 'dup');
+            const value = hub().querySelector('.task-hub__prop-add input.tv-form__control');
+            type(value, '3');
+            await leave(value);
+            const close = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-overlay__close').click();
+            close();
+            await sleep(600);
+            const row = hub()?.querySelector('.task-hub__prop-add');
+            const stayed = { open: !!hub(), said: hub()?.querySelector('.task-hub__form')?.textContent ?? '', key: row?.querySelector('.tv-form__label input').value ?? '' };
+            type(row.querySelector('.tv-form__label input'), '');
+            type(row.querySelector('input.tv-form__control'), '');
+            close();
+            await until(() => !hub());
+            return JSON.stringify({ ...stayed, closed: !hub() });
+        `);
+        expect(after.open).toBe(true);
+        expect(after.said).toContain('dup');
+        expect(after.key).toBe('dup');
+        expect(after.closed).toBe(true);
+        expect(readTestFile(TEST_FILE)).toBe(BLOCK.join('\n'));
     });
 });
