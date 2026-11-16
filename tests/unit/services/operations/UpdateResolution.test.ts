@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../../mocks/obsidian';
 import { Operations } from '../../../../src/services/operations/Operations';
 import { makeTask } from '../../helpers/makeTask';
 import { formatRow } from '../../../../src/services/parsing/TaskLineFormat';

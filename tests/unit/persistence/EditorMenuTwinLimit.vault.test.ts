@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { t } from '../../../src/i18n';
@@ -29,7 +29,6 @@ let live: VaultSession[] = [];
 afterEach(() => {
     for (const session of live) session.dispose();
     live = [];
-    Notice.messages.length = 0;
 });
 
 describe('the editor menu, written to the file, on one of two twin lines', () => {

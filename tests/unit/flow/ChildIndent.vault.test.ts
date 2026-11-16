@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { Notice } from '../mocks/obsidian';
 import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 import { byKey } from '../helpers/properties';
@@ -23,10 +23,6 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 const FILE = 'note.md';
 
 let live: VaultSession | undefined;
-
-beforeEach(() => {
-    Notice.messages.length = 0;
-});
 
 afterEach(() => {
     live?.dispose();

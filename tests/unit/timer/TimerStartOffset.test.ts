@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { TimerPersistence } from '../../../src/timer/TimerPersistence';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
 import type { TimerWidget } from '../../../src/timer/TimerWidget';

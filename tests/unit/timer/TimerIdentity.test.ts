@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { widgetOver } from '../helpers/timerRig';
 import { TimerWidget } from '../../../src/timer/TimerWidget';
@@ -34,7 +34,6 @@ describe('timer identity', () => {
 
     beforeEach(async () => {
         stubWindow();
-        Notice.messages = [];
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(at(9, 0));
         contents = new Map([[FILE, ['- [ ] 器 @2026-09-21 ^box', '- [ ] 別 @2026-09-21 ^other', ''].join('\n')]]);

@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, it, expect, afterEach } from 'vitest';
+import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 import type { SubtreeLine } from '../../../src/services/persistence/TaskOps';
@@ -17,7 +17,6 @@ const FILE = 'note.md';
 const SPACES = { useTab: false, tabSize: 4 };
 
 let live: VaultSession | undefined;
-beforeEach(() => { Notice.messages.length = 0; });
 afterEach(() => { live?.dispose(); live = undefined; });
 
 type Child = [text: string, was: number | null];

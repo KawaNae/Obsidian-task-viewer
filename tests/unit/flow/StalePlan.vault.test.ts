@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
@@ -35,7 +35,6 @@ let live: VaultSession | undefined;
 afterEach(() => {
     live?.dispose();
     live = undefined;
-    Notice.messages.length = 0;
 });
 
 async function open(files: Record<string, string[]>): Promise<{ contents: Map<string, string>; session: VaultSession }> {

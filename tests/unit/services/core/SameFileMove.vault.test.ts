@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../../mocks/obsidian';
 import { vaultSession, type VaultSession } from '../../helpers/vaultSession';
 
 /**
@@ -27,7 +27,6 @@ let live: VaultSession | undefined;
 afterEach(() => {
     live?.dispose();
     live = undefined;
-    Notice.messages.length = 0;
 });
 
 function rowsOf(session: VaultSession): Array<{ id: string; content: string }> {

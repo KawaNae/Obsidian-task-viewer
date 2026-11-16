@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { editorRow } from '../../../src/services/persistence/FileLines';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { t } from '../../../src/i18n';
@@ -27,7 +27,6 @@ const NOTE = ['# note', 'Para', '- [ ] A ==> move([[#Done]])', '---', '## Done',
 const DONE = ['# note', 'Para', '- [x] A ==> move([[#Done]])', '---', '## Done', ''];
 
 let live: VaultSession | undefined;
-beforeEach(() => { Notice.messages.length = 0; });
 afterEach(() => { live?.dispose(); live = undefined; });
 
 async function open(note: string[] = NOTE) {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Notice, type TFile } from 'obsidian';
+import { type TFile } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import en from '../../../src/i18n/locales/en.json';
 

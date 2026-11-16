@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, it, expect, afterEach } from 'vitest';
+import { Notice } from '../../mocks/obsidian';
 import { t } from '../../../../src/i18n';
 import { openLiveVault, type VaultSession } from '../../helpers/vaultSession';
 import { inheritedAt } from '../../../../src/services/data/InheritedValues';
@@ -17,7 +17,6 @@ const OUTSIDE = ['---', 'tv-color: red', '---', '## Work', 'メモ', '- [ ] A @2
 
 let live: VaultSession | undefined;
 afterEach(() => { live?.dispose(); live = undefined; });
-beforeEach(() => { Notice.messages.length = 0; });
 
 const open = () => openLiveVault({ [FILE]: NOTE }, (s) => { live = s; });
 

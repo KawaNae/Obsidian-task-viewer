@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../../mocks/obsidian';
 import { openVault } from '../../helpers/vaultSession';
 import { TaskApi } from '../../../../src/api/TaskApi';
 import { TaskReadService } from '../../../../src/services/data/TaskReadService';

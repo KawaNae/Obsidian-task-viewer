@@ -1,5 +1,4 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { Notice } from 'obsidian';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskApiError } from '../../../src/api/TaskApiTypes';
 import { readApiId } from '../../../src/api/TaskIds';
@@ -22,7 +21,6 @@ let live: VaultSession[] = [];
 afterEach(() => {
     for (const session of live) session.dispose();
     live = [];
-    Notice.messages.length = 0;
 });
 
 async function open(lines: string[]) {

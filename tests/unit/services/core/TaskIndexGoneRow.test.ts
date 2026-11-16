@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../../mocks/obsidian';
 import { vaultSession, makeFile } from '../../helpers/vaultSession';
 import { t } from '../../../../src/i18n';
 

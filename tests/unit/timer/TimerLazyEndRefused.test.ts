@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { statedDates } from '../../../src/utils/TaskDates';
 import { DateUtils } from '../../../src/utils/DateUtils';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { begin, timerOn, timerRig, type TimerRig } from '../helpers/timerRig';
