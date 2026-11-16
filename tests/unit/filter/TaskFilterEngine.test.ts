@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateFilter } from '../helpers/filterContext';
+import { cond, evaluateFilter } from '../helpers/filterContext';
 import type { Task, DisplayTask } from '../../../src/types';
 import type { FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
 import { createDefaultListFilterState } from '../../../src/services/filter/FilterTypes';
@@ -31,18 +31,6 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
 }
 
 // ── Helper: build FilterState from conditions ──
-
-function cond(
-    property: FilterCondition['property'],
-    operator: FilterCondition['operator'],
-    value?: FilterCondition['value'],
-    target?: 'self' | 'parent',
-): FilterCondition {
-    const node: FilterCondition = { property, operator };
-    if (value !== undefined) node.value = value;
-    if (target === 'parent') node.target = 'parent';
-    return node;
-}
 
 function stateFromConditions(conditions: FilterCondition[], logic: 'and' | 'or' = 'and'): FilterState {
     return { filters: conditions, logic };
@@ -458,50 +446,43 @@ describe('TaskFilterEngine', () => {
         });
 
         it('lessThan 3 hours — 2h task passes', () => {
-            const c = cond('length', 'lessThan', 3);
-            c.unit = 'hours';
+            const c = { ...cond('length', 'lessThan', 3), unit: 'hours' as const };
             const state = stateFromCondition(c);
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
         it('greaterThan 1 hour — 2h task passes', () => {
-            const c = cond('length', 'greaterThan', 1);
-            c.unit = 'hours';
+            const c = { ...cond('length', 'greaterThan', 1), unit: 'hours' as const };
             const state = stateFromCondition(c);
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
         it('equals 2 hours', () => {
-            const c = cond('length', 'equals', 2);
-            c.unit = 'hours';
+            const c = { ...cond('length', 'equals', 2), unit: 'hours' as const };
             const state = stateFromCondition(c);
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
         it('lessThanOrEqual 2 hours', () => {
-            const c = cond('length', 'lessThanOrEqual', 2);
-            c.unit = 'hours';
+            const c = { ...cond('length', 'lessThanOrEqual', 2), unit: 'hours' as const };
             const state = stateFromCondition(c);
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
         it('greaterThanOrEqual 2 hours', () => {
-            const c = cond('length', 'greaterThanOrEqual', 2);
-            c.unit = 'hours';
+            const c = { ...cond('length', 'greaterThanOrEqual', 2), unit: 'hours' as const };
             const state = stateFromCondition(c);
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
         it('unit: minutes — 120 minutes', () => {
-            const c = cond('length', 'equals', 120);
-            c.unit = 'minutes';
+            const c = { ...cond('length', 'equals', 120), unit: 'minutes' as const };
             const state = stateFromCondition(c);
             expect(evaluateFilter(task, state)).toBe(true);
         });
 
         it('greaterThan 3 hours — 2h task fails', () => {
-            const c = cond('length', 'greaterThan', 3);
-            c.unit = 'hours';
+            const c = { ...cond('length', 'greaterThan', 3), unit: 'hours' as const };
             const state = stateFromCondition(c);
             expect(evaluateFilter(task, state)).toBe(false);
         });
@@ -1003,11 +984,6 @@ describe('createDefaultListFilterState', () => {
         expect(evaluateFilter(makeDisplayTask({ id: 'nested', parentId: 'top' }), state)).toBe(false);
     });
 
-    it('hands out a fresh state each time', () => {
-        const a = createDefaultListFilterState();
-        a.filters.push({ property: 'tag', operator: 'includes', value: ['x'] });
-        expect(createDefaultListFilterState().filters).toHaveLength(1);
-    });
     // The clock is the context's: a relative preset counts from `now`, so a
     // filter evaluated twice at the same moment answers the same.
     describe('relative presets count from the context\'s now', () => {

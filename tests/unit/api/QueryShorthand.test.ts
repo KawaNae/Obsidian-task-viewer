@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { shorthandConditions, refuseWindowOnToday } from '../../../src/api/QueryShorthand';
-import type { FilterCondition } from '../../../src/services/filter/FilterTypes';
+import type { ConditionOf, FilterCondition, FilterProperty } from '../../../src/services/filter/FilterTypes';
 import type { ListParams } from '../../../src/api/TaskApiTypes';
 import { TaskApiError } from '../../../src/api/TaskApiTypes';
 import { evaluateFilter } from '../helpers/filterContext';
 import { makeTask } from '../helpers/makeTask';
 
-function findCondition(conditions: FilterCondition[], property: string): FilterCondition | undefined {
-    return conditions.find(c => c.property === property);
+function findCondition<P extends FilterProperty>(conditions: FilterCondition[], property: P): ConditionOf<P> | undefined {
+    return conditions.find((c): c is ConditionOf<P> => c.property === property);
 }
 
 describe('shorthandConditions: the simple fields', () => {

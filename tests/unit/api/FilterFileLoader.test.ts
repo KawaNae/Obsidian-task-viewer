@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loadFilterFile } from '../../../src/api/FilterFileLoader';
 import { TaskApiError } from '../../../src/api/TaskApiTypes';
 import { toCliName } from '../../../src/api/OperationSchemas';
-import type { FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
+import type { ConditionOf, FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
 import type { App } from 'obsidian';
 import type { ViewTemplate, PinnedListDefinition } from '../../../src/types';
 import type { ListQuery } from '../../../src/services/filter/PinnedListQuery';
@@ -151,7 +151,7 @@ describe('loadFilterFile', () => {
             expect(typeof result).not.toBe('string');
             const state = (result as ListQuery).filter;
             expect(state.filters).toHaveLength(1);
-            const c = state.filters[0] as FilterCondition;
+            const c = state.filters[0] as ConditionOf<'tag'>;
             expect(c.value).toEqual(['work']);
         });
 
