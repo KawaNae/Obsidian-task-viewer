@@ -24,7 +24,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import { overrideSettings, tr, type HeldSettings } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
@@ -260,9 +260,11 @@ describe('the editor\'s line button', () => {
     it('a tv-inline task has the task\'s menu, a Tasks task none, a checkbox out of the read range the checkbox\'s', async () => {
         held = overrideSettings({ enableTasksPlugin: true, editorMenuForTasks: true, editorMenuForCheckboxes: true });
         await writeIndexedTestFile(MENU_FILE, MENU_NOTE);
-        await writeIndexedTestFile(IGNORED_FILE, IGNORED_NOTE);
+        // The index leaves this note out (tv-ignore), so there is no listing of it to wait for.
+        writeTestFile(IGNORED_FILE, IGNORED_NOTE);
         const steps = run<Record<string, unknown>>(`
             const open = async (path, name) => {
+                await until(() => app.vault.getAbstractFileByPath(path));
                 const leaf = app.workspace.getLeaf('tab');
                 await leaf.openFile(app.vault.getAbstractFileByPath(path), { state: { mode: 'source', source: true } });
                 R[name] = leaf;

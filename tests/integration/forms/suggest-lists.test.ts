@@ -147,7 +147,7 @@ describe('a list stays on its field while the field moves', () => {
             try {
                 await openHub('親');
                 type(nameInput(), '親 [[test-int-suggest');
-                await until(() => list()?.items.length > 1);
+                await until(() => list()?.items.length > 0);
                 key(nameInput(), { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 });
                 await sleep(100);
                 const box = () => document.querySelector('.suggestion-container');
