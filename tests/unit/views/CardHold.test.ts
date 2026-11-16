@@ -57,7 +57,7 @@ function index() {
             ...makeTask({ id: reading.parent, file: 'a.md', line: 0, content: 'parent' }),
             childEntries: [{ kind: 'task', taskId: reading.child, bodyLine: 1 }] as ChildEntry[],
         };
-        return new Map<string, Task>([[parent.id, parent], [child.id, child]]);
+        return new Map<string, Task & Pick<DisplayTask, 'childEntries'>>([[parent.id, parent], [child.id, child]]);
     };
     const readService = {
         getTask: (id: string) => tasks().get(id),

@@ -107,7 +107,7 @@ describe('findOldestOverdueDate', () => {
     });
 
     it('parent complete but child unchecked counts as overdue', () => {
-        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(makeTask({ id: 'child', statusChar: ' ' }));
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(makeDisplayTask({ id: 'child', statusChar: ' ' }));
         const tasks = [makeDisplayTask({
             statusChar: 'x',
             startDate: '2026-07-01',

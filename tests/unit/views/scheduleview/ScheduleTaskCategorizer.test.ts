@@ -4,12 +4,13 @@ import { NO_TASK_LOOKUP, toDisplayTask } from '../../../../src/services/display/
 import { ScheduleTaskCategorizer } from '../../../../src/views/scheduleview/utils/ScheduleTaskCategorizer';
 import { ScheduleGridCalculator } from '../../../../src/views/scheduleview/utils/ScheduleGridCalculator';
 import type { DisplayTask, Task } from '../../../../src/types';
+import { makeTask } from '../../helpers/makeTask';
 
 const startHour = 5;
 const day = '2026-10-02';
 
 function dt(file: string, line: number, content: string, fields: Partial<Task>): DisplayTask {
-    return toDisplayTask({
+    return toDisplayTask(makeTask({
         id: `tv-inline:${file}:n:r1:${line}`,
         file,
         line,
@@ -22,7 +23,7 @@ function dt(file: string, line: number, content: string, fields: Partial<Task>):
         originalText: `- [ ] ${content}`,
         parserId: 'tv-inline',
         ...fields,
-    }, startHour, NO_TASK_LOOKUP);
+    }), startHour, NO_TASK_LOOKUP);
 }
 
 function schedule(tasks: DisplayTask[]) {

@@ -57,36 +57,36 @@ describe('isTaskCompleted', () => {
     });
 
     it('parent incomplete → false regardless of children', () => {
-        const childTask = makeTask({ id: 'child-1', statusChar: 'x' });
+        const childTask = makeDisplayTask({ id: 'child-1', statusChar: 'x' });
         vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: ' ',
             childEntries: [
-                { kind: 'task', taskId: 'child-1' },
+                { kind: 'task', taskId: 'child-1', bodyLine: 1 },
             ],
         });
         expect(isTaskCompleted(dt, defs, mockReadService)).toBe(false);
     });
 
     it('parent complete + child task complete → true', () => {
-        const childTask = makeTask({ id: 'child-1', statusChar: 'x' });
+        const childTask = makeDisplayTask({ id: 'child-1', statusChar: 'x' });
         vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: 'x',
             childEntries: [
-                { kind: 'task', taskId: 'child-1' },
+                { kind: 'task', taskId: 'child-1', bodyLine: 1 },
             ],
         });
         expect(isTaskCompleted(dt, defs, mockReadService)).toBe(true);
     });
 
     it('parent complete + child task incomplete → false', () => {
-        const childTask = makeTask({ id: 'child-1', statusChar: ' ' });
+        const childTask = makeDisplayTask({ id: 'child-1', statusChar: ' ' });
         vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: 'x',
             childEntries: [
-                { kind: 'task', taskId: 'child-1' },
+                { kind: 'task', taskId: 'child-1', bodyLine: 1 },
             ],
         });
         expect(isTaskCompleted(dt, defs, mockReadService)).toBe(false);
@@ -192,8 +192,8 @@ describe('getOverdueLevel', () => {
     });
 
     it('child incomplete makes parent not completed → overdue possible', () => {
-        const childTask = makeTask({ id: 'child-1', statusChar: ' ' });
-        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask as DisplayTask);
+        const childTask = makeDisplayTask({ id: 'child-1', statusChar: ' ' });
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: 'x',
             due: '2026-07-10',
