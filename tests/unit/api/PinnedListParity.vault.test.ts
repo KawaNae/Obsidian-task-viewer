@@ -4,7 +4,7 @@ import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { PinnedListQuery } from '../../../src/services/filter/PinnedListQuery';
 import { createEmptyFilterState, type FilterState } from '../../../src/services/filter/FilterTypes';
 import { codecFor, resolveViewTypeFromShortName } from '../../../src/services/viewConfig';
-import { listFrame, type PinnedListDefinition, type SidebarFrame, type ViewTemplate } from '../../../src/types';
+import { listFrame, listFramesOf, type PinnedListDefinition, type SidebarFrame, type ViewTemplate } from '../../../src/types';
 import type { SortState } from '../../../src/services/sort/SortTypes';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 
@@ -104,7 +104,7 @@ function shownByView(read: TaskReadService, path: string, name: string): string[
         sidebar?: SidebarFrame[];
         grid?: PinnedListDefinition[][];
     };
-    const lists: PinnedListDefinition[] = config.grid ? config.grid.flat() : (config.sidebar ?? []);
+    const lists: PinnedListDefinition[] = config.grid ? config.grid.flat() : listFramesOf(config.sidebar ?? []);
     const listDef = lists.find(l => l.name === name)!;
     const query = PinnedListQuery.resolve(listDef, config.filterState ?? createEmptyFilterState());
     return read.getFilteredTasks(query.filter, query.sort).map(t => t.id);

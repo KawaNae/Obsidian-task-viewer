@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateDateTimeRules } from '../../../../src/services/parsing/utils/DateTimeRuleValidator';
+import type { Task } from '../../../../src/types';
 
 describe('end<start 不正記法の検出', () => {
     it('同日 endTime < startTime (明示 endDate) → error same-day-inversion', () => {
@@ -72,21 +73,21 @@ describe('end<start 不正記法の検出', () => {
 
 describe('isVisible フィルタ', () => {
     it('validation.severity=error のタスクは非表示', () => {
-        const dt = {
+        const dt: Pick<Task, 'validation'> = {
             validation: { severity: 'error' as const, rule: 'same-day-inversion' as const, message: '', hint: '' },
         };
         expect(!dt.validation || dt.validation.severity !== 'error').toBe(false);
     });
 
     it('validation.severity=warning のタスクは表示', () => {
-        const dt = {
+        const dt: Pick<Task, 'validation'> = {
             validation: { severity: 'warning' as const, rule: 'cross-midnight' as const, message: '', hint: '' },
         };
         expect(!dt.validation || dt.validation.severity !== 'error').toBe(true);
     });
 
     it('validation なしのタスクは表示', () => {
-        const dt = { validation: undefined };
+        const dt: Pick<Task, 'validation'> = { validation: undefined };
         expect(!dt.validation || dt.validation.severity !== 'error').toBe(true);
     });
 });

@@ -51,7 +51,11 @@ describe('the editor diagnostics read the flow lines the parser reads', () => {
             // flow holds, and every one the parser merged has that owner.
             const owners = new Map<number, number>();
             for (const task of parsed.tasks) {
-                for (const segment of task.flow?.childSegments ?? []) owners.set(segment.bodyLine, task.line);
+                for (const segment of task.flow?.childSegments ?? []) {
+                    // A flow read off a note stands every segment on its line.
+                    if (segment.bodyLine === undefined) throw new Error(`a segment of line ${task.line} has no line`);
+                    owners.set(segment.bodyLine, task.line);
+                }
             }
             lines.forEach((text, line) => {
                 if (!isFlowLine(text)) return;

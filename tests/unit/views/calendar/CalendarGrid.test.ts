@@ -115,8 +115,7 @@ describe('the saved position', () => {
     });
 
     it('is where the view is, so a reset keeps it', () => {
-        for (const codec of [CalendarCodec, MiniCalendarCodec]) {
-            const patch = resetPatch(codec);
+        for (const patch of [resetPatch(CalendarCodec), resetPatch(MiniCalendarCodec)]) {
             expect('date' in patch).toBe(false);
             expect('weekOffset' in patch).toBe(false);
         }
