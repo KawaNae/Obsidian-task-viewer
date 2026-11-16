@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { App, MarkdownView, TFile } from 'obsidian';
+import { App, MarkdownView, TFile, Workspace, WorkspaceLeaf } from 'obsidian';
 import { openFile, openLink, openTaskInEditor } from '../../../src/utils/NavigationUtils';
 import type { Task } from '../../../src/types';
 
@@ -16,20 +16,21 @@ function fileAt(path: string): TFile {
 }
 
 function leafShowing(path: string) {
-    const view = new MarkdownView() as MarkdownView & { file: TFile };
+    const leaf = new WorkspaceLeaf();
+    const view = new MarkdownView(leaf) as MarkdownView & { file: TFile };
     view.file = fileAt(path);
-    return { view, setEphemeralState: vi.fn(), openFile: vi.fn() };
+    return Object.assign(leaf, { view, setEphemeralState: vi.fn(), openFile: vi.fn() });
 }
 
 function appWith(opts: { files: string[]; open: ReturnType<typeof leafShowing>[] }) {
     const app = new App();
-    const newLeaf = { view: {}, openFile: vi.fn(async () => {}), setEphemeralState: vi.fn() };
+    const newLeaf = Object.assign(new WorkspaceLeaf(), { openFile: vi.fn(async () => {}), setEphemeralState: vi.fn() });
     app.vault.getAbstractFileByPath = ((p: string) => (opts.files.includes(p) ? fileAt(p) : null)) as any;
-    app.workspace = {
+    app.workspace = Object.assign(new Workspace(), {
         getLeavesOfType: vi.fn(() => opts.open),
         setActiveLeaf: vi.fn(),
         getLeaf: vi.fn(() => newLeaf),
-    };
+    });
     return { app, newLeaf };
 }
 
