@@ -25,7 +25,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
 import { waitForFileIndexed } from '../helpers/test-file-manager';
-import { tr } from '../helpers/view-helper';
+import { createTeardown } from '../helpers/teardown';
+import { overrideSettings, tr } from '../helpers/view-helper';
 import { closeDialog, DIALOG, onDialog, openDialog } from '../helpers/send-dialog';
 
 const DIR = 'test-int-nc';
@@ -164,18 +165,20 @@ describe('the send dialog\'s note', () => {
 });
 
 describe('the settings\' note template', () => {
-    afterEach(() => {
-        run(`(async () => { if (app.setting.activeTab) app.setting.close(); await new Promise(r => setTimeout(r, 300)); return 'ok'; })()`);
-    });
+    const teardown = createTeardown();
+    afterEach(() => teardown.run());
 
     it('lists the notes alone, and a pick puts the note\'s path in and keeps it', () => {
         const name = tr('settings.notes.weeklyNoteTemplate');
+        const held = overrideSettings({}, ['weeklyNoteTemplate']);
+        teardown.add('put weeklyNoteTemplate back', () => held.restore());
+        // Closed first, so that a field the test left typed in is not committed over the value put back.
+        teardown.add('close the settings', () => run(`(async () => { if (app.setting.activeTab) app.setting.close(); await new Promise(r => setTimeout(r, 300)); return 'ok'; })()`));
         const picked = run<{ items: Item[]; value: string; kept: string }>(`(async () => {
             ${'' /* the settings as a person opens them */}
             const sleep = ms => new Promise(r => setTimeout(r, ms));
             const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
-            const before = plugin.settings.weeklyNoteTemplate;
             const settingsTab = () => app.setting.activeTab?.id === 'obsidian-task-viewer' ? app.setting.activeTab.containerEl : null;
             app.setting.open();
             app.setting.openTabById('obsidian-task-viewer');
@@ -200,8 +203,6 @@ describe('the settings\' note template', () => {
             item.dispatchEvent(new MouseEvent('click', at));
             await sleep(300);
             const out = { items: listed, value: input.value, kept: plugin.settings.weeklyNoteTemplate };
-            plugin.settings.weeklyNoteTemplate = before;
-            await plugin.saveSettings();
             return JSON.stringify(out);
         })()`);
         expect(picked.items.some(one => one.title === '画像.png')).toBe(false);

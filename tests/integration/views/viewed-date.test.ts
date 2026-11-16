@@ -21,19 +21,18 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/viewed-date.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTeardown } from '../helpers/teardown';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, act, addDays, calendarLabel, closeViews, ev, goToDate, gridDays, monthGridStart, navigate,
-    openUri, openView, overrideSettings, readView, restartView, saveSettings, setViewState, visualDay,
-    type HeldSettings, type ViewReading,
+    openUri, openView, overrideSettings, readView, restartView, saveSettings, setViewState, visualDay, type ViewReading,
 } from '../helpers/view-helper';
 
 const KEYS = ['startHour', 'pastDaysToShow', 'startFromOldestOverdue', 'weekStartDay'] as const;
 type Settings = { startHour: number; pastDaysToShow: number; startFromOldestOverdue: boolean; weekStartDay: number };
 
 let original: Settings;
-let held: HeldSettings<typeof KEYS[number]>;
 let today: string;
 let past: number;
 let ws: number;
@@ -51,13 +50,17 @@ function expectedGridHead(type: string, start: string): string {
     return type === 'calendar-view' ? calendarLabel(start) : start;
 }
 
+const teardown = createTeardown();
+
 beforeAll(async () => {
     if (!isObsidianRunning()) {
         throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
     }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
-    held = overrideSettings({ startFromOldestOverdue: false }, KEYS);
+    const held = overrideSettings({ startFromOldestOverdue: false }, KEYS);
+    teardown.add('put the settings back', () => held.restore());
+    teardown.add('close the views', closeViews);
     original = held.original as unknown as Settings;
     today = visualDay(original.startHour);
     past = original.pastDaysToShow;
@@ -65,10 +68,7 @@ beforeAll(async () => {
     FAR = addDays(today, 40);
 });
 
-afterAll(async () => {
-    await closeViews();
-    held?.restore();
-});
+afterAll(() => teardown.run());
 
 describe('Timeline', () => {
     it('opens following today, the past days before it', () => {

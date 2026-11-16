@@ -17,9 +17,10 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/card-file-link.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTeardown } from '../helpers/teardown';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
-import { PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, type HeldSettings } from '../helpers/view-helper';
+import { PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings } from '../helpers/view-helper';
 
 const FILE = 'SyncIgnore/test-int-イラスト_絵の練習.md';
 const TARGET = FILE.replace(/\.md$/, '');
@@ -98,22 +99,20 @@ function lines(view: string): Record<string, Line> {
     })()`);
 }
 
-let held: HeldSettings<'childCollapseThreshold' | 'enableCardFileLink'>;
+const teardown = createTeardown();
 
 beforeAll(async () => {
     if (!isObsidianRunning()) {
         throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
     }
-    held = overrideSettings({ childCollapseThreshold: 3, enableCardFileLink: true });
+    const held = overrideSettings({ childCollapseThreshold: 3, enableCardFileLink: true });
+    teardown.add('put the settings back', () => held.restore());
+    teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
+    teardown.add('close the views', closeViews);
     expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
 });
 
-afterAll(async () => {
-    await closeViews();
-    held?.restore();
-    deleteTestFile(FILE);
-    await waitForFileDeindexed(FILE);
-});
+afterAll(() => teardown.run());
 
 const LINK = { sep: ' : ', href: TARGET, text: BASENAME };
 

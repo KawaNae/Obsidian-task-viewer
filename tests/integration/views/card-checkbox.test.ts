@@ -15,9 +15,10 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/card-checkbox.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTeardown } from '../helpers/teardown';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
-import { ev, PRELUDE, openView, closeViews, overrideSettings, ymd, type HeldSettings } from '../helpers/view-helper';
+import { ev, PRELUDE, openView, closeViews, overrideSettings, ymd } from '../helpers/view-helper';
 
 const FILE = 'test-int-card-checkbox.md';
 const TITLE = '箱の色の親';
@@ -68,22 +69,20 @@ function clickBox(name: string): Click {
 }
 
 describe('a card\'s own checkbox', () => {
-    let held: HeldSettings<'applyGlobalStyles'>;
+    const teardown = createTeardown();
 
     beforeAll(async () => {
         if (!isObsidianRunning()) {
             throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
         }
-        held = overrideSettings({ applyGlobalStyles: true });
+        const held = overrideSettings({ applyGlobalStyles: true });
+        teardown.add('put the settings back', () => held.restore());
+        teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
+        teardown.add('close the views', closeViews);
         expect(await writeIndexedTestFile(FILE, note())).toBe(true);
     });
 
-    afterAll(async () => {
-        await closeViews();
-        held?.restore();
-        deleteTestFile(FILE);
-        await waitForFileDeindexed(FILE);
-    });
+    afterAll(() => teardown.run());
 
     for (const [type, name] of [['timeline-view', 'checkbox-timeline'], ['calendar-view', 'checkbox-calendar']] as const) {
         it(`${type}: shows the status it writes, in the task's color, before the card is drawn again`, async () => {

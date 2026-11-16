@@ -16,10 +16,11 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/pinned-lists.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTeardown } from '../helpers/teardown';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
-    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, restartView, tr, type HeldSettings,
+    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, restartView, tr,
 } from '../helpers/view-helper';
 
 const FILE = 'test-int-pinned-lists.md';
@@ -34,7 +35,6 @@ function note(extra: string[] = []): string {
 }
 
 const PAGE = 5;
-let held: HeldSettings<'pinnedListPageSize'>;
 
 /** The classes of a list frame of the sidebar (SidebarFrames). */
 const C = {
@@ -174,23 +174,23 @@ const TAG_A = { property: 'tag', operator: 'includes', value: ['tvpla'] };
 const TAG_B = { property: 'tag', operator: 'includes', value: ['tvplb'] };
 const TOP_LEVEL = { property: 'parent', operator: 'isNotSet' };
 
+const teardown = createTeardown();
+
 beforeAll(async () => {
     if (!isObsidianRunning()) {
         throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
     }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
-    held = overrideSettings({ pinnedListPageSize: PAGE });
+    const held = overrideSettings({ pinnedListPageSize: PAGE });
+    teardown.add('put the settings back', () => held.restore());
+    teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
+    teardown.add('close the views', closeViews);
+    teardown.add('close the overlays', () => ev(`(() => { document.querySelectorAll('.tv-overlay__panel .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`));
     expect(await writeIndexedTestFile(FILE, note())).toBe(true);
 });
 
-afterAll(async () => {
-    ev(`(() => { document.querySelectorAll('.tv-overlay__panel .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`);
-    await closeViews();
-    held?.restore();
-    deleteTestFile(FILE);
-    await waitForFileDeindexed(FILE);
-});
+afterAll(() => teardown.run());
 
 describe.each([
     ['Timeline', 'timeline-view', 'pl-tl'],

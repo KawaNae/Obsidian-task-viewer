@@ -35,11 +35,12 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/markdown-frames.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTeardown } from '../helpers/teardown';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { deleteNotesUnder, frameLinks as links, framesOf, kept, notesUnder, readFrames, styles, texts, type Reading } from '../helpers/markdown-frames';
 import {
-    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay, type HeldSettings,
+    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay,
 } from '../helpers/view-helper';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
@@ -148,7 +149,7 @@ const LIST = {
     applyViewFilter: false,
 };
 
-let held: HeldSettings<'reuseExistingTab'>;
+const teardown = createTeardown();
 
 beforeAll(async () => {
     if (!isObsidianRunning()) {
@@ -163,17 +164,15 @@ beforeAll(async () => {
     })()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
     deleteNotes();
-    held = overrideSettings({ reuseExistingTab: true });
+    teardown.add('delete the notes', deleteNotes);
+    const held = overrideSettings({ reuseExistingTab: true });
+    teardown.add('put the settings back', () => held.restore());
+    teardown.add('delete the note of tasks', async () => { deleteTestFile(TASKS); await waitForFileDeindexed(TASKS); });
+    teardown.add('close the views', closeViews);
     expect(await writeIndexedTestFile(TASKS, tasksNote(1))).toBe(true);
 });
 
-afterAll(async () => {
-    await closeViews();
-    held?.restore();
-    deleteTestFile(TASKS);
-    await waitForFileDeindexed(TASKS);
-    deleteNotes();
-});
+afterAll(() => teardown.run());
 
 describe.each([
     ['Timeline', 'timeline-view', 'tl'],
