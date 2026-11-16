@@ -310,9 +310,12 @@ export function renderMatches(el: any, text: string, matches: [number, number][]
  * `2026-09-21` stays a string, `1_000` and `10:30` are strings, and a key
  * written twice throws. The metadata cache's worker parses the same way and
  * drops the whole frontmatter when it throws.
+ *
+ * yaml reads a `null` reviver as none, so `parse(text, {})`, the form its
+ * types accept, is the same call.
  */
 export function parseYaml(yaml: string): any {
-    return yamlParse(yaml, null, {});
+    return yamlParse(yaml, {});
 }
 
 export function stringifyYaml(obj: any): string {

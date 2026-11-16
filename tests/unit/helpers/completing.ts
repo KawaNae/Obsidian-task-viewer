@@ -3,6 +3,7 @@ import type { FirePlan, FlowExecutor } from '../../../src/services/flow/FlowExec
 import { FlowNotices } from '../../../src/services/flow/FlowNotices';
 import { canTriggerFlow } from '../../../src/services/flow/FlowTrigger';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
+import { readingId } from '../../../src/services/core/Reading';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 
@@ -31,7 +32,10 @@ export function completing<E extends FlowExecutor>(
         notices.firing({ written: true, refused: null, fires: [{ fire, setAside: null }] });
         if (plan.kind === 'fires') {
             const ops = plan.ops;
-            if (ops.length > 0) await repository.write(task.file, plannedOn(task), ops);
+            // The row is the index's copy, so it names a reading; one made by
+            // no scan is given one.
+            const copy = { ...task, reading: task.reading ?? readingId('test', 1) };
+            if (ops.length > 0) await repository.write(task.file, plannedOn(copy), ops);
         }
         return plan;
     };

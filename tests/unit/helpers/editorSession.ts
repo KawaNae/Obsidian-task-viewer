@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState, Transaction, type TransactionSpec } from '@codemirror/state';
 import { history, redo, undo } from '@codemirror/commands';
-import { editorInfoField } from 'obsidian';
+import { editorInfoField, TFile, type MarkdownFileInfo } from 'obsidian';
 import { fireFilter, type EditorFireHost } from '../../../src/editor/FlowFireExtension';
 import type { EditorHandle } from '../../../src/editor/EditorWrite';
 
@@ -14,9 +14,11 @@ import type { EditorHandle } from '../../../src/editor/EditorWrite';
  * Obsidian's does (CM6's `history`), for `undo` and `redo`.
  */
 export function editorSession(host: EditorFireHost, path: string, text: string) {
+    // The plugin reads only the file's path of what the editor holds.
+    const infoOf = (note: string) => ({ file: Object.assign(new TFile(), { path: note }) }) as MarkdownFileInfo;
     const stateOf = (note: string, doc: string) => EditorState.create({
         doc,
-        extensions: [editorInfoField.init(() => ({ file: { path: note } })), history(), fireFilter(host)],
+        extensions: [editorInfoField.init(() => infoOf(note)), history(), fireFilter(host)],
     });
     let state = stateOf(path, text);
     let connected = true;
