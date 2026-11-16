@@ -5,28 +5,26 @@ import { cliList, sleep, type ListResult } from './cli-helper';
  * Obsidian (`UNTIL`) and in the test process (the functions below). A wait
  * that runs out fails where it waited, saying what it waited for and for how
  * long, rather than going on to fail later on something the wait would have
- * explained. A caller that takes a different path when the condition does
- * not come asks for the answer instead (`tryUntil`).
+ * explained. No caller takes a different path when its condition does not
+ * come, so there is no wait that answers instead of throwing.
  *
  * The failure reads the same on both sides:
  *   timed out after <ms> ms waiting for <what>[ (<detail>)][; <what was last seen>]
  */
 
 /**
- * JavaScript that defines, in a snippet `obsidian eval` runs, two waits for
+ * JavaScript that defines, in a snippet `obsidian eval` runs, a wait for
  * `test()` to return a truthy value, looking every 50 ms and once more when
- * the time is up:
+ * the time is up: `until(test, ms = 3000, detail)` resolves to true, or
+ * throws an Error that quotes the source of `test`, the time waited and
+ * `detail` (a string, or a function called at the timeout for what to say of
+ * the state then).
  *
- * - `until(test, ms = 3000, detail)` resolves to true, or throws an Error
- *   that quotes the source of `test`, the time waited and `detail` (a string,
- *   or a function called at the timeout for what to say of the state then)
- * - `tryUntil(test, ms = 3000)` resolves to whether the condition came
- *
- * `until` loops by itself rather than awaiting `tryUntil`: awaiting another
- * async function lets promise callbacks the plugin has pending run before the
- * snippet goes on, where a snippet that waited for one state of a dialog can
- * meet a state half changed (the section dialog's heading field lost its
- * list and the focus that way).
+ * The loop is `until`'s own, with no other async function between it and the
+ * snippet: one more await lets promise callbacks the plugin has pending run
+ * before the snippet goes on, where a snippet that waited for one state of a
+ * dialog can meet a state half changed (the section dialog's heading field
+ * lost its list and the focus that way).
  *
  * It names nothing of the snippet it is put in (the snippets call their sleep
  * `sleep` or `wait`). It is written out here rather than taken from a
@@ -34,14 +32,6 @@ import { cliList, sleep, type ListResult } from './cli-helper';
  * transform made of the function.
  */
 export const UNTIL = `
-const tryUntil = async (test, ms = 3000) => {
-    const end = Date.now() + ms;
-    for (;;) {
-        if (test()) return true;
-        if (Date.now() >= end) return false;
-        await new Promise(r => setTimeout(r, 50));
-    }
-};
 const until = async (test, ms = 3000, detail) => {
     const end = Date.now() + ms;
     for (;;) {
