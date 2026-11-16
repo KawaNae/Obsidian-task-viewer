@@ -42,9 +42,9 @@ describe('durationMinutes counts the days between start and end', () => {
     it('agrees with the filter: a task `length greaterThan 24 hours` picks up reports more than 24 hours', () => {
         const { dt, minutes } = minutesOf({ startDate: '2026-01-01', startTime: '10:00', endDate: '2026-01-03', endTime: '11:00' });
         const state: FilterState = {
-            filters: [{ id: 'c', property: 'length', operator: 'greaterThan', value: 24, unit: 'hours' }],
+            filters: [{ property: 'length', operator: 'greaterThan', value: 24, unit: 'hours' }],
             logic: 'and',
-        } as FilterState;
+        };
         expect(evaluateFilter(dt, state, { startHour: START_HOUR })).toBe(true);
         expect(minutes).toBeGreaterThan(24 * 60);
     });

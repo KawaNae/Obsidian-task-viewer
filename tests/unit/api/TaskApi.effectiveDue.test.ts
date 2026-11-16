@@ -3,7 +3,7 @@ import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverte
 import { DateUtils } from '../../../src/utils/DateUtils';
 import { evaluateFilter } from '../helpers/filterContext';
 import type { Task, DisplayTask } from '../../../src/types';
-import type { FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
+import type { ConditionOf, FilterCondition, FilterState, OperatorOf } from '../../../src/services/filter/FilterTypes';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
     return {
@@ -72,8 +72,8 @@ describe('dueDatePart: datetime due の日付部分抽出', () => {
 });
 
 describe('effectiveDue: due フィルタが cascade due を含む', () => {
-    function dueCond(operator: string, value?: string): FilterState {
-        const cond: FilterCondition = { property: 'due', operator, ...(value !== undefined ? { value } : {}) };
+    function dueCond(operator: OperatorOf<'due'>, value?: string): FilterState {
+        const cond: ConditionOf<'due'> = { property: 'due', operator, ...(value !== undefined ? { value } : {}) };
         return { logic: 'and', filters: [cond] };
     }
 

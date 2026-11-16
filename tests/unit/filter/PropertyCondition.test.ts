@@ -5,7 +5,7 @@ import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, type DisplayTask } from '../../../src/types';
 import { toDisplayTask, NO_TASK_LOOKUP } from '../../../src/services/display/DisplayTaskConverter';
 import { resolveQuery } from '../../../src/api/FilterParamsBuilder';
-import type { PropertyCondition } from '../../../src/services/filter/FilterTypes';
+import type { FilterGroup, PropertyCondition } from '../../../src/services/filter/FilterTypes';
 import { FilterValueCollector } from '../../../src/services/filter/FilterValueCollector';
 import { evaluateFilter } from '../helpers/filterContext';
 
@@ -68,8 +68,8 @@ type Row = Omit<PropertyCondition, 'property'>;
  * `contains`, the shorthand `property=key:value`. Every entry answers alike.
  */
 async function which(row: Row): Promise<string[]> {
-    const condition = { property: 'property', ...row };
-    const filter = { logic: 'and', filters: [condition] };
+    const condition: PropertyCondition = { property: 'property', ...row };
+    const filter: FilterGroup = { logic: 'and', filters: [condition] };
     const byJson = await passing({ filter });
     const byFile = await passing({ filterFile: FILE }, appWith({ [FILE]: JSON.stringify(filter) }));
     expect(byFile).toEqual(byJson);

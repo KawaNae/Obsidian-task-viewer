@@ -19,10 +19,7 @@ describe('FilterTypes utilities', () => {
 
     describe('createDefaultCondition', () => {
         it('creates tag/includes condition with empty values', () => {
-            const c = createDefaultCondition();
-            expect(c.property).toBe('tag');
-            expect(c.operator).toBe('includes');
-            expect(c.value).toEqual([]);
+            expect(createDefaultCondition()).toEqual({ property: 'tag', operator: 'includes', value: [] });
         });
     });
 

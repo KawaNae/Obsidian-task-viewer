@@ -1,19 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { FilterSerializer } from '../../../src/services/filter/FilterSerializer';
-import type { FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
+import type { ConditionOf, FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
 import { isFilterCondition } from '../../../src/services/filter/FilterTypes';
-import { evaluateFilter } from '../helpers/filterContext';
+import { cond, evaluateFilter } from '../helpers/filterContext';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
-
-function makeCond(property: string, operator: string, value?: unknown): FilterCondition {
-    const node: FilterCondition = {
-        property: property as FilterCondition['property'],
-        operator: operator as FilterCondition['operator'],
-    };
-    if (value !== undefined) node.value = value as FilterCondition['value'];
-    return node;
-}
 
 function makeState(conditions: FilterCondition[], logic: 'and' | 'or' = 'and'): FilterState {
     return { filters: conditions, logic };
@@ -23,8 +14,8 @@ describe('FilterSerializer', () => {
     describe('v6 round-trip', () => {
         it('toJSON → parse preserves structure', () => {
             const state = makeState([
-                makeCond('tag', 'includes', ['work', 'urgent']),
-                makeCond('file', 'excludes', ['archive.md']),
+                cond('tag', 'includes', ['work', 'urgent']),
+                cond('file', 'excludes', ['archive.md']),
             ], 'or');
 
             const json = FilterSerializer.toJSON(state);
@@ -33,7 +24,7 @@ describe('FilterSerializer', () => {
             expect(restored.logic).toBe('or');
             expect(restored.filters).toHaveLength(2);
 
-            const c0 = restored.filters[0] as FilterCondition;
+            const c0 = restored.filters[0] as ConditionOf<'tag'>;
             expect(c0.property).toBe('tag');
             expect(c0.operator).toBe('includes');
             expect(c0.value).toEqual(['work', 'urgent']);
@@ -41,11 +32,11 @@ describe('FilterSerializer', () => {
 
         it('preserves nested groups', () => {
             const inner: FilterGroup = {
-                filters: [makeCond('status', 'includes', ['x'])],
+                filters: [cond('status', 'includes', ['x'])],
                 logic: 'or',
             };
             const state: FilterState = {
-                filters: [inner, makeCond('tag', 'includes', ['a'])],
+                filters: [inner, cond('tag', 'includes', ['a'])],
                 logic: 'and',
             };
 
@@ -58,66 +49,57 @@ describe('FilterSerializer', () => {
         });
 
         it('serializes date condition (absolute)', () => {
-            const state = makeState([makeCond('startDate', 'equals', '2026-03-10')]);
+            const state = makeState([cond('startDate', 'equals', '2026-03-10')]);
             const json = FilterSerializer.toJSON(state);
             const restored = FilterSerializer.parse(json).state;
-            const c = restored.filters[0] as FilterCondition;
+            const c = restored.filters[0] as ConditionOf<'startDate'>;
             expect(c.value).toBe('2026-03-10');
         });
 
         it('serializes date condition (relative)', () => {
-            const state = makeState([makeCond('startDate', 'equals', { preset: 'today' })]);
+            const state = makeState([cond('startDate', 'equals', { preset: 'today' })]);
             const json = FilterSerializer.toJSON(state);
             const restored = FilterSerializer.parse(json).state;
-            const c = restored.filters[0] as FilterCondition;
+            const c = restored.filters[0] as ConditionOf<'startDate'>;
             expect(c.value).toEqual({ preset: 'today' });
         });
 
         it('serializes length condition with unit', () => {
-            const cond = makeCond('length', 'greaterThan', 2);
-            cond.unit = 'hours';
-            const state = makeState([cond]);
+            const state = makeState([{ ...cond('length', 'greaterThan', 2), unit: 'hours' }]);
             const json = FilterSerializer.toJSON(state);
             const restored = FilterSerializer.parse(json).state;
-            const c = restored.filters[0] as FilterCondition;
+            const c = restored.filters[0] as ConditionOf<'length'>;
             expect(c.value).toBe(2);
             expect(c.unit).toBe('hours');
         });
 
         it('serializes property condition with key', () => {
-            const cond = makeCond('property', 'contains', 'high');
-            cond.key = 'priority';
-            const state = makeState([cond]);
+            const state = makeState([{ ...cond('property', 'contains', 'high'), key: 'priority' }]);
             const json = FilterSerializer.toJSON(state);
             const restored = FilterSerializer.parse(json).state;
-            const c = restored.filters[0] as FilterCondition;
+            const c = restored.filters[0] as ConditionOf<'property'>;
             expect(c.value).toBe('high');
             expect(c.key).toBe('priority');
         });
 
         it('serializes isSet condition (no value)', () => {
-            const state = makeState([makeCond('parent', 'isSet')]);
+            const state = makeState([cond('parent', 'isSet')]);
             const json = FilterSerializer.toJSON(state);
             const restored = FilterSerializer.parse(json).state;
-            const c = restored.filters[0] as FilterCondition;
-            expect(c.property).toBe('parent');
-            expect(c.operator).toBe('isSet');
-            expect(c.value).toBeUndefined();
+            expect(restored.filters[0]).toEqual({ property: 'parent', operator: 'isSet' });
         });
 
         it('serializes target field', () => {
-            const cond = makeCond('tag', 'includes', ['work']);
-            cond.target = 'parent';
-            const state = makeState([cond]);
+            const state = makeState([cond('tag', 'includes', ['work'], 'parent')]);
             const json = FilterSerializer.toJSON(state);
             const restored = FilterSerializer.parse(json).state;
-            const c = restored.filters[0] as FilterCondition;
+            const c = restored.filters[0] as ConditionOf<'tag'>;
             expect(c.target).toBe('parent');
         });
 
         it('output format matches v6 spec', () => {
             const state = makeState([
-                makeCond('tag', 'includes', ['work']),
+                cond('tag', 'includes', ['work']),
             ]);
             const json = FilterSerializer.toJSON(state);
             expect(json).toEqual({
@@ -134,7 +116,7 @@ describe('FilterSerializer', () => {
             const v5 = { property: 'tag', operator: 'includes', value: ['work'] };
             const result = FilterSerializer.parse(v5).state;
             expect(result.filters).toHaveLength(1);
-            const c = result.filters[0] as FilterCondition;
+            const c = result.filters[0] as ConditionOf<'tag'>;
             expect(c.property).toBe('tag');
             expect(c.value).toEqual(['work']);
         });
@@ -162,7 +144,7 @@ describe('FilterSerializer', () => {
 
     describe('URI encoding', () => {
         it('round-trip toURIParam → parseURIParam', () => {
-            const state = makeState([makeCond('tag', 'includes', ['work'])]);
+            const state = makeState([cond('tag', 'includes', ['work'])]);
             const uri = FilterSerializer.toURIParam(state);
             expect(uri).not.toBe('');
 
