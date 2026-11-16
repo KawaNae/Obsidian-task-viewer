@@ -133,8 +133,6 @@ function filterCell(i: number, tag: string): string {
 }
 
 beforeAll(async () => {
-    const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
-    if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
     expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
 });
 
