@@ -34,6 +34,12 @@ import { PropertyListField, type ListFocus } from './PropertyListField';
  * 拒む）、読めないキーは欄の下に理由を出して足さない。理由は打ち直すと
  * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
  * 打ちかけの字は残す。足す書き込みが拒まれたら、打った字を追加行に戻す。
+ *
+ * 行は組み立てごとに1つの `AbortSignal`（`built`）を持ち、その組み立てで
+ * 付けた listener、候補の一覧、リストの欄はすべてそれに掛ける。組み直す前に
+ * それを abort するので、前の組み立ての listener は走らない。focus のある
+ * 入力欄を外すと Chromium は blur を同期で送るが、その blur は何も確定しない
+ * （確定がもう一度走ると、外している最中の行を内側の組み直しが先に外す）。
  */
 export class PropertiesFieldGroup implements ClosingPart {
     private sectionEl: HTMLElement;
@@ -48,8 +54,12 @@ export class PropertiesFieldGroup implements ClosingPart {
     private addRow: { keyInput: HTMLInputElement; valueInput: HTMLInputElement; readKey(): Read<string> | null; commit(): void } | null = null;
     /** What is typed in the add row and not yet added: kept across a rebuild. */
     private draft = { key: '', value: '' };
-    /** The lists under the fields as last built: closed before the rows are built anew. */
-    private suggests: ValueSuggest[] = [];
+    /**
+     * The rows as last built: what they put on (listeners, the lists under
+     * the fields, the list fields) is let go when it aborts, before the rows
+     * are built anew.
+     */
+    private built = new AbortController();
     /** Each list property's field as last built, by key folded. */
     private lists = new Map<string, PropertyListField>();
     /**
@@ -68,9 +78,9 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     render(force = false): void {
         if (!force && this.sectionEl.contains(this.sectionEl.ownerDocument.activeElement)) return;
-        for (const suggest of this.suggests) suggest.close();
-        this.suggests = [];
-        for (const list of this.lists.values()) list.dispose();
+        this.built.abort();
+        this.built = new AbortController();
+        const signal = this.built.signal;
         this.lists.clear();
         this.sectionEl.empty();
         this.valueInputs.clear();
@@ -144,9 +154,9 @@ export class PropertiesFieldGroup implements ClosingPart {
         keyInput.addEventListener('input', (e) => {
             this.draft.key = keyInput.value;
             if (!(e as InputEvent).isComposing) readKey();
-        });
-        keyInput.addEventListener('compositionend', () => readKey());
-        valueInput.addEventListener('input', () => { this.draft.value = valueInput.value; });
+        }, { signal });
+        keyInput.addEventListener('compositionend', () => readKey(), { signal });
+        valueInput.addEventListener('input', () => { this.draft.value = valueInput.value; }, { signal });
 
         // 候補: 既存キー（vault 全体）から未使用のもの / 値はキーに応じて。
         // キーを選ぶと値の欄へ移り、値を選ぶと行を足す。
@@ -195,7 +205,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         };
         this.addRow = { keyInput, valueInput, readKey, commit: commitAdd };
         for (const [input, suggest] of [[keyInput, keySuggest], [valueInput, valueSuggest]] as const) {
-            onFormEnter(input, commitAdd, { takesEnter: () => suggest.listShown });
+            onFormEnter(input, commitAdd, { takesEnter: () => suggest.listShown, signal });
         }
         // blur 確定ルール: key があれば value 空でも確定。値のないプロパティ
         // （`- key::`）として書き、上の層の値を隠す。
@@ -206,8 +216,8 @@ export class PropertiesFieldGroup implements ClosingPart {
             if (to === keyInput || to === valueInput) return;
             if (keyInput.value.trim()) commitAdd();
         };
-        keyInput.addEventListener('blur', blurCommit);
-        valueInput.addEventListener('blur', blurCommit);
+        keyInput.addEventListener('blur', blurCommit, { signal });
+        valueInput.addEventListener('blur', blurCommit, { signal });
 
         this.ctx.issues.redraw();
 
@@ -261,6 +271,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             issues: () => { /* any text is a value */ },
             takesEnter: () => suggest.listShown,
             takesSame: () => !isOwn,
+            signal: this.built.signal,
         });
         this.valueBound.set(folded, value);
 
@@ -285,7 +296,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         hide.addEventListener('click', () => {
             void this.setValue(key, { type: 'null', spelling: '' });
             this.render(true);
-        });
+        }, { signal: this.built.signal });
     }
 
     /**
@@ -318,6 +329,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             candidates: () => this.candidates(key),
             write: (next, focus) => this.writeList(folded, key, next, focus),
             say: (source, issues) => this.ctx.issues.set(source, issues),
+            signal: this.built.signal,
         });
         this.lists.set(folded, field);
 
@@ -338,7 +350,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         makeOwn.addEventListener('click', () => {
             this.drafts.set(folded, [...items]);
             this.render(true);
-        });
+        }, { signal: this.built.signal });
     }
 
     /** The × that takes the row's own property out (or throws a draft away), and builds the rows anew. */
@@ -351,14 +363,14 @@ export class PropertiesFieldGroup implements ClosingPart {
             remove();
             // 構造コミット: 楽観 model から行を即時再構築
             this.render(true);
-        });
+        }, { signal: this.built.signal });
     }
 
     /** Where an inherited value is written, opened from the row. */
     private sourceLabel(row: HTMLElement, task: Task, key: string): void {
         const source = CascadeSource.forProperty(task, key);
         const sourceEl = row.createSpan({ cls: 'task-hub__source', text: this.ctx.sourceLabel(source) });
-        sourceEl.addEventListener('click', () => this.ctx.openSource(copy => CascadeSource.lineOfProperty(copy, key)));
+        sourceEl.addEventListener('click', () => this.ctx.openSource(copy => CascadeSource.lineOfProperty(copy, key)), { signal: this.built.signal });
     }
 
     /** The values offered for the property `key`, as spelled. */
@@ -382,7 +394,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     /** A list of values under `input`, closed when the rows are built anew. */
     private offer(input: HTMLInputElement, opts: ValueSuggestOptions): ValueSuggest {
         const suggest = new ValueSuggest(this.ctx.app, input, opts);
-        this.suggests.push(suggest);
+        this.built.signal.addEventListener('abort', () => suggest.close());
         return suggest;
     }
 

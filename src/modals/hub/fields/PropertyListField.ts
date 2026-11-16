@@ -34,6 +34,13 @@ export interface PropertyListFieldOptions {
     write(items: PropertyScalar[], focus?: ListFocus): void;
     /** Say what the field's inputs read as wrong, under the row (`IssueBoard`, by `source`). */
     say(source: string, issues: readonly FormIssue<HubField>[]): void;
+    /**
+     * Aborts as the rows are built anew: the field's listeners are taken
+     * off, its lists closed, and what it said taken back. Taking out an
+     * input that holds the focus sends it a blur at once, which then
+     * writes nothing.
+     */
+    signal: AbortSignal;
 }
 
 /**
@@ -64,7 +71,6 @@ export class PropertyListField {
     private readonly itemBound: BoundField<PropertyScalar | undefined>[] = [];
     private addInput: HTMLInputElement | null = null;
     private addBound: BoundField<PropertyScalar | undefined> | null = null;
-    private readonly suggests: ValueSuggest[] = [];
     /** The issue each input says now, by its source: an item's place, or the add field. */
     private readonly sources = new Set<string>();
     /**
@@ -76,10 +82,14 @@ export class PropertyListField {
 
     constructor(parent: HTMLElement, private readonly opts: PropertyListFieldOptions) {
         this.el = parent.createDiv({ cls: 'task-hub__list tv-form__control' });
+        const { signal } = opts;
+        signal.addEventListener('abort', () => {
+            for (const source of this.sources) this.opts.say(source, []);
+        });
         // Heard in the capture phase, before the input's own blur commits.
         this.el.addEventListener('blur', (e: FocusEvent) => {
             this.leftFor = e.relatedTarget instanceof Element ? e.relatedTarget : null;
-        }, true);
+        }, { capture: true, signal });
         if (opts.own) this.renderOwn();
         else this.renderInherited();
     }
@@ -125,6 +135,7 @@ export class PropertyListField {
                 },
                 issues: (issue) => this.sayOf(source, input, issue),
                 takesEnter: () => suggest.listShown,
+                signal: this.opts.signal,
             });
             this.itemBound.push(bound);
             input.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -133,7 +144,7 @@ export class PropertyListField {
                 if (to < 0 || to >= this.opts.items.length) return;
                 e.preventDefault();
                 this.writeKept(moved(this.opts.items, index, to), moved(places(this.opts.items), index, to));
-            });
+            }, { signal: this.opts.signal });
 
             const removeBtn = itemEl.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
             setIcon(removeBtn.createSpan(), 'x');
@@ -141,7 +152,7 @@ export class PropertyListField {
             removeBtn.disabled = disabled;
             removeBtn.addEventListener('click', () => {
                 this.writeKept(...removed(this.opts.items, index));
-            });
+            }, { signal: this.opts.signal });
         });
 
         // The add field stands where an item's text does: a handle's room before it, a ×'s after.
@@ -170,6 +181,7 @@ export class PropertyListField {
             },
             issues: (issue) => this.sayOf(source, add, issue),
             takesEnter: () => suggest.listShown,
+            signal: this.opts.signal,
         });
     }
 
@@ -183,7 +195,7 @@ export class PropertyListField {
             },
             pick,
         });
-        this.suggests.push(suggest);
+        this.opts.signal.addEventListener('abort', () => suggest.close());
         return suggest;
     }
 
@@ -193,8 +205,10 @@ export class PropertyListField {
      * item), and the order it is let go in is written. Moves and the release
      * are heard on the document, so the item may be dragged past the list,
      * and nothing is moved in the DOM until the write builds the rows anew.
+     * Rows built anew during the drag end it, writing nothing.
      */
     private dragBy(handle: HTMLElement, itemEl: HTMLElement, listEl: HTMLElement): void {
+        const { signal } = this.opts;
         handle.addEventListener('pointerdown', (down: PointerEvent) => {
             if (down.button !== 0) return;
             down.preventDefault();
@@ -228,10 +242,10 @@ export class PropertyListField {
                 mark();
                 if (target !== from) this.writeKept(moved(this.opts.items, from, target), moved(places(this.opts.items), from, target));
             };
-            doc.addEventListener('pointermove', move);
-            doc.addEventListener('pointerup', up);
-            doc.addEventListener('pointercancel', up);
-        });
+            doc.addEventListener('pointermove', move, { signal });
+            doc.addEventListener('pointerup', up, { signal });
+            doc.addEventListener('pointercancel', up, { signal });
+        }, { signal });
     }
 
     /**
@@ -303,12 +317,6 @@ export class PropertyListField {
             changed = true;
         }
         if (changed) this.opts.write(next.filter((item): item is PropertyScalar => item !== undefined));
-    }
-
-    /** Close the lists under its inputs and take back what it said: the rows are being built anew. */
-    dispose(): void {
-        for (const suggest of this.suggests) suggest.close();
-        for (const source of this.sources) this.opts.say(source, []);
     }
 }
 

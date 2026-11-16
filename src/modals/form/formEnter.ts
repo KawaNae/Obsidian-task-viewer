@@ -60,12 +60,13 @@ export function composingIn(field: HTMLElement): boolean {
  *
  * @param opts.takesEnter whether a list open on the field takes this Enter
  *   (an input suggest showing its list: `ShownSuggest.listShown`)
+ * @param opts.signal takes the handler off once it aborts
  * @returns a function that takes the handler off
  */
 export function onFormEnter(
     field: HTMLElement,
     run: (e: KeyboardEvent) => void,
-    opts: { takesEnter?: () => boolean } = {},
+    opts: { takesEnter?: () => boolean; signal?: AbortSignal } = {},
 ): () => void {
     const composition = compositionOf(field);
     const onKey = (e: KeyboardEvent) => {
@@ -74,6 +75,6 @@ export function onFormEnter(
         e.preventDefault();
         run(e);
     };
-    field.addEventListener('keydown', onKey);
+    field.addEventListener('keydown', onKey, { signal: opts.signal });
     return () => field.removeEventListener('keydown', onKey);
 }
