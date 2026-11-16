@@ -52,8 +52,6 @@ function expectedGridHead(type: string, start: string): string {
 const teardown = createTeardown();
 
 beforeAll(async () => {
-    const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
-    if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
     const held = overrideSettings({ startFromOldestOverdue: false }, KEYS);
     teardown.add('put the settings back', () => held.restore());
     teardown.add('close the views', closeViews);

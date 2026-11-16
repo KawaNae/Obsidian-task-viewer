@@ -151,14 +151,6 @@ const LIST = {
 const teardown = createTeardown();
 
 beforeAll(async () => {
-    // The stylesheet of a build that draws markdown frames marks the panel's element.
-    const live = ev<boolean>(`(() => {
-        const probe = document.body.createDiv('tv-sidebar__frames');
-        const styled = getComputedStyle(probe).getPropertyValue('--tv-sidebar-frames-styled') !== '';
-        probe.remove();
-        return styled;
-    })()`);
-    if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
     deleteNotes();
     teardown.add('delete the notes', deleteNotes);
     const held = overrideSettings({ reuseExistingTab: true });
