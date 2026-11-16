@@ -193,7 +193,7 @@ describe('DateFieldGroup.setEnabled', () => {
             taskLookup: () => undefined,
             getValidationCtx: () => ({ hasImplicitStartDate: false }),
             onChange: () => inputs.push('change'),
-            onCommit: (group) => inputs.push(`commit:${group}`),
+            onCommit: (group) => { inputs.push(`commit:${group}`); },
             issues: () => { /* none said */ },
         });
         group.setEnabled(false);

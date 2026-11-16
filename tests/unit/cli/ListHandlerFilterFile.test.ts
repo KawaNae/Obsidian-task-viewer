@@ -13,7 +13,7 @@ function pluginWith(list: (params: unknown) => Promise<unknown>) {
 
 describe('the CLI list with a filter file', () => {
     it('passes filter-file and list to the API, with the other flags', async () => {
-        const list = vi.fn(async () => ({ total: 0, count: 0, truncated: false, limit: 100, tasks: [] }));
+        const list = vi.fn(async (_params: unknown) => ({ total: 0, count: 0, truncated: false, limit: 100, tasks: [] }));
         const plugin = { api: { list } } as never;
         await createListHandler(plugin)({ 'filter-file': 'templates/work.md', list: 'urgent', tag: 'home', date: 'today' });
 

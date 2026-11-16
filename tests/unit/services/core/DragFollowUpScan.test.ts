@@ -22,7 +22,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 const FILE = 'note.md';
 const proto = Operations.prototype as never as Record<string, (...args: unknown[]) => unknown>;
 
-function buildHost(overrides: Record<string, unknown> = {}) {
+function buildHost<T extends object>(overrides: T) {
     return {
         disposed: false,
         ...overrides,

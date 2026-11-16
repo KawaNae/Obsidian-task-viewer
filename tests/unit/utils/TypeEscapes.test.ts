@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
-import { ItemView } from 'obsidian';
+// The mock's ItemView is the one the source sees; Obsidian's is abstract and wants a leaf.
+import { ItemView } from '../mocks/obsidian';
 import { viewContentEl, redrawView, notifyDayRolled } from '../../../src/utils/ObsidianView';
 import { editorCm } from '../../../src/utils/editorCm';
 import { deviceMemoryGb, jsHeapStats, electronRequire } from '../../../src/utils/hostEnv';
