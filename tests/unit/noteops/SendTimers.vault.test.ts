@@ -51,7 +51,7 @@ async function open(files: Record<string, string[]>) {
     const settle = async () => {
         for (let i = 0; i < 3; i++) {
             await new Promise(r => setTimeout(r, 0));
-            await session.settle(...contents.keys());
+            for (const path of contents.keys()) await session.settle(path);
         }
     };
     /** Start a count-up on the row `content`, and wait until its first line is written. */
