@@ -6,9 +6,10 @@ import type { PropertyValue } from '../../../src/types';
 /**
  * A line's value is typed by its spelling, as YAML 1.2's core schema types the
  * same spelling unquoted. The YAML is the one Obsidian reads the frontmatter
- * with (eemeli/yaml, called as Obsidian calls it).
+ * with (eemeli/yaml, called as Obsidian calls it: yaml reads a `null` reviver
+ * as none, so `parse(text, {})`, the form its types take, is the same call).
  */
-const yamlOf = (spelling: string): unknown => (yamlParse(`k: ${spelling}`, null, {}) as { k: unknown }).k;
+const yamlOf = (spelling: string): unknown => (yamlParse(`k: ${spelling}`, {}) as { k: unknown }).k;
 
 /** What a value means, as YAML gives it: null, a number, a boolean or a string. */
 function meaning(value: PropertyValue): unknown {
@@ -114,6 +115,8 @@ describe('PropertyValues.fromYaml', () => {
         const values = [...NUMBERS.map(([s]) => s), ...BOOLEANS.map(([s]) => s), ...TEXTS, ...QUOTED.map(([s]) => s)].map(yamlOf);
         for (const yaml of values) {
             const value = PropertyValues.fromYaml(yaml)!;
+            // Every spelling of the table is a scalar's.
+            if (value.type === 'list') throw new Error(`${String(yaml)} read as a list`);
             expect(meaning(PropertyValues.fromText(PropertyValues.spelling(value))), String(yaml)).toEqual(meaning(value));
         }
     });

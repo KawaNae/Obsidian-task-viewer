@@ -24,10 +24,10 @@ describe('a copy of a list', () => {
         id: 'list-a',
         name: 'Today',
         filterState: { filters: [{ property: 'status', operator: 'includes', value: [' '] }], logic: 'and' },
-        sortState: { rules: [{ id: 'r', property: 'due', direction: 'asc' }] },
+        sortState: { rules: [{ property: 'due', direction: 'asc' }] },
         applyViewFilter: true,
         topRight: { fields: ['due'], separator: ' ' },
-    } as PinnedListDefinition;
+    };
 
     it('has a new id and a name marked as a copy, and the same query and top right', () => {
         const copy = copyOfList(list);
