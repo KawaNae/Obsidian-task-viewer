@@ -3,7 +3,7 @@ import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 import type { SubtreeLine } from '../../../src/services/persistence/TaskOps';
-import type { SendRow } from '../../../src/services/core/TaskIndex';
+import type { SendRow } from '../../../src/services/operations/Operations';
 
 /**
  * A send to a section of the rows' own note (`TaskIndex.send`): one

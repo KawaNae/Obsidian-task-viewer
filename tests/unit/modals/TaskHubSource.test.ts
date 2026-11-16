@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { t } from '../../../src/i18n';
-import { TaskHubSource, type ReplaceAnswer, type SourceHost, type SourceViewState } from '../../../src/modals/hub/TaskHubSource';
+import { TaskHubSource, type SourceHost, type SourceViewState } from '../../../src/modals/hub/TaskHubSource';
+import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { SubtreeReplacement } from '../../../src/services/persistence/TaskOps';
 import type { DraftEditor, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
@@ -43,13 +44,13 @@ function rowOf(overrides: Partial<Task> = {}): Task {
     return makeTask({ id: 'row-1', content: 'P', subtreeLines: SUBTREE, ...overrides });
 }
 
-function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean; drained?: Promise<void> } = {}) {
+function setUp(opts: { task?: Task; answers?: WriteAnswer[]; confirm?: boolean; drained?: Promise<void> } = {}) {
     let row: Task | undefined = opts.task ?? rowOf();
     const answers = [...(opts.answers ?? [])];
     const states: SourceViewState[] = [];
     const editors: FakeEditor[] = [];
     let asked = 0;
-    const replace = vi.fn(async (_id: string, _base: readonly string[], _r: SubtreeReplacement): Promise<ReplaceAnswer> => answers.shift() ?? { written: true });
+    const replace = vi.fn(async (_id: string, _base: readonly string[], _r: SubtreeReplacement): Promise<WriteAnswer> => answers.shift() ?? { written: true });
     const confirm = vi.fn(async () => opts.confirm ?? true);
     const lockForm = vi.fn();
     const closeHub = vi.fn();
@@ -235,9 +236,9 @@ describe('applying a draft', () => {
     });
 
     it('is not made while a write of the draft is on its way', async () => {
-        let answer!: (a: ReplaceAnswer) => void;
+        let answer!: (a: WriteAnswer) => void;
         const h = await opened();
-        h.replace.mockImplementationOnce(() => new Promise<ReplaceAnswer>(resolve => { answer = resolve; }));
+        h.replace.mockImplementationOnce(() => new Promise<WriteAnswer>(resolve => { answer = resolve; }));
         h.editor().parent = '- [x] P';
         const first = h.source.apply();
         expect(h.state().phase).toBe('applying');

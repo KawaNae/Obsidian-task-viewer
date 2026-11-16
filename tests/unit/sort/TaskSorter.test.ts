@@ -3,14 +3,15 @@ import { TaskSorter } from '../../../src/services/sort/TaskSorter';
 import type { DisplayTask } from '../../../src/types';
 import type { SortState } from '../../../src/services/sort/SortTypes';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
+import { makeTask } from '../helpers/makeTask';
 
 /** A display copy of a task with the given line values (startHour 5). */
 function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    const task = {
+    const task = makeTask({
         id: 'test-1', file: 'file.md', line: 0, content: '', statusChar: ' ', indent: 0,
         childIds: [], childLines: [], originalText: '', tags: [], parserId: 'tv-inline',
         ...overrides,
-    };
+    });
     return { ...toDisplayTask(task, 5, NO_TASK_LOOKUP), ...overrides };
 }
 
@@ -44,7 +45,7 @@ describe('TaskSorter', () => {
                 makeDT({ id: 'a', content: 'Apple' }),
                 makeDT({ id: 'c', content: 'Cherry' }),
             ];
-            const state: SortState = { rules: [{ id: 'r1', property: 'content', direction: 'asc' }] };
+            const state: SortState = { rules: [{ property: 'content', direction: 'asc' }] };
             TaskSorter.sort(tasks, state);
             expect(tasks.map(t => t.content)).toEqual(['Apple', 'Banana', 'Cherry']);
         });
@@ -55,7 +56,7 @@ describe('TaskSorter', () => {
                 makeDT({ id: 'c', content: 'Cherry' }),
                 makeDT({ id: 'b', content: 'Banana' }),
             ];
-            const state: SortState = { rules: [{ id: 'r1', property: 'content', direction: 'desc' }] };
+            const state: SortState = { rules: [{ property: 'content', direction: 'desc' }] };
             TaskSorter.sort(tasks, state);
             expect(tasks.map(t => t.content)).toEqual(['Cherry', 'Banana', 'Apple']);
         });
@@ -68,8 +69,8 @@ describe('TaskSorter', () => {
             ];
             const state: SortState = {
                 rules: [
-                    { id: 'r1', property: 'due', direction: 'asc' },
-                    { id: 'r2', property: 'content', direction: 'asc' },
+                    { property: 'due', direction: 'asc' },
+                    { property: 'content', direction: 'asc' },
                 ],
             };
             TaskSorter.sort(tasks, state);
@@ -81,7 +82,7 @@ describe('TaskSorter', () => {
                 makeDT({ id: 'b', startDate: '2026-03-15' }),
                 makeDT({ id: 'a', startDate: '2026-03-10' }),
             ];
-            const state: SortState = { rules: [{ id: 'r1', property: 'startDate', direction: 'asc' }] };
+            const state: SortState = { rules: [{ property: 'startDate', direction: 'asc' }] };
             TaskSorter.sort(tasks, state);
             expect(tasks.map(t => t.id)).toEqual(['a', 'b']);
         });
@@ -91,7 +92,7 @@ describe('TaskSorter', () => {
                 makeDT({ id: 'b', tags: ['work'] }),
                 makeDT({ id: 'a', tags: ['personal'] }),
             ];
-            const state: SortState = { rules: [{ id: 'r1', property: 'tag', direction: 'asc' }] };
+            const state: SortState = { rules: [{ property: 'tag', direction: 'asc' }] };
             TaskSorter.sort(tasks, state);
             expect(tasks.map(t => t.id)).toEqual(['a', 'b']);
         });
@@ -127,7 +128,7 @@ describe('TaskSorter', () => {
                 makeDT({ id: 'inherited', cascadeContext: { due: '2026-03-01' } }),
                 makeDT({ id: 'none' }),
             ];
-            TaskSorter.sort(tasks, { rules: [{ id: 'r', property: 'due', direction: 'asc' }] });
+            TaskSorter.sort(tasks, { rules: [{ property: 'due', direction: 'asc' }] });
             expect(tasks.map(t => t.id)).toEqual(['none', 'inherited', 'own-later']);
         });
 

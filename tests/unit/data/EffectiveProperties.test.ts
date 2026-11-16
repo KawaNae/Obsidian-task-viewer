@@ -4,6 +4,7 @@ import {
     getEffectiveTags, getEffectiveProperties,
 } from '../../../src/services/data/EffectiveProperties';
 import { makeTask } from '../helpers/makeTask';
+import { byKey, valuesOf } from '../helpers/properties';
 
 describe('EffectiveProperties', () => {
     describe('style (color / linestyle / mask): own ?? cascade', () => {
@@ -63,21 +64,22 @@ describe('EffectiveProperties', () => {
     describe('properties: キー単位 child-wins', () => {
         it('cascade を raw が上書きし、非衝突キーは合流する', () => {
             const t = makeTask({
-                properties: { priority: { type: 'number', number: 5, spelling: '5' } },
+                properties: byKey({ priority: { type: 'number', number: 5, spelling: '5' } }),
                 cascadeContext: {
-                    properties: {
+                    properties: byKey({
                         priority: { type: 'number', number: 1, spelling: '1' },
                         category: { type: 'text', text: 'work', spelling: 'work' },
-                    },
+                    }),
                 },
             });
-            const props = getEffectiveProperties(t);
-            expect(props['priority']).toEqual({ type: 'number', number: 5, spelling: '5' });
-            expect(props['category']).toEqual({ type: 'text', text: 'work', spelling: 'work' });
+            expect(valuesOf(getEffectiveProperties(t))).toEqual({
+                priority: { type: 'number', number: 5, spelling: '5' },
+                category: { type: 'text', text: 'work', spelling: 'work' },
+            });
         });
 
         it('cascade が無ければ raw オブジェクトをそのまま返す（新規割当なし）', () => {
-            const t = makeTask({ properties: { note: { type: 'text', text: 'x', spelling: 'x' } } });
+            const t = makeTask({ properties: byKey({ note: { type: 'text', text: 'x', spelling: 'x' } }) });
             expect(getEffectiveProperties(t)).toBe(t.properties);
         });
     });
