@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     shouldSplitDisplayTask,
     splitDisplayTaskAtBoundary,
+    NO_TASK_LOOKUP,
     toDisplayTask,
 } from '../../../../src/services/display/DisplayTaskConverter';
 import { classifyForSection } from '../../../../src/services/display/SectionClassifier';
@@ -35,7 +36,7 @@ function crosserFor(startHour: number): Partial<Task> {
 }
 
 function splitCrosser(startHour: number): [DisplayTask, DisplayTask] {
-    const dt = toDisplayTask(makeTask(crosserFor(startHour)), startHour);
+    const dt = toDisplayTask(makeTask(crosserFor(startHour)), startHour, NO_TASK_LOOKUP);
     expect(shouldSplitDisplayTask(dt, startHour)).toBe(true);
     return splitDisplayTaskAtBoundary(dt, startHour);
 }
@@ -49,7 +50,7 @@ describe('visual-day split: the head belongs to the day it started on', () => {
     });
 
     it.each(ALL_START_HOURS)('startHour=%i: a segment keeps its line values and the whole span', (startHour) => {
-        const whole = toDisplayTask(makeTask(crosserFor(startHour)), startHour);
+        const whole = toDisplayTask(makeTask(crosserFor(startHour)), startHour, NO_TASK_LOOKUP);
         for (const seg of splitCrosser(startHour)) {
             const { startDate, startTime, endDate, endTime } = seg;
             expect({ startDate, startTime, endDate, endTime }).toEqual(crosserFor(startHour));
@@ -85,7 +86,7 @@ describe('timeline placement (GridRenderer path)', () => {
     const dates = ['2026-08-16', '2026-08-17', '2026-08-18', '2026-08-19'];
 
     it.each(ALL_START_HOURS)('startHour=%i: both segments land in a timed column', (startHour) => {
-        const dt = toDisplayTask(makeTask(crosserFor(startHour)), startHour);
+        const dt = toDisplayTask(makeTask(crosserFor(startHour)), startHour, NO_TASK_LOOKUP);
         const segs = splitTasks([dt], { type: 'visual-date', startHour });
         const map = categorizeTasksByDate(segs, dates, startHour);
 
@@ -95,7 +96,7 @@ describe('timeline placement (GridRenderer path)', () => {
     });
 
     it.each(ALL_START_HOURS)('startHour=%i: no segment leaks into an all-day bucket', (startHour) => {
-        const dt = toDisplayTask(makeTask(crosserFor(startHour)), startHour);
+        const dt = toDisplayTask(makeTask(crosserFor(startHour)), startHour, NO_TASK_LOOKUP);
         const segs = splitTasks([dt], { type: 'visual-date', startHour });
         const map = categorizeTasksByDate(segs, dates, startHour);
         expect(dates.flatMap(d => map.get(d)!.allDay)).toEqual([]);
@@ -106,7 +107,7 @@ describe('single-date placement (ScheduleView path)', () => {
     it('startHour=0: the previous day shows the head as a timed row', () => {
         // Misdated, the head classified as all-day and turned up as an all-day
         // row on both days instead of a timed row on one.
-        const dt = toDisplayTask(makeTask(crosserFor(0)), 0);
+        const dt = toDisplayTask(makeTask(crosserFor(0)), 0, NO_TASK_LOOKUP);
         const segs = splitTasks([dt], { type: 'visual-date', startHour: 0 });
 
         const prev = categorizeTasksForDate(segs, '2026-08-17', 0);
@@ -121,7 +122,7 @@ describe('date-range clipping (AllDay lane / Calendar path)', () => {
     const RANGE = { start: '2026-08-16', end: '2026-08-22' };
 
     function clip(task: Partial<Task>, startHour: number) {
-        const dt = toDisplayTask(makeTask(task), startHour);
+        const dt = toDisplayTask(makeTask(task), startHour, NO_TASK_LOOKUP);
         return splitTasks([dt], { type: 'date-range', startHour, ...RANGE })
             .map(s => {
                 const r = visualDaysOf(s.drawn!, startHour);

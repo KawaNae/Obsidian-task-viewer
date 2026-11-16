@@ -41,7 +41,7 @@ async function duplicate(line: string): Promise<string[]> {
         deleteLine: async () => true,
     };
     const { menu, clicks } = recordingMenu();
-    const builder = new CheckboxMenuBuilder({} as never, () => 0);
+    const builder = new CheckboxMenuBuilder();
     expect(builder.addFullMenu(menu as never, line, { ...DEFAULT_SETTINGS, enableStatusMenu: false }, ops)).toBe(true);
     await clicks.get(t('menu.duplicate'))!();
     return inserted;

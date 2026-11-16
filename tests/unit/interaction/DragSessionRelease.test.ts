@@ -80,7 +80,7 @@ describe('a drag that ends without a commit', () => {
         const { calls, ports, strategy, container, task } = rig(async () => { });
         const handler = new DragHandler(
             container, ports, { getIndex: () => ports } as unknown as PluginContext,
-            {} as SelectionController, () => { }, () => { }, () => '', () => '', () => 1,
+            {} as SelectionController, () => { }, () => '', () => '', () => 1,
         );
         const session = (handler as unknown as { session: DragSession }).session;
         session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);

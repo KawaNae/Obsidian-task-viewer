@@ -338,7 +338,7 @@ describe('toDisplayTask — cascade 継承日時の解決', () => {
             cascadeContext: { startTime: '09:00' },
         });
         expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 10:00' });
-        expect(classifyForSection(dt, startHour)).toBe('timed');
+        expect(classifyForSection(dt)).toBe('timed');
         expect(visualDaysOf(dt.drawn!, startHour)).toEqual({ first: '2026-01-15', last: '2026-01-15' });
     });
 
@@ -347,7 +347,7 @@ describe('toDisplayTask — cascade 継承日時の解決', () => {
             cascadeContext: { startDate: '2026-06-30', startTime: '06:00' },
         });
         expect(moments(dt.span)).toEqual({ start: '2026-06-30 06:00', end: '2026-06-30 07:00' });
-        expect(classifyForSection(dt, startHour)).toBe('timed');
+        expect(classifyForSection(dt)).toBe('timed');
     });
 
     it('継承 endTime + raw endDate は捨てられない', () => {
@@ -357,7 +357,7 @@ describe('toDisplayTask — cascade 継承日時の解決', () => {
         });
         // E-Timed: 終端の 1 時間前が暗黙の開始
         expect(moments(dt.span)).toEqual({ start: '2026-01-15 09:00', end: '2026-01-15 10:00' });
-        expect(classifyForSection(dt, startHour)).toBe('timed');
+        expect(classifyForSection(dt)).toBe('timed');
     });
 
     it('継承 endDate のみのタスクはどのセクションからも消えない', () => {
@@ -365,14 +365,14 @@ describe('toDisplayTask — cascade 継承日時の解決', () => {
             cascadeContext: { endDate: '2026-01-15', endTime: '10:00' },
         });
         expect(moments(dt.span)?.start).toBe('2026-01-15 09:00');
-        expect(classifyForSection(dt, startHour)).not.toBeNull();
+        expect(classifyForSection(dt)).not.toBeNull();
         expect(visualDaysOf(dt.drawn!, startHour).first).toBe('2026-01-15');
     });
 
     it('時刻なしの継承 endDate はその日の allDay', () => {
         const dt = shown({ cascadeContext: { endDate: '2026-01-15' } });
         expect(moments(dt.span)?.end).toBe('2026-01-16 05:00');
-        expect(classifyForSection(dt, startHour)).toBe('allDay');
+        expect(classifyForSection(dt)).toBe('allDay');
     });
 
     it('raw と継承で結果が一致する（同じ値ならどちらに書いても同じ）', () => {
