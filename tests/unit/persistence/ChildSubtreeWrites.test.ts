@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { plannedOn } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn, type ReadCopy } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 import { planDuplicate } from '../../../src/services/operations/DuplicateShift';
@@ -336,7 +336,7 @@ describe('a move within the file carries the subtree', () => {
 describe('a recurrence insert leaves the subtree with the instance that fired', () => {
     const NEXT = '- [ ] parent @2026-08-16';
     /** `write` with the one op a recurrence's next-instance insert makes. */
-    const insertRecurrence = (h: WriteBench, task: Task, content: string, flowLines: string[] = []) =>
+    const insertRecurrence = (h: WriteBench, task: ReadCopy, content: string, flowLines: string[] = []) =>
         h.writer.write(task.file, plannedOn(task), [
             { kind: 'insert-instance', instance: { head: content, flowLines, children: [] } },
         ]);

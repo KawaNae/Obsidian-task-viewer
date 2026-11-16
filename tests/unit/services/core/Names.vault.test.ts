@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../../helpers/vaultSession';
 import { plannedOn } from '../../../../src/services/persistence/TaskRefs';
 import { Block } from '../../../../src/services/persistence/utils/Placement';
-import { updateRow } from '../../helpers/writeBench';
+import { readCopy, updateRow } from '../../helpers/writeBench';
 
 /**
  * A name lasts one reading of its file (the path, the reading's number,
@@ -123,7 +123,7 @@ describe('a name given before our writes brought the file back to a content it h
     it('is not written on its old line from a copy made before the writes, which the file reads as again', async () => {
         const { contents, session } = await open(['- [ ] A', '- [ ] A', '']);
         const [r1, r2] = ids(session);
-        const held = session.index.getTask(r2)!;
+        const held = readCopy(session.index.getTask(r2)!);
         session.holdScans();
 
         expect(await session.ops.deleteTask(r1)).toBe(true);
@@ -142,7 +142,7 @@ describe('a name given before edits from outside brought the file back to the co
     it('names nothing, and a copy made then is not written: the file came back, the reading did not', async () => {
         const { contents, session } = await open(['- [ ] A', '- [ ] A', '']);
         const [, r2] = ids(session);
-        const held = session.index.getTask(r2)!;
+        const held = readCopy(session.index.getTask(r2)!);
         const first = contents.get(FILE)!;
 
         // Two edits from outside, each read: the second puts the first content back.
