@@ -16,7 +16,7 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/filter-period.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { cliList, isObsidianRunning } from '../helpers/cli-helper';
+import { cliList } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, SETTLE_MS, addDays, closeViews, ev, openView, readSettings, tr, visualDay, weekStart,
@@ -100,9 +100,6 @@ function op(name: string, body: string, settleMs = SETTLE_MS): Reading {
 const TAGGED = { property: 'tag', operator: 'includes', value: [TAG] };
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     const { startHour, weekStartDay } = readSettings(['startHour', 'weekStartDay']) as { startHour: number; weekStartDay: number };
     W = weekStart(addDays(visualDay(startHour), 21), weekStartDay);
     expect(await writeIndexedTestFile(FILE, note())).toBe(true);

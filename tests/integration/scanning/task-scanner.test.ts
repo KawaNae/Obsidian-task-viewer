@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
-    cliList, cliGet, isObsidianRunning, waitForTask,
+    cliList, cliGet, waitForTask,
 } from '../helpers/cli-helper';
 import {
     createFixture, writeTestFile, deleteTestFile,
@@ -19,15 +19,6 @@ import {
 } from '../helpers/test-file-manager';
 
 const OUTPUT_FIELDS = 'content,status,startDate,startTime,endDate,endTime,due,tags,childIds,parentId,parserId,color,file,line';
-
-beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error(
-            'Obsidian is not running or CLI is unreachable. ' +
-            'Start Obsidian with the Dev vault before running E2E tests.',
-        );
-    }
-});
 
 // ────────────────────────────────────────────
 // 1. Basic inline task extraction (@notation)

@@ -17,7 +17,6 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/view-export.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteNotesUnder, framesOf, notesUnder } from '../helpers/markdown-frames';
 import { SETTLE_MS, closeViews, ev, openView } from '../helpers/view-helper';
 
@@ -48,9 +47,6 @@ interface Exported {
 let exported: Exported;
 
 beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     deleteNotesUnder(PREFIX);
     ev(`(async () => { ${notesUnder(PREFIX)} await writeNote(${JSON.stringify(`${NOTE}.md`)}, '## Chart\\nchart\\n'); return JSON.stringify(true); })()`);
     openView(NAME, 'timeline-view', {

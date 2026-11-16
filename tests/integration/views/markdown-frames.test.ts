@@ -36,7 +36,6 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { deleteNotesUnder, frameLinks as links, framesOf, kept, notesUnder, readFrames, styles, texts, type Reading } from '../helpers/markdown-frames';
 import {
@@ -152,9 +151,6 @@ const LIST = {
 const teardown = createTeardown();
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     // The stylesheet of a build that draws markdown frames marks the panel's element.
     const live = ev<boolean>(`(() => {
         const probe = document.body.createDiv('tv-sidebar__frames');

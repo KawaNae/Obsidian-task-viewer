@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import { isObsidianRunning, obsidianEval, sleep } from '../helpers/cli-helper';
+import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { closeDialog, onDialog, openDialog as openDialogOn, type DialogState } from '../helpers/send-dialog';
 import { deleteTestFile, readTestFile, vaultAbsolute, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 
@@ -64,12 +64,6 @@ function send(name: string, to: unknown, values: unknown[] = [], prelude = ''): 
 function exists(path: string): boolean {
     return fs.existsSync(vaultAbsolute(path));
 }
-
-beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
-});
 
 afterAll(async () => {
     for (const path of [SRC, DST, `${NEW}.md`, RENAMED]) deleteTestFile(path);

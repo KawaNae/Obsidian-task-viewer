@@ -23,7 +23,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
-import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { obsidianEval } from '../helpers/cli-helper';
 import { waitForFileIndexed } from '../helpers/test-file-manager';
 import { createTeardown } from '../helpers/teardown';
 import { overrideSettings, tr } from '../helpers/view-helper';
@@ -69,9 +69,6 @@ function cleanUp(): void {
 }
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     // Some of the dialog's events need the window to have the focus.
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
     cleanUp();

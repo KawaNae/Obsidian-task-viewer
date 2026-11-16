@@ -15,7 +15,7 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/property-filter.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { cliList, isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { cliList, obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 
 const FILE = 'test-int-property-filter.md';
@@ -92,9 +92,6 @@ function which(operator: string, value?: string): string[] {
 }
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
     expect(await writeIndexedTestFile(FM_FILE, FM_NOTE)).toBe(true);
     expect(await writeIndexedTestFile(ROOT_FILE, ROOT_NOTE)).toBe(true);

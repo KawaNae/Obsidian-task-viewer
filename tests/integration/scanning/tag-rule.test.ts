@@ -14,7 +14,7 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/scanning/tag-rule.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { TagRule } from '../../../src/services/parsing/utils/TagRule';
 
@@ -174,9 +174,6 @@ const sorted = (tags: readonly string[]) => [...new Set(tags)].sort();
 const asListed = (tags: readonly string[]) => sorted(tags.flatMap(tag => TagRule.withParents(tag)).map(TagRule.key));
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     for (const [name, content] of Object.entries(NOTES)) await writeIndexedTestFile(path(name), content);
 });
 

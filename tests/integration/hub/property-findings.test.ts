@@ -10,8 +10,8 @@
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/property-findings.test.ts
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
-import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { describe, it, expect, afterAll, afterEach, beforeEach } from 'vitest';
+import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 
 const TEST_FILE = 'test-int-hub-property-findings.md';
@@ -73,12 +73,6 @@ function closeHub(): void {
         return 'ok';
     `);
 }
-
-beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
-});
 
 beforeEach(async () => { await writeIndexedTestFile(TEST_FILE, LINES.join('\n')); });
 afterEach(() => { closeHub(); });

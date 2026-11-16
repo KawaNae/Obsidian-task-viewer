@@ -15,7 +15,7 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/card-sync.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 
 const FILE = 'test-int-card-sync.md';
@@ -72,9 +72,6 @@ function closeHub(): void {
 }
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
 });
 

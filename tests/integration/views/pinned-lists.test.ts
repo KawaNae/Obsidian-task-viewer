@@ -17,7 +17,6 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, restartView, tr,
@@ -177,9 +176,6 @@ const TOP_LEVEL = { property: 'parent', operator: 'isNotSet' };
 const teardown = createTeardown();
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
     const held = overrideSettings({ pinnedListPageSize: PAGE });

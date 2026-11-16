@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliList, cliCreate, cliUpdate, cliDelete,
-    isObsidianRunning, waitForTask, sleep,
+    waitForTask, sleep,
 } from '../helpers/cli-helper';
 import {
     writeTestFile, readTestFile, deleteTestFile,
@@ -52,15 +52,6 @@ function freshId(content: string): string {
 }
 
 // ── Setup / Teardown ──
-
-beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error(
-            'Obsidian is not running or CLI is unreachable. ' +
-            'Start Obsidian with the Dev vault before running integration tests.',
-        );
-    }
-});
 
 afterAll(async () => {
     deleteTestFile(TEST_FILE);

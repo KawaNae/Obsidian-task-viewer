@@ -157,16 +157,6 @@ export function cliHelp(): string {
     return typeof result === 'string' ? result : JSON.stringify(result);
 }
 
-/** Check if Obsidian CLI is reachable. */
-export function isObsidianRunning(): boolean {
-    try {
-        const result = obsidianCli('list', { limit: '1' });
-        return result !== null && typeof result === 'object';
-    } catch {
-        return false;
-    }
-}
-
 /** Sleep for the given number of milliseconds. */
 export function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

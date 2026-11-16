@@ -29,8 +29,8 @@
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/timer/offset.test.ts
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { describe, it, expect, afterAll, afterEach } from 'vitest';
+import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 
@@ -193,12 +193,6 @@ function line(name: string): string {
     if (!found) throw new Error(`no line ${name} in ${FILE}`);
     return found;
 }
-
-beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
-});
 
 afterAll(async () => {
     deleteTestFile(FILE);

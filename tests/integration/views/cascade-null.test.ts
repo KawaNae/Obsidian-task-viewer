@@ -19,7 +19,7 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/cascade-null.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { cliList, isObsidianRunning } from '../helpers/cli-helper';
+import { cliList } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView } from '../helpers/view-helper';
 
@@ -87,9 +87,6 @@ function texts(view: string): string[] {
 }
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
 });
 

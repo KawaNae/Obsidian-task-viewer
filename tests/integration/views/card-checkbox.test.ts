@@ -16,7 +16,6 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { ev, PRELUDE, openView, closeViews, overrideSettings, ymd } from '../helpers/view-helper';
 
@@ -72,9 +71,6 @@ describe('a card\'s own checkbox', () => {
     const teardown = createTeardown();
 
     beforeAll(async () => {
-        if (!isObsidianRunning()) {
-            throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-        }
         const held = overrideSettings({ applyGlobalStyles: true });
         teardown.add('put the settings back', () => held.restore());
         teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });

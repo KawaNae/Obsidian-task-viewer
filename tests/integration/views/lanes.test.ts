@@ -24,7 +24,6 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/lanes.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, addDays, closeViews, ev, gridDays, monthGridStart, openView, readSettings,
@@ -215,9 +214,6 @@ let weekStartDay: number;
 let past: number;
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
     const s = readSettings(['weekStartDay', 'pastDaysToShow']);
