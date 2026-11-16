@@ -12,8 +12,8 @@
  */
 import { describe, it, expect, afterAll, afterEach, beforeEach } from 'vitest';
 import { obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
-import { UNTIL } from '../helpers/waits';
+import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-hub-property-findings.md';
 

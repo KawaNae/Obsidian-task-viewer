@@ -19,8 +19,8 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
-import { UNTIL } from '../helpers/waits';
+import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-suggest-lists.md';
 const NOTE_A = 'test-int-suggest-props-a.md';

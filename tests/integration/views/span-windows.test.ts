@@ -21,11 +21,11 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliCategorizedTasksForDateRange, cliGet, cliList, cliTasksForDateRange, cliToday, obsidianEval,
 } from '../helpers/cli-helper';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, addDays, closeViews, ev, openView, readSettings, tr, visualDay,
 } from '../helpers/view-helper';
-import { UNTIL } from '../helpers/waits';
+import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-span-windows.md';
 
@@ -74,7 +74,7 @@ function idOf(name: string): string {
 beforeAll(async () => {
     startHour = readSettings(['startHour']).startHour as number;
     D = visualDay(startHour);
-    expect(await writeIndexedTestFile(FILE, note())).toBe(true);
+    await writeIndexedTestFile(FILE, note());
 });
 
 afterAll(async () => {

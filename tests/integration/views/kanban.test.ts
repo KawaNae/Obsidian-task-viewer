@@ -16,8 +16,9 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/kanban.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView, restartView, tr } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-kanban.md';
 /** Six top-level tasks tagged tvkba, the first two also tvkbb. */
@@ -133,7 +134,7 @@ function filterCell(i: number, tag: string): string {
 }
 
 beforeAll(async () => {
-    expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
+    await writeIndexedTestFile(FILE, NOTE);
 });
 
 afterAll(async () => {

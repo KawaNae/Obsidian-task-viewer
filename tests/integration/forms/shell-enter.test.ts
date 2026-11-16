@@ -17,9 +17,9 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
-import { UNTIL } from '../helpers/waits';
+import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-shell-enter.md';
 

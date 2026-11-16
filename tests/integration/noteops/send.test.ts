@@ -19,7 +19,8 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { closeDialog, onDialog, openDialog as openDialogOn, type DialogState } from '../helpers/send-dialog';
-import { deleteTestFile, readTestFile, vaultAbsolute, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, vaultAbsolute, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const SRC = 'test-int-send-src.md';
 const DST = 'test-int-send-dst.md';

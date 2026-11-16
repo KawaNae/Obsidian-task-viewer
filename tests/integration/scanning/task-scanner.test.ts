@@ -10,13 +10,9 @@
  * Run:  npx vitest run tests/integration/scanning/task-scanner.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-    cliList, cliGet, waitForTask,
-} from '../helpers/cli-helper';
-import {
-    createFixture, writeTestFile, deleteTestFile,
-    waitForFileIndexed, waitForFileDeindexed,
-} from '../helpers/test-file-manager';
+import { cliList, cliGet } from '../helpers/cli-helper';
+import { createFixture, writeTestFile, deleteTestFile } from '../helpers/test-file-manager';
+import { waitForFileDeindexed, waitForFileIndexed, waitForTask } from '../helpers/waits';
 
 const OUTPUT_FIELDS = 'content,status,startDate,startTime,endDate,endTime,due,tags,childIds,parentId,parserId,color,file,line';
 

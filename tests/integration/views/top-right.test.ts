@@ -21,8 +21,9 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/top-right.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { PRELUDE, SETTLE_MS, addDays, closeViews, ev, openView, setViewState } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-top-right.md';
 const DAY = '2027-04-14';
@@ -73,7 +74,7 @@ function list(id: string, fields: string[]) {
 }
 
 beforeAll(async () => {
-    expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
+    await writeIndexedTestFile(FILE, NOTE);
 });
 
 afterAll(async () => {

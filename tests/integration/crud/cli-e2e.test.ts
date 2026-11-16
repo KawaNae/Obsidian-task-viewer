@@ -17,9 +17,10 @@ import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
     cliDuplicate, cliTasksForDateRange, cliCategorizedTasksForDateRange,
     cliInsertChildTask, cliGetStartHour, cliHelp,
-    obsidianCli, waitForTask, waitForTaskGone,
+    obsidianCli,
 } from '../helpers/cli-helper';
 import { deleteTestFile, writeIndexedTestFile, readTestFile } from '../helpers/test-file-manager';
+import { waitForTask, waitForTaskGone } from '../helpers/waits';
 
 const TEST_FILE = 'test-tags-properties.md';
 
@@ -374,8 +375,7 @@ describe('duplicate', () => {
             t => t.startDate === '2026-04-04',
             5000,
         );
-        expect(dup).not.toBeNull();
-        expect(dup!.startDate).toBe('2026-04-04');
+        expect(dup.startDate).toBe('2026-04-04');
     });
 
     it('duplicate nonexistent ID returns error', () => {

@@ -24,10 +24,11 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/lanes.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, addDays, closeViews, ev, gridDays, monthGridStart, openView, readSettings,
 } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-lanes.md';
 
@@ -217,7 +218,7 @@ beforeAll(async () => {
     const s = readSettings(['weekStartDay', 'pastDaysToShow']);
     weekStartDay = s.weekStartDay as number;
     past = s.pastDaysToShow as number;
-    expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
+    await writeIndexedTestFile(FILE, NOTE);
 });
 
 afterAll(async () => {

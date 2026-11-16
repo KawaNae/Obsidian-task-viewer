@@ -13,16 +13,15 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
-    cliList, cliCreate, cliUpdate, cliDelete,
-    waitForTask, sleep,
+    cliList, cliCreate, cliUpdate, cliDelete, sleep,
 } from '../helpers/cli-helper';
 import {
-    writeTestFile, readTestFile, deleteTestFile,
-    writeIndexedTestFile, waitForFileDeindexed,
+    writeTestFile, readTestFile, deleteTestFile, writeIndexedTestFile,
 } from '../helpers/test-file-manager';
 import {
     getFileLines, expectFileContains, expectFileNotContains, expectLineContains,
 } from '../helpers/vault-assertions';
+import { waitForFileDeindexed, waitForTask } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-inline-write.md';
 const OUTPUT_FIELDS = 'content,status,startDate,startTime,endDate,endTime,due,tags,parserId,file,line';
@@ -36,7 +35,7 @@ function findTask(content: string): Record<string, unknown> | undefined {
 }
 
 /** Find a task by content, retrying until indexed. */
-async function findTaskWait(content: string, timeoutMs = 8000): Promise<Record<string, unknown> | null> {
+async function findTaskWait(content: string, timeoutMs = 8000): Promise<Record<string, unknown>> {
     return waitForTask(
         { file: TEST_FILE, 'output-fields': OUTPUT_FIELDS },
         t => (t.content as string).includes(content),
@@ -230,8 +229,7 @@ describe('create inline task', () => {
 
     it('created task has correct parserId', async () => {
         const task = await findTaskWait('Newly created task');
-        expect(task).not.toBeNull();
-        expect(task!.parserId).toBe('tv-inline');
+        expect(task.parserId).toBe('tv-inline');
     });
 
     it('creates task with end date', async () => {
@@ -413,10 +411,9 @@ describe('clear status via none sentinel', () => {
 
     it('unchecks task via status=none', async () => {
         const task = await findTaskWait('Completed task');
-        expect(task).not.toBeNull();
-        expect(task!.status).toBe('x');
+        expect(task.status).toBe('x');
 
-        const id = task!.id as string;
+        const id = task.id as string;
         const r = cliUpdate({ id, status: 'none', 'output-fields': OUTPUT_FIELDS });
         expect(r).not.toHaveProperty('error');
         expect(r.task.status).toBe(' ');

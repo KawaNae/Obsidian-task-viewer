@@ -17,10 +17,11 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { cliList } from '../helpers/cli-helper';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, SETTLE_MS, addDays, closeViews, ev, openView, readSettings, tr, visualDay, weekStart,
 } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-filter-period.md';
 const FILTER_FILE = 'test-int-filter-period.json';
@@ -102,7 +103,7 @@ const TAGGED = { property: 'tag', operator: 'includes', value: [TAG] };
 beforeAll(async () => {
     const { startHour, weekStartDay } = readSettings(['startHour', 'weekStartDay']) as { startHour: number; weekStartDay: number };
     W = weekStart(addDays(visualDay(startHour), 21), weekStartDay);
-    expect(await writeIndexedTestFile(FILE, note())).toBe(true);
+    await writeIndexedTestFile(FILE, note());
 });
 
 afterAll(async () => {

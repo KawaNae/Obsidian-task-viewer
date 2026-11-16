@@ -17,10 +17,11 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, restartView, tr,
 } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-pinned-lists.md';
 /** Twelve top-level tasks tagged tvpla, the first four also tvplb; one child, which a list leaves out. */
@@ -181,7 +182,7 @@ beforeAll(async () => {
     teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
     teardown.add('close the views', closeViews);
     teardown.add('close the overlays', () => ev(`(() => { document.querySelectorAll('.tv-overlay__panel .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`));
-    expect(await writeIndexedTestFile(FILE, note())).toBe(true);
+    await writeIndexedTestFile(FILE, note());
 });
 
 afterAll(() => teardown.run());
@@ -352,10 +353,10 @@ describe.each([
     });
 
     it('counts again when a task of its note is added or taken away', async () => {
-        expect(await writeIndexedTestFile(FILE, note(['- [ ] pl 13 #tvpla']))).toBe(true);
+        await writeIndexedTestFile(FILE, note(['- [ ] pl 13 #tvpla']));
         let r = op(name, '');
         expect(r.sections[0].count).toBe(13);
-        expect(await writeIndexedTestFile(FILE, note())).toBe(true);
+        await writeIndexedTestFile(FILE, note());
         r = op(name, '');
         expect(r.sections[0].count).toBe(12);
     });

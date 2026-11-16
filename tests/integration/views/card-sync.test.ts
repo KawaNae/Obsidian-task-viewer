@@ -16,7 +16,8 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-card-sync.md';
 
@@ -72,7 +73,7 @@ function closeHub(): void {
 }
 
 beforeAll(async () => {
-    expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
+    await writeIndexedTestFile(FILE, NOTE);
 });
 
 afterEach(() => { closeHub(); });

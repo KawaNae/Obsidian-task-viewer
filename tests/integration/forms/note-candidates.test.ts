@@ -24,11 +24,10 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
-import { waitForFileIndexed } from '../helpers/test-file-manager';
 import { createTeardown } from '../helpers/teardown';
 import { overrideSettings, tr } from '../helpers/view-helper';
 import { closeDialog, DIALOG, onDialog, openDialog } from '../helpers/send-dialog';
-import { UNTIL } from '../helpers/waits';
+import { UNTIL, waitForFileIndexed } from '../helpers/waits';
 
 const DIR = 'test-int-nc';
 const ROOT_NOTE = 'test-int-nc-root.md';

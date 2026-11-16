@@ -11,8 +11,8 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { obsidianEval, sleep } from '../helpers/cli-helper';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
-import { UNTIL } from '../helpers/waits';
+import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-source-mode.md';
 
