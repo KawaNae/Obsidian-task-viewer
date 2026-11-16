@@ -5,9 +5,10 @@ import type { TaskReadService } from '../../../src/services/data/TaskReadService
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { ChildItemBuilder } from '../../../src/views/taskcard/ChildItemBuilder';
 import type { ChildRenderItem } from '../../../src/views/taskcard/types';
+import { makeTask } from '../helpers/makeTask';
 
 function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
-    const task = {
+    const task = makeTask({
         id: 'test-1',
         file: 'test.md',
         line: 0,
@@ -25,7 +26,7 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
         endDate: '2026-07-18',
         endTime: '10:00',
         due: '2026-07-20',
-    } as Task;
+    });
     return { ...toDisplayTask(task, 0, NO_TASK_LOOKUP), childEntries: [], ...overrides };
 }
 
@@ -136,11 +137,11 @@ describe('computeContentSignature', () => {
     it('line entry のテキスト変更で sig が変わる', () => {
         const entry1: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'line text', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
+            line: { text: 'line text', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null, propertyValue: null },
         };
         const entry2: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'changed text', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
+            line: { text: 'changed text', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null, propertyValue: null },
         };
         const settings = makeSettings();
         const options = makeOptions();
@@ -183,21 +184,21 @@ describe('computeContentSignature', () => {
 
         const entry1: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'a|b', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
+            line: { text: 'a|b', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null, propertyValue: null },
         };
         const entry2: ChildEntry = {
             kind: 'line', bodyLine: 2,
-            line: { text: 'c', bodyLine: 2, indent: '', wikilinkTarget: null, propertyKey: null },
+            line: { text: 'c', bodyLine: 2, indent: '', wikilinkTarget: null, propertyKey: null, propertyValue: null },
         };
         const taskA = makeDisplayTask({ childEntries: [entry1] });
 
         const entryX: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'a', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
+            line: { text: 'a', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null, propertyValue: null },
         };
         const entryY: ChildEntry = {
             kind: 'line', bodyLine: 2,
-            line: { text: 'b', bodyLine: 2, indent: '', wikilinkTarget: null, propertyKey: null },
+            line: { text: 'b', bodyLine: 2, indent: '', wikilinkTarget: null, propertyKey: null, propertyValue: null },
         };
         const taskB = makeDisplayTask({ childEntries: [entryX, entryY] });
 

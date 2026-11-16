@@ -12,7 +12,7 @@ const noRow = () => undefined;
 
 /** Helper: makeTask → DisplayTask → NormalizedTask */
 function makeNormalized(overrides: Parameters<typeof makeTask>[0] = {}) {
-    return normalizeTask(toDisplayTask(makeTask(overrides), 5), noRow);
+    return normalizeTask(toDisplayTask(makeTask(overrides), 5, noRow), noRow);
 }
 
 describe('CliOutputFormatter', () => {
@@ -33,7 +33,7 @@ describe('CliOutputFormatter', () => {
             });
 
             const fields = resolveFields('file,line,content,status,startDate,startTime,endDate,endTime,tags,parserId');
-            const result = taskToRecord(task, fields, noRow);
+            const result = taskToRecord(toDisplayTask(task, 5, noRow), fields, noRow);
 
             expect(result.id).toBe('tv-inline:daily/2026-03-14.md:ln:5');
             expect(result.file).toBe('daily/2026-03-14.md');
@@ -51,7 +51,7 @@ describe('CliOutputFormatter', () => {
         it('uses null for missing optional fields', () => {
             const task = makeTask({});
             const fields = resolveFields('startDate,startTime,endDate,endTime,due,parentId,color,linestyle');
-            const result = taskToRecord(task, fields, noRow);
+            const result = taskToRecord(toDisplayTask(task, 5, noRow), fields, noRow);
 
             expect(result.startDate).toBeNull();
             expect(result.startTime).toBeNull();
@@ -65,7 +65,7 @@ describe('CliOutputFormatter', () => {
 
         it('only includes requested fields', () => {
             const task = makeTask({ content: 'Test', startDate: '2026-03-14' });
-            const result = taskToRecord(task, ['content', 'startDate'], noRow);
+            const result = taskToRecord(toDisplayTask(task, 5, noRow), ['content', 'startDate'], noRow);
 
             expect(Object.keys(result)).toEqual(['content', 'startDate']);
             expect(result.content).toBe('Test');
