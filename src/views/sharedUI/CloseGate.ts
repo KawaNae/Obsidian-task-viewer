@@ -21,7 +21,10 @@ export interface CloseGateHost {
  * closes, or keeps the overlay open, before `request` returns. While an
  * answer is waited for, a further close asked for waits on the same answer
  * and asks nothing again. An answer that comes after the overlay closed
- * otherwise, or opened again, belongs to no one.
+ * otherwise, or opened again, belongs to no one. An answer that fails, as
+ * it is asked (`ask` throws) or after a wait (the promise rejects), keeps
+ * the overlay open and says why in the console: the close is not lost in
+ * the listener that asked for it, and the next close asks again.
  */
 export class CloseGate {
     private waiting: Promise<boolean> | null = null;
@@ -38,7 +41,13 @@ export class CloseGate {
     request(closeNow: () => void = () => this.host.close()): Promise<boolean> {
         if (!this.host.isOpen()) return Promise.resolve(true);
         if (this.waiting) return this.waiting;
-        const answer = this.host.ask();
+        let answer: CloseAnswer;
+        try {
+            answer = this.host.ask();
+        } catch (err) {
+            failed(err);
+            return Promise.resolve(false);
+        }
         if (answer === 'close') {
             closeNow();
             return Promise.resolve(true);
@@ -48,7 +57,7 @@ export class CloseGate {
         const round = this.round;
         const waiting: Promise<boolean> = answer
             .catch((err: unknown) => {
-                console.error('[OverlayShell] beforeClose failed; staying open', err);
+                failed(err);
                 return 'stay' as const;
             })
             .then((settled) => {
@@ -68,4 +77,9 @@ export class CloseGate {
         this.waiting = null;
         this.round++;
     }
+}
+
+/** A body's answer that failed: the overlay stays open, and why is said. */
+function failed(err: unknown): void {
+    console.error('[OverlayShell] beforeClose failed; staying open', err);
 }
