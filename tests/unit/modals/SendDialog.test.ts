@@ -68,7 +68,7 @@ function previewOf(opts: { subtree?: string[]; candidates?: InheritedValue[]; li
 }
 
 /** What every note's facts hold, beside its kind's. */
-type CommonFacts = Omit<Extract<NoteFacts, { kind: 'existing' }>, 'kind'>;
+type CommonFacts = Omit<Extract<NoteFacts, { kind: 'existing' | 'same' }>, 'kind'>;
 
 /** The facts of a note: a new one by a name in `Inbox` unless `overrides` say otherwise. */
 function facts(overrides: Partial<CommonFacts> & (
@@ -309,7 +309,7 @@ describe('the values offered to write into the note', () => {
         const h = await answered(facts(), {
             preview: previewOf({
                 candidates: [
-                    value('id', { to: 'root', lines: ['- id:: "123"'], from: [{ kind: 'section', line: 3, heading: { level: 2, text: '設計', line: 2 } }] }),
+                    value('id', { to: 'root', lines: ['- id:: "123"'], from: [{ kind: 'section', line: 3, heading: { level: 2, text: '設計', line: 2, end: 3 } }] }),
                     value('who', { to: 'root', lines: ['- who::', '    - a', '    - "b"'] }),
                     value('none', { to: 'root', lines: ['- none::'] }),
                 ],
@@ -328,7 +328,7 @@ describe('the values offered to write into the note', () => {
         const h = await answered(facts(), {
             preview: previewOf({
                 candidates: [
-                    value('tv-start', { lines: ['tv-start: "2026-09-29"'], from: [{ kind: 'section', line: 3, heading: { level: 2, text: '設計', line: 2 } }] }),
+                    value('tv-start', { lines: ['tv-start: "2026-09-29"'], from: [{ kind: 'section', line: 3, heading: { level: 2, text: '設計', line: 2, end: 3 } }] }),
                     value('tags', { lines: ['tags:', '  - a', '  - b'], from: [{ kind: 'frontmatter', line: null }, { kind: 'section', line: 1, heading: null }] }),
                 ],
             }),
@@ -458,7 +458,7 @@ describe('what keeps a send from being asked', () => {
 
     it('not asked of the timers while the fields name no note, or a draft cannot be written', async () => {
         const timers = vi.fn(() => 'kept');
-        const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'empty' } }, { timers });
+        const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'empty', at: 'name' } }, { timers });
         expect(timers).not.toHaveBeenCalled();
         await h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
         await h.answer(facts());
