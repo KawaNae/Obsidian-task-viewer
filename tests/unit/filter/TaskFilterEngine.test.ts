@@ -4,11 +4,12 @@ import type { Task, DisplayTask } from '../../../src/types';
 import type { FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
 import { createDefaultListFilterState } from '../../../src/services/filter/FilterTypes';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
+import { makeTask as baseMakeTask } from '../helpers/makeTask';
 
 // ── Helper: minimal Task factory ──
 
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'test-1',
         file: 'notes/daily.md',
         line: 1,
@@ -21,7 +22,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         tags: [],
         parserId: 'tv-inline',
         ...overrides,
-    };
+    });
 }
 
 /** A display copy of a task with the given line values (startHour 0, as testContext). */

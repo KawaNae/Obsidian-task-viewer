@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { NotationUtils } from '../../../src/views/taskcard/NotationUtils';
 import type { Task } from '../../../src/types';
+import { makeTask as baseMakeTask } from '../helpers/makeTask';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'tv-inline:note.md:ln:1',
         file: 'note.md',
         line: 0,
@@ -20,7 +21,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         tags: [],
         parserId: 'tv-inline',
         ...overrides,
-    };
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { TasksPluginParser } from '../../../src/services/parsing/tv-inline/Tasks
 import { DEFAULT_STATUS_DEFINITIONS } from '../../../src/types';
 import type { TasksPluginMapping } from '../../../src/types';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
+import { nameOutsideIndex } from '../helpers/readLine';
 
 const defaultMapping: TasksPluginMapping = {
     start: 'startDate',
@@ -63,12 +64,12 @@ describe('DayPlannerParser', () => {
     });
 
     it('formatRow returns originalText', () => {
-        const task = parser.parse('- [ ] 09:00 Test', 'daily.md', 0)!;
+        const task = nameOutsideIndex(parser.parse('- [ ] 09:00 Test', 'daily.md', 0)!);
         expect(formatRow(task)).toBe('- [ ] 09:00 Test');
     });
 
     it('read-only tasks never trigger flow (canTriggerFlow gate)', () => {
-        const task = parser.parse('- [x] 09:00 Done', 'daily.md', 0)!;
+        const task = nameOutsideIndex(parser.parse('- [x] 09:00 Done', 'daily.md', 0)!);
         expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
     });
 });
@@ -164,7 +165,7 @@ describe('TasksPluginParser', () => {
     // so the text stays; with no diagnostic in the editor for this notation,
     // the task stays in the views with a warning rather than vanish.
     it('reads no date naming a day that does not exist, and warns', () => {
-        const task = parser.parse('- [ ] Task 🛫 2026-03-01 📅 2026-02-30', 'test.md', 0)!;
+        const task = nameOutsideIndex(parser.parse('- [ ] Task 🛫 2026-03-01 📅 2026-02-30', 'test.md', 0)!);
         expect(task.parserId).toBe('tasks-plugin');
         expect(task.startDate).toBe('2026-03-01');
         expect(task.due).toBeUndefined();
@@ -197,12 +198,12 @@ describe('TasksPluginParser', () => {
     });
 
     it('formatRow returns originalText', () => {
-        const task = parser.parse('- [ ] Task 📅 2026-03-21', 'test.md', 0)!;
+        const task = nameOutsideIndex(parser.parse('- [ ] Task 📅 2026-03-21', 'test.md', 0)!);
         expect(formatRow(task)).toBe('- [ ] Task 📅 2026-03-21');
     });
 
     it('read-only tasks never trigger flow (canTriggerFlow gate)', () => {
-        const task = parser.parse('- [x] Done 📅 2026-03-21', 'test.md', 0)!;
+        const task = nameOutsideIndex(parser.parse('- [x] Done 📅 2026-03-21', 'test.md', 0)!);
         expect(canTriggerFlow(task, DEFAULT_STATUS_DEFINITIONS)).toBe(false);
     });
 });

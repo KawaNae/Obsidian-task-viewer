@@ -9,10 +9,11 @@ import {
 import { classifyForSection } from '../../../src/services/display/SectionClassifier';
 import { dayStart, instantText, visualDaysOf } from '../../../src/utils/DayWindow';
 import type { DisplayTask, Task, TaskSpan } from '../../../src/types';
+import { makeTask as baseMakeTask } from '../helpers/makeTask';
 
 /** Build a minimal Task for testing. */
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'tv-inline:test.md:ln:1',
         file: 'test.md',
         line: 0,
@@ -25,7 +26,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         originalText: '- [ ] test task @2026-01-15',
         parserId: 'tv-inline',
         ...overrides,
-    };
+    });
 }
 
 const startHour = 5; // default 5:00

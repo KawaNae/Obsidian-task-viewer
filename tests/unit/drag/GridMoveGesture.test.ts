@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { GridMoveGesture } from '../../../src/interaction/drag/strategies/grid/GridMoveGesture';
 import type { Task } from '../../../src/types';
+import { makeTask as baseMakeTask } from '../helpers/makeTask';
 
 /** 最低限のフィールドを持つ Task を返す。drag が見るのは startDate/endDate/endTime。 */
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'tv-inline:test.md:ln:1',
         file: 'test.md',
         line: 0,
@@ -17,7 +18,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         originalText: '- [ ] test',
         parserId: 'tv-inline',
         ...overrides,
-    };
+    });
 }
 
 describe('GridMoveGesture.buildMoveEdits', () => {

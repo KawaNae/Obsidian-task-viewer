@@ -4,6 +4,7 @@ import { BaseDragStrategy } from '../../../src/interaction/drag/strategies/BaseD
 import type { DragContext } from '../../../src/interaction/drag/DragStrategy';
 import type { DragPlan } from '../../../src/interaction/drag/DragPlan';
 import type { Task } from '../../../src/types';
+import { makeTask as baseMakeTask } from '../helpers/makeTask';
 
 /** classList だけを持つ最小の要素スタブ（vitest は node environment）。 */
 function makeEl(...classes: string[]): HTMLElement & { classes: Set<string> } {
@@ -96,7 +97,7 @@ describe('DropReveal', () => {
 // ---------------------------------------------------------------------------
 
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'tv-inline:test.md:ln:1',
         file: 'test.md',
         line: 0,
@@ -113,7 +114,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         endDate: '2026-08-12',
         endTime: '11:00',
         ...overrides,
-    };
+    });
 }
 
 /** commitAndReveal の順序だけを観測する最小の Strategy。 */
