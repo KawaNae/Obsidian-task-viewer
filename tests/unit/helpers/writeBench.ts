@@ -10,6 +10,7 @@ import type { LineEdit, Refusal, RowRef, WriteChannel } from '../../../src/servi
 import type { CompletionFire, FiringOutcome } from '../../../src/services/persistence/FiringTrials';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
+import { isReadCopy, type ReadCopy } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * A vault in memory with a real `TaskScanner` over it, and the write layer
@@ -64,10 +65,10 @@ export interface WriteBench {
     /** Something other than the plugin changed the file. No scan follows. */
     edit(text: string | string[], path?: string): void;
     scan(path?: string): Promise<void>;
-    /** The index's tasks in `path`, in line order. */
-    tasks(path?: string): Task[];
+    /** The index's tasks in `path`, in line order: each a copy of the reading the scan made. */
+    tasks(path?: string): ReadCopy[];
     /** The index's task on `line` of `path`. Throws when the scan read none there. */
-    taskAt(line: number, path?: string): Task;
+    taskAt(line: number, path?: string): ReadCopy;
 }
 
 /**
@@ -135,16 +136,23 @@ export async function writeBench(files: string | string[] | Record<string, strin
         scan: async (path = FILE) => { await scanner.requestScan(makeFile(path)); },
         tasks: (path = FILE) => store.getTasks()
             .filter(task => task.file === path)
+            .map(readCopy)
             .sort((a, b) => a.line - b.line),
         taskAt: (line, path = FILE) => {
             const task = store.getTasks().find(candidate => candidate.file === path && candidate.line === line);
             if (!task) throw new Error(`writeBench: the scan read no task on ${path}:${line}`);
-            return task;
+            return readCopy(task);
         },
     };
 
     for (const path of contents.keys()) await bench.scan(path);
     return bench;
+}
+
+/** A task of the index as the copy of the reading the scan made it in: every row the scan stores names one. */
+export function readCopy(task: Task): ReadCopy {
+    if (!isReadCopy(task)) throw new Error(`writeBench: ${task.id} names no reading`);
+    return task;
 }
 
 /**

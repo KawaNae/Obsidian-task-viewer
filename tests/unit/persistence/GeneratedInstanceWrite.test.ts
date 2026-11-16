@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { GeneratedChild } from '../../../src/services/persistence/FlowInstanceLines';
-import { plannedOn } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn, type ReadCopy } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 
@@ -20,7 +20,7 @@ const child = (depth: number, body: string): GeneratedChild => ({ depth, body })
 
 /** `write` with a single `insert-instance` op of kind `generated`. */
 function insertGenerated(
-    h: WriteBench, task: Task, parentLine: string, flowLines: string[], children: GeneratedChild[],
+    h: WriteBench, task: ReadCopy, parentLine: string, flowLines: string[], children: GeneratedChild[],
 ) {
     return h.writer.write(task.file, plannedOn(task), [
         { kind: 'insert-instance', instance: { head: parentLine, flowLines, children } },

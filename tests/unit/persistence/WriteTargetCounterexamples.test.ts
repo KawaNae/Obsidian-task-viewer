@@ -5,7 +5,7 @@ import { updateRow, writeBench, FILE, type Filed, type WriteBench } from '../hel
 import type { Task } from '../../../src/types';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import { plannedOn } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn, type ReadCopy } from '../../../src/services/persistence/TaskRefs';
 import { planDuplicate } from '../../../src/services/operations/DuplicateShift';
 
 /**
@@ -384,7 +384,7 @@ describe('a guess by position one level up', () => {
 describe('two own writes trade the texts of two rows, then an unreported change', () => {
     // X and Y trade `[ ] A` and `[x] A` by our own writes, no scan in
     // between. X's copy is the index's once its write landed (`landed`).
-    const traded = async (): Promise<{ bench: WriteBench; x: Task }> => {
+    const traded = async (): Promise<{ bench: WriteBench; x: ReadCopy }> => {
         const bench = await writeBench(['- [ ] A', '- [x] A']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
