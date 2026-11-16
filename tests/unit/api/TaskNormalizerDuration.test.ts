@@ -14,7 +14,7 @@ const noRow = () => undefined;
 const START_HOUR = 5;
 
 function minutesOf(overrides: Parameters<typeof makeTask>[0]) {
-    const dt = toDisplayTask(makeTask(overrides), START_HOUR);
+    const dt = toDisplayTask(makeTask(overrides), START_HOUR, noRow);
     return { dt, minutes: normalizeTask(dt, noRow).durationMinutes };
 }
 
