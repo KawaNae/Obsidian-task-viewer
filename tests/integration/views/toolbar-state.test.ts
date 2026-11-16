@@ -21,12 +21,13 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/toolbar-state.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTeardown } from '../helpers/teardown';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import {
-    act, closeViews, copyUri, ev, openView, overrideSettings, PRELUDE, readView, restartView, type HeldSettings,
+    act, closeViews, copyUri, ev, openView, overrideSettings, PRELUDE, readView, restartView,
 } from '../helpers/view-helper';
 
-let held: HeldSettings<'viewTemplateFolder'>;
+const teardown = createTeardown();
 
 beforeAll(() => {
     if (!isObsidianRunning()) {
@@ -34,13 +35,12 @@ beforeAll(() => {
     }
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
-    held = overrideSettings({ viewTemplateFolder: '' });
+    const held = overrideSettings({ viewTemplateFolder: '' });
+    teardown.add('put the settings back', () => held.restore());
+    teardown.add('close the views', closeViews);
 });
 
-afterAll(async () => {
-    await closeViews();
-    held?.restore();
-});
+afterAll(() => teardown.run());
 
 /** The toolbar's controls of a Timeline, as it shows them. */
 interface TimelineControls {

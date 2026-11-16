@@ -21,6 +21,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
 import { readTestFile } from '../helpers/test-file-manager';
+import { createTeardown } from '../helpers/teardown';
 import { closeViews, openView, overrideSettings, tr } from '../helpers/view-helper';
 
 const DATA_JSON = '.obsidian/plugins/obsidian-task-viewer/data.json';
@@ -92,16 +93,24 @@ beforeAll(() => {
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
 });
 
-afterEach(() => {
+/** Close the settings and the plugin's overlays a test left open. */
+function closeSettingsAndOverlays(): void {
     run(`
         if (app.setting.activeTab) app.setting.close();
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
         await sleep(250);
         return 'ok';
     `);
+}
+
+afterEach(() => {
+    closeSettingsAndOverlays();
 });
 
 describe('the settings\' fields', () => {
+    const teardown = createTeardown();
+    afterEach(() => teardown.run());
+
     it('does not save an emptied start of the day: it says why under the description, and the setting keeps its hour', () => {
         const before = storedSettings();
         const result = run<Record<string, unknown>>(`
@@ -172,19 +181,22 @@ describe('the settings\' fields', () => {
         expect(storedSettings()).toEqual(before);
     });
 
-    it('commits what is typed as the settings close', () => {
+    it('commits what is typed as the settings close', async () => {
         const before = storedSettings();
+        const held = overrideSettings({}, ['pastDaysToShow']);
+        teardown.add('put pastDaysToShow back', () => held.restore());
+        // Closed first, so that a value left typed in is not committed over the one put back.
+        teardown.add('close the settings', closeSettingsAndOverlays);
         const result = run<Record<string, unknown>>(`
             const days = plugin.settings.pastDaysToShow;
             await openSettings('viewDetails');
             const field = settingOf(${JSON.stringify(tr('settings.views.pastDaysToShow'))});
             type(field.input, String(days + 2));
             await closeSettings();
-            const closed = plugin.settings.pastDaysToShow;
-            plugin.settings.pastDaysToShow = days;
-            await plugin.saveSettings();
-            return JSON.stringify({ moved: closed - days });
+            return JSON.stringify({ moved: plugin.settings.pastDaysToShow - days });
         `);
+        // Put back before the disk is read.
+        await teardown.run();
         expect(result).toEqual({ moved: 2 });
         expect(storedSettings()).toEqual(before);
     });

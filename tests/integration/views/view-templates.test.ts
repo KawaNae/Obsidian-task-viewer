@@ -17,11 +17,11 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/view-templates.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createTeardown } from '../helpers/teardown';
 import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, closeViews, copyUri, ev, openUri, openView, overrideSettings, readSettings, tr, visualDay,
-    type HeldSettings,
 } from '../helpers/view-helper';
 
 /** The test's own template folder, two levels deep so that saving makes both. */
@@ -153,7 +153,7 @@ function removeFolder(): void {
     })()`);
 }
 
-let held: HeldSettings<'viewTemplateFolder'>;
+const teardown = createTeardown();
 
 beforeAll(async () => {
     if (!isObsidianRunning()) {
@@ -162,7 +162,13 @@ beforeAll(async () => {
     const live = ev<boolean>(`(() => typeof app.plugins.plugins['obsidian-task-viewer'].viewEvents?.rollIfChanged === 'function')()`);
     if (!live) throw new Error('The Dev vault runs an older build: run `npm run build` and reload the plugin.');
     removeFolder();
-    held = overrideSettings({ viewTemplateFolder: FOLDER });
+    const held = overrideSettings({ viewTemplateFolder: FOLDER });
+    teardown.add('put the settings back', () => held.restore());
+    teardown.add('remove the folder', removeFolder);
+    teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
+    teardown.add('close the views', closeViews);
+    // A dialog a failed save left open would take the next file's clicks.
+    teardown.add('close the dialogs', () => ev(`(() => { document.querySelectorAll('.tv-overlay__panel.tv-ask .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`));
     const today = visualDay(readSettings(['startHour']).startHour as number);
     expect(await writeIndexedTestFile(FILE, [
         `- [ ] vt one @${today} #tvvt`,
@@ -172,15 +178,7 @@ beforeAll(async () => {
     ].join('\n'))).toBe(true);
 });
 
-afterAll(async () => {
-    // A dialog a failed save left open would take the next file's clicks.
-    ev(`(() => { document.querySelectorAll('.tv-overlay__panel.tv-ask .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`);
-    await closeViews();
-    removeFolder();
-    held?.restore();
-    deleteTestFile(FILE);
-    await waitForFileDeindexed(FILE);
-});
+afterAll(() => teardown.run());
 
 describe('Save view...', () => {
     let saved: Drawn;
