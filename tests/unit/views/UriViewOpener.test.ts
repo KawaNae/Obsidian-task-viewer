@@ -11,14 +11,14 @@ import type { App } from 'obsidian';
  * the named template is not there.
  */
 
-const openLeafFromState = vi.fn(async () => { });
+const openLeafFromState = vi.fn(async (..._args: unknown[]) => { });
 const buildViewStateFromParams = vi.fn(async () => ({ state: {} as Record<string, unknown>, templateNotFound: undefined as string | undefined, issues: [] as { field: string; text: string }[] }));
 const resolveViewTypeFromShortName = vi.fn((_: string) => undefined as string | undefined);
 const notices: string[] = [];
 
 vi.mock('../../../src/services/viewConfig/LeafOpener', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../../src/services/viewConfig/LeafOpener')>();
-    return { ...actual, openLeafFromState: (...args: unknown[]) => openLeafFromState(...args as []) };
+    return { ...actual, openLeafFromState: (...args: unknown[]) => openLeafFromState(...args) };
 });
 vi.mock('../../../src/services/viewConfig/ViewStateFactory', () => ({
     buildViewStateFromParams: (...args: unknown[]) => buildViewStateFromParams(...args as []),

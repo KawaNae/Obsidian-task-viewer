@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { NotifyCoalescer } from '../../../../src/services/core/NotifyCoalescer';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
+import { NotifyCoalescer, type ChangeListener } from '../../../../src/services/core/NotifyCoalescer';
 
 /**
  * How a frame's worth of notifications becomes one.
@@ -10,11 +10,11 @@ import { NotifyCoalescer } from '../../../../src/services/core/NotifyCoalescer';
  * or, worse, a card left showing a value the store no longer holds.
  */
 describe('NotifyCoalescer', () => {
-    let emit: ReturnType<typeof vi.fn>;
+    let emit: Mock<ChangeListener>;
 
     beforeEach(() => {
         vi.useFakeTimers();
-        emit = vi.fn();
+        emit = vi.fn<ChangeListener>();
     });
     afterEach(() => vi.useRealTimers());
 

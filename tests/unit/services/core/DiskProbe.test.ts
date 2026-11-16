@@ -36,6 +36,8 @@ function fsFailing(code: string, failing: string): NodeFs {
                 if (path.endsWith(failing)) throw Object.assign(new Error(code), { code });
                 return fs.promises.stat(path);
             },
+            mkdir: fs.promises.mkdir,
+            writeFile: fs.promises.writeFile,
         },
     };
 }

@@ -4,6 +4,8 @@ import { Operations } from '../../../../src/services/operations/Operations';
 import { makeTask } from '../../helpers/makeTask';
 import { formatRow } from '../../../../src/services/parsing/TaskLineFormat';
 import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../../src/types';
+import type { RowRef } from '../../../../src/services/persistence/FileLines';
+import type { TaskOp } from '../../../../src/services/persistence/TaskOps';
 
 /**
  * Which values updateTask uses to find the line, and what it leaves the
@@ -36,7 +38,7 @@ function buildHost(task: Task, written = true) {
         notices: { firing: () => { } },
         writeCompleting: proto.writeCompleting,
         repository: {
-            write: vi.fn(async () => ({ written, refused: null, fires: [] })),
+            write: vi.fn(async (_file: string, _target: RowRef, _ops: readonly TaskOp[]) => ({ written, refused: null, fires: [] })),
         },
         onRow: proto.onRow,
         rowNow: proto.rowNow,
@@ -83,7 +85,7 @@ describe('updateTask: which task resolves the line', () => {
 
         const [, target, [op]] = host.repository.write.mock.calls[0];
         expect(target.basis.text).toBe('- [ ] x @T10:00');
-        expect(op.text).toBe(formatRow({ ...task, startTime: '11:00' }));
+        expect(op).toMatchObject({ text: formatRow({ ...task, startTime: '11:00' }) });
         expect(task.startTime).toBe('10:00');
     });
 });

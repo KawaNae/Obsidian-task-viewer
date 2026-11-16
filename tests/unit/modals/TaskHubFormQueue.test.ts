@@ -39,10 +39,12 @@ function formAnswering(written: boolean, fresh: Task | undefined, refused: Index
         refresh,
     });
 
-    const queue = (updates: Partial<Task> | null) =>
-        (form as unknown as { queue(u: Partial<Task> | null): Promise<boolean> }).queue(updates);
+    const internals = form as unknown as { task: Task; queue(u: Partial<Task> | null): Promise<boolean> };
+    const queue = (updates: Partial<Task> | null) => internals.queue(updates);
+    /** The form's model of the row, which `queue` updates before the write is made. */
+    const model = () => internals.task;
     const drained = () => form.drained();
-    return { form, queue, drained, updateTask, getTask, refresh, said };
+    return { form, queue, model, drained, updateTask, getTask, refresh, said };
 }
 
 describe('TaskHubForm.queue', () => {
@@ -52,7 +54,7 @@ describe('TaskHubForm.queue', () => {
 
         h.queue({ content: '新しい名前' });
         // 楽観更新は投げる前に載る。
-        expect((h.form.task as Task).content).toBe('新しい名前');
+        expect(h.model().content).toBe('新しい名前');
         await h.drained();
 
         expect(h.updateTask).toHaveBeenCalledWith('task-1', { content: '新しい名前' }, { tellRefusal: false });
