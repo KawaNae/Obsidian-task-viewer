@@ -172,15 +172,15 @@ describe('an operation that takes the row away plans from its subtree', () => {
     });
 
     it('refuses a move within the file whose child was edited since', async () => {
-        const bench = await writeBench(['- [ ] A', '    - [ ] 子', '- [ ] Z', '']);
+        const bench = await writeBench(['- [ ] A', '    - [ ] 子', '- [ ] Z', '## Done', '']);
         const a = bench.taskAt(0);
-        bench.edit(['- [ ] A', '    - [ ] 子 書き足し', '- [ ] Z', '']);
+        bench.edit(['- [ ] A', '    - [ ] 子 書き足し', '- [ ] Z', '## Done', '']);
 
         const outcome = await bench.writer.write(
-            a.file, plannedOn(a, { commands: true, subtree: true }), [{ kind: 'move', to: { kind: 'end' }, text: '- [x] A' }]);
+            a.file, plannedOn(a, { commands: true, subtree: true }), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text: '- [x] A' }]);
 
         expect(outcome.written).toBe(false);
-        expect(bench.lines()).toEqual(['- [ ] A', '    - [ ] 子 書き足し', '- [ ] Z', '']);
+        expect(bench.lines()).toEqual(['- [ ] A', '    - [ ] 子 書き足し', '- [ ] Z', '## Done', '']);
     });
 
     it('takes the row and the subtree the scan read', async () => {
