@@ -308,7 +308,7 @@ describe('the send dialog', () => {
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.line(1).to, insert: '2' } });
             await pickFrom(0, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC.slice(0, -3))});
-            await until(() => state().noteSays?.includes('このノート'));
+            await until(() => state().noteSays === ${JSON.stringify(`送る行と同じノート ${SRC}`)});
             await pickFrom(1, 'Do', 'Done');
             await until(() => state().says?.includes('Done') && state().canSend);
             return JSON.stringify({ ...state(), draft: children.state.doc.toString() });
