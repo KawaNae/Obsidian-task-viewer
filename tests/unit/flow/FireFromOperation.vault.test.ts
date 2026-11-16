@@ -1,9 +1,9 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { editorRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { keyOf } from '../../../src/editor/EditorDoc';
 import { writeEditorLine } from '../../../src/editor/EditorWrite';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openLiveVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { editorSession, type EditorSession } from '../helpers/editorSession';
 import { freezeDate } from '../helpers/fakeDate';
@@ -24,10 +24,6 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 const FILE = 'note.md';
 
 let live: VaultSession | undefined;
-
-beforeEach(() => {
-    Notice.messages.length = 0;
-});
 
 afterEach(() => {
     live?.dispose();

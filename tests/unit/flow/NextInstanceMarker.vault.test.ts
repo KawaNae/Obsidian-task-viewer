@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -24,7 +24,6 @@ let live: VaultSession | undefined;
 afterEach(() => {
     live?.dispose();
     live = undefined;
-    Notice.messages.length = 0;
 });
 
 async function complete(lines: string[], content = 'T'): Promise<{ lines: string[]; session: VaultSession }> {

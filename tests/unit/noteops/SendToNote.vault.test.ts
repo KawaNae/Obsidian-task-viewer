@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { Notice, TFile } from 'obsidian';
+import { describe, it, expect, afterEach } from 'vitest';
+import { TFile } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 import type { SubtreeLine } from '../../../src/services/persistence/TaskOps';
@@ -20,7 +21,6 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 const SPACES = { useTab: false, tabSize: 4 };
 
 let live: VaultSession | undefined;
-beforeEach(() => { Notice.messages.length = 0; });
 afterEach(() => { live?.dispose(); live = undefined; });
 
 type Child = [text: string, was: number | null];

@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { editorRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
@@ -28,10 +28,6 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 const FILE = 'note.md';
 
 let live: VaultSession | undefined;
-
-beforeEach(() => {
-    Notice.messages.length = 0;
-});
 
 afterEach(() => {
     live?.dispose();

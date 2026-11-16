@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { TaskActionsMenuBuilder } from '../../../src/interaction/menu/builders/TaskActionsMenuBuilder';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
@@ -42,7 +42,6 @@ afterEach(() => {
     for (const session of live) session.dispose();
     live = [];
     submitted = undefined;
-    Notice.messages.length = 0;
 });
 
 async function open(lines: string[]) {

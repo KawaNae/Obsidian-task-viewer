@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { Notice, TFolder } from 'obsidian';
+import { describe, it, expect, afterEach } from 'vitest';
+import { TFolder } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { NoteOps } from '../../../src/services/data/NoteOps';
 import { DEFAULT_SETTINGS } from '../../../src/types';
@@ -15,7 +16,6 @@ import type { DestinationAsk, DestinationFacts, SendDestination } from '../../..
 const FILE = 'note.md';
 
 let live: VaultSession | undefined;
-beforeEach(() => { Notice.messages.length = 0; });
 afterEach(() => { live?.dispose(); live = undefined; });
 
 async function open(lines: string[], others: Record<string, string[]> = {}) {

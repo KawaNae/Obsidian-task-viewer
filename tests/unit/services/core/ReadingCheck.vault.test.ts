@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../../mocks/obsidian';
 import { t } from '../../../../src/i18n';
 import { openLiveVault, vaultSession, type VaultSession } from '../../helpers/vaultSession';
 import { rowOf } from '../../helpers/anchoredRow';
@@ -24,7 +24,7 @@ const readAgain = (subject: string) => t('notice.readAgain', { subject });
 
 let live: VaultSession | undefined;
 afterEach(() => { live?.dispose(); live = undefined; });
-beforeEach(() => { Notice.messages.length = 0; clearLog(); });
+beforeEach(() => { clearLog(); });
 afterEach(() => { vi.restoreAllMocks(); });
 const lines = () => getLogEntries().map(entry => entry.message);
 

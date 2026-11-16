@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { Notice } from '../../mocks/obsidian';
 import { openVault, type VaultSession } from '../../helpers/vaultSession';
 import { t } from '../../../../src/i18n';
 import type { TaskRepository } from '../../../../src/services/persistence/TaskRepository';
@@ -47,10 +47,6 @@ const changed = (subject: string) => t('notice.notWritten', { reason: t('notice.
 const readAgain = (subject: string) => t('notice.readAgain', { subject });
 
 let live: VaultSession | undefined;
-
-beforeEach(() => {
-    Notice.messages.length = 0;
-});
 
 afterEach(() => {
     live?.dispose();

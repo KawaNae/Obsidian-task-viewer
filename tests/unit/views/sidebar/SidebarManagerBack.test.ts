@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { historyStack } from 'obsidian';
+import { historyStack } from '../../mocks/obsidian';
 import { SidebarManager } from '../../../../src/views/sidebar/SidebarManager';
 import { holdHistoryBack } from '../../../../src/views/sharedUI/HistoryBack';
 

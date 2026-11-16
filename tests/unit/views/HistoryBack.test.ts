@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { PopoverSuggest, historyStack } from 'obsidian';
+import { PopoverSuggest } from 'obsidian';
+import { historyStack } from '../mocks/obsidian';
 import { holdHistoryBack } from '../../../src/views/sharedUI/HistoryBack';
 
 /**

@@ -1,5 +1,4 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { Notice } from 'obsidian';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../../helpers/vaultSession';
 
 /**
@@ -17,7 +16,6 @@ let live: VaultSession[] = [];
 afterEach(() => {
     for (const session of live) session.dispose();
     live = [];
-    Notice.messages.length = 0;
 });
 
 async function open(lines: string[]) {

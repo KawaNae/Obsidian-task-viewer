@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Notice, setMockLocale } from 'obsidian';
+import { describe, it, expect, vi } from 'vitest';
+import { Notice, setMockLocale } from '../mocks/obsidian';
 import { initI18n, t } from '../../../src/i18n';
 import { FlowExecutor, type FireOp, type FirePlan } from '../../../src/services/flow/FlowExecutor';
 import { FlowNotices, notRunsOf } from '../../../src/services/flow/FlowNotices';
@@ -72,10 +72,6 @@ describe('a fire that does not happen says so', () => {
     // 非発火・非消費は設計どおりだが、外から見えるのは「チェックしても何も
     // 起きないチェックボックス」。ログしか残らないと、タスクを触っている人
     // には何も届かない。
-    beforeEach(() => {
-        Notice.messages.length = 0;
-    });
-
     /** Complete a row whose command is `command`, as a write does, and tell what it owes once it landed. */
     function complete(notices: FlowNotices, executor: FlowExecutor, command: string): void {
         notices.firing(made({ fire: planned(executor, command), setAside: null }));

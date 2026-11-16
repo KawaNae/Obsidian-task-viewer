@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, expect, it } from 'vitest';
+import { Notice } from '../mocks/obsidian';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
 import type { PendingRecord, TimerState } from '../../../src/timer/TimerState';
 import { step, type TimerEvent } from '../../../src/timer/TimerTransitions';
@@ -113,8 +113,6 @@ const paths: { name: string; shape: Shape; write: 'insert' | 'update'; kind: str
 ];
 
 describe('recordSessionEnd answers whether the record was written', () => {
-    beforeEach(() => { Notice.messages.length = 0; });
-
     it.each(paths)('$name: not written → false, no notice', async ({ shape, write }) => {
         const h = makeHarness(write === 'insert' ? { insertResult: false } : { updateResult: false });
 
@@ -159,8 +157,6 @@ describe('recordSessionEnd answers whether the record was written', () => {
 });
 
 describe('the running line was lost: a record is added instead', () => {
-    beforeEach(() => { Notice.messages.length = 0; });
-
     it('says only that it was recorded, once', async () => {
         const h = makeHarness({ childExists: false });
 
@@ -184,8 +180,6 @@ describe('the running line was lost: a record is added instead', () => {
 });
 
 describe('the target cannot be resolved', () => {
-    beforeEach(() => { Notice.messages.length = 0; });
-
     it.each<{ name: string; shape: Shape }>([
         { name: 'child, an added record', shape: {} },
         { name: 'self', shape: { self: true, tail: TARGET } },

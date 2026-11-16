@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, it, expect, vi } from 'vitest';
+import { Notice } from '../mocks/obsidian';
 import { TaskHubForm } from '../../../src/modals/hub/TaskHubForm';
 import { refusalNotice, type IndexRefusal } from '../../../src/services/core/RefusalClause';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
@@ -44,8 +44,6 @@ function formAnswering(written: boolean, fresh: Task | undefined, refused: Index
     const drained = () => form.drained();
     return { form, queue, drained, updateTask, getTask, refresh, said };
 }
-
-beforeEach(() => { Notice.messages.length = 0; });
 
 describe('TaskHubForm.queue', () => {
     it('refreshes from the index copy when the write was not made', async () => {

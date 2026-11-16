@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, it, expect } from 'vitest';
+import { Notice } from '../../mocks/obsidian';
 import { vaultSession, makeFile } from '../../helpers/vaultSession';
 
 /**
@@ -35,8 +35,6 @@ async function over(from: string[]) {
 }
 
 describe('a row whose indentation alone was changed from outside', () => {
-    beforeEach(() => { Notice.messages.length = 0; });
-
     for (const shape of SHAPES) {
         for (const op of ['update', 'duplicate'] as const) {
             it(`${shape.name}: a ${op} before the scan is refused once, and goes through after it`, async () => {

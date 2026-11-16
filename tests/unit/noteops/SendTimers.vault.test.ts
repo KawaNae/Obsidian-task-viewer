@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { widgetOver } from '../helpers/timerRig';
 import { NoteOps, type SendDestination } from '../../../src/services/data/NoteOps';
@@ -35,7 +35,6 @@ afterEach(() => {
     live?.dispose();
     live = undefined;
     vi.useRealTimers();
-    Notice.messages.length = 0;
     store.clear();
 });
 

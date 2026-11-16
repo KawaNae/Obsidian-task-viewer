@@ -1,5 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { describe, it, expect, afterEach } from 'vitest';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { SubtreeFrame, type SubtreeDraft } from '../../../src/services/persistence/utils/SubtreeFrame';
 import { indentUnit } from '../../../src/utils/ObsidianConfig';
@@ -13,7 +12,6 @@ import { indentUnit } from '../../../src/utils/ObsidianConfig';
 const FILE = 'note.md';
 
 let live: VaultSession | undefined;
-beforeEach(() => { Notice.messages.length = 0; });
 afterEach(() => { live?.dispose(); live = undefined; });
 
 async function open(lines: string[], config?: Record<string, unknown>) {

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { Notice, TFile } from 'obsidian';
+import { TFile } from 'obsidian';
+import { Notice } from '../../mocks/obsidian';
 import { openVault, makeFile, type VaultSession } from '../../helpers/vaultSession';
 import { FileParsePipeline } from '../../../../src/services/parsing/FileParsePipeline';
 import { contentKeyOf } from '../../../../src/services/core/ContentKey';
@@ -17,7 +18,6 @@ let live: VaultSession | undefined;
 afterEach(() => {
     live?.dispose();
     live = undefined;
-    Notice.messages.length = 0;
     vi.restoreAllMocks();
 });
 

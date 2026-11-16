@@ -1,5 +1,4 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { Notice } from 'obsidian';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../../helpers/vaultSession';
 import { plannedOn } from '../../../../src/services/persistence/TaskRefs';
 import { Block } from '../../../../src/services/persistence/utils/Placement';
@@ -19,7 +18,6 @@ let live: VaultSession[] = [];
 afterEach(() => {
     for (const session of live) session.dispose();
     live = [];
-    Notice.messages.length = 0;
 });
 
 async function open(lines: string[]) {
