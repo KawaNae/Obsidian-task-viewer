@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { UNTIL } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-source-mode.md';
 
@@ -70,7 +71,7 @@ const state = () => ({
     shut: shown('.task-hub__mode-shut') ? document.querySelector('.task-hub__mode-shut').textContent : null,
     notices: document.querySelectorAll('.notice').length,
 });
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const KEY_CODES = { Enter: 13, Tab: 9, ArrowUp: 38, ArrowDown: 40 };
 /** A key pressed in the editor that has the focus, as a keydown CodeMirror's keymap reads. */
 const press = async (key, opts = {}) => {

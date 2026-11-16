@@ -26,6 +26,7 @@ import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { overrideSettings, tr, type HeldSettings } from '../helpers/view-helper';
+import { UNTIL } from '../helpers/waits';
 
 const DAY = '2031-01-15';
 const DAILY = `${DAY}.md`;
@@ -69,7 +70,7 @@ const IGNORED_NOTE = [
 const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const R = (window.__tvCreateE2E ??= {});
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
 /** The create dialog's panel: a dialog with a name section that is not the hub's. */

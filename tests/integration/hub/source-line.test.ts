@@ -14,6 +14,7 @@
 import { describe, it, expect, afterAll, afterEach, beforeEach } from 'vitest';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { UNTIL } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-hub-source-line.md';
 
@@ -38,7 +39,7 @@ const LINES = [
 const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');

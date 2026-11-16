@@ -20,6 +20,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { deleteNotesUnder, frameLinks, framesOf, notesUnder, readFrames, texts, type Reading } from '../helpers/markdown-frames';
 import { closeViews, ev, openView, restartView, tr } from '../helpers/view-helper';
+import { UNTIL } from '../helpers/waits';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
 const PREFIX = 'SyncIgnore/test-int-mdsection';
@@ -90,7 +91,7 @@ interface Choice {
 function dialogOf(name: string): string {
     return `
         ${framesOf(PREFIX, name)}
-        const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await wait(50); } return false; };
+        ${UNTIL}
         const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-overlay__panel.tv-section');
         const inputs = () => [...(panel()?.querySelectorAll('input') ?? [])];
         const saidUnder = (input, errors) => {
@@ -130,7 +131,7 @@ function dialogOf(name: string): string {
             el.querySelector('.tv-sidebar__panel-add-btn').click();
             await wait(100);
             menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.addSection'))});
-            if (!(await until(() => panel()))) throw new Error('no section dialog');
+            await until(() => panel(), 3000, 'no section dialog');
         };
         /** The titles of the ⋯ menu of the frame \`id\`, a list or a markdown frame, and of its submenus as \`parent › title\`; the menu closed again. */
         const frameMenuTitles = async (id) => {
@@ -153,20 +154,20 @@ function dialogOf(name: string): string {
             if (!item) throw new Error('no item to add a section under ' + where);
             closeMenus();
             item.callback(new MouseEvent('click'));
-            if (!(await until(() => panel()))) throw new Error('no section dialog');
+            await until(() => panel(), 3000, 'no section dialog');
         };
         /** Type \`text\` into the note field and click the note of the list titled \`title\`; wait until the note is answered. */
         const pickNote = async (text, title) => {
             typeIn(inputs()[0], text);
             const item = () => items().find(e => !e.classList.contains('tv-section-choice') && e.querySelector('.suggestion-title')?.textContent === title);
-            if (!(await until(() => item()))) throw new Error('no note ' + title + ' in the list of ' + text);
+            await until(() => item(), 3000, 'no note ' + title + ' in the list of ' + text);
             item().click();
-            if (!(await until(() => state().noteSays && !document.querySelector('.suggestion-container')))) throw new Error('the note is not answered');
+            await until(() => state().noteSays && !document.querySelector('.suggestion-container'), 3000, 'the note is not answered');
         };
         /** Open the heading field's list on \`text\`. */
         const openHeadings = async (text = '') => {
             typeIn(inputs()[1], text);
-            if (!(await until(() => choiceItems().length > 0))) throw new Error('no list of headings');
+            await until(() => choiceItems().length > 0, 3000, 'no list of headings');
         };
         /** Click the item of the heading field's list that is the \`nth\` titled \`title\`. */
         const pickChoice = async (title, nth = 0) => {
@@ -177,9 +178,9 @@ function dialogOf(name: string): string {
         };
         /** Press the button that chooses, once it can, and wait until the dialog is gone. */
         const choose = async () => {
-            if (!(await until(() => state().canChoose))) throw new Error('nothing can be chosen: ' + JSON.stringify(state()));
+            await until(() => state().canChoose, 3000, () => 'nothing can be chosen: ' + JSON.stringify(state()));
             cta().click();
-            if (!(await until(() => !panel()))) throw new Error('the dialog stays open');
+            await until(() => !panel(), 3000, 'the dialog stays open');
         };
     `;
 }
@@ -436,9 +437,9 @@ describe.each([
             await openAdd();
             typeIn(inputs()[0], ${JSON.stringify(HASHED_SHORT)});
             const item = () => items().find(e => e.querySelector('.suggestion-title')?.textContent === ${JSON.stringify(HASHED_SHORT)});
-            if (!(await until(() => item()))) throw new Error('the note is not offered');
+            await until(() => item(), 3000, 'the note is not offered');
             item().click();
-            if (!(await until(() => state().noteErrors))) throw new Error('nothing is said of the note');
+            await until(() => state().noteErrors, 3000, 'nothing is said of the note');
             await wait(200);
             const s = state();
             cta().click();
@@ -475,7 +476,7 @@ describe.each([
             typeIn(field, ${JSON.stringify(SHORT)});
             // The list is put by the field as it is typed in; the note is answered after.
             const typedAt = field.getBoundingClientRect().top;
-            if (!(await until(() => state().noteSays && box()))) throw new Error('the note is not answered: ' + JSON.stringify(state()));
+            await until(() => state().noteSays && box(), 3000, () => 'the note is not answered: ' + JSON.stringify(state()));
             await wait(200);
             const f = field.getBoundingClientRect();
             const b = box().getBoundingClientRect();
@@ -492,7 +493,7 @@ describe.each([
             await wait(200);
             const field = inputs()[0];
             const box = () => document.querySelector('.suggestion-container');
-            if (!(await until(() => box()))) throw new Error('no list');
+            await until(() => box(), 3000, 'no list');
             const room = box().offsetParent ?? document.documentElement;
             const before = field.getBoundingClientRect().top;
             const nextFrame = () => new Promise(r => requestAnimationFrame(r));
@@ -525,10 +526,10 @@ describe.each([
             const opened = !!panel();
             R[${JSON.stringify(other)}].detach();
             delete R[${JSON.stringify(other)}];
-            const closed = await until(() => !document.querySelector('.tv-overlay .tv-section'));
-            return JSON.stringify({ opened, closed });
+            await until(() => !document.querySelector('.tv-overlay .tv-section'));
+            return JSON.stringify({ opened });
         `);
-        expect(r).toEqual({ opened: true, closed: true });
+        expect(r).toEqual({ opened: true });
     });
 
     it('offers in the note field the notes there are, and no note an unresolved link names', () => {
@@ -547,21 +548,20 @@ describe.each([
 
     it('adds nothing on Cancel, nor on Escape', () => {
         const before = op('');
-        const r = onDialog<{ cancelled: boolean; escaped: boolean }>(name, `
+        onDialog(name, `
             await openAdd();
             await pickNote(${JSON.stringify(SHORT)}, ${JSON.stringify(SHORT)});
             await until(() => state().canChoose);
             panel().querySelector('.tv-form__cancel').click();
-            const cancelled = await until(() => !panel());
+            await until(() => !panel(), 3000, 'Cancel left the dialog open');
 
             await openAdd();
             await pickNote(${JSON.stringify(SHORT)}, ${JSON.stringify(SHORT)});
             await until(() => state().canChoose);
             pressKey(inputs()[0], 'Escape', 27);
-            const escaped = await until(() => !panel());
-            return JSON.stringify({ cancelled, escaped });
+            await until(() => !panel(), 3000, 'Escape left the dialog open');
+            return 'closed';
         `);
-        expect(r).toEqual({ cancelled: true, escaped: true });
         const after = op('');
         expect(after.sidebar).toEqual(before.sidebar);
     });
@@ -572,9 +572,9 @@ describe.each([
             await openAdd();
             typeIn(inputs()[0], ${JSON.stringify(SHORT)});
             const first = () => items()[0]?.querySelector('.suggestion-title')?.textContent;
-            if (!(await until(() => first() === ${JSON.stringify(SHORT)}))) throw new Error('the note is not first: ' + first());
+            await until(() => first() === ${JSON.stringify(SHORT)}, 3000, () => 'the note is not first: ' + first());
             pressKey(inputs()[0], 'Enter', 13);
-            if (!(await until(() => state().noteSays))) throw new Error('the note is not answered');
+            await until(() => state().noteSays, 3000, 'the note is not answered');
             await openHeadings();
             // From the whole note, two down: Plan, then the Tasks under it.
             pressKey(inputs()[1], 'ArrowDown', 40);
@@ -587,7 +587,7 @@ describe.each([
             const picked = state();
             await until(() => state().canChoose);
             pressKey(inputs()[1], 'Enter', 13);
-            if (!(await until(() => !panel()))) throw new Error('Enter added nothing');
+            await until(() => !panel(), 3000, 'Enter added nothing');
             return JSON.stringify({ picked, selected });
         `);
         expect(s.selected).toBe('Tasks H2');
@@ -654,11 +654,11 @@ describe.each([
             { kind: 'markdown', id: 'gone', link: `${GONE}#Plan` },
         ];
         const relinkOf = (id: string) => `frame(${JSON.stringify(id)}).querySelector('.markdown-frame__missing-relink').click();
-            if (!(await until(() => panel()))) throw new Error('no section dialog');`;
+            await until(() => panel(), 3000, 'no section dialog');`;
         /** Open the dialog from the ⋯ menu of the frame `id`, as the user does: its item picked from the menu Obsidian holds. */
         const relinkFromMenu = (id: string) => `await openMenu(${JSON.stringify(id)});
             menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.relinkSection'))});
-            if (!(await until(() => panel()))) throw new Error('no section dialog');`;
+            await until(() => panel(), 3000, 'no section dialog');`;
 
         beforeAll(() => {
             openView(name, type, { showSidebar: true, sidebar: [LIST, ...FRAMES], sidebarCollapsed: { folded: true } });

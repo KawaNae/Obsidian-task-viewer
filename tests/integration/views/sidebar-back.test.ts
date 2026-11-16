@@ -17,6 +17,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { closeViews, ev, openView, PRELUDE, tr } from '../helpers/view-helper';
+import { UNTIL } from '../helpers/waits';
 
 const NARROW = 500;
 const WIDE = 1000;
@@ -110,13 +111,13 @@ describe.each([
     it('is under a dialog opened over it: the back closes the dialog first, then the sidebar', () => {
         const r = ev<Record<string, unknown>>(`(async () => {
             ${sidebarPrelude(name)}
-            const until = async (pred, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (pred()) return true; await wait(50); } return false; };
+            ${UNTIL}
             const dialog = () => !!document.querySelector('.tv-overlay:not(.is-closing) .tv-overlay__panel.tv-section');
             await openAt(${NARROW});
             el.querySelector('.tv-sidebar__panel-add-btn').click();
             await wait(100);
             menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.addSection'))});
-            if (!(await until(dialog))) throw new Error('no section dialog');
+            await until(dialog, 3000, 'no section dialog');
             // The dialog's note field may have its list open under it: each is stepped back from first.
             const steps = [];
             for (let i = 0; i < 3 && dialog(); i++) {

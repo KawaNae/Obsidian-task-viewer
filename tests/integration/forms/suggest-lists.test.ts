@@ -20,6 +20,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { UNTIL } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-suggest-lists.md';
 const NOTE_A = 'test-int-suggest-props-a.md';
@@ -36,7 +37,7 @@ const NOTE = [
 const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const R = (window.__tvSuggestE2E ??= {});
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
@@ -127,13 +128,13 @@ describe('a list open under a field keeps the note\'s hotkeys out', () => {
             // Opened with the focus on its panel: the field is focused after, as a click does.
             await openHub('親');
             type(nameInput(), '親 [[test-int-suggest');
-            const listed = await until(() => list()?.items.length > 0);
+            await until(() => list()?.items.length > 0);
             editor.setSelection({ line: 2, ch: 6 }, { line: 2, ch: 7 });
             bold();
             await sleep(200);
-            return JSON.stringify({ listed, line: editor.getLine(2), focused: document.activeElement === nameInput() });
+            return JSON.stringify({ line: editor.getLine(2), focused: document.activeElement === nameInput() });
         `);
-        expect(result).toEqual({ listed: true, line: '- [ ] 次', focused: true });
+        expect(result).toEqual({ line: '- [ ] 次', focused: true });
     });
 });
 
@@ -193,13 +194,13 @@ describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys', () => 
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`
             await openHub('次', 'tags');
-            const opened = await until(() => list()?.items.length > 0);
+            await until(() => list()?.items.length > 0);
             const shown = list();
             escape(tagInput());
             await sleep(200);
-            return JSON.stringify({ opened, first: shown.items[0] === shown.selected, closed: !list(), hub: !!hub(), focused: document.activeElement === tagInput() });
+            return JSON.stringify({ first: shown.items[0] === shown.selected, closed: !list(), hub: !!hub(), focused: document.activeElement === tagInput() });
         `);
-        expect(result).toEqual({ opened: true, first: true, closed: true, hub: true, focused: true });
+        expect(result).toEqual({ first: true, closed: true, hub: true, focused: true });
     });
 
     it('puts the selected item in on an Enter while the list is open', async () => {
@@ -226,15 +227,15 @@ describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys', () => 
         const result = run<Record<string, unknown>>(`
             await openHub('次');
             type(tagInput(), 'e2e-suggest-proj');
-            const listed = await until(() => list()?.items.length === 2);
+            await until(() => list()?.items.length === 2);
             escape(tagInput());
             await sleep(100);
             const closed = !list() && !!hub();
             enter(tagInput());
             await sleep(800);
-            return JSON.stringify({ listed, closed, tags: rowOf('次').tags });
+            return JSON.stringify({ closed, tags: rowOf('次').tags });
         `);
-        expect(result).toEqual({ listed: true, closed: true, tags: ['e2e-suggest-proj'] });
+        expect(result).toEqual({ closed: true, tags: ['e2e-suggest-proj'] });
     });
 
     it('picks nothing on an Enter an IME commits a conversion with (WebKit: keyCode 229 after the composition), and the next Enter picks', async () => {
@@ -341,7 +342,7 @@ describe('the filter\'s fields', () => {
             await until(() => popover());
             const input = popover().querySelector('.filter-popover__tag-value input');
             type(input, 'e2e-suggest-proj');
-            const listed = await until(() => list()?.items.length === 2);
+            await until(() => list()?.items.length === 2);
             const shown = list();
             escape(input);
             await sleep(200);
@@ -353,10 +354,9 @@ describe('the filter\'s fields', () => {
             const pills = [...popover().querySelectorAll('.tv-ctrl__pill')].map(p => p.textContent.trim());
             escape(document.activeElement);
             await until(() => !popover());
-            return JSON.stringify({ listed, shown, afterEscape, pills });
+            return JSON.stringify({ shown, afterEscape, pills });
         `);
         expect(result).toEqual({
-            listed: true,
             shown: { items: ['#e2e-suggest-proj-x', '#e2e-suggest-project'], selected: '#e2e-suggest-proj-x' },
             afterEscape: { list: false, popover: true },
             pills: ['#e2e-suggest-proj-x'],
@@ -381,16 +381,16 @@ describe('the Properties view\'s color picker', () => {
             R.b = await open(${JSON.stringify(NOTE_B)}, 'split');
             app.workspace.setActiveLeaf(R.b, { focus: true });
             const pickerOf = leaf => leaf.view.containerEl.querySelector('.metadata-property input[type="color"]');
-            const found = await until(() => pickerOf(R.a) && pickerOf(R.b));
+            await until(() => pickerOf(R.a) && pickerOf(R.b));
             const active = app.workspace.getActiveFile()?.path;
             const picker = pickerOf(R.a);
             picker.value = '#00ff00';
             picker.dispatchEvent(new Event('input', { bubbles: true }));
             picker.dispatchEvent(new Event('change', { bubbles: true }));
             await sleep(800);
-            return JSON.stringify({ found, active });
+            return JSON.stringify({ active });
         `);
-        expect(result).toEqual({ found: true, active: NOTE_B });
+        expect(result).toEqual({ active: NOTE_B });
         expect(readTestFile(NOTE_A)).toBe(`---\n${key}: 00ff00\n---\n本文 A\n`);
         expect(readTestFile(NOTE_B)).toBe(`---\n${key}: blue\n---\n本文 B\n`);
     });

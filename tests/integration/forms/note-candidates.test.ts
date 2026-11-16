@@ -28,6 +28,7 @@ import { waitForFileIndexed } from '../helpers/test-file-manager';
 import { createTeardown } from '../helpers/teardown';
 import { overrideSettings, tr } from '../helpers/view-helper';
 import { closeDialog, DIALOG, onDialog, openDialog } from '../helpers/send-dialog';
+import { UNTIL } from '../helpers/waits';
 
 const DIR = 'test-int-nc';
 const ROOT_NOTE = 'test-int-nc-root.md';
@@ -174,7 +175,7 @@ describe('the settings\' note template', () => {
         const picked = run<{ items: Item[]; value: string; kept: string }>(`(async () => {
             ${'' /* the settings as a person opens them */}
             const sleep = ms => new Promise(r => setTimeout(r, ms));
-            const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+            ${UNTIL}
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
             const settingsTab = () => app.setting.activeTab?.id === 'obsidian-task-viewer' ? app.setting.activeTab.containerEl : null;
             const before = plugin.settings.weeklyNoteTemplate;
@@ -194,7 +195,7 @@ describe('the settings\' note template', () => {
                 input.dispatchEvent(new Event('input', { bubbles: true }));
                 // The settings may stand in a window of their own, where the list opens.
                 const items = () => [...new Set([document, input.ownerDocument])].flatMap(doc => [...doc.querySelectorAll('.suggestion-container .suggestion-item')]);
-                if (!(await until(() => items().some(el => el.querySelector('.suggestion-title')?.textContent === 'qqx-name')))) throw new Error('no qqx-name listed');
+                await until(() => items().some(el => el.querySelector('.suggestion-title')?.textContent === 'qqx-name'), 3000, 'no qqx-name listed');
                 const listed = items().map(el => ({ title: el.querySelector('.suggestion-title')?.textContent ?? el.textContent, note: el.querySelector('.suggestion-note')?.textContent ?? null }));
                 const item = items().find(el => el.querySelector('.suggestion-title')?.textContent === 'qqx-name');
                 const r = item.getBoundingClientRect();
@@ -243,7 +244,7 @@ const openHub = async () => {
 const pickInName = async (text, pick, note) => {
     typeIn(nameInput(), '候補を見る ' + text);
     const item = () => items().find(el => itemOf(el).title === pick && (note === undefined || itemOf(el).note === note));
-    if (!(await until(() => item()))) throw new Error('no ' + pick + ' in the list of ' + text);
+    await until(() => item(), 3000, 'no ' + pick + ' in the list of ' + text);
     press(item());
     await sleep(100);
     const written = nameInput().value;

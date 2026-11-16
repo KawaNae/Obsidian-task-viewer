@@ -23,13 +23,14 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { readTestFile } from '../helpers/test-file-manager';
 import { createTeardown } from '../helpers/teardown';
 import { closeViews, openView, overrideSettings, tr } from '../helpers/view-helper';
+import { UNTIL } from '../helpers/waits';
 
 const DATA_JSON = '.obsidian/plugins/obsidian-task-viewer/data.json';
 
 const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const key = (el, init) => el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
 const enter = el => key(el, { key: 'Enter', code: 'Enter', keyCode: 13 });
 /** Type text in a field as a person does: the text, then its input event. */
