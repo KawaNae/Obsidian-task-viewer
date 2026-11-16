@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliList, cliUpdate,
-    isObsidianRunning, waitForTask, sleep,
+    waitForTask, sleep,
 } from '../helpers/cli-helper';
 import {
     writeIndexedTestFile, deleteTestFile,
@@ -90,12 +90,6 @@ async function resetFixture(): Promise<void> {
 }
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error(
-            'Obsidian is not running or CLI is unreachable. ' +
-            'Start Obsidian with the Dev vault before running integration tests.',
-        );
-    }
     await resetFixture();
 });
 

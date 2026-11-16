@@ -18,7 +18,6 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings } from '../helpers/view-helper';
 
@@ -102,9 +101,6 @@ function lines(view: string): Record<string, Line> {
 const teardown = createTeardown();
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     const held = overrideSettings({ childCollapseThreshold: 3, enableCardFileLink: true });
     teardown.add('put the settings back', () => held.restore());
     teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });

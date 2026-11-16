@@ -21,7 +21,6 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/top-right.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { PRELUDE, SETTLE_MS, addDays, closeViews, ev, openView, setViewState } from '../helpers/view-helper';
 
@@ -74,9 +73,6 @@ function list(id: string, fields: string[]) {
 }
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
 });
 

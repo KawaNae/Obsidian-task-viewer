@@ -19,7 +19,6 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/bottom-spacing.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteNotesUnder } from '../helpers/markdown-frames';
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView } from '../helpers/view-helper';
 
@@ -111,9 +110,6 @@ function readAreas(value: string | null): Record<string, AreaReading> {
 }
 
 beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     deleteNotesUnder(PREFIX);
     openView('bs-timeline', 'timeline-view', { showSidebar: true, sidebar: [] });
     openView('bs-schedule', 'schedule-view');

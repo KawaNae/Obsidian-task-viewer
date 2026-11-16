@@ -16,17 +16,10 @@
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/sidebar-back.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { closeViews, ev, openView, PRELUDE, tr } from '../helpers/view-helper';
 
 const NARROW = 500;
 const WIDE = 1000;
-
-beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
-});
 
 afterAll(async () => {
     await closeViews();

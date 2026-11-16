@@ -19,7 +19,7 @@
  */
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
-import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { obsidianEval } from '../helpers/cli-helper';
 import { readTestFile } from '../helpers/test-file-manager';
 import { createTeardown } from '../helpers/teardown';
 import { closeViews, openView, overrideSettings, tr } from '../helpers/view-helper';
@@ -86,9 +86,6 @@ function storedSettings(): Record<string, unknown> {
 }
 
 beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     // Focus moves need the window to have the focus.
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
 });

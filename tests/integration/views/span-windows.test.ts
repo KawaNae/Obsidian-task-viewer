@@ -19,7 +19,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
-    cliCategorizedTasksForDateRange, cliGet, cliList, cliTasksForDateRange, cliToday, isObsidianRunning, obsidianEval,
+    cliCategorizedTasksForDateRange, cliGet, cliList, cliTasksForDateRange, cliToday, obsidianEval,
 } from '../helpers/cli-helper';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
@@ -71,9 +71,6 @@ function idOf(name: string): string {
 }
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     startHour = readSettings(['startHour']).startHour as number;
     D = visualDay(startHour);
     expect(await writeIndexedTestFile(FILE, note())).toBe(true);

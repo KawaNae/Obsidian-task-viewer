@@ -23,7 +23,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
-import { isObsidianRunning, obsidianEval } from '../helpers/cli-helper';
+import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { overrideSettings, tr, type HeldSettings } from '../helpers/view-helper';
 
@@ -129,9 +129,6 @@ const WARNING = 'tv-form__warning';
 const ERROR = 'tv-form__error';
 
 beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     // Focus moves need the window to have the focus.
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
     const there = run<boolean>(`return JSON.stringify(!!app.vault.getAbstractFileByPath(${JSON.stringify(DAILY)}));`);

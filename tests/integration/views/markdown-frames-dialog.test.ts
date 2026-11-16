@@ -18,7 +18,6 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
-import { isObsidianRunning } from '../helpers/cli-helper';
 import { deleteNotesUnder, frameLinks, framesOf, notesUnder, readFrames, texts, type Reading } from '../helpers/markdown-frames';
 import { closeViews, ev, openView, restartView, tr } from '../helpers/view-helper';
 
@@ -210,9 +209,6 @@ function ids(r: Reading): string[] {
 }
 
 beforeAll(() => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running integration tests.');
-    }
     // The arrow keys of a list need the window to have the focus.
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
     deleteNotesUnder(PREFIX);

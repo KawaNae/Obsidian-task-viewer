@@ -10,7 +10,7 @@
  * built from this tree is loaded.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { isObsidianRunning, obsidianEval, sleep } from '../helpers/cli-helper';
+import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { createFixture, writeTestFile } from '../helpers/test-file-manager';
 
 const FILE = 'test-int-delete-notice.md';
@@ -57,9 +57,6 @@ const fixture = createFixture(FILE, [
 ].join('\n'));
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error('Obsidian is not running or CLI is unreachable. Start Obsidian with the Dev vault before running E2E tests.');
-    }
     await fixture.setup();
     evalOk(`(() => {
         window.__tvDeleteNoticeOff?.();

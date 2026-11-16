@@ -17,7 +17,7 @@ import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
     cliDuplicate, cliTasksForDateRange, cliCategorizedTasksForDateRange,
     cliInsertChildTask, cliGetStartHour, cliHelp,
-    isObsidianRunning, obsidianCli, waitForTask, waitForTaskGone,
+    obsidianCli, waitForTask, waitForTaskGone,
 } from '../helpers/cli-helper';
 import { deleteTestFile, writeIndexedTestFile, readTestFile } from '../helpers/test-file-manager';
 
@@ -54,12 +54,6 @@ const FIXTURE_CONTENT = [
 ].join('\n');
 
 beforeAll(async () => {
-    if (!isObsidianRunning()) {
-        throw new Error(
-            'Obsidian is not running or CLI is unreachable. ' +
-            'Start Obsidian with the Dev vault before running E2E tests.',
-        );
-    }
     await writeIndexedTestFile(TEST_FILE, FIXTURE_CONTENT);
 });
 
