@@ -22,6 +22,12 @@ import { cliList, sleep, type ListResult } from './cli-helper';
  *   or a function called at the timeout for what to say of the state then)
  * - `tryUntil(test, ms = 3000)` resolves to whether the condition came
  *
+ * `until` loops by itself rather than awaiting `tryUntil`: awaiting another
+ * async function lets promise callbacks the plugin has pending run before the
+ * snippet goes on, where a snippet that waited for one state of a dialog can
+ * meet a state half changed (the section dialog's heading field lost its
+ * list and the focus that way).
+ *
  * It names nothing of the snippet it is put in (the snippets call their sleep
  * `sleep` or `wait`). It is written out here rather than taken from a
  * function's `toString()`, which would carry what the test runner's
@@ -37,7 +43,12 @@ const tryUntil = async (test, ms = 3000) => {
     }
 };
 const until = async (test, ms = 3000, detail) => {
-    if (await tryUntil(test, ms)) return true;
+    const end = Date.now() + ms;
+    for (;;) {
+        if (test()) return true;
+        if (Date.now() >= end) break;
+        await new Promise(r => setTimeout(r, 50));
+    }
     const said = typeof detail === 'function' ? detail() : detail;
     throw new Error('timed out after ' + ms + ' ms waiting for ' + String(test) + (said ? ' (' + said + ')' : ''));
 };
