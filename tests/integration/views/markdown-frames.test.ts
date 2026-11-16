@@ -37,6 +37,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
 import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { requireDataview } from '../helpers/prerequisites';
 import { deleteNotesUnder, frameLinks as links, framesOf, kept, notesUnder, readFrames, styles, texts, type Reading } from '../helpers/markdown-frames';
 import {
     PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay,
@@ -778,8 +779,7 @@ describe("Timeline's markdown frame of a section whose headings hold Dataview bl
     }
 
     beforeAll(() => {
-        const dataview = ev<boolean>(`(() => JSON.stringify(!!app.plugins.plugins.dataview?.settings.enableDataviewJs))()`);
-        if (!dataview) throw new Error('Dataview, with DataviewJS, is not enabled in the Dev vault');
+        requireDataview({ js: true });
         ev(`(async () => { ${NOTES} ${write()} return JSON.stringify(true); })()`);
         openView(name, 'timeline-view', {
             showSidebar: true,
@@ -919,8 +919,7 @@ describe.each([
     });
 
     it('leaves a checkbox of a Dataview task list to Dataview, which writes the note on each click', () => {
-        const dataview = ev<boolean>(`(() => JSON.stringify(!!app.plugins.plugins.dataview))()`);
-        if (!dataview) throw new Error('Dataview is not enabled in the Dev vault');
+        requireDataview();
         const line = (r: { notes: Record<string, string> }) => r.notes[`${QUERIED}.md`].split('\n')[0];
 
         // Dataview refreshes its lists an interval after a note changed. The
