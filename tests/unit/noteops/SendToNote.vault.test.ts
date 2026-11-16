@@ -4,7 +4,7 @@ import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 import type { SubtreeLine } from '../../../src/services/persistence/TaskOps';
-import type { SendRow } from '../../../src/services/core/TaskIndex';
+import type { SendRow } from '../../../src/services/operations/Operations';
 import type { NoteValue } from '../../../src/services/persistence/writers/SendWriter';
 import { NoteSections } from '../../../src/services/parsing/tree/NoteSections';
 import { Outline } from '../../../src/services/parsing/utils/Outline';

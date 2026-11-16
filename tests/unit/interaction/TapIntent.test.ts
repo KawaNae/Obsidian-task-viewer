@@ -73,7 +73,7 @@ describe('bindTapIntents', () => {
     it('does not fire onDoubleTap when the second click is past the threshold', () => {
         const el = makeElement();
         const onDoubleTap = vi.fn();
-        bindTapIntents(el, { onDoubleTap, threshold: 400 });
+        bindTapIntents(el, { onDoubleTap }, { threshold: 400 });
         el.dispatchClick();
         vi.advanceTimersByTime(500);
         el.dispatchClick();
@@ -83,7 +83,7 @@ describe('bindTapIntents', () => {
     it('respects custom threshold', () => {
         const el = makeElement();
         const onDoubleTap = vi.fn();
-        bindTapIntents(el, { onDoubleTap, threshold: 200 });
+        bindTapIntents(el, { onDoubleTap }, { threshold: 200 });
         el.dispatchClick();
         vi.advanceTimersByTime(150);
         el.dispatchClick();
