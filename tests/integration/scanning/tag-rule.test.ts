@@ -15,8 +15,9 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { TagRule } from '../../../src/services/parsing/utils/TagRule';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const DIR = 'test-int-tags';
 

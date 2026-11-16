@@ -22,11 +22,12 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, act, addDays, calendarLabel, closeViews, ev, goToDate, gridDays, monthGridStart, navigate,
     openUri, openView, overrideSettings, readView, restartView, saveSettings, setViewState, visualDay, type ViewReading,
 } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const KEYS = ['startHour', 'pastDaysToShow', 'startFromOldestOverdue', 'weekStartDay'] as const;
 type Settings = { startHour: number; pastDaysToShow: number; startFromOldestOverdue: boolean; weekStartDay: number };
@@ -343,7 +344,7 @@ describe('the oldest overdue pull', () => {
 
     beforeAll(async () => {
         overdue = addDays(today, -(past + 5));
-        expect(await writeIndexedTestFile(FILE, `- [ ] 超過のタスク @${overdue}>>${overdue}\n`)).toBe(true);
+        await writeIndexedTestFile(FILE, `- [ ] 超過のタスク @${overdue}>>${overdue}\n`);
     });
 
     afterAll(async () => {

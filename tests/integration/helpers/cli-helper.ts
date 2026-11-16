@@ -162,46 +162,6 @@ export function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Poll until a task matching the predicate appears in list results.
- * Returns the matching task, or null if timeout is reached.
- */
-export async function waitForTask(
-    flags: Record<string, string>,
-    predicate: (task: Record<string, unknown>) => boolean,
-    timeoutMs = 5000,
-    intervalMs = 200,
-): Promise<Record<string, unknown> | null> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-        const result = cliList(flags);
-        const found = result.tasks.find(predicate);
-        if (found) return found;
-        await sleep(intervalMs);
-    }
-    return null;
-}
-
-/**
- * Poll until a task disappears from list results.
- * Returns true if the task is gone, false if timeout is reached.
- */
-export async function waitForTaskGone(
-    flags: Record<string, string>,
-    predicate: (task: Record<string, unknown>) => boolean,
-    timeoutMs = 5000,
-    intervalMs = 200,
-): Promise<boolean> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-        const result = cliList(flags);
-        const found = result.tasks.find(predicate);
-        if (!found) return true;
-        await sleep(intervalMs);
-    }
-    return false;
-}
-
 // ── Types ──
 
 export interface ListResult {

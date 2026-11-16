@@ -16,7 +16,8 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { cliList, obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-property-filter.md';
 const FM_FILE = 'test-int-property-filter-fm.md';
@@ -92,9 +93,9 @@ function which(operator: string, value?: string): string[] {
 }
 
 beforeAll(async () => {
-    expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
-    expect(await writeIndexedTestFile(FM_FILE, FM_NOTE)).toBe(true);
-    expect(await writeIndexedTestFile(ROOT_FILE, ROOT_NOTE)).toBe(true);
+    await writeIndexedTestFile(FILE, NOTE);
+    await writeIndexedTestFile(FM_FILE, FM_NOTE);
+    await writeIndexedTestFile(ROOT_FILE, ROOT_NOTE);
 });
 
 afterAll(async () => {

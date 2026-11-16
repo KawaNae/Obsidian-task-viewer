@@ -18,8 +18,9 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'SyncIgnore/test-int-イラスト_絵の練習.md';
 const TARGET = FILE.replace(/\.md$/, '');
@@ -105,7 +106,7 @@ beforeAll(async () => {
     teardown.add('put the settings back', () => held.restore());
     teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
     teardown.add('close the views', closeViews);
-    expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
+    await writeIndexedTestFile(FILE, NOTE);
 });
 
 afterAll(() => teardown.run());

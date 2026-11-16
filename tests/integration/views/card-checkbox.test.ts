@@ -16,8 +16,9 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { ev, PRELUDE, openView, closeViews, overrideSettings, ymd } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-card-checkbox.md';
 const TITLE = '箱の色の親';
@@ -75,14 +76,14 @@ describe('a card\'s own checkbox', () => {
         teardown.add('put the settings back', () => held.restore());
         teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
         teardown.add('close the views', closeViews);
-        expect(await writeIndexedTestFile(FILE, note())).toBe(true);
+        await writeIndexedTestFile(FILE, note());
     });
 
     afterAll(() => teardown.run());
 
     for (const [type, name] of [['timeline-view', 'checkbox-timeline'], ['calendar-view', 'checkbox-calendar']] as const) {
         it(`${type}: shows the status it writes, in the task's color, before the card is drawn again`, async () => {
-            expect(await writeIndexedTestFile(FILE, note())).toBe(true);
+            await writeIndexedTestFile(FILE, note());
             openView(name, type);
 
             const tick = clickBox(name);

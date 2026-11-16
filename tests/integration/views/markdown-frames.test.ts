@@ -36,12 +36,13 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { requireDataview } from '../helpers/prerequisites';
 import { deleteNotesUnder, frameLinks as links, framesOf, kept, notesUnder, readFrames, styles, texts, type Reading } from '../helpers/markdown-frames';
 import {
     PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay,
 } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
 const PREFIX = 'SyncIgnore/test-int-mdframes';
@@ -158,7 +159,7 @@ beforeAll(async () => {
     teardown.add('put the settings back', () => held.restore());
     teardown.add('delete the note of tasks', async () => { deleteTestFile(TASKS); await waitForFileDeindexed(TASKS); });
     teardown.add('close the views', closeViews);
-    expect(await writeIndexedTestFile(TASKS, tasksNote(1))).toBe(true);
+    await writeIndexedTestFile(TASKS, tasksNote(1));
 });
 
 afterAll(() => teardown.run());
@@ -175,7 +176,7 @@ describe.each([
     const write = (parts: NoteParts = {}) => `await writeNote(${JSON.stringify(`${NOTE}.md`)}, ${JSON.stringify(note(parts))});`;
 
     beforeAll(async () => {
-        expect(await writeIndexedTestFile(TASKS, tasksNote(1))).toBe(true);
+        await writeIndexedTestFile(TASKS, tasksNote(1));
         ev(`(async () => { ${NOTES} ${write()} return JSON.stringify(true); })()`);
         openView(name, type, {
             showSidebar: true,
@@ -242,7 +243,7 @@ describe.each([
 
     it('keeps every body as it is when the tasks change and the panel draws its lists anew', async () => {
         op(name, 'mark();', 0);
-        expect(await writeIndexedTestFile(TASKS, tasksNote(2))).toBe(true);
+        await writeIndexedTestFile(TASKS, tasksNote(2));
         const r = op(name, '');
         expect(r.listCount).toBe(2);
         expect([kept(r.frames.memo), kept(r.frames.whole), kept(r.frames.plain)]).toEqual([[true, true], [true, true, true], [true]]);

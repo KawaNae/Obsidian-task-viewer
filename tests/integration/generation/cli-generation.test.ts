@@ -14,14 +14,13 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
-    cliList, cliUpdate,
-    waitForTask, sleep,
+    cliList, cliUpdate, sleep,
 } from '../helpers/cli-helper';
 import {
-    writeIndexedTestFile, deleteTestFile,
-    waitForFileDeindexed, vaultAbsolute,
+    writeIndexedTestFile, deleteTestFile, vaultAbsolute,
 } from '../helpers/test-file-manager';
 import * as fs from 'fs';
+import { waitForFileDeindexed, waitForTask } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-generation.md';
 
@@ -118,10 +117,8 @@ describe('schedule (at)', () => {
                 && t.startDate === '2026-04-02',
             8000,
         );
-
-        expect(newTask).not.toBeNull();
-        expect(newTask!.startDate).toBe('2026-04-02');
-        expect(newTask!.status).toBe(' ');
+        expect(newTask.startDate).toBe('2026-04-02');
+        expect(newTask.status).toBe(' ');
 
         // Fire-consumes: the completed original keeps its line but loses `==>`
         const consumed = await waitForFileContent(c =>
@@ -150,10 +147,8 @@ describe('schedule (at)', () => {
                 && t.startDate === '2026-04-08',
             8000,
         );
-
-        expect(newTask).not.toBeNull();
-        expect(newTask!.startDate).toBe('2026-04-08');
-        expect(newTask!.endDate).toBe('2026-04-10');
+        expect(newTask.startDate).toBe('2026-04-08');
+        expect(newTask.endDate).toBe('2026-04-10');
     }, 20000);
 });
 
@@ -169,14 +164,13 @@ describe('telomere (xN)', () => {
 
         cliUpdate({ id: task!.id as string, status: 'x' });
 
-        const newTask = await waitForTask(
+        await waitForTask(
             { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-telomere-C')
                 && t.status === ' '
                 && t.startDate === '2026-04-04',
             8000,
         );
-        expect(newTask).not.toBeNull();
 
         // The final instance carries no `==>` (telomere exhausted)
         const content = readTestFile();
@@ -239,14 +233,13 @@ describe('move', () => {
         cliUpdate({ id: task!.id as string, status: 'x' });
 
         // Next instance appears in the source file
-        const newTask = await waitForTask(
+        await waitForTask(
             { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-combo-F')
                 && t.status === ' '
                 && t.startDate === '2026-04-02',
             8000,
         );
-        expect(newTask).not.toBeNull();
 
         // Completed original carried to the Done section
         const moved = await waitForFileContent(() => doneSection().includes('- [x] flow-combo-F @2026-04-01'));
@@ -270,14 +263,13 @@ describe('multi-line flows', () => {
 
         cliUpdate({ id: task!.id as string, status: 'x' });
 
-        const newTask = await waitForTask(
+        await waitForTask(
             { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-multi-G')
                 && t.status === ' '
                 && t.startDate === '2026-04-02',
             8000,
         );
-        expect(newTask).not.toBeNull();
 
         // Fire-consumes: the original loses `==>` AND its flow child lines
         const consumed = await waitForFileContent(c =>
@@ -307,14 +299,13 @@ describe('multi-line flows', () => {
 
         cliUpdate({ id: task!.id as string, status: 'x' });
 
-        const newTask = await waitForTask(
+        await waitForTask(
             { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-multi-H')
                 && t.status === ' '
                 && t.startDate === '2026-04-03',
             8000,
         );
-        expect(newTask).not.toBeNull();
 
         const lines = readTestFile().split('\n');
         const newIdx = lines.findIndex(l => l.includes('- [ ] flow-multi-H @2026-04-03'));
@@ -334,14 +325,13 @@ describe('multi-line flows', () => {
 
         cliUpdate({ id: task!.id as string, status: 'x' });
 
-        const newTask = await waitForTask(
+        await waitForTask(
             { file: TEST_FILE, 'output-fields': 'id,content,status,startDate' },
             t => (t.content as string).includes('flow-multi-I')
                 && t.status === ' '
                 && t.startDate === '2026-04-02',
             8000,
         );
-        expect(newTask).not.toBeNull();
 
         const lines = readTestFile().split('\n');
         const newIdx = lines.findIndex(l => l.includes('- [ ] flow-multi-I @2026-04-02'));

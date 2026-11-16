@@ -18,10 +18,11 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
-import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import {
     PRELUDE, closeViews, copyUri, ev, openUri, openView, overrideSettings, readSettings, tr, visualDay,
 } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 /** The test's own template folder, two levels deep so that saving makes both. */
 const ROOT = 'test-int-view-templates';
@@ -164,12 +165,12 @@ beforeAll(async () => {
     // A dialog a failed save left open would take the next file's clicks.
     teardown.add('close the dialogs', () => ev(`(() => { document.querySelectorAll('.tv-overlay__panel.tv-ask .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`));
     const today = visualDay(readSettings(['startHour']).startHour as number);
-    expect(await writeIndexedTestFile(FILE, [
+    await writeIndexedTestFile(FILE, [
         `- [ ] vt one @${today} #tvvt`,
         `- [ ] vt two @${today} #tvvt #tvvtx`,
         `- [ ] vt untagged @${today}`,
         '',
-    ].join('\n'))).toBe(true);
+    ].join('\n'));
 });
 
 afterAll(() => teardown.run());

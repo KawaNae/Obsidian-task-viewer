@@ -20,8 +20,9 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { cliList } from '../helpers/cli-helper';
-import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-cascade-null.md';
 const DAY = '2027-04-21';
@@ -87,7 +88,7 @@ function texts(view: string): string[] {
 }
 
 beforeAll(async () => {
-    expect(await writeIndexedTestFile(FILE, NOTE)).toBe(true);
+    await writeIndexedTestFile(FILE, NOTE);
 });
 
 afterAll(async () => {
