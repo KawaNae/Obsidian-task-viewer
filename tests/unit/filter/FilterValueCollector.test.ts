@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { FilterValueCollector } from '../../../src/services/filter/FilterValueCollector';
 import type { Task } from '../../../src/types';
+import { makeTask as baseMakeTask } from '../helpers/makeTask';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'test-1',
         file: 'notes/daily.md',
         line: 1,
@@ -16,7 +17,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         tags: [],
         parserId: 'tv-inline',
         ...overrides,
-    };
+    });
 }
 
 describe('FilterValueCollector', () => {

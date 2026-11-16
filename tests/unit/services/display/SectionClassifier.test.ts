@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { classifyForSection, bucketBySection } from '../../../../src/services/display/SectionClassifier';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../../src/services/display/DisplayTaskConverter';
 import type { DisplayTask, Task } from '../../../../src/types';
+import { makeTask as baseMakeTask } from '../../helpers/makeTask';
 
 /** Build a minimal Task for testing. */
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'tv-inline:test.md:ln:1',
         file: 'test.md',
         line: 0,
@@ -18,7 +19,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         originalText: '- [ ] test task',
         parserId: 'tv-inline',
         ...overrides,
-    };
+    });
 }
 
 const startHour = 5;

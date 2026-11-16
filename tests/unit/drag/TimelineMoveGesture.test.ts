@@ -3,9 +3,10 @@ import { TimelineMoveGesture } from '../../../src/interaction/drag/strategies/ti
 import { visualDayAt } from '../../../src/utils/DayWindow';
 import { materializeRawDates } from '../../../src/services/display/DisplayTaskConverter';
 import type { Task } from '../../../src/types';
+import { makeTask as baseMakeTask } from '../helpers/makeTask';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
-    return {
+    return baseMakeTask({
         id: 'tv-inline:test.md:ln:1',
         file: 'test.md',
         line: 0,
@@ -18,7 +19,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
         originalText: '- [ ] test',
         parserId: 'tv-inline',
         ...overrides,
-    };
+    });
 }
 
 const startHour = 5;
