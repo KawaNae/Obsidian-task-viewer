@@ -76,6 +76,27 @@ describe('CloseGate', () => {
         error.mockRestore();
     });
 
+    it('stays open on an answer that throws as it is asked, says why, and asks again on the next close', async () => {
+        let fail = true;
+        const { host, gate } = setUp(() => {
+            if (fail) throw new Error('save failed');
+            return 'close';
+        });
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const slid = vi.fn();
+        let asked: Promise<boolean> | undefined;
+        expect(() => { asked = gate.request(slid); }).not.toThrow();
+        expect(await asked).toBe(false);
+        expect(slid).not.toHaveBeenCalled();
+        expect(host.closes).toBe(0);
+        expect(error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ message: 'save failed' }));
+        fail = false;
+        expect(await gate.request()).toBe(true);
+        expect(host.asked).toBe(2);
+        expect(host.closes).toBe(1);
+        error.mockRestore();
+    });
+
     it('does not act on an answer that comes after the overlay closed or opened anew', async () => {
         const wait = deferred();
         const { host, gate } = setUp(() => wait.promise);
