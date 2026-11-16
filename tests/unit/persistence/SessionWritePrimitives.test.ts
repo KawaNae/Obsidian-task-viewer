@@ -3,7 +3,8 @@ import { Operations } from '../../../src/services/operations/Operations';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
-import type { Refusal, WriteOutcome } from '../../../src/services/persistence/FileLines';
+import type { Refusal, RowRef, WriteOutcome } from '../../../src/services/persistence/FileLines';
+import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { Task } from '../../../src/types';
 
 /**
@@ -224,7 +225,7 @@ function buildIndexHost(task: Task | undefined) {
             learnFrom: async () => { },
         },
         repository: {
-            write: vi.fn(async () => MADE),
+            write: vi.fn(async (_file: string, _target: RowRef, _ops: readonly TaskOp[]) => MADE),
         },
         onRow: proto.onRow,
         rowNow: proto.rowNow,

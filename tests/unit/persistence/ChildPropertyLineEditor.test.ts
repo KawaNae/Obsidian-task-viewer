@@ -399,7 +399,11 @@ describe('ChildPropertyLineEditor', () => {
                     ownLines(lines, 0).map(line => [line.key, line.value]),
                 );
                 const read = Object.fromEntries(
-                    Object.values(task.properties).map(({ key, value }) => [key, PropertyValues.spelling(value)]),
+                    Object.values(task.properties).map(({ key, value }) => {
+                        // A property line holds one value, never a list.
+                        if (value.type === 'list') throw new Error(`${key} read as a list`);
+                        return [key, PropertyValues.spelling(value)];
+                    }),
                 );
                 expect(read).toEqual(written);
                 expect(written).toEqual(expected);

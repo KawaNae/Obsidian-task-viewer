@@ -251,7 +251,7 @@ describe('flow effects', () => {
         const outcome = await bench.writer.write(a.file, plannedOn(a), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text: '- [x] A' }]);
         expect(outcome.written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] B', '## Done', '- [x] A']);
-        expect(only(bench.filed).edits.some(edit => edit.kind === 'carried')).toBe(true);
+        expect((only(bench.filed).edits ?? []).some(edit => edit.kind === 'carried')).toBe(true);
     });
 
     it('an outside line before the fire: nothing lands, the command stays', async () => {

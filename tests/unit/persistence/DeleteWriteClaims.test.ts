@@ -97,7 +97,7 @@ describe('the origin half of a move says what it did', () => {
         await b.writer.write(b.taskAt(1).file, plannedOn(b.taskAt(1)), [{ kind: 'move', to: { heading: 'archive', side: 'end' }, text: '- [x] 移動する @2026-09-21' }]);
 
         expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21', '']);
-        expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['carried', 'replaced', 'removed']);
+        expect((only(b.filed).edits ?? []).map(edit => edit.kind)).toEqual(['carried', 'replaced', 'removed']);
     });
 });
 
