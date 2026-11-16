@@ -3,6 +3,7 @@ import { bindField } from '../../../src/modals/form/bindField';
 import { DateInput } from '../../../src/utils/values/DateValues';
 import { optional, type Issue } from '../../../src/utils/values/Read';
 import { FakeEl, asEl } from '../helpers/fakeDom';
+import { FocusDoc, asEl as asFocusEl } from '../helpers/focusDom';
 
 /** A date field bound to a value held here, as the hub holds its row. */
 function dateField(initial: string | undefined, opts: { refuse?: boolean; takesSame?: boolean } = {}) {
@@ -219,5 +220,23 @@ describe('bindField', () => {
             f.input.type('2026-10-01');
             expect(f.field.pending()).toBeNull();
         });
+    });
+
+    it('takes its listeners off once its signal aborts: a blur or an Enter then commits nothing', () => {
+        const input = new FocusDoc().root();
+        const built = new AbortController();
+        const commits: unknown[] = [];
+        bindField(asFocusEl(input), {
+            codec: optional(DateInput),
+            current: () => undefined,
+            commit: (v) => { commits.push(v); },
+            issues: () => { },
+            signal: built.signal,
+        });
+        input.type('2026-10-05');
+        built.abort();
+        input.enter();
+        input.dispatchEvent(new Event('blur'));
+        expect(commits).toEqual([]);
     });
 });

@@ -60,6 +60,12 @@ export interface BindFieldOptions<T> {
      * and its picker in step). By default, the input's value.
      */
     put?(text: string): void;
+    /**
+     * Takes the field's listeners off once it aborts: a field whose row is
+     * being built anew. Taking out an input that holds the focus sends it a
+     * blur at once, and that blur then commits nothing.
+     */
+    signal?: AbortSignal;
 }
 
 /**
@@ -131,13 +137,14 @@ export function bindField<T>(input: HTMLInputElement, opts: BindFieldOptions<T>)
         }
     };
 
+    const { signal } = opts;
     input.addEventListener('input', (e) => {
         typedOver = true;
         if (!(e as InputEvent).isComposing) check();
-    });
-    input.addEventListener('compositionend', check);
-    input.addEventListener('blur', commit);
-    onFormEnter(input, commit, { takesEnter: opts.takesEnter });
+    }, { signal });
+    input.addEventListener('compositionend', check, { signal });
+    input.addEventListener('blur', commit, { signal });
+    onFormEnter(input, commit, { takesEnter: opts.takesEnter, signal });
 
     return {
         pending,
