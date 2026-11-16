@@ -23,13 +23,14 @@ import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { closeViews, openView, readSettings, saveSettings, tr } from '../helpers/view-helper';
+import { UNTIL } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-ask-dialogs.md';
 
 const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
     if (!task) throw new Error('no row ' + name);

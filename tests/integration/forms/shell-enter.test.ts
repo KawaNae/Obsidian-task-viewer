@@ -19,6 +19,7 @@ import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
+import { UNTIL } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-shell-enter.md';
 
@@ -32,7 +33,7 @@ const NOTE = [
 const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const R = (window.__tvShellE2E ??= {});
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
@@ -203,7 +204,7 @@ describe('the create dialog\'s name field', () => {
             typeName('見る [[' + ${JSON.stringify(base.slice(0, -3))});
             input.setSelectionRange(input.value.length, input.value.length);
             input.dispatchEvent(new Event('input', { bubbles: true }));
-            const listed = await until(() => [...document.querySelectorAll('.suggestion-container .suggestion-item')].some(el => el.textContent.includes(${JSON.stringify(base)})));
+            await until(() => [...document.querySelectorAll('.suggestion-container .suggestion-item')].some(el => el.textContent.includes(${JSON.stringify(base)})));
             const highlighted = document.querySelector('.suggestion-container .suggestion-item.is-selected')?.textContent ?? null;
             enter(input);
             await sleep(300);
@@ -211,9 +212,8 @@ describe('the create dialog\'s name field', () => {
             enter(input);
             await until(() => !createPanel());
             await sleep(500);
-            return JSON.stringify({ listed, highlighted, picked, closed: !createPanel() });
+            return JSON.stringify({ highlighted, picked, closed: !createPanel() });
         `);
-        expect(steps.listed).toBe(true);
         const picked = steps.picked as DialogState & { listOpen: boolean };
         expect(picked).toMatchObject({ open: true, listOpen: false });
         expect(picked.name).toMatch(/^見る \[\[[^\]]+\]\]$/);

@@ -25,6 +25,7 @@ import { deleteTestFile, waitForFileDeindexed, writeIndexedTestFile } from '../h
 import {
     PRELUDE, addDays, closeViews, ev, openView, readSettings, tr, visualDay,
 } from '../helpers/view-helper';
+import { UNTIL } from '../helpers/waits';
 
 const FILE = 'test-int-span-windows.md';
 
@@ -256,7 +257,7 @@ describe("the hub's faint values", () => {
         const r = obsidianEval(`(async () => {
             const sleep = ms => new Promise(r => setTimeout(r, ms));
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
-            const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+            ${UNTIL}
             const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
             const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(FILE)} && t.content.startsWith(${JSON.stringify(name + ' ')}));
             if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
@@ -292,7 +293,7 @@ describe("the hub's faint values", () => {
         const said = obsidianEval(`(async () => {
             const sleep = ms => new Promise(r => setTimeout(r, ms));
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
-            const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+            ${UNTIL}
             const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
             const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(FILE)} && t.content.startsWith('sw-rule4'));
             if (!task) throw new Error('no row sw-rule4');

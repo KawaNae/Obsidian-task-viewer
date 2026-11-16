@@ -1,4 +1,5 @@
 import { obsidianEval } from './cli-helper';
+import { UNTIL } from './waits';
 
 /**
  * The send dialog driven in the running Dev vault, as a person drives it:
@@ -10,7 +11,7 @@ import { obsidianEval } from './cli-helper';
  */
 export const DIALOG = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+${UNTIL}
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-send');
 const inputs = () => [...(panel()?.querySelectorAll('.tv-send__destination input') ?? [])];
@@ -68,7 +69,7 @@ const typeIn = (input, text) => {
 const pickFrom = async (i, text, pick, note) => {
     typeIn(inputs()[i], text);
     const item = () => items().find(el => itemOf(el).title === pick && (note === undefined || itemOf(el).note === note));
-    if (!(await until(() => item()))) throw new Error('no ' + pick + ' in the list of ' + text);
+    await until(() => item(), 3000, 'no ' + pick + ' in the list of ' + text);
     press(item());
     await sleep(100);
 };
