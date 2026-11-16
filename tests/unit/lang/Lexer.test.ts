@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tokenize, splitDurationText } from '../../../src/services/lang/Lexer';
-import { TokenKind } from '../../../src/services/lang/Token';
+import type { TokenKind } from '../../../src/services/lang/Token';
 
 function kinds(src: string): TokenKind[] {
     return tokenize(src).tokens.map(t => t.kind);

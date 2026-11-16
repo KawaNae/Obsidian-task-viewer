@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EvalContext, EvalError } from '../../../src/services/lang/ExprEvaluator';
+import { type EvalContext, EvalError } from '../../../src/services/lang/ExprEvaluator';
 import type { EvalHost, StaticType } from '../../../src/services/lang/functions';
 import type { Value } from '../../../src/services/lang/Value';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';

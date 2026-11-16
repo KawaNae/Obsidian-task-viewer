@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Diagnostic } from '../../../src/services/lang/Diagnostic';
-import { Expr } from '../../../src/services/lang/ExprAst';
+import type { Diagnostic } from '../../../src/services/lang/Diagnostic';
+import type { Expr } from '../../../src/services/lang/ExprAst';
 import { parseExpr } from '../../../src/services/lang/ExprParser';
 import { tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { EvalContext, EvalError, evalExpr } from '../../../src/services/lang/ExprEvaluator';
+import { type EvalContext, EvalError, evalExpr } from '../../../src/services/lang/ExprEvaluator';
 import { parseExpr } from '../../../src/services/lang/ExprParser';
-import { EvalHost } from '../../../src/services/lang/functions';
+import type { EvalHost } from '../../../src/services/lang/functions';
 import { tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
-import { Value } from '../../../src/services/lang/Value';
+import type { Value } from '../../../src/services/lang/Value';
 
 const stubHost: EvalHost = {
     formatDate: (value, tokens) => `[${tokens}:${value.type === 'date' ? value.value : value.type === 'datetime' ? value.date : '?'}]`,

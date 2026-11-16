@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { Diagnostic } from '../../../src/services/lang/Diagnostic';
+import type { Diagnostic } from '../../../src/services/lang/Diagnostic';
 import { parseProgram } from '../../../src/services/lang/StmtParser';
-import { Stmt } from '../../../src/services/lang/StmtAst';
+import type { Stmt } from '../../../src/services/lang/StmtAst';
 
 /** Parse and require a clean read — the shape assertions below start here. */
 function ok(src: string): Stmt[] {
