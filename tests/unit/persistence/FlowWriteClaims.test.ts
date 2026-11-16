@@ -71,7 +71,7 @@ describe('what a strip-flow write reports', () => {
             { kind: 'removed', at: 3, count: 1 },
             { kind: 'replaced', at: 2 },
         ]);
-        for (const edit of claim.edits) {
+        for (const edit of claim.edits ?? []) {
             if (edit.kind === 'removed') expect(claim.before[edit.at]).toContain('==>');
         }
     });
