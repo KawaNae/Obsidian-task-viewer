@@ -177,30 +177,40 @@ describe('the settings\' note template', () => {
             const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
             const plugin = app.plugins.plugins['obsidian-task-viewer'];
             const settingsTab = () => app.setting.activeTab?.id === 'obsidian-task-viewer' ? app.setting.activeTab.containerEl : null;
-            app.setting.open();
-            app.setting.openTabById('obsidian-task-viewer');
-            await until(() => settingsTab()?.isConnected && settingsTab().querySelector('.tv-settings__nav-btn'));
-            settingsTab().querySelector('.tv-settings__nav-btn[data-tab-id="notes"]').click();
-            await sleep(100);
-            const panel = [...settingsTab().querySelectorAll('.tv-settings__panel')].find(p => p.style.display !== 'none');
-            const setting = [...panel.querySelectorAll('.setting-item')].find(el => el.querySelector('.setting-item-name')?.textContent === ${JSON.stringify(name)});
-            const input = setting.querySelector('.setting-item-control input');
-            input.focus();
-            input.value = ${JSON.stringify(`${DIR}/`)};
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            // The settings may stand in a window of their own, where the list opens.
-            const items = () => [...new Set([document, input.ownerDocument])].flatMap(doc => [...doc.querySelectorAll('.suggestion-container .suggestion-item')]);
-            if (!(await until(() => items().some(el => el.querySelector('.suggestion-title')?.textContent === 'qqx-name')))) throw new Error('no qqx-name listed');
-            const listed = items().map(el => ({ title: el.querySelector('.suggestion-title')?.textContent ?? el.textContent, note: el.querySelector('.suggestion-note')?.textContent ?? null }));
-            const item = items().find(el => el.querySelector('.suggestion-title')?.textContent === 'qqx-name');
-            const r = item.getBoundingClientRect();
-            const at = { bubbles: true, cancelable: true, clientX: r.left + 4, clientY: r.top + 4, button: 0 };
-            item.dispatchEvent(new MouseEvent('mousedown', at));
-            item.dispatchEvent(new MouseEvent('mouseup', at));
-            item.dispatchEvent(new MouseEvent('click', at));
-            await sleep(300);
-            const out = { items: listed, value: input.value, kept: plugin.settings.weeklyNoteTemplate };
-            return JSON.stringify(out);
+            const before = plugin.settings.weeklyNoteTemplate;
+            // Put back here too: a call the CLI gave up on runs on, and its
+            // pick would land after the teardown had put the setting back.
+            try {
+                app.setting.open();
+                app.setting.openTabById('obsidian-task-viewer');
+                await until(() => settingsTab()?.isConnected && settingsTab().querySelector('.tv-settings__nav-btn'));
+                settingsTab().querySelector('.tv-settings__nav-btn[data-tab-id="notes"]').click();
+                await sleep(100);
+                const panel = [...settingsTab().querySelectorAll('.tv-settings__panel')].find(p => p.style.display !== 'none');
+                const setting = [...panel.querySelectorAll('.setting-item')].find(el => el.querySelector('.setting-item-name')?.textContent === ${JSON.stringify(name)});
+                const input = setting.querySelector('.setting-item-control input');
+                input.focus();
+                input.value = ${JSON.stringify(`${DIR}/`)};
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                // The settings may stand in a window of their own, where the list opens.
+                const items = () => [...new Set([document, input.ownerDocument])].flatMap(doc => [...doc.querySelectorAll('.suggestion-container .suggestion-item')]);
+                if (!(await until(() => items().some(el => el.querySelector('.suggestion-title')?.textContent === 'qqx-name')))) throw new Error('no qqx-name listed');
+                const listed = items().map(el => ({ title: el.querySelector('.suggestion-title')?.textContent ?? el.textContent, note: el.querySelector('.suggestion-note')?.textContent ?? null }));
+                const item = items().find(el => el.querySelector('.suggestion-title')?.textContent === 'qqx-name');
+                const r = item.getBoundingClientRect();
+                const at = { bubbles: true, cancelable: true, clientX: r.left + 4, clientY: r.top + 4, button: 0 };
+                item.dispatchEvent(new MouseEvent('mousedown', at));
+                item.dispatchEvent(new MouseEvent('mouseup', at));
+                item.dispatchEvent(new MouseEvent('click', at));
+                await sleep(300);
+                const out = { items: listed, value: input.value, kept: plugin.settings.weeklyNoteTemplate };
+                return JSON.stringify(out);
+            } finally {
+                // Closed first, so that the field is not committed over the value put back.
+                if (app.setting.activeTab) { app.setting.close(); await sleep(300); }
+                plugin.settings.weeklyNoteTemplate = before;
+                await plugin.saveSettings();
+            }
         })()`);
         expect(picked.items.some(one => one.title === '画像.png')).toBe(false);
         expect(picked.items.map(one => [one.title, one.note])).toEqual(expect.arrayContaining([['同名ノート', `${DIR}/a/`], ['inner', `${DIR}/qqx/`]]));

@@ -186,11 +186,19 @@ describe('the settings\' fields', () => {
         teardown.add('close the settings', closeSettingsAndOverlays);
         const result = run<Record<string, unknown>>(`
             const days = plugin.settings.pastDaysToShow;
-            await openSettings('viewDetails');
-            const field = settingOf(${JSON.stringify(tr('settings.views.pastDaysToShow'))});
-            type(field.input, String(days + 2));
-            await closeSettings();
-            return JSON.stringify({ moved: plugin.settings.pastDaysToShow - days });
+            // Put back here too: a call the CLI gave up on runs on, and its
+            // close would commit the value after the teardown had put it back.
+            try {
+                await openSettings('viewDetails');
+                const field = settingOf(${JSON.stringify(tr('settings.views.pastDaysToShow'))});
+                type(field.input, String(days + 2));
+                await closeSettings();
+                return JSON.stringify({ moved: plugin.settings.pastDaysToShow - days });
+            } finally {
+                if (app.setting.activeTab) await closeSettings();
+                plugin.settings.pastDaysToShow = days;
+                await plugin.saveSettings();
+            }
         `);
         // Put back before the disk is read.
         await teardown.run();
