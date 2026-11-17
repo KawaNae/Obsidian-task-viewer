@@ -34,6 +34,19 @@ export function deleteTestFile(relativePath: string): void {
 }
 
 /**
+ * Delete an empty folder from the E2E vault, once the files a test put in it
+ * are deleted. Silently ignores a missing folder; one with anything left in
+ * it is not deleted, and throws.
+ */
+export function deleteTestFolder(relativePath: string): void {
+    try {
+        fs.rmdirSync(vaultAbsolute(relativePath));
+    } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    }
+}
+
+/**
  * The IDs the index hands out for the file's rows now that name a reading of
  * it: every ID but a `path#^id` one, which outlives readings. Such an ID
  * lasts until the file changes other than by a write of the plugin's

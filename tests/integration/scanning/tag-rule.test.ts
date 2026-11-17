@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { obsidianEval } from '../helpers/cli-helper';
-import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, deleteTestFolder, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { TagRule } from '../../../src/services/parsing/utils/TagRule';
 import { waitForFileDeindexed } from '../helpers/waits';
 
@@ -181,6 +181,7 @@ beforeAll(async () => {
 afterAll(async () => {
     for (const name of Object.keys(NOTES)) deleteTestFile(path(name));
     for (const name of Object.keys(NOTES)) await waitForFileDeindexed(path(name));
+    deleteTestFolder(DIR);
 });
 
 describe('the tags of a row, against Obsidian', () => {

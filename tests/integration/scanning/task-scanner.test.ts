@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { cliList, cliGet } from '../helpers/cli-helper';
-import { createFixture, writeTestFile, deleteTestFile } from '../helpers/test-file-manager';
+import { createFixture, writeTestFile, deleteTestFile, deleteTestFolder } from '../helpers/test-file-manager';
 import { waitForFileDeindexed, waitForFileIndexed, waitForTask } from '../helpers/waits';
 
 const OUTPUT_FIELDS = 'content,status,startDate,startTime,endDate,endTime,due,tags,childIds,parentId,parserId,color,file,line';
@@ -103,7 +103,10 @@ describe('daily note date inheritance', () => {
     ].join('\n'));
 
     beforeAll(() => fixture.setup());
-    afterAll(() => fixture.teardown());
+    afterAll(async () => {
+        await fixture.teardown();
+        deleteTestFolder('DailyNotes');
+    });
 
     it('inherits date for time-only task on daily note', () => {
         // Inherited dates live on effective* (raw fields stay as written
