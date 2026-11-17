@@ -1,10 +1,10 @@
 /**
- * The hub's source mode, in the running Dev vault: the hub opened on a row,
+ * The hub's source mode, in the running E2E vault: the hub opened on a row,
  * its source edited through the CodeMirror views the hub shows, applied,
  * and the note's bytes read back.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that has the source mode
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/source-mode.test.ts

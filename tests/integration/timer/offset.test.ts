@@ -1,6 +1,6 @@
 /**
  * Shifting the start of a running count-up (`TimerLifecycle.offsetStart`),
- * in the running Dev vault, through the widget: the elapsed time pressed,
+ * in the running E2E vault, through the widget: the elapsed time pressed,
  * an item of the menu it opens chosen. A self start shifted back to the
  * start it overwrote records from that start; a child's running line has
  * its start rewritten when the shift is chosen; after ⏸ and ▶ the menu no
@@ -24,7 +24,7 @@
  * whole seconds.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that shifts the start of a running timer
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/timer/offset.test.ts

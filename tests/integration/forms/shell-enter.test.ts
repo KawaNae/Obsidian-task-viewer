@@ -9,7 +9,7 @@
  * active beside it. The note's bytes are read back from the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that has OverlayShell's initialFocus and onFormEnter
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/shell-enter.test.ts

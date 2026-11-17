@@ -16,7 +16,7 @@
  * far off (2031-01-15), made by the test and deleted after.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     its daily notes at the vault's root as YYYY-MM-DD, with no template
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/create-dialog.test.ts
@@ -133,7 +133,7 @@ beforeAll(() => {
     // Focus moves need the window to have the focus.
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
     const there = run<boolean>(`return JSON.stringify(!!app.vault.getAbstractFileByPath(${JSON.stringify(DAILY)}));`);
-    if (there) throw new Error(`${DAILY} is in the Dev vault: the test makes and deletes it, so it does not run over one.`);
+    if (there) throw new Error(`${DAILY} is in the E2E vault: the test makes and deletes it, so it does not run over one.`);
 });
 
 afterEach(() => { cleanUp(); });
@@ -248,7 +248,7 @@ describe('the create dialog under a row (a card\'s menu, Add child task)', () =>
             start: { date: { value: '', placeholder: '2031-02-01' } },
             form: [`${INFO}: ${tr('modal.newTask.toChild', { parent: '親' })}`],
         });
-        // Indented as Obsidian's settings say (a tab in the Dev vault).
+        // Indented as Obsidian's settings say (a tab, Obsidian's default).
         expect(steps.disk).toMatch(/^## Work\n- tv-start:: 2031-02-01\n- \[ \] 親\n(\t| {4})- \[ \] 子 @10:00\n$/);
     });
 });

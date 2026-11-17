@@ -3,7 +3,7 @@ import en from '../../../src/i18n/locales/en.json';
 import ja from '../../../src/i18n/locales/ja.json';
 
 /**
- * Drive the plugin's views in the running Dev vault through `obsidian eval`.
+ * Drive the plugin's views in the running E2E vault through `obsidian eval`.
  *
  * Each test opens its views in leaves of its own, kept under a name in
  * `window.__tvE2E`, so the views the vault already has are never touched;

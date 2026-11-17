@@ -10,8 +10,8 @@
  * removed at the end.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/filter-period.test.ts
  */

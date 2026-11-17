@@ -1,5 +1,5 @@
 /**
- * The hub's close, in the running Dev vault: every way the user
+ * The hub's close, in the running E2E vault: every way the user
  * closes it saves what is typed with no blur waited for, a value that cannot
  * be saved keeps it open and asks (the focus on fix), a write refused keeps
  * it open with why at the form's end and no notice, and the source mode asks
@@ -10,7 +10,7 @@
  * saved. The note's bytes are read back from the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that has the hub's close (TaskHubForm.beforeClose)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/close-save.test.ts

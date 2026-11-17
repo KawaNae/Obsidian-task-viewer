@@ -1,6 +1,6 @@
 /**
  * A card's own checkbox shows the status a click writes from the click on, in
- * the running Dev vault: the box's list item is marked `data-task="x"` before
+ * the running E2E vault: the box's list item is marked `data-task="x"` before
  * the card is drawn again from the file, so the stylesheet's rule for `x`
  * colors the box with the task's color at once, as it does after the draw.
  * With the tick alone, Obsidian's rule for a checked box would draw it in the
@@ -10,7 +10,7 @@
  * which hold the per-status rules, and the note's `tv-color` red.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/card-checkbox.test.ts
  */

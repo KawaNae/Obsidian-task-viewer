@@ -1,7 +1,7 @@
 /**
  * The notes a field suggests, listed and drawn as Obsidian's `[[` lists and
  * draws them (`NoteCandidates`, `candidateView`),
- * in the running Dev vault: the send dialog's note, the settings' note
+ * in the running E2E vault: the send dialog's note, the settings' note
  * templates, and the `[[` of the task name and of the source editor, whose
  * picks write the link Obsidian's `[[` writes (the note a link is spelt
  * from is the unit tests': the vault's link format is not changed here,
@@ -17,7 +17,7 @@
  * are taken away at the end.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/note-candidates.test.ts
  */

@@ -1,5 +1,5 @@
 /**
- * What a card's top right says, in the running Dev vault: the dates the note
+ * What a card's top right says, in the running E2E vault: the dates the note
  * states, as written (the line's, and what its section gives it), never a
  * value the rules fill in. A pinned list and a Kanban cell show the fields
  * of their display label; Timeline, Calendar's cards of a day and Schedule
@@ -15,8 +15,8 @@
  * whole or not at all, and the end shows exactly when it fits.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/top-right.test.ts
  */

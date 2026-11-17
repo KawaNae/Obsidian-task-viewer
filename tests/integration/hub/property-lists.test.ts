@@ -1,5 +1,5 @@
 /**
- * The hub's lists, in the running Dev vault: a custom property's list is
+ * The hub's lists, in the running E2E vault: a custom property's list is
  * shown an item a line, each item edited, taken out, added and moved, and
  * every edit writes the list as its block of the note. An item that would
  * not read back as one is said under the row and not written. An inherited
@@ -7,7 +7,7 @@
  * items, written by the first edit.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/property-lists.test.ts
  */

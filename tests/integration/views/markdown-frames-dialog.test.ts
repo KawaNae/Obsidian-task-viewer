@@ -1,6 +1,6 @@
 /**
  * The section dialog of Timeline's and Calendar's sidebar, in the running
- * Dev vault, driven as the user drives it: opened from the add button's
+ * E2E vault, driven as the user drives it: opened from the add button's
  * menu to add a markdown frame, and from a frame's ⋯ menu, or the card of
  * a frame whose note or section is not there, to choose its section again. The fields are typed
  * in as a person types (the text, then its `input` event), the items of
@@ -11,8 +11,8 @@
  * are the test's own, under `SyncIgnore/`, written through the vault.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/markdown-frames-dialog.test.ts
  */

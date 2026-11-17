@@ -1,5 +1,5 @@
 /**
- * The hub opens the line a value is written on, in the running Dev vault:
+ * The hub opens the line a value is written on, in the running E2E vault:
  * an inherited value's source label and a finding's button open the row's
  * note with the cursor on that line, and a frontmatter key the Properties
  * view shows is lit there. A value written above the first heading is said
@@ -7,7 +7,7 @@
  * section's does. A line our own write moved is followed.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/source-line.test.ts
  */

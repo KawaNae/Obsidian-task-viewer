@@ -1,5 +1,5 @@
 /**
- * The settings' fields and the load, in the running Dev vault: a
+ * The settings' fields and the load, in the running E2E vault: a
  * settings field reads what is typed and commits once (a blur, the form's
  * Enter), saving only a value that reads and saying under its description
  * why one does not; a scope key typed again tells nothing and reads the
@@ -12,7 +12,7 @@
  * `data.json` as it found it, which is checked on the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a current build
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/settings-fields.test.ts

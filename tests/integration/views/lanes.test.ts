@@ -1,5 +1,5 @@
 /**
- * The lanes of dated cards, in the running Dev vault: Calendar's week rows
+ * The lanes of dated cards, in the running E2E vault: Calendar's week rows
  * and Timeline's all-day row. A task of several days is drawn as a bar in
  * the columns of its days, cut at each edge of a row (a week, the window)
  * with the cut marked on the side it continues; a bar is moved by its move
@@ -18,8 +18,8 @@
  * days.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/lanes.test.ts
  */

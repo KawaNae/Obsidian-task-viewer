@@ -1,5 +1,5 @@
 /**
- * The questions put to the user, in the running Dev vault: the
+ * The questions put to the user, in the running E2E vault: the
  * delete's confirmation, a flow's three ways to delete, and a timer's three
  * ways to start on a completed task stand on OverlayShell (`askChoice`),
  * open with the focus on cancel, and answer once: the button pressed, or
@@ -13,7 +13,7 @@
  * are read back from the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that has the questions of modals/ask
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/ask-dialogs.test.ts

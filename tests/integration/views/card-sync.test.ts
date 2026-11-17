@@ -1,6 +1,6 @@
 /**
  * A card is drawn whole when `TaskCardRenderer.render` returns, in the running
- * Dev vault. The draw does not wait on `MarkdownRenderer.render`: it rests on
+ * E2E vault. The draw does not wait on `MarkdownRenderer.render`: it rests on
  * Obsidian putting the markdown into the element within the call, which its
  * renderer does but its API does not promise. This test watches that.
  *
@@ -9,7 +9,7 @@
  * laid on each child task after the markdown must be there.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build whose card draw is synchronous
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/card-sync.test.ts

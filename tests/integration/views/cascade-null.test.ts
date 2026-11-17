@@ -1,6 +1,6 @@
 /**
  * What a card shows of a style a layer says it has none of, in the running
- * Dev vault: a property with no value (`- tv-color::`, the frontmatter's
+ * E2E vault: a property with no value (`- tv-color::`, the frontmatter's
  * `tv-linestyle:`) hides the value above it, and a value the plugin cannot
  * read (`- tv-linestyle:: wavy`) is read as not written, letting the value
  * above it through. A value written above the first heading wins over the
@@ -13,8 +13,8 @@
  * The mask is read with the view's mask mode on, as the text the card shows.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/cascade-null.test.ts
  */

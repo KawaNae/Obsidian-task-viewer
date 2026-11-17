@@ -1,5 +1,5 @@
 /**
- * The tags the plugin reads are Obsidian's, in the running Dev vault:
+ * The tags the plugin reads are Obsidian's, in the running E2E vault:
  * Obsidian is the spec of what a tag is (`TagRule`), and this checks the
  * plugin against it. For notes of the forms the rule was found on, each
  * row's tags are the tags Obsidian's metadata cache reads on the row's line
@@ -8,7 +8,7 @@
  * Obsidian's rule changes with its version, this is where it shows.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that has TagRule
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/scanning/tag-rule.test.ts

@@ -1,12 +1,12 @@
 /**
  * The hub's fields and what the row's own property lines hold that is
- * wrong, in the running Dev vault: a field whose block has a finding takes
+ * wrong, in the running E2E vault: a field whose block has a finding takes
  * no edit and says the editor's sentence under its row, with the line to
  * open; the other fields are written as before. A date key under the task
  * is said of the form and locks nothing.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/property-findings.test.ts
  */

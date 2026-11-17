@@ -1,5 +1,5 @@
 /**
- * The hub's custom properties, in the running Dev vault: a value is written
+ * The hub's custom properties, in the running E2E vault: a value is written
  * back as it is spelled. Editing one property rewrites that line alone, so
  * the other lines keep their spelling (`007`, `True`, `0x1F`, a quoted
  * `"123"`, a line with no value), and a value typed is written as typed. A
@@ -7,7 +7,7 @@
  * the values offered are spelled so.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/property-values.test.ts
  */
