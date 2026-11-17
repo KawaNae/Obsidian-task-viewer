@@ -26,6 +26,13 @@ const NOTE = [
     '',
 ].join('\n');
 
+/**
+ * A row with a tag, in a note of its own. The list under the hub's tag field
+ * offers the tags of the vault's rows, and shows only when there is one.
+ */
+const TAGGED_FILE = 'test-int-source-mode-tagged.md';
+const TAGGED = '- [ ] 札 #test-int-source-mode\n';
+
 /** A row whose code block keeps the paragraph below it from going on the row's text. */
 const FENCED = [
     '# 見出し',
@@ -154,7 +161,9 @@ afterEach(() => { closeHub(); });
 
 afterAll(async () => {
     deleteTestFile(TEST_FILE);
+    deleteTestFile(TAGGED_FILE);
     await waitForFileDeindexed(TEST_FILE);
+    await waitForFileDeindexed(TAGGED_FILE);
 });
 
 describe('the hub\'s source mode', () => {
@@ -466,6 +475,7 @@ describe('the hub\'s source mode', () => {
 
     it('takes the back as Escape: a list open under a field first, then a close that asks over a draft', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
+        await writeIndexedTestFile(TAGGED_FILE, TAGGED);
         // Obsidian's history.back() calls what is on top of its stack, as Android's back and the mouse's back button do.
         const steps = run<Record<string, unknown>>(`
             const onBack = () => document.activeElement === document.querySelector('.task-hub__source-actions .tv-form__cancel');
@@ -512,6 +522,7 @@ describe('the hub\'s source mode', () => {
 
     it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, a list open under a field among it', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
+        await writeIndexedTestFile(TAGGED_FILE, TAGGED);
         const result = run<Record<string, unknown>>(`
             const file = app.vault.getAbstractFileByPath(${JSON.stringify(TEST_FILE)});
             const leaf = app.workspace.getLeaf('tab');
