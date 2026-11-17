@@ -1,11 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { VAULT_PATHS } from '../../../dev-paths.mjs';
+import { VAULT_PATH } from '../vault/location';
 import { sleep, cliList } from './cli-helper';
 import { waitForFileIndexed } from './waits';
-
-/** Dev vault root. Must match the path Obsidian is watching. */
-const VAULT_PATH = VAULT_PATHS.dev;
 
 /** Resolve a relative vault path to its absolute location on disk. */
 export function vaultAbsolute(relativePath: string): string {
@@ -13,7 +10,7 @@ export function vaultAbsolute(relativePath: string): string {
 }
 
 /**
- * Write (or overwrite) a file in the Dev vault.
+ * Write (or overwrite) a file in the E2E vault.
  * Parent directories are created automatically.
  */
 export function writeTestFile(relativePath: string, content: string): void {
@@ -22,12 +19,12 @@ export function writeTestFile(relativePath: string, content: string): void {
     fs.writeFileSync(abs, content, 'utf-8');
 }
 
-/** Read a file from the Dev vault. */
+/** Read a file from the E2E vault. */
 export function readTestFile(relativePath: string): string {
     return fs.readFileSync(vaultAbsolute(relativePath), 'utf-8');
 }
 
-/** Delete a file from the Dev vault. Silently ignores missing files. */
+/** Delete a file from the E2E vault. Silently ignores missing files. */
 export function deleteTestFile(relativePath: string): void {
     try {
         fs.unlinkSync(vaultAbsolute(relativePath));
@@ -49,7 +46,7 @@ function readingIds(relativePath: string): Set<string> {
 }
 
 /**
- * Write a file in the Dev vault from outside, as `writeTestFile` does, and
+ * Write a file in the E2E vault from outside, as `writeTestFile` does, and
  * wait until the index lists the file as written (`waitForFileIndexed`),
  * which throws when `timeoutMs` runs out.
  *

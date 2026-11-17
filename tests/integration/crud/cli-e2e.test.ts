@@ -1,9 +1,9 @@
 /**
  * CLI E2E Tests
  *
- * These tests call the real Obsidian CLI via PowerShell and assert on JSON responses.
+ * These tests call the real Obsidian CLI and assert on JSON responses.
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * The tag/property fixture (test-tags-properties.md) is written by this
  * suite itself — it used to be a manually-maintained vault file and got
@@ -19,6 +19,7 @@ import {
     cliInsertChildTask, cliGetStartHour, cliHelp,
     obsidianCli,
 } from '../helpers/cli-helper';
+import { VAULT_NAME } from '../vault/location';
 import { deleteTestFile, writeIndexedTestFile, readTestFile } from '../helpers/test-file-manager';
 import { waitForTask, waitForTaskGone } from '../helpers/waits';
 
@@ -560,9 +561,9 @@ describe('strict flag validation', () => {
 
     // Obsidian's CLI hands `x=` to the plugin as an empty string, which is
     // refused for every flag; the helper drops empty values, so this calls
-    // the CLI itself (directly, as on macOS and Linux).
-    it.skipIf(process.platform === 'win32')('an empty flag is refused', () => {
-        const out = execFileSync('obsidian', ['vault=dev', 'obsidian-task-viewer:list', 'limit='], { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' });
+    // the CLI itself.
+    it('an empty flag is refused', () => {
+        const out = execFileSync('obsidian', [`vault=${VAULT_NAME}`, 'obsidian-task-viewer:list', 'limit='], { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' });
         expect(JSON.parse(out.trim())).toMatchObject({ error: 'limit must not be empty' });
     });
 
