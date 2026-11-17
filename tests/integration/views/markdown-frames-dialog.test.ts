@@ -8,7 +8,7 @@
  *
  * What a choice wrote is read from the view's state (`sidebar`,
  * `sidebarCollapsed`), and what the frame shows from its DOM. The notes
- * are the test's own, under `SyncIgnore/`, written through the vault.
+ * are the test's own, named with its prefix, written through the vault.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault open, with the current build
@@ -23,7 +23,7 @@ import { closeViews, ev, openView, restartView, tr } from '../helpers/view-helpe
 import { UNTIL } from '../helpers/waits';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
-const PREFIX = 'SyncIgnore/test-int-mdsection';
+const PREFIX = 'test-int-mdsection';
 const NOTES = notesUnder(PREFIX);
 
 /**

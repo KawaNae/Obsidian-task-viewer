@@ -22,7 +22,7 @@ import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manag
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings } from '../helpers/view-helper';
 import { waitForFileDeindexed } from '../helpers/waits';
 
-const FILE = 'SyncIgnore/test-int-イラスト_絵の練習.md';
+const FILE = 'test-int-イラスト_絵の練習.md';
 const TARGET = FILE.replace(/\.md$/, '');
 const BASENAME = 'test-int-イラスト_絵の練習';
 const DAY = '2027-05-12';

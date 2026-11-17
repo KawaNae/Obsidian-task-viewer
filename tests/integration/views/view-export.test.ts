@@ -21,7 +21,7 @@ import { deleteNotesUnder, framesOf, notesUnder } from '../helpers/markdown-fram
 import { SETTLE_MS, closeViews, ev, openView } from '../helpers/view-helper';
 
 /** Every file of the test is under this: nothing else is written to or deleted. */
-const PREFIX = 'SyncIgnore/test-int-export';
+const PREFIX = 'test-int-export';
 const NOTE = `${PREFIX}-chart`;
 const FOLDER = `${PREFIX}-images`;
 const NAME = 'export-tl';
