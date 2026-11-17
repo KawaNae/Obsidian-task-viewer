@@ -89,6 +89,9 @@ function storedSettings(): Record<string, unknown> {
 beforeAll(() => {
     // Focus moves need the window to have the focus.
     if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']);
+    // The plugin writes data.json on its first save, not on its load: in a
+    // vault it has not saved in yet there is none to compare against.
+    run(`await plugin.saveSettings(); return 'ok';`);
 });
 
 /** Close the settings and the plugin's overlays a test left open. */
