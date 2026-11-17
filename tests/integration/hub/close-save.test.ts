@@ -85,16 +85,23 @@ function openHub(name: string): void {
     `);
 }
 
-/** Close whatever hub is open, throwing away what it asks about. */
+/**
+ * Close whatever hub is open, throwing away what it asks about.
+ *
+ * A test that held the file's readings back has them let in first, and the
+ * hub told of them at once, as a drag's end does: a close asked between the
+ * reading going in and the hub hearing of it saves the name typed to a row
+ * the index no longer has, is refused, and leaves the hub open.
+ */
 function closeHub(): void {
     run(`
         await plugin.getIndex().setDraggingFile(null);
-        for (let i = 0; i < 3 && hub(); i++) {
-            closeButton();
-            await sleep(100);
-            hub()?.querySelector('.tv-form__discard')?.click();
-            await until(() => !hub(), 1000);
-        }
+        plugin.getIndex().notifyImmediate();
+        if (!hub()) return 'ok';
+        closeButton();
+        await sleep(100);
+        hub()?.querySelector('.tv-form__discard')?.click();
+        await until(() => !hub(), 1000);
         return 'ok';
     `);
 }
