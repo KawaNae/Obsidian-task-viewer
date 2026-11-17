@@ -234,11 +234,18 @@ describe('the end shows whenever it fits, and never cut', () => {
         fits('tr-fit-cal', null);
     });
 
-    it('in Schedule, beside another card and not', () => {
+    it('in Schedule, beside another card, until the half it has is too narrow', () => {
         openView('tr-fit-sc', 'schedule-view', { date: DAY });
-        // At 300 px tr-1011 shares its hour with tr-at10, in half of it.
-        const seen = [null, 300].map(w => expectFits(fits('tr-fit-sc', w), 'tr-1011')[0]);
-        expect(seen).toEqual([true, false]);
+        // tr-1011 shares its hour with tr-at10, in half of the content. The width
+        // at which that half no longer holds 10:00>11:00 goes with the font, so the
+        // content is narrowed step by step until the end is gone, not to one width.
+        const seen = [expectFits(fits('tr-fit-sc', null), 'tr-1011')[0]];
+        for (let width = 400; width >= 200 && seen[seen.length - 1]; width -= 50) {
+            seen.push(expectFits(fits('tr-fit-sc', width), 'tr-1011')[0]);
+        }
+        expect(seen[0]).toBe(true);
+        expect(seen[seen.length - 1], JSON.stringify(seen)).toBe(false);
+        fits('tr-fit-sc', null);
     });
 
     it("in a Kanban cell, whose fields after the times go whole with the end", () => {
