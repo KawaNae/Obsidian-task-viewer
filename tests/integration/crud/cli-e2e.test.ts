@@ -21,7 +21,7 @@ import {
 } from '../helpers/cli-helper';
 import { VAULT_NAME } from '../vault/location';
 import { deleteTestFile, writeIndexedTestFile, readTestFile } from '../helpers/test-file-manager';
-import { waitForTask, waitForTaskGone } from '../helpers/waits';
+import { waitForFileDeindexed, waitForTask, waitForTaskGone } from '../helpers/waits';
 
 const TEST_FILE = 'test-tags-properties.md';
 
@@ -57,6 +57,11 @@ const FIXTURE_CONTENT = [
 
 beforeAll(async () => {
     await writeIndexedTestFile(TEST_FILE, FIXTURE_CONTENT);
+});
+
+afterAll(async () => {
+    deleteTestFile(TEST_FILE);
+    await waitForFileDeindexed(TEST_FILE);
 });
 
 // ────────────────────────────────────────────
