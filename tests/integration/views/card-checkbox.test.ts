@@ -8,6 +8,10 @@
  *
  * The box's color is read with the global styles on (`applyGlobalStyles`),
  * which hold the per-status rules, and the note's `tv-color` red.
+ * The views open on today, the day of the test's task, with the window not
+ * pulled back to the oldest overdue (`startFromOldestOverdue` off): an
+ * unchecked row of an earlier day, in any note, would start it before today
+ * and leave the task out.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -72,7 +76,7 @@ describe('a card\'s own checkbox', () => {
     const teardown = createTeardown();
 
     beforeAll(async () => {
-        const held = overrideSettings({ applyGlobalStyles: true });
+        const held = overrideSettings({ applyGlobalStyles: true, startFromOldestOverdue: false });
         teardown.add('put the settings back', () => held.restore());
         teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
         teardown.add('close the views', closeViews);
