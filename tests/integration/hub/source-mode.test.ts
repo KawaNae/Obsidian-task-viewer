@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
+import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-source-mode.md';
@@ -192,9 +193,9 @@ describe('the hub\'s source mode', () => {
                 focused: document.activeElement === actions.querySelector('.tv-form__cancel'),
             });
         `);
-        expect(row).toEqual({ items: ['下書きを捨てますか', '捨てる', '戻る', '適用'], oneLine: true, askAtStart: true, applyAtEnd: true, apart: true, focused: true });
+        expect(row).toEqual({ items: [tr('modal.draft.discardAsk'), tr('modal.draft.discard'), tr('modal.draft.keep'), tr('modal.hub.source.apply')], oneLine: true, askAtStart: true, applyAtEnd: true, apart: true, focused: true });
         const kept = click('.task-hub__source-actions .tv-form__cancel');
-        expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions .tv-form__buttons > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual(['キャンセル', '適用']);
+        expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions .tv-form__buttons > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual([tr('modal.cancel'), tr('modal.hub.source.apply')]);
         expect(kept).toMatchObject({ source: true, asking: false, children: '- [ ] 子a2\n- [ ] 子b\n    - [ ] 孫' });
 
         const applied = run<SourceState>(`
@@ -279,7 +280,7 @@ describe('the hub\'s source mode', () => {
         `);
         expect(look).toEqual({
             boxes: [true, true], oneBox: false, indented: true, guideUnderDash: true, guideSpansBox: true,
-            placeholder: '子の行', onParent: [true, false], onChildren: [false, true],
+            placeholder: tr('modal.sourceChildren'), onParent: [true, false], onChildren: [false, true],
         });
         // Typed in, the placeholder goes.
         const typed = run<string | null>(`viewOf('children').focus(); typeText('- [ ] 子'); await sleep(50); return JSON.stringify(document.querySelector('.task-hub .tv-source-editor__children .cm-placeholder')?.textContent ?? null);`);

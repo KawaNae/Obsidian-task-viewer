@@ -129,7 +129,7 @@ describe('the send dialog\'s note', () => {
             await until(() => items().some(el => itemOf(el).title === '別名アルファ'));
             return JSON.stringify(items().map(el => ({ ...itemOf(el), flair: el.querySelector('.suggestion-aux .suggestion-flair')?.getAttribute('aria-label') ?? null })));
         `);
-        expect(alias).toContainEqual({ title: '別名アルファ', note: `${DIR}/別名元`, flair: 'エイリアス' });
+        expect(alias).toContainEqual({ title: '別名アルファ', note: `${DIR}/別名元`, flair: tr('aria.alias') });
         const sizes = new Set(listed.items.map(one => one.noteSize));
         expect([...sizes]).toEqual(['12px']);
         expect(parseFloat(listed.items[0].titleSize)).toBeGreaterThan(12);
@@ -293,7 +293,7 @@ describe('the task name\'s [[', () => {
         ]));
         expect(listed.items.every(one => one.complex)).toBe(true);
         expect([...new Set(listed.items.map(one => one.noteSize))]).toEqual(['12px']);
-        expect(listed.alias).toContainEqual(expect.objectContaining({ title: '別名アルファ', note: `${DIR}/別名元`, flair: 'エイリアス' }));
+        expect(listed.alias).toContainEqual(expect.objectContaining({ title: '別名アルファ', note: `${DIR}/別名元`, flair: tr('aria.alias') }));
         expect(listed.hint).toBe(tr('modal.taskNameHint.file'));
         expect(listed.hint).not.toContain('^');
     });
