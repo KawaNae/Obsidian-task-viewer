@@ -23,7 +23,7 @@ import { deleteNotesUnder } from '../helpers/markdown-frames';
 import { PRELUDE, SETTLE_MS, closeViews, ev, openView } from '../helpers/view-helper';
 
 /** Every file of the test is under this: nothing else is written to or deleted. */
-const PREFIX = 'SyncIgnore/test-int-bottom-spacing';
+const PREFIX = 'test-int-bottom-spacing';
 const FOLDER = `${PREFIX}-images`;
 
 /** The room a phone with the floating navigation bar asks for. */

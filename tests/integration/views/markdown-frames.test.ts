@@ -19,7 +19,7 @@
  * (`openView`); what they show is read from their DOM, and what the view
  * keeps from `getState` (`sidebar`, `sidebarCollapsed`, `maskMode`). Whether a card's
  * markdown was rendered anew is told by a mark put on its element: an
- * element made anew does not have it. The notes are the test's own, under `SyncIgnore/`, and
+ * element made anew does not have it. The notes are the test's own, named with its prefix, and
  * are written, renamed and deleted through the vault, as Obsidian does it.
  *
  * The last part asks Obsidian itself which heading a link names: it renders
@@ -45,7 +45,7 @@ import {
 import { waitForFileDeindexed } from '../helpers/waits';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
-const PREFIX = 'SyncIgnore/test-int-mdframes';
+const PREFIX = 'test-int-mdframes';
 const TASKS = `${PREFIX}-tasks.md`;
 const TAG = 'tvmdframes';
 
