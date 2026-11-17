@@ -1,6 +1,6 @@
 // Where this machine keeps its Obsidian vaults. The build writes the plugin
-// into one of them and the E2E suite drives the Dev one, so both read the
-// paths from here rather than each holding its own copy.
+// into one of them and the E2E suite rebuilds and drives its own, so both
+// read the paths from here rather than each holding its own copy.
 import os from "os";
 import path from "path";
 
@@ -19,4 +19,15 @@ if (!root) {
 export const VAULT_PATHS = {
   dev: path.join(root, "Dev"),
   main: path.join(root, "Main"),
+};
+
+// The E2E suite runs on macOS only. Its vault is emptied and written again
+// on every run, so the path is held here alone and not read from the
+// environment: a variable could point the emptying at another folder.
+export const E2E_PATHS = {
+  vault: path.join(root, "DevE2E"),
+  // Other authors' plugins the E2E vault installs, kept outside the
+  // repository and checked against the hashes the vault's definition holds:
+  // <plugins>/<id>/<version>/<file>.
+  plugins: path.join(root, "_e2e-plugins"),
 };

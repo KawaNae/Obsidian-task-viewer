@@ -1,39 +1,42 @@
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import { VAULT_NAME } from '../vault/location';
 
 /**
- * Execute an Obsidian CLI command and return parsed JSON. On Windows the CLI
- * is reached through PowerShell; elsewhere the default shell runs it directly.
- * Requires Obsidian to be running with the Dev vault open.
+ * Run the Obsidian CLI against the E2E vault and return what it printed.
+ * The vault is always named, so a call does not depend on which vault's
+ * window is in front, and never reaches a vault the user works in. Each
+ * argument is handed over as it is, not through a shell.
+ *
+ * SIGKILL: a CLI client has been seen to wait more than ten minutes for an
+ * answer that never came, and not to end on the SIGTERM the timeout sent,
+ * which left the suite hanging instead of failing the call.
+ */
+function runCli(args: string[]): string {
+    return execFileSync('obsidian', [`vault=${VAULT_NAME}`, ...args],
+        { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' }).trim();
+}
+
+/**
+ * Execute one of the plugin's CLI commands in the E2E vault and return its
+ * answer parsed as JSON. A flag `true` is passed bare, a flag `false` or
+ * empty not at all. A failed call, or an answer that is not JSON, comes
+ * back as `{ error }`.
  */
 export function obsidianCli(command: string, flags: Record<string, string | boolean> = {}): unknown {
-    const parts: string[] = [];
+    const args: string[] = [];
     for (const [key, val] of Object.entries(flags)) {
         if (val === true) {
-            parts.push(key);
+            args.push(key);
         } else if (val !== false && val !== '') {
-            // Quote values that contain spaces so the CLI parser doesn't split them
-            const strVal = String(val);
-            const needsQuoting = strVal.includes(' ');
-            parts.push(needsQuoting ? `${key}='${strVal}'` : `${key}=${strVal}`);
+            args.push(`${key}=${String(val)}`);
         }
     }
-    const args = parts.join(' ');
-    // Always target the Dev vault explicitly so E2E does not depend on which
-    // vault is currently active/focused (Main data stays untouched).
-    const fullCmd = `obsidian vault=dev obsidian-task-viewer:${command}${args ? ' ' + args : ''}`;
 
     let raw: string;
     try {
-        const shellCmd = process.platform === 'win32'
-            ? `powershell.exe -Command "${fullCmd}"`
-            : fullCmd;
-        // SIGKILL: a CLI client has been seen to wait more than ten minutes
-        // for an answer that never came, and not to end on the SIGTERM the
-        // timeout sent, which left the suite hanging instead of failing the
-        // call.
-        raw = execSync(shellCmd, { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' }).trim();
+        raw = runCli([`obsidian-task-viewer:${command}`, ...args]);
     } catch (err: unknown) {
-        // execSync throws on non-zero exit code; stderr may contain the error
+        // A non-zero exit throws; stderr may hold the error
         const msg = (err as { stderr?: string }).stderr?.trim()
             || (err as { stdout?: string }).stdout?.trim()
             || String(err);
@@ -66,21 +69,16 @@ function asciiOnly(code: string): string {
 }
 
 /**
- * Evaluate `code` in the Dev vault's Obsidian (`obsidian eval`) and return
+ * Evaluate `code` in the E2E vault's Obsidian (`obsidian eval`) and return
  * the value it printed, parsed as JSON when it is JSON. `code` is an
  * expression; a Promise is waited for. A thrown error comes back as
  * `{ error }`. The code is passed as one argument, not through a shell, so it
- * needs no quoting. Killed as a CLI call is (see {@link obsidianCli}).
+ * needs no quoting. Killed as a CLI call is (see {@link runCli}).
  */
 export function obsidianEval(code: string): unknown {
-    code = asciiOnly(code);
     let raw: string;
     try {
-        raw = process.platform === 'win32'
-            ? execSync(`powershell.exe -Command "obsidian vault=dev eval code='${code.replace(/'/g, "''").replace(/"/g, '\\"')}'"`,
-                { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' }).trim()
-            : execFileSync('obsidian', ['vault=dev', 'eval', `code=${code}`],
-                { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' }).trim();
+        raw = runCli(['eval', `code=${asciiOnly(code)}`]);
     } catch (err: unknown) {
         return { error: (err as { stderr?: string }).stderr?.trim() || String(err) };
     }

@@ -579,7 +579,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 - タグの語: 空白、`-` `/` `_` 以外の ASCII の記号、U+2000〜206F と U+2E00〜2E7F の句読点のどれかで終わる。日本語の約物、`＃`、絵文字はタグの一部になる。ASCII の数字だけの語（`#123`）はタグにならない
 - 本文で `#` がタグを始める位置: 読みが止まる位置である。つまり、本文か記法の中身の先頭、空白（全角空白と NBSP を含む）の直後、直前の記法の終わり（`#a#b`、`[[x]]#y`、`**b**#c`、`$x$#d`、`<b>#e`、`\##f`）。平文の文字や閉じない記号の後はタグにならない（`日本語の#x`、`(#x`、`*#x`）。記法の中身の終わりはタグを終える（`_#a_` は `#a`）
-- 一致の検査: E2E（`tests/integration/scanning/tag-rule.test.ts`）が Dev vault に文字ごとの表、始まりの位置、強調、数式、HTML、ほかの記法、frontmatter の各形を置き、行のタグを Obsidian の `cache.tags` に、ノートのタグを Obsidian の `getTags()` がそのノートについて数えるものに突き合わせる。Obsidian の版が上がって規則が変われば、ここで落ちる
+- 一致の検査: E2E（`tests/integration/scanning/tag-rule.test.ts`）が E2E の vault に文字ごとの表、始まりの位置、強調、数式、HTML、ほかの記法、frontmatter の各形を置き、行のタグを Obsidian の `cache.tags` に、ノートのタグを Obsidian の `getTags()` がそのノートについて数えるものに突き合わせる。Obsidian の版が上がって規則が変われば、ここで落ちる
 - 大文字と小文字は区別しない。`a/b` は `a` の下のタグである。候補は `getTags()` と同じく1つにまとめ、親のタグも入れる。綴りは最も多く書かれたもの（下のタグの分を含む）、同数なら先に出たものを選ぶ
 - 書く側: ハブのタグ欄はタグの語にならない語を拒む（`chars` か `digitsOnly`）。`tags::` の行は常に `#a #b` で書く
 
@@ -766,7 +766,7 @@ What a view draws is derived from `date`, the settings and (Timeline) the tasks 
 - **Schedule**: draws the day looked at; the arrows move `date` by a day
 - **Calendar** and **MiniCalendar** (`calendar/CalendarGrid.ts`): they also hold the transient `weekOffset`, the weeks the grid was moved from `date`'s month grid (absent: 0). `gridRange` is the one function of the days drawn: the week of the 1st of the day looked at's month (today while following), moved by `weekOffset` weeks, six weeks. Go to date, a URI's `date=` and the CLI's `anchor-date=` put the day in `date` as given and clear the offset, so all three show the same screen. The arrows and MiniCalendar's wheel move only the offset; while following they fix today in `date` first. Today clears both. The week start is read at each draw, so a month grid keeps its month's 1st on the top row when it changes. The date picker opens on the day looked at, as Timeline's and Schedule's do. The toolbar names the month of the grid's middle, which is `date`'s month while the offset is 0. So `date` means the day looked at in every dated view; what each view draws around it is its own: Timeline puts the past days before it, Calendar draws its month grid
 
-The E2E suite drives these rules through the toolbars in the Dev vault (`tests/integration/views/viewed-date.test.ts`, `toolbar-state.test.ts`).
+The E2E suite drives these rules through the toolbars in the E2E vault (`tests/integration/views/viewed-date.test.ts`, `toolbar-state.test.ts`).
 
 ### Saved lists, lanes and note links
 
@@ -833,7 +833,7 @@ Three things more than one view draws are drawn by one part each.
 
 **Links to periodic notes** (`sharedUI/PeriodicNoteLink.ts`). `periodicNoteLink` makes every link to a daily or weekly note in a view: an `a.internal-link` pointed at the note (`pointPeriodicLink`), previewed on hover, and a click on it, or on the cell given as `opensFrom`, opens the note in the current leaf, made from its template when it is not there (`openPeriodicNoteInLeaf`). The toolbar's year and month label points its links the same way. Calendar and MiniCalendar draw their week numbers with one cell (`calendar/WeekNumberCell.ts`).
 
-The E2E suite drives the lists, the markdown frames and the lanes in the Dev vault (`tests/integration/views/pinned-lists.test.ts`, `markdown-frames.test.ts`, `markdown-frames-dialog.test.ts`, `kanban.test.ts`, `lanes.test.ts`). `markdown-frames.test.ts` draws the frames the state holds and follows their notes; `markdown-frames-dialog.test.ts` adds frames and chooses their sections again through the section dialog. The two read the frames and write their notes with `tests/integration/helpers/markdown-frames.ts`. `markdown-frames.test.ts` needs Dataview enabled in the Dev vault, for a task list in a card. It also asks Obsidian which heading a link names, by rendering an embed of the link, and compares it with the frame of the same link. The two agree but for a paragraph of several lines underlined by `===` or `---`: the outline reads it as a setext heading, Obsidian as a paragraph, so a section above it ends there for a frame and runs on for Obsidian.
+The E2E suite drives the lists, the markdown frames and the lanes in the E2E vault (`tests/integration/views/pinned-lists.test.ts`, `markdown-frames.test.ts`, `markdown-frames-dialog.test.ts`, `kanban.test.ts`, `lanes.test.ts`). `markdown-frames.test.ts` draws the frames the state holds and follows their notes; `markdown-frames-dialog.test.ts` adds frames and chooses their sections again through the section dialog. The two read the frames and write their notes with `tests/integration/helpers/markdown-frames.ts`. `markdown-frames.test.ts` needs Dataview, which the E2E vault's definition installs, for a task list in a card. It also asks Obsidian which heading a link names, by rendering an embed of the link, and compares it with the frame of the same link. The two agree but for a paragraph of several lines underlined by `===` or `---`: the outline reads it as a setext heading, Obsidian as a paragraph, so a section above it ends there for a frame and runs on for Obsidian.
 
 ---
 
@@ -998,10 +998,39 @@ src/styles/
 npm install       # Install dependencies
 npm run dev       # Development build (watch)
 npm run build     # Production build
-npm run test:e2e  # E2E against the Dev vault through the Obsidian CLI
+npm run test:e2e  # E2E in the E2E vault through the Obsidian CLI (macOS)
+npm run test:e2e:vault  # Rebuild the E2E vault from this checkout, without a test
 ```
 
-The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault paths per OS live in `dev-paths.mjs`. The Dev vault is the default; set `OBSIDIAN_VAULT=main` or `OBSIDIAN_VAULT_PATH=<path>` to write elsewhere. E2E needs Obsidian running with the Dev vault open, the plugin enabled there, and the `obsidian` CLI on the PATH.
+The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault paths per OS live in `dev-paths.mjs`. The Dev vault is the default; set `OBSIDIAN_VAULT=main` or `OBSIDIAN_VAULT_PATH=<path>` to write elsewhere.
+
+### The E2E vault
+
+The E2E suite runs on macOS only, in a vault of its own (`E2E_PATHS.vault` in `dev-paths.mjs`, `~/Develop/Obsidian/DevE2E`), never in a vault the user works in. Before the first test file, `tests/integration/preflight.ts` rebuilds that vault (`tests/integration/vault/rebuild.ts`):
+
+1. It checks, before Obsidian is touched, that the folder is the E2E vault, that the other authors' plugins in the store are the files the definition names, and that this checkout builds.
+2. It closes the vault's window and waits for its renderer to end, so no page still running writes over what follows.
+3. It deletes everything in the folder but the marker, and writes the definition (`tests/integration/vault/definition.ts`), a build of this checkout's source, and the stored plugins.
+4. It opens the window again by a CLI call and waits for the layout and the plugins.
+5. It sets the window's size (`WINDOW_SIZE` in `rebuild.ts`), takes it out of full screen and maximized, and brings it to the front with the focus.
+
+When a step does not hold, the run stops there and says what puts it right. The definition holds only what differs from what Obsidian and the plugins use by default; a test that needs another setting sets it itself. The window is left open after the run, so the state a failed test left can be looked at; the next run closes and rebuilds it. The vault's registration, the trust of its community plugins and the window's place are kept outside the folder and live across rebuilds.
+
+The folder is emptied only when its marker `.tv-e2e-vault` holds the folder's own absolute path, and never when it is, lies in or holds the Main or Dev vault (`tests/integration/vault/emptying.ts`). Its path is read from `dev-paths.mjs` alone, not from the environment.
+
+Setting up a Mac for the E2E suite, once:
+
+1. Make the folder.
+   - Command: `mkdir ~/Develop/Obsidian/DevE2E`
+2. Put the marker at its top, holding the folder's absolute path. The suite never makes or deletes it.
+   - Command: `printf '%s' ~/Develop/Obsidian/DevE2E > ~/Develop/Obsidian/DevE2E/.tv-e2e-vault`
+3. Open the folder as a vault in Obsidian (the vault switcher, Open folder as vault). The CLI then knows it by the folder's name (`vault=DevE2E`). Turn on Settings > General > Command line interface if it is off, and have the `obsidian` CLI on the PATH.
+4. Turn off the vault's restricted mode, so its community plugins load. The vault keeps this across rebuilds.
+   - Command: `obsidian vault=DevE2E plugins:restrict off`
+5. Put the files of Dataview 0.5.68 (`main.js`, `manifest.json`, `styles.css`) in the store. The rebuild checks each against the SHA-256 in `definition.ts` and stops when one differs; it downloads nothing.
+   - Path: `~/Develop/Obsidian/_e2e-plugins/dataview/0.5.68/`
+
+The window is set to 1600x1000; a display whose work area is smaller stops the run.
 
 ---
 

@@ -1,188 +1,34 @@
 /**
- * What the E2E suite needs of the running Obsidian, checked once before the
- * first test file (vitest's `globalSetup`).
+ * The E2E suite's start, run once before the first test file (vitest's
+ * `globalSetup`): the E2E vault is rebuilt from its definition and this
+ * checkout's source (`vault/rebuild.ts`), and what the suite needs of the
+ * window is checked.
  *
  * A suite run where one of these does not hold fails by the hundreds and
  * for reasons that do not name it (an overlay opens in the settings window,
  * a focus test sees no focus, a view of a phone lays its parts out
  * otherwise), so the run is stopped here instead, with every check that
  * failed and what puts it right.
- *
- * Two things are put right here, as they change nothing the user set: the
- * window is brought to the front, and the plugin is loaded again when the
- * build in the Dev vault is not the one loaded. The window's size, the
- * theme and the settings are left as they are.
  */
-import { execFileSync } from 'child_process';
-import { createHash, randomUUID } from 'crypto';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { VAULT_PATHS } from '../../dev-paths.mjs';
 import { obsidianCli, obsidianEval } from './helpers/cli-helper';
+import { rebuildVault } from './vault/rebuild';
+import { VAULT_NAME } from './vault/location';
+import { describeProblems, type Problem } from './vault/problem';
 
-const PLUGIN_ID = 'obsidian-task-viewer';
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
-const DEV_PLUGIN_DIR = path.join(VAULT_PATHS.dev, '.obsidian', 'plugins', PLUGIN_ID);
-const BUILT_FILES = ['main.js', 'styles.css', 'manifest.json'];
-
-/** Where the window lays its key the loaded build's fingerprint (see `loadedBuild`). */
-const LOADED_BUILD_KEY = '__tvE2ELoadedBuild';
-
-/** A check that failed: what was seen, and what puts it right. */
-interface Problem {
-    what: string;
-    fix: string;
-}
 
 function errorOf(value: unknown): string | null {
     return value && typeof value === 'object' && 'error' in value ? String((value as { error: unknown }).error) : null;
 }
 
-/** The CLI answers from the Dev vault: the token sent comes back with the vault's path. */
-function checkCli(): Problem | null {
-    const token = randomUUID();
-    const answer = obsidianEval(`JSON.stringify({ token: ${JSON.stringify(token)}, path: app.vault.adapter.basePath })`);
-    const ok = answer && typeof answer === 'object' && (answer as { token?: string }).token === token;
-    if (!ok) {
-        return {
-            what: `\`obsidian vault=dev eval\` did not answer with the token it was sent; it answered ${JSON.stringify(errorOf(answer) ?? answer)}`,
-            fix: 'start Obsidian with the Dev vault open, and Settings > General > Command line interface on',
-        };
-    }
-    const basePath = (answer as { path?: string }).path;
-    if (path.resolve(basePath ?? '') !== path.resolve(VAULT_PATHS.dev)) {
-        return {
-            what: `the vault that answered is at ${basePath}, not at ${VAULT_PATHS.dev}`,
-            fix: 'open the Dev vault (dev-paths.mjs) in Obsidian',
-        };
-    }
-    return null;
-}
-
-/** Build time the bundle carries (`__BUILD_TIME__`), which differs between two builds of the same source. */
-const BUILD_TIME = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)/g;
-
-function builtFile(dir: string, name: string): string {
-    const text = fs.readFileSync(path.join(dir, name), 'utf-8');
-    return name === 'main.js' ? text.replace(BUILD_TIME, '') : text;
-}
-
-/**
- * The Dev vault holds the build of this checkout's source: the source is
- * built again, into a scratch folder, and its files compared with the
- * vault's, the build time aside. A comparison of the files' times would
- * stop a run after a mere switch of branch, which touches the source.
- */
-function checkBuild(): Problem | null {
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'tv-e2e-build-'));
-    try {
-        try {
-            execFileSync(process.execPath, ['esbuild.config.mjs', 'production'], {
-                cwd: REPO,
-                env: { ...process.env, OBSIDIAN_VAULT_PATH: scratch },
-                stdio: 'pipe',
-                timeout: 120000,
-            });
-        } catch (err) {
-            const out = (err as { stderr?: Buffer }).stderr?.toString().trim() || String(err);
-            return { what: `the source did not build: ${out}`, fix: 'make `npm run build` pass' };
-        }
-        const built = path.join(scratch, '.obsidian', 'plugins', PLUGIN_ID);
-        const differ = BUILT_FILES.filter(name => {
-            try {
-                return builtFile(built, name) !== builtFile(DEV_PLUGIN_DIR, name);
-            } catch {
-                return true;
-            }
-        });
-        if (differ.length === 0) return null;
-        return {
-            what: `the Dev vault's build is not this checkout's source (${differ.join(', ')} differ from a build of it)`,
-            fix: 'run `npm run build` (it writes to the Dev vault); the plugin is then loaded again on the next run',
-        };
-    } finally {
-        fs.rmSync(scratch, { recursive: true, force: true });
-    }
-}
-
-/** A fingerprint of the build in the Dev vault, the build time aside. */
-function devBuildFingerprint(): string {
-    const hash = createHash('sha256');
-    for (const name of BUILT_FILES) hash.update(name).update('\0').update(builtFile(DEV_PLUGIN_DIR, name)).update('\0');
-    return hash.digest('hex');
-}
-
-/**
- * The plugin is enabled, and the build loaded is the one in the Dev vault.
- * Obsidian keeps no record of which files it loaded, so the window keeps
- * the fingerprint of the build each reload here loaded; when it is not the
- * vault's (a build since, or a window that was never reloaded here), the
- * plugin is loaded again.
- */
-function checkPlugin(buildMatches: boolean): Problem | null {
-    const state = obsidianEval(`JSON.stringify({
-        enabled: app.plugins.enabledPlugins.has(${JSON.stringify(PLUGIN_ID)}),
-        loaded: !!app.plugins.plugins[${JSON.stringify(PLUGIN_ID)}]?._loaded,
-        build: window[${JSON.stringify(LOADED_BUILD_KEY)}] ?? null,
-    })`) as { enabled?: boolean; loaded?: boolean; build?: string | null };
-    if (errorOf(state)) return { what: `the plugin's state could not be read: ${errorOf(state)}`, fix: 'see that the CLI answers (above)' };
-    if (!state.enabled) {
-        return { what: 'Task Viewer is not enabled in the Dev vault', fix: 'enable it in Settings > Community plugins' };
-    }
-    // A build that is not the source's is not loaded: the run stops on it anyway.
-    if (!buildMatches) return null;
-    const fingerprint = devBuildFingerprint();
-    if (!state.loaded || state.build !== fingerprint) {
-        const reloaded = obsidianEval(`(async () => {
-            const id = ${JSON.stringify(PLUGIN_ID)};
-            await app.plugins.disablePlugin(id);
-            await app.plugins.enablePlugin(id);
-            const end = Date.now() + 10000;
-            while (!app.plugins.plugins[id]?._loaded && Date.now() < end) await new Promise(r => setTimeout(r, 100));
-            const loaded = !!app.plugins.plugins[id]?._loaded;
-            if (loaded) window[${JSON.stringify(LOADED_BUILD_KEY)}] = ${JSON.stringify(fingerprint)};
-            return JSON.stringify(loaded);
-        })()`);
-        if (reloaded !== true) {
-            return {
-                what: `Task Viewer did not load again (disabled, then enabled): ${JSON.stringify(errorOf(reloaded) ?? reloaded)}`,
-                fix: 'see the developer console of the Dev vault for the error of its load',
-            };
-        }
-    }
+/** The plugin answers its own CLI commands, which most tests drive it by. */
+function checkPluginCli(): Problem | null {
     const listed = obsidianCli('list', { limit: '1' }) as { count?: unknown };
-    if (typeof listed?.count !== 'number') {
-        return {
-            what: `the plugin's CLI command \`list\` did not answer with a count; it answered ${JSON.stringify(errorOf(listed) ?? listed)}`,
-            fix: 'see the developer console of the Dev vault for the error of its load',
-        };
-    }
-    return null;
-}
-
-/** Whether the main window of the Dev vault has the focus. */
-function hasFocus(): boolean {
-    return obsidianEval('JSON.stringify(document.hasFocus() && activeDocument === document)') === true;
-}
-
-/** Obsidian is the application in front, its main window focused; `open -a` brings it there. */
-async function checkFront(): Promise<Problem | null> {
-    if (hasFocus()) return null;
-    if (process.platform === 'darwin') {
-        execFileSync('open', ['-a', 'Obsidian']);
-        const end = Date.now() + 5000;
-        while (Date.now() < end) {
-            await new Promise(r => setTimeout(r, 300));
-            if (hasFocus()) return null;
-        }
-    }
+    if (typeof listed?.count === 'number') return null;
     return {
-        what: 'the main window of the Dev vault does not have the focus',
-        fix: process.platform === 'darwin'
-            ? 'bring it to the front (`open -a Obsidian` did not); close a pop-out window that has the focus, and keep other apps from taking it while the suite runs'
-            : 'bring Obsidian to the front, its main window focused',
+        what: `the plugin's CLI command \`list\` did not answer with a count; it answered ${JSON.stringify(errorOf(listed) ?? listed)}`,
+        fix: `see the developer console of ${VAULT_NAME} for the error of its load`,
     };
 }
 
@@ -215,9 +61,14 @@ function readScreen(): Screen | { error: string } {
     })()`) as Screen | { error: string };
 }
 
+/**
+ * The window is drawn and shows nothing in the way. The emulation of a
+ * phone is kept outside the vault (Obsidian's `localStorage`), so the
+ * rebuild does not end it.
+ */
 function checkScreen(): Problem[] {
     const screen = readScreen();
-    if ('error' in screen) return [{ what: `the window could not be read: ${screen.error}`, fix: 'see that the CLI answers (above)' }];
+    if ('error' in screen) return [{ what: `the window could not be read: ${screen.error}`, fix: `see that \`obsidian vault=${VAULT_NAME} eval\` answers` }];
     const problems: Problem[] = [];
     if (screen.visibility !== 'visible' || !screen.frame) {
         problems.push({
@@ -236,29 +87,25 @@ function checkScreen(): Problem[] {
     if (screen.mobile) {
         problems.push({
             what: 'the window emulates a phone or a tablet',
-            fix: '`obsidian vault=dev dev:mobile off` (or `app.emulateMobile(false)` in the console)',
+            fix: `\`obsidian vault=${VAULT_NAME} dev:mobile off\` (or \`app.emulateMobile(false)\` in the console)`,
         });
     }
     return problems;
 }
 
 export default async function preflight(): Promise<void> {
-    const problems: Problem[] = [];
-    const cli = checkCli();
-    if (cli) {
-        problems.push(cli);
-    } else {
-        const build = checkBuild();
-        if (build) problems.push(build);
-        const plugin = checkPlugin(!build);
-        if (plugin) problems.push(plugin);
-        const front = await checkFront();
-        if (front) problems.push(front);
+    if (process.platform !== 'darwin') {
+        throw new Error(`The E2E suite runs on macOS only, not on ${process.platform}.`);
+    }
+    const problems = await rebuildVault(REPO, message => console.log(`[e2e] ${message}`));
+    if (problems.length === 0) {
+        const cli = checkPluginCli();
+        if (cli) problems.push(cli);
         problems.push(...checkScreen());
     }
     if (problems.length === 0) return;
-    throw new Error([
-        `The E2E suite did not start: ${problems.length} of what it needs of the Dev vault's Obsidian ${problems.length === 1 ? 'does' : 'do'} not hold.`,
-        ...problems.map((p, i) => `  ${i + 1}. ${p.what}\n     fix: ${p.fix}`),
-    ].join('\n'));
+    throw new Error(describeProblems(
+        `The E2E suite did not start: ${problems.length} of what it needs of ${VAULT_NAME}'s Obsidian ${problems.length === 1 ? 'does' : 'do'} not hold.`,
+        problems,
+    ));
 }
