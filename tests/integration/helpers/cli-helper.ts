@@ -1,5 +1,6 @@
 import { execFileSync } from 'child_process';
 import { VAULT_NAME } from '../vault/location';
+import { readEvalOutput } from './eval-output';
 
 /**
  * Run the Obsidian CLI against the E2E vault and return what it printed.
@@ -70,10 +71,12 @@ function asciiOnly(code: string): string {
 
 /**
  * Evaluate `code` in the E2E vault's Obsidian (`obsidian eval`) and return
- * the value it printed, parsed as JSON when it is JSON. `code` is an
- * expression; a Promise is waited for. A thrown error comes back as
- * `{ error }`. The code is passed as one argument, not through a shell, so it
- * needs no quoting. Killed as a CLI call is (see {@link runCli}).
+ * the value it gave, parsed as JSON when it is JSON. `code` is an
+ * expression; a Promise is waited for. A thrown error, and an output that
+ * holds no value (an undefined among them), come back as `{ error }`
+ * ({@link readEvalOutput}). The code is passed as one argument, not through
+ * a shell, so it needs no quoting. Killed as a CLI call is (see
+ * {@link runCli}).
  */
 export function obsidianEval(code: string): unknown {
     let raw: string;
@@ -82,16 +85,8 @@ export function obsidianEval(code: string): unknown {
     } catch (err: unknown) {
         return { error: (err as { stderr?: string }).stderr?.trim() || String(err) };
     }
-    // The console lines the code wrote come first; the value is on the line
-    // `=> ` opens.
-    const at = raw.lastIndexOf('=> ');
-    const value = at >= 0 && (at === 0 || raw[at - 1] === '\n') ? raw.slice(at + 3) : raw;
-    if (value.startsWith('Error:')) return { error: value };
-    try {
-        return JSON.parse(value);
-    } catch {
-        return value;
-    }
+    const outcome = readEvalOutput(raw);
+    return 'error' in outcome ? outcome : outcome.value;
 }
 
 /** List tasks. Returns { count, tasks }. */
