@@ -1,5 +1,5 @@
 /**
- * The room at the bottom of a view, in the running Dev vault: each scroll
+ * The room at the bottom of a view, in the running E2E vault: each scroll
  * area that runs to a view's bottom scrolls its last content up by
  * Obsidian's `--view-bottom-spacing`, the height a phone's floating
  * navigation bar takes over the view, and by nothing where Obsidian sets no
@@ -13,8 +13,8 @@
  * what it shows and the bottom of its last child is read.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/bottom-spacing.test.ts
  */

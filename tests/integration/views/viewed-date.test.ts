@@ -1,5 +1,5 @@
 /**
- * The day a dated view looks at, in the running Dev vault. Timeline, Schedule, Calendar and MiniCalendar hold the transient
+ * The day a dated view looks at, in the running E2E vault. Timeline, Schedule, Calendar and MiniCalendar hold the transient
  * `date`: absent, the view follows today; present, it stays on that day.
  * Calendar and MiniCalendar also hold `weekOffset`, the weeks their grid was
  * moved from `date`'s month grid.
@@ -15,8 +15,8 @@
  * the tests change are put back in `afterAll`.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/viewed-date.test.ts
  */

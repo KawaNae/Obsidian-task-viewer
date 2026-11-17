@@ -1,7 +1,7 @@
 import { readTestFile } from './test-file-manager';
 
 /**
- * Read a file from the Dev vault and return its lines.
+ * Read a file from the E2E vault and return its lines.
  */
 export function getFileLines(relativePath: string): string[] {
     return readTestFile(relativePath).split('\n');

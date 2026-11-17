@@ -1,5 +1,5 @@
 /**
- * Hiding an inherited value in the hub, in the running Dev vault: a row
+ * Hiding an inherited value in the hub, in the running E2E vault: a row
  * that inherits a value and does not hide it offers to hide it, which
  * writes its own line with no value (`- key::`); a row's own no value shows
  * as an empty field that says so, and its × takes the line out, so the
@@ -10,7 +10,7 @@
  * file's.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/property-hide.test.ts
  */

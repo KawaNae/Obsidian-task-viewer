@@ -1,5 +1,5 @@
 /**
- * A view's image export, in the running Dev vault: what a canvas in the view
+ * A view's image export, in the running E2E vault: what a canvas in the view
  * shows is in the image, and a canvas that cannot be copied leaves the export
  * whole.
  *
@@ -11,8 +11,8 @@
  * (`exportOpenView`), and the saved PNG is read back pixel by pixel.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/view-export.test.ts
  */

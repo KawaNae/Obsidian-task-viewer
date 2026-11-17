@@ -1,5 +1,5 @@
 /**
- * Kanban's grid of lists, in the running Dev vault, driven as the user
+ * Kanban's grid of lists, in the running E2E vault, driven as the user
  * clicks it: each cell's ⋯ menu (insert and remove rows and columns,
  * duplicate, rename, display label, Apply view filter), its header
  * (collapse), its sort and filter buttons, and the toolbar's filter. What the
@@ -10,8 +10,8 @@
  * they pass. Menu items are picked by the text the vault's locale shows.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/kanban.test.ts
  */

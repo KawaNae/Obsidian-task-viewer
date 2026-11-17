@@ -6,7 +6,7 @@
  * A listener is subscribed through `obsidian eval` and records into a window
  * global, which the test reads back.
  *
- * Prerequisites: Obsidian is running with the Dev vault open, and the plugin
+ * Prerequisites: Obsidian is running with the E2E vault open, and the plugin
  * built from this tree is loaded.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

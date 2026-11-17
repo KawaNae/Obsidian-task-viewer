@@ -1,5 +1,5 @@
 /**
- * The hub's form and what it says, in the running Dev vault: each
+ * The hub's form and what it says, in the running E2E vault: each
  * field reads what is typed, shows it in the form the note writes once it
  * is committed, says what does not read under its row and saves none of
  * it, and one field's issue is not taken back by another's.
@@ -9,7 +9,7 @@
  * The note's bytes are read back from the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that has IssueBoard and bindField
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/hub/form-issues.test.ts

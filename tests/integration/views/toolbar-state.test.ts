@@ -1,7 +1,7 @@
 /**
  * The toolbars write their view's state through the store, and the view
  * answers each change (draw, save, the toolbar mending itself), in the
- * running Dev vault. Each control is clicked as the user clicks it; what the
+ * running E2E vault. Each control is clicked as the user clicks it; what the
  * view shows is read from its DOM and what it saves from `getState`.
  *
  * Copy URI is read by standing in for the clipboard while the menu item
@@ -11,8 +11,8 @@
  * put back after them.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * The fold of the action zone into ⋮ is read by narrowing the view's own
  * content to a width (its leaf is the test's, so no pane of the vault is

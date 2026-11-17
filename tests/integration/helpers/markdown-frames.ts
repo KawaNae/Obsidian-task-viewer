@@ -1,7 +1,7 @@
 import { PRELUDE, SETTLE_MS, ev } from './view-helper';
 
 /**
- * The markdown frames of a view's sidebar, read in the running Dev vault,
+ * The markdown frames of a view's sidebar, read in the running E2E vault,
  * and the notes a test writes for them, all under the test's own prefix.
  * `markdown-frames.test.ts` and `markdown-frames-dialog.test.ts` share it.
  */

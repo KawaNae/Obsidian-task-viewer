@@ -1,5 +1,5 @@
 /**
- * The link to a card's note, in the running Dev vault. Obsidian draws the
+ * The link to a card's note, in the running E2E vault. Obsidian draws the
  * task's line alone, and the card puts the link at the end of it as an
  * `a.internal-link`. Drawn as one line of markdown, a name and a note's path
  * with an `_` each were read as one emphasis, which made the name italic and
@@ -11,8 +11,8 @@
  * hub's preview, a task with no name, and a masked card.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
- *     with the current build loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
+ *     with the current build loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/card-file-link.test.ts
  */

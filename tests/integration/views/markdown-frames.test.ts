@@ -1,6 +1,6 @@
 /**
  * The markdown frames of Timeline's and Calendar's sidebar, in the running
- * Dev vault: a frame the view's state holds (`kind: 'markdown'`, a link to a
+ * E2E vault: a frame the view's state holds (`kind: 'markdown'`, a link to a
  * heading of a note, or to the whole note) drawn under a header row as the
  * section's cards, one for the lines under the section's own heading and
  * one for each heading nested one level in it, kept across the panel's
@@ -28,8 +28,8 @@
  * frame of the same link shows.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *   - Dataview enabled in the vault, for its task list in a body
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/markdown-frames.test.ts

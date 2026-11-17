@@ -1,6 +1,6 @@
 /**
  * Sending a row and its subtree to a note (`NoteOps.send`), in the
- * running Dev vault: to a new note, to a note there is, to a heading of the
+ * running E2E vault: to a new note, to a note there is, to a heading of the
  * row's own note, and a send whose note the row came from refuses once the
  * new note is written, which takes the new note away again. Then the send
  * dialog, opened from a card's menu: the note and the heading picked
@@ -9,7 +9,7 @@
  * notes' bytes are read back from the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a build that sends rows to other notes
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/noteops/send.test.ts

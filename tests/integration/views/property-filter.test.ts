@@ -1,5 +1,5 @@
 /**
- * A property condition in the running Dev vault: the CLI's `property=`, a
+ * A property condition in the running E2E vault: the CLI's `property=`, a
  * filter file and the API's filter compare a property's value by its type,
  * a text in any case, a list item by item, and `isNotSet` finds no value
  * as it finds no key; a value written above the first heading is every
@@ -9,8 +9,8 @@
  * The tasks are in notes of the test's own, removed at the end.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/property-filter.test.ts
  */

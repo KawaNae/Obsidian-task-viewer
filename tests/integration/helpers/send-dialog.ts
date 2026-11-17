@@ -2,7 +2,7 @@ import { obsidianEval } from './cli-helper';
 import { UNTIL } from './waits';
 
 /**
- * The send dialog driven in the running Dev vault, as a person drives it:
+ * The send dialog driven in the running E2E vault, as a person drives it:
  * opened from a card's menu, fields typed in, items of their lists pressed
  * with the pointer. `send.test.ts` and `note-candidates.test.ts` share it.
  *

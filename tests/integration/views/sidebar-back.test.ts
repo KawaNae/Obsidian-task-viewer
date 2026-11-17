@@ -1,7 +1,7 @@
 /**
  * The sidebar of Timeline and Calendar takes the user's "back" while it lies
  * open over the view (the view at or below the breakpoint), in the running
- * Dev vault. Obsidian's `history.back()` calls what is on top of its stack,
+ * E2E vault. Obsidian's `history.back()` calls what is on top of its stack,
  * as Android's back and the mouse's back button do. Beside the view (wider)
  * the back is left to the rest of the app; a dialog opened over the sidebar
  * takes it first; a view in a tab behind another does not take it.
@@ -10,8 +10,8 @@
  * pane of the vault is resized), as the user's pane would be.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/sidebar-back.test.ts
  */

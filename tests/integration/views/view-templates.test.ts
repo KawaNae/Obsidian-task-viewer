@@ -1,5 +1,5 @@
 /**
- * View templates, in the running Dev vault: a view saved from its settings
+ * View templates, in the running E2E vault: a view saved from its settings
  * menu (Save view...) as a note in the view template folder, that note
  * opened again through Load view... and through a URI, and Copy URI, which
  * names a template instead of writing the config while a folder is set.
@@ -11,8 +11,8 @@
  * pinned list. Menu items are picked by the text the vault's locale shows.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault open, with the current build
- *     loaded (`npm run build`, then reload the plugin)
+ *   - Obsidian is running with the E2E vault open, with the current build
+ *     loaded (the preflight builds it into the vault)
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/view-templates.test.ts
  */

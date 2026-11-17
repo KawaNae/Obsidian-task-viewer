@@ -11,7 +11,7 @@
  * `input` event). The note's bytes are read back from the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
  *     with a current build
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/suggest-lists.test.ts
