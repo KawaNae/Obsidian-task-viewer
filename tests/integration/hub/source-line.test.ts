@@ -14,6 +14,7 @@
 import { describe, it, expect, afterAll, afterEach, beforeEach } from 'vitest';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 const TEST_FILE = 'test-int-hub-source-line.md';
@@ -99,7 +100,7 @@ describe('the hub opens the line a value is written on', () => {
     it('says a value above the first heading is the file\'s, a section\'s the section\'s, and opens its line', () => {
         openHub('親');
         const labels = run<string[]>(`return JSON.stringify(['時給', 'area'].map(key => rowOf(key).querySelector('.task-hub__source').textContent));`);
-        expect(labels).toEqual(['継承: ファイル', '継承: セクション']);
+        expect(labels).toEqual([tr('modal.hub.inheritedFromFile'), tr('modal.hub.inheritedFromSection')]);
         expect(run<boolean>(`return !rowOf('owner');`)).toBe(true);
         const line = run<number>(`rowOf('時給').querySelector('.task-hub__source').click(); return await cursorLine();`);
         expect(line).toBe(4);
@@ -139,7 +140,7 @@ describe('the hub opens the line a value is written on', () => {
     it('lights a frontmatter key in the Properties view, or puts the cursor on its line in source mode', () => {
         openHub('親');
         const shown = run<{ lit: boolean; cursor: number; properties: boolean }>(`
-            rowOf('マスク').querySelector('.task-hub__source').click();
+            rowOf(${JSON.stringify(tr('modal.hub.mask'))}).querySelector('.task-hub__source').click();
             await until(() => noteView() && !hub());
             await sleep(200);
             const view = noteView();

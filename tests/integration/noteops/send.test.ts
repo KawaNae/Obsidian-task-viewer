@@ -20,6 +20,7 @@ import * as fs from 'fs';
 import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { closeDialog, onDialog, openDialog as openDialogOn, type DialogState } from '../helpers/send-dialog';
 import { deleteTestFile, readTestFile, vaultAbsolute, writeIndexedTestFile } from '../helpers/test-file-manager';
+import { tr } from '../helpers/view-helper';
 import { waitForFileDeindexed } from '../helpers/waits';
 
 const SRC = 'test-int-send-src.md';
@@ -308,15 +309,15 @@ describe('the send dialog', () => {
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.line(1).to, insert: '2' } });
             await pickFrom(0, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC.slice(0, -3))});
-            await until(() => state().noteSays === ${JSON.stringify(`送る行と同じノート ${SRC}`)});
+            await until(() => state().noteSays === ${JSON.stringify(tr('modal.send.noteSame', { note: SRC }))});
             await pickFrom(1, 'Do', 'Done');
             await until(() => state().says?.includes('Done') && state().canSend);
             return JSON.stringify({ ...state(), draft: children.state.doc.toString() });
         `);
         // A press on either list neither closed the dialog nor asked to throw the draft away.
         expect(picked).toMatchObject({ open: true, closing: false, asking: false, note: SRC.slice(0, -3), heading: 'Done', canSend: true, draft: '- [ ] 子2' });
-        expect(picked.noteSays).toBe(`送る行と同じノート ${SRC}`);
-        expect(picked.says).toBe('見出し Done の先頭へ移します');
+        expect(picked.noteSays).toBe(tr('modal.send.noteSame', { note: SRC }));
+        expect(picked.says).toBe(tr('modal.send.withinHead', { heading: 'Done' }));
 
         const sent = onDialog<{ open: boolean; notices: number }>(`
             const before = new Set(document.querySelectorAll('.notice'));
@@ -353,8 +354,8 @@ describe('the send dialog', () => {
         `);
         expect(listed).toEqual({
             groups: [
-                { label: 'frontmatter に書く値', rows: [['tv-color', 'red', true]] },
-                { label: 'ノートの先頭に書く値', rows: [['時給', '1450', true], ['who', 'a', true]] },
+                { label: tr('modal.send.frontmatter'), rows: [['tv-color', 'red', true]] },
+                { label: tr('modal.send.root'), rows: [['時給', '1450', true], ['who', 'a', true]] },
             ],
             canSend: true,
         });
@@ -387,7 +388,7 @@ describe('the send dialog', () => {
                 }
                 await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, rows[0]);
                 const menu = plugin.menuPresenter.currentMenu;
-                const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
+                const item = menu?.items.find(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
                 menu.hide();
                 item.callback(new MouseEvent('click'));
                 await until(() => panel() && panel().querySelectorAll('.tv-source-editor__parent .cm-content').length === 2);
@@ -403,7 +404,7 @@ describe('the send dialog', () => {
             const rowSays = [...panel().querySelectorAll('.tv-send__row-says')].map(el => [...el.children].map(c => c.className + ': ' + c.textContent));
             return JSON.stringify({ rows: rowSays, canSend: state().canSend });
         `);
-        const notTask = 'tv-form__error: 1行目がタスクの行ではありません。';
+        const notTask = `tv-form__error: ${tr('modal.send.notTask')}`;
         expect(said).toEqual({ rows: [[notTask], [notTask]], canSend: false });
     });
 
@@ -411,7 +412,7 @@ describe('the send dialog', () => {
         await writeIndexedTestFile(SRC, ['## Done', '- [x] 済み', '    - [ ] 浅い', '      続き', '        - [ ] 子', ''].join('\n'));
         const opened = openDialog('浅い');
         expect(opened).toMatchObject({ open: true, editors: 0, fixed: '- [ ] 浅い\n  続き\n    - [ ] 子' });
-        expect(opened.why).toContain('1 行目');
+        expect(opened.why).toBe(tr('modal.send.shallow', { line: 1 }));
 
         const sent = onDialog<DialogState>(`
             const [note, heading] = inputs();
@@ -439,6 +440,8 @@ describe('the send dialog\'s note field', () => {
     const DIR = 'test-int-send-nf';
     const ROW = '送り先を選ぶ';
     const UNRESOLVED = 'test-int-send-nf-未解決';
+    /** What is said of `同名`, the name of a note in each of two folders. */
+    const ambiguous = () => tr('modal.noteAmbiguous', { name: '同名', count: 2, notes: `${DIR}/a/同名.md, ${DIR}/b/同名.md` });
 
     const vaultDo = (body: string) => onDialog(`${body}\nreturn 'ok';`);
     const makeNotes = () => vaultDo(`
@@ -497,7 +500,7 @@ describe('the send dialog\'s note field', () => {
     it('a name one note has: that note, in whatever folder, and the row goes to it', async () => {
         await openOnRow();
         const s = typeNote('唯一');
-        expect(s).toMatchObject({ noteSays: `既存のノート ${DIR}/唯一.md`, noteErrors: null, canSend: true });
+        expect(s).toMatchObject({ noteSays: tr('modal.send.noteExisting', { note: `${DIR}/唯一.md` }), noteErrors: null, canSend: true });
         expect(sendNow().open).toBe(false);
         expect(lines(`${DIR}/唯一.md`)).toContain(`- [ ] ${ROW}`);
     });
@@ -511,9 +514,11 @@ describe('the send dialog\'s note field', () => {
             const line = inputs()[0].closest('.tv-form__row').nextElementSibling.firstElementChild;
             return JSON.stringify({ ...state(), tone: line?.className ?? null });
         `);
-        expect(s.noteSays).toMatch(/^一致するノートがありません。新しいノート .*test-int-send-nf-無い名前\.md を作ります$/);
+        // The folder for new notes is the vault's choice: any path that ends in the name.
+        const [head, tail] = tr('modal.send.noteNewByName', { note: '\n' }).split('\n');
+        expect(s.noteSays!.startsWith(head) && s.noteSays!.endsWith(`test-int-send-nf-無い名前.md${tail}`)).toBe(true);
         expect(s.tone).toBe('tv-form__warning');
-        expect(s.says).toBe('見出し Tasks を作り、その下に置きます');
+        expect(s.says).toBe(tr('modal.send.toNew', { heading: 'Tasks' }));
         expect(s.canSend).toBe(true);
     });
 
@@ -521,14 +526,14 @@ describe('the send dialog\'s note field', () => {
         await openOnRow();
         const s = typeNote('同名');
         expect(s.canSend).toBe(false);
-        expect(s.noteErrors).toBe(`「同名」に当たるノートが 2 件あります（${DIR}/a/同名.md, ${DIR}/b/同名.md）。候補から選んでください`);
+        expect(s.noteErrors).toBe(ambiguous());
 
         const picked = onDialog<DialogState>(`
             await pickFrom(0, '同名', '同名', ${JSON.stringify(`${DIR}/b/`)});
             await until(() => state().canSend);
             return JSON.stringify(state());
         `);
-        expect(picked).toMatchObject({ note: '同名', noteSays: `既存のノート ${DIR}/b/同名.md`, noteErrors: null, canSend: true });
+        expect(picked).toMatchObject({ note: '同名', noteSays: tr('modal.send.noteExisting', { note: `${DIR}/b/同名.md` }), noteErrors: null, canSend: true });
         sendNow();
         expect(lines(`${DIR}/b/同名.md`)).toContain(`- [ ] ${ROW}`);
         expect(lines(`${DIR}/a/同名.md`)).not.toContain(ROW);
@@ -546,13 +551,13 @@ describe('the send dialog\'s note field', () => {
             return JSON.stringify(state());
         `);
         expect(s.canSend).toBe(false);
-        expect(s.noteErrors).toContain('「同名」に当たるノートが 2 件あります');
+        expect(s.noteErrors).toBe(ambiguous());
     });
 
     it('a path whose folder is not there: the note and the folder made, and the row goes to it', async () => {
         await openOnRow();
         const s = typeNote(`${DIR}/新しい/作る`);
-        expect(s.noteSays).toBe(`新しいノート ${DIR}/新しい/作る.md を作ります フォルダ ${DIR}/新しい も作ります`);
+        expect(s.noteSays).toBe(`${tr('modal.send.noteNew', { note: `${DIR}/新しい/作る.md` })} ${tr('modal.send.noteFolderMade', { folder: `${DIR}/新しい` })}`);
         expect(s.canSend).toBe(true);
         sendNow();
         expect(lines(`${DIR}/新しい/作る.md`)).toContain(`- [ ] ${ROW}`);
@@ -565,7 +570,7 @@ describe('the send dialog\'s note field', () => {
             await until(() => state().canSend);
             return JSON.stringify(state());
         `);
-        expect(s).toMatchObject({ note: '別名元', noteSays: `既存のノート ${DIR}/別名元.md` });
+        expect(s).toMatchObject({ note: '別名元', noteSays: tr('modal.send.noteExisting', { note: `${DIR}/別名元.md` }) });
         sendNow();
         expect(lines(`${DIR}/別名元.md`)).toContain(`- [ ] ${ROW}`);
     });
@@ -578,7 +583,7 @@ describe('the send dialog\'s note field', () => {
             return JSON.stringify(state());
         `);
         expect(s.note).toBe(UNRESOLVED);
-        expect(s.noteSays).toContain(`新しいノート ${UNRESOLVED}.md を作ります`);
+        expect(s.noteSays).toContain(tr('modal.send.noteNew', { note: `${UNRESOLVED}.md` }));
         sendNow();
         expect(lines(`${UNRESOLVED}.md`)).toContain(`- [ ] ${ROW}`);
     });
