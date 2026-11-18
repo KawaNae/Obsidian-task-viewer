@@ -29,8 +29,8 @@ export interface ScheduleToolbarDeps {
 }
 
 /**
- * Persistent toolbar for ScheduleView. Re-attached on each render via mount/detach
- * so the filter button (and any open popover) survive container.empty().
+ * Persistent toolbar for ScheduleView. It stands in the view's toolbar place
+ * for the view's life, so the filter button (and any open popover) survive draws.
  * It reads and writes the view's store and mends itself when the store changes.
  */
 export class ScheduleToolbar extends ViewToolbarBase {

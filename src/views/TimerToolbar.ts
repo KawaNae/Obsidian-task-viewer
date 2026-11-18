@@ -24,8 +24,8 @@ export interface TimerToolbarDeps {
 
 /**
  * Persistent toolbar for TimerView. Marked dynamic-content: its buttons
- * depend on the mode and on whether a timer runs, so it is built anew on
- * each mount, and the view draws on every change of its state.
+ * depend on the mode and on whether a timer runs, so it is built anew at
+ * each draw (`sync`), and the view draws on every change of its state.
  */
 export class TimerToolbar extends ViewToolbarBase {
     constructor(private deps: TimerToolbarDeps) {
