@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
 import { deleteTestFile } from '../helpers/test-file-manager';
 import {
-    act, closeViews, copyUri, drawAgainByIndex, ev, openView, overrideSettings, PRELUDE, readView, restartView,
+    act, closeViews, copyUri, drawAgainByIndex, ev, openView, overrideSettings, PRELUDE, readView, restartView, tr,
 } from '../helpers/view-helper';
 import { waitForFileDeindexed } from '../helpers/waits';
 
@@ -288,10 +288,28 @@ describe('Kanban', () => {
     });
 });
 
+/** Timer's mode button, as its toolbar shows it: the mode's name and whether it can be clicked. */
+interface TimerModeButton {
+    label: string | null;
+    disabled: boolean | null;
+}
+
+function timerModeButton(name: string): TimerModeButton {
+    return ev<TimerModeButton>(`(() => {
+        ${PRELUDE}
+        const b = V(${JSON.stringify(name)}).contentEl.querySelector('.view-toolbar__btn--dropdown');
+        return JSON.stringify({
+            label: b?.querySelector('.view-toolbar__btn-label')?.textContent ?? null,
+            disabled: b ? b.disabled : null,
+        });
+    })()`);
+}
+
 describe('Timer', () => {
     it('opens in pomodoro, changes mode from its menu, keeps it on restart and copies it as timerViewMode', () => {
         const r = openView('tm', 'timer-view');
         expect(r.state.timerViewMode).toBe('pomodoro');
+        expect(timerModeButton('tm')).toEqual({ label: tr('timer.pomodoro'), disabled: false });
 
         const changed = act('tm', `
             click('tm', '.view-toolbar__btn--dropdown');
@@ -300,13 +318,30 @@ describe('Timer', () => {
             menuItem((_, i) => i === 0);
         `);
         expect(changed.state.timerViewMode).toBe('countup');
+        expect(timerModeButton('tm').label).toBe(tr('timer.countup'));
 
         const restarted = restartView('tm', 'tm-2');
         expect(restarted.state.timerViewMode).toBe('countup');
+        expect(timerModeButton('tm-2').label).toBe(tr('timer.countup'));
 
         const uri = copyUri('tm');
         expect(uri).toMatch(/^obsidian:\/\/task-viewer\?view=timer/);
         expect(uri).toContain('timerViewMode=countup');
         expect(uri).not.toMatch(/[?&]mode=/);
+    });
+
+    it('holds the mode button while a timer runs or is paused, and frees it once the timer is stopped', () => {
+        openView('tm', 'timer-view', { timerViewMode: 'countup' });
+        expect(timerModeButton('tm')).toEqual({ label: tr('timer.countup'), disabled: false });
+
+        act('tm', `click('tm', '.timer-view__btn--primary');`);
+        expect(timerModeButton('tm').disabled).toBe(true);
+        act('tm', `click('tm', '.timer-view__btn--secondary');`);
+        expect(timerModeButton('tm').disabled).toBe(true);
+        act('tm', `click('tm', '.timer-view__btn--primary');`);
+        expect(timerModeButton('tm').disabled).toBe(true);
+
+        act('tm', `click('tm', '.timer-view__btn--danger');`);
+        expect(timerModeButton('tm')).toEqual({ label: tr('timer.countup'), disabled: false });
     });
 });
