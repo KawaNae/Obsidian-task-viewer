@@ -16,8 +16,9 @@
  * config never marks the sidebar as opened by the user. Its look (the
  * classes of the layout) follows the open state, applied when the user opens
  * or closes it, when the view's width changes, and when `showSidebar`
- * changes otherwise (a state handed in by the workspace or a URI). Escape, a
- * click on the backdrop and the back close it.
+ * changes otherwise (a state handed in by the workspace or a URI). The
+ * toggle, a click on the backdrop and the back close it. It takes no key:
+ * Escape is left to the rest of the app.
  *
  * While the sidebar lies open over the view (narrow width), the view behind
  * the backdrop cannot be used, so the user's "back" (Android's back gesture,
@@ -50,14 +51,6 @@ export interface ViewSidebarOptions {
     syncToggleButton: () => void;
 }
 
-/**
- * The view's `registerDomEvent`, so that Obsidian removes the listener when
- * the view closes. Typed for the one call made with it (a keydown listener
- * on a Window): Obsidian declares that method as three separate overloads,
- * so a widened `HTMLElement | Window | Document` union matches none of them.
- */
-export type RegisterKeydown = (el: Window, event: 'keydown', handler: (e: KeyboardEvent) => void) => void;
-
 export class ViewSidebar {
     private containerEl: HTMLElement | null = null;
     private layoutEl: HTMLElement | null = null;
@@ -89,9 +82,9 @@ export class ViewSidebar {
      * Build the layout in `container`, once, as the view opens, and give back
      * the main area, the one element the view draws into. The panel's frames
      * are made in the panel's body and start drawing. The sidebar starts
-     * following the view's width, `showSidebar` and Escape.
+     * following the view's width and `showSidebar`.
      */
-    build(container: HTMLElement, registerDomEvent: RegisterKeydown): HTMLElement {
+    build(container: HTMLElement): HTMLElement {
         this.containerEl = container;
 
         const layout = container.createDiv({ cls: 'tv-sidebar' });
@@ -118,14 +111,6 @@ export class ViewSidebar {
             this.followDocument();
         });
         this.resizeObserver.observe(container);
-
-        const win = container.win ?? window;
-        registerDomEvent(win, 'keydown', (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && this.isOpen()) {
-                event.preventDefault();
-                this.setOpen(false);
-            }
-        });
 
         this.unsubscribe = this.host.subscribe((patch) => {
             if ('showSidebar' in patch && !this.writingOpen) this.sync(this.isOpen(), { animate: false });

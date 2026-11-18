@@ -70,7 +70,7 @@ function setup(width: number, open: boolean, connected = true) {
         for (const listener of [...listeners]) listener(patch);
     };
     let toggleSyncs = 0;
-    const container = Object.assign(new FakeEl(), { clientWidth: width, win: {}, isConnected: connected });
+    const container = Object.assign(new FakeEl(), { clientWidth: width, isConnected: connected });
     const sidebar = new ViewSidebar({} as SidebarFramesDeps, {
         state: () => state,
         subscribe: (listener) => {
@@ -82,7 +82,7 @@ function setup(width: number, open: boolean, connected = true) {
         mobileBreakpointPx: BREAKPOINT,
         syncToggleButton: () => { toggleSyncs++; },
     });
-    sidebar.build(asEl(container), () => {});
+    sidebar.build(asEl(container));
     if (open) sidebar.toggle(true);
 
     function resize(next: number): void {

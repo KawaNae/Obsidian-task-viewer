@@ -158,7 +158,7 @@ export abstract class TaskViewerView<
         const sidebar = this.frameSidebar();
         this.openedSidebar = sidebar;
         this.body = sidebar
-            ? sidebar.build(container, (el, ev, handler) => this.registerDomEvent(el, ev, handler))
+            ? sidebar.build(container)
             : container.createDiv('tv-view__body');
         await this.openView();
         const toolbar = this.frameToolbar();
