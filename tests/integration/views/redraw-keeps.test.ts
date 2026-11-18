@@ -4,9 +4,9 @@
  * was, the selected card stays selected with its handles, and the
  * sidebar's panel stays in the document, its elements the same and the
  * focus in it kept; and the image export, after such a draw, leaves the
- * toolbar out. Then the
- * sidebar's look following the `showSidebar` the workspace or a URI hands
- * the view.
+ * toolbar out. Then the cards of the sidebar's list frame across a draw of
+ * the view alone, and the sidebar's look following the `showSidebar` the
+ * workspace or a URI hands the view.
  *
  * A draw is set off as the user's edits elsewhere set it off: a note of the
  * test's own, whose task no view draws, is written from outside, and every
@@ -16,6 +16,11 @@
  * was kept read. The sidebar's look tests read the look alone, whether or not a
  * draw put it there: the view may answer a state handed in without drawing
  * its body again.
+ *
+ * A draw of the index's draws the sidebar's panel in the same frame, which
+ * makes the list frames' elements anew. The draw of the view alone is set
+ * off by a change of the view's name, a field the panel does not read; that
+ * test sees the view's body made anew and the list frame's element not.
  *
  * Each test opens the views it reads itself, under a name of its own, and
  * reads them while they are in front: a tab behind another has no size, and
@@ -276,6 +281,51 @@ describe('The sidebar\'s panel stays in the document while the view draws again'
             })()`);
             const all = Object.keys(KEPT);
             expect(after).toEqual({ same: all, connected: all, takenOut: [], focused: true });
+        });
+    }
+});
+
+describe('The cards of the sidebar\'s list frame stay while the view alone draws again', () => {
+    /** A list frame of the day's tasks, so that the panel holds task cards of its own. */
+    const LIST = { kind: 'list', id: 'rk-frame-list', name: 'rk-frame-list', filterState: { logic: 'and', filters: [{ property: 'tag', operator: 'includes', value: [TAG] }] } };
+
+    for (const type of ['timeline-view', 'calendar-view']) {
+        it(`${type}: a change of the view's name draws the view and not the panel, and the panel's cards are the same elements, in the document`, () => {
+            const name = `rk-frame-${type}`;
+            openView(name, type, { ...stateFor(type), sidebar: [LIST] });
+            // The list frame's element and its cards are kept, and the view's
+            // body is marked: a draw of the view makes the body anew, and a
+            // draw of the panel makes the list frame's element anew.
+            const cards = ev<number>(`(() => {
+                ${PRELUDE}
+                const v = V(${JSON.stringify(name)});
+                const list = v.contentEl.querySelector('.tv-sidebar__frames .pinned-list');
+                if (!list) throw new Error('no list frame');
+                const cards = [...list.querySelectorAll('.task-card')];
+                v.contentEl.querySelector(${JSON.stringify(VIEW_BODY[type])}).dataset.tvRedrawMark = '1';
+                window.__tvFrameKept = { list, cards };
+                return JSON.stringify(cards.length);
+            })()`);
+            expect(cards).toBeGreaterThan(0);
+
+            const after = ev<{ listSame: boolean; same: number; connected: number }>(`(async () => {
+                ${PRELUDE}
+                ${UNTIL}
+                const v = V(${JSON.stringify(name)});
+                const { list, cards } = window.__tvFrameKept;
+                delete window.__tvFrameKept;
+                v.update({ customName: ${JSON.stringify(`${name} renamed`)} });
+                await until(() => !v.contentEl.querySelector('[data-tv-redraw-mark]') && v.contentEl.querySelector(${JSON.stringify(VIEW_BODY[type])}), 5000,
+                    ${JSON.stringify(`${name} drawn again after its name changed`)});
+                ${frames(3)}
+                const now = [...v.contentEl.querySelectorAll('.tv-sidebar__frames .pinned-list .task-card')];
+                return JSON.stringify({
+                    listSame: v.contentEl.querySelector('.tv-sidebar__frames .pinned-list') === list,
+                    same: cards.filter((c, i) => now[i] === c).length,
+                    connected: cards.filter(c => c.isConnected).length,
+                });
+            })()`);
+            expect(after).toEqual({ listSame: true, same: cards, connected: cards });
         });
     }
 });
