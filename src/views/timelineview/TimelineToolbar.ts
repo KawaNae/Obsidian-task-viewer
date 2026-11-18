@@ -42,7 +42,7 @@ export interface TimelineToolbarDeps {
  * It reads and writes the view's store, and mends its controls whenever the
  * store changes, so it holds no copy of the view's state.
  *
- * Why mount/update instead of render-from-scratch:
+ * Why place once and update instead of render-from-scratch:
  *   The owning view draws on every data change. By preserving the toolbar
  *   instance and its child components, the filter popover survives draws.
  */

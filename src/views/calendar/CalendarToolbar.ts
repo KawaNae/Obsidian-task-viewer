@@ -36,9 +36,9 @@ export interface CalendarToolbarDeps {
 }
 
 /**
- * Persistent toolbar for CalendarView. Re-attached on each render via
- * mount/detach so the filter popover survives draws. It reads and writes the
- * view's store and mends itself when the store changes.
+ * Persistent toolbar for CalendarView. It stands in the view's toolbar place
+ * for the view's life, so the filter popover survives draws. It reads and
+ * writes the view's store and mends itself when the store changes.
  */
 export class CalendarToolbar extends ViewToolbarBase {
     private sidebarToggleBtn: HTMLButtonElement | null = null;
