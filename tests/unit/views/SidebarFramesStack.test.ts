@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Menu } from 'obsidian';
 import { t } from '../../../src/i18n';
 import { insertFrame, listFrame, type PinnedListDefinition, type SidebarFrame } from '../../../src/types';
 import { SidebarFrames, stackInOrder, type SidebarFramesDeps, type SidebarFramesState } from '../../../src/views/sidebar/SidebarFrames';
 import type { ListPlacement } from '../../../src/views/sharedUI/TaskListSections';
 import type { MarkdownFramePlacement } from '../../../src/views/sidebar/MarkdownFrameSections';
-import { FakeEl } from '../helpers/fakeDom';
+import { FakeEl, asEl } from '../helpers/fakeDom';
 
 /**
  * The stack of a sidebar that holds a markdown frame among its lists: the
@@ -49,7 +49,6 @@ vi.mock('../../../src/views/sidebar/MarkdownFrameSections', () => ({
         holds() { return false; }
         elementOf() { return {}; }
         paint() {}
-        placed() {}
         add(slot: unknown) { drawn.sectionsAdded.push(slot); }
     },
 }));
@@ -112,8 +111,11 @@ function menuOf() {
     };
 }
 
-/** A panel over `sidebar`, with what it wrote into the view's state. Its listeners hear a write at once, as a view's store tells it. */
-function panelOver(sidebar: SidebarFrame[]) {
+/**
+ * A panel over `sidebar`, made in `body`, with what it wrote into the view's
+ * state. Its listeners hear a write at once, as a view's store tells it.
+ */
+function panelOver(sidebar: SidebarFrame[], body: unknown = new FakeEl()) {
     let state: SidebarFramesState = { sidebar, sidebarCollapsed: { a: true } };
     let writes = 0;
     const listeners: ((patch: Partial<SidebarFramesState>) => void)[] = [];
@@ -132,7 +134,7 @@ function panelOver(sidebar: SidebarFrame[]) {
             return () => listeners.splice(listeners.indexOf(listener), 1);
         },
         write: (patch) => { writes++; update(patch); },
-    });
+    }, body as HTMLElement);
     const placement = drawn.placement as ListPlacement;
     const markdown = drawn.markdownPlacement as MarkdownFramePlacement;
     /** Choose `title` in the items the panel adds to the menu of the frame `id`. */
@@ -145,10 +147,9 @@ function panelOver(sidebar: SidebarFrame[]) {
         placement.appendMenuItems(menu.menu, { id } as PinnedListDefinition);
         return menu;
     };
-    /** Put the panel into a sidebar and click its add button: what it gives chooses one of the items of the menu it opened. */
+    /** Click the add button the panel made in its body: what it gives chooses one of the items of the menu it opened. */
     const add = () => {
-        const placed: FakeEl[] = [];
-        frames.mount({ appendChild: (el: FakeEl) => placed.push(el) } as unknown as HTMLElement);
+        const placed = (body as FakeEl).children;
         const button = placed.find(el => el.classList.contains('tv-sidebar__panel-add-btn'))!;
         Object.assign(button, { getBoundingClientRect: () => ({}) });
         button.dispatchEvent(new Event('click'));
@@ -166,13 +167,6 @@ function panelOver(sidebar: SidebarFrame[]) {
 }
 
 describe("the stack of a sidebar that holds a markdown frame", () => {
-    beforeEach(() => {
-        vi.stubGlobal('document', { createElement: () => new FakeEl() });
-    });
-    afterEach(() => {
-        vi.unstubAllGlobals();
-    });
-
     it('moves a list past the markdown frame, and the markdown frame by its own id', () => {
         const panel = panelOver([A, MEMO, B]);
         panel.choose('b', t('menu.moveUp'));
@@ -255,7 +249,7 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
         expect(panel.state().sidebar).toEqual([A, B]);
     });
 
-    it('puts its add button into the sidebar after the frames, and not among them', () => {
+    it('makes its add button in the sidebar\'s body after the frames, and not among them', () => {
         expect(panelOver([A, MEMO]).add().placed).toEqual(['frames', 'button']);
     });
 
@@ -337,30 +331,27 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
 });
 
 describe('the markdown frames of a sidebar, kept to the state', () => {
+    /** A sidebar's body, making the panel's elements as much of them as making the panel and a draw touch. */
+    const body = () => {
+        const element = () => {
+            const children: unknown[] = [];
+            return {
+                children,
+                appendText() {},
+                addEventListener() {},
+                insertBefore(node: unknown) { children.push(node); return node; },
+                createDiv: () => ({ setText() {} }),
+            };
+        };
+        return { createDiv: element, createEl: element };
+    };
     beforeEach(() => {
-        // The panel's elements, as much of them as making the panel and a draw touch.
-        vi.stubGlobal('document', {
-            createElement: () => {
-                const children: unknown[] = [];
-                return {
-                    children,
-                    addClass() {},
-                    appendText() {},
-                    addEventListener() {},
-                    insertBefore(node: unknown) { children.push(node); return node; },
-                    createDiv: () => ({ setText() {} }),
-                };
-            },
-        });
         drawn.synced = [];
         drawn.requested = 0;
     });
-    afterEach(() => {
-        vi.unstubAllGlobals();
-    });
 
     it('have the state\'s frames and folds take as the panel opens, and at once on a change of either, ahead of the draw it requests', () => {
-        const panel = panelOver([]);
+        const panel = panelOver([], body());
         panel.frames.open();
         expect(drawn.synced).toEqual([{ ids: [], collapsed: { a: true } }]);
 
@@ -374,7 +365,7 @@ describe('the markdown frames of a sidebar, kept to the state', () => {
     });
 
     it('are not had take anything on a change of another field, nor once the panel is closed', () => {
-        const panel = panelOver([MEMO]);
+        const panel = panelOver([MEMO], body());
         panel.frames.open();
         panel.update({ maskMode: true, filterState: { filters: [], logic: 'and' } });
         expect(drawn.synced).toHaveLength(1);
@@ -385,7 +376,7 @@ describe('the markdown frames of a sidebar, kept to the state', () => {
     });
 
     it('take the frames the state got while the panel was closed when it opens again', () => {
-        const panel = panelOver([]);
+        const panel = panelOver([], body());
         panel.frames.open();
         panel.frames.close();
         panel.update({ sidebar: [MEMO] });

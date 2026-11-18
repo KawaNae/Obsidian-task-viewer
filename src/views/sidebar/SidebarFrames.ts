@@ -22,11 +22,12 @@
  * element taken out and put back would load what it embeds again. Only a
  * markdown frame out of its place is moved, which is one the user moved.
  *
- * The panel's elements, the frames' and the add button, outlive the view's
- * draws: the view takes them out before it empties its DOM (`lift`) and
- * puts them back into the sidebar it built (`mount`), so the pages, the
- * opened cards and the markdown frames' bodies are kept. The button is not
- * a child of the frames' element, whose children are the frames alone.
+ * The panel's elements, the frames' and the add button, are made once in
+ * the body of the sidebar the panel is handed (`ViewSidebar`), and stay
+ * there for the view's life: a draw of the view leaves them where they
+ * stand, so the pages, the opened cards and the markdown frames' bodies are
+ * kept. The button is not a child of the frames' element, whose children
+ * are the frames alone.
  */
 
 import { setIcon, type Menu } from 'obsidian';
@@ -110,14 +111,14 @@ export class SidebarFrames {
     private pendingDraw: number | null = null;
     private readonly unsubscribers: (() => void)[] = [];
 
+    /** Make the panel's elements in `body`, the sidebar's body that scrolls: the frames, and the add button after them. */
     constructor(
         private readonly deps: SidebarFramesDeps,
         private readonly host: SidebarFramesHost,
+        body: HTMLElement,
     ) {
-        this.el = document.createElement('div');
-        this.el.addClass('tv-sidebar__frames');
-        this.addBtn = document.createElement('button');
-        this.addBtn.addClass('tv-icon-btn', 'tv-sidebar__panel-add-btn');
+        this.el = body.createDiv({ cls: 'tv-sidebar__frames' });
+        this.addBtn = body.createEl('button', { cls: 'tv-icon-btn tv-sidebar__panel-add-btn' });
         setIcon(this.addBtn, 'plus');
         this.addBtn.appendText(t('sidebar.add'));
         this.addBtn.addEventListener('click', () => this.showAddMenu(this.addBtn));
@@ -178,24 +179,6 @@ export class SidebarFrames {
     /** The settings were saved: the markdown frames read their notes again (`MarkdownFrameSections.settingsSaved`). */
     settingsSaved(): void {
         this.markdown.settingsSaved();
-    }
-
-    /**
-     * Take the frames out of the view's DOM. The view calls it before it
-     * gathers its own cards and empties its DOM, so the frames' cards are
-     * neither taken for the view's nor lost.
-     */
-    lift(): void {
-        this.el.remove();
-        this.addBtn.remove();
-    }
-
-    /** Put the panel into the body of a sidebar the view built: the frames, and the add button after them. */
-    mount(body: HTMLElement): void {
-        body.appendChild(this.el);
-        body.appendChild(this.addBtn);
-        // A body that waited for the panel to stand in a sidebar is rendered now.
-        this.markdown.placed();
     }
 
     /** The add button's menu: a frame of each kind, put at the end of the stack. */

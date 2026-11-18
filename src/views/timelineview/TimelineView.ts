@@ -25,10 +25,9 @@ import { DateHeaderRenderer } from '../sharedUI/DateHeaderRenderer';
 import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TimelineSectionRenderer } from './renderers/TimelineSectionRenderer';
-import { SidebarFrames } from '../sidebar/SidebarFrames';
 import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
-import { SidebarManager } from '../sidebar/SidebarManager';
+import { ViewSidebar } from '../sidebar/ViewSidebar';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from '../sharedUI/CardReconciler';
@@ -57,15 +56,14 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     private handleManager: HandleManager;
     private selectionController!: SelectionController;
     private toolbar: TimelineToolbar | undefined;
-    private sidebarManager: SidebarManager;
     private readonly days: TimelineDays;
 
     // ==================== Renderers ====================
     private gridRenderer: GridRenderer;
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
-    /** The sidebar's frames; they draw themselves, and outlive the view's draws. */
-    private readonly sidebarFrames: SidebarFrames;
+    /** The sidebar, built once as the view opens; its frames draw themselves. */
+    private readonly viewSidebar: ViewSidebar;
     private moonRenderer: MoonPhaseRenderer;
     private dateHeaderRenderer: DateHeaderRenderer;
     private periodicHeaderRenderer: PeriodicHeaderRenderer;
@@ -73,6 +71,10 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
 
     // ==================== DOM ====================
     private container: HTMLElement;
+    /** Where the toolbar stands, above the sidebar's layout; made once as the view opens. */
+    private toolbarHostEl: HTMLElement;
+    /** The sidebar's main area, the one element a draw empties and draws into. */
+    private main: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     // Scroll save/restore: save the visible time at the viewport top as
@@ -105,12 +107,6 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     private pinchInitialMidY: number = 0;
     private pinchInitialScrollTop: number = 0;
     private isPinching: boolean = false;
-    /**
-     * At narrow width the sidebar starts closed whatever the state says, and
-     * only the toggle button opens it. `showSidebar` states the desktop-width
-     * position; applying a config never marks the sidebar as user-opened.
-     */
-    private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
 
     // ==================== Lifecycle ====================
@@ -129,13 +125,6 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             pastDaysToShow: () => this.plugin.settings.pastDaysToShow,
             pullsToOverdue: () => this.plugin.settings.startFromOldestOverdue,
             oldestOverdue: () => this.findOldestOverdueDate(),
-        });
-        this.sidebarManager = new SidebarManager({
-            mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
-            onPersist: () => this.app.workspace.requestSaveLayout(),
-            onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
-            onRequestClose: () => this.setSidebarOpen(false),
-            getIsOpen: () => this.isSidebarOpen(),
         });
         const cards = createCardRendering({
             app: this.app,
@@ -165,7 +154,7 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         });
 
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.sidebarFrames = new SidebarFrames({
+        this.viewSidebar = new ViewSidebar({
             plugin: this.plugin,
             readService: this.readService,
             index: this.index,
@@ -176,6 +165,9 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             state: () => this.state,
             subscribe: (listener) => this.store.subscribe(listener),
             write: (patch) => this.update(patch, { draw: false }),
+        }, {
+            mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
+            syncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
         });
     }
 
@@ -183,9 +175,6 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('timeline-view');
-        this.sidebarManager.attach(this.container, (el, ev, handler) =>
-            this.registerDomEvent(el, ev, handler),
-        );
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {
@@ -194,10 +183,10 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         });
         this.selectionController = new SelectionController(this.handleManager);
 
-        // Construct the toolbar once for the lifetime of this view. performRender()
-        // calls toolbar.detach() before container.empty() and toolbar.mount(host)
-        // after, so the toolbar's DOM survives renders. That is what lets the
-        // filter popover stay open across data-driven re-renders.
+        // Construct the toolbar once for the lifetime of this view. It stands in
+        // the toolbar host, which no draw empties, so its DOM survives renders.
+        // That is what lets the filter popover stay open across data-driven
+        // re-renders.
         this.toolbar = new TimelineToolbar({
             host: this.toolbarHost(),
             commands: {
@@ -209,11 +198,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
                 jumpToDate: (date) => this.update(this.days.goTo(date)),
                 viewedDay: () => this.days.viewedDay(this.state.date),
                 window: () => this.window(),
-                isSidebarOpen: () => this.isSidebarOpen(),
-                toggleSidebar: (open) => {
-                    if (open) this.sidebarOpenedThisSession = true;
-                    this.setSidebarOpen(open);
-                },
+                isSidebarOpen: () => this.viewSidebar.isOpen(),
+                toggleSidebar: (open) => this.viewSidebar.toggle(open),
             },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
@@ -243,7 +229,12 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             this.dateHeaderRenderer,
             this.periodicHeaderRenderer,
         );
-        this.sidebarFrames.open();
+        // The toolbar's host (top row) and the sidebar's layout (bottom row)
+        // are made once; a draw empties the sidebar's main area alone.
+        this.toolbarHostEl = this.container.createDiv('timeline-view__toolbar-host');
+        this.main = this.viewSidebar.build(this.container, (el, ev, handler) =>
+            this.registerDomEvent(el, ev, handler),
+        );
         this.moonRenderer = new MoonPhaseRenderer();
 
         // Initialize DragHandler with selection callback, move callback, and the window drawn
@@ -380,14 +371,13 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.hoverParent.dispose();
         this.toolbar?.close();
         this.dragHandler.destroy();
-        this.sidebarFrames.close();
+        this.viewSidebar.close();
         if (this.unsubscribe) {
             this.unsubscribe();
         }
         if (this.unsubscribeDelete) {
             this.unsubscribeDelete();
         }
-        this.sidebarManager.detach();
         if (this.stickyAnchorObserver) {
             this.stickyAnchorObserver.disconnect();
             this.stickyAnchorObserver = null;
@@ -405,22 +395,10 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         return this.days.window(this.state.date, daysToShowOf(this.state));
     }
 
-    /** Whether the sidebar shows: closed at narrow width until the toggle opens it this session. */
-    private isSidebarOpen(): boolean {
-        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) return false;
-        return this.state.showSidebar ?? true;
-    }
-
-    /** Open or close the sidebar, sliding; the draw does not rebuild it. */
-    private setSidebarOpen(open: boolean): void {
-        this.update({ showSidebar: open }, { draw: false });
-        this.sidebarManager.applyOpen(open, { animate: true });
-    }
-
     /** Settings were saved: the window is read anew, a view following today pulls anew, and the sidebar's frames read their notes anew. */
     override redraw(): void {
         this.days.settle(this.state.date);
-        this.sidebarFrames.settingsSaved();
+        this.viewSidebar.settingsSaved();
         this.requestDraw();
     }
 
@@ -518,25 +496,16 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     }
 
     private performRender() {
-        this.sidebarManager.syncPresentation(this.isSidebarOpen(), { animate: false });
-
-        // Detach the toolbar before empty() so its DOM (and the FilterMenuComponent
-        // bound to it) survives. We re-attach it via mount() below.
-        this.toolbar?.detach();
-        // The sidebar's frames come out before the grid's cards are gathered,
-        // so their cards are neither taken for the grid's nor lost; they go
-        // back into the sidebar built below.
-        this.sidebarFrames.lift();
-
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the scaffolding. Cards retain their inner DOM /
         // markdown / Component lifecycle, and will be re-parented + re-decorated
         // when their key turns up in the new render. Stale survivors are
-        // disposed at the end.
+        // disposed at the end. Only the main area is gathered and emptied: the
+        // sidebar's frames keep their own cards.
         const reconciler = new CardReconciler();
-        reconciler.detach(this.container);
+        reconciler.detach(this.main);
 
-        this.container.empty();
+        this.main.empty();
 
         // Apply Zoom Level
         const zoomLevel = this.zoom();
@@ -546,26 +515,18 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         const scrollbarWidth = this.measureScrollbarWidth();
         this.container.style.setProperty('--scrollbar-width-actual', `${scrollbarWidth}px`);
 
-        // Toolbar host (top row)
-        const toolbarHost = this.container.createDiv('timeline-view__toolbar-host');
-
-        // Build sidebar layout (bottom row)
-        const { main, sidebarBody } = this.sidebarManager.buildLayout(this.container);
-
-        this.sidebarFrames.mount(sidebarBody);
-
         const dates = windowDates(this.window());
 
-        // Mount the persistent toolbar instance into this render's toolbarHost.
-        // First call builds DOM; subsequent calls re-attach the existing rootEl.
-        this.toolbar!.mount(toolbarHost);
+        // The first mount builds the toolbar's DOM; each later one, into the
+        // same host, only brings it up to date.
+        this.toolbar!.mount(this.toolbarHostEl);
 
         // Use GridRenderer (render into main column)
         const filteredTasks = this.readService.tasksInWindow(
             daysWindow(dates[0], dates[dates.length - 1], this.plugin.settings.startHour), this.state.filterState
         );
         this.gridRenderer.render(
-            main,
+            this.main,
             this.allDayRenderer,
             this.timelineRenderer,
             this.moonRenderer,
