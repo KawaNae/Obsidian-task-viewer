@@ -1,8 +1,10 @@
 /**
  * What a view keeps across a draw the index sets off, in the running E2E
  * vault: the toolbar's filter popover stays open, the scroll stays where it
- * was, and the selected card stays selected with its handles; and the
- * image export, after such a draw, leaves the toolbar out. Then the
+ * was, the selected card stays selected with its handles, and the
+ * sidebar's panel stays in the document, its elements the same and the
+ * focus in it kept; and the image export, after such a draw, leaves the
+ * toolbar out. Then the
  * sidebar's look following the `showSidebar` the workspace or a URI hands
  * the view.
  *
@@ -11,7 +13,7 @@
  * open view hears the index's change. Each such test first sees that the
  * draw happened: an element of the view's body, rebuilt by each draw, is
  * marked before the write, and the mark is gone after it. Only then is what
- * was kept read. The sidebar's tests read the look alone, whether or not a
+ * was kept read. The sidebar's look tests read the look alone, whether or not a
  * draw put it there: the view may answer a state handed in without drawing
  * its body again.
  *
@@ -215,6 +217,65 @@ describe('The selected card stays selected while the view draws again', () => {
 
             const after = selection(name, false);
             expect(after).toEqual({ ...before, others: 0 });
+        });
+    }
+});
+
+describe('The sidebar\'s panel stays in the document while the view draws again', () => {
+    /** The elements of the sidebar that are read, by their class. */
+    const KEPT = {
+        layout: '.tv-sidebar',
+        panel: '.tv-sidebar__panel',
+        body: '.tv-sidebar__panel-body',
+        frames: '.tv-sidebar__frames',
+        add: '.tv-sidebar__panel-add-btn',
+    };
+
+    for (const type of ['timeline-view', 'calendar-view']) {
+        it(`${type}: the same elements are there after the draw, none was taken out meanwhile, and the focus in the panel stays`, async () => {
+            const name = `rk-panel-${type}`;
+            openView(name, type, stateFor(type));
+            // Each element of the sidebar is kept, every node taken out of the
+            // view from now on is recorded, and the panel's add button takes
+            // the focus.
+            const focused = ev<boolean>(`(() => {
+                ${PRELUDE}
+                const el = V(${JSON.stringify(name)}).contentEl;
+                const kept = {};
+                for (const [key, sel] of Object.entries(${JSON.stringify(KEPT)})) {
+                    kept[key] = el.querySelector(sel);
+                    if (!kept[key]) throw new Error('no ' + sel);
+                }
+                const removed = [];
+                const record = records => { for (const r of records) removed.push(...r.removedNodes); };
+                const observer = new MutationObserver(record);
+                observer.observe(el, { childList: true, subtree: true });
+                kept.add.focus();
+                window.__tvPanelKept = { kept, removed, record, observer };
+                return JSON.stringify(document.activeElement === kept.add);
+            })()`);
+            expect(focused).toBe(true);
+
+            await drawAgainByIndex(name, TOUCH);
+
+            const after = ev<{ same: string[]; connected: string[]; takenOut: string[]; focused: boolean }>(`(() => {
+                ${PRELUDE}
+                const { kept, removed, record, observer } = window.__tvPanelKept;
+                delete window.__tvPanelKept;
+                record(observer.takeRecords());
+                observer.disconnect();
+                const el = V(${JSON.stringify(name)}).contentEl;
+                const sels = ${JSON.stringify(KEPT)};
+                const keys = Object.keys(sels);
+                return JSON.stringify({
+                    same: keys.filter(k => el.querySelector(sels[k]) === kept[k]),
+                    connected: keys.filter(k => kept[k].isConnected),
+                    takenOut: keys.filter(k => removed.some(n => n === kept[k] || n.contains?.(kept[k]))),
+                    focused: document.activeElement === kept.add,
+                });
+            })()`);
+            const all = Object.keys(KEPT);
+            expect(after).toEqual({ same: all, connected: all, takenOut: [], focused: true });
         });
     }
 });
