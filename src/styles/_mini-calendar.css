@@ -16,10 +16,6 @@
     padding: 12px !important;
 }
 
-.mini-calendar-view__toolbar-host {
-    flex-shrink: 0;
-}
-
 .mini-calendar-view .view-toolbar {
     padding: 0 0 7px;
     border-bottom: none;

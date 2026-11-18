@@ -7,7 +7,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { ViewToolbarContext } from '../base/TaskViewerView';
 import type { CalendarState } from './CalendarSchema';
 
 /** What Calendar does that is not a change of its state, or reads from more than it. */
@@ -29,7 +29,7 @@ export interface CalendarCommands {
 }
 
 export interface CalendarToolbarDeps {
-    host: ViewToolbarHost<CalendarState>;
+    context: ViewToolbarContext<CalendarState>;
     commands: CalendarCommands;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
@@ -48,12 +48,12 @@ export class CalendarToolbar extends ViewToolbarBase {
 
     constructor(private deps: CalendarToolbarDeps) {
         super();
-        this.filterMenu = new FilterMenuComponent(deps.host.app, () => deps.host.plugin.settings);
-        deps.host.store.subscribe(() => this.update());
+        this.filterMenu = new FilterMenuComponent(deps.context.app, () => deps.context.plugin.settings);
+        deps.context.store.subscribe(() => this.update());
     }
 
     private get store() {
-        return this.deps.host.store;
+        return this.deps.context.store;
     }
 
     /** Close the popovers the toolbar opened. */
@@ -70,13 +70,13 @@ export class CalendarToolbar extends ViewToolbarBase {
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { host, commands } = this.deps;
+        const { context, commands } = this.deps;
 
         // Date Label (YYYY - MM)
         const dateLabelDeps = {
-            app: host.app,
-            getSettings: () => host.plugin.settings,
-            notes: host.plugin.getOperations(),
+            app: context.app,
+            getSettings: () => context.plugin.settings,
+            notes: context.plugin.getOperations(),
             linkInteractionManager: this.deps.linkInteractionManager,
             hoverParent: this.deps.hoverParent,
         };
@@ -107,7 +107,7 @@ export class CalendarToolbar extends ViewToolbarBase {
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.addEventListener('click', (event: MouseEvent) => {
-            editViewFilter(this.filterMenu, { event }, this.store, () => host.plugin.getIndex().getTasks());
+            editViewFilter(this.filterMenu, { event }, this.store, () => context.plugin.getIndex().getTasks());
         });
 
         this.maskHandle = MaskToggleButton.render(actionZone, {
@@ -123,11 +123,11 @@ export class CalendarToolbar extends ViewToolbarBase {
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
 
         moreBtn.onclick = (e) => {
-            host.plugin.menuPresenter.present((menu) => {
+            context.plugin.menuPresenter.present((menu) => {
                 appendCompactFilterAndMask(menu, moreBtn, {
                     filterMenu: this.filterMenu,
                     store: this.store,
-                    getTasks: () => host.plugin.getIndex().getTasks(),
+                    getTasks: () => context.plugin.getIndex().getTasks(),
                 });
                 menu.addSeparator();
                 ViewSettingsMenu.appendItems(menu, this.settingsOptions());
@@ -144,11 +144,11 @@ export class CalendarToolbar extends ViewToolbarBase {
     }
 
     private settingsOptions() {
-        const { host } = this.deps;
-        return host.settingsOptions((menu) => {
+        const { context } = this.deps;
+        return context.settingsOptions((menu) => {
             appendAstronomyMenuSection(menu, {
                 overlays: ['moonPhase'],
-                settings: host.plugin.settings.astronomy,
+                settings: context.plugin.settings.astronomy,
                 instance: this.store.get().astronomyDisplay,
                 onChange: (next) => this.store.update({ astronomyDisplay: next }),
             });

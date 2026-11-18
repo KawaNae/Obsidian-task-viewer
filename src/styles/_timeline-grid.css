@@ -16,10 +16,6 @@
     /* Ensure no padding interferes with full height */
 }
 
-.timeline-view__toolbar-host {
-    flex-shrink: 0;
-}
-
 /* Timeline Grid Container (Flex Column of Rows)
    Acts as the single scroll container for the entire timeline (date-header,
    allday-section, and timed grid all scroll within it).

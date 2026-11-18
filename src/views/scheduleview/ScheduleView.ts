@@ -3,7 +3,7 @@ import { daysWindow } from '../../utils/DayWindow';
 import { t } from '../../i18n';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { createCardRendering } from '../sharedUI/CardRendering';
-import { CardReconciler } from '../sharedUI/CardReconciler';
+import type { CardReconciler } from '../sharedUI/CardReconciler';
 import { getEffectiveAstronomyDisplay } from '../../services/astronomy/AstronomyService';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { PluginContext } from '../../PluginContext';
@@ -24,7 +24,6 @@ import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { IndexReads } from '../../services/core/TaskIndex';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
@@ -47,8 +46,6 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
     private static readonly TIMELINE_TOP_PADDING_PX = 16;
     private static readonly TIMELINE_BOTTOM_PADDING_PX = 16;
     private readonly readService: TaskReadService;
-    /** The index's copies and changes (`PluginContext.getIndex`). */
-    private readonly index: IndexReads;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly moonRenderer: MoonPhaseRenderer;
@@ -64,7 +61,6 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
     private readonly sectionRenderer: ScheduleSectionRenderer;
 
     private container: HTMLElement;
-    private unsubscribe: (() => void) | null = null;
     private scrollToNowOnNextRender = false;
     // Latest grid layout, cached off the last full render so the per-minute
     // now-line (`onMinute`) can re-paint without re-running buildAdaptiveGrid.
@@ -83,7 +79,6 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, ScheduleCodec);
         this.readService = plugin.getTaskReadService();
-        this.index = plugin.getIndex();
         const cards = createCardRendering({
             app: this.app,
             plugin: this.plugin,
@@ -133,7 +128,7 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         });
 
         this.toolbar = new ScheduleToolbar({
-            host: this.toolbarHost(),
+            context: this.toolbarContext(),
             commands: {
                 navigate: (days) => this.navigateDate(days),
                 today: () => {
@@ -162,17 +157,20 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         return { anchor: day, from: day, to: day };
     }
 
+    protected frameToolbar(): ScheduleToolbar {
+        return this.toolbar;
+    }
+
+    protected cardRenderer(): TaskCardRenderer {
+        return this.taskRenderer;
+    }
+
     protected openView(): void {
         this.container = this.contentEl;
-        this.container.empty();
         this.container.addClass('schedule-view');
 
         this.registerKeyboardNavigation();
         this.scrollToNowOnNextRender = true;
-
-        this.unsubscribe = this.index.onChange((taskId, changes) => {
-            this.renderScheduler.handleChange(taskId, changes);
-        });
     }
 
     /**
@@ -192,18 +190,12 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
 
     protected closeView(): void {
         this.hoverParent.dispose();
-        this.toolbar.close();
-        if (this.unsubscribe) {
-            this.unsubscribe();
-            this.unsubscribe = null;
-        }
         this.scrollRestorer.dispose();
     }
 
     /** The visual day changed: a view following today moves to it and scrolls to now; a fixed one stays. */
-    override onDayRolled(): void {
+    protected override dayRolled(): void {
         if (followsToday(this.state.date)) this.scrollToNowOnNextRender = true;
-        this.requestDraw();
     }
 
     private registerKeyboardNavigation(): void {
@@ -226,43 +218,30 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         });
     }
 
-    /** Draw the day, keeping the scroll. */
-    protected draw(): void {
+    /** Keep the scroll across the draw. */
+    protected override beforeEmpty(): void {
         this.scrollRestorer.save();
-        this.performRender();
     }
 
-    private performRender(): void {
+    /**
+     * Draw the day. The cards gathered from the body are re-parented +
+     * re-decorated as their key turns up in the new render.
+     */
+    protected draw(body: HTMLElement, reconciler: CardReconciler): void {
         const day = this.viewedDay();
-
-        // Keyed reconciliation: lift surviving cards before tearing down the
-        // day-timeline scaffolding. They will be re-parented + re-decorated as
-        // their key turns up in the new render; unmatched ones are
-        // disposed at the end.
-        const reconciler = new CardReconciler();
-        reconciler.detach(this.container);
-
-        this.toolbar.detach();
-        this.container.empty();
-        const toolbarHost = this.container.createDiv('schedule-view__toolbar-host');
-        this.toolbar.mount(toolbarHost);
-
         const startHour = this.plugin.settings.startHour;
         const rangeTasks = this.readService.tasksInWindow(daysWindow(day, day, startHour), this.state.filterState);
         const splitResult = splitTasks(rangeTasks, { type: 'visual-date', startHour });
         const baseCategorized = categorizeTasksForDate(splitResult, day, startHour);
         this.menuHandler.setViewStartDate(day);
 
-        const fixedHost = this.container.createDiv('schedule-view__fixed-host');
+        const fixedHost = body.createDiv('schedule-view__fixed-host');
         const fixedContainer = fixedHost.createDiv('schedule-view__fixed-rows');
 
-        const bodyScroll = this.container.createDiv('schedule-view__body-scroll');
+        const bodyScroll = body.createDiv('schedule-view__body-scroll');
         const bodyContainer = bodyScroll.createDiv('schedule-view__scroll-content');
 
         this.renderDayTimeline(fixedContainer, bodyContainer, day, baseCategorized, reconciler);
-
-        // Dispose any cards that did not turn up in the new render.
-        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
 
         if (this.scrollToNowOnNextRender) {
             this.scrollToNowOnNextRender = false;

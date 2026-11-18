@@ -20,10 +20,6 @@
     container-name: calendar-view;
 }
 
-.calendar-view__toolbar-host {
-    flex-shrink: 0;
-}
-
 /* --- Calendar task card (grid positioned, scoped to week-row) --- */
 .cal-week-row > .task-card {
     box-sizing: border-box;

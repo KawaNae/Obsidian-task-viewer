@@ -8,10 +8,6 @@
     container-type: inline-size;
 }
 
-.schedule-view__toolbar-host {
-    flex-shrink: 0;
-}
-
 .schedule-view__fixed-host {
     flex-shrink: 0;
 }

@@ -12,10 +12,6 @@
     background-color: transparent;
 }
 
-.kanban-view__toolbar-host {
-    flex-shrink: 0;
-}
-
 .kanban-view__grid-host {
     flex: 1;
     min-height: 0;

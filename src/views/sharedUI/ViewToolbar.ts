@@ -23,25 +23,26 @@ import { refusalText } from '../../services/operations/WriteAnswer';
 import { ToolbarFold } from './ToolbarFold';
 
 /**
- * Persistent toolbar root with mount/detach lifecycle.
+ * A view's toolbar: its root stands in the view's toolbar place for the
+ * view's life.
  *
  * Subclasses implement `buildDom(rootEl)` to create button DOM and may override
- * `update()` for dynamic refreshes. The view calls `mount(host)` after creating
- * its toolbar host, and `detach()` before container.empty() so the rootEl + any
- * child components (filter popover anchors, etc.) survive the re-render.
+ * `update()` for dynamic refreshes. The view's base puts the toolbar in its
+ * place once, as the view opens (`place`), and brings it up to the view's
+ * state at each draw (`sync`). The root and any child components (filter
+ * popover anchors, etc.) are never taken out between draws.
  *
  * Pass `{ dynamicContent: true }` to the constructor for toolbars whose inner
  * DOM depends on state that changes between renders (e.g. month labels in
- * mini-calendar, timer-mode controls). Such toolbars rebuild their content on
- * every mount; static toolbars rebuild only on first mount.
+ * mini-calendar, timer-mode controls). Such toolbars rebuild their content at
+ * every sync; static toolbars build it once, when placed.
  *
  * A toolbar that puts its actions in an action zone ({@link createActionZone})
  * folds the zone into its ⋮ button when its row does not fit
- * ({@link ToolbarFold}); the view calls `close()` when it closes, which stops
- * the watching.
+ * ({@link ToolbarFold}); the base calls `close()` when the view closes, which
+ * stops the watching.
  */
 export abstract class ViewToolbarBase {
-    protected host: HTMLElement | null = null;
     protected rootEl: HTMLElement | null = null;
     private readonly dynamicContent: boolean;
     /** Folds the action zone into ⋮; there when the toolbar has an action zone. */
@@ -51,38 +52,33 @@ export abstract class ViewToolbarBase {
         this.dynamicContent = options.dynamicContent ?? false;
     }
 
-    /** Returns the toolbar root element (after first mount) for callers that
+    /** Returns the toolbar root element (once placed) for callers that
      * need to read/write data attributes or measure the DOM. */
     getRootEl(): HTMLElement | null {
         return this.rootEl;
     }
 
-    mount(host: HTMLElement): void {
-        if (this.rootEl) {
-            if (this.host !== host || this.rootEl.parentElement !== host) {
-                host.appendChild(this.rootEl);
-                this.host = host;
-            }
-            if (this.dynamicContent) {
-                this.rootEl.empty();
-                this.buildDom(this.rootEl);
-            }
-            this.update();
-            this.fold?.attach(this.rootEl);
-            return;
-        }
-        this.host = host;
-        this.rootEl = host.createDiv('view-toolbar');
+    /** Put the toolbar in `slot` and build its content; once, as the view opens. */
+    place(slot: HTMLElement): void {
+        this.rootEl = slot.createDiv('view-toolbar');
         this.buildDom(this.rootEl);
         this.update();
         this.fold?.attach(this.rootEl);
     }
 
-    detach(): void {
-        if (this.rootEl?.parentElement) {
-            this.rootEl.parentElement.removeChild(this.rootEl);
+    /**
+     * Bring the toolbar up to the view's state, at each draw: a dynamic
+     * toolbar builds its content again, and `update()` runs. Writing the
+     * toolbar's DOM has its fold measured again.
+     */
+    sync(): void {
+        if (!this.rootEl) return;
+        if (this.dynamicContent) {
+            this.rootEl.empty();
+            this.buildDom(this.rootEl);
         }
-        this.host = null;
+        this.update();
+        this.fold?.attach(this.rootEl);
     }
 
     /**

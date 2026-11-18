@@ -6,7 +6,7 @@ import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { ViewToolbarContext } from '../base/TaskViewerView';
 import type { MiniCalendarState } from './MiniCalendarSchema';
 
 /** What MiniCalendar does that is not a change of its state, or reads from more than it. */
@@ -20,7 +20,7 @@ export interface MiniCalendarCommands {
 }
 
 export interface MiniCalendarToolbarDeps {
-    host: ViewToolbarHost<MiniCalendarState>;
+    context: ViewToolbarContext<MiniCalendarState>;
     commands: MiniCalendarCommands;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
@@ -36,12 +36,12 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
 
     constructor(private deps: MiniCalendarToolbarDeps) {
         super();
-        this.filterMenu = new FilterMenuComponent(deps.host.app, () => deps.host.plugin.settings);
-        deps.host.store.subscribe(() => this.update());
+        this.filterMenu = new FilterMenuComponent(deps.context.app, () => deps.context.plugin.settings);
+        deps.context.store.subscribe(() => this.update());
     }
 
     private get store() {
-        return this.deps.host.store;
+        return this.deps.context.store;
     }
 
     /** Close the popovers the toolbar opened. */
@@ -51,12 +51,12 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { host, commands } = this.deps;
+        const { context, commands } = this.deps;
 
         const dateLabelDeps = {
-            app: host.app,
-            getSettings: () => host.plugin.settings,
-            notes: host.plugin.getOperations(),
+            app: context.app,
+            getSettings: () => context.plugin.settings,
+            notes: context.plugin.getOperations(),
             linkInteractionManager: this.deps.linkInteractionManager,
             hoverParent: this.deps.hoverParent,
         };
@@ -79,13 +79,13 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
 
         moreBtn.onclick = (e) => {
-            host.plugin.menuPresenter.present((menu) => {
+            context.plugin.menuPresenter.present((menu) => {
                 menu.addItem((item) => {
                     item.setTitle(t('toolbar.filter'))
                         .setIcon('filter')
                         .onClick(() => editViewFilter(
                             this.filterMenu, { element: moreBtn }, this.store,
-                            () => host.plugin.getIndex().getTasks(),
+                            () => context.plugin.getIndex().getTasks(),
                         ));
                 });
                 menu.addSeparator();
@@ -95,11 +95,11 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
     }
 
     private settingsOptions() {
-        const { host } = this.deps;
-        return host.settingsOptions((menu) => {
+        const { context } = this.deps;
+        return context.settingsOptions((menu) => {
             appendAstronomyMenuSection(menu, {
                 overlays: ['moonPhase'],
-                settings: host.plugin.settings.astronomy,
+                settings: context.plugin.settings.astronomy,
                 instance: this.store.get().astronomyDisplay,
                 onChange: (next) => this.store.update({ astronomyDisplay: next }),
             });

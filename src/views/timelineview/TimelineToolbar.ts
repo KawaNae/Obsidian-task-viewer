@@ -7,7 +7,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { ViewToolbarContext } from '../base/TaskViewerView';
 import type { DayWindow } from './TimelineDays';
 import { daysToShowOf, effectiveZoom, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW, type TimelineState } from './TimelineSchema';
 
@@ -30,7 +30,7 @@ export interface TimelineCommands {
 }
 
 export interface TimelineToolbarDeps {
-    host: ViewToolbarHost<TimelineState>;
+    context: ViewToolbarContext<TimelineState>;
     commands: TimelineCommands;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
@@ -56,16 +56,16 @@ export class TimelineToolbar extends ViewToolbarBase {
 
     constructor(private deps: TimelineToolbarDeps) {
         super();
-        this.filterMenu = new FilterMenuComponent(deps.host.app, () => deps.host.plugin.settings);
-        deps.host.store.subscribe(() => this.update());
+        this.filterMenu = new FilterMenuComponent(deps.context.app, () => deps.context.plugin.settings);
+        deps.context.store.subscribe(() => this.update());
     }
 
     private get store() {
-        return this.deps.host.store;
+        return this.deps.context.store;
     }
 
     private get settings() {
-        return this.deps.host.plugin.settings;
+        return this.deps.context.plugin.settings;
     }
 
     /** Close the popovers the toolbar opened. */
@@ -100,13 +100,13 @@ export class TimelineToolbar extends ViewToolbarBase {
 
     protected override buildDom(toolbar: HTMLElement): void {
         const { deps } = this;
-        const { host, commands } = deps;
+        const { context, commands } = deps;
 
         // Date Label (YYYY - MM)
         const dateLabelDeps = {
-            app: host.app,
-            getSettings: () => host.plugin.settings,
-            notes: host.plugin.getOperations(),
+            app: context.app,
+            getSettings: () => context.plugin.settings,
+            notes: context.plugin.getOperations(),
             linkInteractionManager: deps.linkInteractionManager,
             hoverParent: deps.hoverParent,
         };
@@ -150,7 +150,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         moreBtn.setAttribute('aria-label', t('toolbar.viewSettings'));
 
         moreBtn.onclick = (e) => {
-            host.plugin.menuPresenter.present((menu) => {
+            context.plugin.menuPresenter.present((menu) => {
                 this.appendCompactMenuItems(menu, moreBtn);
                 menu.addSeparator();
                 ViewSettingsMenu.appendItems(menu, this.settingsOptions());
@@ -209,7 +209,7 @@ export class TimelineToolbar extends ViewToolbarBase {
             toolbar,
             () => this.daysToShow(),
             (newValue) => this.store.update({ daysToShow: newValue }),
-            this.deps.host.plugin.menuPresenter,
+            this.deps.context.plugin.menuPresenter,
             { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW }
         );
     }
@@ -219,7 +219,7 @@ export class TimelineToolbar extends ViewToolbarBase {
             toolbar,
             () => this.zoom(),
             (newZoom) => this.store.update({ zoomLevel: newZoom }),
-            this.deps.host.plugin.menuPresenter
+            this.deps.context.plugin.menuPresenter
         );
     }
 
@@ -229,7 +229,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
 
         filterBtn.onclick = (e) => {
-            const allTasks = this.deps.host.plugin.getIndex().getTasks();
+            const allTasks = this.deps.context.plugin.getIndex().getTasks();
             editViewFilter(this.filterMenu, { event: e }, this.store, () => allTasks);
         };
     }
@@ -248,7 +248,7 @@ export class TimelineToolbar extends ViewToolbarBase {
     }
 
     private settingsOptions() {
-        return this.deps.host.settingsOptions((menu) => {
+        return this.deps.context.settingsOptions((menu) => {
             appendAstronomyMenuSection(menu, {
                 overlays: ['sunTimes', 'moonPhase'],
                 settings: this.settings.astronomy,
@@ -279,7 +279,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         appendCompactFilterAndMask(menu, moreBtn, {
             filterMenu: this.filterMenu,
             store: this.store,
-            getTasks: () => this.deps.host.plugin.getIndex().getTasks(),
+            getTasks: () => this.deps.context.plugin.getIndex().getTasks(),
         });
     }
 }
