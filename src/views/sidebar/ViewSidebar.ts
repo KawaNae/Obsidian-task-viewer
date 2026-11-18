@@ -146,9 +146,14 @@ export class ViewSidebar {
         this.holdBack(false);
     }
 
-    /** Settings were saved: the markdown frames read their notes again. */
+    /** Settings were saved: the panel answers (`SidebarFrames.settingsSaved`). */
     settingsSaved(): void {
         this.frames?.settingsSaved();
+    }
+
+    /** The visual day changed: the panel answers (`SidebarFrames.dayRolled`). */
+    dayRolled(): void {
+        this.frames?.dayRolled();
     }
 
     // ----- Open state -----
