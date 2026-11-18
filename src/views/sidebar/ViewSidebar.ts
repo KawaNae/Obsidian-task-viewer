@@ -6,7 +6,9 @@
  * area (`tv-sidebar__main`), the backdrop, and the panel with its body, in
  * which the frames are made. The view draws into the main area alone, and
  * empties only that, so the panel and what it holds stand in the document
- * for the view's life.
+ * for the view's life. A view opened in no document is put into one later;
+ * the sidebar tells the panel then, so markdown that waited for a document
+ * is rendered.
  *
  * The open state is the view's `showSidebar`, but at narrow width the
  * sidebar starts closed whatever the state says, and only the toggle button
@@ -70,6 +72,8 @@ export class ViewSidebar {
     private releaseBack: (() => void) | null = null;
     /** The user opened the sidebar with the toggle in this session: it opens at narrow width too. */
     private openedThisSession = false;
+    /** Whether the container stood in a document when last seen: by `build`, then by each resize. */
+    private inDocument = false;
     /** The sidebar writes `showSidebar` itself and shows it sliding; the change it hears back is not synced again. */
     private writingOpen = false;
 
@@ -105,8 +109,13 @@ export class ViewSidebar {
 
         this.frames = new SidebarFrames(this.deps, this.host, body);
 
+        // A view may be opened in no document (a leaf made apart from the
+        // workspace) and put into one later; the container then takes a
+        // size, which is the change seen here.
+        this.inDocument = container.isConnected;
         this.resizeObserver = new ResizeObserver(() => {
             this.sync(this.isOpen(), { animate: false });
+            this.followDocument();
         });
         this.resizeObserver.observe(container);
 
@@ -173,6 +182,19 @@ export class ViewSidebar {
             this.writingOpen = false;
         }
         this.sync(open, { animate: true });
+    }
+
+    /**
+     * Tell the panel when the container has come into a document since it
+     * was last seen, after the look is applied at the width it has there:
+     * markdown that waited for a document is rendered then, not at the next
+     * draw. A change of the width alone tells it nothing.
+     */
+    private followDocument(): void {
+        const connected = this.containerEl?.isConnected ?? false;
+        const entered = connected && !this.inDocument;
+        this.inDocument = connected;
+        if (entered) this.frames?.placed();
     }
 
     // ----- The look -----

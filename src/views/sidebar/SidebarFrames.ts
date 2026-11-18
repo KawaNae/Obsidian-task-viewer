@@ -181,6 +181,14 @@ export class SidebarFrames {
         this.markdown.settingsSaved();
     }
 
+    /**
+     * The panel was put into a document: the markdown frames that waited for
+     * one are painted now (`MarkdownFrameSections.placed`).
+     */
+    placed(): void {
+        this.markdown.placed();
+    }
+
     /** The add button's menu: a frame of each kind, put at the end of the stack. */
     private showAddMenu(button: HTMLElement): void {
         this.deps.plugin.menuPresenter.present((menu) => {
