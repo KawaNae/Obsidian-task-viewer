@@ -15,13 +15,21 @@ import { FakeEl, asEl } from '../../helpers/fakeDom';
  *
  * Then the look: it follows a `showSidebar` the view's state is handed
  * without a draw of the view, and a toggle applies it once, sliding.
+ *
+ * Then the document: a view opened in none and put into one later has the
+ * panel told, once, when its container is seen in the document, and not
+ * when its width alone changes.
  */
+
+/** How many times the panel was told it was put into a document. */
+let placedCalls = 0;
 
 vi.mock('../../../../src/views/sidebar/SidebarFrames', () => ({
     SidebarFrames: class {
         open() {}
         close() {}
         settingsSaved() {}
+        placed() { placedCalls++; }
     },
 }));
 
@@ -40,6 +48,7 @@ const realResizeObserver = globals.ResizeObserver;
 
 beforeEach(() => {
     observers = [];
+    placedCalls = 0;
     globals.ResizeObserver = FakeResizeObserver;
 });
 
@@ -53,7 +62,7 @@ afterEach(() => {
  * the user opened it with the toggle. Its state's listeners hear a write at
  * once, as a view's store tells them.
  */
-function setup(width: number, open: boolean) {
+function setup(width: number, open: boolean, connected = true) {
     let state: ViewSidebarState = { showSidebar: open };
     const listeners: ((patch: Partial<ViewSidebarState>) => void)[] = [];
     const update = (patch: Partial<ViewSidebarState>) => {
@@ -61,7 +70,7 @@ function setup(width: number, open: boolean) {
         for (const listener of [...listeners]) listener(patch);
     };
     let toggleSyncs = 0;
-    const container = Object.assign(new FakeEl(), { clientWidth: width, win: {} });
+    const container = Object.assign(new FakeEl(), { clientWidth: width, win: {}, isConnected: connected });
     const sidebar = new ViewSidebar({} as SidebarFramesDeps, {
         state: () => state,
         subscribe: (listener) => {
@@ -80,13 +89,18 @@ function setup(width: number, open: boolean) {
         container.clientWidth = next;
         observers.forEach((cb) => cb());
     }
+    /** Put the container into a document, or take it out; it takes or loses a size, which the observer reports. */
+    function place(inDocument: boolean, next = width): void {
+        container.isConnected = inDocument;
+        resize(inDocument ? next : 0);
+    }
     const layout = container.find('tv-sidebar')!;
     const look = () => ({
         hidden: layout.find('tv-sidebar__panel')!.classList.contains('tv-sidebar__panel--hidden'),
         animate: layout.classList.contains('tv-sidebar--animate'),
     });
     return {
-        sidebar, resize, update, look,
+        sidebar, resize, place, update, look,
         shown: () => state.showSidebar,
         toggleSyncs: () => toggleSyncs,
     };
@@ -208,5 +222,43 @@ describe('ViewSidebar\'s look', () => {
         expect(shown()).toBe(true);
         expect(look()).toEqual({ hidden: false, animate: true });
         expect(toggleSyncs() - before).toBe(1);
+    });
+});
+
+describe('ViewSidebar and the document', () => {
+    it('tells the panel once, when a view built in no document is put into one', () => {
+        const { resize, place } = setup(1000, false, false);
+        resize(0);
+        expect(placedCalls).toBe(0);
+
+        place(true);
+        expect(placedCalls).toBe(1);
+        resize(800);
+        resize(1200);
+        expect(placedCalls).toBe(1);
+    });
+
+    it('tells it nothing when the view was built in a document and only its width changes', () => {
+        const { resize } = setup(1000, false);
+        resize(1000);
+        resize(500);
+        resize(0);
+        resize(1000);
+        expect(placedCalls).toBe(0);
+    });
+
+    it('tells it again when the view is taken out of the document and put back', () => {
+        const { place } = setup(1000, false);
+        place(false);
+        expect(placedCalls).toBe(0);
+        place(true);
+        expect(placedCalls).toBe(1);
+    });
+
+    it('tells it nothing once closed', () => {
+        const { sidebar, place } = setup(1000, false, false);
+        sidebar.close();
+        place(true);
+        expect(placedCalls).toBe(0);
     });
 });

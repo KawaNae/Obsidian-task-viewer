@@ -13,7 +13,9 @@
  * of the settings that moves the visual day; the checkboxes of a body,
  * which do not toggle, but for those of a Dataview query; and a body wider
  * than the sidebar, whose long URL wraps and whose wide table scrolls
- * inside it; and a body's headings, sized and spaced for the card.
+ * inside it; and a body's headings, sized and spaced for the card. Then a
+ * view opened in a leaf made apart from the workspace, whose frame reads
+ * its note there and renders it once the leaf is put into the workspace.
  *
  * The frames are put into the view's state as the workspace hands it over
  * (`openView`); what they show is read from their DOM, and what the view
@@ -40,9 +42,9 @@ import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manag
 import { requireDataview } from '../helpers/prerequisites';
 import { deleteNotesUnder, frameLinks as links, framesOf, kept, notesUnder, readFrames, styles, texts, type Reading } from '../helpers/markdown-frames';
 import {
-    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay,
+    PRELUDE, SETTLE_MS, VIEW_BODY, closeViews, ev, frames, openView, overrideSettings, readSettings, restartView, tr, visualDay,
 } from '../helpers/view-helper';
-import { waitForFileDeindexed } from '../helpers/waits';
+import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 
 /** Every note of the test is under this: nothing else is written to or deleted. */
 const PREFIX = 'test-int-mdframes';
@@ -1299,5 +1301,69 @@ describe('the heading a link names', () => {
         expect(embeds).toEqual({ '#Top': 'm01 m02 m03', '#first line second line': null, '#After': 'm03' });
         // The outline reads them as a heading of the first level, which ends the section above.
         expect(frames).toEqual({ '#Top': 'm01', '#first line second line': 'm02 m03', '#After': 'm03' });
+    });
+});
+
+describe.each([
+    ['timeline-view'],
+    ['calendar-view'],
+])('%s: a markdown frame of a view opened in no document', (type) => {
+    const name = `mf-apart-${type}`;
+    const path = `${PREFIX}-apart.md`;
+    const link = `${PREFIX}-apart#Memo`;
+
+    it('waits there with its note read, and is rendered once the leaf is put into the workspace, the view not drawn again', () => {
+        // The leaf is made apart from the workspace and opens the view there;
+        // the frame reads its note, and has nothing rendered while its panel
+        // is in no document.
+        const waited = ev<{ connected: boolean; cards: number; rendered: number }>(`(async () => {
+            ${PRELUDE}
+            ${UNTIL}
+            ${NOTES}
+            await writeNote(${JSON.stringify(path)}, ${JSON.stringify('## Memo\n\nmemo apart\n')});
+            const Leaf = app.workspace.getLeaf('tab').constructor;
+            const leaf = new Leaf(app);
+            window.__tvApartLeaf = leaf;
+            await leaf.setViewState({ type: ${JSON.stringify(type)}, state: {
+                showSidebar: true,
+                sidebar: [{ kind: 'markdown', id: 'apart', link: ${JSON.stringify(link)} }],
+            } });
+            const el = leaf.view.contentEl;
+            await until(() => el.querySelector('.markdown-frame[data-frame-id="apart"] .markdown-frame__card'), 5000, 'the frame read its note');
+            ${frames(3)}
+            return JSON.stringify({
+                connected: el.isConnected,
+                cards: el.querySelectorAll('.markdown-frame__card').length,
+                rendered: el.querySelectorAll('.markdown-frame__content').length,
+            });
+        })()`);
+        expect(waited).toEqual({ connected: false, cards: 1, rendered: 0 });
+
+        // The leaf goes into a group of tabs, in the place of a tab made for
+        // it, with the view's body marked: a draw of the view makes it anew.
+        const shown = ev<{ text: string | null; width: number; drawn: boolean }>(`(async () => {
+            ${PRELUDE}
+            ${UNTIL}
+            const leaf = window.__tvApartLeaf;
+            delete window.__tvApartLeaf;
+            const el = leaf.view.contentEl;
+            el.querySelector(${JSON.stringify(VIEW_BODY[type])}).dataset.tvRedrawMark = '1';
+            const tab = app.workspace.getLeaf('tab');
+            const tabs = tab.parent;
+            tabs.insertChild(tabs.children.indexOf(tab), leaf);
+            tab.detach();
+            R[${JSON.stringify(name)}] = leaf;
+            app.workspace.setActiveLeaf(leaf);
+            await until(() => el.querySelector('.markdown-frame__content'), 3000, 'the frame rendered its note');
+            const body = el.querySelector('.markdown-frame__content');
+            return JSON.stringify({
+                text: body.textContent.replace(/\s+/g, ' ').trim(),
+                width: Math.round(body.getBoundingClientRect().width),
+                drawn: !el.querySelector('[data-tv-redraw-mark]'),
+            });
+        })()`);
+        expect(shown.text).toBe('memo apart');
+        expect(shown.width).toBeGreaterThan(0);
+        expect(shown.drawn).toBe(false);
     });
 });

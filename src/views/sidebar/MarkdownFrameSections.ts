@@ -209,10 +209,11 @@ export class MarkdownFrameSections {
     }
 
     /**
-     * The container may be styled now. The frames are painted when markdown
-     * can be rendered, and the wait for the stylesheet ends.
+     * The container may stand where markdown can be rendered now: put into
+     * a document, or styled. The frames are painted when it can, and the
+     * wait for the stylesheet ends.
      */
-    private stylesheetApplied(): void {
+    placed(): void {
         if (this.frames.size === 0 || !this.canRender()) return;
         this.stopAwaitingStylesheet?.();
         this.paint();
@@ -323,8 +324,8 @@ export class MarkdownFrameSections {
      * stylesheet after the plugin has loaded, and a view the load opens is
      * drawn before that, its sidebar as wide as the view; a chart rendered
      * then keeps that width. A container found unstyled has the frames
-     * painted once the stylesheet is applied (`stylesheetApplied`); one
-     * that is in no document has them painted at the panel's next draw.
+     * painted once the stylesheet is applied; one that is in no document
+     * has them painted once it is put into one (`placed`, for both).
      */
     private canRender(): boolean {
         if (!this.container.isConnected) return false;
@@ -342,7 +343,7 @@ export class MarkdownFrameSections {
      */
     private awaitStylesheet(): void {
         if (this.stopAwaitingStylesheet) return;
-        const observer = new MutationObserver(() => this.stylesheetApplied());
+        const observer = new MutationObserver(() => this.placed());
         observer.observe(this.container.ownerDocument.head, { childList: true });
         this.stopAwaitingStylesheet = () => {
             observer.disconnect();
