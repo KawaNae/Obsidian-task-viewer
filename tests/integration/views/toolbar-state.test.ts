@@ -22,15 +22,24 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
+import { deleteTestFile } from '../helpers/test-file-manager';
 import {
-    act, closeViews, copyUri, ev, openView, overrideSettings, PRELUDE, readView, restartView,
+    act, closeViews, copyUri, drawAgainByIndex, ev, openView, overrideSettings, PRELUDE, readView, restartView,
 } from '../helpers/view-helper';
+import { waitForFileDeindexed } from '../helpers/waits';
+
+/** The note written to have a view draw again (`drawAgainByIndex`). */
+const TOUCH = 'test-int-toolbar-state-touch.md';
 
 const teardown = createTeardown();
 
 beforeAll(() => {
     const held = overrideSettings({ viewTemplateFolder: '' });
     teardown.add('put the settings back', () => held.restore());
+    teardown.add('delete the touch note', async () => {
+        deleteTestFile(TOUCH);
+        await waitForFileDeindexed(TOUCH);
+    });
     teardown.add('close the views', closeViews);
 });
 
@@ -168,7 +177,7 @@ function fitAt(name: string, width: number | null, opts: { hidden?: boolean } = 
 
 describe('The toolbar folds its actions into ⋮ when its row does not fit', () => {
     afterAll(() => {
-        for (const name of ['tl-fold', 'cal-fold', 'sch-fold']) {
+        for (const name of ['tl-fold', 'cal-fold', 'sch-fold', 'tl-fold-draw', 'cal-fold-draw', 'sch-fold-draw']) {
             try { fitAt(name, null); } catch { /* not opened */ }
         }
     });
@@ -244,6 +253,24 @@ describe('The toolbar folds its actions into ⋮ when its row does not fit', () 
             expect(fitAt(name, needed - 10).compact).toBe(true);
         }
     });
+
+    // A draw of the view, with no change of the toolbar's width or content,
+    // leaves the fold the width calls for.
+    for (const [name, type] of [['tl-fold-draw', 'timeline-view'], ['cal-fold-draw', 'calendar-view'], ['sch-fold-draw', 'schedule-view']]) {
+        it(`${type}'s stays folded, or open, through a draw the index sets off`, async () => {
+            openView(name, type);
+            const needed = Math.ceil(fitAt(name, 700).needed);
+            for (const [width, compact] of [[needed + 10, false], [needed - 10, true]] as const) {
+                const before = fitAt(name, width);
+                expectFits(before, width);
+                expect(before.compact).toBe(compact);
+                await drawAgainByIndex(name, TOUCH);
+                const after = fitAt(name, width);
+                expectFits(after, width);
+                expect(after.compact).toBe(compact);
+            }
+        });
+    }
 });
 
 describe('Kanban', () => {
