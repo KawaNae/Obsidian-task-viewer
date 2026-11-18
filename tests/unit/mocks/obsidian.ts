@@ -82,8 +82,13 @@ export class Modal {
 export class ItemView {
     app: App = new App();
     containerEl = { empty() {}, createDiv() { return {}; } } as any;
+    /** What the view draws into; a test that opens a view puts its own element here. */
+    contentEl = {} as any;
+    constructor(public leaf: any = new WorkspaceLeaf()) {}
     getViewType() { return ''; }
     getDisplayText() { return ''; }
+    async setState(_state: unknown, _result: unknown): Promise<void> {}
+    registerDomEvent(_el: unknown, _type: string, _callback: unknown): void {}
 }
 
 export class MarkdownView extends ItemView {}
