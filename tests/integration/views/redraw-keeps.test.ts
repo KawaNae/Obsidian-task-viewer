@@ -3,8 +3,10 @@
  * vault: the toolbar's filter popover stays open, the scroll stays where it
  * was, the selected card stays selected with its handles, and the
  * sidebar's panel stays in the document, its elements the same and the
- * focus in it kept; and the image export, after such a draw, leaves the
- * toolbar out. Then the cards of the sidebar's list frame across a draw of
+ * focus in it kept, as do the toolbar's place, the toolbar and the body of
+ * a view without a sidebar; and the image export, after such a draw, leaves
+ * the toolbar out. Timer, which does not follow the index, is drawn again by
+ * a change of its name. Then the cards of the sidebar's list frame across a draw of
  * the view alone, and the sidebar's look following the `showSidebar` the
  * workspace or a URI hands the view.
  *
@@ -281,6 +283,83 @@ describe('The sidebar\'s panel stays in the document while the view draws again'
             })()`);
             const all = Object.keys(KEPT);
             expect(after).toEqual({ same: all, connected: all, takenOut: [], focused: true });
+        });
+    }
+});
+
+describe('The toolbar\'s place and the body stay in the document while the view draws again', () => {
+    /** The elements of the view's frame that are read, by their selector. */
+    const KEPT = {
+        slot: '.tv-view__toolbar-host',
+        toolbar: '.tv-view__toolbar-host > .view-toolbar',
+        body: '.tv-view__body',
+    };
+    /** The element of Timer's body that each of its draws makes anew. */
+    const TIMER_BODY = '.timer-view__main';
+
+    /**
+     * Have `name` draw again: as an edit elsewhere has it, or, for Timer,
+     * which does not follow the index, by a change of its name.
+     */
+    async function drawAgain(name: string, type: string): Promise<void> {
+        if (type !== 'timer-view') {
+            await drawAgainByIndex(name, TOUCH);
+            return;
+        }
+        ev(`(async () => {
+            ${PRELUDE}
+            ${UNTIL}
+            const v = V(${JSON.stringify(name)});
+            v.contentEl.querySelector(${JSON.stringify(TIMER_BODY)}).dataset.tvRedrawMark = '1';
+            v.update({ customName: ${JSON.stringify(`${name} renamed`)} });
+            await until(() => !v.contentEl.querySelector('[data-tv-redraw-mark]') && v.contentEl.querySelector(${JSON.stringify(TIMER_BODY)}), 5000,
+                ${JSON.stringify(`${name} drawn again after its name changed`)});
+            ${frames(3)}
+            return JSON.stringify(true);
+        })()`);
+    }
+
+    for (const type of ['schedule-view', 'kanban-view', 'mini-calendar-view', 'timer-view']) {
+        it(`${type}: the same elements are there after the draw, and none was taken out meanwhile`, async () => {
+            const name = `rk-outer-${type}`;
+            openView(name, type, stateFor(type));
+            // Each element of the frame is kept, and every node taken out of
+            // the view from now on is recorded.
+            ev(`(() => {
+                ${PRELUDE}
+                const el = V(${JSON.stringify(name)}).contentEl;
+                const kept = {};
+                for (const [key, sel] of Object.entries(${JSON.stringify(KEPT)})) {
+                    kept[key] = el.querySelector(sel);
+                    if (!kept[key]) throw new Error('no ' + sel);
+                }
+                const removed = [];
+                const record = records => { for (const r of records) removed.push(...r.removedNodes); };
+                const observer = new MutationObserver(record);
+                observer.observe(el, { childList: true, subtree: true });
+                window.__tvOuterKept = { kept, removed, record, observer };
+                return JSON.stringify(true);
+            })()`);
+
+            await drawAgain(name, type);
+
+            const after = ev<{ same: string[]; connected: string[]; takenOut: string[] }>(`(() => {
+                ${PRELUDE}
+                const { kept, removed, record, observer } = window.__tvOuterKept;
+                delete window.__tvOuterKept;
+                record(observer.takeRecords());
+                observer.disconnect();
+                const el = V(${JSON.stringify(name)}).contentEl;
+                const sels = ${JSON.stringify(KEPT)};
+                const keys = Object.keys(sels);
+                return JSON.stringify({
+                    same: keys.filter(k => el.querySelector(sels[k]) === kept[k]),
+                    connected: keys.filter(k => kept[k].isConnected),
+                    takenOut: keys.filter(k => removed.some(n => n === kept[k] || n.contains?.(kept[k]))),
+                });
+            })()`);
+            const all = Object.keys(KEPT);
+            expect(after).toEqual({ same: all, connected: all, takenOut: [] });
         });
     }
 });
