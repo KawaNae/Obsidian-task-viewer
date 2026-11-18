@@ -701,7 +701,7 @@ A task is drawn all day when its start is a bare date (a start date with no star
 
 ## View Skeleton
 
-The six views (Timeline, Schedule, Calendar, MiniCalendar, Kanban, Timer) share one skeleton: a table that says what each view is, a base class that holds its state and answers each change of it, and the plugin's events that tell the views what happened. The log view is not one of them.
+The six views (Timeline, Schedule, Calendar, MiniCalendar, Kanban, Timer) share one skeleton: a table that says what each view is, a base class that holds its state, answers each change of it, builds the view's frame and runs its draws, and the plugin's events that tell the views what happened. The log view is not one of them.
 
 ### The view table (`views/ViewDescriptors.ts`)
 
@@ -713,7 +713,7 @@ What is read from the table:
 - `SchemaRegistry` (`codecFor`, `schemaFor`, the short names) for the string boundaries: the URI, the CLI, `PinnedListQuery`. A caller that knows the view imports its codec from the schema module instead
 - `ExportRegistry`'s keys (`ExportableViewType`, checked by the compiler), the CLI's and `Reference`'s view names, `ViewTemplateLoader`'s valid views, `LeafOpener`'s default position, the settings menu's template and export items
 
-Adding a view is one table entry plus its modules: `ViewType`, the schema module with its codec, the view class, its entry in `main`'s `VIEW_CONSTRUCTORS` (the table cannot hold the constructors without importing the classes, which import the table; a type left out there is a compile error), its i18n keys, its field in `defaultViewPositions`, and, when it exports, its target in `ExportRegistry`. The settings tab's list of default positions (`settings/ViewsTab.ts`) is still written by hand, one row per view with its label.
+Adding a view is one table entry plus its modules: `ViewType`, the schema module with its codec, the view class, its entry in `main`'s `VIEW_CONSTRUCTORS` (the table cannot hold the constructors without importing the classes, which import the table; a type left out there is a compile error), its i18n keys, its field in `defaultViewPositions`, and, when it exports, its target in `ExportRegistry`. The view class extends the base and writes its answers (the table under "The frame and the draw"): at least `openView`, `frameToolbar`, `cardRenderer` and `draw`, with its toolbar a `ViewToolbarBase`. It builds no frame of its own, and empties nothing outside its draw. The settings tab's list of default positions (`settings/ViewsTab.ts`) is still written by hand, one row per view with its label.
 
 A view answers `getViewType()` from its schema module (`TimelineCodec.schema.viewType`), not from a field: Obsidian's `View` constructor reads the type (the leaf's `data-type`) before the subclass has any field.
 
@@ -733,19 +733,79 @@ The base answers every patch in one place:
 
 The toolbars and the pinned lists subscribe to the store and mend themselves; they hold no copy of the state. A toolbar is handed the store and, apart from it, the few commands that are not a change of state (move by days, Now, Go to date). The filter menu edits a value it is handed and gives back a new one (`editViewFilter`).
 
-Timeline's, Calendar's and Schedule's toolbars put their actions in an action zone (`ViewToolbarBase.createActionZone`), which folds into ⋮ (`is-compact` on the toolbar) when the row does not fit (`sharedUI/ToolbarFold.ts`). The width the row needs open is measured on each change of the toolbar's DOM (the month's name, a label, a button), with the zone shown whether or not it is folded, so folding never unfolds it; the width the toolbar has is read on each resize. A toolbar out of sight (no width) keeps its fold, and is measured again once seen. The view's `toolbar.close()` stops the watching.
+Timeline's, Calendar's and Schedule's toolbars put their actions in an action zone (`ViewToolbarBase.createActionZone`), which folds into ⋮ (`is-compact` on the toolbar) when the row does not fit (`sharedUI/ToolbarFold.ts`). The width the row needs open is measured on each change of the toolbar's DOM (the month's name, a label, a button), with the zone shown whether or not it is folded, so folding never unfolds it; the width the toolbar has is read on each resize. A toolbar out of sight (no width) keeps its fold, and is measured again once seen. The toolbar's `close()`, which the base calls as the view closes, stops the watching.
 
 The settings (gear) menu is built once for every view, by `buildViewSettingsOptions` (`ViewSettings.ts`), from the descriptor and the store: Save and Load view (when the view keeps templates; saving names the view after the template), Copy URI and Copy as link (the config through `codec.toUriParams`), Reset (the config back to the defaults, the transient fields cleared except where the view is: the date looked at and Calendar's week offset), Export (when it exports). The view's own items go above them.
 
+### The frame and the draw
+
+The base builds a view's frame once, as the view opens (`onOpen`), and no draw takes any of it out of the document:
+
+```
+contentEl
+├── div.tv-view__toolbar-host   the toolbar's place
+│   └── div.view-toolbar        the toolbar's root
+└── div.tv-view__body           the body: the one element the view draws into
+```
+
+A view with a sidebar (Timeline, Calendar) has the sidebar build its layout there instead of `tv-view__body` (`ViewSidebar.build`), and the body is the sidebar's main area, `tv-sidebar__main`. The sidebar's panel beside it is drawn by the panel and outlives the view's draws. The two classes are styled once for every view (`_base.css`).
+
+Opening, in order:
+
+1. The content is emptied and the toolbar's place is made
+2. `frameSidebar()`: a sidebar builds its layout, and its main area is the body; with none, the body is `tv-view__body`
+3. `openView()`: the view wires its parts. The frame is there; the toolbar is not placed yet
+4. `frameToolbar().place(slot)`
+5. When `followsIndex()`, the index is followed: each change calls `indexChanged()`, then asks for a draw (`RenderScheduler.handleChange`, which skips a change of `blockId` alone)
+6. The first draw is asked for. `onReady` runs once the state has come too (`setState`)
+
+Each draw (`drawFrame`, run by the scheduler in the next frame once the view is open), in order:
+
+1. `toolbar.sync()`
+2. `beforeEmpty()`: the view reads what emptying the body loses (the scroll)
+3. When `cardRenderer()` gives a renderer, the cards in the body are gathered (`CardReconciler.detach(body)`), and the body is emptied. Only the body's cards are gathered: those of the sidebar's panel are the panel's
+4. `draw(body, cards)`: the view draws the body from its state, taking cards again by key (`cards.acquire`)
+5. The cards not taken again are disposed of (`renderer.dispose`). A view whose `cardRenderer()` is null (MiniCalendar, Timer) gathers none and disposes of none
+
+Closing: the index is let go, `closeView()` runs, then the toolbar's `close()` and the sidebar's, and a draw asked for and not run is dropped.
+
+What a view answers:
+
+| Answer | What the view gives | Default |
+|---|---|---|
+| `openView()` | Wires its parts, once, as it opens | — |
+| `closeView()` | Lets go of what `openView` took (subscriptions, observers, popovers) | Nothing |
+| `frameToolbar()` | Its toolbar, which it has by the end of `openView` | — |
+| `frameSidebar()` | Its sidebar (Timeline, Calendar); asked before `openView` | None |
+| `cardRenderer()` | The renderer its cards are drawn and disposed of with; null for a view without cards | — |
+| `followsIndex()` | Whether a change of the index draws it again (Timer: no) | Yes |
+| `indexChanged()` | Its answer to a change of the index, before the draw (Timeline pulls its window to the oldest overdue day) | Nothing |
+| `beforeEmpty()` | Reads what emptying the body loses (Timeline, Schedule, Calendar, Kanban: the scroll) | Nothing |
+| `draw(body, cards)` | Draws the body, emptied, from its state | — |
+| `settingsSaved()` | Its answer to the settings saved, before the draw (Timeline settles its window) | Nothing |
+| `dayRolled()` | Its answer to the visual day's change, before the draw (Timeline, Schedule) | Nothing |
+| `onMinute()` | Its answer to a minute passed (Timeline, Schedule: the now-line) | Nothing |
+| `onReady()` | Runs once the view is open and has its state | Nothing |
+
+A toolbar (`ViewToolbarBase`) is put in its place once and brought up to the state at each draw:
+
+| Method | When | What it does |
+|---|---|---|
+| `place(slot)` | As the view opens | Makes the root (`view-toolbar`) in the place, builds its content (`buildDom`) and runs `update()` |
+| `sync()` | At each draw | A toolbar made with `{ dynamicContent: true }` (Timer's) empties its root and builds its content again; every toolbar then runs `update()`. The root stays in its place |
+| `close()` | As the view closes | Stops the fold's watching; a toolbar with popovers closes them too |
+
 ### The plugin's events
 
-| Event | Who tells | Base default |
+| Event | Who tells | What the base does |
 |---|---|---|
-| `redraw()` | Settings saved (`ViewEvents.settingsChanged`) | Draw again |
-| `onDayRolled()` | The visual day changed (`ViewEvents.rollIfChanged`) | Draw again |
+| `redraw()` | Settings saved (`ViewEvents.settingsChanged`) | The view's `settingsSaved()`, then the sidebar's (its frames read their notes again), then a draw |
+| `onDayRolled()` | The visual day changed (`ViewEvents.rollIfChanged`) | The view's `dayRolled()`, then a draw. The sidebar is not told |
 | `onMinute()` | A minute passed (`ViewEvents.minutePassed`) | Nothing; Timeline and Schedule move their now-line |
 
-The plugin has one clock of minutes (`sharedLogic/MinuteClock.ts`, `startMinuteClock`): its first tick lands on the next minute boundary, every tick after it one minute later, and its timers are the plugin's, cleared when it unloads. Each tick sweeps the overdue judgement and calls `ViewEvents.minutePassed`, which checks the visual day (`startHour`) every minute and tells the views. `ViewEvents` is the one place that decides the day rolled; a settings save that moves the day (a new start hour) is told as a day roll and then as a redraw, since what the views draw from was saved too (the keys the sidebar's markdown frames read a note by). Neither moves the date a view shows (Timeline's `redraw` settles its window on the date it shows, and `TimelineDays.dayRolled` and `settle` give the same window when both run). A running timer's clock of seconds is not this clock.
+A view answers in `settingsSaved` and `dayRolled`; `redraw` and `onDayRolled` are the base's.
+
+The plugin has one clock of minutes (`sharedLogic/MinuteClock.ts`, `startMinuteClock`): its first tick lands on the next minute boundary, every tick after it one minute later, and its timers are the plugin's, cleared when it unloads. Each tick sweeps the overdue judgement and calls `ViewEvents.minutePassed`, which checks the visual day (`startHour`) every minute and tells the views. `ViewEvents` is the one place that decides the day rolled; a settings save that moves the day (a new start hour) is told as a day roll and then as a redraw, since what the views draw from was saved too (the keys the sidebar's markdown frames read a note by). Neither moves the date a view shows (Timeline's `settingsSaved` settles its window on the date it shows, and `TimelineDays.dayRolled` and `settle` give the same window when both run). A running timer's clock of seconds is not this clock.
 
 ### The day a dated view looks at
 
