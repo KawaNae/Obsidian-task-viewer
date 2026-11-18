@@ -1,4 +1,6 @@
 import { obsidianEval, sleep } from './cli-helper';
+import { writeIndexedTestFile } from './test-file-manager';
+import { UNTIL } from './waits';
 import en from '../../../src/i18n/locales/en.json';
 import ja from '../../../src/i18n/locales/ja.json';
 
@@ -269,6 +271,56 @@ export function copyUri(name: string, menuButton = 'button:has(> svg.lucide-sett
             closeMenus();
         }
         return JSON.stringify(written);
+    })()`);
+}
+
+/**
+ * For each view type, an element of its body that every draw builds anew:
+ * a mark put on it is gone once the view has drawn again.
+ */
+export const VIEW_BODY: Record<string, string> = {
+    'timeline-view': '.timeline-grid',
+    'calendar-view': '.cal-grid',
+    'schedule-view': '.schedule-view__body-scroll',
+    'kanban-view': '.kanban-view__grid-host',
+    'mini-calendar-view': '.cal-grid--mini',
+};
+
+/** Statements that wait for `n` frames of the main window. */
+export function frames(n: number): string {
+    return `for (let i = 0; i < ${n}; i++) await new Promise(r => requestAnimationFrame(r));`;
+}
+
+let touches = 0;
+
+/**
+ * Have the view `name` draw again as an edit elsewhere has it draw: mark its
+ * body (`VIEW_BODY`), write the note `touch` from outside with a task no
+ * view draws (no date, no tag), and wait until the index has read it, the
+ * mark is gone, a body is there, and three frames have passed (the draw
+ * puts its scroll back over two). Throws when the view does not draw again.
+ * The note is the caller's to delete.
+ */
+export async function drawAgainByIndex(name: string, touch: string): Promise<void> {
+    ev(`(() => {
+        ${PRELUDE}
+        const v = V(${JSON.stringify(name)});
+        const body = v.contentEl.querySelector(${JSON.stringify(VIEW_BODY)}[v.getViewType()]);
+        if (!body) throw new Error('no body in ' + ${JSON.stringify(name)});
+        body.dataset.tvRedrawMark = '1';
+        return JSON.stringify(true);
+    })()`);
+    touches += 1;
+    await writeIndexedTestFile(touch, `- [ ] touch ${touches}\n`);
+    ev(`(async () => {
+        ${PRELUDE}
+        ${UNTIL}
+        const v = V(${JSON.stringify(name)});
+        const sel = ${JSON.stringify(VIEW_BODY)}[v.getViewType()];
+        await until(() => !v.contentEl.querySelector('[data-tv-redraw-mark]') && v.contentEl.querySelector(sel), 5000,
+            ${JSON.stringify(`${name} drawn again after ${touch} was written`)});
+        ${frames(3)}
+        return JSON.stringify(true);
     })()`);
 }
 
