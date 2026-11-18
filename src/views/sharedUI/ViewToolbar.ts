@@ -33,8 +33,8 @@ import { ToolbarFold } from './ToolbarFold';
  * popover anchors, etc.) are never taken out between draws.
  *
  * Pass `{ dynamicContent: true }` to the constructor for toolbars whose inner
- * DOM depends on state that changes between renders (e.g. month labels in
- * mini-calendar, timer-mode controls). Such toolbars rebuild their content at
+ * DOM depends on state that changes between renders (e.g. the timer's mode
+ * controls). Such toolbars rebuild their content at
  * every sync; static toolbars build it once, when placed.
  *
  * A toolbar that puts its actions in an action zone ({@link createActionZone})
@@ -68,8 +68,8 @@ export abstract class ViewToolbarBase {
 
     /**
      * Bring the toolbar up to the view's state, at each draw: a dynamic
-     * toolbar builds its content again, and `update()` runs. Writing the
-     * toolbar's DOM has its fold measured again.
+     * toolbar builds its content again, and `update()` runs. The fold,
+     * watching the root since `place`, measures again on what is written.
      */
     sync(): void {
         if (!this.rootEl) return;
@@ -78,7 +78,6 @@ export abstract class ViewToolbarBase {
             this.buildDom(this.rootEl);
         }
         this.update();
-        this.fold?.attach(this.rootEl);
     }
 
     /**
