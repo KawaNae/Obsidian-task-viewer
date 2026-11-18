@@ -288,6 +288,38 @@ describe.each([
         expect(r.lists[0].name).toBe('Alpha');
     });
 
+    it('leaves the sidebar open, its state kept, on the Escape that keeps a list\'s old name', () => {
+        const r = ev<Record<string, unknown>>(`(async () => {
+            ${PRELUDE}
+            const C = ${JSON.stringify(C)};
+            const el = V(${JSON.stringify(name)}).contentEl;
+            const sidebar = () => ({
+                shown: !el.querySelector('.tv-sidebar__panel').classList.contains('tv-sidebar__panel--hidden'),
+                saved: V(${JSON.stringify(name)}).getState().showSidebar ?? true,
+            });
+            if (!sidebar().shown) {
+                el.querySelector('.sidebar-toggle-button-icon').click();
+                await wait(400);
+            }
+            const before = sidebar();
+            const sec = el.querySelector('.' + C.root);
+            headerBtn(C, sec, 'more-horizontal').click();
+            await wait(100);
+            menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('menu.rename'))});
+            await wait(200);
+            const input = el.querySelector('.' + C.root + ' .' + C.nameInput);
+            input.value = 'Discarded';
+            key(input, 'Escape');
+            await wait(${SETTLE_MS});
+            return JSON.stringify({ before, name: readSection(C, el.querySelector('.' + C.root)).name, after: sidebar() });
+        })()`);
+        expect(r).toEqual({
+            before: { shown: true, saved: true },
+            name: 'Alpha',
+            after: { shown: true, saved: true },
+        });
+    });
+
     it('adds, duplicates and removes conditions and groups in its filter menu, and counts what passes', () => {
         // A condition: tagged tvpla.
         let r = op(name, `
