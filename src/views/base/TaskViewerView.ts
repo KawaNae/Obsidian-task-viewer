@@ -59,8 +59,9 @@ export interface ViewToolbarContext<S extends object> {
  * The plugin's events: `redraw` (settings saved), `onDayRolled` (the visual
  * day changed) and `onMinute` (a minute passed). The first two are answered
  * here, for every view: the view's own answer (`settingsSaved`,
- * `dayRolled`), then the sidebar's, then a draw. The last does nothing
- * unless the view says otherwise.
+ * `dayRolled`), then a draw. Saved settings are also handed to the
+ * sidebar, between the two; a new day is not. The last does nothing unless
+ * the view says otherwise.
  */
 export abstract class TaskViewerView<
     TConfig extends NamedConfig,
