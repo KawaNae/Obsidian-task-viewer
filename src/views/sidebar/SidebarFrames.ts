@@ -11,10 +11,12 @@
  * is its kind's (`drawFrame`). A list frame is a saved list, drawn by
  * `TaskListSections`; a markdown frame is a section of a note, drawn by
  * `MarkdownFrameSections`. The panel is the placement of both. The panel
- * draws itself on a change of its fields of the state and of the tasks, so a
- * change of the frames does not draw the view. The markdown frames take a
- * change of the frames or folds at once, not at the draw, which only puts
- * their elements in place.
+ * draws itself on a change of its fields of the state and of the tasks, and
+ * when the settings are saved or the visual day changes, which the view
+ * hands it through the sidebar: a list's cards are drawn by the settings,
+ * and a list's conditions may count from today. A change of the frames does
+ * not draw the view. The markdown frames take a change of the frames or
+ * folds at once, not at the draw, which only puts their elements in place.
  *
  * A draw makes every list frame anew, its cards kept by key, and leaves a
  * markdown frame's element where it stands: what a note's blocks drew in it
@@ -109,6 +111,8 @@ export class SidebarFrames {
     /** The window's animation frames, in which a requested draw runs. */
     private readonly animationFrames = new HostFrameScheduler(() => this.el);
     private pendingDraw: number | null = null;
+    /** Between `open` and `close`: a draw is requested only then. */
+    private opened = false;
     private readonly unsubscribers: (() => void)[] = [];
 
     /** Make the panel's elements in `body`, the sidebar's body that scrolls: the frames, and the add button after them. */
@@ -145,12 +149,14 @@ export class SidebarFrames {
 
     /**
      * Start drawing: now, and again on a change of the tasks or of the
-     * panel's fields. Start following the notes of the markdown frames,
+     * panel's fields, and when the view hands it saved settings or a new
+     * day (`settingsSaved`, `dayRolled`). Start following the notes of the markdown frames,
      * which take the state's frames and folds now and at once whenever they
      * change, ahead of the draw: a note renamed before the draw is followed
      * by the frame that shows it.
      */
     open(): void {
+        this.opened = true;
         this.markdown.open();
         this.syncMarkdown();
         this.unsubscribers.push(
@@ -167,6 +173,7 @@ export class SidebarFrames {
 
     /** Stop drawing and following, close the popovers the frames opened, and end the markdown frames. */
     close(): void {
+        this.opened = false;
         for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
         if (this.pendingDraw !== null) {
             this.animationFrames.cancel(this.pendingDraw);
@@ -176,9 +183,24 @@ export class SidebarFrames {
         this.markdown.close();
     }
 
-    /** The settings were saved: the markdown frames read their notes again (`MarkdownFrameSections.settingsSaved`). */
+    /**
+     * The settings were saved: the markdown frames read their notes again
+     * (`MarkdownFrameSections.settingsSaved`), and the panel is drawn again,
+     * as a list's cards are drawn by the settings (the statuses, the page's
+     * size).
+     */
     settingsSaved(): void {
         this.markdown.settingsSaved();
+        this.requestDraw();
+    }
+
+    /**
+     * The visual day changed: the panel is drawn again, as a list's
+     * conditions may count from today. What a note holds does not change
+     * with the day, so the markdown frames do not read their notes again.
+     */
+    dayRolled(): void {
+        this.requestDraw();
     }
 
     /**
@@ -250,7 +272,7 @@ export class SidebarFrames {
     }
 
     private requestDraw(): void {
-        if (this.pendingDraw !== null) return;
+        if (!this.opened || this.pendingDraw !== null) return;
         this.pendingDraw = this.animationFrames.request(() => {
             this.pendingDraw = null;
             this.draw();
