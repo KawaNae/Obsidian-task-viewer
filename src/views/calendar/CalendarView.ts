@@ -27,8 +27,7 @@ import { CalendarCodec, type CalendarConfig, type CalendarTransient } from './Ca
 import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { parseSegmentId } from '../../services/display/SegmentIds';
-import { SidebarManager } from '../sidebar/SidebarManager';
-import { SidebarFrames } from '../sidebar/SidebarFrames';
+import { ViewSidebar } from '../sidebar/ViewSidebar';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { drawDateGridLane } from '../sharedUI/DateGridLane';
@@ -57,22 +56,19 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
     private dragHandler: DragHandler | null = null;
     private handleManager: HandleManager | null = null;
     private selectionController: SelectionController | null = null;
-    private sidebarManager: SidebarManager;
-    /** The sidebar's frames; they draw themselves, and outlive the view's draws. */
-    private readonly sidebarFrames: SidebarFrames;
+    /** The sidebar, built once as the view opens; its frames draw themselves. */
+    private readonly viewSidebar: ViewSidebar;
     private readonly toolbar: CalendarToolbar;
     private container: HTMLElement;
+    /** Where the toolbar stands, above the sidebar's layout; made once as the view opens. */
+    private toolbarHostEl: HTMLElement;
+    /** The sidebar's main area, the one element a draw empties and draws into. */
+    private main: HTMLElement;
     private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private readonly scrollRestorer = new PixelScrollRestorer(
         () => this.container?.querySelector('.cal-grid__body') as HTMLElement | null,
     );
-    /**
-     * At narrow width the sidebar starts closed whatever the state says, and
-     * only the toggle button opens it. `showSidebar` states the desktop-width
-     * position; applying a config never marks the sidebar as user-opened.
-     */
-    private sidebarOpenedThisSession = false;
     private readonly hoverParent = new TaskViewHoverParent();
 
     getViewType(): string {
@@ -97,14 +93,6 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.menuHandler = cards.menuHandler;
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.sidebarManager = new SidebarManager({
-            mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
-            onPersist: () => this.app.workspace.requestSaveLayout(),
-            onSyncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
-            onRequestClose: () => this.setSidebarOpen(false),
-            getIsOpen: () => this.isSidebarOpen(),
-        });
-
         this.toolbar = new CalendarToolbar({
             host: this.toolbarHost(),
             commands: {
@@ -113,17 +101,14 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
                 goTo: (date) => this.update(gridAt(date)),
                 viewedDay: () => viewedDay(this.state.date, this.visualToday()),
                 referenceMonth: () => referenceMonth(this.gridRange().start),
-                isSidebarOpen: () => this.isSidebarOpen(),
-                toggleSidebar: (open) => {
-                    if (open) this.sidebarOpenedThisSession = true;
-                    this.setSidebarOpen(open);
-                },
+                isSidebarOpen: () => this.viewSidebar.isOpen(),
+                toggleSidebar: (open) => this.viewSidebar.toggle(open),
             },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
         });
 
-        this.sidebarFrames = new SidebarFrames({
+        this.viewSidebar = new ViewSidebar({
             plugin: this.plugin,
             readService: this.readService,
             index: this.index,
@@ -134,6 +119,9 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
             state: () => this.state,
             subscribe: (listener) => this.store.subscribe(listener),
             write: (patch) => this.update(patch, { draw: false }),
+        }, {
+            mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
+            syncToggleButton: () => this.toolbar?.syncSidebarToggleState(),
         });
     }
 
@@ -147,27 +135,17 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.update(gridShifted(this.state, this.visualToday(), weeks));
     }
 
-    /** Whether the sidebar shows: closed at narrow width until the toggle opens it this session. */
-    private isSidebarOpen(): boolean {
-        if (this.sidebarManager.isNarrow() && !this.sidebarOpenedThisSession) return false;
-        return this.state.showSidebar ?? true;
-    }
-
-    /** Open or close the sidebar, sliding; the draw does not rebuild it. */
-    private setSidebarOpen(open: boolean): void {
-        this.update({ showSidebar: open }, { draw: false });
-        this.sidebarManager.applyOpen(open, { animate: true });
-    }
-
     protected openView(): void {
         this.container = this.contentEl;
         this.container.empty();
         this.container.addClass('calendar-view');
-        this.sidebarManager.attach(this.container, (el, ev, handler) =>
+
+        // The toolbar's host and the sidebar's layout are made once; a draw
+        // empties the sidebar's main area alone.
+        this.toolbarHostEl = this.container.createDiv('calendar-view__toolbar-host');
+        this.main = this.viewSidebar.build(this.container, (el, ev, handler) =>
             this.registerDomEvent(el, ev, handler),
         );
-
-        this.sidebarFrames.open();
         this.handleManager = new HandleManager(this.container, {
             getTask: (id) => this.index.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
@@ -202,8 +180,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
     protected closeView(): void {
         this.hoverParent.dispose();
         this.toolbar.close();
-        this.sidebarManager.detach();
-        this.sidebarFrames.close();
+        this.viewSidebar.close();
 
         this.dragHandler?.destroy();
         this.dragHandler = null;
@@ -222,7 +199,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
 
     /** Settings were saved: the grid is drawn anew, and the sidebar's frames read their notes anew. */
     override redraw(): void {
-        this.sidebarFrames.settingsSaved();
+        this.viewSidebar.settingsSaved();
         super.redraw();
     }
 
@@ -233,31 +210,23 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
     }
 
     private performRender(): void {
-        this.sidebarManager.syncPresentation(this.isSidebarOpen(), { animate: false });
-
-        this.toolbar.detach();
-        // The sidebar's frames come out before the grid's cards are gathered,
-        // so their cards are neither taken for the grid's nor lost; they go
-        // back into the sidebar built below.
-        this.sidebarFrames.lift();
-
         // Keyed reconciliation: lift surviving cards into a key→element map
         // before tearing down the month grid. Survivors are re-parented and
         // re-decorated when their key turns up in the new render;
         // unmatched ones are disposed at the end. Cards keep their inner DOM
-        // (markdown, focus, expand state) intact across renders.
+        // (markdown, focus, expand state) intact across renders. Only the
+        // main area is gathered and emptied: the sidebar's frames keep their
+        // own cards.
         const reconciler = new CardReconciler();
-        reconciler.detach(this.container);
+        reconciler.detach(this.main);
 
-        this.container.empty();
+        this.main.empty();
 
-        const toolbarHost = this.container.createDiv('calendar-view__toolbar-host');
-        this.toolbar.mount(toolbarHost);
-        const { main, sidebarBody } = this.sidebarManager.buildLayout(this.container);
+        // The first mount builds the toolbar's DOM; each later one, into the
+        // same host, only brings it up to date.
+        this.toolbar.mount(this.toolbarHostEl);
 
-        this.sidebarFrames.mount(sidebarBody);
-
-        const calendarHost = main.createDiv('cal-grid');
+        const calendarHost = this.main.createDiv('cal-grid');
 
         const { start: rangeStartStr, end: rangeEndStr } = this.gridRange();
         this.menuHandler.setViewStartDate(rangeStartStr);

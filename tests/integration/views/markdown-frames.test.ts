@@ -642,7 +642,7 @@ describe.each([
                 v.update({ sidebar: [...(v.state.sidebar ?? []), { kind: 'markdown', id: 'added', link: ${JSON.stringify(`${ADDED}#Memo`)} }] }, { draw: false });
                 // Its note is read meanwhile; its element, in no document yet, is reached through the panel.
                 await wait(300);
-                const root = v.sidebarFrames.markdown.elementOf('added');
+                const root = v.viewSidebar.frames.markdown.elementOf('added');
                 const before = { connected: root.isConnected, body: !!root.querySelector('.markdown-frame__content') };
                 await renameNote(${JSON.stringify(`${ADDED}.md`)}, ${JSON.stringify(`${ADDED}-moved.md`)});
                 return JSON.stringify({ before, atRename, frames: heldCount });
