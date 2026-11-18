@@ -50,6 +50,17 @@ function expectedGridHead(type: string, start: string): string {
     return type === 'calendar-view' ? calendarLabel(start) : start;
 }
 
+/** The year and month (YYYY-MM) a Timeline's toolbar shows. */
+function timelineMonthLabel(name: string): string {
+    return ev<string>(`(() => {
+        ${PRELUDE}
+        const el = V(${JSON.stringify(name)}).contentEl;
+        const year = el.querySelector('.view-toolbar__date-label-year a')?.textContent;
+        const month = el.querySelector('.view-toolbar__date-label-month a')?.textContent;
+        return JSON.stringify(year + '-' + month);
+    })()`);
+}
+
 const teardown = createTeardown();
 
 beforeAll(async () => {
@@ -252,6 +263,20 @@ describe('a settings save', () => {
             saveSettings({ pastDaysToShow: past });
         }
         expect(readView('ss-follow').dates?.[0]).toBe(addDays(today, -past));
+    });
+
+    it("moves a following Timeline's year and month in its toolbar with its window, on a new past days to show", () => {
+        openView('ss-label', 'timeline-view');
+        expect(timelineMonthLabel('ss-label')).toBe(addDays(today, -past).slice(0, 7));
+        // Forty days more go back over at least one month's end.
+        try {
+            saveSettings({ pastDaysToShow: past + 40 });
+            expect(readView('ss-label').dates?.[0]).toBe(addDays(today, -(past + 40)));
+            expect(timelineMonthLabel('ss-label')).toBe(addDays(today, -(past + 40)).slice(0, 7));
+        } finally {
+            saveSettings({ pastDaysToShow: past });
+        }
+        expect(timelineMonthLabel('ss-label')).toBe(addDays(today, -past).slice(0, 7));
     });
 
     it("redraws a Calendar's month grid at once by a new week start, following or on a picked day", () => {
