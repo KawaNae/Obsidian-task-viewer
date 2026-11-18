@@ -25,6 +25,12 @@ const drawn = vi.hoisted(() => ({
     synced: [] as { ids: string[]; collapsed: Record<string, boolean> }[],
     /** How many draws were requested of the window. */
     requested: 0,
+    /** The draws requested and not run yet, run by `runFrames`. */
+    frames: [] as (() => void)[],
+    /** How many lists were drawn. */
+    listsDrawn: 0,
+    /** How many times the markdown frames were told to read their notes again. */
+    readAgain: 0,
 }));
 
 vi.mock('../../../src/views/sharedUI/TaskListSections', () => ({
@@ -33,7 +39,7 @@ vi.mock('../../../src/views/sharedUI/TaskListSections', () => ({
         constructor(_deps: unknown, placement: unknown) { drawn.placement = placement; }
         scheduleRename(id: string) { drawn.renames.push(id); }
         keepPagesOf() {}
-        drawList() { return {}; }
+        drawList() { drawn.listsDrawn++; return { remove() {} }; }
         close() {}
     },
 }));
@@ -47,9 +53,10 @@ vi.mock('../../../src/views/sidebar/MarkdownFrameSections', () => ({
             drawn.synced.push({ ids: frames.filter(f => f.kind === 'markdown').map(f => f.id), collapsed });
         }
         holds() { return false; }
-        elementOf() { return {}; }
+        elementOf() { return { remove() {} }; }
         paint() {}
         add(slot: unknown) { drawn.sectionsAdded.push(slot); }
+        settingsSaved() { drawn.readAgain++; }
     },
 }));
 
@@ -62,7 +69,7 @@ vi.mock('../../../src/views/sharedUI/CardReconciler', () => ({
 
 vi.mock('../../../src/utils/HostWindow', () => ({
     HostFrameScheduler: class {
-        request() { return ++drawn.requested; }
+        request(cb: () => void) { drawn.frames.push(cb); return ++drawn.requested; }
         cancel() {}
     },
 }));
@@ -165,6 +172,24 @@ function panelOver(sidebar: SidebarFrame[], body: unknown = new FakeEl()) {
         ids: () => state.sidebar?.map(f => f.id), state: () => state, writes: () => writes,
     };
 }
+
+/** A sidebar's body, making the panel's elements as much of them as making the panel and a draw touch. */
+const body = () => {
+    const element = () => {
+        const children: unknown[] = [];
+        return {
+            children,
+            appendText() {},
+            addEventListener() {},
+            insertBefore(node: unknown) { children.push(node); return node; },
+            createDiv: () => ({ setText() {} }),
+        };
+    };
+    return { createDiv: element, createEl: element };
+};
+
+/** Run the draws requested of the window so far. */
+const runFrames = () => { for (const run of drawn.frames.splice(0)) run(); };
 
 describe("the stack of a sidebar that holds a markdown frame", () => {
     it('moves a list past the markdown frame, and the markdown frame by its own id', () => {
@@ -331,20 +356,6 @@ describe("the stack of a sidebar that holds a markdown frame", () => {
 });
 
 describe('the markdown frames of a sidebar, kept to the state', () => {
-    /** A sidebar's body, making the panel's elements as much of them as making the panel and a draw touch. */
-    const body = () => {
-        const element = () => {
-            const children: unknown[] = [];
-            return {
-                children,
-                appendText() {},
-                addEventListener() {},
-                insertBefore(node: unknown) { children.push(node); return node; },
-                createDiv: () => ({ setText() {} }),
-            };
-        };
-        return { createDiv: element, createEl: element };
-    };
     beforeEach(() => {
         drawn.synced = [];
         drawn.requested = 0;
@@ -382,6 +393,61 @@ describe('the markdown frames of a sidebar, kept to the state', () => {
         panel.update({ sidebar: [MEMO] });
         panel.frames.open();
         expect(drawn.synced.at(-1)).toEqual({ ids: ['m'], collapsed: { a: true } });
+    });
+});
+
+describe('the panel, told by its view that the settings were saved or the day rolled', () => {
+    beforeEach(() => {
+        drawn.requested = 0;
+        drawn.frames = [];
+        drawn.listsDrawn = 0;
+        drawn.readAgain = 0;
+    });
+
+    it('draws its lists again when the settings are saved, and has the markdown frames read their notes again', () => {
+        const panel = panelOver([A, MEMO, B], body());
+        panel.frames.open();
+        drawn.listsDrawn = 0;
+
+        panel.frames.settingsSaved();
+        expect(drawn.readAgain).toBe(1);
+        expect(drawn.requested).toBe(1);
+        runFrames();
+        expect(drawn.listsDrawn).toBe(2);
+    });
+
+    it('draws its lists again when the day rolls, and leaves the markdown frames\' notes unread', () => {
+        const panel = panelOver([A, MEMO, B], body());
+        panel.frames.open();
+        drawn.listsDrawn = 0;
+
+        panel.frames.dayRolled();
+        expect(drawn.requested).toBe(1);
+        runFrames();
+        expect(drawn.listsDrawn).toBe(2);
+        expect(drawn.readAgain).toBe(0);
+    });
+
+    it('draws once for a day roll and a settings save told one after the other', () => {
+        const panel = panelOver([A], body());
+        panel.frames.open();
+        drawn.listsDrawn = 0;
+
+        panel.frames.dayRolled();
+        panel.frames.settingsSaved();
+        expect(drawn.requested).toBe(1);
+        runFrames();
+        expect(drawn.listsDrawn).toBe(1);
+    });
+
+    it('requests no draw for either once it is closed', () => {
+        const panel = panelOver([A, MEMO], body());
+        panel.frames.open();
+        panel.frames.close();
+
+        panel.frames.settingsSaved();
+        panel.frames.dayRolled();
+        expect(drawn.requested).toBe(0);
     });
 });
 

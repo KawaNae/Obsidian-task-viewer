@@ -231,6 +231,7 @@ function setup(options: Options = {}) {
             return asEl(main);
         },
         settingsSaved() { log.push('sidebar.settingsSaved'); },
+        dayRolled() { log.push('sidebar.dayRolled'); },
         close() { log.push('sidebar.close'); },
     } as unknown as ViewSidebar : null;
 
@@ -438,19 +439,30 @@ describe('the plugin\'s events', () => {
         expect(log.slice(2, 3)).toEqual(['toolbar.sync']);
     });
 
-    it('the day rolled: the view answers and is drawn; the sidebar is not told', async () => {
+    it('the day rolled: the view answers, then the sidebar, then the view is drawn', async () => {
         const t = setup({ sidebar: true });
         await t.open();
         t.clock.tick();
 
         const log = t.fresh();
         t.view.onDayRolled();
-        expect(log).toEqual(['dayRolled pending=0']);
+        expect(log).toEqual(['dayRolled pending=0', 'sidebar.dayRolled']);
         expect(t.clock.pending()).toBe(1);
 
         t.clock.tick();
-        expect(log.filter(line => line.startsWith('sidebar.'))).toEqual([]);
-        expect(log).toContain('toolbar.sync');
+        expect(log.slice(2, 3)).toEqual(['toolbar.sync']);
+    });
+
+    it('settings saved and the day rolled, for a view with no sidebar: the view answers and is drawn', async () => {
+        const t = setup();
+        await t.open();
+        t.clock.tick();
+
+        const log = t.fresh();
+        t.view.redraw();
+        t.view.onDayRolled();
+        expect(log).toEqual(['settingsSaved pending=0', 'dayRolled pending=1']);
+        expect(t.clock.pending()).toBe(1);
     });
 });
 
