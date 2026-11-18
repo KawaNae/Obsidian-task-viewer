@@ -595,15 +595,16 @@ describe.each([
      * does: set in memory to an hour still ahead (or to 0 before the start
      * hour), today becomes another day, and `ViewEvents.rollIfChanged`, what
      * the minute clock calls, tells the views. The start hour is put back in
-     * the same call.
+     * the same call. The hour ahead is two on, so the test may run past the
+     * end of this one; skipped from 22:00, when two on is no hour of the day.
      */
     const now = new Date();
     const h = now.getHours();
 
-    it.skipIf(h >= 22 && now.getMinutes() >= 50)('counts again the tasks that start today when the day rolls', async () => {
+    it.skipIf(h >= 22)('counts again the tasks that start today when the day rolls', async () => {
         const startHour = readSettings(['startHour']).startHour as number;
         const today = visualDay(startHour, now);
-        const rolledHour = h < startHour ? 0 : Math.min(h + 2, 23);
+        const rolledHour = h < startHour ? 0 : h + 2;
         const rolledToday = visualDay(rolledHour, now);
         expect(rolledToday).not.toBe(today);
 
