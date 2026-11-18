@@ -401,7 +401,13 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         return dateStr === this.visualToday();
     }
 
-    /** Scrolls the schedule body to center the now-line vertically. */
+    /**
+     * Scrolls the schedule body to center the now-line vertically. The line's
+     * place is read from the boxes, against the top of what the body shows,
+     * so it is measured in the body's own scroll whatever ancestor is
+     * positioned (`offsetTop` would count from the nearest positioned one,
+     * outside the body, and take in the toolbar above it).
+     */
     private scrollToCurrentTime(): void {
         if (!this.isCurrentVisualDate(this.viewedDay())) return;
         const bodyScroll = this.container.querySelector('.schedule-view__body-scroll') as HTMLElement | null;
@@ -409,12 +415,9 @@ export class ScheduleView extends TaskViewerView<ScheduleConfig, ScheduleTransie
         const nowLine = bodyScroll.querySelector('.schedule-grid__now-line') as HTMLElement | null;
         if (!nowLine) return;
 
-        const nowTopPx = parseFloat(nowLine.style.top);
-        if (isNaN(nowTopPx)) return;
-        const grid = nowLine.parentElement;
-        if (!grid) return;
-
-        bodyScroll.scrollTop = (grid.offsetTop + nowTopPx) - bodyScroll.clientHeight / 2;
+        const shownTop = bodyScroll.getBoundingClientRect().top + bodyScroll.clientTop;
+        const lineTop = nowLine.getBoundingClientRect().top - shownTop + bodyScroll.scrollTop;
+        bodyScroll.scrollTop = lineTop - bodyScroll.clientHeight / 2;
     }
 
 
