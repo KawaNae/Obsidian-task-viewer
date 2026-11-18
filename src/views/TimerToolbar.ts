@@ -2,7 +2,7 @@ import { setIcon } from 'obsidian';
 import { t } from '../i18n';
 import { ViewSettingsMenu, ViewToolbarBase } from './sharedUI/ViewToolbar';
 import type { ViewSettingsOptions } from './sharedUI/ViewToolbar';
-import type { ViewToolbarHost } from './base/TaskViewerView';
+import type { ViewToolbarContext } from './base/TaskViewerView';
 import type { TimerState, TimerViewMode } from './TimerSchema';
 
 /** What the timer does that is not a change of its state, or reads from more than it. */
@@ -18,7 +18,7 @@ export interface TimerCommands {
 }
 
 export interface TimerToolbarDeps {
-    host: ViewToolbarHost<TimerState>;
+    context: ViewToolbarContext<TimerState>;
     commands: TimerCommands;
 }
 
@@ -33,8 +33,8 @@ export class TimerToolbar extends ViewToolbarBase {
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { host, commands } = this.deps;
-        const mode = host.store.get().timerViewMode ?? 'pomodoro';
+        const { context, commands } = this.deps;
+        const mode = context.store.get().timerViewMode ?? 'pomodoro';
         const isIdle = commands.isIdle();
 
         const labels: Record<TimerViewMode, string> = {

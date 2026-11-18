@@ -65,12 +65,12 @@ export class TimerView extends TaskViewerView<TimerConfig> {
         this.templateLoader = new IntervalTemplateLoader(plugin.app);
 
         this.toolbar = new TimerToolbar({
-            host: this.toolbarHost(),
+            context: this.toolbarContext(),
             commands: {
                 isIdle: () => !this.run,
                 selectMode: (event) => this.showModeMenu(event),
                 reloadTemplates: () => void this.loadTemplates(),
-                settingsOptions: () => this.toolbarHost().settingsOptions((menu) => this.appendDurationItems(menu)),
+                settingsOptions: () => this.toolbarContext().settingsOptions((menu) => this.appendDurationItems(menu)),
             },
         });
 
@@ -115,9 +115,22 @@ export class TimerView extends TaskViewerView<TimerConfig> {
         }, { kind: 'mouseEvent', event });
     }
 
+    protected frameToolbar(): TimerToolbar {
+        return this.toolbar;
+    }
+
+    /** The timer draws no cards. */
+    protected cardRenderer(): null {
+        return null;
+    }
+
+    /** The timer draws no tasks, and runs its own clock. */
+    protected override followsIndex(): boolean {
+        return false;
+    }
+
     protected openView(): void {
         this.container = this.contentEl;
-        this.container.empty();
         this.container.addClass('timer-view');
     }
 
@@ -251,14 +264,8 @@ export class TimerView extends TaskViewerView<TimerConfig> {
 
     // ─── Rendering ──────────────────────────────────────────────
 
-    protected draw(): void {
-        this.toolbar.detach();
-        this.container.empty();
-
-        const toolbarHost = this.container.createDiv('timer-view__toolbar-host');
-        this.toolbar.mount(toolbarHost);
-
-        const mainContainer = this.container.createDiv('timer-view__main');
+    protected draw(body: HTMLElement): void {
+        const mainContainer = body.createDiv('timer-view__main');
 
         // Interval mode: show template selector when idle
         if (this.mode() === 'interval' && !this.run) {

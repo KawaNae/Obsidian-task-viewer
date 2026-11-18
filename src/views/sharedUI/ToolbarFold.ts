@@ -13,8 +13,8 @@
  *   - the width the toolbar has, its own box. It changes with the pane, so it
  *     is read on each resize (ResizeObserver). Folding does not change it.
  *
- * A toolbar out of sight (a tab behind another, a toolbar lifted out between
- * draws) has no width: nothing is decided then, and the width it needs is
+ * A toolbar out of sight (a tab behind another, a view not yet in a
+ * document) has no width: nothing is decided then, and the width it needs is
  * measured again once it is seen.
  */
 export class ToolbarFold {

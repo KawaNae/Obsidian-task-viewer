@@ -28,7 +28,7 @@ import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { parseSegmentId } from '../../services/display/SegmentIds';
 import { ViewSidebar } from '../sidebar/ViewSidebar';
-import { CardReconciler } from '../sharedUI/CardReconciler';
+import type { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { drawDateGridLane } from '../sharedUI/DateGridLane';
 import { TaskViewerView } from '../base/TaskViewerView';
@@ -56,15 +56,10 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
     private dragHandler: DragHandler | null = null;
     private handleManager: HandleManager | null = null;
     private selectionController: SelectionController | null = null;
-    /** The sidebar, built once as the view opens; its frames draw themselves. */
+    /** The sidebar, built by the base as the view opens; its frames draw themselves. */
     private readonly viewSidebar: ViewSidebar;
     private readonly toolbar: CalendarToolbar;
     private container: HTMLElement;
-    /** Where the toolbar stands, above the sidebar's layout; made once as the view opens. */
-    private toolbarHostEl: HTMLElement;
-    /** The sidebar's main area, the one element a draw empties and draws into. */
-    private main: HTMLElement;
-    private unsubscribe: (() => void) | null = null;
     private unsubscribeDelete: (() => void) | null = null;
     private readonly scrollRestorer = new PixelScrollRestorer(
         () => this.container?.querySelector('.cal-grid__body') as HTMLElement | null,
@@ -94,7 +89,7 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.toolbar = new CalendarToolbar({
-            host: this.toolbarHost(),
+            context: this.toolbarContext(),
             commands: {
                 navigateWeeks: (n) => this.navigateWeeks(n),
                 today: () => this.update(gridFollowingToday()),
@@ -135,17 +130,22 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.update(gridShifted(this.state, this.visualToday(), weeks));
     }
 
+    protected frameToolbar(): CalendarToolbar {
+        return this.toolbar;
+    }
+
+    protected override frameSidebar(): ViewSidebar {
+        return this.viewSidebar;
+    }
+
+    protected cardRenderer(): TaskCardRenderer {
+        return this.taskRenderer;
+    }
+
     protected openView(): void {
         this.container = this.contentEl;
-        this.container.empty();
         this.container.addClass('calendar-view');
 
-        // The toolbar's host and the sidebar's layout are made once; a draw
-        // empties the sidebar's main area alone.
-        this.toolbarHostEl = this.container.createDiv('calendar-view__toolbar-host');
-        this.main = this.viewSidebar.build(this.container, (el, ev, handler) =>
-            this.registerDomEvent(el, ev, handler),
-        );
         this.handleManager = new HandleManager(this.container, {
             getTask: (id) => this.index.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
@@ -171,25 +171,15 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
 
         // Clear selection when the selected task is deleted via the UI.
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
-
-        this.unsubscribe = this.index.onChange((taskId, changes) => {
-            this.renderScheduler.handleChange(taskId, changes);
-        });
     }
 
     protected closeView(): void {
         this.hoverParent.dispose();
-        this.toolbar.close();
-        this.viewSidebar.close();
 
         this.dragHandler?.destroy();
         this.dragHandler = null;
         this.handleManager = null;
 
-        if (this.unsubscribe) {
-            this.unsubscribe();
-            this.unsubscribe = null;
-        }
         if (this.unsubscribeDelete) {
             this.unsubscribeDelete();
             this.unsubscribeDelete = null;
@@ -197,36 +187,18 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
         this.scrollRestorer.dispose();
     }
 
-    /** Settings were saved: the grid is drawn anew, and the sidebar's frames read their notes anew. */
-    override redraw(): void {
-        this.viewSidebar.settingsSaved();
-        super.redraw();
-    }
-
-    /** Draw the grid, keeping the scroll. */
-    protected draw(): void {
+    /** Keep the scroll across the draw. */
+    protected override beforeEmpty(): void {
         this.scrollRestorer.save();
-        this.performRender();
     }
 
-    private performRender(): void {
-        // Keyed reconciliation: lift surviving cards into a key→element map
-        // before tearing down the month grid. Survivors are re-parented and
-        // re-decorated when their key turns up in the new render;
-        // unmatched ones are disposed at the end. Cards keep their inner DOM
-        // (markdown, focus, expand state) intact across renders. Only the
-        // main area is gathered and emptied: the sidebar's frames keep their
-        // own cards.
-        const reconciler = new CardReconciler();
-        reconciler.detach(this.main);
-
-        this.main.empty();
-
-        // The first mount builds the toolbar's DOM; each later one, into the
-        // same host, only brings it up to date.
-        this.toolbar.mount(this.toolbarHostEl);
-
-        const calendarHost = this.main.createDiv('cal-grid');
+    /**
+     * Draw the grid into the sidebar's main area. The cards gathered from it
+     * are re-parented and re-decorated when their key turns up in the new
+     * render, and keep their inner DOM (markdown, focus, expand state).
+     */
+    protected draw(main: HTMLElement, reconciler: CardReconciler): void {
+        const calendarHost = main.createDiv('cal-grid');
 
         const { start: rangeStartStr, end: rangeEndStr } = this.gridRange();
         this.menuHandler.setViewStartDate(rangeStartStr);
@@ -281,11 +253,6 @@ export class CalendarView extends TaskViewerView<CalendarConfig, CalendarTransie
 
             this.renderWeekTasks(weekRow, weekDates, allVisibleTasks, reconciler);
         }
-
-        // Dispose any cards that did not turn up in the new render (filter
-        // dropped, segments collapsed, etc). Their elements are already
-        // detached from the DOM by reconciler.detach().
-        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
 
         const toolbarRootEl = this.toolbar.getRootEl();
         if (toolbarRootEl) {

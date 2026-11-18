@@ -3,6 +3,20 @@
     box-sizing: border-box;
 }
 
+/* The frame of a view: the toolbar's place above, and the body the view
+   draws into below it, taking the rest of the view's column. A view with a
+   sidebar has the sidebar's layout in the body's stead. */
+.tv-view__toolbar-host {
+    flex-shrink: 0;
+}
+
+.tv-view__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 /* View header visibility (toggled via settings → body class) */
 body.task-viewer-hide-view-header .workspace-leaf-content[data-type="timeline-view"] .view-header,
 body.task-viewer-hide-view-header .workspace-leaf-content[data-type="schedule-view"] .view-header,

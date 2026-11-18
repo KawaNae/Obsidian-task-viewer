@@ -3,11 +3,11 @@ import { t } from '../../i18n';
 import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, editViewFilter } from '../sharedUI/ViewToolbar';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { hasConditions } from '../../services/filter/FilterTypes';
-import type { ViewToolbarHost } from '../base/TaskViewerView';
+import type { ViewToolbarContext } from '../base/TaskViewerView';
 import type { KanbanState } from './KanbanSchema';
 
 export interface KanbanToolbarDeps {
-    host: ViewToolbarHost<KanbanState>;
+    context: ViewToolbarContext<KanbanState>;
 }
 
 /**
@@ -21,12 +21,12 @@ export class KanbanToolbar extends ViewToolbarBase {
 
     constructor(private deps: KanbanToolbarDeps) {
         super();
-        this.filterMenu = new FilterMenuComponent(deps.host.app, () => deps.host.plugin.settings);
-        deps.host.store.subscribe(() => this.update());
+        this.filterMenu = new FilterMenuComponent(deps.context.app, () => deps.context.plugin.settings);
+        deps.context.store.subscribe(() => this.update());
     }
 
     private get store() {
-        return this.deps.host.store;
+        return this.deps.context.store;
     }
 
     /** Close the popovers the toolbar opened. */
@@ -36,7 +36,7 @@ export class KanbanToolbar extends ViewToolbarBase {
     }
 
     protected override buildDom(toolbar: HTMLElement): void {
-        const { host } = this.deps;
+        const { context } = this.deps;
 
         toolbar.createDiv('view-toolbar__spacer');
 
@@ -44,7 +44,7 @@ export class KanbanToolbar extends ViewToolbarBase {
         setIcon(filterBtn, 'filter');
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
         filterBtn.onclick = (event) => {
-            editViewFilter(this.filterMenu, { event }, this.store, () => host.plugin.getIndex().getTasks());
+            editViewFilter(this.filterMenu, { event }, this.store, () => context.plugin.getIndex().getTasks());
         };
         this.filterBtn = filterBtn;
 
@@ -53,7 +53,7 @@ export class KanbanToolbar extends ViewToolbarBase {
             setMaskMode: (next) => this.store.update({ maskMode: next }),
         });
 
-        ViewSettingsMenu.renderButton(toolbar, host.settingsOptions());
+        ViewSettingsMenu.renderButton(toolbar, context.settingsOptions());
     }
 
     override update(): void {

@@ -337,7 +337,3 @@
     transform: none;
     box-shadow: none;
 }
-
-.timer-view__toolbar-host {
-    flex-shrink: 0;
-}

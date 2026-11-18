@@ -5,7 +5,7 @@ import { createCardRendering } from '../sharedUI/CardRendering';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { KanbanToolbar } from './KanbanToolbar';
-import { CardReconciler } from '../sharedUI/CardReconciler';
+import type { CardReconciler } from '../sharedUI/CardReconciler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import type { ListSectionClasses } from '../sharedUI/ListSectionRenderer';
 import { TaskListSections, newList } from '../sharedUI/TaskListSections';
@@ -48,7 +48,6 @@ export class KanbanView extends TaskViewerView<KanbanConfig, KanbanTransient> {
     private readonly cells: TaskListSections;
 
     private container: HTMLElement;
-    private unsubscribe: (() => void) | null = null;
     /**
      * Scroll position across full re-renders, on both axes. The element is
      * re-queried each time because `render()` builds a fresh grid host.
@@ -90,7 +89,7 @@ export class KanbanView extends TaskViewerView<KanbanConfig, KanbanTransient> {
             appendMenuItems: (menu, list) => this.appendCellMenuItems(menu, list),
         });
 
-        this.toolbar = new KanbanToolbar({ host: this.toolbarHost() });
+        this.toolbar = new KanbanToolbar({ context: this.toolbarContext() });
 
         // A grid without a cell is given the default list, in the same change.
         this.store.subscribe((patch) => {
@@ -110,44 +109,40 @@ export class KanbanView extends TaskViewerView<KanbanConfig, KanbanTransient> {
         this.update({ grid });
     }
 
+    protected frameToolbar(): KanbanToolbar {
+        return this.toolbar;
+    }
+
+    protected cardRenderer(): TaskCardRenderer {
+        return this.taskRenderer;
+    }
+
     protected openView(): void {
         this.container = this.contentEl;
         this.container.addClass('kanban-view');
-
-        this.unsubscribe = this.index.onChange((taskId, changes) => {
-            this.renderScheduler.handleChange(taskId, changes);
-        });
     }
 
     protected closeView(): void {
         this.hoverParent.dispose();
         this.cells.close();
-        this.toolbar.close();
-        this.unsubscribe?.();
-        this.unsubscribe = null;
         this.scrollRestorer.dispose();
     }
 
     // ─── Render ───────────────────────────────────────────────
 
-    protected draw(): void {
-        // The board is rebuilt from scratch below, so the scroll offsets of the
-        // old grid host die with it. Both axes matter here: columns run
-        // horizontally, so scrollLeft is the position a user notices most.
+    /**
+     * The board is rebuilt from scratch at each draw, so the scroll offsets
+     * of the old grid host die with it. Both axes matter here: columns run
+     * horizontally, so scrollLeft is the position a user notices most.
+     */
+    protected override beforeEmpty(): void {
         this.scrollRestorer.save();
-        this.toolbar.detach();
+    }
 
-        // Keep the cards already shown: they are re-parented as their key
-        // turns up in the new board, and the rest are disposed at the end.
-        const reconciler = new CardReconciler();
-        reconciler.detach(this.container);
-        this.container.empty();
-
-        const toolbarHost = this.container.createDiv('kanban-view__toolbar-host');
-        this.toolbar.mount(toolbarHost);
-
+    /** Draw the board. The cards gathered from the body are re-parented as their key turns up in it. */
+    protected draw(body: HTMLElement, reconciler: CardReconciler): void {
         // The cells fill the grid row by row: the columns are the grid's.
-        const gridHost = this.container.createDiv('kanban-view__grid-host');
+        const gridHost = body.createDiv('kanban-view__grid-host');
         const gridEl = gridHost.createDiv('kanban-view__grid');
         gridEl.style.gridTemplateColumns = `repeat(${this.grid[0]?.length ?? 1}, minmax(250px, 1fr))`;
         this.cells.draw(gridEl, this.grid.flat(), {
@@ -156,7 +151,6 @@ export class KanbanView extends TaskViewerView<KanbanConfig, KanbanTransient> {
             viewFilter: this.state.filterState,
         });
 
-        reconciler.forEachStale(card => this.taskRenderer.dispose(card));
         this.scrollRestorer.restore();
     }
 

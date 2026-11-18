@@ -6,7 +6,6 @@ import { getEffectiveAstronomyDisplay } from '../../services/astronomy/Astronomy
 import { DateUtils } from '../../utils/DateUtils';
 import { daysWindow, visualDaysOf } from '../../utils/DayWindow';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { IndexReads } from '../../services/core/TaskIndex';
 import { dailyNotes } from '../../utils/PeriodicNotes';
 import { periodicNoteLink, type PeriodicLinkContext } from '../sharedUI/PeriodicNoteLink';
 import { renderWeekNumberCell } from './WeekNumberCell';
@@ -39,13 +38,10 @@ interface IndicatorState {
  */
 export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCalendarTransient> {
     private readonly readService: TaskReadService;
-    /** The index's copies and changes (`PluginContext.getIndex`). */
-    private readonly index: IndexReads;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly toolbar: MiniCalendarToolbar;
 
     private container: HTMLElement;
-    private unsubscribe: (() => void) | null = null;
     private isAnimating: boolean = false;
     private navigateWeekDebounceTimer: number | null = null;
     private pendingWeekOffset: number = 0;
@@ -58,11 +54,10 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf, plugin, MiniCalendarCodec);
         this.readService = this.plugin.getTaskReadService();
-        this.index = this.plugin.getIndex();
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
         this.toolbar = new MiniCalendarToolbar({
-            host: this.toolbarHost(),
+            context: this.toolbarContext(),
             commands: {
                 navigateWeeks: (n) => this.navigateWeeks(n),
                 today: () => {
@@ -81,42 +76,34 @@ export class MiniCalendarView extends TaskViewerView<MiniCalendarConfig, MiniCal
         return gridRange(this.state, this.visualToday(), this.plugin.settings.weekStartDay);
     }
 
+    protected frameToolbar(): MiniCalendarToolbar {
+        return this.toolbar;
+    }
+
+    /** The grid draws dots, not cards. */
+    protected cardRenderer(): null {
+        return null;
+    }
+
     protected openView(): void {
         this.container = this.contentEl;
-        this.container.empty();
         this.container.addClass('mini-calendar-view');
-
-        this.unsubscribe = this.index.onChange((taskId, changes) => {
-            this.renderScheduler.handleChange(taskId, changes);
-        });
     }
 
     protected closeView(): void {
         this.hoverParent.dispose();
-        this.toolbar.close();
         if (this.navigateWeekDebounceTimer !== null) {
             window.clearTimeout(this.navigateWeekDebounceTimer);
             this.navigateWeekDebounceTimer = null;
             this.pendingWeekOffset = 0;
         }
         this.isAnimating = false;
-
-        if (this.unsubscribe) {
-            this.unsubscribe();
-            this.unsubscribe = null;
-        }
     }
 
-    protected draw(): void {
+    protected draw(frameBody: HTMLElement): void {
         this.isAnimating = false;
 
-        this.toolbar.detach();
-        this.container.empty();
-
-        const toolbarHost = this.container.createDiv('mini-calendar-view__toolbar-host');
-        this.toolbar.mount(toolbarHost);
-
-        const grid = this.container.createDiv('cal-grid cal-grid--mini');
+        const grid = frameBody.createDiv('cal-grid cal-grid--mini');
         this.renderWeekdayHeader(grid);
 
         const body = grid.createDiv('cal-grid__body cal-grid__body--mini');
