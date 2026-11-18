@@ -19,11 +19,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
 import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import {
-    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, restartView, tr,
+    PRELUDE, SETTLE_MS, closeViews, ev, openView, overrideSettings, readSettings, restartView, tr, visualDay,
 } from '../helpers/view-helper';
 import { waitForFileDeindexed } from '../helpers/waits';
 
 const FILE = 'test-int-pinned-lists.md';
+/** The note of the lists that count from today: its tasks start on days around it. */
+const DAY_FILE = 'test-int-pinned-lists-day.md';
 /** Twelve top-level tasks tagged tvpla, the first four also tvplb; one child, which a list leaves out. */
 function note(extra: string[] = []): string {
     const rows: string[] = [];
@@ -180,6 +182,7 @@ beforeAll(async () => {
     const held = overrideSettings({ pinnedListPageSize: PAGE });
     teardown.add('put the settings back', () => held.restore());
     teardown.add('delete the note', async () => { deleteTestFile(FILE); await waitForFileDeindexed(FILE); });
+    teardown.add('delete the note of days', async () => { deleteTestFile(DAY_FILE); await waitForFileDeindexed(DAY_FILE); });
     teardown.add('close the views', closeViews);
     teardown.add('close the overlays', () => ev(`(() => { document.querySelectorAll('.tv-overlay__panel .tv-overlay__close').forEach(b => b.click()); return JSON.stringify(true); })()`));
     await writeIndexedTestFile(FILE, note());
@@ -535,5 +538,101 @@ describe.each([
         expect(keys).toEqual(expect.arrayContaining(['sidebar', 'sidebarCollapsed']));
         expect(keys).not.toContain('pinnedLists');
         expect(keys).not.toContain('pinnedListCollapsed');
+    });
+});
+
+/**
+ * The view hands the panel saved settings and a new day, and the panel
+ * draws its lists again. Each is told here through `ViewEvents`, as the
+ * plugin tells the views, with the setting changed in memory alone: a save
+ * through the plugin also has the index tell its listeners, and the panel
+ * draws on that too, so the save would not show whether the view's own
+ * event reaches the panel. Nothing else changes between the two readings.
+ */
+describe.each([
+    ['Timeline', 'timeline-view', 'pl-tl-ev'],
+    ['Calendar', 'calendar-view', 'pl-cal-ev'],
+])("%s's pinned lists, told of saved settings and a new day", (_label, type, name) => {
+    /** Read the lists' counts and cards, run `body` in the plugin (`P`), and read them again once drawn; `undo` runs after, whatever happens. */
+    function around(body: string, undo: string): { before: Section[]; after: Section[] } {
+        return ev(`(async () => {
+            ${PRELUDE}
+            const C = ${JSON.stringify(C)};
+            const el = V(${JSON.stringify(name)}).contentEl;
+            const sections = () => [...el.querySelectorAll('.' + C.root)].map(s => readSection(C, s));
+            await wait(${SETTLE_MS});
+            const before = sections();
+            try {
+                ${body}
+                await wait(${SETTLE_MS});
+                return JSON.stringify({ before, after: sections() });
+            } finally {
+                ${undo}
+                await wait(${SETTLE_MS});
+            }
+        })()`);
+    }
+
+    it('shows a page of the size the saved settings give', () => {
+        const list = { id: 'ev-page', name: 'Page', filterState: { logic: 'and', filters: [TOP_LEVEL, TAG_A] }, applyViewFilter: false };
+        openView(name, type, { showSidebar: true, sidebar: [list] });
+
+        const r = around(`
+            P.settings.pinnedListPageSize = 3;
+            P.viewEvents.settingsChanged();
+        `, `
+            P.settings.pinnedListPageSize = ${PAGE};
+            P.viewEvents.settingsChanged();
+        `);
+        expect(r.before[0].cards).toBe(PAGE);
+        expect(r.after[0].count).toBe(12);
+        expect(r.after[0].cards).toBe(3);
+        expect(r.after[0].more).toBe(tr('pinnedList.showMore', { remaining: 12 - 3 }));
+    });
+
+    /**
+     * The visual day is moved by the start hour, as viewed-date's day roll
+     * does: set in memory to an hour still ahead (or to 0 before the start
+     * hour), today becomes another day, and `ViewEvents.rollIfChanged`, what
+     * the minute clock calls, tells the views. The start hour is put back in
+     * the same call.
+     */
+    const now = new Date();
+    const h = now.getHours();
+
+    it.skipIf(h >= 22 && now.getMinutes() >= 50)('counts again the tasks that start today when the day rolls', async () => {
+        const startHour = readSettings(['startHour']).startHour as number;
+        const today = visualDay(startHour, now);
+        const rolledHour = h < startHour ? 0 : Math.min(h + 2, 23);
+        const rolledToday = visualDay(rolledHour, now);
+        expect(rolledToday).not.toBe(today);
+
+        await writeIndexedTestFile(DAY_FILE, [
+            `- [ ] pld today #tvpld @${today}`,
+            `- [ ] pld rolled 1 #tvpld @${rolledToday}`,
+            `- [ ] pld rolled 2 #tvpld @${rolledToday}`,
+            '',
+        ].join('\n'));
+        const list = {
+            id: 'ev-today',
+            name: 'Today',
+            filterState: { logic: 'and', filters: [
+                { property: 'tag', operator: 'includes', value: ['tvpld'] },
+                { property: 'startDate', operator: 'equals', value: { preset: 'today' } },
+            ] },
+            applyViewFilter: false,
+        };
+        openView(name, type, { showSidebar: true, sidebar: [list] });
+
+        const r = around(`
+            P.settings.startHour = ${rolledHour};
+            if (!P.viewEvents.rollIfChanged()) throw new Error('the day did not roll');
+        `, `
+            P.settings.startHour = ${startHour};
+            P.viewEvents.rollIfChanged();
+        `);
+        expect(r.before[0].count).toBe(1);
+        expect(r.after[0].count).toBe(2);
+        expect(r.after[0].cards).toBe(2);
     });
 });
