@@ -2,9 +2,11 @@
  * The sidebar of Timeline and Calendar takes the user's "back" while it lies
  * open over the view (the view at or below the breakpoint), in the running
  * E2E vault. Obsidian's `history.back()` calls what is on top of its stack,
- * as Android's back and the mouse's back button do. Beside the view (wider)
- * the back is left to the rest of the app; a dialog opened over the sidebar
- * takes it first; a view in a tab behind another does not take it.
+ * as Android's back and the mouse's back button do. The back closes it there
+ * and leaves the view's `showSidebar` as it was. Beside the view (wider) the
+ * back is left to the rest of the app; a dialog opened over the sidebar
+ * takes it first; a view in a tab behind another does not take it, and its
+ * sidebar is closed once its tab is shown again.
  *
  * The width is set on the view's own content (its leaf is the test's, so no
  * pane of the vault is resized), as the user's pane would be.
@@ -67,9 +69,9 @@ describe.each([
         })()`);
         expect(r).toEqual({
             before: { shown: true, saved: true, over: true },
-            after: { shown: false, saved: false, over: true },
+            after: { shown: false, saved: true, over: true },
             // Closed, it holds the back no more: the next one is the app's.
-            again: { shown: false, saved: false, over: true },
+            again: { shown: false, saved: true, over: true },
         });
     });
 
@@ -87,24 +89,22 @@ describe.each([
         });
     });
 
-    it('takes the back once the view narrows, and lets go of it once the view widens', () => {
+    it('lets go of the back once the view widens, and takes it again once the sidebar is opened over the narrowed view', () => {
         const r = ev<Record<string, unknown>>(`(async () => {
             ${sidebarPrelude(name)}
             await openAt(${WIDE});
-            el.style.width = '${NARROW}px';
-            await wait(200);
+            await openAt(${NARROW});
             el.style.width = '${WIDE}px';
             await wait(200);
             await back();
             const wide = sidebar();
-            el.style.width = '${NARROW}px';
-            await wait(200);
+            await openAt(${NARROW});
             await back();
             return JSON.stringify({ wide, narrowed: sidebar() });
         })()`);
         expect(r).toEqual({
             wide: { shown: true, saved: true, over: false },
-            narrowed: { shown: false, saved: false, over: true },
+            narrowed: { shown: false, saved: true, over: true },
         });
     });
 
@@ -131,11 +131,11 @@ describe.each([
         expect(r).toEqual({
             dialogClosed: true,
             sidebarWhileDialog: true,
-            after: { shown: false, saved: false, over: true },
+            after: { shown: false, saved: true, over: true },
         });
     });
 
-    it('does not take the back from a tab shown over it, and takes it again once its tab is shown', () => {
+    it('does not take the back from a tab shown over it, and is closed, holding none, once its tab is shown again', () => {
         const r = ev<Record<string, unknown>>(`(async () => {
             ${sidebarPrelude(name)}
             await openAt(${NARROW});
@@ -154,8 +154,8 @@ describe.each([
         })()`);
         expect(r).toEqual({
             behind: { shown: true, saved: true, over: true },
-            shownAgain: { shown: true, saved: true, over: true },
-            after: { shown: false, saved: false, over: true },
+            shownAgain: { shown: false, saved: true, over: true },
+            after: { shown: false, saved: true, over: true },
         });
     });
 });
