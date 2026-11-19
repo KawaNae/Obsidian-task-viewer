@@ -22,7 +22,7 @@ export interface CalendarCommands {
     viewedDay(): string;
     /** The month the grid is read as. */
     referenceMonth(): { year: number; month: number };
-    /** Whether the sidebar shows (closed at narrow width until opened). */
+    /** Whether the sidebar shows (`ViewSidebar.isOpen`). */
     isSidebarOpen(): boolean;
     /** Open or close the sidebar, sliding. */
     toggleSidebar(open: boolean): void;
