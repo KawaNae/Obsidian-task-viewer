@@ -13,6 +13,11 @@ import { FakeEl, asEl } from '../../helpers/fakeDom';
  * is open is the sidebar's own value, which the back closes, leaving the
  * view's `showSidebar` as it was.
  *
+ * Then the open state: beside the view it is `showSidebar`, which the toggle
+ * alone writes; over it, a value the sidebar holds and writes nowhere,
+ * closed each time the view is seen narrow after it was not (wider, or a
+ * hidden tab), kept while the view stays narrow.
+ *
  * Then the look: it follows a `showSidebar` the view's state is handed
  * without a draw of the view, and a toggle applies it once, sliding.
  *
@@ -59,12 +64,13 @@ afterEach(() => {
 
 /**
  * A view with a sidebar at `width`, built as the view opens, its state's
- * `showSidebar` being `open`; with `open`, the user then opened it with the
- * toggle too. Its state's listeners hear a write at once, as a view's store
+ * `showSidebar` being `saved`; with `open`, the user then opened it with the
+ * toggle. Its state's listeners hear a write at once, as a view's store
  * tells them.
  */
-function setup(width: number, open: boolean, connected = true) {
-    let state: ViewSidebarState = { showSidebar: open };
+function setup(width: number, open: boolean, connected = true, saved = open) {
+    let state: ViewSidebarState = { showSidebar: saved };
+    const writes: Partial<ViewSidebarState>[] = [];
     const listeners: ((patch: Partial<ViewSidebarState>) => void)[] = [];
     const update = (patch: Partial<ViewSidebarState>) => {
         state = { ...state, ...patch };
@@ -78,7 +84,7 @@ function setup(width: number, open: boolean, connected = true) {
             listeners.push(listener);
             return () => listeners.splice(listeners.indexOf(listener), 1);
         },
-        write: update,
+        write: (patch) => { writes.push(patch); update(patch); },
     }, {
         mobileBreakpointPx: BREAKPOINT,
         syncToggleButton: () => { toggleSyncs++; },
@@ -100,8 +106,10 @@ function setup(width: number, open: boolean, connected = true) {
         hidden: layout.find('tv-sidebar__panel')!.classList.contains('tv-sidebar__panel--hidden'),
         animate: layout.classList.contains('tv-sidebar--animate'),
     });
+    const clickBackdrop = () => layout.find('tv-sidebar__backdrop')!.dispatchEvent(new Event('click'));
     return {
-        sidebar, resize, place, update, look,
+        sidebar, resize, place, update, look, clickBackdrop,
+        writes: () => writes.length,
         shown: () => state.showSidebar,
         toggleSyncs: () => toggleSyncs,
     };
@@ -198,6 +206,138 @@ describe('ViewSidebar and the back', () => {
         back();
         expect(sidebar.isOpen()).toBe(false);
         expect(historyStack).toHaveLength(0);
+    });
+});
+
+describe('ViewSidebar\'s open state', () => {
+    it('starts closed over the view whatever showSidebar says, and the toggle opens and closes it there without writing it', () => {
+        const { sidebar, look, shown, writes } = setup(400, false, true, true);
+        expect(sidebar.isOpen()).toBe(false);
+        expect(look().hidden).toBe(true);
+
+        sidebar.toggle(true);
+        expect(sidebar.isOpen()).toBe(true);
+        expect(look()).toEqual({ hidden: false, animate: true });
+        sidebar.toggle(false);
+        expect(sidebar.isOpen()).toBe(false);
+        expect(look()).toEqual({ hidden: true, animate: true });
+        expect(shown()).toBe(true);
+        expect(writes()).toBe(0);
+    });
+
+    it('opens over the view with the toggle whatever showSidebar says', () => {
+        const { sidebar, shown, writes } = setup(400, true, true, false);
+        expect(sidebar.isOpen()).toBe(true);
+        expect(shown()).toBe(false);
+        expect(writes()).toBe(0);
+    });
+
+    it('closes over the view on a click on the backdrop and on the back, writing nothing', () => {
+        const backdrop = setup(400, true, true, true);
+        backdrop.clickBackdrop();
+        expect(backdrop.sidebar.isOpen()).toBe(false);
+        expect(backdrop.look()).toEqual({ hidden: true, animate: true });
+        expect(backdrop.writes()).toBe(0);
+
+        const theBack = setup(400, true, true, true);
+        back();
+        expect(theBack.sidebar.isOpen()).toBe(false);
+        expect(theBack.writes()).toBe(0);
+    });
+
+    it('writes showSidebar with the toggle beside the view, and follows it', () => {
+        const { sidebar, shown, writes } = setup(1000, false, true, true);
+        expect(sidebar.isOpen()).toBe(true);
+        sidebar.toggle(false);
+        expect(shown()).toBe(false);
+        expect(sidebar.isOpen()).toBe(false);
+        sidebar.toggle(true);
+        expect(shown()).toBe(true);
+        expect(writes()).toBe(2);
+    });
+
+    it('closes once the view narrows, opened beside it with the toggle or by the state', () => {
+        const toggled = setup(1000, false, true, false);
+        toggled.sidebar.toggle(true);
+        toggled.resize(500);
+        expect(toggled.sidebar.isOpen()).toBe(false);
+        expect(toggled.look()).toEqual({ hidden: true, animate: false });
+        expect(toggled.shown()).toBe(true);
+
+        const saved = setup(1000, false, true, true);
+        saved.resize(500);
+        expect(saved.sidebar.isOpen()).toBe(false);
+        expect(saved.look().hidden).toBe(true);
+    });
+
+    it('stays open over the view while its width changes and stays narrow', () => {
+        const { sidebar, resize, look } = setup(400, true);
+        resize(600);
+        resize(BREAKPOINT);
+        expect(sidebar.isOpen()).toBe(true);
+        expect(look().hidden).toBe(false);
+    });
+
+    it('shows the showSidebar of the wide width once the view widens, whatever was done over it', () => {
+        const closedOver = setup(400, true, true, true);
+        closedOver.sidebar.toggle(false);
+        closedOver.resize(1000);
+        expect(closedOver.sidebar.isOpen()).toBe(true);
+        expect(closedOver.look().hidden).toBe(false);
+
+        const openedOver = setup(400, true, true, false);
+        openedOver.resize(1000);
+        expect(openedOver.sidebar.isOpen()).toBe(false);
+        expect(openedOver.look().hidden).toBe(true);
+    });
+
+    it('starts closed again each time the view narrows, opened over it before', () => {
+        const { sidebar, resize, look } = setup(400, true, true, false);
+        resize(1000);
+        resize(400);
+        expect(sidebar.isOpen()).toBe(false);
+        expect(look().hidden).toBe(true);
+    });
+
+    it('starts closed once its tab, hidden, is shown again at narrow width', () => {
+        const { sidebar, resize, look } = setup(400, true, true, true);
+        resize(0);
+        resize(400);
+        expect(sidebar.isOpen()).toBe(false);
+        expect(look().hidden).toBe(true);
+        expect(historyStack).toHaveLength(0);
+    });
+
+    it('shows nothing of a showSidebar handed in over the view, and shows it once the view widens', () => {
+        const { sidebar, update, resize, look } = setup(400, true, true, false);
+        update({ showSidebar: true });
+        update({ showSidebar: false });
+        expect(sidebar.isOpen()).toBe(true);
+        expect(look()).toEqual({ hidden: false, animate: true });
+
+        update({ showSidebar: true });
+        resize(1000);
+        expect(look()).toEqual({ hidden: false, animate: false });
+        update({ showSidebar: false });
+        resize(400);
+        resize(1000);
+        expect(look().hidden).toBe(true);
+    });
+
+    it('shows on the toolbar each change over the view, by the toggle, the backdrop and the narrowing', () => {
+        const { sidebar, clickBackdrop, resize, toggleSyncs } = setup(400, false);
+        let before = toggleSyncs();
+        sidebar.toggle(true);
+        expect(toggleSyncs() - before).toBe(1);
+        before = toggleSyncs();
+        clickBackdrop();
+        expect(toggleSyncs() - before).toBe(1);
+        resize(1000);
+        sidebar.toggle(true);
+        before = toggleSyncs();
+        resize(400);
+        expect(toggleSyncs() - before).toBe(1);
+        expect(sidebar.isOpen()).toBe(false);
     });
 });
 
