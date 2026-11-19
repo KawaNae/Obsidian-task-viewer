@@ -10,15 +10,21 @@
  * the sidebar tells the panel then, so markdown that waited for a document
  * is rendered.
  *
- * The open state is the view's `showSidebar`, but at narrow width the
- * sidebar starts closed whatever the state says, and only the toggle button
- * opens it: `showSidebar` states the desktop-width position, and applying a
- * config never marks the sidebar as opened by the user. Its look (the
- * classes of the layout) follows the open state, applied when the user opens
- * or closes it, when the view's width changes, and when `showSidebar`
- * changes otherwise (a state handed in by the workspace or a URI). The
- * toggle, a click on the backdrop and the back close it. It takes no key:
- * Escape is left to the rest of the app.
+ * Whether it is open is held twice, one for each width. Beside the view
+ * (wide width) it is the view's `showSidebar`, which is saved with the view,
+ * copied into its URI and templates, and written by the toggle alone. Over
+ * the view (narrow width) it is a value of the sidebar's own, never saved:
+ * it is closed whenever the view is seen not narrow (wide, or a hidden tab,
+ * which has no width), so each time the view is shown narrow the sidebar
+ * starts closed, and the toggle, a click on the backdrop and the back open
+ * and close it there without touching `showSidebar`. A narrow sidebar
+ * closed on a phone thus leaves the view's saved position as it was.
+ *
+ * Its look (the classes of the layout) follows the open state, applied when
+ * the user opens or closes it (sliding), when the view's width changes, and
+ * when `showSidebar` changes otherwise (a state handed in by the workspace or
+ * a URI), which shows only at wide width. It takes no key: Escape is left to
+ * the rest of the app.
  *
  * While the sidebar lies open over the view (narrow width), the view behind
  * the backdrop cannot be used, so the user's "back" (Android's back gesture,
@@ -63,12 +69,12 @@ export class ViewSidebar {
     private unsubscribe: (() => void) | null = null;
     /** Lets go of the back, while the sidebar lies open over the view. */
     private releaseBack: (() => void) | null = null;
-    /** The user opened the sidebar with the toggle in this session: it opens at narrow width too. */
-    private openedThisSession = false;
+    /** Whether the sidebar is open over the view, at narrow width; closed whenever the view is seen not narrow. */
+    private openNarrow = false;
+    /** Whether the look last applied shows the sidebar open; none before the first. */
+    private shown: boolean | null = null;
     /** Whether the container stood in a document when last seen: by `build`, then by each resize. */
     private inDocument = false;
-    /** The sidebar writes `showSidebar` itself and shows it sliding; the change it hears back is not synced again. */
-    private writingOpen = false;
 
     constructor(
         private readonly deps: SidebarFramesDeps,
@@ -92,9 +98,7 @@ export class ViewSidebar {
         const main = layout.createDiv({ cls: 'tv-sidebar__main' });
         this.mainEl = main;
         const backdrop = layout.createDiv({ cls: 'tv-sidebar__backdrop' });
-        backdrop.addEventListener('click', () => {
-            if (this.isOpen()) this.setOpen(false);
-        });
+        backdrop.addEventListener('click', () => this.closeOver());
         this.backdropEl = backdrop;
         const panel = layout.createDiv({ cls: 'tv-sidebar__panel' });
         this.panelEl = panel;
@@ -107,13 +111,16 @@ export class ViewSidebar {
         // size, which is the change seen here.
         this.inDocument = container.isConnected;
         this.resizeObserver = new ResizeObserver(() => {
+            if (!this.isNarrow()) this.openNarrow = false;
             this.sync(this.isOpen(), { animate: false });
             this.followDocument();
         });
         this.resizeObserver.observe(container);
 
+        // The toggle applies its own change, sliding, before it writes it:
+        // hearing it back, the look already is what it says.
         this.unsubscribe = this.host.subscribe((patch) => {
-            if ('showSidebar' in patch && !this.writingOpen) this.sync(this.isOpen(), { animate: false });
+            if ('showSidebar' in patch && this.isOpen() !== this.shown) this.sync(this.isOpen(), { animate: false });
         });
 
         this.sync(this.isOpen(), { animate: false });
@@ -143,16 +150,25 @@ export class ViewSidebar {
 
     // ----- Open state -----
 
-    /** Whether the sidebar shows: closed at narrow width until the toggle opens it this session. */
+    /** Whether the sidebar shows: over the view, its own value; beside it, `showSidebar`. */
     isOpen(): boolean {
-        if (this.isNarrow() && !this.openedThisSession) return false;
+        if (this.isNarrow()) return this.openNarrow;
         return this.host.state().showSidebar ?? true;
     }
 
-    /** The toolbar's toggle: opening marks the sidebar as opened by the user, so it opens at narrow width too. */
+    /**
+     * The toolbar's toggle, sliding; the view is not drawn. Over the view it
+     * opens or closes the sidebar there alone; beside it, it writes
+     * `showSidebar`.
+     */
     toggle(open: boolean): void {
-        if (open) this.openedThisSession = true;
-        this.setOpen(open);
+        if (this.isNarrow()) {
+            this.openNarrow = open;
+            this.sync(open, { animate: true });
+            return;
+        }
+        this.sync(open, { animate: true });
+        this.host.write({ showSidebar: open });
     }
 
     /** Whether the container is at or below the mobile breakpoint. A hidden tab, which has no width, is not. */
@@ -163,15 +179,11 @@ export class ViewSidebar {
         return width <= this.options.mobileBreakpointPx;
     }
 
-    /** Open or close the sidebar, sliding; the view is not drawn. */
-    private setOpen(open: boolean): void {
-        this.writingOpen = true;
-        try {
-            this.host.write({ showSidebar: open });
-        } finally {
-            this.writingOpen = false;
-        }
-        this.sync(open, { animate: true });
+    /** The backdrop and the back: close the sidebar lying open over the view, sliding; `showSidebar` is left alone. */
+    private closeOver(): void {
+        if (!this.isNarrow() || !this.openNarrow) return;
+        this.openNarrow = false;
+        this.sync(false, { animate: true });
     }
 
     /**
@@ -197,6 +209,7 @@ export class ViewSidebar {
         this.panelEl?.classList.toggle('tv-sidebar__panel--hidden', !isOpen);
         this.mainEl?.classList.toggle('tv-sidebar__main--open', isOpen);
         this.backdropEl?.classList.toggle('tv-sidebar__backdrop--visible', isOpen);
+        this.shown = isOpen;
         this.holdBack(isOpen && this.isNarrow());
         this.options.syncToggleButton();
     }
@@ -204,9 +217,7 @@ export class ViewSidebar {
     /** Hold the back while `held`, else let go of it; holding it twice holds it once. */
     private holdBack(held: boolean): void {
         if (held && !this.releaseBack) {
-            this.releaseBack = holdHistoryBack(() => {
-                if (this.isOpen()) this.setOpen(false);
-            });
+            this.releaseBack = holdHistoryBack(() => this.closeOver());
         } else if (!held && this.releaseBack) {
             this.releaseBack();
             this.releaseBack = null;

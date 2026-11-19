@@ -9,9 +9,9 @@ import { FakeEl, asEl } from '../../helpers/fakeDom';
  * The sidebar takes the user's "back" while it lies open over the view
  * (open, and at or below the breakpoint), and only then: the stand-in it
  * puts on Obsidian's stack (the mock's, whose `open` and `close` are written
- * as Obsidian's) is there exactly while both hold. Whether it is open is the
- * view's `showSidebar`, which the sidebar writes when the back closes it; at
- * narrow width it is open only once the toggle opened it.
+ * as Obsidian's) is there exactly while both hold. Over the view, whether it
+ * is open is the sidebar's own value, which the back closes, leaving the
+ * view's `showSidebar` as it was.
  *
  * Then the look: it follows a `showSidebar` the view's state is handed
  * without a draw of the view, and a toggle applies it once, sliding.
@@ -58,9 +58,10 @@ afterEach(() => {
 });
 
 /**
- * A view with a sidebar at `width`, built as the view opens; with `open`,
- * the user opened it with the toggle. Its state's listeners hear a write at
- * once, as a view's store tells them.
+ * A view with a sidebar at `width`, built as the view opens, its state's
+ * `showSidebar` being `open`; with `open`, the user then opened it with the
+ * toggle too. Its state's listeners hear a write at once, as a view's store
+ * tells them.
  */
 function setup(width: number, open: boolean, connected = true) {
     let state: ViewSidebarState = { showSidebar: open };
@@ -116,8 +117,8 @@ describe('ViewSidebar and the back', () => {
         expect(historyStack).toHaveLength(1);
 
         back();
-        expect(shown()).toBe(false);
         expect(sidebar.isOpen()).toBe(false);
+        expect(shown()).toBe(true);
         expect(historyStack).toHaveLength(0);
     });
 
@@ -145,11 +146,13 @@ describe('ViewSidebar and the back', () => {
         expect(historyStack).toHaveLength(1);
     });
 
-    it('lets go once the view widens past the breakpoint, and takes it again once it narrows', () => {
-        const { resize } = setup(400, true);
+    it('lets go once the view widens past the breakpoint, and takes it again once the toggle opens it narrowed', () => {
+        const { sidebar, resize } = setup(400, true);
         resize(1000);
         expect(historyStack).toHaveLength(0);
         resize(500);
+        expect(historyStack).toHaveLength(0);
+        sidebar.toggle(true);
         expect(historyStack).toHaveLength(1);
     });
 
@@ -186,14 +189,14 @@ describe('ViewSidebar and the back', () => {
     });
 
     it('is under a dialog opened above it: the back closes the dialog first, then the sidebar', () => {
-        const { shown } = setup(400, true);
+        const { sidebar } = setup(400, true);
         const releaseDialog = holdHistoryBack(() => releaseDialog());
 
         back();
-        expect(shown()).toBe(true);
+        expect(sidebar.isOpen()).toBe(true);
         expect(historyStack).toHaveLength(1);
         back();
-        expect(shown()).toBe(false);
+        expect(sidebar.isOpen()).toBe(false);
         expect(historyStack).toHaveLength(0);
     });
 });

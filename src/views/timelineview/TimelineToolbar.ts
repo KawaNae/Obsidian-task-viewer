@@ -23,7 +23,7 @@ export interface TimelineCommands {
     viewedDay(): string;
     /** The days drawn. */
     window(): DayWindow;
-    /** Whether the sidebar shows (closed at narrow width until opened). */
+    /** Whether the sidebar shows (`ViewSidebar.isOpen`). */
     isSidebarOpen(): boolean;
     /** Open or close the sidebar, sliding. */
     toggleSidebar(open: boolean): void;
