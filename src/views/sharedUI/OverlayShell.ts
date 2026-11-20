@@ -25,8 +25,11 @@
  * out from the moment it is open: a frame after it opens, the shell puts
  * the focus where the body asks (`initialFocus`), or on the panel itself
  * when the body names nothing or what it named did not take the focus. On
- * the panel the focus raises no on-screen keyboard. Closed with the focus
- * still in it, the overlay gives the focus back to what had it before.
+ * the panel the focus raises no on-screen keyboard. While the panel still
+ * opens (its animation: the sheet sliding up, the box popping in), the
+ * focus waits on the panel, and goes where the body asks once it has come
+ * to rest (`focusOnceOpen`). Closed with the focus still in it, the overlay
+ * gives the focus back to what had it before.
  *
  * Escape and the user's "back" (Android's back gesture, the desktop mouse's
  * back button: `HistoryBack`) step back alike: a child popover open closes
@@ -50,6 +53,7 @@ import { CloseGate, type CloseAnswer } from './CloseGate';
 import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { trackKeyboard } from '../../utils/KeyboardState';
+import { runningAnimations, whenStopped } from '../../utils/Animations';
 import { t } from '../../i18n';
 
 export type OverlayMode = 'anchored' | 'centered';
@@ -77,10 +81,12 @@ export interface OverlayOpenOpts {
      */
     keymap: Keymap;
     /**
-     * What the focus goes to a frame after the overlay opens (the frame of
-     * the window it stands in, so a popout's). A text field's text is
-     * selected, so what is typed replaces it. Not given, or naming nothing,
-     * the panel itself takes the focus.
+     * What the focus goes to once the overlay has opened: a frame after it
+     * opens (the frame of the window it stands in, so a popout's), or once
+     * its open animation has ended, the panel holding the focus until then
+     * (`focusOnceOpen`). A text field's text is selected, so what is typed
+     * replaces it. Not given, or naming nothing, the panel itself takes the
+     * focus.
      */
     initialFocus?: () => Focusable | null;
     onClose?: () => void;
@@ -143,6 +149,68 @@ export function takeEscape(
     if (yieldsEscape?.(e)) return;
     e.stopPropagation();
     step();
+}
+
+/** An overlay opening, as its first focus sees it (`focusOnceOpen`). */
+export interface OpeningOverlay {
+    /** The element on the body the overlay stands in: its panel and backdrop animate in it. */
+    root: Element;
+    panel: HTMLElement;
+    doc: Document;
+    /** Whether the overlay is still open on this panel: not closed, nor opened again on another body. */
+    isCurrent: () => boolean;
+    /** Whether `node` is in the overlay's surface. */
+    holds: (node: Node | null) => boolean;
+    /** What the body asks the focus to go to (`initialFocus`), asked when it goes. */
+    target: () => Focusable | null;
+}
+
+/**
+ * The first focus of an overlay, a frame after it opens (`win`'s frame).
+ *
+ * A field focused while the panel still moves raises the on-screen keyboard
+ * with the field where it stands midway, and WebKit scrolls the body by that
+ * place (on iPad the sheet sliding up from below the window had its body
+ * scrolled to the end). So while an animation runs in the overlay then (the
+ * sheet sliding up, the box popping in), the panel takes the focus, which
+ * raises no keyboard and keeps the hotkeys out, and the field takes it once
+ * every one of them has stopped, ended or cancelled (the sheet dragged by its
+ * handle). The focus the user moved meanwhile to another part of the surface
+ * is left there, and an overlay closed or opened again meanwhile is not
+ * focused. With nothing running, or where the DOM cannot list what runs,
+ * the field takes the focus at that frame.
+ */
+export function focusOnceOpen(win: Window, overlay: OpeningOverlay): void {
+    win.requestAnimationFrame(() => {
+        if (!overlay.isCurrent()) return;
+        const opening = runningAnimations(overlay.root);
+        if (opening.length === 0) {
+            focusFirst(overlay);
+            return;
+        }
+        overlay.panel.focus({ preventScroll: true });
+        void whenStopped(opening).then(() => {
+            if (!overlay.isCurrent()) return;
+            const active = overlay.doc.activeElement;
+            if (active !== overlay.panel && overlay.holds(active)) return;
+            focusFirst(overlay);
+        });
+    });
+}
+
+/**
+ * Put the focus on what the body asks, a text field with its text selected,
+ * and on the panel when it names nothing or the focus did not go into the
+ * surface (an element hidden, or disabled).
+ */
+function focusFirst({ panel, doc, holds, target }: OpeningOverlay): void {
+    const to = target();
+    if (to) {
+        to.focus({ preventScroll: true });
+        const field = to as Partial<HTMLInputElement>;
+        if (doc.activeElement === (to as unknown) && typeof field.select === 'function') field.select();
+    }
+    if (!holds(doc.activeElement)) panel.focus({ preventScroll: true });
 }
 
 export class OverlayShell implements ClosableOverlay {
@@ -277,12 +345,14 @@ export class OverlayShell implements ClosableOverlay {
         // Hotkeys: kept out while the focus is in the surface.
         this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => this.holds(node));
 
-        // The first focus, a frame later: one put during the open animation
-        // can be lost.
         const initialFocus = opts.initialFocus;
-        hostWin.requestAnimationFrame(() => {
-            if (this.panelEl !== panel) return;
-            this.focusFirst(panel, hostDoc, initialFocus?.() ?? null);
+        focusOnceOpen(hostWin, {
+            root,
+            panel,
+            doc: hostDoc,
+            isCurrent: () => this.panelEl === panel,
+            holds: (node) => this.holds(node),
+            target: () => initialFocus?.() ?? null,
         });
 
         // Pagehide (popout window close): nothing to keep open for, so not asked.
@@ -301,20 +371,6 @@ export class OverlayShell implements ClosableOverlay {
      */
     requestClose(): Promise<boolean> {
         return this.gate.request();
-    }
-
-    /**
-     * Put the focus on `target`, a text field with its text selected, and
-     * on the panel when there is no target or the focus did not go into the
-     * surface (an element hidden, or disabled).
-     */
-    private focusFirst(panel: HTMLElement, doc: Document, target: Focusable | null): void {
-        if (target) {
-            target.focus({ preventScroll: true });
-            const field = target as Partial<HTMLInputElement>;
-            if (doc.activeElement === (target as unknown) && typeof field.select === 'function') field.select();
-        }
-        if (!this.holds(doc.activeElement)) panel.focus({ preventScroll: true });
     }
 
     /**

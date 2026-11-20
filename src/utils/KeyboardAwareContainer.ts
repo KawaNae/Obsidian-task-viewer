@@ -1,5 +1,6 @@
 import { logDebug } from '../log/log';
 import { trackKeyboard, nativeKeyboardHeight, keyboardTop } from './KeyboardState';
+import { runningAnimations, whenStopped } from './Animations';
 
 /**
  * Mobile virtual keyboard awareness for fixed-position containers.
@@ -155,32 +156,18 @@ export class KeyboardAwareContainer {
      */
     private measureWhenSettled(): void {
         if (this.settling) return;
-        const moving = this.runningAnimations();
+        const moving = runningAnimations(this.container);
         if (moving.length === 0) {
             this.measure();
             return;
         }
         this.settling = true;
         const attachment = this.attachment;
-        // A cancelled animation (the sheet dragged by its handle) rejects
-        // `finished`: it has stopped moving all the same.
-        void Promise.allSettled(moving.map((a) => a.finished)).then(() => {
+        void whenStopped(moving).then(() => {
             if (attachment !== this.attachment) return;
             this.settling = false;
             this.measure();
         });
-    }
-
-    /**
-     * The animations running in the container and what is in it that will
-     * end (an endless one, a spinner, would keep the field from ever being
-     * measured). None where the DOM cannot list them.
-     */
-    private runningAnimations(): Animation[] {
-        if (typeof this.container.getAnimations !== 'function') return [];
-        return this.container.getAnimations({ subtree: true }).filter((a) =>
-            a.playState === 'running'
-            && Number.isFinite(Number(a.effect?.getComputedTiming().endTime ?? Infinity)));
     }
 
     /** Keep the field focused in the container above the keyboard, while it is open. */
