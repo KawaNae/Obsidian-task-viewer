@@ -11,12 +11,21 @@
  * module-scoped, and a plugin reload re-evaluates the module, so an old
  * instance's `closeAllOverlays()` only ever sees its own overlays.
  *
+ * It is also where an overlay finds whether it is the top one: overlays
+ * opened over one another stand on the body in the order they opened
+ * (`LayerOrder`), and an Escape is the top one's alone (`overlayAbove`).
+ *
  * DOM-free on purpose: the unit suite runs on `environment: 'node'`, and
- * this is the part worth testing.
+ * this is the part worth testing. The order is read from the nodes' parent
+ * and next sibling only.
  */
+
+import { inLayerAbove } from './LayerOrder';
 
 export interface ClosableOverlay {
     close(): void;
+    /** The element on the body the overlay stands in (its layer), while it is open. */
+    layer(): Node | null;
 }
 
 const openOverlays = new Set<ClosableOverlay>();
@@ -27,6 +36,20 @@ export function registerOverlay(overlay: ClosableOverlay): void {
 
 export function unregisterOverlay(overlay: ClosableOverlay): void {
     openOverlays.delete(overlay);
+}
+
+/**
+ * Whether another open overlay stands above `overlay`: on the same body,
+ * put there after it. One in another window's body is above none here.
+ */
+export function overlayAbove(overlay: ClosableOverlay): boolean {
+    const layer = overlay.layer();
+    if (!layer) return false;
+    for (const other of openOverlays) {
+        const at = other.layer();
+        if (at && inLayerAbove(layer, at)) return true;
+    }
+    return false;
 }
 
 /**

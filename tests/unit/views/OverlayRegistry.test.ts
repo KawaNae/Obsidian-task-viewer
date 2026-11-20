@@ -4,13 +4,14 @@ import {
     unregisterOverlay,
     closeAllOverlays,
     openOverlayCount,
+    overlayAbove,
     type ClosableOverlay,
 } from '../../../src/views/sharedUI/OverlayRegistry';
 
 /**
- * Stand-in for OverlayShell — the registry only ever calls `close()`, so a
- * plain object is the whole contract (the "plain object, no jsdom" pattern
- * used in tests/unit/views/ViewToolbarMenus.test.ts).
+ * Stand-in for OverlayShell — the registry calls `close()` and reads
+ * `layer()`, so a plain object is the whole contract (the "plain object, no
+ * jsdom" pattern used in tests/unit/views/ViewToolbarMenus.test.ts).
  */
 function fakeOverlay(closed: string[], name: string, onClose?: () => void): ClosableOverlay {
     return {
@@ -18,7 +19,24 @@ function fakeOverlay(closed: string[], name: string, onClose?: () => void): Clos
             closed.push(name);
             onClose?.();
         },
+        layer: () => null,
     };
+}
+
+/** A node of a body: its parent and its next sibling, all the order reads. */
+interface FakeNode { parentNode: FakeNode | null; nextSibling: FakeNode | null }
+
+/** A body holding `count` layers in the order they were put there. */
+function bodyOf(count: number): FakeNode[] {
+    const body: FakeNode = { parentNode: null, nextSibling: null };
+    const layers = Array.from({ length: count }, (): FakeNode => ({ parentNode: body, nextSibling: null }));
+    layers.forEach((layer, i) => { layer.nextSibling = layers[i + 1] ?? null; });
+    return layers;
+}
+
+/** An open overlay standing in `layer`. */
+function standingIn(layer: FakeNode | null): ClosableOverlay {
+    return { close() {}, layer: () => layer as unknown as Node | null };
 }
 
 describe('OverlayRegistry', () => {
@@ -69,7 +87,7 @@ describe('OverlayRegistry', () => {
 
     it('closes the remaining overlays when one throws', () => {
         const closed: string[] = [];
-        registerOverlay({ close() { closed.push('boom'); throw new Error('teardown failed'); } });
+        registerOverlay({ close() { closed.push('boom'); throw new Error('teardown failed'); }, layer: () => null });
         registerOverlay(fakeOverlay(closed, 'after'));
 
         expect(() => closeAllOverlays()).not.toThrow();
@@ -87,5 +105,54 @@ describe('OverlayRegistry', () => {
         closeAllOverlays();
 
         expect(closed).toEqual(['a']);
+    });
+});
+
+describe('overlayAbove', () => {
+    beforeEach(() => {
+        closeAllOverlays();
+    });
+
+    it('finds an open overlay put on the body after this one, and none for the top one', () => {
+        // The workspace first, then the hub, then the dialog opened from it.
+        const [, hub, dialog] = bodyOf(3);
+        const under = standingIn(hub);
+        const top = standingIn(dialog);
+        registerOverlay(under);
+        registerOverlay(top);
+        expect(overlayAbove(under)).toBe(true);
+        expect(overlayAbove(top)).toBe(false);
+    });
+
+    it('goes by the body, not by the order they were registered in', () => {
+        const [lower, upper] = bodyOf(2);
+        const top = standingIn(upper);
+        const under = standingIn(lower);
+        registerOverlay(top);
+        registerOverlay(under);
+        expect(overlayAbove(under)).toBe(true);
+        expect(overlayAbove(top)).toBe(false);
+    });
+
+    it('finds none once the one above has closed, nor for an overlay alone', () => {
+        const [lower, upper] = bodyOf(2);
+        const under = standingIn(lower);
+        const top = standingIn(upper);
+        registerOverlay(under);
+        expect(overlayAbove(under)).toBe(false);
+        registerOverlay(top);
+        unregisterOverlay(top);
+        expect(overlayAbove(under)).toBe(false);
+    });
+
+    it('does not count an overlay of another window\'s body, or one that stands nowhere', () => {
+        const [here] = bodyOf(1);
+        const [there] = bodyOf(1);
+        const overlay = standingIn(here);
+        registerOverlay(overlay);
+        registerOverlay(standingIn(there));
+        registerOverlay(standingIn(null));
+        expect(overlayAbove(overlay)).toBe(false);
+        expect(overlayAbove(standingIn(null))).toBe(false);
     });
 });
