@@ -32,11 +32,11 @@ export interface ClosingPart {
 }
 
 /**
- * TaskHubForm の各フィールドグループ（Tags/Style/Properties）が共有する
- * ホスト依存。フィールドグループは自前の task コピーを持たず、常に
+ * TaskHubForm の各欄の部品（Name/Status/Tags/Style/Properties）が共有する
+ * ホスト依存。欄の部品は自前の task コピーを持たず、常に
  * `getTask()` 経由で TaskHubForm 本体の最新値を読む — 楽観更新
  * （`queue` 内で `this.task` が即座に書き換わる）と echo 反映の両方が
- * このゲッター 1 つを通るので、フィールドグループ側に鮮度の管理が要らない。
+ * このゲッター 1 つを通るので、欄の部品の側に鮮度の管理が要らない。
  */
 export interface FieldGroupContext {
     getTask: () => Task;
