@@ -42,3 +42,19 @@ export interface HubHost {
     /** The form to tell, once it is built. */
     bind(form: HubForm): void;
 }
+
+/** What a hub's host asks of the panel it is in. */
+export interface HubPanel {
+    /** Draw the card again from the host's value. */
+    redrawPreview(): void;
+    /** Close the hub, asking nothing: a navigation away. */
+    close(): void;
+}
+
+/** A hub's host as its panel sees it: the form's host, told when the hub has opened and when it has closed. */
+export interface PanelHost extends HubHost {
+    /** The hub has opened in `panel`: what the host follows from now on is drawn there. */
+    attach(panel: HubPanel): void;
+    /** The hub has closed: the host follows nothing more, and a refusal that comes after is told by a notice. */
+    dispose(): void;
+}

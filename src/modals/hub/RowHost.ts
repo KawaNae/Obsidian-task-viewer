@@ -9,7 +9,7 @@ import { refusalNotice } from '../../services/core/RefusalClause';
 import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import { logError } from '../../log/log';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
-import type { HubForm, HubHost } from './HubHost';
+import type { HubForm, HubPanel, PanelHost } from './HubHost';
 import { openSourceLine, type LineTarget } from './SourceLine';
 
 export interface RowHostDeps {
@@ -17,16 +17,6 @@ export interface RowHostDeps {
     plugin: PluginContext;
     index: IndexReads;
     operations: Operations;
-}
-
-/** What the hub's panel does as the row changes in the index, and to close. */
-export interface RowPanel {
-    /** Draw the card again from the host's value. */
-    redrawPreview(): void;
-    /** The source mode follows the row; undefined once the index no longer holds it. */
-    follow(row: Task | undefined): void;
-    /** Close the hub, asking nothing: a navigation away. */
-    close(): void;
 }
 
 /**
@@ -49,10 +39,10 @@ export interface RowPanel {
  * writing one row would have one of them refused, and the draft is the
  * user's work) and while the index no longer holds it (nothing to write to).
  */
-export class RowHost implements HubHost {
+export class RowHost implements PanelHost {
     private value: Task;
     private form: HubForm | null = null;
-    private panel: RowPanel | null = null;
+    private panel: HubPanel | null = null;
     private unsubscribe: (() => void) | null = null;
     /** The writes asked and not yet answered, each to whether it was written, for {@link drained} and the close. */
     private writing = new Set<Promise<boolean>>();
@@ -63,7 +53,12 @@ export class RowHost implements HubHost {
     /** The source mode holds the row: its draft is the one way to write it until it closes. */
     private sourceOpen = false;
 
-    constructor(task: Task, private readonly deps: RowHostDeps) {
+    /**
+     * @param follow told of each change of the row after the card and the
+     *   fields are, undefined once the index no longer holds it: the hub's
+     *   source mode follows the row by it
+     */
+    constructor(task: Task, private readonly deps: RowHostDeps, private readonly follow: (row: Task | undefined) => void) {
         // A segment of a split task is a key within the display: the hub
         // works on its row, by the row's name.
         const originalId = getOriginalTaskId(task);
@@ -176,9 +171,10 @@ export class RowHost implements HubHost {
     /**
      * Follow the row in the index for the hub that has opened: each change of
      * it (our own writes' echoes among them) becomes the value, drawn in the
-     * card and the fields; a row the index no longer holds shuts the fields.
+     * card and the fields, then told to `follow`; a row the index no longer
+     * holds shuts the fields.
      */
-    attach(panel: RowPanel): void {
+    attach(panel: HubPanel): void {
         this.panel = panel;
         this.unsubscribe = this.deps.index.onChange((taskId) => {
             if (taskId !== undefined && taskId !== this.value.id) return;
@@ -190,7 +186,7 @@ export class RowHost implements HubHost {
             } else {
                 this.lose();
             }
-            panel.follow(fresh);
+            this.follow(fresh);
         });
     }
 

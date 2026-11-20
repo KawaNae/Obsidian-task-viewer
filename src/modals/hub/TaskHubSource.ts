@@ -16,7 +16,7 @@ import { DraftGuard } from '../form/DraftGuard';
  * what the source opens on, what an apply writes, what a refusal leaves, and
  * whether the hub may close. What it looks like is the surface's
  * (`TaskHubSourceView`); where the text comes from and goes to is the host's
- * (the hub panel).
+ * (the hub's opener on a row, `TaskHubPanel.openRowHub`).
  *
  * - Entering waits for the hub's writes asked so far, asks whether the
  *   hub's copy is the row on the disk (`confirm`), and opens its subtree once
