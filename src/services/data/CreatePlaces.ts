@@ -38,8 +38,9 @@ export interface Inheritance {
 }
 
 /**
- * What a place is, for the create dialog to say before the line is written
- * (`CreatePlaces.facts`), and what a line put there inherits (`inherits`):
+ * What a place is, for the hub on a task not written yet to say before the
+ * line is written (`CreatePlaces.facts`), and what a line put there inherits
+ * (`inherits`):
  * what the read layer gives the line once it is written, and nothing else,
  * with where it comes from (`inheritedFrom`).
  * A daily note's day is not one of them: the reading gives a line no date of
@@ -69,8 +70,8 @@ export type PlaceFacts =
 const PROBE = '- [ ] _';
 
 /**
- * The places a new task line is made in, as the create dialog asks of them:
- * what a place is and what a line there inherits ({@link facts}), the
+ * The places a new task line is made in, as the hub on a task not written
+ * yet asks of them: what a place is and what a line there inherits ({@link facts}), the
  * note a line put there is in ({@link noteOf}), and the write of the line
  * there ({@link create}). Beside `NoteOps`, which answers
  * the same of a send's destination.

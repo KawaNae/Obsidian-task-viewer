@@ -465,7 +465,6 @@
     "deleteSort": "ソートを削除"
   },
   "modal": {
-    "createTask": "新しいタスクを作成",
     "taskName": "タスク名",
     "create": "作成",
     "cancel": "キャンセル",
@@ -482,7 +481,6 @@
     "note": "ノート",
     "notePlaceholder": "名前かフォルダで検索",
     "heading": "見出し",
-    "nameRequired": "タスク名が必要です。",
     "noteAmbiguous": "「{{name}}」に当たるノートが {{count}} 件あります（{{notes}}）。候補から選んでください",
     "openDatePicker": "日付ピッカーを開く",
     "openTimePicker": "時刻ピッカーを開く",

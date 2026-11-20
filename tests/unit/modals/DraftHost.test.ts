@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Notice } from '../mocks/obsidian';
-import { DraftHost, placeIssues } from '../../../src/modals/hub/DraftHost';
+import { DraftHost, placeIssues, placeText } from '../../../src/modals/hub/DraftHost';
 import type { HubForm } from '../../../src/modals/hub/HubHost';
 import type { CreatePlace, PlaceFacts } from '../../../src/services/data/CreatePlaces';
 import type { IndexRefusal } from '../../../src/services/core/RefusalClause';
@@ -273,5 +273,15 @@ describe('placeIssues', () => {
             { at: 'form', tone: 'info', text: t('modal.newTask.toMade', { note: '2031-01-15.md', heading: 'Tasks' }) },
             { at: 'form', tone: 'warning', text: t('modal.newTask.ignored', { note: '2031-01-15.md' }) },
         ]);
+    });
+});
+
+describe('placeText', () => {
+    it('says each place by where the line goes', () => {
+        const vars = { note: '2031-01-15.md', heading: 'Tasks' };
+        expect(placeText(daily({ note: 'new', heading: { kind: 'one', heading: {} as never } }))).toEqual({ text: t('modal.newTask.toNew', vars), tone: 'info' });
+        expect(placeText(daily({ heading: { kind: 'one', heading: {} as never } }))).toEqual({ text: t('modal.newTask.toHead', vars), tone: 'info' });
+        expect(placeText(daily({ heading: { kind: 'one', heading: {} as never }, section: { ...SECTION, side: 'end' } }))).toEqual({ text: t('modal.newTask.toEnd', vars), tone: 'info' });
+        expect(placeText({ kind: 'childOf', parent: '親', inherits: {} })).toEqual({ text: t('modal.newTask.toChild', { parent: '親' }), tone: 'info' });
     });
 });

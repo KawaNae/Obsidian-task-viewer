@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PickerTextField, createPickerTextField } from '../../../src/modals/form/PickerTextField';
 import { DateFieldGroup } from '../../../src/modals/form/DateFieldGroup';
+import type { DateTimeFields } from '../../../src/modals/TaskDateValidator';
 import { makeTask } from '../helpers/makeTask';
 import { t } from '../../../src/i18n';
 
@@ -181,18 +182,19 @@ describe('PickerTextField', () => {
     });
 });
 
+const NO_DATES: DateTimeFields = { startDate: '', startTime: '', endDate: '', endTime: '', dueDate: '', dueTime: '' };
+
 describe('DateFieldGroup.setEnabled', () => {
     it('disables every field with its buttons, so a clear in the hub\'s source mode changes nothing', () => {
         const root = new FakeEl('div');
         const inputs: string[] = [];
         const group = new DateFieldGroup(root as unknown as HTMLElement, {
             labels: { start: 'start', end: 'end', due: 'due' },
-            initial: { startDate: '2026-09-29', startTime: '10:00', dueDate: '2026-10-01' },
+            current: () => ({ ...NO_DATES, startDate: '2026-09-29', startTime: '10:00', dueDate: '2026-10-01' }),
             buildOverlayTask: () => makeTask({ id: 'overlay' }),
             getStartHour: () => 0,
             taskLookup: () => undefined,
             getValidationCtx: () => ({ hasImplicitStartDate: false }),
-            onChange: () => inputs.push('change'),
             onCommit: (group) => { inputs.push(`commit:${group}`); },
             issues: () => { /* none said */ },
         });
@@ -207,18 +209,19 @@ describe('DateFieldGroup.setEnabled', () => {
 
         for (const clear of root.findAll('tv-form__clear-button')) clear.click();
         for (const button of root.findAll('tv-form__picker-button')) button.click();
-        expect(group.collect()).toMatchObject({ startDate: '2026-09-29', startTime: '10:00', dueDate: '2026-10-01' });
+        expect(root.findAll('tv-ctrl__text-input').map(input => input.value)).toEqual(['2026-09-29', '10:00', '', '', '2026-10-01', '']);
         expect(root.findAll('tv-form__native-picker-input').every(p => p.shown === 0)).toBe(true);
         expect(inputs).toEqual([]);
     });
 });
 
 describe('DateFieldGroup.refresh', () => {
-    function group(initial: Record<string, string>) {
+    function group(values: Partial<DateTimeFields>) {
         const said: { at: string; text: string }[][] = [];
         const g = new DateFieldGroup(new FakeEl('div') as unknown as HTMLElement, {
             labels: { start: 'start', end: 'end', due: 'due' },
-            initial,
+            current: () => ({ ...NO_DATES, ...values }),
+            onCommit: () => { },
             buildOverlayTask: () => makeTask({ id: 'overlay' }),
             getStartHour: () => 0,
             taskLookup: () => undefined,

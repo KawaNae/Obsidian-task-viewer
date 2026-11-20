@@ -10,7 +10,8 @@ import type { Menu } from 'obsidian';
 import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { CreateModal } from '../../modals/create/CreateModal';
+import type { DraftSeed } from '../../services/data/TaskDraft';
+import { DateUtils } from '../../utils/DateUtils';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
 
@@ -28,27 +29,38 @@ export function startDailyNoteTimer(
 }
 
 /**
- * Open the create dialog on the daily note of `date`: the line it makes goes
- * under the task section of that day's note (`CreatePlace` `dailyNote`).
+ * Open the hub on a task not written yet in the daily note of `date`: the
+ * line it makes goes under the task section of that day's note
+ * (`CreatePlace` `dailyNote`).
  *
- * `date` is the file's day (the visual column), which is not always the
- * task's own start date — a click past midnight seeds the next day while
- * still belonging to this column's note. `startTime` is what separates the
- * two callers: clicking the timed lane knows the hour under the cursor,
- * clicking the all-day lane does not.
+ * `date` is the file's day (the visual column). A click on the timed lane
+ * knows the time under the cursor, `minutes` after that day's midnight (the
+ * start hour's offset in): the task starts then, to the nearest 5 minutes,
+ * on the next day once it is past midnight, while still going in this
+ * column's note. A click on the all-day lane knows no time: the task starts
+ * on the day alone.
  */
-export function openCreateTaskForDailyNote(
-    plugin: PluginContext,
-    date: string,
-    seed: { startDate: string; startTime?: string },
-): void {
-    new CreateModal(
-        plugin.app,
-        plugin.getCreatePlaces(),
-        () => plugin.settings.startHour,
-        { kind: 'dailyNote', date },
-        seed,
-    ).open();
+export function openDraftHubForDailyNote(plugin: PluginContext, date: string, minutes?: number): void {
+    plugin.openDraftHub({ kind: 'dailyNote', date }, minutes === undefined ? { startDate: date } : timedSeed(date, minutes));
+}
+
+function timedSeed(date: string, minutes: number): DraftSeed {
+    let totalMinutes = minutes;
+    if (totalMinutes >= 24 * 60) totalMinutes -= 24 * 60;
+
+    const hours = Math.floor(totalMinutes / 60);
+    let roundedMinutes = Math.round(Math.floor(totalMinutes % 60) / 5) * 5;
+    let finalHours = hours;
+    if (roundedMinutes === 60) {
+        roundedMinutes = 0;
+        finalHours += 1;
+    }
+    if (finalHours >= 24) finalHours -= 24;
+
+    return {
+        startDate: minutes >= 24 * 60 ? DateUtils.addDays(date, 1) : date,
+        startTime: DateUtils.formatHHMM(finalHours, roundedMinutes),
+    };
 }
 
 /**

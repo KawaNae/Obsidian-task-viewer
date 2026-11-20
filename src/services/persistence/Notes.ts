@@ -228,8 +228,8 @@ export async function putInPeriodicNote(
  * What a new periodic note of `date` holds: its template (the path, or the
  * path with `.md`) expanded for the date, ending with a terminator; '' with
  * no template, or one that cannot be found, which is logged — a note is made
- * all the same. What a write makes the note of, and what the create dialog
- * reads a note not there yet as (`CreatePlaces.facts`).
+ * all the same. What a write makes the note of, and what the hub on a task
+ * not written yet reads a note not there yet as (`CreatePlaces.facts`).
  */
 export async function periodicNoteSeed(app: App, desc: PeriodicNote, date: string): Promise<string> {
     if (!desc.template) return '';

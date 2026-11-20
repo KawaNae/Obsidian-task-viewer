@@ -156,7 +156,6 @@ export class TaskHubForm implements HubForm {
         this.dateGroup = new DateFieldGroup(scheduleGroup, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
             icons: { start: PROPERTY_ICONS.start, end: PROPERTY_ICONS.end, due: PROPERTY_ICONS.due },
-            initial: dateFieldsOf(this.host.task()),
             current: () => dateFieldsOf(this.host.task()),
             buildOverlayTask: (f) => ({
                 ...this.host.task(),

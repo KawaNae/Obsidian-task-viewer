@@ -22,10 +22,9 @@ export interface TempTaskFields {
 }
 
 /**
- * Builds a synthetic raw {@link Task} of no row: the create dialog's
- * preview, through `toDisplayTask(t, startHour, NO_TASK_LOOKUP)`, and the
- * base of a task not written yet (`TaskDraft.draftTask`), whose row a write
- * is handed is made from it (`TaskDraft.newRowOf`).
+ * Builds a synthetic raw {@link Task} of no row: the base of a task not
+ * written yet (`TaskDraft.draftTask`), whose row a write is handed is made
+ * from it (`TaskDraft.newRowOf`).
  *
  * Centralizing the construction keeps the substrate fields
  * (`childIds`, `childLines`, `tags`, `properties`) consistent across

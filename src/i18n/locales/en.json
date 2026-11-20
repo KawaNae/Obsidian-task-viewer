@@ -465,7 +465,6 @@
     "deleteSort": "Delete sort"
   },
   "modal": {
-    "createTask": "Create New Task",
     "taskName": "Task Name",
     "create": "Create",
     "cancel": "Cancel",
@@ -482,7 +481,6 @@
     "note": "Note",
     "notePlaceholder": "Search by name or folder",
     "heading": "Heading",
-    "nameRequired": "A task name is required.",
     "noteAmbiguous": "{{count}} notes match \"{{name}}\" ({{notes}}). Pick one from the list",
     "openDatePicker": "Open date picker",
     "openTimePicker": "Open time picker",
