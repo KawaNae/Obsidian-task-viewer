@@ -5,8 +5,9 @@
  * conversion with, or one an open list takes, is not the form's.
  *
  * The create dialog is opened from a card's menu ("Add child task"), as a
- * user opens it; the filter menu from a Timeline's toolbar, with the note
- * active beside it. The note's bytes are read back from the disk.
+ * user opens it, with no hub under it, or over the hub it was opened from;
+ * the filter menu from a Timeline's toolbar, with the note active beside
+ * it. The note's bytes are read back from the disk.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
@@ -67,6 +68,25 @@ const openCreate = async (name) => {
     item.callback(new MouseEvent('click'));
     await until(() => nameInput() && document.activeElement === nameInput());
 };
+/**
+ * Open the screen that makes a child task over the hub of the row named, as
+ * a user does: the hub opened on the row, then its card's menu, Add child
+ * task. Wait for both to be open and the focus on the name. The one place
+ * a test draws a screen that makes a task over the hub.
+ */
+const openCreateOverHub = async (name) => {
+    const task = rowOf(name);
+    plugin.openTaskHub(task.id);
+    await until(() => hubPanel() && hubPanel().contains(document.activeElement));
+    await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
+    const menu = plugin.menuPresenter.currentMenu;
+    const item = menu?.items.find(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.addChildTask'))});
+    if (!item) throw new Error('no add child in the menu');
+    menu.hide();
+    item.callback(new MouseEvent('click'));
+    await until(() => hubPanel() && nameInput() && document.activeElement === nameInput());
+};
+const pressEscape = () => key(document.activeElement, { key: 'Escape', code: 'Escape', keyCode: 27 });
 /** A note's leaf in source mode, active, its line 2's second character selected. */
 const openNote = async () => {
     const file = app.vault.getAbstractFileByPath(${JSON.stringify(TEST_FILE)});
@@ -306,5 +326,30 @@ describe('every overlay keeps the note\'s hotkeys out and holds the focus', () =
             onPanel: true, inPanel: true, line: '- [ ] 次', focusBack: true,
             named: { value: '2026-10-04', selected: true },
         });
+    });
+});
+
+describe('overlays opened over one another', () => {
+    it('the screen that makes a task over the hub: Escape closes it alone, the hub staying open, and the next Escape closes the hub', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const steps = run<Record<string, unknown>>(`
+            await openCreateOverHub('親');
+            const opened = { hub: !!hubPanel(), create: !!createPanel() };
+            pressEscape();
+            await until(() => !createPanel());
+            await sleep(300);
+            const first = { hub: !!hubPanel(), create: !!createPanel() };
+            pressEscape();
+            await until(() => !hubPanel());
+            await sleep(100);
+            const second = { hub: !!hubPanel(), create: !!createPanel() };
+            return JSON.stringify({ opened, first, second });
+        `);
+        expect(steps).toEqual({
+            opened: { hub: true, create: true },
+            first: { hub: true, create: false },
+            second: { hub: false, create: false },
+        });
+        expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 });
