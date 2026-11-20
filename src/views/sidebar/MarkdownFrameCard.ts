@@ -27,9 +27,10 @@
  * keeps it though it is handed the markdown of a note that has changed.
  * Whether the note still reads so is the write's to decide, and to tell.
  *
- * A checkbox of a note embedded in the markdown (`![[…]]`) writes nothing:
- * the render draws it as that note's, and the card knows nothing of its
- * lines. A checkbox another plugin draws (a Dataview task list, of a code
+ * A checkbox of a note embedded in the markdown (`![[…]]`) writes nothing,
+ * and says so: the render draws it as that note's, and the card knows
+ * nothing of its lines. The renders never shown draw the embed as a link,
+ * so they read no other note and run none of its scripts. A checkbox another plugin draws (a Dataview task list, of a code
  * block or of an inline query) is that plugin's, which writes the note
  * itself, and is left alone.
  */
@@ -259,7 +260,7 @@ export class MarkdownFrameCard {
      * A click in `rendered`, the element a render of `drawn` drew into: on
      * a checkbox the markdown drew, the checkbox is kept as it is and its
      * line written (`press`). One another plugin drew is left to it; one of
-     * an embedded note writes nothing. The listener lives as long as the
+     * an embedded note writes nothing, and says it is that note's. The listener lives as long as the
      * render's component, so `drawn` is what the card shows at the click. A
      * heading over a mask holds no lines of a task, so a checkbox drawn
      * there (one the markdown writes as HTML) writes nothing either.
@@ -268,6 +269,10 @@ export class MarkdownFrameCard {
         const target = event.target as Element | null;
         if (typeof target?.matches !== 'function' || !target.matches(CHECKBOX) || within(target, rendered, PLUGIN_DRAWN)) return;
         event.preventDefault();
+        if (within(target, rendered, EMBED)) {
+            new Notice(t('sidebar.checkboxEmbedded'));
+            return;
+        }
         const boxes = ownCheckboxes(rendered);
         const index = boxes.indexOf(target);
         if (drawn.kind === 'body' && index >= 0) this.press(drawn, statusesOf(boxes), index);

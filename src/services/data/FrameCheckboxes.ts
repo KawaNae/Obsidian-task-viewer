@@ -44,14 +44,20 @@ const TASK_LINE = /^((?:[ \t]*>|[ \t]*\[\^[^\]\s]+\]:|[ \t]*(?:[-*+]|\d+[.)])(?=
  * `dataview`) would run that plugin's script or query on every render; the
  * language is replaced by one no plugin draws, so the block is drawn as
  * code. Replacing a word of the opening line by another keeps it an
- * opening line, and a line within a block one within it. This has no part
- * in what a write stands on: a render it changed in some other way does
- * not draw what the click asks for, and the checkbox writes nothing.
+ * opening line, and a line within a block one within it.
  */
 const FENCE_OPEN = /^((?:[ \t]*>|[ \t]*\[\^[^\]\s]+\]:|[ \t]*(?:[-*+]|\d+[.)])(?=[ \t]))*[ \t]*(?:`{3,}|~{3,})[ \t]*)[^\s`]+/;
 
 /** The language a fence's is replaced by: one no plugin draws. */
 const QUIET_LANGUAGE = 'x';
+
+/**
+ * The `!` that makes a link an embed, of a note or of a file: before `[[`
+ * (`![[…]]`) and before `[…](` (`![…](…)`). An embedded note is read and
+ * drawn by the render, its code blocks run, and its own embeds read; with
+ * the `!` taken out it is drawn as a link, and none of that happens.
+ */
+const EMBED_BANG = /!(?=\[\[|\[[^\]\n]*\]\()/g;
 
 /**
  * The first character naming a line, in Unicode's private use area: line
@@ -61,10 +67,20 @@ const QUIET_LANGUAGE = 'x';
 const MARK_BASE = 0xE000;
 export const MARKED_LINES = 0xF8FF - MARK_BASE + 1;
 
-/** `markdown`'s lines, each fence's language replaced (`FENCE_OPEN`), and `turn` applied to the line `k`. */
+/**
+ * `markdown`'s lines as a render never shown is to draw them, `turn`
+ * applied to the line `k`: running no plugin's script or query, and
+ * reading no other note. After the turn, so the status is turned where the
+ * note has it, each fence's language is replaced (`FENCE_OPEN`) and each
+ * embed made a link (`EMBED_BANG`). A checkbox of an embedded note is not
+ * the card's, and is taken from no render. None of this has a part in what
+ * a write stands on: a render it changed in some other way, a checkbox
+ * more or less, does not draw what the click asks for, and the checkbox
+ * writes nothing.
+ */
 function quieted(markdown: string, turn: (line: string, k: number) => string): string {
     return markdown.split('\n')
-        .map((line, k) => turn(line.replace(FENCE_OPEN, (_, open: string) => open + QUIET_LANGUAGE), k))
+        .map((line, k) => turn(line, k).replace(FENCE_OPEN, (_, open: string) => open + QUIET_LANGUAGE).replace(EMBED_BANG, ''))
         .join('\n');
 }
 

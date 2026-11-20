@@ -15,18 +15,24 @@ import { FakeEl, type FakeEvent } from '../../helpers/cardDom';
  * note embedded (`![[…]]`) as an `.internal-embed` holding a task of its
  * own; a Dataview block as a `.block-language-dataview` holding one; and an
  * inline Dataview query as Dataview's task list, drawn only by a render
- * whose component is loaded. Every render the card asks for is kept.
+ * whose component is loaded. Every render the card asks for is kept, with
+ * its component and the element it draws into; a render not loaded fails
+ * while `failUnshown` is set.
  */
 
+interface StandInComponent { loaded: boolean; unloaded: boolean }
 const renders: { markdown: string; loaded: boolean }[] = [];
+const rendered: { component: StandInComponent; el: FakeEl }[] = [];
+let failUnshown = false;
 
 vi.mock('obsidian', async () => {
     const actual = await vi.importActual<Record<string, unknown>>('obsidian');
     class Component {
         loaded = false;
+        unloaded = false;
         private readonly ends: (() => void)[] = [];
         load() { this.loaded = true; }
-        unload() { for (const end of this.ends.splice(0)) end(); }
+        unload() { this.unloaded = true; for (const end of this.ends.splice(0)) end(); }
         register(end: () => void) { this.ends.push(end); }
         registerDomEvent(el: FakeEl, type: string, fn: (e: FakeEvent) => void) {
             el.addEventListener(type, fn);
@@ -39,6 +45,8 @@ vi.mock('obsidian', async () => {
         MarkdownRenderer: {
             render: (_app: unknown, markdown: string, el: FakeEl, _path: string, component: Component) => {
                 renders.push({ markdown, loaded: component.loaded });
+                rendered.push({ component, el });
+                if (failUnshown && !component.loaded) return Promise.reject(new Error('render failed'));
                 drawn(markdown, el, component.loaded);
                 return Promise.resolve();
             },
@@ -79,6 +87,8 @@ class StandInObserver {
 beforeEach(() => {
     Notice.messages = [];
     renders.length = 0;
+    rendered.length = 0;
+    failUnshown = false;
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeEl(tag) });
     vi.stubGlobal('MutationObserver', StandInObserver);
 });
@@ -253,23 +263,57 @@ describe("a click of a markdown frame card's checkbox", () => {
         expect(Notice.messages).toEqual([t('sidebar.checkboxUnmatched')]);
     });
 
-    it('writes nothing, and says so, for a checkbox of an embedded note, which is kept from toggling', async () => {
+    it("writes nothing for a checkbox of an embedded note, which is kept from toggling, and says it is that note's", async () => {
         const { card: c, writes, click } = await card(body('- [ ] a\n![[Other#Tasks]]\n- [ ] b'));
         c.paint(true);
+        renders.length = 0;
+
+        expect(click(1)).toBe(true);
+        await settled();
+        expect(writes).toEqual([]);
+        expect(renders).toEqual([]);
+        expect(Notice.messages).toEqual([t('sidebar.checkboxEmbedded')]);
+    });
+
+    it('takes the checkboxes past an embedded note without it, rendering the embed as a link where it is never shown', async () => {
+        const { card: c, writes, click } = await card(body('- [ ] a\n![[Other#Tasks]]\n- [ ] b'));
+        c.paint(true);
+        renders.length = 0;
+
+        click(2);
+        await settled();
+        expect(writes.map(w => w.write)).toEqual([{ line: 2, text: '- [ ] b', next: '- [x] b' }]);
+        expect(renders.map(r => r.markdown.split('\n')[1])).toEqual(['[[Other#Tasks]]', '[[Other#Tasks]]']);
+    });
+
+    it("ends the component of each render never shown, and makes its element by the card's document", async () => {
+        const { card: c, click } = await card(body('- [ ] a\n- [ ] b'));
+        c.paint(true);
+        const made: FakeEl[] = [];
+        Object.defineProperty(c.el, 'ownerDocument', { value: { createElement: (tag: string) => { const el = new FakeEl(tag); made.push(el); return el; } } });
+        rendered.length = 0;
+
+        click(1);
+        await settled();
+        expect(rendered).toHaveLength(2);
+        expect(rendered.map(r => r.component)).toEqual([
+            expect.objectContaining({ loaded: false, unloaded: true }),
+            expect.objectContaining({ loaded: false, unloaded: true }),
+        ]);
+        expect(rendered.map(r => made.includes(r.el))).toEqual([true, true]);
+    });
+
+    it('writes nothing, and says so, when a render never shown fails, and ends its component', async () => {
+        const { card: c, writes, click } = await card(body('- [ ] a\n- [ ] b'));
+        c.paint(true);
+        failUnshown = true;
+        rendered.length = 0;
 
         expect(click(1)).toBe(true);
         await settled();
         expect(writes).toEqual([]);
         expect(Notice.messages).toEqual([t('sidebar.checkboxUnmatched')]);
-    });
-
-    it('takes the checkboxes past an embedded note without it', async () => {
-        const { card: c, writes, click } = await card(body('- [ ] a\n![[Other#Tasks]]\n- [ ] b'));
-        c.paint(true);
-
-        click(2);
-        await settled();
-        expect(writes.map(w => w.write)).toEqual([{ line: 2, text: '- [ ] b', next: '- [x] b' }]);
+        expect(rendered.map(r => r.component.unloaded)).toEqual([true]);
     });
 
     it("leaves a code block's checkbox to the block, and takes the checkboxes past it without it", async () => {

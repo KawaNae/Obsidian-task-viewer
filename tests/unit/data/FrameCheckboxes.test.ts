@@ -39,6 +39,35 @@ describe('markLines', () => {
         expect(markLines(md)).toBe('```x\nrun()\n```\n- ```x\n  TASK\n  ```\n> ~~~ x\n> q\n> ~~~\n```\nplain\n```\n`code`');
     });
 
+    it('makes each embed a link, of a note and of a file, in a quote and an item', () => {
+        const md = [
+            '![[Other#Tasks]]',
+            '> ![[Other]]',
+            '- [ ] wow![[x]] and ![[y|z]]',
+            '- [ ] a ![alt](b.png) c',
+            '![](note.md)',
+            '> - ![[Other#^b]]',
+        ];
+        expect(markLines(md.join('\n')).split('\n')).toEqual([
+            '[[Other#Tasks]]',
+            '> [[Other]]',
+            `- [${mark(2)}] wow[[x]] and [[y|z]]`,
+            `- [${mark(3)}] a [alt](b.png) c`,
+            '[](note.md)',
+            '> - [[Other#^b]]',
+        ]);
+    });
+
+    it("leaves an ! that makes no embed, and a task line's status of !", () => {
+        expect(markLines('- [!] a\n> [!todo] b\n- ![ ] c\nwow! [x]\n- [!][[x]] d').split('\n')).toEqual([
+            `- [${mark(0)}] a`,
+            '> [!todo] b',
+            '- ![ ] c',
+            'wow! [x]',
+            `- [${mark(4)}][[x]] d`,
+        ]);
+    });
+
     it(`names no line past the first ${MARKED_LINES}`, () => {
         const md = Array.from({ length: MARKED_LINES + 1 }, () => '- [ ] a').join('\n');
         const lines = markLines(md).split('\n');
@@ -89,6 +118,14 @@ describe('turnLine', () => {
         expect(turnLine('- [ ] a [x] b\n```dataviewjs\n```', [0, 1, 2], 0, '')!.markdown).toBe('- [x] a [x] b\n```x\n```');
     });
 
+    it("makes the embeds links in the markdown to render, the turned line's too, and writes the note's line as it reads", () => {
+        expect(turnLine('- [ ] a ![[n]]\n![](m.md)', [3, 4], 0, '')).toEqual({
+            markdown: '- [x] a [[n]]\n[](m.md)',
+            drawn: 'x',
+            write: { line: 3, text: '- [ ] a ![[n]]', next: '- [x] a ![[n]]' },
+        });
+    });
+
     it('gives nothing for a line not written as a task line, nor one past the markdown', () => {
         expect(turnLine('text\n- [ ] a', [0, 1], 0, '')).toBeNull();
         expect(turnLine('- [ ] a', [0], 1, '')).toBeNull();
@@ -107,6 +144,16 @@ describe('confirms', () => {
         expect(confirms(['', ''], ['', 'x', ''], 1, 'x')).toBe(false);
         expect(confirms(['', ''], [''], 0, 'x')).toBe(false);
         expect(confirms([], [], 0, 'x')).toBe(false);
+    });
+
+    it('does not hold when the render draws fewer checkboxes, though the pressed one and every one before it are as asked', () => {
+        // A checkbox drawn only as the card is shown (by an inline query) leaves the render one short.
+        expect(confirms(['', '', ''], ['', 'x'], 1, 'x')).toBe(false);
+        expect(confirms(['', 'x', ''], ['x'], 0, 'x')).toBe(false);
+    });
+
+    it('does not hold when the render draws more checkboxes than the card shows', () => {
+        expect(confirms(['', 'x'], ['', '', 'x'], 1, '')).toBe(false);
     });
 
     it('does not hold when the pressed checkbox shows the status already: a line drawn nowhere was turned', () => {
