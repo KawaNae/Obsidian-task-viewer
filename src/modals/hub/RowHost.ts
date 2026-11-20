@@ -1,0 +1,210 @@
+import { Notice, type App } from 'obsidian';
+import { t } from '../../i18n';
+import type { Task } from '../../types';
+import type { PluginContext } from '../../PluginContext';
+import type { IndexReads } from '../../services/core/TaskIndex';
+import type { Operations } from '../../services/operations/Operations';
+import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
+import { refusalNotice } from '../../services/core/RefusalClause';
+import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
+import { logError } from '../../log/log';
+import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
+import type { HubForm, HubHost } from './HubHost';
+import { openSourceLine, type LineTarget } from './SourceLine';
+
+export interface RowHostDeps {
+    app: App;
+    plugin: PluginContext;
+    index: IndexReads;
+    operations: Operations;
+}
+
+/** What the hub's panel does as the row changes in the index, and to close. */
+export interface RowPanel {
+    /** Draw the card again from the host's value. */
+    redrawPreview(): void;
+    /** The source mode follows the row; undefined once the index no longer holds it. */
+    follow(row: Task | undefined): void;
+    /** Close the hub, asking nothing: a navigation away. */
+    close(): void;
+}
+
+/**
+ * The host of a hub on a row the note already has: each change handed on is
+ * written to the row at once (`Operations.updateTask`), and the row is
+ * followed in the index.
+ *
+ * The value is what the fields hold, not the index's copy: a change handed on
+ * is put over it before it is written, so the next one is built from what was
+ * typed even before the echo comes. The echo, and any change from outside,
+ * replaces it with the index's copy.
+ *
+ * Writes handed on one after another are asked at once: the operations keep
+ * their order (each is planned from what the one before left, `onRow`). Each
+ * is asked with no notice (`tellRefusal: false`): a refusal is said at the
+ * form's end once and the value goes back to the index's copy; once the hub
+ * has closed, a refusal is told by a notice, as any write's is.
+ *
+ * The fields are shut while the source mode holds the row (two ways of
+ * writing one row would have one of them refused, and the draft is the
+ * user's work) and while the index no longer holds it (nothing to write to).
+ */
+export class RowHost implements HubHost {
+    private value: Task;
+    private form: HubForm | null = null;
+    private panel: RowPanel | null = null;
+    private unsubscribe: (() => void) | null = null;
+    /** The writes asked and not yet answered, each to whether it was written, for {@link drained} and the close. */
+    private writing = new Set<Promise<boolean>>();
+    /** The hub closed: a refusal that comes after is told by a notice. */
+    private closed = false;
+    /** The row is gone from the index: nothing to write to. */
+    private missing = false;
+    /** The source mode holds the row: its draft is the one way to write it until it closes. */
+    private sourceOpen = false;
+
+    constructor(task: Task, private readonly deps: RowHostDeps) {
+        // A segment of a split task is a key within the display: the hub
+        // works on its row, by the row's name.
+        const originalId = getOriginalTaskId(task);
+        this.value = deps.index.getTask(originalId) ?? { ...task, id: originalId };
+    }
+
+    task(): Task {
+        return this.value;
+    }
+
+    /** @returns whether it was written (a field refused keeps what was typed: `bindField`) */
+    put(updates: Partial<Task> | null): Promise<boolean> {
+        if (!updates) return Promise.resolve(true);
+        this.value = { ...this.value, ...updates };
+        const id = this.value.id;
+        const write: Promise<boolean> = this.deps.operations.updateTask(id, updates, { tellRefusal: false })
+            .then((answer) => {
+                this.answered(id, answer);
+                return answer.written;
+            })
+            .catch((e) => {
+                logError(`[RowHost] commit failed: ${e instanceof Error ? e.message : String(e)}`);
+                return false;
+            })
+            .finally(() => { this.writing.delete(write); });
+        this.writing.add(write);
+        return write;
+    }
+
+    /**
+     * A write's answer. Written, the last refusal said is taken back. Refused,
+     * why is said at the form's end, and the value goes back to the index's
+     * copy: the fields refused keep what was typed, and are written again from
+     * the new reading when committed again.
+     */
+    private answered(id: string, answer: WriteAnswer): void {
+        if (this.closed) {
+            if (!answer.written && answer.refused) new Notice(refusalNotice(answer.refused));
+            return;
+        }
+        if (answer.written) {
+            this.form?.sayWrite(null);
+            return;
+        }
+        this.form?.sayWrite(refusalText(answer.refused));
+        const fresh = this.deps.index.getTask(id);
+        if (fresh) this.take(fresh);
+    }
+
+    /** The index's copy becomes the value, the fields opened again if the row had been lost. */
+    private take(fresh: Task): void {
+        this.value = fresh;
+        if (this.missing) {
+            // Only coming back from missing opens the fields again: opened on
+            // every echo, a group built anew would break the input in focus.
+            this.missing = false;
+            this.form?.showShut();
+        }
+        this.form?.refresh();
+    }
+
+    shut(): string | null {
+        if (this.sourceOpen) return t('modal.hub.source.formShut');
+        if (this.missing) return t('modal.hub.taskMissing');
+        return null;
+    }
+
+    /** Open the line on the value (`openSourceLine`); the hub closes, as for any navigation. */
+    openSource(locate: (task: Task) => LineTarget | null): void {
+        void openSourceLine(
+            { app: this.deps.app, index: this.deps.index, reuseTab: this.deps.plugin.settings.reuseExistingTab },
+            this.value,
+            locate,
+        );
+        this.panel?.close();
+    }
+
+    /** All written, the hub closes; one refused, it stays open with why at the form's end. */
+    closing(): CloseAnswer {
+        if (this.writing.size === 0) return 'close';
+        return this.settled().then(written => (written ? 'close' : 'stay'));
+    }
+
+    /** Resolves once every write asked so far is answered: whether all of them were written. */
+    private async settled(): Promise<boolean> {
+        let written = true;
+        while (this.writing.size > 0) {
+            const answers = await Promise.all(this.writing);
+            if (answers.includes(false)) written = false;
+        }
+        return written;
+    }
+
+    /** Resolves once every write asked so far is done: the source opens on what they left. */
+    async drained(): Promise<void> {
+        while (this.writing.size > 0) await Promise.all(this.writing);
+    }
+
+    bind(form: HubForm): void {
+        this.form = form;
+    }
+
+    /** The source mode opened or closed on the row: the fields are shut while it is open. */
+    setSourceOpen(open: boolean): void {
+        if (this.sourceOpen === open) return;
+        this.sourceOpen = open;
+        this.form?.showShut();
+    }
+
+    /**
+     * Follow the row in the index for the hub that has opened: each change of
+     * it (our own writes' echoes among them) becomes the value, drawn in the
+     * card and the fields; a row the index no longer holds shuts the fields.
+     */
+    attach(panel: RowPanel): void {
+        this.panel = panel;
+        this.unsubscribe = this.deps.index.onChange((taskId) => {
+            if (taskId !== undefined && taskId !== this.value.id) return;
+            const fresh = this.deps.index.getTask(this.value.id);
+            if (fresh) {
+                this.value = fresh;
+                panel.redrawPreview();
+                this.take(fresh);
+            } else {
+                this.lose();
+            }
+            panel.follow(fresh);
+        });
+    }
+
+    /** The row is gone from the index (deleted, or its name changed): the fields are shut. */
+    private lose(): void {
+        if (this.missing) return;
+        this.missing = true;
+        this.form?.showShut();
+    }
+
+    /** The hub closed: the row is no longer followed, and a refusal that comes after is told by a notice. */
+    dispose(): void {
+        this.unsubscribe?.();
+        this.unsubscribe = null;
+        this.closed = true;
+    }
+}

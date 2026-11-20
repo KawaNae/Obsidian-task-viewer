@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { CardHold } from '../../../src/views/taskcard/CardHold';
 import { MenuHandler } from '../../../src/interaction/menu/MenuHandler';
-import { TaskHubPanel } from '../../../src/modals/hub/TaskHubPanel';
+import { RowHost } from '../../../src/modals/hub/RowHost';
 import { splitDisplayTaskAtBoundary, toDisplayTask, NO_TASK_LOOKUP } from '../../../src/services/display/DisplayTaskConverter';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask, Task } from '../../../src/types';
@@ -45,13 +45,13 @@ describe('a segment acts on its row', () => {
     it('the hub works on the row, found by its name', () => {
         const [first] = segments();
         const row = makeTask({ id: NAME });
-        const panel = new TaskHubPanel({} as never, first, { index: { getTask: (id: string) => (id === NAME ? row : undefined) } } as never);
-        expect((panel as unknown as { task: Task }).task).toBe(row);
+        const host = new RowHost(first, { index: { getTask: (id: string) => (id === NAME ? row : undefined) } } as never);
+        expect(host.task()).toBe(row);
     });
 
     it('the hub names the row even when the index no longer holds it', () => {
         const [first] = segments();
-        const panel = new TaskHubPanel({} as never, first, { index: { getTask: () => undefined } } as never);
-        expect((panel as unknown as { task: Task }).task.id).toBe(NAME);
+        const host = new RowHost(first, { index: { getTask: () => undefined } } as never);
+        expect(host.task().id).toBe(NAME);
     });
 });

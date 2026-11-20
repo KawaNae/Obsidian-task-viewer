@@ -18,7 +18,7 @@ import { DraftGuard } from '../form/DraftGuard';
  * (`TaskHubSourceView`); where the text comes from and goes to is the host's
  * (the hub panel).
  *
- * - Entering waits for the form's writes queued so far, asks whether the
+ * - Entering waits for the hub's writes asked so far, asks whether the
  *   hub's copy is the row on the disk (`confirm`), and opens its subtree once
  *   (`SubtreeFrame.open`): that subtree is the base every apply is checked
  *   against. The form is shut while the source is open, since two ways of
@@ -71,7 +71,7 @@ export interface SourceSurface {
 }
 
 export interface SourceHost {
-    /** Resolves once the form's writes queued so far are done. */
+    /** Resolves once the hub's writes asked so far are done (`RowHost.drained`). */
     drained(): Promise<void>;
     /** Whether the index's copy of the row is the row on the disk (`Operations.confirmTask`); told the user when not. */
     confirm(taskId: string): Promise<boolean>;

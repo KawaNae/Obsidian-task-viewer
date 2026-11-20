@@ -188,7 +188,7 @@ describe('a name given before a write of ours', () => {
 
     it('orders writes asked of one name without waiting: each is planned from what the one before left', async () => {
         // The hub asks so: every field it commits is written at once, by the
-        // name the form was opened with (`TaskHubForm.queue`).
+        // name the hub was opened with (`RowHost.put`).
         const { contents, session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
         const b = idOf(session, 'B');
 
