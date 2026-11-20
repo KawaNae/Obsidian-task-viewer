@@ -127,14 +127,14 @@ export class RowHost implements PanelHost {
     }
 
     /** Open the line on the value (`openSourceLine`); the hub closes, as for any navigation. */
-    openSource(locate: (task: Task) => LineTarget | null): void {
+    readonly openSource = (locate: (task: Task) => LineTarget | null): void => {
         void openSourceLine(
             { app: this.deps.app, index: this.deps.index, reuseTab: this.deps.plugin.settings.reuseExistingTab },
             this.value,
             locate,
         );
         this.panel?.close();
-    }
+    };
 
     /** All written, the hub closes; one refused, it stays open with why at the form's end. */
     closing(): CloseAnswer {

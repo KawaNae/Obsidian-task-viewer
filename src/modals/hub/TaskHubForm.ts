@@ -115,7 +115,7 @@ export class TaskHubForm implements HubForm {
             app: deps.app,
             plugin: deps.plugin,
             index: deps.index,
-            openSource: (locate) => this.host.openSource(locate),
+            openSource: this.host.openSource,
             issues: this.issues,
             findings: () => this.findings,
             locked: (field) => this.locks.has(field),
@@ -215,21 +215,25 @@ export class TaskHubForm implements HubForm {
     /**
      * Say each finding under the field it is of (the form's at its end),
      * with the line to open in the editor: the user fixes the block there.
+     * With no row to open (`HubHost.openSource` null), nothing is offered.
      */
     private sayFindings(): void {
+        const open = this.host.openSource;
         this.issues.set('findings', this.findings.map(finding => ({
             at: finding.field,
             tone: finding.tone,
             text: finding.text,
-            action: {
-                label: t('modal.hub.openLine'),
-                run: () => {
-                    const among = this.findings;
-                    this.host.openSource(row => (row === this.host.task()
-                        ? { line: finding.line }
-                        : { line: lineOfFinding(finding, among, row, this.deps.plugin.settings.scopeKeys) }));
+            ...(open && {
+                action: {
+                    label: t('modal.hub.openLine'),
+                    run: () => {
+                        const among = this.findings;
+                        open(row => (row === this.host.task()
+                            ? { line: finding.line }
+                            : { line: lineOfFinding(finding, among, row, this.deps.plugin.settings.scopeKeys) }));
+                    },
                 },
-            },
+            }),
         })));
     }
 
