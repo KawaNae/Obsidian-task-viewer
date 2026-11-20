@@ -11,7 +11,9 @@
  * while its frame is folded, and one renamed before the panel draws the
  * frame just added (the window's animation frames held meanwhile); a save
  * of the settings that moves the visual day; the checkboxes of a body,
- * which do not toggle, but for those of a Dataview query; and a body wider
+ * which write their line of the note, but for those of an embedded note,
+ * which write nothing and say so, and those of a Dataview query, which are
+ * Dataview's; and a body wider
  * than the sidebar, whose long URL wraps and whose wide table scrolls
  * inside it; and a body's headings, sized and spaced for the card. Then a
  * view opened in a leaf made apart from the workspace, whose frame reads
@@ -36,7 +38,7 @@
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/markdown-frames.test.ts
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createTeardown } from '../helpers/teardown';
 import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { requireDataview } from '../helpers/prerequisites';
@@ -888,37 +890,66 @@ describe.each([
         openView(name, type, { showSidebar: true, sidebar: [{ kind: 'markdown', id: 'boxes', link: BOXES }] });
     });
 
+    // A click that writes a line leaves the note so; the next test starts
+    // from the note as it was.
+    afterEach(() => {
+        ev(`(async () => {
+            ${names(name)}
+            await writeNote(${JSON.stringify(`${BOXES}.md`)}, ${JSON.stringify(BOXES_NOTE)});
+            await wait(${SETTLE_MS});
+            return JSON.stringify(true);
+        })()`);
+    });
+
     /**
      * Click the checkbox of the body of the frame whose task's text is
-     * `text`, found anew; give whether it is checked right after the click
-     * and the notes as they are once the click has been answered.
+     * `text`, found anew; give whether it is checked right after the click,
+     * the notes as they are once the click has been answered, whether the
+     * checkbox found again then is checked, and the notices the click
+     * brought.
      */
-    function clickBox(text: string, settleMs = SETTLE_MS): { found: boolean; checked: boolean | null; notes: Record<string, string> } {
+    function clickBox(text: string, settleMs = SETTLE_MS): { found: boolean; checked: boolean | null; notes: Record<string, string>; checkedAfter: boolean | null; notices: string[] } {
         return ev(`(async () => {
             ${names(name)}
             const box = () => [...bodyOf('boxes').querySelectorAll('input.task-list-item-checkbox')]
                 .find(b => b.closest('li')?.textContent.includes(${JSON.stringify(text)}));
             // A query is drawn by its plugin some time after the body.
             for (let i = 0; i < 50 && !box(); i++) await wait(100);
+            const seen = new Set(document.querySelectorAll('.notice'));
             const b = box();
             let checked = null;
             if (b) { b.click(); checked = b.checked; }
             await wait(${settleMs});
             const notes = {};
             for (const path of ${JSON.stringify([`${BOXES}.md`, `${EMBEDDED}.md`, `${QUERIED}.md`])}) notes[path] = await app.vault.read(noteAt(path));
-            return JSON.stringify({ found: !!b, checked, notes });
+            const notices = [...document.querySelectorAll('.notice')].filter(n => !seen.has(n)).map(n => n.textContent);
+            return JSON.stringify({ found: !!b, checked, notes, checkedAfter: box()?.checked ?? null, notices });
         })()`);
     }
 
     it.each([
-        ['the body\'s markdown', 'box in the body'],
-        ['a callout', 'box in a callout'],
-        ['a note embedded in the body', 'box in an embed'],
-    ])('does not toggle a checkbox of %s, and leaves the notes as they are', (_where, text) => {
+        ['the body\'s markdown', 'box in the body', '- [ ] box in the body', '- [x] box in the body'],
+        ['a callout', 'box in a callout', '> - [ ] box in a callout', '> - [x] box in a callout'],
+    ])('writes the line of a checkbox of %s done, the checkbox left as it is until the card is drawn anew', (_where, text, line, done) => {
         const r = clickBox(text);
         expect(r.found).toBe(true);
         expect(r.checked).toBe(false);
+        expect(r.notes).toEqual({
+            [`${BOXES}.md`]: BOXES_NOTE.replace(line, done),
+            [`${EMBEDDED}.md`]: EMBEDDED_NOTE,
+            [`${QUERIED}.md`]: QUERIED_NOTE,
+        });
+        expect(r.checkedAfter).toBe(true);
+        expect(r.notices).toEqual([]);
+    });
+
+    it('writes nothing for a checkbox of a note embedded in the body, leaves it as it is, and says the checkbox matches no line', () => {
+        const r = clickBox('box in an embed');
+        expect(r.found).toBe(true);
+        expect(r.checked).toBe(false);
         expect(r.notes).toEqual({ [`${BOXES}.md`]: BOXES_NOTE, [`${EMBEDDED}.md`]: EMBEDDED_NOTE, [`${QUERIED}.md`]: QUERIED_NOTE });
+        expect(r.checkedAfter).toBe(false);
+        expect(r.notices).toEqual([tr('sidebar.checkboxUnmatched')]);
     });
 
     it('leaves a checkbox of a Dataview task list to Dataview, which writes the note on each click', () => {
