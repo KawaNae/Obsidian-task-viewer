@@ -80,7 +80,8 @@ describe('the reader of a markdown frame', () => {
         const frame = readerOver('Folder/Note#Memo');
         frame.name('Folder/Note', 'Folder/Note.md');
         frame.reader.follow();
-        await frame.pending[0].end(MEMO_NOTE.replaceAll('\n', '\r\n'));
+        // A write ends a line at a CRLF and at a CR on its own alike.
+        await frame.pending[0].end('# Memo\r\nfirst\r# Other\r\nsecond');
         void frame.reader.read();
         await frame.pending[1].end(['# Memo', 'first, then more', '# Other', 'second'].join('\n'));
 
