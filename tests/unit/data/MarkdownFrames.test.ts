@@ -1,10 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { frameLink, frameLinkAt, frameTarget, frameTitle, readFrameContent } from '../../../src/services/data/MarkdownFrames';
+import { frameLink, frameLinkAt, frameTarget, frameTitle, readFrameContent, type FrameContent } from '../../../src/services/data/MarkdownFrames';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { headingLinks } from '../../../src/services/parsing/utils/HeadingLinks';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
-const read = (lines: string[], subpath: string) => readFrameContent(lines, subpath, DEFAULT_SETTINGS);
+/**
+ * What a frame shows of the note `lines`, for `subpath`, its cards without
+ * where their lines are (`rows`). Each read checks that every line of every
+ * card's markdown is the note's line its rows name, the lines in order and
+ * within the card's range; the rows themselves are fixed by the tests of
+ * their own below.
+ */
+const read = (lines: string[], subpath: string) => {
+    const content = readFrameContent(lines, subpath, DEFAULT_SETTINGS);
+    expectRowsHold(lines, content);
+    if (content.kind === 'no-heading') return content;
+    return { ...content, cards: content.cards.map(({ rows: _rows, ...card }) => card) };
+};
 /** The cards of the section `subpath` names; undefined when the note has no such heading. */
 const cardsOf = (lines: string[], subpath: string) => {
     const content = read(lines, subpath);
@@ -16,8 +28,17 @@ const markdownOf = (lines: string[], subpath: string) => cardsOf(lines, subpath)
 const styleOf = (lines: string[], subpath: string) => cardsOf(lines, subpath)?.map(card => [card.color, card.linestyle]);
 /** Each card's mask. */
 const maskOf = (lines: string[], subpath: string) => cardsOf(lines, subpath)?.map(card => card.mask);
-/** A card of no style and no mask. */
+/** A card of no style and no mask, without where its lines are. */
 const plain = (heading: string | null, markdown: string) => ({ heading, markdown, color: null, linestyle: null, mask: null });
+
+/** That each card's markdown is, line by line, the lines of `lines` its rows name, in order and within `[from, to)`. */
+function expectRowsHold(lines: readonly string[], content: FrameContent): void {
+    if (content.kind === 'no-heading') return;
+    for (const { markdown, rows } of content.cards) {
+        expect(markdown === '' ? [] : markdown.split('\n')).toEqual(rows.lines.map(line => lines[line]));
+        expect(rows.lines.every((line, k) => rows.from <= line && line < rows.to && (k === 0 || rows.lines[k - 1] < line))).toBe(true);
+    }
+}
 
 describe('the link of a markdown frame', () => {
     it('is cut at its first `#` into the note and the section', () => {
@@ -65,7 +86,7 @@ describe('the link of a frame whose note was renamed or moved', () => {
 });
 
 describe('the name the row of a frame shows', () => {
-    const body = { cards: [plain(null, '')] };
+    const body = { cards: [{ ...plain(null, ''), rows: { from: 1, to: 1, lines: [] } }] };
 
     it('is the heading\'s text as the note writes it, for a heading\'s section', () => {
         expect(frameTitle('Folder/Note#bold link', { kind: 'heading', title: '**Bold** [[Link]]', ...body }, 'Note')).toBe('**Bold** [[Link]]');

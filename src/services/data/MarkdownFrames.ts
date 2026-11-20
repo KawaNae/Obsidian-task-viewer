@@ -102,6 +102,27 @@ export interface FrameCard {
      * (`NoteTasks.inheritance`).
      */
     mask: string | null;
+    /** Which lines of the note the card stands on. */
+    rows: CardRows;
+}
+
+/**
+ * The lines of the note a card stands on, by their index in the note's
+ * lines (as `splitLines` cuts them).
+ */
+export interface CardRows {
+    /**
+     * The lines `[from, to)` the card was cut from: the property lines left
+     * out of its markdown and the blank lines taken off its two ends among
+     * them.
+     */
+    from: number;
+    to: number;
+    /**
+     * The note's line each line of the markdown is (`markdown.split('\n')[k]`
+     * is the note's line `lines[k]`), in order; none for an empty markdown.
+     */
+    lines: readonly number[];
 }
 
 /**
@@ -165,6 +186,8 @@ export function frameTitle(link: string, reading: FrameReading, noteName: string
  * lines under them: they say how the section's tasks look, and are no part
  * of what the note shows. The blank lines at a card's two ends are left
  * out too, so that a blank line put between two sections changes neither.
+ * A card says, for each line of its markdown, which line of the note it
+ * is (`FrameCard.rows`).
  *
  * A card's style and mask are the ones a task written in its section would
  * inherit (`SectionNode.resolvedColor`, `resolvedLinestyle`,
@@ -176,7 +199,7 @@ export function frameTitle(link: string, reading: FrameReading, noteName: string
  * heading. A property line of a heading deeper than a card's is not the
  * card's, and does not style or mask it.
  *
- * A tv-ignore'd note is read as any other: it has no rows, and its cards
+ * A tv-ignore'd note is read as any other: it has no task rows, and its cards
  * are still its cards.
  */
 export function readFrameContent(lines: readonly string[], subpath: string, settings: TaskViewerSettings): FrameContent {
@@ -200,7 +223,8 @@ function cardsOf(lines: readonly string[], section: SectionNode): FrameCard[] {
 
 /**
  * The card of the lines `from` to `to` of `section`, opened by `heading`
- * when it is a nested heading's, with the section's style and mask.
+ * when it is a nested heading's, with the section's style and mask, and the
+ * note's line each line of its markdown is.
  */
 function cardOf(lines: readonly string[], section: SectionNode, heading: OutlineHeading | null, from: number, to: number): FrameCard {
     const hidden = new Set<number>();
@@ -210,24 +234,32 @@ function cardOf(lines: readonly string[], section: SectionNode, heading: Outline
         }
     }
 
-    const shown: string[] = [];
+    const shown: ShownLine[] = [];
     for (let line = from; line < to; line++) {
-        if (!hidden.has(line)) shown.push(lines[line]);
+        if (!hidden.has(line)) shown.push({ line, text: lines[line] });
     }
+    const drawn = withoutBlankEnds(shown);
     return {
         heading: heading && lines.slice(heading.line, heading.end).join('\n'),
-        markdown: withoutBlankEnds(shown).join('\n'),
+        markdown: drawn.map(row => row.text).join('\n'),
         color: section.resolvedColor ?? null,
         linestyle: section.resolvedLinestyle ?? null,
         mask: section.resolvedMask || null,
+        rows: { from, to, lines: drawn.map(row => row.line) },
     };
 }
 
-/** `lines` without the blank lines at its two ends. */
-function withoutBlankEnds(lines: readonly string[]): readonly string[] {
+/** A line of the note a card shows: its index in the note's lines, and its text. */
+interface ShownLine {
+    line: number;
+    text: string;
+}
+
+/** `shown` without the blank lines at its two ends. */
+function withoutBlankEnds(shown: readonly ShownLine[]): readonly ShownLine[] {
     let from = 0;
-    let to = lines.length;
-    while (from < to && Outline.isBlank(lines[from])) from++;
-    while (to > from && Outline.isBlank(lines[to - 1])) to--;
-    return lines.slice(from, to);
+    let to = shown.length;
+    while (from < to && Outline.isBlank(shown[from].text)) from++;
+    while (to > from && Outline.isBlank(shown[to - 1].text)) to--;
+    return shown.slice(from, to);
 }

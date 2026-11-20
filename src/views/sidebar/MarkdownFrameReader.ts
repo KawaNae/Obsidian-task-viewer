@@ -17,6 +17,7 @@
 
 import type { App, TAbstractFile, TFile } from 'obsidian';
 import { logError } from '../../log/log';
+import { contentKeyOf, type ContentKey } from '../../services/core/ContentKey';
 import { frameTarget, frameTitle, readFrameContent, type FrameContent } from '../../services/data/MarkdownFrames';
 import { frameNote } from '../../services/data/MarkdownFrameNotes';
 import { splitLines } from '../../services/persistence/FileLines';
@@ -26,10 +27,12 @@ import { isNote } from '../../utils/NoteLink';
 /**
  * What a frame read, with the name its row shows of it. A section of a note
  * comes with the path its cards are resolved against, the note's path when it
- * was found; that the note is not there comes with no path.
+ * was found, and the key of the lines it was read from (`contentKeyOf`), the
+ * content its cards' lines (`FrameCard.rows`) are lines of; that the note is
+ * not there comes with no path.
  */
 export type FrameRead =
-    | { reading: FrameContent; title: string; path: string }
+    | { reading: FrameContent; title: string; path: string; key: ContentKey }
     | { reading: { kind: 'no-note' }; title: string; path: null };
 
 /** What a reader is handed of the panel that holds it. */
@@ -110,8 +113,9 @@ export class MarkdownFrameReader {
             return;
         }
         if (turn !== this.reads) return;
-        const reading = readFrameContent(splitLines(content).lines, frameTarget(this.frameLink).subpath, this.host.settings());
-        this.onRead({ reading, title: frameTitle(this.frameLink, reading, found.file.basename), path: found.path });
+        const { lines } = splitLines(content);
+        const reading = readFrameContent(lines, frameTarget(this.frameLink).subpath, this.host.settings());
+        this.onRead({ reading, title: frameTitle(this.frameLink, reading, found.file.basename), path: found.path, key: contentKeyOf(lines) });
     }
 
     /**

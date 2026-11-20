@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TFile } from 'obsidian';
+import { contentKeyOf } from '../../../../src/services/core/ContentKey';
 import { DEFAULT_SETTINGS } from '../../../../src/types';
 import { MarkdownFrameReader, type FrameRead, type MarkdownFrameReaderHost } from '../../../../src/views/sidebar/MarkdownFrameReader';
 import { makeFile } from '../../helpers/vaultSession';
@@ -177,6 +178,6 @@ describe('the reader of a markdown frame', () => {
         frame.name('Folder/Note', 'Folder/Note.md');
         frame.reader.follow();
         await frame.pending[0].end(MEMO_NOTE);
-        expect(frame.reads).toEqual([{ reading: { kind: 'no-heading' }, title: 'Nope', path: 'Folder/Note.md' }]);
+        expect(frame.reads).toEqual([{ reading: { kind: 'no-heading' }, title: 'Nope', path: 'Folder/Note.md', key: contentKeyOf(MEMO_NOTE.split('\n')) }]);
     });
 });

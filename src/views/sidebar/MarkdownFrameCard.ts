@@ -23,19 +23,25 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { t } from '../../i18n';
 import { logError } from '../../log/log';
+import type { ContentKey } from '../../services/core/ContentKey';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 
 /**
  * What a card shows under its shape:
  *
- * - `body`: the card's markdown, rendered against the note's path
+ * - `body`: the card's markdown, rendered against the note's path, with
+ *   where its lines are in the note: the key of the note's lines it was read
+ *   from (`FrameRead.key`), and the line there each line of the markdown is
+ *   (`CardRows.lines`). Where its lines are is no part of what the card
+ *   shows: a card whose markdown and path are the same shows the same
+ *   (`sameContent`), and is only handed where its lines are now
  * - `mask`: the card's mask, in place of its markdown, while the view
  *   masks; under the heading that opens the card, rendered against the
  *   note's path, when one does
  * - `missing`: that the note, or the section, is not there
  */
 export type CardContent =
-    | { kind: 'body'; markdown: string; path: string }
+    | { kind: 'body'; markdown: string; path: string; key: ContentKey; lines: readonly number[] }
     | { kind: 'mask'; heading: string | null; text: string; path: string }
     | { kind: 'missing'; what: 'no-note' | 'no-heading' };
 
@@ -92,7 +98,12 @@ function isMarkdownCheckbox(target: EventTarget | null, rendered: HTMLElement): 
     return block === null || !rendered.contains(block);
 }
 
-/** Whether a card showing `a` shows `b` already. */
+/**
+ * Whether a card showing `a` shows `b` already. Where a body's lines are in
+ * the note is not compared: every change to the note gives it a new key, and
+ * a line put above the card moves its lines, neither of which changes what
+ * the card shows.
+ */
 export function sameContent(a: CardContent, b: CardContent): boolean {
     switch (a.kind) {
         case 'body': return b.kind === 'body' && a.markdown === b.markdown && a.path === b.path;
