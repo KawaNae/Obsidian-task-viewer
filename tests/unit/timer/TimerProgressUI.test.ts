@@ -37,7 +37,18 @@ class FakeEl {
         return child;
     }
 
-    setText(text: string): void { this.text = text; }
+    createSpan(options: { cls?: string; text?: string } = {}): FakeEl {
+        const child = this.createDiv(options.cls);
+        if (options.text !== undefined) child.text = options.text;
+        return child;
+    }
+
+    /** 子を消して文字だけにする（Obsidian の `setText` と同じ）。 */
+    setText(text: string): void {
+        for (const child of this.children) child.parent = null;
+        this.children = [];
+        this.text = text;
+    }
     addClass(cls: string): void { this.classes.add(cls); }
     toggleClass(cls: string, on: boolean): void {
         if (on) this.classes.add(cls);
@@ -50,8 +61,10 @@ class FakeEl {
         this.parent = null;
     }
 
-    /** `.a` か `[data-repeat-display="ring"]` だけを読む。 */
+    /** `.a`、`.a .b`、`[data-repeat-display="ring"]` だけを読む。 */
     querySelector(selector: string): FakeEl | null {
+        const [first, ...rest] = selector.split(' ');
+        if (rest.length > 0) return this.querySelector(first)?.querySelector(rest.join(' ')) ?? null;
         const match = (el: FakeEl): boolean => selector.startsWith('.')
             ? el.classes.has(selector.slice(1))
             : el.dataset.repeatDisplay === 'ring';
@@ -97,7 +110,7 @@ describe('TimerProgressUI', () => {
             'timer-view__progress-ring-progress',
             'timer-view__progress-ring-progress--break',
         ]);
-        expect(root.querySelector('.timer-view__time-display')?.text).toBe('75s');
+        expect(root.querySelector('.timer-view__time-display .timer-view__time-text')?.text).toBe('75s');
         expect(root.querySelector('[data-repeat-display="ring"]')?.text).toBe('Break 2/4');
         expect(root.all().some(el => [...el.classes].some(c => c.startsWith('timer-widget__')))).toBe(false);
     });
@@ -125,8 +138,20 @@ describe('TimerProgressUI', () => {
         expect(circle.classes.has('timer-widget__progress-ring-progress--overtime')).toBe(true);
         expect(circle.classes.has('timer-widget__progress-ring-progress--break')).toBe(false);
         const time = root.querySelector('.timer-widget__time-display')!;
-        expect(time.text).toBe('-30s');
+        expect(time.querySelector('.timer-widget__time-text')?.text).toBe('-30s');
         expect(time.classes.has('timer-widget__time-display--countup')).toBe(true);
         expect(root.querySelector('[data-repeat-display="ring"]')).toBeNull();
+    });
+
+    it('update writes the time alone and keeps what the caller hung on the time display', () => {
+        const root = new FakeEl();
+        TimerProgressUI.render(root as unknown as HTMLElement, ring(), options('timer-widget'));
+        const display = root.querySelector('.timer-widget__time-display')!;
+        const hung = display.createDiv('hung');
+
+        TimerProgressUI.update(root as unknown as HTMLElement, ring({ displaySeconds: 90 }), options('timer-widget'));
+
+        expect(display.querySelector('.timer-widget__time-text')?.text).toBe('90s');
+        expect(display.querySelector('.hung')).toBe(hung);
     });
 });
