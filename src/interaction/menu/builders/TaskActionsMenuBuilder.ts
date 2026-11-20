@@ -3,7 +3,6 @@ import type { Task } from '../../../types';
 import type { Operations } from '../../../services/operations/Operations';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import { CreateModal } from '../../../modals/create/CreateModal';
 import { confirm } from '../../../modals/ask/askChoice';
 import { askFlowDelete } from '../../../modals/ask/flowDeleteChoice';
 import { SendModal } from '../../../modals/noteops/SendModal';
@@ -91,8 +90,8 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * "Add Child Task": the create dialog on the head of the row's children
-     * (`CreatePlace` `childOf`).
+     * "Add Child Task": the hub on a task not written yet, at the head of
+     * the row's children (`CreatePlace` `childOf`), with no first values.
      */
     private addChildTaskItem(menu: Menu, task: Task): void {
         menu.addItem((item) => {
@@ -100,12 +99,7 @@ export class TaskActionsMenuBuilder {
                 .setIcon('plus')
                 .onClick(() => {
                     menu.close();
-                    new CreateModal(
-                        this.app,
-                        this.plugin.getCreatePlaces(),
-                        () => this.plugin.settings.startHour,
-                        { kind: 'childOf', taskId: task.id },
-                    ).open();
+                    this.plugin.openDraftHub({ kind: 'childOf', taskId: task.id }, {});
                 });
         });
     }

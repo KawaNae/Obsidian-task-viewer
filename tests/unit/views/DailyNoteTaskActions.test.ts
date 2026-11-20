@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     appendEmptySpaceMenuItems,
+    openDraftHubForDailyNote,
     startDailyNoteTimer,
     type DailyNoteTimerType,
 } from '../../../src/views/sharedLogic/DailyNoteTaskActions';
@@ -31,6 +32,27 @@ describe('startDailyNoteTimer', () => {
         const { plugin, started } = makePlugin();
         startDailyNoteTimer(plugin, '2026-08-22', 'pomodoro');
         expect(started[0][2]).toEqual({ kind: 'pomodoro' });
+    });
+});
+
+describe('openDraftHubForDailyNote', () => {
+    function opened(date: string, minutes?: number) {
+        const calls: unknown[][] = [];
+        const plugin = { openDraftHub: (...args: unknown[]) => { calls.push(args); } } as unknown as TaskViewerPlugin;
+        openDraftHubForDailyNote(plugin, date, minutes);
+        return calls;
+    }
+
+    it('opens the hub on a task not written yet in the day\'s daily note, starting at the time clicked to the nearest 5 minutes', () => {
+        expect(opened('2026-08-22', 10 * 60 + 13)).toEqual([[{ kind: 'dailyNote', date: '2026-08-22' }, { startDate: '2026-08-22', startTime: '10:15' }]]);
+    });
+
+    it('starts the task on the next day past midnight, still in the column\'s note', () => {
+        expect(opened('2026-08-22', 24 * 60 + 2 * 60 + 30)).toEqual([[{ kind: 'dailyNote', date: '2026-08-22' }, { startDate: '2026-08-23', startTime: '02:30' }]]);
+    });
+
+    it('starts the task on the day alone from the all-day lane, which knows no time', () => {
+        expect(opened('2026-08-22')).toEqual([[{ kind: 'dailyNote', date: '2026-08-22' }, { startDate: '2026-08-22' }]]);
     });
 });
 

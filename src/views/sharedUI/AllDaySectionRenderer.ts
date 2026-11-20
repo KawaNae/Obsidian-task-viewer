@@ -5,7 +5,7 @@ import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { DisplayTask } from '../../types';
 import {
     appendEmptySpaceMenuItems,
-    openCreateTaskForDailyNote,
+    openDraftHubForDailyNote,
     startDailyNoteTimer,
 } from '../sharedLogic/DailyNoteTaskActions';
 import { drawDateGridLane } from './DateGridLane';
@@ -55,7 +55,7 @@ export class AllDaySectionRenderer {
     private showEmptySpaceMenu(x: number, y: number, date: string) {
         this.plugin.menuPresenter.present((menu) => {
             appendEmptySpaceMenuItems(menu, {
-                onCreate: () => openCreateTaskForDailyNote(this.plugin, date, { startDate: date }),
+                onCreate: () => openDraftHubForDailyNote(this.plugin, date),
                 onTimer: (kind) => startDailyNoteTimer(this.plugin, date, kind),
             });
         }, { kind: 'position', x, y });

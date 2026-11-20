@@ -1,10 +1,11 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from '../mocks/obsidian';
 import { TaskActionsMenuBuilder } from '../../../src/interaction/menu/builders/TaskActionsMenuBuilder';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { t } from '../../../src/i18n';
 import { CreatePlaces, type CreatePlace } from '../../../src/services/data/CreatePlaces';
+import type { DraftSeed } from '../../../src/services/data/TaskDraft';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
@@ -25,23 +26,11 @@ const FILE = 'note.md';
 const TWINS = ['- [ ] 読書', '- [ ] 読書', ''];
 const EDITED = ['メモ', '- [ ] 読書', '- [ ] 読書', ''].join('\n');
 
-/** What the menu's "Add child task" dialog answers of its write, once it is opened and `c` created. */
-let submitted: Promise<WriteAnswer> | undefined;
-
-/** The dialog creates `c` in its place as it opens, its refusal said in it (`CreateModal`). */
-vi.mock('../../../src/modals/create/CreateModal', () => ({
-    CreateModal: class {
-        constructor(_app: unknown, private readonly places: CreatePlaces, _startHour: unknown, private readonly place: CreatePlace) { }
-        open() { submitted = this.places.create(this.place, { line: '- [ ] c' }, { tellRefusal: false }); }
-    },
-}));
-
 let live: VaultSession[] = [];
 
 afterEach(() => {
     for (const session of live) session.dispose();
     live = [];
-    submitted = undefined;
 });
 
 async function open(lines: string[]) {
@@ -80,14 +69,29 @@ function recordingMenu() {
     return { menu, clicks };
 }
 
-async function addChildFromCardMenu(session: VaultSession, task: ReturnType<typeof secondTwin>): Promise<WriteAnswer> {
+/**
+ * Pick "Add child task" on the card's menu: the hub on a task not written
+ * yet opens on the place it is handed, and `c` is created there as its
+ * create writes, its refusal said in the hub. What the hub was opened on,
+ * and what the write answered.
+ */
+async function addChildFromCardMenu(session: VaultSession, task: ReturnType<typeof secondTwin>) {
     const places = new CreatePlaces(session.app, session.ops, () => DEFAULT_SETTINGS, (id) => session.index.getTask(id));
-    const plugin = { settings: { startHour: 0 }, getTimerWidget: () => undefined, getCreatePlaces: () => places };
+    const opened: [CreatePlace, DraftSeed][] = [];
+    let submitted: Promise<WriteAnswer> | undefined;
+    const plugin = {
+        settings: { startHour: 0 },
+        getTimerWidget: () => undefined,
+        openDraftHub: (place: CreatePlace, seed: DraftSeed) => {
+            opened.push([place, seed]);
+            submitted = places.create(place, { line: '- [ ] c' }, { tellRefusal: false });
+        },
+    };
     const builder = new TaskActionsMenuBuilder(session.app as never, session.ops, plugin as never);
     const { menu, clicks } = recordingMenu();
     builder.addChildActions(menu as never, task);
     await clicks.get(t('menu.addChildTask'))!();
-    return submitted!;
+    return { opened, answer: await submitted! };
 }
 
 function apiOver(session: VaultSession): TaskApi {
@@ -102,6 +106,13 @@ function apiOver(session: VaultSession): TaskApi {
 }
 
 describe('a child added from a card\'s menu', () => {
+    it('opens the hub on a task not written yet at the head of the row\'s children, with no first values', async () => {
+        const { session } = await open(TWINS);
+        const task = secondTwin(session);
+        const { opened } = await addChildFromCardMenu(session, task);
+        expect(opened).toEqual([[{ kind: 'childOf', taskId: task.id }, {}]]);
+    });
+
     it('is written under the row the card shows', async () => {
         const { contents, session } = await open(TWINS);
         await addChildFromCardMenu(session, secondTwin(session));
@@ -113,9 +124,9 @@ describe('a child added from a card\'s menu', () => {
         const task = secondTwin(session);
         contents.set(FILE, EDITED);
 
-        const answer = await addChildFromCardMenu(session, task);
+        const { answer } = await addChildFromCardMenu(session, task);
         expect(contents.get(FILE)).toBe(EDITED);
-        // Said in the dialog, which stays open: no notice besides.
+        // Said in the hub, which stays open: no notice besides.
         expect(answer.written).toBe(false);
         expect(answer.written === false && answer.refused).not.toBeNull();
         expect(Notice.messages).toHaveLength(0);

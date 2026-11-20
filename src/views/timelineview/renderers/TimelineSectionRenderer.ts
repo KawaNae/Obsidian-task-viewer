@@ -3,7 +3,6 @@ import type { DisplayTask } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
-import { DateUtils } from '../../../utils/DateUtils';
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout } from '../TaskLayout';
@@ -13,7 +12,7 @@ import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
 import {
     appendEmptySpaceMenuItems,
-    openCreateTaskForDailyNote,
+    openDraftHubForDailyNote,
     startDailyNoteTimer,
 } from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
@@ -137,48 +136,7 @@ export class TimelineSectionRenderer {
         // offsetY is in pixels. 1 hour = 60 * zoomLevel pixels
         const minutesFromStart = offsetY / zoomLevel;
 
-        // Add startHour offset
-        const rawTotalMinutes = (startHour * 60) + minutesFromStart;
-        let totalMinutes = rawTotalMinutes;
-
-        // Normalize to 0-23 hours
-        if (totalMinutes >= 24 * 60) {
-            totalMinutes -= 24 * 60;
-        }
-
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = Math.floor(totalMinutes % 60);
-
-        // Round to nearest 5 minutes for cleaner times
-        let roundedMinutes = Math.round(minutes / 5) * 5;
-        let finalHours = hours;
-
-        if (roundedMinutes === 60) {
-            roundedMinutes = 0;
-            finalHours += 1;
-        }
-
-        // Normalize hours again just in case
-        if (finalHours >= 24) {
-            finalHours -= 24;
-        }
-
-        // Format time HH:mm
-        const timeString = DateUtils.formatHHMM(finalHours, roundedMinutes);
-
-        // Determine Task Date
-        // If finalHours + 24 (effectively) was >= 24, it means it's next day
-        // Wait, 'finalHours' is normalized 0-23. 
-        // We can check totalMinutes vs 24*60
-        // Or check rawTotalMinutes
-
-        let taskDate = date;
-        if (rawTotalMinutes >= 24 * 60) {
-            // It's the next day
-            taskDate = DateUtils.addDays(date, 1);
-        }
-
-        openCreateTaskForDailyNote(this.plugin, date, { startDate: taskDate, startTime: timeString });
+        openDraftHubForDailyNote(this.plugin, date, (startHour * 60) + minutesFromStart);
     }
 
     /** Show context menu for empty space click */

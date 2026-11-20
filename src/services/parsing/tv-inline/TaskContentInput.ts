@@ -21,7 +21,7 @@ export function notationInName(text: string): NotationKind | null {
 }
 
 /**
- * A task's name typed in a field (the hub, the create dialog): free text,
+ * A task's name typed in a field (the hub's): free text,
  * written as typed, but none of the notation the line would read as
  * something else ({@link notationInName}). A name is no field to write the
  * dates in: they have their own, and a date block in the name would be

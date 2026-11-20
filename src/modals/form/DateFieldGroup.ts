@@ -7,7 +7,6 @@ import { optional, type FieldCodec, type Issue } from '../../utils/values/Read';
 import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
 import { dateRuleIssues, type DateTimeFields, type ValidationContext } from '../TaskDateValidator';
 import { bindField, type BoundField } from './bindField';
-import { onFormEnter } from './formEnter';
 import { readIssue, type FormIssue, type IssueSlot } from './FormIssue';
 import { createPickerTextField, type PickerTextField } from './PickerTextField';
 import { createFormRow } from './formRow';
@@ -32,35 +31,26 @@ function groupOf(key: DateKey): DateGroupKey {
 export interface DateFieldGroupOptions {
     labels: { start: string; end: string; due: string };
     icons?: Partial<Record<DateGroupKey, string>>;
-    initial: Partial<DateTimeFields>;
     buildOverlayTask: (f: DateTimeFields) => Task;
     getStartHour: () => number;
     taskLookup: (id: string) => Task | undefined;
     getValidationCtx: () => ValidationContext;
-    /**
-     * The values the fields stand for now (the hub's row, `''` for none);
-     * absent for a task not yet written (the create dialog), whose fields
-     * stand for nothing until it is.
-     */
-    current?: () => DateTimeFields;
+    /** The values the fields stand for now (the hub's task, `''` for none): the fields are made with them. */
+    current: () => DateTimeFields;
     /**
      * A group's fields were committed (a blur, the form's Enter, a pick, a
      * clear), every field reading and the rules holding: `f` is the six as
      * read. Not called while one does not read or a rule is broken. Whether
      * the write took it, when a write decides (`bindField`'s commit).
      */
-    onCommit?: (group: DateGroupKey, f: DateTimeFields) => void | Promise<boolean>;
-    /** The form's Enter in a field, after the field's commit: the create dialog's submit. */
-    onEnter?: () => void;
-    /** A field's text changed, by typing, a pick or a clear. */
-    onChange?: () => void;
+    onCommit: (group: DateGroupKey, f: DateTimeFields) => void | Promise<boolean>;
     /** What the six fields say now, in place of what they said: each field's reading, then the rules across them. */
     issues: (issues: FormIssue<DateKey>[]) => void;
 }
 
 /**
  * 6 つの日付/時刻入力（開始/終了/期限 × 日付/時刻）をまとめて所有する
- * フォーム部品。CreateModal と TaskHubForm が共用する。
+ * フォーム部品。TaskHubForm の日付の欄である。
  *
  * 行文法: ラベル左置き + date:time = 2:1 flex 配分（_form.css）。
  *
@@ -104,10 +94,10 @@ export class DateFieldGroup {
         const codec: FieldCodec<string | undefined> = kind === 'date' ? DATE_FIELD : TIME_FIELD;
         // The picker and the clear button put a value in: it is committed as a blur would.
         const changedBy = () => {
-            this.changed();
+            this.updatePlaceholders();
             this.bound.get(key)?.commit();
         };
-        const field = createPickerTextField(box, kind, kind === 'date' ? 'YYYY-MM-DD' : 'HH:mm', this.opts.initial[key] ?? '', {
+        const field = createPickerTextField(box, kind, kind === 'date' ? 'YYYY-MM-DD' : 'HH:mm', this.opts.current()[key], {
             onPick: changedBy,
             onClear: changedBy,
         });
@@ -127,18 +117,11 @@ export class DateFieldGroup {
             },
             put: (text) => field.setText(text),
         }));
-        field.input.addEventListener('input', () => this.changed());
-        const onEnter = this.opts.onEnter;
-        if (onEnter) onFormEnter(field.input, () => onEnter());
+        field.input.addEventListener('input', () => this.updatePlaceholders());
     }
 
     private currentOf(key: DateKey): string | undefined {
-        return this.opts.current?.()[key] || undefined;
-    }
-
-    private changed(): void {
-        this.updatePlaceholders();
-        this.opts.onChange?.();
+        return this.opts.current()[key] || undefined;
     }
 
     /**
@@ -173,7 +156,7 @@ export class DateFieldGroup {
         const fields = this.readAll();
         this.tell();
         if (!fields || dateRuleIssues(fields, this.opts.getValidationCtx()).length > 0) return false;
-        return this.opts.onCommit?.(group, fields) ?? true;
+        return this.opts.onCommit(group, fields) ?? true;
     }
 
     /**
@@ -220,23 +203,10 @@ export class DateFieldGroup {
     }
 
     /**
-     * The six as read, every field reading and the rules holding (the create
-     * dialog's submit); null otherwise, with why said under the fields.
-     */
-    read(): DateTimeFields | null {
-        for (const key of KEYS) this.bound.get(key)!.commit();
-        const fields = this.readAll();
-        this.tell();
-        if (!fields || dateRuleIssues(fields, this.opts.getValidationCtx()).length > 0) return null;
-        return fields;
-    }
-
-    /**
      * The six as they stand: a field that reads as its value (normalized),
-     * one that does not as its text. What the placeholders and the create
-     * dialog's notice of an empty task read.
+     * one that does not as its text: what the placeholders read.
      */
-    collect(): DateTimeFields {
+    private collect(): DateTimeFields {
         const out = {} as DateTimeFields;
         for (const key of KEYS) {
             const text = this.inputs.get(key)!.value;
@@ -277,12 +247,11 @@ export class DateFieldGroup {
     }
 
     /**
-     * The placeholders and what the fields say drawn again: once the form
-     * that holds the group can show them (the hub as it opens, a rule its
-     * row breaks said from the start), and when what the fields imply, or
-     * what their rules allow, changed from outside (the create dialog's
-     * place answered). The constructor tells nothing: the form's slots for
-     * the fields are not there yet.
+     * The placeholders and what the fields say drawn: once the form that
+     * holds the group can show them (the hub as it opens, a rule its row
+     * breaks said from the start). The constructor tells nothing: the form's
+     * slots for the fields are not there yet. Values from outside are put in
+     * by {@link set}, which draws them again.
      */
     refresh(): void {
         this.updatePlaceholders();

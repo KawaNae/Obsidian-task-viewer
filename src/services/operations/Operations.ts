@@ -870,7 +870,7 @@ export class Operations {
      * Put `row` under the task section (`Destination.taskSection`) of the
      * daily note of `date` (`YYYY-MM-DD`), the note made of its template with
      * the row in it when it is not there, in one write (`putInPeriodicNote`):
-     * a task a view's create dialog makes, a timer's first record.
+     * a task a hub on a task not written yet makes, a timer's first record.
      *
      * @returns whether the row was written, with the path of the note when
      * it was; when not, why not, told as {@link updateTask} tells it.

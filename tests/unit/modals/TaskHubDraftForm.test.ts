@@ -50,7 +50,7 @@ const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve()
 interface MenuItem { pick: () => void }
 
 /** A form on a draft at a place that has answered, its writes held until the test answers them. */
-async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean } = {}) {
+async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts } = {}) {
     const doc = new FocusDoc();
     Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
     const root = doc.root();
@@ -59,7 +59,7 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean } = {}) {
     const writes: ((answer: WriteAnswer) => void)[] = [];
     const places = {
         noteOf: () => 'n.md',
-        facts: vi.fn(() => (opts.hold ? new Promise<PlaceFacts>(resolve => { answer = () => resolve(FACTS); }) : Promise.resolve(FACTS))),
+        facts: vi.fn(() => (opts.hold ? new Promise<PlaceFacts>(resolve => { answer = () => resolve(opts.facts ?? FACTS); }) : Promise.resolve(opts.facts ?? FACTS))),
         create: vi.fn((_place: CreatePlace, row: NewRow) => {
             rows.push(row);
             return new Promise<WriteAnswer>(resolve => { writes.push(resolve); });
@@ -181,6 +181,26 @@ describe('the fields of a hub on a task not written yet', () => {
         s.form.refresh();
         expect(s.host.task().properties).toEqual({});
         expect(s.rowOf('memo')).toBeUndefined();
+    });
+});
+
+describe('the dates of a hub on a task not written yet', () => {
+    const startTime = (s: Awaited<ReturnType<typeof setUp>>) => s.root.findAll('tv-ctrl__text-input')
+        .find(input => input.attrs.get('aria-label') === `${t('modal.start')} — ${t('modal.time')}`)!;
+
+    it('read a time with no date as a start only where the place gives a start date', async () => {
+        const plain = await setUp();
+        startTime(plain).focus();
+        startTime(plain).type('10:00');
+        startTime(plain).enter();
+        expect(plain.host.task().startTime).toBeUndefined();
+
+        const given = await setUp({}, { facts: { ...FACTS, inherits: { ...FACTS.inherits, startDate: '2031-01-10' } } });
+        startTime(given).focus();
+        startTime(given).type('10:00');
+        startTime(given).enter();
+        expect(given.host.task().startTime).toBe('10:00');
+        expect(given.host.task().startDate).toBeUndefined();
     });
 });
 
