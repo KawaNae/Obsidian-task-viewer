@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Notice } from '../mocks/obsidian';
-import { RowHost, type RowPanel } from '../../../src/modals/hub/RowHost';
-import type { HubForm } from '../../../src/modals/hub/HubHost';
+import { RowHost } from '../../../src/modals/hub/RowHost';
+import type { HubForm, HubPanel } from '../../../src/modals/hub/HubHost';
 import { t } from '../../../src/i18n';
 import { refusalNotice, type IndexRefusal } from '../../../src/services/core/RefusalClause';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
@@ -23,8 +23,9 @@ vi.mock('../../../src/modals/hub/SourceLine', () => ({ openSourceLine }));
  * before is taken back. A refusal after the hub closed is told by a notice.
  *
  * The host follows the row in the index once the hub has opened: a change of
- * it is drawn in the card, then in the form, then followed by the source; a
- * row the index no longer holds shuts the form until it comes back.
+ * it is drawn in the card, then in the form, then told to what the host was
+ * made to tell (the source mode); a row the index no longer holds shuts the
+ * form until it comes back.
  */
 
 const REFUSED: IndexRefusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '元の名前' };
@@ -42,15 +43,16 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         return () => { listeners.splice(listeners.indexOf(listener), 1); };
     });
 
+    const told: string[] = [];
+    const follow = vi.fn((row: Task | undefined) => { told.push(`follow:${row?.content ?? 'none'}`); });
     const host = new RowHost(opened, {
         app: {} as never,
         plugin: { settings: { reuseExistingTab: true } } as never,
         index: { getTask, onChange } as never,
         operations: { updateTask } as never,
-    });
+    }, follow);
     copy = fresh;
 
-    const told: string[] = [];
     const form: HubForm & { said: (string | null)[] } = {
         said: [],
         refresh: vi.fn(() => { told.push('form'); }),
@@ -58,9 +60,8 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         sayWrite(refusal) { this.said.push(refusal); },
     };
     if (bound) host.bind(form);
-    const panel: RowPanel = {
+    const panel: HubPanel = {
         redrawPreview: vi.fn(() => { told.push('preview'); }),
-        follow: vi.fn((row: Task | undefined) => { told.push(`follow:${row?.content ?? 'none'}`); }),
         close: vi.fn(),
     };
 

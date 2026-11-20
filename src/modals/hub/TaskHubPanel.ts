@@ -11,6 +11,7 @@ import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
 import { RowHost } from './RowHost';
+import type { PanelHost } from './HubHost';
 import { indentUnit } from '../../utils/ObsidianConfig';
 
 export interface TaskHubDeps {
@@ -24,13 +25,32 @@ export interface TaskHubPanelOptions {
     focusField?: TaskHubFocusField;
 }
 
+/** Where the panel lets a source mode be built, and what it may ask of the panel. */
+export interface SourceSlots {
+    /** Where its switch goes, above the card. */
+    bar: HTMLElement;
+    /** The card's element, hidden while the source is open. */
+    card: HTMLElement;
+    /** Where the source goes, in the card's place. */
+    pane: HTMLElement;
+    /** Close the hub, asking nothing more. */
+    close(): void;
+}
+
+/** What the panel asks of its source mode (`TaskHubSource`) as the hub closes. */
+export type HubSource = Pick<TaskHubSource, 'beforeClose' | 'yieldsEscape' | 'takesBack' | 'dispose'>;
+
+/** Builds the source mode in the panel's slots, once, as the hub is built. */
+export type SourceMaker = (slots: SourceSlots) => HubSource;
+
 /**
  * タスクハブパネル — 「タスクを開く」の単一の目的地。
  *
- * 上部にカードプレビュー（行が index で変わるとホストが描き直させる）、下部に
- * プロパティ編集フォーム（値の読み書きはホスト `RowHost`）。read-only タスクは
- * プレビューのみに縮退。プレビューの上の切り替えで、カードの代わりに
- * 行と部分木のソースを編集できる（TaskHubSource）。
+ * 上部にカードプレビュー（ホストが描き直させる）、下部にプロパティ編集
+ * フォーム（値の読み書きはホスト `PanelHost`）。read-only タスクは
+ * プレビューのみに縮退。ソースモードを作る関数を入口が渡したときだけ、
+ * プレビューの上の切り替えで、カードの代わりに行と部分木のソースを編集
+ * できる（TaskHubSource）。渡さなければ切り替えの bar も作らない。
  * 利用者が閉じる経路（×、Escape、外側、下へ払う、戻る、別のハブを開く）は
  * どれも OverlayShell.beforeClose を通る。ソースに下書きがあれば捨てるかを
  * 確かめ、無ければフォームが打ちかけの欄を保存し、保存できない値があれば
@@ -53,23 +73,52 @@ export class TaskHubPanel {
     private overlay = new OverlayShell();
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
-    private source: TaskHubSource | null = null;
+    private source: HubSource | null = null;
 
     /**
      * Open the hub on a row the note already has (a segment of a split task
      * opens its row's): its host writes each change to the row at once and
-     * follows the row in the index (`RowHost`).
+     * follows the row in the index (`RowHost`), and the source mode edits
+     * the row and its subtree, following the row as the host does.
      */
     static openRowHub(app: App, task: Task, deps: TaskHubDeps, options: TaskHubPanelOptions = {}): Promise<void> {
-        const host = new RowHost(task, { app, plugin: deps.plugin, index: deps.index, operations: deps.operations });
-        return new TaskHubPanel(app, host, deps, options).open();
+        let source: TaskHubSource | null = null;
+        const host = new RowHost(
+            task,
+            { app, plugin: deps.plugin, index: deps.index, operations: deps.operations },
+            (row) => source?.follow(row),
+        );
+        const makeSource: SourceMaker = ({ bar, card, pane, close }) => {
+            const view = new TaskHubSourceView(app, bar, card, pane, {
+                enter: () => { void source?.enter(); },
+                apply: () => { void source?.apply(); },
+                cancel: () => source?.cancel(),
+                discard: () => source?.discard(),
+                keep: () => source?.keep(),
+                draftText: () => source?.draftText() ?? null,
+            });
+            source = new TaskHubSource(host.task(), {
+                drained: () => host.drained(),
+                confirm: (id) => deps.operations.confirmTask(id),
+                reread: (id) => deps.index.getTask(id),
+                // The refusal is shown under the draft it leaves; a notice would say it twice.
+                replace: (id, base, replacement) => deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
+                indentUnit: () => indentUnit(app),
+                lockForm: (locked) => host.setSourceOpen(locked),
+                closeHub: close,
+            }, view);
+            return source;
+        };
+        return new TaskHubPanel(app, host, deps, options, makeSource).open();
     }
 
-    private constructor(
+    /** @param makeSource builds the source mode; null, the hub has none, nor its switch */
+    constructor(
         private app: App,
-        private readonly host: RowHost,
+        private readonly host: PanelHost,
         private deps: TaskHubDeps,
         private options: TaskHubPanelOptions,
+        private readonly makeSource: SourceMaker | null,
     ) { }
 
     /**
@@ -111,15 +160,15 @@ export class TaskHubPanel {
 
         this.host.attach({
             redrawPreview: () => this.renderPreview(),
-            follow: (row) => this.source?.follow(row),
             close: () => this.close(),
         });
     }
 
     private buildContent(bodyEl: HTMLElement): void {
-        const bar = bodyEl.createDiv();
-        this.previewEl = bodyEl.createDiv({ cls: 'task-hub__preview' });
-        const sourceHost = bodyEl.createDiv();
+        const bar = this.makeSource ? bodyEl.createDiv() : null;
+        const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
+        this.previewEl = card;
+        const pane = this.makeSource ? bodyEl.createDiv() : null;
         const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
 
         this.renderPreview();
@@ -138,24 +187,9 @@ export class TaskHubPanel {
             });
         }
 
-        const view = new TaskHubSourceView(this.app, bar, this.previewEl, sourceHost, {
-            enter: () => { void this.source?.enter(); },
-            apply: () => { void this.source?.apply(); },
-            cancel: () => this.source?.cancel(),
-            discard: () => this.source?.discard(),
-            keep: () => this.source?.keep(),
-            draftText: () => this.source?.draftText() ?? null,
-        });
-        this.source = new TaskHubSource(this.host.task(), {
-            drained: () => this.host.drained(),
-            confirm: (id) => this.deps.operations.confirmTask(id),
-            reread: (id) => this.deps.index.getTask(id),
-            // The refusal is shown under the draft it leaves; a notice would say it twice.
-            replace: (id, base, replacement) => this.deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
-            indentUnit: () => indentUnit(this.app),
-            lockForm: (locked) => this.host.setSourceOpen(locked),
-            closeHub: () => this.close(),
-        }, view);
+        if (this.makeSource && bar && pane) {
+            this.source = this.makeSource({ bar, card, pane, close: () => this.close() });
+        }
     }
 
     private renderPreview(): void {
