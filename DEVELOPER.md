@@ -484,7 +484,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 ハブのフォーム（`TaskHubForm`）は、欄を部品に分けて並べる。部品は名前（`NameField`）、状態（`StatusField`）、タグ、色と線種とマスク、プロパティで、`modals/hub/fields/` にある。日付は作成のダイアログと同じ `DateFieldGroup` である。
 
-- 部品は、値を読む口（`FieldGroupContext.getTask`）と値を渡す口（`queue`）だけを知る。2つの口はフォームのホストの `task` と `put` につながり、いつノートに書くかはホストが決める（「ハブのホスト」）
+- 部品は、値を読む口（`FieldGroupContext.task`）と値を渡す口（`put`）だけを知る。2つの口はフォームのホストの同じ名の口につながり、いつノートに書くかはホストが決める（「ハブのホスト」）
     - 部品は値の写しを持たない。`put` はホストの値を先に書き換えるので、部品は渡した値をすぐ読める
     - 外の変更は、ホストがフォームの `refresh` を呼び、フォームが各部品の `refresh` を呼んで取り込む。打ちかけの欄と IME の変換中の欄は取り込まない（`bindField`）
 - 閉じる手順では、保存するものを持つ部品が `ClosingPart` を持つ。保存できない値を挙げる（`unsaved`）、捨てる（`discardUnsaved`）、blur を待たずに確定する（`save`）。状態はメニューで選んだときに書くので、持たない

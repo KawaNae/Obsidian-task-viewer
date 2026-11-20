@@ -87,7 +87,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         this.valueSays.clear();
         this.valueBound.clear();
 
-        const task = this.ctx.getTask();
+        const task = this.ctx.task();
         const shut = this.ctx.isShut();
 
         // A draft goes once the row has a value of its own (written, or from outside).
@@ -98,7 +98,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         // render 時スナップショット。表示判定（isOwn / pv）専用 — commit の
         // merge base には使わない。focus ガードで rebuild がスキップされる間に
         // 他行の commit が echo されると陳腐化するため、各 closure は
-        // ctx.getTask().properties を発火時に読む（tags と同じ規則）。
+        // ctx.task().properties を発火時に読む（tags と同じ規則）。
         const own = task.properties ?? {};
         const effective = getEffectiveProperties(task);
 
@@ -232,7 +232,7 @@ export class PropertiesFieldGroup implements ClosingPart {
      * again is made the row's own.
      */
     private renderValueRow(folded: string, key: string, pv: PropertyValue, isOwn: boolean): void {
-        const task = this.ctx.getTask();
+        const task = this.ctx.task();
         const shut = this.ctx.isShut();
         const locked = this.ctx.locked(`prop:${folded}`);
 
@@ -262,7 +262,7 @@ export class PropertiesFieldGroup implements ClosingPart {
         const value = bindField(valueInput, {
             codec: FreeText,
             current: () => {
-                const shown = isOwn ? PropertyKey.get(this.ctx.getTask().properties, key)?.value : pv;
+                const shown = isOwn ? PropertyKey.get(this.ctx.task().properties, key)?.value : pv;
                 return shown ? shownText(shown) : '';
             },
             // An own line keeps its key as written; an inherited value made
@@ -308,7 +308,7 @@ export class PropertiesFieldGroup implements ClosingPart {
      * whole line out; a draft's × throws the draft away.
      */
     private renderListRow(folded: string, key: string, items: readonly PropertyScalar[], kind: 'own' | 'draft' | 'inherited'): void {
-        const task = this.ctx.getTask();
+        const task = this.ctx.task();
         const shut = this.ctx.isShut();
         const locked = this.ctx.locked(`prop:${folded}`);
         const at: HubField = `prop:${folded}`;
@@ -409,21 +409,21 @@ export class PropertiesFieldGroup implements ClosingPart {
 
     /** Write `value` as the task's own value of the property `key`, its key kept as {@link set} keeps it. */
     private setValue(key: string, value: PropertyValue): Promise<boolean> | undefined {
-        const own = this.ctx.getTask().properties ?? {};
+        const own = this.ctx.task().properties ?? {};
         const written = PropertyKey.get(own, key)?.key ?? key;
         return this.commit({ ...own, [PropertyKey.fold(key)]: { key: written, value } });
     }
 
     /** Take the task's own line of the property `key` out, its case aside: the value above comes through. */
     private remove(key: string): Promise<boolean> | undefined {
-        const next = { ...(this.ctx.getTask().properties ?? {}) };
+        const next = { ...(this.ctx.task().properties ?? {}) };
         delete next[PropertyKey.fold(key)];
         return this.commit(next);
     }
 
     private commit(props: Properties): Promise<boolean> | undefined {
         if (this.ctx.isShut()) return undefined;
-        return this.ctx.queue(TaskUpdateBuilder.customProperties(this.ctx.getTask(), props));
+        return this.ctx.put(TaskUpdateBuilder.customProperties(this.ctx.task(), props));
     }
 
     /**

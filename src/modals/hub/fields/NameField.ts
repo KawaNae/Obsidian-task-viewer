@@ -28,14 +28,14 @@ export class NameField implements ClosingPart {
             placeholder: t('modal.taskName'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
         });
-        this.input.value = ctx.getTask().content ?? '';
+        this.input.value = ctx.task().content ?? '';
         this.says = section.createDiv({ cls: 'tv-form__says' });
         // A link typed in the name is written in the row's note.
-        const suggest = new TaskNameSuggest(ctx.app, this.input, () => this.ctx.getTask().file);
+        const suggest = new TaskNameSuggest(ctx.app, this.input, () => this.ctx.task().file);
         attachBracketPairing(this.input, () => { /* the value is read as it is committed */ });
         this.bound = bindField(this.input, {
             codec: TaskContentInput,
-            current: () => this.ctx.getTask().content ?? '',
+            current: () => this.ctx.task().content ?? '',
             commit: (content) => this.commit(content),
             issues: (issue) => this.ctx.issues.set('name', readIssue('name', issue)),
             // An Enter that picks from the name's list is the list's.
@@ -45,7 +45,7 @@ export class NameField implements ClosingPart {
 
     private commit(content: string): Promise<boolean> | void {
         if (this.ctx.isShut()) return;
-        return this.ctx.queue(TaskUpdateBuilder.content(this.ctx.getTask(), content));
+        return this.ctx.put(TaskUpdateBuilder.content(this.ctx.task(), content));
     }
 
     unsaved(): UnsavedField[] {
@@ -62,7 +62,7 @@ export class NameField implements ClosingPart {
 
     /** The row's name from outside, unless something is typed over it or an IME converts in it (`BoundField.set`). */
     refresh(): void {
-        this.bound.set(this.ctx.getTask().content ?? '');
+        this.bound.set(this.ctx.task().content ?? '');
     }
 
     setEnabled(enabled: boolean): void {

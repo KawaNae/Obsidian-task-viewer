@@ -33,17 +33,17 @@ export interface ClosingPart {
 
 /**
  * TaskHubForm の各欄の部品（Name/Status/Tags/Style/Properties）が共有する
- * 依存。値を読む口（`getTask`）と値を渡す口（`queue`）はフォームのホスト
- * （`HubHost.task` と `HubHost.put`）につながり、いつ、どこへ書くかはホストが
- * 決める。欄の部品は自前の task コピーを持たず、常に `getTask()` 経由で
+ * 依存。値を読む口（`task`）と値を渡す口（`put`）はフォームのホストの同じ
+ * 名の口（`HubHost.task`、`HubHost.put`）につながり、いつ、どこへ書くかは
+ * ホストが決める。欄の部品は自前の task コピーを持たず、常に `task()` 経由で
  * ホストの最新値を読む — 渡した値（`put` が値に即座に重ねる）と echo 反映の
  * 両方がこのゲッター 1 つを通るので、欄の部品の側に鮮度の管理が要らない。
  */
 export interface FieldGroupContext {
-    getTask: () => Task;
+    task: () => Task;
     isShut: () => boolean;
     /** Hand `updates` on to the host: whether they were taken (a refusal is said by the host). */
-    queue: (updates: Partial<Task> | null) => Promise<boolean>;
+    put: (updates: Partial<Task> | null) => Promise<boolean>;
     app: App;
     plugin: PluginContext;
     index: IndexReads;

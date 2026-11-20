@@ -66,8 +66,8 @@ export interface TaskHubFormDeps {
  *
  * 欄の DOM 構築とコミット/echo の取り込みは欄の部品が持つ: 名前、状態、
  * タグ、スタイル、プロパティは `fields/` 配下、日付は `DateFieldGroup`。
- * 欄の部品は自前の task コピーを持たず、`FieldGroupContext.getTask`
- * 経由でホストの値を都度読み、値は `queue` でホストに渡す。本体は欄の並び、
+ * 欄の部品は自前の task コピーを持たず、`FieldGroupContext.task`
+ * 経由でホストの値を都度読み、値は `put` でホストに渡す。本体は欄の並び、
  * 誤りの出す場所、所見、閉じる手順を持つ。
  */
 export class TaskHubForm implements HubForm {
@@ -109,9 +109,9 @@ export class TaskHubForm implements HubForm {
             },
         });
         this.fieldCtx = {
-            getTask: () => this.host.task(),
+            task: () => this.host.task(),
             isShut: () => this.shut,
-            queue: (updates) => this.host.put(updates),
+            put: (updates) => this.host.put(updates),
             app: deps.app,
             plugin: deps.plugin,
             index: deps.index,
