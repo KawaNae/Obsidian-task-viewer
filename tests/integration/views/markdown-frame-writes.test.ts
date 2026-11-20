@@ -15,8 +15,11 @@
  *   skipped, a card under the section's first, blank lines cut off
  * - A checkbox written as HTML, above a line whose status names a line as
  *   the card's own renders do, which writes nothing
- * - A card with a `dataviewjs` block, whose script a click runs as often as
- *   a write of the note apart from the click does
+ * - A card with a `dataviewjs` script, of its own block or of a note
+ *   embedded in it, which a click runs as often as a write of the note
+ *   apart from the click does
+ * - A card whose inline Dataview query draws a checkbox in the card shown
+ *   alone, none of whose checkboxes writes
  * - A note written apart from the plugin before its frame reads it again; a
  *   line put above the card, read again but not rendered again; two
  *   checkboxes of a card clicked before it is read again
@@ -30,7 +33,8 @@
  * Prerequisites:
  *   - Obsidian is running with the E2E vault open, with the current build
  *     loaded (the preflight builds it into the vault)
- *   - Dataview enabled in the vault, with DataviewJS
+ *   - Dataview enabled in the vault, with DataviewJS; its inline JS is
+ *     turned on in memory alone, and put back after
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/markdown-frame-writes.test.ts
  */
@@ -397,24 +401,32 @@ describe('a checkbox written as HTML, above a line whose status names a line of 
     });
 });
 
-describe('a checkbox of a card with a dataviewjs block', () => {
-    const name = 'mdwrites-script';
-    const NOTE = `${PREFIX}-script`;
+/**
+ * Cards whose `dataviewjs` script counts its runs: the card's own block, a
+ * note embedded in it, and a note embedded by a link (`![](…)`) that embeds
+ * the note of the script in turn.
+ */
+const SCRIPTED: [where: string, id: string, lines: string[], notes: Record<string, string>][] = [
+    ['the card\'s own block', 'script', [`${F}dataviewjs`, 'window.__n = (window.__n || 0) + 1', F], {}],
+    ['a note embedded in the card', 'embedded', [`![[${PREFIX}-embedded-script#S]]`], {
+        [`${PREFIX}-embedded-script.md`]: ['# S', `${F}dataviewjs`, 'window.__n = (window.__n || 0) + 1', F, '- [ ] box in the embed', ''].join('\n'),
+    }],
+    ['a note embedded by a link, embedding the note of the script', 'linked', [`![](${PREFIX}-embedding.md)`], {
+        [`${PREFIX}-embedding.md`]: [`![[${PREFIX}-embedded-script#S]]`, ''].join('\n'),
+        [`${PREFIX}-embedded-script.md`]: ['# S', `${F}dataviewjs`, 'window.__n = (window.__n || 0) + 1', F, '- [ ] box in the embed', ''].join('\n'),
+    }],
+];
+
+describe.each(SCRIPTED)('a checkbox of a card with a dataviewjs script of %s', (_where, id, lines, notes) => {
+    const name = `mdwrites-${id}`;
+    const NOTE = `${PREFIX}-${id}`;
     const PATH = `${NOTE}.md`;
-    const TEXT = [
-        '# Script',
-        '- [ ] scripted box',
-        '',
-        `${F}dataviewjs`,
-        'window.__n = (window.__n || 0) + 1',
-        F,
-        '',
-    ].join('\n');
+    const TEXT = ['# Script', '- [ ] scripted box', '', ...lines, ''].join('\n');
 
     beforeAll(() => {
         requireDataview({ js: true });
-        writeNotes({ [PATH]: TEXT });
-        openView(name, 'timeline-view', { showSidebar: true, sidebar: [{ kind: 'markdown', id: 'script', link: NOTE }] });
+        writeNotes({ ...notes, [PATH]: TEXT });
+        openView(name, 'timeline-view', { showSidebar: true, sidebar: [{ kind: 'markdown', id, link: NOTE }] });
     });
 
     afterAll(() => {
@@ -424,26 +436,28 @@ describe('a checkbox of a card with a dataviewjs block', () => {
     let refreshMs = 2500;
 
     /**
-     * How many times the card's script runs from `change` (`click` its
+     * How many times the script runs from `change` (`click` the card's
      * checkbox, or `write` the note `text`) to the card drawn anew and
      * Dataview's refresh of its views after the note changed.
      */
     function runsOf(change: 'click' | 'write', text = TEXT): { runs: number; note: string } {
         return ev(`(async () => {
             ${cardsIn(name)}
+            const id = ${JSON.stringify(id)};
             const path = ${JSON.stringify(PATH)};
-            const body = await rendered('script', 'Script');
+            const body = await rendered(id, 'Script');
             const before = await disk(path);
             window.__n = 0;
             if (${JSON.stringify(change)} === 'click') boxesOf(body)[0].click();
             else await writeNote(path, ${JSON.stringify(text)});
             for (let i = 0; i < 50 && (await disk(path)) === before; i++) await wait(100);
-            for (let i = 0; i < 50 && (cardBody('script', 'Script') === body || !(cardBody('script', 'Script')?.childElementCount > 0)); i++) await wait(100);
+            for (let i = 0; i < 50 && (cardBody(id, 'Script') === body || !(cardBody(id, 'Script')?.childElementCount > 0)); i++) await wait(100);
             for (let i = 0; i < 50 && !(window.__n >= 1); i++) await wait(100);
             await wait(${refreshMs + 1000});
             return JSON.stringify({ runs: window.__n, note: await disk(path) });
         })()`);
     }
+
     it('runs the script once a click is answered as often as once the note is written apart from the click', () => {
         refreshMs = ev<number>(`(() => JSON.stringify(app.plugins.plugins.dataview.settings.refreshInterval ?? 2500))()`);
         // The card drawn once from a write of the note, before what is measured.
@@ -456,6 +470,40 @@ describe('a checkbox of a card with a dataviewjs block', () => {
     });
 });
 
+describe('a checkbox of a card whose inline Dataview query draws a checkbox, as the card is shown alone', () => {
+    const name = 'mdwrites-inline';
+    const NOTE = `${PREFIX}-inline`;
+    const PATH = `${NOTE}.md`;
+    // `dv.paragraph` draws its markdown, a checkbox of its own, in the card
+    // shown; the renders that find a checkbox's line draw no inline query.
+    const TEXT = ['- [ ] w0 `$= dv.paragraph("- [ ] fake")`', '- [ ] w1', ''].join('\n');
+    let inlineJs: boolean | null = null;
+
+    beforeAll(() => {
+        requireDataview({ js: true });
+        // Set in memory alone, and put back after.
+        inlineJs = ev<boolean>(`(() => { const s = app.plugins.plugins.dataview.settings; const was = s.enableInlineDataviewJs; s.enableInlineDataviewJs = true; return JSON.stringify(!!was); })()`);
+        writeNotes({ [PATH]: TEXT });
+        openView(name, 'timeline-view', { showSidebar: true, sidebar: [{ kind: 'markdown', id: 'inline', link: NOTE }] });
+    });
+
+    afterAll(() => {
+        if (inlineJs !== null) ev(`(() => { app.plugins.plugins.dataview.settings.enableInlineDataviewJs = ${JSON.stringify(inlineJs)}; return JSON.stringify(true); })()`);
+    });
+
+    it('writes nothing for any of its checkboxes, and says the checkbox matches no line', () => {
+        const drawn = ev<number>(`(async () => {
+            ${cardsIn(name)}
+            const body = await rendered('inline', 0);
+            for (let i = 0; i < 50 && boxesOf(body).length < 3; i++) await wait(100);
+            return JSON.stringify(boxesOf(body).length);
+        })()`);
+        expect(drawn).toBe(3);
+        const presses = pressEach(name, 'inline', 0, PATH, [0, 1, 2]);
+        expect(presses.map(p => p.item)).toEqual(['w0', 'fake', 'w1']);
+        expect(presses.map(p => ({ note: p.note, notices: p.notices }))).toEqual(presses.map(() => ({ note: TEXT, notices: [tr('sidebar.checkboxUnmatched')] })));
+    });
+});
 
 describe('a checkbox of a card whose note is no longer what the card was read from', () => {
     const name = 'mdwrites-changed';

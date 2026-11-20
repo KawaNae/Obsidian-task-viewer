@@ -53,6 +53,8 @@ export interface Pressed {
     notices: string[];
     /** The first line of the item the checkbox clicked stands in, the items in it left out. */
     item: string;
+    /** That of the card's checkbox after it, or nothing for the last. */
+    next: string;
     /** The `data-task` of that item before the click: the status it is drawn with. */
     shown: string | null;
     /** Whether the checkbox clicked is checked right after the click. */
@@ -71,15 +73,20 @@ export function pressEach(prefix: string, name: string, id: string, which: numbe
             const before = await disk(${JSON.stringify(path)});
             const seen = noticesNow();
             // The first line of the item's own text, without the items and quotes nested in it.
+            const itemOf = (b) => {
+                const own = b.closest('li')?.cloneNode(true);
+                own?.querySelectorAll('ul, ol, blockquote').forEach(n => n.remove());
+                return (own?.textContent ?? b.parentElement?.textContent ?? '').trim().split('\\n')[0].trim();
+            };
             const li = box.closest('li');
-            const own = li?.cloneNode(true);
-            own?.querySelectorAll('ul, ol, blockquote').forEach(n => n.remove());
-            const item = (own?.textContent ?? box.parentElement?.textContent ?? '').trim().split('\\n')[0].trim();
+            const item = itemOf(box);
+            const after = boxesOf(body)[i + 1];
+            const next = after ? itemOf(after) : '';
             const shown = li?.getAttribute('data-task') ?? null;
             box.click();
             const checked = box.checked;
             await answered(${JSON.stringify(id)}, ${JSON.stringify(which)}, ${JSON.stringify(path)}, before, body, seen);
-            out.push({ before, note: await disk(${JSON.stringify(path)}), notices: noticesSince(seen), item, shown, checked });
+            out.push({ before, note: await disk(${JSON.stringify(path)}), notices: noticesSince(seen), item, next, shown, checked });
         }
         return JSON.stringify(out);
     })()`);
@@ -126,7 +133,8 @@ const wordsOf = (text: string): string[] => text.match(/(?<![\w])w\d+(?![\w])/g)
  * - `written`: the line that holds the item's word, and no other, has its
  *   status character turned as the checkbox is drawn (one drawn blank to
  *   `x`, any other to a space), and no notice came. An item with no word is
- *   held to a line with no word
+ *   held to a line with no word, the first word on the lines below it that
+ *   of the card's next checkbox, when there is one
  * - `nothing`: the note is as it was, and the notice that nothing was
  *   written came, alone
  * - anything else, said as what went wrong
@@ -150,6 +158,8 @@ export function judged(press: Pressed): string {
     const status = press.shown === '' ? 'x' : ' ';
     if (wasChars.length !== nowChars.length || diff.length !== 1 || nowChars[diff[0]] !== status) return `the line ${at} went from ${JSON.stringify(was)} to ${JSON.stringify(now)}`;
     const words = wordsOf(press.item);
-    const held = words.length === 0 ? wordsOf(was).length === 0 : wordsOf(was).includes(words[0]);
+    const next = wordsOf(press.next)[0];
+    const below = before.slice(at + 1).map(wordsOf).find(w => w.length > 0)?.[0];
+    const held = words.length > 0 ? wordsOf(was).includes(words[0]) : wordsOf(was).length === 0 && (next === undefined || below === next);
     return held ? 'written' : `the line ${at} (${JSON.stringify(was)}) written for the item ${JSON.stringify(press.item)}`;
 }
