@@ -34,9 +34,11 @@ export interface HubHost {
     /**
      * Open a line of the row's note in the editor and light it: the line
      * `locate` finds on a copy of the row, asked again of a newer copy when
-     * the note has changed. The hub closes.
+     * the note has changed. The hub closes. Null when there is no row whose
+     * lines could be opened: where a value is inherited from is said, and
+     * not offered to open.
      */
-    openSource(locate: (task: Task) => LineTarget | null): void;
+    readonly openSource: ((locate: (task: Task) => LineTarget | null) => void) | null;
     /** Whether the hub may close, asked once the form has saved its fields: what was handed on is waited for. */
     closing(): CloseAnswer;
     /** The form to tell, once it is built. */

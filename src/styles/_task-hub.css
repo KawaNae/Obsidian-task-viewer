@@ -170,6 +170,17 @@
     color: var(--tv-text-muted);
 }
 
+/* Where a value is inherited from, with no row whose line could be opened:
+ * said, not offered to press. */
+.task-hub__source--plain {
+    cursor: default;
+    text-decoration: none;
+}
+
+.task-hub__source--plain:hover {
+    color: var(--tv-text-faint);
+}
+
 /* --- A custom property's list: an item a line, as the note writes it --- */
 .task-hub__list {
     display: flex;

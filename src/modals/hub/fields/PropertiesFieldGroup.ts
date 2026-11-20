@@ -366,11 +366,13 @@ export class PropertiesFieldGroup implements ClosingPart {
         }, { signal: this.built.signal });
     }
 
-    /** Where an inherited value is written, opened from the row. */
+    /** Where an inherited value is written, opened from the row when there is a row to open. */
     private sourceLabel(row: HTMLElement, task: Task, key: string): void {
         const source = CascadeSource.forProperty(task, key);
         const sourceEl = row.createSpan({ cls: 'task-hub__source', text: CascadeSource.label(source) });
-        sourceEl.addEventListener('click', () => this.ctx.openSource(copy => CascadeSource.lineOfProperty(copy, key)), { signal: this.built.signal });
+        const open = this.ctx.openSource;
+        if (open) sourceEl.addEventListener('click', () => open(copy => CascadeSource.lineOfProperty(copy, key)), { signal: this.built.signal });
+        else sourceEl.addClass('task-hub__source--plain');
     }
 
     /** The values offered for the property `key`, as spelled. */

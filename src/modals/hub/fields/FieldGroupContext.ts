@@ -50,9 +50,12 @@ export interface FieldGroupContext {
     /**
      * Open a line of the row's note in the editor and light it (`openSourceLine`):
      * the line `locate` finds on a copy of the row, which is asked again of a
-     * newer copy when the note has changed. The hub closes.
+     * newer copy when the note has changed. The hub closes. Null when the
+     * host has no row to open (`HubHost.openSource`): a field says where an
+     * inherited value comes from, drawn as nothing to press, with no
+     * listener on it.
      */
-    openSource: (locate: (task: Task) => LineTarget | null) => void;
+    openSource: ((locate: (task: Task) => LineTarget | null) => void) | null;
     /** What the row's own property lines hold that is wrong, by field (`hubFindings`), as the form last read them. */
     findings: () => readonly HubFinding[];
     /**
