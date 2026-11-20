@@ -277,7 +277,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **CreateDialog / CreateModal** | `modals/create/` | The create dialog: a new task line and the place it goes (`CreatePlace`: a daily note's task section, or the head of a row's children), its logic (`CreateDialog`) apart from how it looks (`CreateModal`), as the send dialog's is. It asks the place what it is (`CreatePlaces.facts`, `services/data/`) and says where the line goes; its placeholders and date rules read only what a line there inherits (the reading's answer, never a daily note's day). Opens on the name field and creates nothing while the name is empty; waits for the write, closing once written and saying why above its buttons when refused |
 | **SendDialog / NoteField** | `modals/noteops/` | The send dialog: rows and their subtrees sent to a heading of a note, its logic (`SendDialog`) apart from how it looks (`SendModal`). The note is one field (`NoteField`) searched among the vault's notes, aliases and unresolved links (`NoteSuggest`); it holds the text and the note picked (`NoteAsk`), a pick let go once the text changes. `NoteName.find` reads it as a link's text is read: the note picked; a name, the vault's one note by it or a new note in the folder for new notes; a path, the note at it from the root or the one whose path ends in it, or a new note there. More than one note is no note, and no send until one is picked. Under the field the dialog always says which note the rows go to; under the heading, where in it |
 | **SectionDialog / SectionModal** | `modals/section/` | The section dialog: a note and a heading of it, or the whole note, chosen for a markdown frame of the sidebar, to add the frame or to choose its section again (see "Saved lists, lanes and note links"). Its logic (`SectionDialog`) apart from how it looks (`SectionModal`); its fields are `SectionField` (`NoteField` and the heading field, with its own list of the note's headings) |
-| **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`. Its fields' lists are Obsidian's (`ValueSuggest`), its status button opens the card menu's statuses (`addStatusItems`). Entry: card double-tap, menu Properties items (with field focus), each opening it on a row by `openRowHub`, whose host (`RowHost`) writes and follows the row: 「ハブのホスト」. Its property fields: 「ハブのプロパティの欄」 |
+| **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`. Its fields' lists are Obsidian's (`ValueSuggest`), its status button opens the card menu's statuses (`addStatusItems`). Entry: card double-tap, menu Properties items (with field focus), each opening it on a row by `openRowHub`, whose host (`RowHost`) writes and follows the row, and which builds the source mode the panel is handed: 「ハブのホスト」. Its property fields: 「ハブのプロパティの欄」 |
 | **OverlayShell** | `views/sharedUI/OverlayShell.ts` | The one surface of the plugin's dialogs and popovers (centered: a dialog, a bottom sheet on a phone; anchored: a popover). Every overlay is given Obsidian's keymap and keeps its hotkeys out while the focus is in it (`HotkeyShield`); a frame after it opens, it puts the focus on the field the body names (`initialFocus`, its text selected), else on the panel itself, and gives the focus back on close. A close the user asks for (×, Escape, the back, outside, a swipe) asks the body first (`beforeClose`, a `CloseAnswer`: close, stay, or a promise waited for; `CloseGate`) |
 | **askChoice / confirm / askText** | `modals/ask/` | The questions put to the user, on OverlayShell's centered panel (a sheet from below on a phone), each answered once when it has closed (`ask`): a choice of buttons opens with the focus on cancel and answers `'cancel'` however else it closes (×, Escape, the back, outside, a swipe); a text opens on its field, says under it what does not read (`issueWords`), and waits for its `submit` before closing. Their button row is `FormActions` (`modals/form/`) |
 | **TaskMenuExtension** | `editor/TaskMenuExtension.ts` | The editor's line button (`lineMenuOf`), drawn again when the document, the part shown, the index or the settings change. The index and the settings ask for it by a transaction of the plugin's own (`askToRedraw`), never into an editor the IME is composing in: CodeMirror on iOS reads the IME's input on the next frame, and a transaction before then drops that input and loses the composition. The editor composing holds the change and draws it at its first update after the composition (`redrawsOn`) |
@@ -490,6 +490,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - 閉じる手順では、保存するものを持つ部品が `ClosingPart` を持つ。保存できない値を挙げる（`unsaved`）、捨てる（`discardUnsaved`）、blur を待たずに確定する（`save`）。状態はメニューで選んだときに書くので、持たない
 - 欄が何も受けない間（ソースモードが開いている、行が消えた）は、フォームが各部品の `setEnabled` を呼ぶ。部品は確定のときにも `isShut` を見る。受けない理由はホストが答える（`HubHost.shut`）
 - 受け継いだ値の出所のラベルの文は、部品が `CascadeSource.label` で出す。行を開くのは `openSource`（`HubHost.openSource`）で、ハブが閉じる
+    - ホストに開ける行が無いとき、`openSource` は null である。部品は出所を言うだけで、押しても何もしない。ラベルは listener を付けず、押せない見た目（`task-hub__source--plain`、カーソルも下線も無い）で描く。受け継いだタグの札は、もともと押せる見た目を持たないので、listener だけを付けない。所見には「行を開く」を出さない
 - 所見と、所見が止める欄（`findings`、`locked`）は、フォームがホストの値から `hubFindings` で求める。値から決まる純粋な値なので、ホストの口にしない
 
 ### ハブのホスト
@@ -500,15 +501,23 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - `task`：今の値。欄が出す値で、渡した変更を重ねてある
 - `put`：変更を渡す。書けたかを答え、拒まれた理由はホストが言う
 - `shut`：欄が受けない理由の文。受けるなら null
-- `openSource`：出所の行を開き、ハブを閉じる
+- `openSource`：出所の行を開き、ハブを閉じる。開ける行が無いホストでは null で、部品は出所を押せない形で描く（「ハブの欄の部品」）
 - `closing`：フォームが欄を保存した後に、閉じてよいかを答える
 - `bind`：フォームが自分を渡す。ホストは `HubForm` の口（`refresh`、`showShut`、`sayWrite`）でフォームに伝える
+
+パネル（`TaskHubPanel`）は、ホストを `PanelHost` として持つ。フォームから見た口に、次の2つを足したものである。パネルは `RowHost` を名指ししない。
+- `attach`：overlay が開いた後に、パネルの口（`HubPanel`）を渡す。ホストは `redrawPreview` でカードを描き直させ、`close` でハブを問わずに閉じる
+- `dispose`：ハブが閉じたときに呼ぶ。ホストは何も追わなくなり、後から届いた拒否は通知で言う
+
+ソースモードは入口が組む。パネルは、ソースモードを作る関数（`SourceMaker`）を受け取り、切り替えの bar、カードの枠、ソースの置き場、閉じる口（`SourceSlots`）を渡して1回呼ぶ。関数を渡されなければ、bar もソースの置き場も作らない。パネルがソースモードに頼むのは、閉じる前の問い（`beforeClose`）、Escape と戻るを譲るか（`yieldsEscape`、`takesBack`）、片付け（`dispose`）だけである（`HubSource`）。
+- `openRowHub` は、`TaskHubSourceView` と `TaskHubSource` を作り、`RowHost` の `drained`、`setSourceOpen` と、操作の `confirmTask`、`replaceSubtree` を繋ぐ
+- ソースモードが行を追う口（`follow`）は、`RowHost` を作るときに渡す。パネルの口には無い
 
 `RowHost` が持つもの：
 - 書き込み：渡された変更を値に重ねてから、すぐに `updateTask` を頼む。続けて渡された書き込みは同時に頼み、順は操作の層が守る（`onRow`）
 - 答え：通知を出さない書き方で頼み（`tellRefusal: false`）、拒まれたら理由をフォームの末尾に出して、値を索引の写しに戻す。書けたら前の拒否の文を取り下げる。ハブが閉じた後に届いた拒否は通知で言う
 - 閉じるときの待ち：書き込みが途中なら全部の答えを待ち、全部書けたら閉じ、1つでも拒まれたら開いたままにする。ソースモードに入るときも、途中の書き込みを待つ（`drained`）
-- 索引の購読：ハブが開いてから閉じるまで、行の変更を値にし、パネルのカードを描き直させ、フォームに取り込ませ、ソースモードに伝える（`RowPanel`）。行が索引から消えたら欄を止め、戻ったら開く
+- 索引の購読：ハブが開いてから閉じるまで、行の変更を値にし、パネルのカードを描き直させ、フォームに取り込ませ、作るときに渡された `follow` でソースモードに伝える。行が索引から消えたら欄を止め、戻ったら開く
 - ソースモードによる封鎖：ソースモードが開いている間は欄を止める。1つの行を2つの書き方で書くと片方が拒まれるためである。理由の文はソースモードを行の消えたことより先に言う
 
 ### ハブのプロパティの欄
