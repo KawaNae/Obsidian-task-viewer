@@ -480,6 +480,17 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - API と CLI の `property=key:value` は `contains` の条件の略記である（`QueryShorthand`）
 - フィルタメニューの値の候補（`FilterValueCollector.collectPropertyItemsForKey`）は、リストを項目ごとに出し、値なしを出さない。どの候補も、`equals` で選べば候補を出したタスクに当たる。ハブの値の候補（`collectPropertySpellingsForKey`）は、リストを項目ごとに出し、値なしを出さず、各値を行に書く綴りで出す（「ハブのプロパティの欄」）
 
+### ハブの欄の部品
+
+ハブのフォーム（`TaskHubForm`）は、欄を部品に分けて並べる。部品は名前（`NameField`）、状態（`StatusField`）、タグ、色と線種とマスク、プロパティで、`modals/hub/fields/` にある。日付は作成のダイアログと同じ `DateFieldGroup` である。
+
+- 部品は、値を読む口（`FieldGroupContext.getTask`）と値を渡す口（`queue`）だけを知る。いつノートに書くかは、口の向こうのフォームが決める
+    - 部品は値の写しを持たない。`queue` はフォームの値を先に書き換えるので、部品は渡した値をすぐ読める
+    - 外の変更は、フォームが各部品の `refresh` を呼んで取り込む。打ちかけの欄と IME の変換中の欄は取り込まない（`bindField`）
+- 閉じる手順では、保存するものを持つ部品が `ClosingPart` を持つ。保存できない値を挙げる（`unsaved`）、捨てる（`discardUnsaved`）、blur を待たずに確定する（`save`）。状態はメニューで選んだときに書くので、持たない
+- 欄が何も受けない間（ソースモードが開いている、行が消えた）は、フォームが各部品の `setEnabled` を呼ぶ。部品は確定のときにも `isShut` を見る
+- 受け継いだ値の出所のラベルの文は、部品が `CascadeSource.label` で出す。行を開くのは `openSource` で、ハブが閉じる
+
 ### ハブのプロパティの欄
 
 ハブ（`TaskHubForm`）は、タスク自身のプロパティ行を欄から書く。欄は、組み込みの色、線種、マスク（`StyleFieldGroup`）、タグ（`TagsFieldGroup`）、カスタムプロパティ（`PropertiesFieldGroup`、リストは `PropertyListField`）である。節、根、frontmatter の値を編集する欄は無い。受け継いだ値は出所のラベル（`CascadeSource`）で示し、ラベルから値を書いた行を開く。ラベルは、frontmatter と根の行の値を「継承: ファイル」、見出しの節の値を「継承: セクション」と言う。根も frontmatter もノート全体の値で、どちらの行かはラベルから行を開けば分かる
