@@ -30,6 +30,17 @@ export class TagExtractor {
     }
 
     /**
+     * The tags a task's own `tags::` line is to declare for its tags to be
+     * `tags` (`Task.tags`, the ones its content holds among them): those its
+     * `content` does not hold, since a `#tag` in the content is declared by
+     * the content itself. Sorted, deduplicated, without `#`.
+     */
+    static declaredTags(tags: readonly string[], content: string): string[] {
+        const inContent = new Set(TagExtractor.fromContent(content));
+        return TagExtractor.merge(tags.filter(tag => !inContent.has(tag)));
+    }
+
+    /**
      * Merge tags from multiple sources, deduplicate and sort.
      */
     static merge(...tagArrays: string[][]): string[] {

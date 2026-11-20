@@ -82,4 +82,18 @@ describe('TagExtractor', () => {
             expect(TagExtractor.merge(['z', 'a'], ['m'])).toEqual(['a', 'm', 'z']);
         });
     });
+
+    describe('declaredTags', () => {
+        it('is the tags the content does not hold, sorted and once each', () => {
+            expect(TagExtractor.declaredTags(['z', 'a', 'body', 'a'], '本文 #body')).toEqual(['a', 'z']);
+        });
+
+        it('is none when the content holds every tag', () => {
+            expect(TagExtractor.declaredTags(['a', 'b'], '#b and #a')).toEqual([]);
+        });
+
+        it('keeps a tag the content holds only inside code or a link', () => {
+            expect(TagExtractor.declaredTags(['a', 'b'], '`#a` [[note#b]]')).toEqual(['a', 'b']);
+        });
+    });
 });

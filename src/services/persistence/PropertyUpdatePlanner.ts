@@ -76,12 +76,9 @@ export class PropertyUpdatePlanner {
 
         if ('tags' in updates) {
             // updates.tags は own tags 全体（content 由来含む、Task.tags と同義）。
-            // content 内 #tag は content 自身が宣言なので、property 宣言
-            // （子行 / frontmatter）に書くべき残余だけを導出する。
-            const wanted = updates.tags ?? [];
+            // 子行に書くのは、content が宣言していない残余だけである。
             const content = ('content' in updates ? updates.content : before.content) ?? '';
-            const contentTags = new Set(TagExtractor.fromContent(content));
-            const declTags = TagExtractor.merge(wanted.filter(t => !contentTags.has(t)));
+            const declTags = TagExtractor.declaredTags(updates.tags ?? [], content);
             if (declTags.length > 0) {
                 ops.push({ key: 'tags', op: 'set', value: { tags: declTags } });
             } else {
