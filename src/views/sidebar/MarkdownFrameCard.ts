@@ -13,17 +13,32 @@
  * Each render has an element and a `Component` of its own, so one that ends
  * late adds nothing to the one that took its place.
  *
- * A checkbox the markdown draws (`- [ ] …`) does not toggle on a click: the
- * render draws it with nothing that writes the note, so a click would only
- * change how it looks. A checkbox a block of another plugin draws (a
- * Dataview task list) is that plugin's, which writes the note itself, and
- * is left alone.
+ * A checkbox the markdown draws (`- [ ] …`) writes its line of the note on
+ * a click, through the frame (`MarkdownFrameCardHost.writeBox`): the render
+ * draws it with nothing that writes the note. The click is taken by the
+ * element the markdown is rendered in, for every checkbox in it. Which line
+ * the checkbox writes is decided off two renders of the markdown that are
+ * never shown (`FrameCheckboxes`), against the checkboxes the card shows at
+ * the click. The checkbox does not change how it looks on the click: the
+ * line written has the note read again, and the card rendered anew from it.
+ * The line is written at the reading the checkbox stands in: the one the
+ * card was handed last when it shows that markdown still, with where its
+ * lines are now; else the one it rendered, as a card that waits to render
+ * keeps it though it is handed the markdown of a note that has changed.
+ * Whether the note still reads so is the write's to decide, and to tell.
+ *
+ * A checkbox of a note embedded in the markdown (`![[…]]`) writes nothing:
+ * the render draws it as that note's, and the card knows nothing of its
+ * lines. A checkbox another plugin draws (a Dataview task list, of a code
+ * block or of an inline query) is that plugin's, which writes the note
+ * itself, and is left alone.
  */
 
-import { Component, MarkdownRenderer, type App } from 'obsidian';
+import { Component, MarkdownRenderer, Notice, type App } from 'obsidian';
 import { t } from '../../i18n';
 import { logError } from '../../log/log';
 import type { ContentKey } from '../../services/core/ContentKey';
+import { confirms, markLines, markedLine, turnLine, type BoxLine } from '../../services/data/FrameCheckboxes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 
 /**
@@ -71,6 +86,13 @@ export interface MarkdownFrameCardHost {
     remove(): void;
     /** Choose again the section the frame shows. */
     relink(): void;
+    /**
+     * Write `write` to the note at `path`, its line a line of the content
+     * whose key is `key`: written only while the note reads as that content,
+     * and told when it is not. The content may be older than the one the
+     * card was handed last: the one it still shows.
+     */
+    writeBox(path: string, key: ContentKey, write: BoxLine): void;
 }
 
 /** What a card shows, and the element it is drawn in; what a render registered too. */
@@ -85,17 +107,41 @@ interface CardShown {
  * (`block-language-dataview`): what is in it is the plugin's.
  */
 const CODE_BLOCK = '[class^="block-language-"], [class*=" block-language-"]';
+/**
+ * What Dataview draws, a task list of its inline query too: its items and
+ * their checkboxes carry its class. An inline query is drawn only in a
+ * render whose `Component` is loaded, so the renders never shown draw none.
+ */
+const DATAVIEW = '.dataview';
+/** What another plugin draws, whose checkboxes are that plugin's. */
+const PLUGIN_DRAWN = `${CODE_BLOCK}, ${DATAVIEW}`;
+/** A note embedded in the markdown (`![[…]]`), drawn as that note's. */
+const EMBED = '.internal-embed';
+/** A task's checkbox, as the render draws it. */
+const CHECKBOX = 'input.task-list-item-checkbox';
 
 /**
- * Whether `target` is a task's checkbox the markdown of `rendered` drew,
- * and not one a code block in it drew. Asked by selector, not by class: an
- * element of a pop-out window is not an instance of this window's classes.
+ * Whether `el` is under an element `rendered` holds that matches
+ * `selector`, or is one. Asked by selector, not by class: an element of a
+ * pop-out window is not an instance of this window's classes.
  */
-function isMarkdownCheckbox(target: EventTarget | null, rendered: HTMLElement): boolean {
-    const el = target as Element | null;
-    if (typeof el?.matches !== 'function' || !el.matches('input.task-list-item-checkbox')) return false;
-    const block = el.closest(CODE_BLOCK);
-    return block === null || !rendered.contains(block);
+function within(el: Element, rendered: HTMLElement, selector: string): boolean {
+    const at = el.closest(selector);
+    return at !== null && rendered.contains(at);
+}
+
+/**
+ * The checkboxes the markdown of `rendered` drew of its own lines, in
+ * order: not one of a note embedded in it, nor one another plugin drew.
+ */
+function ownCheckboxes(rendered: HTMLElement): Element[] {
+    return Array.from(rendered.querySelectorAll(CHECKBOX))
+        .filter(box => !within(box, rendered, EMBED) && !within(box, rendered, PLUGIN_DRAWN));
+}
+
+/** The `data-task` of the item of each of `boxes`: the status the render wrote on it, null for a checkbox with none. */
+function statusesOf(boxes: readonly Element[]): (string | null)[] {
+    return boxes.map(box => box.closest('li')?.getAttribute('data-task') ?? null);
 }
 
 /**
@@ -160,7 +206,7 @@ export class MarkdownFrameCard {
         this.clear();
         switch (wanted.kind) {
             case 'body': {
-                const { el, component } = this.render('markdown-frame__content', wanted.markdown, wanted.path);
+                const { el, component } = this.render('markdown-frame__content', wanted, wanted.markdown);
                 this.shown = { content: wanted, el, component };
                 break;
             }
@@ -185,10 +231,12 @@ export class MarkdownFrameCard {
     }
 
     /**
-     * Render `markdown` against `path` into an element of the class `cls`,
-     * in the card or in `parent`, with a Component of its own.
+     * Render `markdown`, a part of what the card shows (`drawn`), against
+     * its path into an element of the class `cls`, in the card or in
+     * `parent`, with a Component of its own.
      */
-    private render(cls: string, markdown: string, path: string, parent: HTMLElement = this.el): { el: HTMLElement; component: Component } {
+    private render(cls: string, drawn: CardContent & { path: string }, markdown: string, parent: HTMLElement = this.el): { el: HTMLElement; component: Component } {
+        const { path } = drawn;
         const el = parent.createDiv(`${cls} markdown-rendered`);
         const component = new Component();
         component.load();
@@ -198,15 +246,90 @@ export class MarkdownFrameCard {
         const observer = new MutationObserver(() => this.host.bindLinks(el, path));
         observer.observe(el, { childList: true, subtree: true });
         component.register(() => observer.disconnect());
-        component.registerDomEvent(el, 'click', (event) => {
-            if (isMarkdownCheckbox(event.target, el)) event.preventDefault();
-        });
+        component.registerDomEvent(el, 'click', (event) => this.clicked(event, el, drawn));
 
         MarkdownRenderer.render(this.host.app, markdown, el, path, component)
             .catch((e: unknown) => {
                 logError(`[MarkdownFrame] markdown render failed: ${e instanceof Error ? e.message : String(e)}`, { notice: false });
             });
         return { el, component };
+    }
+
+    /**
+     * A click in `rendered`, the element a render of `drawn` drew into: on
+     * a checkbox the markdown drew, the checkbox is kept as it is and its
+     * line written (`press`). One another plugin drew is left to it; one of
+     * an embedded note writes nothing. The listener lives as long as the
+     * render's component, so `drawn` is what the card shows at the click. A
+     * heading over a mask holds no lines of a task, so a checkbox drawn
+     * there (one the markdown writes as HTML) writes nothing either.
+     */
+    private clicked(event: MouseEvent, rendered: HTMLElement, drawn: CardContent): void {
+        const target = event.target as Element | null;
+        if (typeof target?.matches !== 'function' || !target.matches(CHECKBOX) || within(target, rendered, PLUGIN_DRAWN)) return;
+        event.preventDefault();
+        const boxes = ownCheckboxes(rendered);
+        const index = boxes.indexOf(target);
+        if (drawn.kind === 'body' && index >= 0) this.press(drawn, statusesOf(boxes), index);
+        else new Notice(t('sidebar.checkboxUnmatched'));
+    }
+
+    /**
+     * Write the line of the checkbox `index` of those the card shows, whose
+     * items' `data-task` are `shown`, read at the click; else tell the user
+     * nothing was written. The line is of the reading the checkbox stands
+     * in: the one the card was handed last when it is to show what it shows
+     * (`sameContent`), its key and lines those of the note now; else
+     * `drawn`, which the note may have left, and then the write is refused
+     * where it is made. The reading is taken at the click and kept through
+     * the renders it waits for, whatever the card is handed meanwhile.
+     */
+    private press(drawn: CardContent & { kind: 'body' }, shown: readonly (string | null)[], index: number): void {
+        const { wanted } = this;
+        const reading = wanted.kind === 'body' && sameContent(drawn, wanted) ? wanted : drawn;
+        void this.lineOf(reading, shown, index).then((write) => {
+            if (write) this.host.writeBox(reading.path, reading.key, write);
+            else new Notice(t('sidebar.checkboxUnmatched'));
+        });
+    }
+
+    /**
+     * The line the checkbox `index` writes, of the card's `markdown`: the
+     * line the render with each line named (`markLines`) names at its
+     * place, written only when the render with that line turned draws what
+     * the click asks for (`confirms`). Null when no line is named, or the
+     * render does not confirm it.
+     */
+    private async lineOf(reading: CardContent & { kind: 'body' }, shown: readonly (string | null)[], index: number): Promise<BoxLine | null> {
+        try {
+            const k = markedLine(statusesOf(await this.drawUnshown(markLines(reading.markdown), reading.path))[index] ?? null);
+            const turned = k === null ? null : turnLine(reading.markdown, reading.lines, k, shown[index] ?? null);
+            if (turned === null) return null;
+            const tried = statusesOf(await this.drawUnshown(turned.markdown, reading.path));
+            return confirms(shown, tried, index, turned.drawn) ? turned.write : null;
+        } catch (e: unknown) {
+            logError(`[MarkdownFrame] checkbox render failed: ${e instanceof Error ? e.message : String(e)}`, { notice: false });
+            return null;
+        }
+    }
+
+    /**
+     * Render `markdown` against `path` into an element never put in a
+     * document, and give the checkboxes it drew of its own lines. The
+     * element is made by the card's document, a pop-out window's for a card
+     * in one. Its `Component` is not loaded, so what is drawn only on load
+     * (an inline query) is not; it draws the checkboxes and their items'
+     * statuses by the time the render ends.
+     */
+    private async drawUnshown(markdown: string, path: string): Promise<Element[]> {
+        const el = this.el.ownerDocument.createElement('div');
+        const component = new Component();
+        try {
+            await MarkdownRenderer.render(this.host.app, markdown, el, path, component);
+            return ownCheckboxes(el);
+        } finally {
+            component.unload();
+        }
     }
 
     /**
@@ -219,7 +342,7 @@ export class MarkdownFrameCard {
             return { content: mask, el: this.el.createDiv({ cls: 'markdown-frame__mask', text: mask.text }), component: null };
         }
         const el = this.el.createDiv('markdown-frame__masked');
-        const { component } = this.render('markdown-frame__heading', mask.heading, mask.path, el);
+        const { component } = this.render('markdown-frame__heading', mask, mask.heading, el);
         el.createDiv({ cls: 'markdown-frame__mask', text: mask.text });
         return { content: mask, el, component };
     }

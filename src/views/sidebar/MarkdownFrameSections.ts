@@ -8,7 +8,7 @@
  * The frames sit in the sidebar's panel (`SidebarFrames`), which holds them
  * in the view's state and stacks their elements; what the panel does for
  * them is its placement's (`MarkdownFramePlacement`), the only way a frame
- * writes anything. The panel has the frames take the state's frames and
+ * writes the view's state. The panel has the frames take the state's frames and
  * folds (`sync`) as soon as the state changes, before it draws, so a frame
  * in the state always has its reader, which knows the note it found and
  * the path it found it at. `sync` is the one way a link or a fold reaches a
@@ -21,6 +21,13 @@
  * through the placement, and a note made, moved or deleted has every frame
  * look again for the note its link names. A saved setting has them read
  * again, since the keys a section's style is read by are settings.
+ *
+ * A checkbox a card's markdown drew writes its line of the note through
+ * the plugin's operations (`Operations.writeLine`), at the key of the
+ * reading the checkbox stands in, the frame's last or the older one a card
+ * still shows: in a note that no longer reads as that reading, nothing is
+ * written, and the user is told so there; a line it
+ * completes fires as a task card's does. The note written is read again as any note written to.
  *
  * Markdown that measures the room it has (a chart) is rendered once the panel
  * stands in a document, styled by the plugin's stylesheet (`canRender`).
@@ -42,6 +49,7 @@ import { frameLinkMiss } from '../../services/data/MarkdownFrameNotes';
 import { frameLinkAt, frameTarget } from '../../services/data/MarkdownFrames';
 import { emptySectionAsk, sectionAskOf, type SectionAsk } from '../../modals/section/SectionDialog';
 import { SectionModal } from '../../modals/section/SectionModal';
+import { keyedRow } from '../../services/persistence/FileLines';
 import { newMarkdownFrameId } from '../../services/viewConfig/ListIds';
 import type { FrameSlot, MarkdownFrame, SidebarFrame } from '../../types';
 import { openFile } from '../../utils/NavigationUtils';
@@ -240,6 +248,9 @@ export class MarkdownFrameSections {
             showMenu: event => this.showMenu(id, reader, event),
             remove: () => this.placement.remove(id),
             relink: () => this.relink(id, reader),
+            writeBox: (path, key, { line, text, next }) => {
+                void plugin.getOperations().writeLine(path, keyedRow(line, text, key), [{ kind: 'update', text: next }]);
+            },
         }, id, reader.untitled(), collapsed);
         this.frames.set(id, { reader, view });
         if (this.notesKnown()) reader.follow();
