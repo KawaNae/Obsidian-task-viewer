@@ -189,6 +189,30 @@ describe('a list stays on its field while the field moves', () => {
     });
 });
 
+describe('the hub\'s name: an Enter while its [[ list is open', () => {
+    it('picks the item selected and writes no name; the next Enter writes the name, the link in it', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const steps = run<{ picked: { name: string; listOpen: boolean; hub: boolean; line: string }; hub: boolean }>(`
+            const noteLine = async () => (await app.vault.adapter.read(${JSON.stringify(TEST_FILE)})).split('\\n')[2];
+            await openHub('次');
+            const input = nameInput();
+            type(input, '次 [[test-int-suggest');
+            await until(() => list()?.items.length > 0);
+            enter(input);
+            // Long enough for a write the Enter must not start to reach the file.
+            await sleep(500);
+            const picked = { name: input.value, listOpen: !!list(), hub: !!hub(), line: await noteLine() };
+            enter(input);
+            await until(() => rowOf('次').content !== '次');
+            return JSON.stringify({ picked, hub: !!hub() });
+        `);
+        expect(steps.picked).toMatchObject({ listOpen: false, hub: true, line: '- [ ] 次' });
+        expect(steps.picked.name).toMatch(/^次 \[\[[^\]]+\]\]$/);
+        expect(steps.hub).toBe(true);
+        expect(readTestFile(TEST_FILE).split('\n')[2]).toBe(`- [ ] ${steps.picked.name}`);
+    });
+});
+
 describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys', () => {
     it('opens its list as the field takes the focus, the first item selected; Escape closes the list and leaves the hub open', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
