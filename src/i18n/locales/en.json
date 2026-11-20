@@ -869,7 +869,7 @@
     "relink": "Choose again",
     "relinkSection": "Choose section again",
     "checkboxUnmatched": "Nothing was written: which line of the note this checkbox stands for could not be confirmed",
-    "checkboxEmbedded": "Nothing was written: a checkbox of an embedded note cannot be changed from here"
+    "checkboxEmbedded": "Nothing was written: a checkbox of an embedded note cannot be changed from the sidebar"
   },
   "pinnedList": {
     "addList": "Add List",
