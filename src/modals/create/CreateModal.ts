@@ -140,7 +140,7 @@ export class CreateModal implements CreateSurface {
         this.dialog = new CreateDialog(this.place, {
             facts: (place) => this.places.facts(place),
             // Said above the buttons; a notice would say it twice.
-            create: (place, line) => this.places.create(place, line, { tellRefusal: false }),
+            create: (place, line) => this.places.create(place, { line }, { tellRefusal: false }),
             tellLate: (refused) => new Notice(refusalNotice(refused)),
             close: () => this.overlay.close(),
         }, this);

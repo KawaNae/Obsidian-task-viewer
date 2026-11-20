@@ -1,3 +1,4 @@
+import type { NewRow } from '../persistence/NewRow';
 import { TFile, type App } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { logWarn } from '../../log/log';
@@ -128,15 +129,16 @@ export class CreatePlaces {
     }
 
     /**
-     * Write `line` in `place`: under the daily note's section, the note made
-     * of its template when it is not there (`putInDailyNote`), or at the head
-     * of the row's children (`insertLine`). Whether it was written, and why
-     * not, as the write answers (`WriteAnswer`), told as `opts` says.
+     * Write `row`, with its property lines, in `place`: under the daily
+     * note's section, the note made of its template when it is not there
+     * (`putInDailyNote`), or at the head of the row's children
+     * (`insertLine`). Whether it was written, and why not, as the write
+     * answers (`WriteAnswer`), told as `opts` says.
      */
-    create(place: CreatePlace, line: string, opts: WriteTelling = {}): Promise<WriteAnswer> {
+    create(place: CreatePlace, row: NewRow, opts: WriteTelling = {}): Promise<WriteAnswer> {
         return place.kind === 'dailyNote'
-            ? this.operations.putInDailyNote(place.date, line, opts)
-            : this.operations.insertLine(place.taskId, line, 'firstChild', undefined, opts);
+            ? this.operations.putInDailyNote(place.date, row, opts)
+            : this.operations.insertLine(place.taskId, row, 'firstChild', undefined, opts);
     }
 
     /** The lines of the note at `path` as the vault holds them; null when there is none. */

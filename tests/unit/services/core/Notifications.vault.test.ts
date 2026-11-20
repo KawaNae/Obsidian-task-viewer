@@ -51,7 +51,7 @@ describe('what a write of ours tells the views', () => {
         const heard = listen(session);
         const row = session.index.getTasks()[0];
 
-        await session.ops.insertLine(row.id, '- [ ] child', 'firstChild');
+        await session.ops.insertLine(row.id, { line: '- [ ] child' }, 'firstChild');
         const atReturn = [...heard];
         await frame();
 
@@ -115,7 +115,7 @@ describe('who hears that a row was deleted', () => {
         const [a] = byLine(session);
 
         await session.ops.updateTask(a.id, { statusChar: 'x' });
-        await session.ops.insertLine(a.id, '- [ ] new', 'firstChild');
+        await session.ops.insertLine(a.id, { line: '- [ ] new' }, 'firstChild');
         await settled();
 
         expect(deleted).toEqual([]);

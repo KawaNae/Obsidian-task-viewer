@@ -64,7 +64,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         const { bench, task } = await afterMenu();
 
         expect((await bench.writer.write(task.file, plannedOn(task), [
-            { kind: 'insert', place: 'firstChild', text: '- [x] ⏱️ 記録' },
+            { kind: 'insert', place: 'firstChild', row: { line: '- [x] ⏱️ 記録' } },
         ])).written).toBe(false);
         expect(bench.lines()).toEqual([TICKED, '']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
@@ -78,7 +78,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         bench.edit(['- [ ] P', `\t${ROW}`, '']);
 
         const outcome = await bench.writer.write(task.file, plannedOn(task), [
-            { kind: 'insert', place: 'firstChild', text: '- [x] ⏱️ 記録' },
+            { kind: 'insert', place: 'firstChild', row: { line: '- [x] ⏱️ 記録' } },
         ]);
         expect(outcome.written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] P', `\t${ROW}`, '']);
@@ -91,7 +91,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
 
         expect((await bench.writer.write(milk.file, plannedOn(milk), [
-            { kind: 'insert', place: 'firstChild', text: '- [x] ⏱️ 記録' },
+            { kind: 'insert', place: 'firstChild', row: { line: '- [x] ⏱️ 記録' } },
         ])).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);

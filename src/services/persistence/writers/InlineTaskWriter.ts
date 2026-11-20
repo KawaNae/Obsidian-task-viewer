@@ -5,6 +5,7 @@ import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type InSection, type Spot } from '../utils/Placement';
 import { ListNumber } from '../utils/ListNumber';
 import { renderFlowInstance } from '../FlowInstanceLines';
+import { rowBlock } from '../NewRow';
 import {
     UnfollowableDraft, fileGone, processLines, withRefused,
     type LineDraft, type Refusal, type RowRef, type RowTarget, type WriteChannel, type WriteChannels, type WriteSession,
@@ -211,8 +212,13 @@ export class InlineTaskWriter {
                 return true;
             }
             case 'insert': {
-                // A new line beside the row, spelled as the item next to it.
-                draft.put(Placement[op.place](draft.reading(), line, op.text, indentUnit(this.app)), Block.line(op.text));
+                // A new row beside the row, spelled as the item next to it,
+                // with its property lines in the one block.
+                const unit = indentUnit(this.app);
+                const spot = Placement[op.place](draft.reading(), line, op.row.line, unit);
+                const block = rowBlock(op.row, unit);
+                if (!Array.isArray(block)) return session.refuse({ ...block, line: spot.at + block.line });
+                draft.put(spot, block);
                 return true;
             }
             case 'copies': {

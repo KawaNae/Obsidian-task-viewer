@@ -285,7 +285,7 @@ export class TaskApi {
             due: DateUtils.joinDateTime(due?.date, due?.time),
         });
 
-        const insertedLine = await this.operations.createTask(params.file, line, params.heading);
+        const insertedLine = await this.operations.createTask(params.file, { line }, params.heading);
         if (insertedLine === null) throw new TaskApiError(`Task could not be written to: ${params.file}`);
 
         const created = this.index.getTaskByFileLine(params.file, insertedLine);
@@ -446,7 +446,7 @@ export class TaskApi {
         if (holdsLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
         const task = await this.rowToWrite(params.parentId);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        const { written } = await this.operations.insertLine(task.id, formatTaskLine({ statusChar: ' ', content: params.content }), 'firstChild');
+        const { written } = await this.operations.insertLine(task.id, { line: formatTaskLine({ statusChar: ' ', content: params.content }) }, 'firstChild');
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }

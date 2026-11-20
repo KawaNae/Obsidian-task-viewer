@@ -7,6 +7,7 @@ import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 import { opsOver, rowOf, answerOf } from '../helpers/anchoredRow';
 import { timerOn } from '../helpers/timerRig';
+import type { NewRow } from '../../../src/services/persistence/NewRow';
 
 /**
  * 記録の置き場。**尻尾（最後に書いたレコード）の兄弟**に並べる、が原則で、
@@ -81,7 +82,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
             ...opsOver(taskIndex),
             insertLine: async (
                 taskId: string,
-                line: string,
+                { line }: NewRow,
                 place: 'firstChild' | 'afterSubtree' | 'afterCompletedRun',
                 rowId?: string | null,
             ) => {

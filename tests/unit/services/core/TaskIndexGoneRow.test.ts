@@ -61,8 +61,8 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
     });
 
     const ops = [
-        { name: 'insertLine (firstChild)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'firstChild').then(a => a.written) },
-        { name: 'insertLine (afterSubtree)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, '- [ ] 子', 'afterSubtree').then(a => a.written) },
+        { name: 'insertLine (firstChild)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, { line: '- [ ] 子' }, 'firstChild').then(a => a.written) },
+        { name: 'insertLine (afterSubtree)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.ops.insertLine(id, { line: '- [ ] 子' }, 'afterSubtree').then(a => a.written) },
     ] as const;
 
     for (const { name, call } of ops) {

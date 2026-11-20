@@ -27,7 +27,7 @@ function harness(initial: string) {
 }
 
 const put = (app: any, path: string, line: string, to: Section) =>
-    putInNote(app, path, undefined, { where: to, block: Block.line(line) });
+    putInNote(app, path, undefined, { where: to, row: { line } });
 
 /**
  * putBlock reads and writes lines (the file's terminator is the write's).
@@ -294,7 +294,7 @@ describe('Notes: a note made with lines put in it', () => {
         b.app.vault.create = async (path: string, data: string) => { created.push(data); return create(path, data); };
 
         const at = await putInNote(b.app, NEW, b.channel(NEW), {
-            where: LOG, block: Block.line('- [ ] a'), create: () => '﻿# 2026-10-01\r\n\r\n## Log\r\n',
+            where: LOG, row: { line: '- [ ] a' }, create: () => '﻿# 2026-10-01\r\n\r\n## Log\r\n',
         });
 
         expect(at.written && at.line).toBe(3);
@@ -307,8 +307,8 @@ describe('Notes: a note made with lines put in it', () => {
         const template = () => '# 2026-10-01\n';
 
         const [first, second] = await Promise.all([
-            putInNote(b.app, NEW, b.channel(NEW), { where: LOG, block: Block.line('- [x] first'), create: template }),
-            putInNote(b.app, NEW, b.channel(NEW), { where: LOG, block: Block.line('- [x] second'), create: template }),
+            putInNote(b.app, NEW, b.channel(NEW), { where: LOG, row: { line: '- [x] first' }, create: template }),
+            putInNote(b.app, NEW, b.channel(NEW), { where: LOG, row: { line: '- [x] second' }, create: template }),
         ]);
 
         expect(first.written).toBe(true);
@@ -322,7 +322,7 @@ describe('Notes: a note made with lines put in it', () => {
         const b = await writeBench({ [FILE]: '# note' });
 
         const at = await putInNote(b.app, NEW, b.channel(NEW), {
-            where: 'end', block: Block.line('- [ ] a'), create: async () => { throw new Error('template unreadable'); },
+            where: 'end', row: { line: '- [ ] a' }, create: async () => { throw new Error('template unreadable'); },
         });
 
         expect(at.refused?.reason).toEqual({ kind: 'failed' });

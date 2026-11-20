@@ -109,7 +109,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
         ].join('\n'));
 
         await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
-            { kind: 'insert', place: 'afterSubtree', text: '- [ ] ⏱️ rec @2026-08-15T11:00' },
+            { kind: 'insert', place: 'afterSubtree', row: { line: '- [ ] ⏱️ rec @2026-08-15T11:00' } },
         ]);
 
         expect(h.lines()[2]).toBe('- [ ] ⏱️ rec @2026-08-15T11:00');
@@ -127,7 +127,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
         ].join('\n'));
 
         await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
-            { kind: 'insert', place: 'afterCompletedRun', text: '- [ ] ⏱️ rec @2026-08-15T12:00' },
+            { kind: 'insert', place: 'afterCompletedRun', row: { line: '- [ ] ⏱️ rec @2026-08-15T12:00' } },
         ]);
 
         expect(h.lines()[4]).toBe('- [ ] ⏱️ rec @2026-08-15T12:00');
@@ -140,7 +140,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
         const h = await writeBench(['1. [ ] T @2026-08-15', '  - [ ] U'].join('\n'));
 
         const { written } = await h.writer.write(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
-            { kind: 'insert', place: 'afterSubtree', text: '- [x] ⏱️ rec @2026-08-15T11:00>11:30' },
+            { kind: 'insert', place: 'afterSubtree', row: { line: '- [x] ⏱️ rec @2026-08-15T11:00>11:30' } },
         ]);
 
         expect(written).toBe(true);

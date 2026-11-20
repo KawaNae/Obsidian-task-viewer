@@ -10,6 +10,8 @@ import {
     type DraftEdit, type LineDraft, type WriteChannel, type WriteChannels, type WriteMade, type WriteRefused,
 } from './FileLines';
 import { Block, Placement, type PlacedLine, type SectionLookup, type Spot } from './utils/Placement';
+import { rowBlock, type NewRow } from './NewRow';
+import { indentUnit } from '../../utils/ObsidianConfig';
 
 /**
  * Notes as a write takes them whole: a note made with lines put in it, and a
@@ -22,7 +24,7 @@ export type NoteSpot = Section | 'end';
 /** A note made, and the note. */
 export type NoteMade = WriteMade & { file: TFile };
 
-/** A block put in a note, the line its first line went to, and the note. */
+/** A row put in a note, the line it went to, and the note. */
 export type NotePut = WriteRefused | (WriteMade & { line: number; file: TFile });
 
 /**
@@ -68,10 +70,15 @@ export function sectionSpot(draft: LineDraft, to: Section, head: string): Spot |
  * first line went to, or how many headings go by the section's name.
  */
 export function putBlock(draft: LineDraft, where: NoteSpot, block: readonly PlacedLine[]): number | Extract<SectionLookup, { kind: 'many' }> {
-    const spot = where === 'end' ? Placement.end(draft.reading()) : sectionSpot(draft, where, block[0].text);
+    const spot = noteSpot(draft, where, block[0].text);
     if ('kind' in spot) return spot;
     draft.put(spot, block);
     return spot.at;
+}
+
+/** Where lines go that `where` says, `head` the first of them: in the section ({@link sectionSpot}), or at the end of the note. */
+function noteSpot(draft: LineDraft, where: NoteSpot, head: string): Spot | Extract<SectionLookup, { kind: 'many' }> {
+    return where === 'end' ? Placement.end(draft.reading()) : sectionSpot(draft, where, head);
 }
 
 /**
@@ -128,18 +135,19 @@ async function makeNote(
 }
 
 /**
- * Put `block` in the note at `path`, where `where` says ({@link putBlock}):
- * in a section, its heading made when the note has none by the name and the
- * block put nowhere when it has more than one (`headings`); or at the end.
- * A note there is written in place (`processLines`). A note not there is
- * made with the block in it when `create` says what it holds before
- * ({@link createNote}'s seed), in one write; without `create`, or with a
- * folder by the name, the write is refused as `gone`. Answers the line the
- * block's first line went to, with the note.
+ * Put `row` in the note at `path`, where `where` says: in a section
+ * ({@link sectionSpot}), its heading made when the note has none by the
+ * name and the row put nowhere when it has more than one (`headings`); or
+ * at the end. The row goes with its property lines, as one block
+ * (`rowBlock`), or not at all (`property`). A note there is written in
+ * place (`processLines`). A note not there is made with the row in it when
+ * `create` says what it holds before ({@link createNote}'s seed), in one
+ * write; without `create`, or with a folder by the name, the write is
+ * refused as `gone`. Answers the line the row went to, with the note.
  *
  * The writes of this and {@link createNote} to one path run one at a time,
  * each once the one before it is done, and whether the note is there is
- * asked then: of two blocks put in a note not there yet, the first makes
+ * asked then: of two rows put in a note not there yet, the first makes
  * the note, and the second is put in the note it made, as it would be in a
  * note that was there.
  */
@@ -147,18 +155,21 @@ export function putInNote(
     app: App,
     path: string,
     channel: WriteChannel | undefined,
-    put: { where: NoteSpot; block: readonly PlacedLine[]; create?: () => string | Promise<string> },
+    put: { where: NoteSpot; row: NewRow; create?: () => string | Promise<string> },
 ): Promise<NotePut> {
     return inCreationLineOf(path, async (): Promise<NotePut> => {
-        const subject = put.block[0].text.trim();
+        const subject = put.row.line.trim();
         let at = -1;
         const edit: DraftEdit = (draft, _eol, session) => {
-            const placed = putBlock(draft, put.where, put.block);
-            if (typeof placed !== 'number') {
+            const spot = noteSpot(draft, put.where, put.row.line);
+            if ('kind' in spot) {
                 const heading = put.where === 'end' ? '' : put.where.heading;
-                return session.refuse({ kind: 'headings', name: heading, count: placed.count });
+                return session.refuse({ kind: 'headings', name: heading, count: spot.count });
             }
-            at = placed;
+            const block = rowBlock(put.row, indentUnit(app));
+            if (!Array.isArray(block)) return session.refuse({ ...block, line: spot.at + block.line });
+            draft.put(spot, block);
+            at = spot.at;
             return true;
         };
 
@@ -190,9 +201,9 @@ export function openPeriodicNote(app: App, desc: PeriodicNote, date: string, cha
 }
 
 /**
- * Put `line` in the section `to` of the periodic note of `date`
+ * Put `row` in the section `to` of the periodic note of `date`
  * (`YYYY-MM-DD`; {@link putInNote}), the note made of its template with the
- * line in it when it is not there, in one write.
+ * row in it when it is not there, in one write.
  *
  * @returns what the write did (`NotePut`): the note written, or why not,
  * told once through the channel of its path. A caller finds the line again
@@ -203,13 +214,13 @@ export async function putInPeriodicNote(
     app: App,
     desc: PeriodicNote,
     date: string,
-    line: string,
+    row: NewRow,
     to: Section,
     channelFor: WriteChannels,
 ): Promise<NotePut> {
     const path = notePath(desc, date);
     return putInNote(app, path, channelFor(path), {
-        where: to, block: Block.line(line), create: () => periodicNoteSeed(app, desc, date),
+        where: to, row, create: () => periodicNoteSeed(app, desc, date),
     });
 }
 

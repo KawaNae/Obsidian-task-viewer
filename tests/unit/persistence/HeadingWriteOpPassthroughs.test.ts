@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
-import { Block } from '../../../src/services/persistence/utils/Placement';
 
 /**
  * 一本化した見出し挿入経路の配線を pin する。
@@ -25,7 +24,7 @@ describe('TaskRepository.putInNote', () => {
     it('delegates to the shared heading-write op and returns insertedLine', async () => {
         const h = heading_harness('## Tasks\nexisting');
         // Past the paragraph under the heading, which a line put above it would take in.
-        const at = await h.repo.putInNote('note.md', { heading: 'Tasks', level: 2, side: 'head' }, Block.line('- [ ] child'));
+        const at = await h.repo.putInNote('note.md', { heading: 'Tasks', level: 2, side: 'head' }, { line: '- [ ] child' });
         expect(at.written && at.line).toBe(2);
         expect(h.text().split('\n')).toEqual(['## Tasks', 'existing', '- [ ] child']);
     });

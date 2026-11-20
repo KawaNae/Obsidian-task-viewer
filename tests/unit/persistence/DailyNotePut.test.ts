@@ -32,7 +32,7 @@ async function dailyBench(options: Record<string, string>, template?: string) {
 }
 
 const put = (b: Awaited<ReturnType<typeof dailyBench>>, line: string) =>
-    putInPeriodicNote(b.app, dailyNotes(b.app), DAY, line, LOG, (path) => b.channel(path))
+    putInPeriodicNote(b.app, dailyNotes(b.app), DAY, { line }, LOG, (path) => b.channel(path))
         .then(outcome => (outcome.written ? outcome.file.path : null));
 
 /** `vault.create` answering a turn later and, as Obsidian's does, throwing for a path taken. */

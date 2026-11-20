@@ -85,7 +85,7 @@ describe('create の行番号ベース再特定', () => {
         });
         expect(operations.createTask).toHaveBeenCalledWith(
             'test.md',
-            expect.stringContaining('- [ ] same content'),
+            { line: expect.stringContaining('- [ ] same content') },
             'Tasks',
         );
         expect(readService.getTaskByFileLine).toHaveBeenCalledWith('test.md', 3);
@@ -146,7 +146,7 @@ describe('the line create and insertChildTask write', () => {
             createdTask: makeFullTask({ line: 5 }),
         });
         await api.create({ file: 'test.md', content: 'task ', start: '2026-07-18' });
-        expect(operations.createTask).toHaveBeenCalledWith('test.md', '- [ ] task @2026-07-18', undefined);
+        expect(operations.createTask).toHaveBeenCalledWith('test.md', { line: '- [ ] task @2026-07-18' }, undefined);
     });
 
     it('insertChildTask writes the content with its end trimmed', async () => {
@@ -157,7 +157,7 @@ describe('the line create and insertChildTask write', () => {
         readService.getTask.mockReturnValue(makeFullTask({ id: 'parent-1' }));
         operations.insertLine.mockResolvedValue({ written: true });
         await api.insertChildTask({ parentId: 'parent-1', content: 'child ' });
-        expect(operations.insertLine).toHaveBeenCalledWith('parent-1', '- [ ] child', 'firstChild');
+        expect(operations.insertLine).toHaveBeenCalledWith('parent-1', { line: '- [ ] child' }, 'firstChild');
     });
 });
 
@@ -168,7 +168,7 @@ describe('the date block create writes', () => {
             createdTask: makeFullTask({ line: 5 }),
         });
         await api.create({ file: 'test.md', content: 't', ...params });
-        return operations.createTask.mock.calls[0][1];
+        return operations.createTask.mock.calls[0][1].line;
     };
 
     it.each([

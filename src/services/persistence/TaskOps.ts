@@ -1,4 +1,5 @@
 import type { FlowInstance } from './FlowInstanceLines';
+import type { NewRow } from './NewRow';
 import type { PropertyEdit } from './PropertyUpdatePlanner';
 import type { InSection } from './utils/Placement';
 
@@ -25,12 +26,13 @@ export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
  *   children are carried, not copied: they are the rows they were (see
  *   `LineEdits.carry`).
  * - `remove`: the row and its children are taken out.
- * - `insert`: `text`, a new line, goes in beside the row where `place`
- *   says (`Placement`, of the same name): at the head of its children
- *   (`firstChild`), as its next sibling past its subtree (`afterSubtree`),
- *   or past the completed siblings that follow it (`afterCompletedRun`),
- *   spelled as the item next to it. A timer's record, the one insert every
- *   timer line takes (`Operations.insertLine`).
+ * - `insert`: `row`, a new row with its property lines (`rowBlock`), goes
+ *   in beside the row where `place` says (`Placement`, of the same name):
+ *   at the head of its children (`firstChild`), as its next sibling past
+ *   its subtree (`afterSubtree`), or past the completed siblings that follow
+ *   it (`afterCompletedRun`), spelled as the item next to it. A child added
+ *   to a row, and a timer's record, the one insert every timer line takes
+ *   (`Operations.insertLine`).
  * - `copies`: copies of the row go in as its siblings, on `side`: just
  *   above it, or past its subtree, spelled as the row is
  *   (`Placement.copyOf`). `lines` are the copies' own lines, finished
@@ -55,7 +57,7 @@ export type TaskOp =
     | { kind: 'move'; text: string; to: InSection }
     | { kind: 'remove' }
     | { kind: 'copies'; side: 'above' | 'below'; lines: CopyLines; children: boolean }
-    | { kind: 'insert'; place: InsertPlace; text: string }
+    | { kind: 'insert'; place: InsertPlace; row: NewRow }
     | { kind: 'update'; text: string; properties?: PropertyEdit }
     | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
 

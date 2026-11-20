@@ -97,7 +97,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const { written } = await session.ops.insertLine(a.id, '- [ ] 子タスク', 'firstChild');
+        const { written } = await session.ops.insertLine(a.id, { line: '- [ ] 子タスク' }, 'firstChild');
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -157,7 +157,7 @@ describe('the writes that always landed, but landed in LF', () => {
             ['# crlf heading', '', '## 予定', '- [ ] 既存 @2026-09-21', ''].join('\r\n')
         );
 
-        const line = await session.ops.createTask(FILE, '- [ ] 追加 @2026-09-21', '予定');
+        const line = await session.ops.createTask(FILE, { line: '- [ ] 追加 @2026-09-21' }, '予定');
         await session.settle(FILE);
 
         expect(line).toBe(3);

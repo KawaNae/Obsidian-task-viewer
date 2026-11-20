@@ -175,7 +175,7 @@ describe('a replacement refused', () => {
         const id = note.idOf('P');
         const base = note.session.index.getTask(id)!.subtreeLines!;
         // A child line written since the draft was opened, by the form.
-        await note.session.ops.insertLine(id, '- [ ] b', 'firstChild');
+        await note.session.ops.insertLine(id, { line: '- [ ] b' }, 'firstChild');
         await note.session.flowSettled(FILE);
         const before = note.lines();
 
@@ -191,7 +191,7 @@ describe('a replacement refused', () => {
         const note = await open(['- [ ] P', '    - [ ] a', '']);
         const id = note.idOf('P');
         const base = note.session.index.getTask(id)!.subtreeLines!;
-        await note.session.ops.insertLine(id, '- [ ] b', 'firstChild');
+        await note.session.ops.insertLine(id, { line: '- [ ] b' }, 'firstChild');
         await note.session.flowSettled(FILE);
         const index = note.session.index as unknown as { learnFrom: (refusal: unknown) => Promise<void> };
         const learnt: unknown[] = [];

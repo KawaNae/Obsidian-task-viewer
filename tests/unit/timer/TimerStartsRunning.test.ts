@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { widgetOver } from '../helpers/timerRig';
 import { readSeconds } from '../../../src/timer/TimerClock';
+import type { NewRow } from '../../../src/services/persistence/NewRow';
 
 /**
  * 開始の命令は押した瞬間に走り出す。「子として記録」もデイリーノートの
@@ -61,7 +62,7 @@ describe('a start runs from the press', () => {
     it('a daily note timer: running at once, and its first line starts at the press', async () => {
         const widget = widgetOver(s);
         const put: string[] = [];
-        s.ops.putInDailyNote = async (_date: string, line: string) => { put.push(line); return { written: true, path: 'daily/2026-09-21.md' }; };
+        s.ops.putInDailyNote = async (_date: string, { line }: NewRow) => { put.push(line); return { written: true, path: 'daily/2026-09-21.md' }; };
 
         widget.startTimer({ daily: '2026-09-21' }, 'child', { kind: 'pomodoro' });
 

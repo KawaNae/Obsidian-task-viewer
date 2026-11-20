@@ -68,7 +68,7 @@ describe('content holding U+2028 or U+2029', () => {
     it('is created as a task that scans back with the same value', async () => {
         const { session } = await open(['# note', '- [ ] Y', '']);
 
-        await session.ops.createTask(FILE, `- [ ] A${LS}B`);
+        await session.ops.createTask(FILE, { line: `- [ ] A${LS}B` });
         await session.settle(FILE);
 
         expect(session.index.getTasks().map(task => task.content)).toEqual(['Y', `A${LS}B`]);

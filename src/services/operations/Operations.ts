@@ -16,11 +16,11 @@ import { formatRow } from '../parsing/TaskLineFormat';
 import { planDuplicate } from './DuplicateShift';
 import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { splitLines, withRefused, type Refusal, type RowRef, type WriteChannels } from '../persistence/FileLines';
+import { withRefused, type Refusal, type RowRef, type WriteChannels } from '../persistence/FileLines';
 import type { FiringOutcome } from '../persistence/FiringTrials';
 import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination } from '../persistence/Destination';
-import { Block } from '../persistence/utils/Placement';
+import type { NewRow } from '../persistence/NewRow';
 import type { SendTo } from '../persistence/writers/SendWriter';
 import type { OnDisk } from '../core/ReadingCheck';
 import { outermostRows } from '../persistence/writers/SendRows';
@@ -726,27 +726,29 @@ export class Operations {
     }
 
     /**
+     * Put `row`, with its property lines, in the note at `filePath`: under
+     * `heading` (`Destination.sectionNamed`), or at the end of the note.
+     *
      * @returns the line the task was written on, or null when it was not — a
      * write that was not has told the user why.
      */
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number | null> {
+    async createTask(filePath: string, row: NewRow, heading?: string): Promise<number | null> {
         if (this.refuseAfterDispose('createTask')) return null;
         logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
 
         // Under a heading, in a note that is there; at the end, in a note
-        // made empty when it is not. The appended text is built with LF;
-        // split here, the note's own terminator goes back between every
-        // line, and the lines are to read as they read by themselves.
+        // made empty when it is not.
         const outcome = heading
-            ? await this.repository.putInNote(filePath, Destination.sectionNamed(heading, this.settings), Block.line(taskLine))
-            : await this.repository.putInNote(filePath, 'end', Block.read(splitLines(taskLine).lines), { create: () => '' });
+            ? await this.repository.putInNote(filePath, Destination.sectionNamed(heading, this.settings), row)
+            : await this.repository.putInNote(filePath, 'end', row, { create: () => '' });
         // What the write left is in the index once it landed (`landed`):
         // the caller finds the row on its line without waiting for a scan.
         return outcome.written ? outcome.line : null;
     }
 
     /**
-     * A line put in beside the row, where `place` says (`TaskOp` `insert`):
+     * A new row put in beside the row with its property lines, where
+     * `place` says (`TaskOp` `insert`):
      * a child at the head of the row's children, added from a card's menu,
      * the API or the CLI; a timer's first session line or record there, the
      * next session beside the last one, the first session of a continued run
@@ -763,10 +765,10 @@ export class Operations {
      * takes it off (the last session's, once the next one is beside it). Both
      * land or neither does.
      *
-     * @returns whether the line was written, and when not, why not, told
+     * @returns whether the row was written, and when not, why not, told
      * as {@link updateTask} tells it.
      */
-    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null, opts: WriteTelling = {}): Promise<WriteAnswer> {
+    async insertLine(taskId: string, row: NewRow, place: InsertPlace, rowId?: string | null, opts: WriteTelling = {}): Promise<WriteAnswer> {
         if (this.refuseAfterDispose('insertLine')) return notWritten();
         const hear = this.hearer(opts);
         return this.onRow(taskId, async () => {
@@ -776,7 +778,7 @@ export class Operations {
             logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
             const ops: TaskOp[] = [];
             if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
-            ops.push({ kind: 'insert', place, text: line });
+            ops.push({ kind: 'insert', place, row });
             const outcome = await this.repository.write(task.file, plannedOn(task), ops, { refused: heard(hear) });
             return outcome.written ? WRITTEN : notWritten(outcome.refused);
         });
@@ -864,17 +866,17 @@ export class Operations {
     // ===== ノートの書き込み =====
 
     /**
-     * Put `line` under the task section (`Destination.taskSection`) of the
+     * Put `row` under the task section (`Destination.taskSection`) of the
      * daily note of `date` (`YYYY-MM-DD`), the note made of its template with
-     * the line in it when it is not there, in one write (`putInPeriodicNote`):
+     * the row in it when it is not there, in one write (`putInPeriodicNote`):
      * a task a view's create dialog makes, a timer's first record.
      *
-     * @returns whether the line was written, with the path of the note when
+     * @returns whether the row was written, with the path of the note when
      * it was; when not, why not, told as {@link updateTask} tells it.
      */
-    async putInDailyNote(date: string, line: string, opts: WriteTelling = {}): Promise<WriteAnswer & { path?: string }> {
+    async putInDailyNote(date: string, row: NewRow, opts: WriteTelling = {}): Promise<WriteAnswer & { path?: string }> {
         if (this.refuseAfterDispose('putInDailyNote')) return notWritten();
-        const outcome = await putInPeriodicNote(this.app, dailyNotes(this.app), date, line, Destination.taskSection(this.settings), this.channelsTelling(opts));
+        const outcome = await putInPeriodicNote(this.app, dailyNotes(this.app), date, row, Destination.taskSection(this.settings), this.channelsTelling(opts));
         return outcome.written ? { written: true, path: outcome.file.path } : notWritten(outcome.refused);
     }
 
