@@ -137,7 +137,7 @@ describe('a child written under a task with no children', () => {
     it('reaches the task\'s content column, however wide its marker', async () => {
         const { contents, session } = await open(['# note', '100. [ ] T', '']);
 
-        await session.ops.insertLine(idOf(session, 'T'), '- [ ] c', 'firstChild');
+        await session.ops.insertLine(idOf(session, 'T'), { line: '- [ ] c' }, 'firstChild');
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '100. [ ] T', '\t\t- [ ] c', '']);

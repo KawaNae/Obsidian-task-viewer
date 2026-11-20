@@ -6,6 +6,7 @@ import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
 import { opsOver, answerOf } from '../helpers/anchoredRow';
 import { timerOn, type MeasureKind } from '../helpers/timerRig';
+import type { NewRow } from '../../../src/services/persistence/NewRow';
 
 /**
  * 記録の書き先は尻尾（最後に書いた行）で選ぶ（`TimerRecorder.recordSessionEnd`）。
@@ -55,7 +56,7 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         getIndex: () => taskIndex,
         getOperations: () => ({
             ...opsOver(taskIndex),
-            insertLine: async (_parentId: string, line: string, _place: string) => { inserted.push(line); return answerOf(true); },
+            insertLine: async (_parentId: string, { line }: NewRow, _place: string) => { inserted.push(line); return answerOf(true); },
         }),
     } as unknown as TaskViewerPlugin;
 

@@ -289,7 +289,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
-        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
+        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), { line: '- [ ] 記録 @2026-09-21' }, 'afterSubtree');
         await session.settle(FILE);
 
         expect(at).toBe(true);
@@ -304,7 +304,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const { contents, session } = await open({ [FILE]: NOTE(...target) });
         const before = rows(session).map(row => row.id);
 
-        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
+        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), { line: '- [ ] 記録 @2026-09-21T13:00' }, 'afterCompletedRun');
         await session.settle(FILE);
 
         expect(at).toBe(true);
@@ -319,7 +319,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
+        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), { line: '- [ ] 記録 @2026-09-21' }, 'afterSubtree');
         await session.settle(FILE);
 
         expect(at).toBe(false);
@@ -333,7 +333,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
+        const { written: at } = await session.ops.insertLine(idOf(session, '対象'), { line: '- [ ] 記録 @2026-09-21T13:00' }, 'afterCompletedRun');
         await session.settle(FILE);
 
         expect(at).toBe(false);
@@ -349,7 +349,7 @@ describe('7. insertLine, firstChild (a child from a card, the API or the CLI)', 
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
-        expect((await session.ops.insertLine(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21', 'firstChild')).written).toBe(true);
+        expect((await session.ops.insertLine(idOf(session, '対象'), { line: '- [ ] 先頭 @2026-09-21' }, 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 先頭 @2026-09-21', '\t- [ ] 子 @2026-09-21').join('\n'));
@@ -363,7 +363,7 @@ describe('7. insertLine, firstChild (a child from a card, the API or the CLI)', 
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        expect((await session.ops.insertLine(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21', 'firstChild')).written).toBe(false);
+        expect((await session.ops.insertLine(idOf(session, '対象'), { line: '- [ ] 先頭 @2026-09-21' }, 'firstChild')).written).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);

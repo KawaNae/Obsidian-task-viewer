@@ -87,7 +87,7 @@ describe('a daily note as a place', () => {
 
     it('the write puts the line under the heading, the note made when it is not there', async () => {
         const { contents, places: p } = await places({});
-        const answer = await p.create({ kind: 'dailyNote', date: DAY }, '- [ ] 新しい @10:00', { tellRefusal: false });
+        const answer = await p.create({ kind: 'dailyNote', date: DAY }, { line: '- [ ] 新しい @10:00' }, { tellRefusal: false });
         expect(answer.written).toBe(true);
         expect(contents.get(NOTE)).toBe('## Tasks\n- [ ] 新しい @10:00\n');
     });
@@ -111,7 +111,7 @@ describe('the head of a row\'s children as a place', () => {
     it('the write puts the line first among the children', async () => {
         const { contents, session, places: p } = await places({ 'n.md': LINES });
         const parent = session.index.getTasks().find(task => task.content === '親')!;
-        expect((await p.create({ kind: 'childOf', taskId: parent.id }, '- [ ] 先頭')).written).toBe(true);
+        expect((await p.create({ kind: 'childOf', taskId: parent.id }, { line: '- [ ] 先頭' })).written).toBe(true);
         expect(contents.get('n.md')).toBe(['## Work', '- tv-start:: 2031-02-01', '- [ ] 親', '    - [ ] 先頭', '    - [ ] 子', ''].join('\n'));
     });
 });

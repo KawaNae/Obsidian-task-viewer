@@ -8,6 +8,7 @@ import { makeTask } from '../helpers/makeTask';
 import en from '../../../src/i18n/locales/en.json';
 import { opsOver, answerOf } from '../helpers/anchoredRow';
 import { timerOn, type MeasureKind } from '../helpers/timerRig';
+import type { NewRow } from '../../../src/services/persistence/NewRow';
 
 /**
  * 記録の成否と通知。記録を書けたときだけ記録の通知（`notice.timerRecorded`）を
@@ -76,7 +77,7 @@ function makeHarness(options: Options = {}) {
         getIndex: () => taskIndex,
         getOperations: () => ({
             ...opsOver(taskIndex),
-            insertLine: async (_parentId: string, line: string, _place: string) => {
+            insertLine: async (_parentId: string, { line }: NewRow, _place: string) => {
                 inserted.push(line);
                 return answerOf(options.insertResult ?? true);
             },

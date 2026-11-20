@@ -6,7 +6,7 @@ import type { LineDraft, Refusal, RowRef, RowTarget, WriteChannel, WriteOutcome,
 import type { CompletionFire, FiringOutcome } from './FiringTrials';
 import type { SubtreeReplacement, TaskOp } from './TaskOps';
 import { putInNote, type NotePut, type NoteSpot } from './Notes';
-import type { PlacedLine } from './utils/Placement';
+import type { NewRow } from './NewRow';
 
 /**
  * The write layer as the index holds it: the writers, built over the one
@@ -86,14 +86,14 @@ export class TaskRepository {
 
     // --- Notes and frontmatter ---
 
-    /** A block put in a section of a note, or at its end, the note made of `create` when it is not there (see Notes.putInNote). */
+    /** A row put in a section of a note, or at its end, the note made of `create` when it is not there (see Notes.putInNote). */
     async putInNote(
         path: string,
         where: NoteSpot,
-        block: readonly PlacedLine[],
+        row: NewRow,
         opts: { create?: () => string | Promise<string> } = {},
     ): Promise<NotePut> {
-        return putInNote(this.app, path, this.channelOf(path), { where, block, create: opts.create });
+        return putInNote(this.app, path, this.channelOf(path), { where, row, create: opts.create });
     }
 
     /**

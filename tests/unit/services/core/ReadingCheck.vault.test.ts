@@ -39,7 +39,7 @@ function idOf(session: VaultSession, content: string): string {
 describe('a refusal the caller tells itself (tellRefusal: false)', () => {
     const operations: [string, (s: VaultSession, id: string) => ReturnType<VaultSession['ops']['updateTask']>][] = [
         ['updateTask', (s, id) => s.ops.updateTask(id, { statusChar: 'x' }, { tellRefusal: false })],
-        ['insertLine', (s, id) => s.ops.insertLine(id, '- [ ] child', 'firstChild', undefined, { tellRefusal: false })],
+        ['insertLine', (s, id) => s.ops.insertLine(id, { line: '- [ ] child' }, 'firstChild', undefined, { tellRefusal: false })],
     ];
 
     for (const [name, operate] of operations) {
@@ -65,7 +65,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
         ['deleteTask', (s, id) => s.ops.deleteTask(id)],
         ['deleteTask with its fire', (s, id) => s.ops.deleteTask(id, { fireFlow: true })],
         ['duplicateTask', (s, id) => s.ops.duplicateTask(id)],
-        ['insertLine', (s, id) => s.ops.insertLine(id, '- [ ] child', 'firstChild').then(a => a.written)],
+        ['insertLine', (s, id) => s.ops.insertLine(id, { line: '- [ ] child' }, 'firstChild').then(a => a.written)],
     ];
 
     for (const [name, operate] of operations) {

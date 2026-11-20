@@ -400,7 +400,7 @@ export class TimerRecorder {
      */
     private startLine(timer: TimerState, task: Task, rowId: string | undefined, place: 'firstChild' | 'afterCompletedRun'): Promise<boolean> {
         return this.writeFirstLine(timer, rowId, line =>
-            this.wrote(this.plugin.getOperations().insertLine(task.id, line, place, rowId), timer.file));
+            this.wrote(this.plugin.getOperations().insertLine(task.id, { line }, place, rowId), timer.file));
     }
 
     /**
@@ -427,7 +427,7 @@ export class TimerRecorder {
      */
     private async writeChildLine(timer: TimerState, line: string): Promise<string | null> {
         if (timer.subject.kind === 'daily') {
-            return this.plugin.getOperations().putInDailyNote(timer.subject.date, line).then(answer => answer.path ?? null);
+            return this.plugin.getOperations().putInDailyNote(timer.subject.date, { line }).then(answer => answer.path ?? null);
         }
         const target = await this.resolveTarget(timer);
         switch (target.kind) {
@@ -438,7 +438,7 @@ export class TimerRecorder {
                 this.noticeUnreadable(timer, 'writeChildLine (not written)');
                 return null;
         }
-        return this.wrote(this.plugin.getOperations().insertLine(target.task.id, line, 'firstChild'), timer.file);
+        return this.wrote(this.plugin.getOperations().insertLine(target.task.id, { line }, 'firstChild'), timer.file);
     }
 
     /**
@@ -592,7 +592,7 @@ export class TimerRecorder {
         const next = this.opening(timer, blockId, { puts: [blockId], takesOff });
         // 書けなければ、理由は書き込みの層が1回だけ通知済みで、尻尾は動かない。
         return this.writeOpening(timer, next, () => row
-            ? this.wrote(this.plugin.getOperations().insertLine(row.id, line, 'afterSubtree', takesOff ? null : undefined), timer.file)
+            ? this.wrote(this.plugin.getOperations().insertLine(row.id, { line }, 'afterSubtree', takesOff ? null : undefined), timer.file)
             : this.writeChildLine(timer, line));
     }
 

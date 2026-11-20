@@ -32,7 +32,7 @@ let submitted: Promise<WriteAnswer> | undefined;
 vi.mock('../../../src/modals/create/CreateModal', () => ({
     CreateModal: class {
         constructor(_app: unknown, private readonly places: CreatePlaces, _startHour: unknown, private readonly place: CreatePlace) { }
-        open() { submitted = this.places.create(this.place, '- [ ] c', { tellRefusal: false }); }
+        open() { submitted = this.places.create(this.place, { line: '- [ ] c' }, { tellRefusal: false }); }
     },
 }));
 
@@ -149,13 +149,13 @@ describe('a timer\'s record (the same check as every write)', () => {
 
     it('is refused as a first child on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect((await session.ops.insertLine(task.id, '- [x] rec', 'firstChild')).written).toBe(false);
+        expect((await session.ops.insertLine(task.id, { line: '- [x] rec' }, 'firstChild')).written).toBe(false);
         expect(contents.get(FILE)).toBe(INDENTED);
     });
 
     it('is refused as a next sibling on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect((await session.ops.insertLine(task.id, '- [x] rec', 'afterSubtree')).written).toBe(false);
+        expect((await session.ops.insertLine(task.id, { line: '- [x] rec' }, 'afterSubtree')).written).toBe(false);
         expect(contents.get(FILE)).toBe(INDENTED);
     });
 });

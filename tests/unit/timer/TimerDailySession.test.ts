@@ -7,6 +7,7 @@ import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 import { opsOver, rowOf, answerOf } from '../helpers/anchoredRow';
 import { timerOnDay } from '../helpers/timerRig';
+import type { NewRow } from '../../../src/services/persistence/NewRow';
 
 /**
  * デイリーノート起点のタイマーも、起動と同時に走行中の行を持つ。
@@ -34,7 +35,7 @@ function makeHarness(): Harness {
     let idSeq = 0;
 
     /** Where a line put in the daily note goes: the harness's own record of it. */
-    const putInDailyNote = async (_date: string, line: string) => {
+    const putInDailyNote = async (_date: string, { line }: NewRow) => {
         appended.push(line);
         registerWrittenLine(line);
         return { written: true as const, path: DAILY_PATH };
@@ -66,7 +67,7 @@ function makeHarness(): Harness {
         getOperations: () => ({
             ...opsOver(taskIndex),
             putInDailyNote,
-            insertLine: async (afterTaskId: string, line: string) => {
+            insertLine: async (afterTaskId: string, { line }: NewRow) => {
                 siblings.push({ afterTaskId, line });
                 registerWrittenLine(line);
                 return answerOf(true);

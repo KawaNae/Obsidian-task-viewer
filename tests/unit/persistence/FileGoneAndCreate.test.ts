@@ -5,7 +5,6 @@ import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
 import { putInNote } from '../../../src/services/persistence/Notes';
-import { Block } from '../../../src/services/persistence/utils/Placement';
 import { keyedRow, createFile } from '../../../src/services/persistence/FileLines';
 
 /**
@@ -68,7 +67,7 @@ describe('a write whose file is not there', () => {
         const { b } = await benchWithout('missing');
 
         const outcome = await putInNote(b.app, FILE, b.channel(FILE), {
-            where: { heading: 'Tasks', level: 2, side: 'head' }, block: Block.line('- [ ] 新しい'),
+            where: { heading: 'Tasks', level: 2, side: 'head' }, row: { line: '- [ ] 新しい' },
         });
 
         expect(outcome.written).toBe(false);
@@ -82,7 +81,7 @@ describe('creating a note', () => {
     const CONTENT = '- [ ] 新しいタスク';
     /** A task created with no heading (the API's): at the end, the note made empty when it is not there. */
     const append = (b: { repo: { putInNote: (...args: any[]) => Promise<any> } }, path: string, text: string) =>
-        b.repo.putInNote(path, 'end', Block.read([text]), { create: () => '' });
+        b.repo.putInNote(path, 'end', { line: text }, { create: () => '' });
 
     /** A bench whose `vault.create` throws, having first left `left` at the path (or nothing). */
     async function benchCreateThrows(left: string | null) {
@@ -170,17 +169,17 @@ describe('creating a note', () => {
         expect(b.refused).toEqual([]);
     });
 
-    it('an append: a note is made only of lines that read there as put, as when they are appended to an empty note', async () => {
-        // By itself, four spaces make the line code; at the top of a note, unindented, it would be a task.
-        const CODE = '    - [ ] 字下げ';
-        const b = await writeBench({ [FILE]: '' });
+    it('an append: a note is made only of lines that read there as put, as when they are appended to a note that holds its seed', async () => {
+        // A task by itself; past a fence that never closes, code.
+        const SEED = '```\n';
+        const b = await writeBench({ [FILE]: SEED });
         const create = vi.spyOn(b.app.vault, 'create');
 
-        const appended = await append(b, FILE, CODE);
-        const made = await append(b, NEW, CODE);
+        const appended = await b.repo.putInNote(FILE, 'end', { line: CONTENT });
+        const made = await b.repo.putInNote(NEW, 'end', { line: CONTENT }, { create: () => SEED });
 
-        expect(appended.refused?.reason).toEqual({ kind: 'unplaceable', fence: null });
-        expect(made.refused).toEqual({ file: NEW, reason: { kind: 'unplaceable', fence: null }, subject: CODE.trim() });
+        expect(appended.refused?.reason).toEqual({ kind: 'unplaceable', fence: 0 });
+        expect(made.refused).toEqual({ file: NEW, reason: { kind: 'unplaceable', fence: 0 }, subject: CONTENT });
         expect(create).not.toHaveBeenCalled();
         expect(b.refused).toHaveLength(2);
     });

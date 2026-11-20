@@ -149,8 +149,8 @@ describe('writes after dispose', () => {
         expect((await proto.updateTask.call(host(), 'id', {})).written).toBe(false);
         expect(await proto.deleteTask.call(host(), 'id')).toBe(false);
         expect(await proto.duplicateTask.call(host(), 'id')).toBe(false);
-        expect(await proto.createTask.call(host(), FILE, '- [ ] x')).toBe(null);
-        expect((await proto.insertLine.call(host(), 'id', '- [ ] x', 'afterSubtree')).written).toBe(false);
+        expect(await proto.createTask.call(host(), FILE, { line: '- [ ] x' })).toBe(null);
+        expect((await proto.insertLine.call(host(), 'id', { line: '- [ ] x' }, 'afterSubtree')).written).toBe(false);
         expect(await proto.updateByAnchor.call(host(), FILE, 'a', {})).toEqual({ kind: 'not-written', refused: null });
     });
 
@@ -180,7 +180,7 @@ describe('writes after dispose', () => {
         });
 
         await proto.writeLine.call(closed, FILE, keyedRow(0, '- [ ] x', ''), [{ kind: 'update', text: '- [x] x' }]);
-        await proto.insertLine.call(closed, 'id', '- [ ] x', 'firstChild');
+        await proto.insertLine.call(closed, 'id', { line: '- [ ] x' }, 'firstChild');
 
         expect(closed.repository.write).not.toHaveBeenCalled();
     });

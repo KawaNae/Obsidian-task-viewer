@@ -132,7 +132,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
     it('goes past the paragraph under the heading, which would otherwise go on the new task', async () => {
         const { contents, session } = await open(['## H', 'some words', '- [ ] A', '']);
 
-        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['## H', 'some words', '- [ ] N', '- [ ] A', '']);
@@ -148,7 +148,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open([...note, '']);
         const before = contents.get(FILE)!;
 
-        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).toBeNull();
+        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).toBeNull();
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -160,8 +160,8 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open(['### h', '- [ ] A', '#### Sub', '- [ ] S', '']);
         session.index.updateSettings({ ...DEFAULT_SETTINGS, sectionSide: 'end', taskHeadingLevel: 4 });
 
-        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
-        expect(await session.ops.createTask(FILE, '- [ ] M', 'Made')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, { line: '- [ ] M' }, 'Made')).not.toBeNull();
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['### h', '- [ ] A', '- [ ] N', '#### Sub', '- [ ] S', '', '#### Made', '- [ ] M', '']);
@@ -171,7 +171,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open(['## H', '- [ ] A', '### h', '']);
         const before = contents.get(FILE)!;
 
-        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).toBeNull();
+        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).toBeNull();
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -183,7 +183,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
             live?.dispose();
             const { contents, session } = await open(note);
 
-            expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+            expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
             await session.settle(FILE);
 
             expect(lines(contents).slice(-3)).toEqual(['## H', '- [ ] N', '']);
@@ -262,7 +262,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
         const { contents, session } = await open(['# n', '1. [ ] T', '  - [ ] U', '']);
         expect(parents(session)).toEqual([['T', null], ['U', null]]);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [x] rec' }, 'afterSubtree')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '1. [ ] T', '  - [x] rec', '  - [ ] U', '']);
@@ -272,7 +272,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes past the completed run, at the indentation of the last of it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '- [ ] U', '']);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] r2', 'afterCompletedRun')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [x] r2' }, 'afterCompletedRun')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '    - [x] r2', '- [ ] U', '']);
@@ -282,7 +282,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes above a fence at the top that never closes, which ends the row', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '```', 'x', '']);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] rec', 'afterSubtree')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [x] rec' }, 'afterSubtree')).written).toBe(true);
         await session.settle(FILE);
 
         // T's subtree is its own line (the fence at column 0 ends T): the
@@ -298,7 +298,7 @@ describe('siblings spelled at different columns', () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['U', 'P'], ['c', 'U']]);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [x] N', 'afterCompletedRun')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [x] N' }, 'afterCompletedRun')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '  - [x] N', '']);
@@ -321,7 +321,7 @@ describe('text past a blank line that a line put above would take in', () => {
     it('puts a first child past the task\'s code below a blank line', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '', '\t\tcode', '- [ ] U', '']);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [ ] c' }, 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '', '\t\tcode', '    - [ ] c', '- [ ] U', '']);
@@ -331,7 +331,7 @@ describe('text past a blank line that a line put above would take in', () => {
     it('puts a line under a heading past the code below a blank line', async () => {
         const { contents, session } = await open(['## H', '', '    code', '- [ ] A', '']);
 
-        expect(await session.ops.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['## H', '', '    code', '- [ ] N', '- [ ] A', '']);
@@ -350,7 +350,7 @@ describe('text past a blank line that a line put above would take in', () => {
     it('stops before a blank line past which the text is shallower than the line put', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '', '  para', '']);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [ ] c' }, 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         // The file's unit is four spaces (its first indented line).
@@ -362,7 +362,7 @@ describe('a first child (insertLine, firstChild)', () => {
     it('goes below the task, before its children, in an indented fence\'s item', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '  - [ ] T', '    ```', '    x', '    ```', '- [ ] U', '']);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [ ] c' }, 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         // No child item to copy: a level under T spelled as T stands under P
@@ -378,7 +378,7 @@ describe('an append (createTask without a heading, at the end)', () => {
             live?.dispose();
             const { contents, session } = await open(note);
 
-            expect(await session.ops.createTask(FILE, '- [ ] N')).not.toBeNull();
+            expect(await session.ops.createTask(FILE, { line: '- [ ] N' })).not.toBeNull();
             await session.settle(FILE);
 
             expect(lines(contents).slice(-2)).toEqual(['- [ ] N', '']);
@@ -390,7 +390,7 @@ describe('an append (createTask without a heading, at the end)', () => {
         const { contents, session } = await open(['- [ ] A', '```', 'code', '']);
         const before = contents.get(FILE);
 
-        expect(await session.ops.createTask(FILE, '- [ ] N')).toBeNull();
+        expect(await session.ops.createTask(FILE, { line: '- [ ] N' })).toBeNull();
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -441,7 +441,7 @@ describe('the two readings made CommonMark\'s: a quote after an item, an ordered
     it('puts a child of a task a quote ends above the quote', async () => {
         const { contents, session } = await open(QUOTE);
 
-        expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] n', 'firstChild')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [ ] n' }, 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '    - [ ] n', '> quote', '  - [ ] c', '']);
@@ -462,7 +462,7 @@ describe('the two readings made CommonMark\'s: a quote after an item, an ordered
     it('puts a child of a task whose empty child item a quote follows past the empty item, above the quote', async () => {
         const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
 
-        expect((await session.ops.insertLine(only(session, 't2').id, '- [ ] n', 'firstChild')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 't2').id, { line: '- [ ] n' }, 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] t2', '  -', '    - [ ] n', '> text', '  -  [ ] t8', '']);
@@ -483,7 +483,7 @@ describe('the two readings made CommonMark\'s: a quote after an item, an ordered
         // it, where P's text has ended.
         const { contents, session } = await open(ORDERED);
 
-        expect((await session.ops.insertLine(only(session, 'P').id, '- [ ] f', 'firstChild')).written).toBe(true);
+        expect((await session.ops.insertLine(only(session, 'P').id, { line: '- [ ] f' }, 'firstChild')).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] f', '  - [ ] c', '']);
@@ -499,7 +499,7 @@ describe('the two readings made CommonMark\'s: a quote after an item, an ordered
         it('puts a first child', async () => {
             const { contents, session } = await open(NOTE);
 
-            expect((await session.ops.insertLine(only(session, 'T').id, '- [ ] f', 'firstChild')).written).toBe(true);
+            expect((await session.ops.insertLine(only(session, 'T').id, { line: '- [ ] f' }, 'firstChild')).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - [ ] f', '- [ ] V', '']);

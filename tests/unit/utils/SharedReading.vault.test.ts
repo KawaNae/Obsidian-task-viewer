@@ -81,7 +81,7 @@ describe('a write of several ops, read once while its lines are as handed', () =
         const note = ['# note', '- [ ] T', '\t- [ ] c', '- [ ] U', ''];
         const lines = await sameEitherWay(note, 1, () => [
             { kind: 'update', text: '- [ ] T ^tv-t-1' },
-            { kind: 'insert', place: 'firstChild', text: '- [x] rec' },
+            { kind: 'insert', place: 'firstChild', row: { line: '- [x] rec' } },
         ]);
         expect(lines).toEqual(['# note', '- [ ] T ^tv-t-1', '\t- [x] rec', '\t- [ ] c', '- [ ] U', '']);
     });
@@ -163,7 +163,7 @@ describe('a write of one op to a long note', () => {
 
     it('puts a first child under a row that has none', async () => {
         const readings = await readingsOf(async (session) => {
-            expect((await session.ops.insertLine(idOf(session, 'row 1600'), '- [ ] new', 'firstChild')).written).toBe(true);
+            expect((await session.ops.insertLine(idOf(session, 'row 1600'), { line: '- [ ] new' }, 'firstChild')).written).toBe(true);
         });
         expect(readings).toEqual({ handed: 1, all: 3 });
     });
