@@ -42,6 +42,12 @@ describe('PropertyUpdatePlanner', () => {
             .toEqual([{ key: 'area', op: 'set', value: { text: 'null' } }]);
     });
 
+    it('writes on the tags line the tags the content does not hold, of the content as it is to read, and none as a delete', () => {
+        const task = taskOf(['- [ ] T #body', '\t- tags:: #a'], 'T #body');
+        expect(plan(task, { tags: ['a', 'b', 'body'] })).toEqual([{ key: 'tags', op: 'set', value: { tags: ['a', 'b'] } }]);
+        expect(plan(task, { tags: ['a', 'body'], content: 'T #a #body' })).toEqual([{ key: 'tags', op: 'delete' }]);
+    });
+
     it('writes a list as its items, each as spelled, and none as a delete', () => {
         const task = taskOf(TASK, 'T');
         expect(plan(task, { properties: { ...task.properties, ...props({ tags2: list('a', '"12"') }) } }))
