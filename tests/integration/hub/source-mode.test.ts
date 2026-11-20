@@ -1,7 +1,9 @@
 /**
  * The hub's source mode, in the running E2E vault: the hub opened on a row,
  * its source edited through the CodeMirror views the hub shows, applied,
- * and the note's bytes read back.
+ * and the note's bytes read back. The card the source takes the place of
+ * is drawn again as the form's writes change the row, and the source opens
+ * on what those writes left.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
@@ -594,5 +596,67 @@ describe('the hub\'s source mode', () => {
         expect(discarded.source).toBe(false);
         expect(discarded.shut).toBeTruthy();
         expect(readTestFile(TEST_FILE)).toBe(NOTE + '- [ ] 外で足した行\n');
+    });
+});
+
+describe('the hub following its row', () => {
+    it('draws the row as the form wrote it in the card', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const seen = run<Record<string, unknown>>(`
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+            plugin.openTaskHub(task.id);
+            const content = () => document.querySelector('.task-hub .task-hub__preview .task-card__content');
+            const name = () => document.querySelector('.task-hub .tv-form__name-section input');
+            await until(() => content() && name());
+            const before = content().textContent;
+            const input = name();
+            input.focus();
+            input.value = '親7';
+            input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+            // The card is drawn again once the index has the row as written (the write's echo).
+            await until(() => content()?.textContent.includes('親7'), 5000, 'the card drawn again with the name written');
+            return JSON.stringify({ before: before.includes('親7'), after: content().textContent.includes('親7'), disk: await app.vault.adapter.read(${JSON.stringify(TEST_FILE)}) });
+        `);
+        expect(seen).toEqual({ before: false, after: true, disk: NOTE.replace('- [ ] 親 @2026-09-29', '- [ ] 親7 @2026-09-29') });
+    });
+
+    it('opens the source on the name the form wrote, once its write is answered', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const steps = run<Record<string, unknown>>(`
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+            plugin.openTaskHub(task.id);
+            const name = () => document.querySelector('.task-hub .tv-form__name-section input');
+            await until(() => name() && document.querySelector('.task-hub__mode-toggle'));
+            // The disk holds the next write until it is let go: the switch to the source is asked while the name's write is under way.
+            const real = app.vault.process;
+            let release;
+            const held = new Promise(r => { release = r; });
+            app.vault.process = async function (...args) { app.vault.process = real; await held; return real.apply(this, args); };
+            const out = {};
+            try {
+                const input = name();
+                input.focus();
+                input.value = '親5';
+                input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+                document.querySelectorAll('.task-hub__mode-toggle button')[1].click();
+                // While the write is held the source does not open.
+                await sleep(300);
+                out.held = { source: !!viewOf('parent'), disk: await app.vault.adapter.read(${JSON.stringify(TEST_FILE)}) };
+                release();
+                await until(() => viewOf('parent'), 5000, 'the source opened once the write was answered');
+            } finally {
+                release();
+                app.vault.process = real;
+            }
+            out.opened = { parent: viewOf('parent').state.doc.toString(), disk: await app.vault.adapter.read(${JSON.stringify(TEST_FILE)}) };
+            return JSON.stringify(out);
+        `);
+        const written = NOTE.replace('- [ ] 親 @2026-09-29', '- [ ] 親5 @2026-09-29');
+        expect(steps).toEqual({
+            held: { source: false, disk: NOTE },
+            opened: { parent: '- [ ] 親5 @2026-09-29', disk: written },
+        });
     });
 });
