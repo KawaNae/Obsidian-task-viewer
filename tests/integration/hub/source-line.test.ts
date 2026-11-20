@@ -4,7 +4,9 @@
  * note with the cursor on that line, and a frontmatter key the Properties
  * view shows is lit there. A value written above the first heading is said
  * to be the file's, as the frontmatter's is, and its line opens as a
- * section's does. A line our own write moved is followed.
+ * section's does. A line our own write moved is followed. A write still
+ * under way as the hub goes to the line, refused once it has gone, is told
+ * by a notice.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -135,6 +137,36 @@ describe('the hub opens the line a value is written on', () => {
             return await cursorLine();
         `);
         expect(line).toBe(11);
+    });
+
+    it('tells a write refused after the hub has gone to a line by a notice', () => {
+        openHub('親');
+        const seen = run<Record<string, unknown>>(`
+            const before = document.querySelectorAll('.notice').length;
+            // The disk holds the next write, then refuses it (the write layer's 'failed'), once the hub has gone.
+            const real = app.vault.process;
+            let release;
+            const held = new Promise(r => { release = r; });
+            app.vault.process = async function () { app.vault.process = real; await held; throw new Error('e2e: the disk refused'); };
+            try {
+                const input = nameInput();
+                type(input, '親6');
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+                rowOf('area').querySelector('.task-hub__source').click();
+                await until(() => !hub(), 3000, 'the hub gone to the line');
+                release();
+                await until(() => document.querySelectorAll('.notice').length > before, 3000, 'a notice of the write refused');
+            } finally {
+                release();
+                app.vault.process = real;
+            }
+            const said = [...document.querySelectorAll('.notice')].slice(before).map(n => n.textContent);
+            return JSON.stringify({ said, line: await cursorLine() });
+        `);
+        expect(seen).toEqual({
+            said: [tr('notice.notWritten', { reason: tr('notice.refusedFailed'), subject: TEST_FILE })],
+            line: 6,
+        });
     });
 
     it('lights a frontmatter key in the Properties view, or puts the cursor on its line in source mode', () => {
