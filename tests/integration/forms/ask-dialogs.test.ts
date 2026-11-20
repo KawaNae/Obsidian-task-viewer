@@ -37,6 +37,11 @@ const rowOf = name => {
     return task;
 };
 const askPanel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-overlay__panel.tv-ask');
+/**
+ * Whether the question has its first focus: on what it named, in its panel.
+ * The panel itself holds the focus while it opens, so that is not it yet.
+ */
+const firstFocused = () => !!askPanel() && askPanel().contains(document.activeElement) && document.activeElement !== askPanel();
 const buttons = () => [...(askPanel()?.querySelectorAll('.tv-form__buttons button') ?? [])];
 const button = text => { const b = buttons().find(one => one.textContent === text); if (!b) throw new Error('no button ' + text); return b; };
 /** What the question shows: its title, buttons, what has the focus, and what it says under a field. */
@@ -77,7 +82,7 @@ const fromMenu = async (name, title) => {
     if (!item) throw new Error('no ' + title + ' in the menu');
     menu.hide();
     item.callback(new MouseEvent('click'));
-    await until(() => askPanel() && askPanel().contains(document.activeElement));
+    await until(() => firstFocused());
 };
 /** Wait for the question to be gone, and for what its answer wrote. */
 const closed = async () => { await until(() => !askPanel()); await sleep(600); return askState(); };
@@ -232,7 +237,7 @@ describe('a timer\'s three ways to start on a completed task', () => {
             const widget = plugin.getTimerWidget();
             const before = new Set(widget.board.values().map(t => t.id));
             widget.startTimer(rowOf('済み'), 'self', { kind: 'countup' });
-            await until(() => askPanel() && askPanel().contains(document.activeElement));
+            await until(() => firstFocused());
             const opened = askState();
             ${how};
             await closed();
@@ -301,7 +306,7 @@ describe('the timer\'s Custom... length', () => {
             window.__tvE2E.timer.view.appendDurationItems(menu);
             const custom = items.find(i => i.title.includes(${JSON.stringify(tr('timer.custom'))}));
             custom.click();
-            await until(() => askPanel() && askPanel().contains(document.activeElement));
+            await until(() => firstFocused());
             const input = () => askPanel().querySelector('input');
             const type = text => { input().value = text; input().dispatchEvent(new Event('input', { bubbles: true })); };
             const out = {};
