@@ -193,7 +193,7 @@ export class StyleFieldGroup implements ClosingPart {
         this.unhideButtons[field]?.toggleClass('is-hidden', task[field] !== null);
 
         if (source) {
-            sourceEl.setText(this.ctx.sourceLabel(source));
+            sourceEl.setText(CascadeSource.label(source));
             sourceEl.style.display = '';
         } else {
             sourceEl.setText('');

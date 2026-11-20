@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { PropertyKey } from '../../services/parsing/utils/PropertyKey';
@@ -38,6 +39,11 @@ export class CascadeSource {
     /** cascade 由来カスタムプロパティ 1 件の出所。キーは大文字と小文字を区別しない */
     static forProperty(task: Task, key: string): CascadeSourceKind {
         return kindOf(task.inheritedFrom?.properties[PropertyKey.fold(key)]);
+    }
+
+    /** What a field shows of where its inherited value comes from: the note, or a section of it. */
+    static label(source: CascadeSourceKind): string {
+        return source === 'file' ? t('modal.hub.inheritedFromFile') : t('modal.hub.inheritedFromSection');
     }
 
     /**

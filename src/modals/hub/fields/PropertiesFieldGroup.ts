@@ -369,7 +369,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     /** Where an inherited value is written, opened from the row. */
     private sourceLabel(row: HTMLElement, task: Task, key: string): void {
         const source = CascadeSource.forProperty(task, key);
-        const sourceEl = row.createSpan({ cls: 'task-hub__source', text: this.ctx.sourceLabel(source) });
+        const sourceEl = row.createSpan({ cls: 'task-hub__source', text: CascadeSource.label(source) });
         sourceEl.addEventListener('click', () => this.ctx.openSource(copy => CascadeSource.lineOfProperty(copy, key)), { signal: this.built.signal });
     }
 

@@ -2,7 +2,6 @@ import type { App } from 'obsidian';
 import type { Task } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { IndexReads } from '../../../services/core/TaskIndex';
-import type { CascadeSourceKind } from '../CascadeSource';
 import type { DateKey } from '../../form/DateFieldGroup';
 import type { IssueBoard } from '../../form/FormIssue';
 import type { FindingField, HubFinding } from '../HubFindings';
@@ -47,7 +46,6 @@ export interface FieldGroupContext {
     app: App;
     plugin: PluginContext;
     index: IndexReads;
-    sourceLabel: (source: CascadeSourceKind) => string;
     /**
      * Open a line of the row's note in the editor and light it (`openSourceLine`):
      * the line `locate` finds on a copy of the row, which is asked again of a
