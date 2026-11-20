@@ -4,7 +4,8 @@ import type { IndexReads } from './services/core/TaskIndex';
 import type { TaskReadService } from './services/data/TaskReadService';
 import type { Operations } from './services/operations/Operations';
 import type { NoteOps } from './services/data/NoteOps';
-import type { CreatePlaces } from './services/data/CreatePlaces';
+import type { CreatePlace, CreatePlaces } from './services/data/CreatePlaces';
+import type { DraftSeed } from './services/data/TaskDraft';
 import type { MenuPresenter } from './interaction/menu/MenuPresenter';
 import type { LogManager } from './log/log-manager';
 
@@ -73,6 +74,13 @@ export interface PluginContext {
     /** The places a new task line is made in: what one is, and the write there (`CreatePlaces`). */
     getCreatePlaces(): CreatePlaces;
     getLogManager(): LogManager | null;
+
+    /**
+     * Open the hub on a task not written yet, to be put in `place`, holding
+     * `seed`'s values: nothing is written until it is created there. The one
+     * way in for every place a task is made from, a view's or the editor's.
+     */
+    openDraftHub(place: CreatePlace, seed: DraftSeed): void;
 
     /** Tell the editor's inline task menu that its settings moved. */
     notifyEditorMenuSettingsChanged(): void;

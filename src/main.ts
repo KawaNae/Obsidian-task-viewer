@@ -45,7 +45,8 @@ import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
 import { Operations } from './services/operations/Operations';
 import { NoteOps } from './services/data/NoteOps';
-import { CreatePlaces } from './services/data/CreatePlaces';
+import { CreatePlaces, type CreatePlace } from './services/data/CreatePlaces';
+import type { DraftSeed } from './services/data/TaskDraft';
 import { initI18n, t } from './i18n';
 import { enabledLineParserIds } from './services/parsing/TaskParser';
 import { initLog, logInfo, logWarn } from './log/log';
@@ -336,6 +337,10 @@ export default class TaskViewerPlugin extends Plugin {
      */
     openTaskHub(taskId: string, options?: TaskHubPanelOptions): void {
         this.taskHub.open(taskId, options);
+    }
+
+    openDraftHub(place: CreatePlace, seed: DraftSeed): void {
+        this.taskHub.openDraft(place, seed);
     }
 
     // Public accessors for services

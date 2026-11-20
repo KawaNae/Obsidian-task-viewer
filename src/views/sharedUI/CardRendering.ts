@@ -1,5 +1,7 @@
 import type { App, Component, HoverParent } from 'obsidian';
 import type { Task } from '../../types';
+import type { CreatePlace } from '../../services/data/CreatePlaces';
+import type { DraftSeed } from '../../services/data/TaskDraft';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -84,6 +86,8 @@ export function createCardRendering(deps: CardRenderingDeps): CardRendering {
 /** The task hub opened outside the views, and the cards it draws. */
 export interface TaskHubOpenerHandle {
     open: TaskHubOpener;
+    /** Open the hub on a task not written yet (`TaskHubPanel.openDraftHub`), its card drawn by the same renderer. */
+    openDraft(place: CreatePlace, seed: DraftSeed): void;
     /** The renderer, menu and hub, made with the first open; null before it. */
     readonly cards: CardRendering | null;
 }
@@ -93,6 +97,10 @@ export interface TaskHubOpenerHandle {
  * opens it through its own `createCardRendering`; this one makes its cards
  * the same way with the first open, adds the renderer to `owner` so it
  * unloads with the plugin, and has no selection to clear or mask to apply.
+ *
+ * The hub on a task not written yet is opened here alone, whatever it is
+ * made from: its card is one nothing is done on, so a view's renderer (its
+ * hover, its selection) would add nothing.
  */
 export function createTaskHubOpener(deps: {
     app: App;
@@ -102,9 +110,7 @@ export function createTaskHubOpener(deps: {
     const hoverParent = new TaskViewHoverParent();
     let cards: CardRendering | null = null;
 
-    const open: TaskHubOpener = (taskId, options) => {
-        const task = deps.plugin.getIndex().getTask(taskId);
-        if (!task) return;
+    const made = (): CardRendering => {
         if (!cards) {
             cards = createCardRendering({
                 app: deps.app,
@@ -114,11 +120,29 @@ export function createTaskHubOpener(deps: {
             });
             deps.owner.addChild(cards.taskRenderer);
         }
-        cards.openTaskHub(task, options);
+        return cards;
+    };
+
+    const open: TaskHubOpener = (taskId, options) => {
+        const task = deps.plugin.getIndex().getTask(taskId);
+        if (!task) return;
+        made().openTaskHub(task, options);
+    };
+
+    const openDraft = (place: CreatePlace, seed: DraftSeed): void => {
+        const { plugin } = deps;
+        void TaskHubPanel.openDraftHub(deps.app, place, seed, {
+            taskRenderer: made().taskRenderer,
+            index: plugin.getIndex(),
+            operations: plugin.getOperations(),
+            plugin,
+            places: plugin.getCreatePlaces(),
+        });
     };
 
     return {
         open,
+        openDraft,
         get cards() { return cards; },
     };
 }

@@ -11,7 +11,10 @@ import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
 import { RowHost } from './RowHost';
+import { DraftHost } from './DraftHost';
 import type { PanelHost } from './HubHost';
+import type { CreatePlace, CreatePlaces } from '../../services/data/CreatePlaces';
+import type { DraftSeed } from '../../services/data/TaskDraft';
 import { indentUnit } from '../../utils/ObsidianConfig';
 
 export interface TaskHubDeps {
@@ -43,6 +46,64 @@ export type HubSource = Pick<TaskHubSource, 'beforeClose' | 'yieldsEscape' | 'ta
 /** Builds the source mode in the panel's slots, once, as the hub is built. */
 export type SourceMaker = (slots: SourceSlots) => HubSource;
 
+/** What an entry makes of a hub besides its host. */
+interface HubShape {
+    /** Builds the source mode; null, the hub has none, nor its switch. */
+    source: SourceMaker | null;
+    /** Whether the card is drawn as one nothing is done on (`RenderOptions.inert`). */
+    inert: boolean;
+    /** The hubs this one opens one at a time with; null, it opens over whatever is open. */
+    turns: OneAtATime | null;
+}
+
+/** A hub as the hubs it opens one at a time with see it: what closing it as the user would does. */
+interface Turn {
+    requestClose(): Promise<boolean>;
+}
+
+/**
+ * Hubs that are open one at a time: one opens once the one open now has
+ * given way as the user closing it would — not while it holds a draft,
+ * which it asks about in its own place. The one asked for is not opened
+ * then, nor later: throwing the draft away there closes that hub and goes no
+ * further. A close that waits (`CloseAnswer`) is waited for; a hub asked for
+ * meanwhile goes first. With none open, the hub opens within the call that
+ * asks for it, so its caller finds it open and drawn as the call returns.
+ */
+class OneAtATime {
+    private active: Turn | null = null;
+    /** The hub asked for last; one asked for while another waits for a hub to close goes before it. */
+    private wanted: Turn | null = null;
+
+    /**
+     * Open `turn` by `openIt` once the hub open now has given way; not at
+     * all if it does not, or if another is asked for meanwhile. The body of
+     * an async function runs within the call up to its first await: with no
+     * hub open the loop awaits nothing, and `openIt` runs before this returns.
+     */
+    async open(turn: Turn, openIt: () => void): Promise<void> {
+        this.wanted = turn;
+        for (let current = this.active; current; current = this.active) {
+            const closed = await current.requestClose();
+            if (this.wanted !== turn) return;
+            if (!closed) {
+                this.wanted = null;
+                return;
+            }
+            // Closed: its teardown let go of the place, which this makes sure of.
+            if (this.active === current) this.active = null;
+        }
+        this.wanted = null;
+        this.active = turn;
+        openIt();
+    }
+
+    /** `turn` has closed: the next one asked for opens with nothing to wait for. */
+    release(turn: Turn): void {
+        if (this.active === turn) this.active = null;
+    }
+}
+
 /**
  * タスクハブパネル — 「タスクを開く」の単一の目的地。
  *
@@ -51,6 +112,12 @@ export type SourceMaker = (slots: SourceSlots) => HubSource;
  * プレビューのみに縮退。ソースモードを作る関数を入口が渡したときだけ、
  * プレビューの上の切り替えで、カードの代わりに行と部分木のソースを編集
  * できる（TaskHubSource）。渡さなければ切り替えの bar も作らない。
+ * 開く入口は2つある。今あるタスクのハブ（`openRowHub`）は、今あるタスクの
+ * ハブどうしで同時に1つだけ開く（`OneAtATime`）。まだ書いていないタスクの
+ * ハブ（`openDraftHub`）は、その規則に入らず、開いているハブの上に重なって
+ * 開き、閉じると下のハブがそのまま残る。カードは何もできない形で描く。
+ * 待つ相手（閉じるのを待つ今あるタスクのハブ）が無ければ、開く呼び出しが
+ * 返る時点でハブは開き、カードを描き終えている。
  * 利用者が閉じる経路（×、Escape、外側、下へ払う、戻る、別のハブを開く）は
  * どれも OverlayShell.beforeClose を通る。ソースに下書きがあれば捨てるかを
  * 確かめ、無ければフォームが打ちかけの欄を保存し、保存できない値があれば
@@ -63,14 +130,14 @@ export type SourceMaker = (slots: SourceSlots) => HubSource;
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
- * このクラスは domain logic（singleton・preview・form・source）のみ。
+ * このクラスは domain logic（開く規則、preview、form、source）のみ。
  */
 export class TaskHubPanel {
-    private static active: TaskHubPanel | null = null;
-    /** The hub asked for last; one asked for while another waits for a hub to close goes before it. */
-    private static wanted: TaskHubPanel | null = null;
+    /** The hubs on rows: one at a time. */
+    private static readonly rowHubs = new OneAtATime();
 
     private overlay = new OverlayShell();
+    private readonly turn: Turn = { requestClose: () => this.overlay.requestClose() };
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
     private source: HubSource | null = null;
@@ -109,41 +176,49 @@ export class TaskHubPanel {
             }, view);
             return source;
         };
-        return new TaskHubPanel(app, host, deps, options, makeSource).open();
+        return new TaskHubPanel(app, host, deps, options, { source: makeSource, inert: false, turns: TaskHubPanel.rowHubs }).open();
     }
 
-    /** @param makeSource builds the source mode; null, the hub has none, nor its switch */
-    constructor(
+    /**
+     * Open the hub on a task not written yet, to be put in `place`, holding
+     * `seed`'s values: its host puts what the fields hand on over the draft
+     * and writes nothing until the create (`DraftHost`). There is no row to
+     * edit the source of, nor to do anything on from its card. It opens over
+     * a hub open now, which stays as it was once this one closes, and it is
+     * not one of the hubs on rows that open one at a time. The focus is on the
+     * name as it opens.
+     */
+    static openDraftHub(app: App, place: CreatePlace, seed: DraftSeed, deps: TaskHubDeps & { places: CreatePlaces }): Promise<void> {
+        const host = new DraftHost(place, seed, {
+            places: deps.places,
+            scopeKeys: () => deps.plugin.settings.scopeKeys,
+        });
+        return new TaskHubPanel(app, host, deps, { focusField: 'name' }, { source: null, inert: true, turns: null }).open();
+    }
+
+    private constructor(
         private app: App,
         private readonly host: PanelHost,
         private deps: TaskHubDeps,
         private options: TaskHubPanelOptions,
-        private readonly makeSource: SourceMaker | null,
+        private readonly shape: HubShape,
     ) { }
 
     /**
-     * Open, once the hub open now has given way as the user closing it
-     * would: not while it holds a draft, which it asks about in its own
-     * place. This hub is not opened then, nor later: throwing the draft
-     * away there closes that hub and goes no further. A close that waits
-     * (`CloseAnswer`) is waited for; a hub asked for meanwhile goes first.
+     * Open, once the hubs it opens one at a time with let it (`OneAtATime`);
+     * one opened over whatever is open opens at once. With nothing to wait
+     * for, the hub is open and its card drawn as this returns.
      */
-    async open(): Promise<void> {
-        if (this.overlay.isOpen()) return;
-        TaskHubPanel.wanted = this;
-        for (let current = TaskHubPanel.active; current; current = TaskHubPanel.active) {
-            const closed = await current.overlay.requestClose();
-            if (TaskHubPanel.wanted !== this) return;
-            if (!closed) {
-                TaskHubPanel.wanted = null;
-                return;
-            }
-            // Closed: its teardown let go of the place, which this makes sure of.
-            if (TaskHubPanel.active === current) TaskHubPanel.active = null;
+    private open(): Promise<void> {
+        if (this.overlay.isOpen()) return Promise.resolve();
+        if (!this.shape.turns) {
+            this.show();
+            return Promise.resolve();
         }
-        TaskHubPanel.wanted = null;
-        TaskHubPanel.active = this;
+        return this.shape.turns.open(this.turn, () => this.show());
+    }
 
+    private show(): void {
         const focusField = this.options.focusField;
         this.overlay.open({
             mode: 'centered',
@@ -165,10 +240,11 @@ export class TaskHubPanel {
     }
 
     private buildContent(bodyEl: HTMLElement): void {
-        const bar = this.makeSource ? bodyEl.createDiv() : null;
+        const makeSource = this.shape.source;
+        const bar = makeSource ? bodyEl.createDiv() : null;
         const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
         this.previewEl = card;
-        const pane = this.makeSource ? bodyEl.createDiv() : null;
+        const pane = makeSource ? bodyEl.createDiv() : null;
         const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
 
         this.renderPreview();
@@ -187,8 +263,8 @@ export class TaskHubPanel {
             });
         }
 
-        if (this.makeSource && bar && pane) {
-            this.source = this.makeSource({ bar, card, pane, close: () => this.close() });
+        if (makeSource && bar && pane) {
+            this.source = makeSource({ bar, card, pane, close: () => this.close() });
         }
     }
 
@@ -211,6 +287,7 @@ export class TaskHubPanel {
             alwaysLinks: true,
             doubleTap: false,
             mask: false,
+            inert: this.shape.inert,
             hooks: {
                 onNavigate: closePanel,
                 // The menu's destructive items close the hub, and its
@@ -224,7 +301,7 @@ export class TaskHubPanel {
     }
 
     private teardown(): void {
-        if (TaskHubPanel.active === this) TaskHubPanel.active = null;
+        this.shape.turns?.release(this.turn);
 
         this.host.dispose();
         this.source?.dispose();

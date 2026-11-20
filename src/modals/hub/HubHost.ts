@@ -1,10 +1,12 @@
 import type { Task } from '../../types';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
+import type { FormIssue } from '../form/FormIssue';
 import type { LineTarget } from './SourceLine';
 
 /**
  * What the hub's form is to its host: the host tells it to take the value
- * again, to show whether its fields are shut, and what of a write to say.
+ * again, to show whether its fields are shut, what of a write to say, and,
+ * for a task not written yet, where it goes and whether it can be created.
  */
 export interface HubForm {
     /** Take the host's value (`HubHost.task`) into every field again, and read its findings from it. */
@@ -13,6 +15,26 @@ export interface HubForm {
     showShut(): void;
     /** Say at the form's end why a write was refused; null takes back what was said. */
     sayWrite(refusal: string | null): void;
+    /** Say at the form's end where the task goes, and what of that place to heed; none takes back what was said. */
+    sayPlace(issues: readonly FormIssue<never>[]): void;
+    /** Draw the create again as `HubHost.draft` says now: whether it may be asked, and whether one is under way. */
+    showDraft(): void;
+}
+
+/**
+ * What a hub on a task not written yet has that a hub on a row has not: the
+ * create, which writes the task as the fields hold it, and whether anything
+ * was given that a close would lose.
+ */
+export interface HubDraft {
+    /** Whether a create may be asked now: the place has answered, the task can go there, and none is under way. */
+    canCreate(): boolean;
+    /** Whether a create is under way: its write not yet answered. */
+    creating(): boolean;
+    /** Write the task as it stands now; asked once the form has put in what is typed. The hub closes once it is written. */
+    create(): void;
+    /** Whether a write now would write anything other than the task as it opened: what a close asks about throwing away. */
+    changed(): boolean;
 }
 
 /**
@@ -39,7 +61,16 @@ export interface HubHost {
      * not offered to open.
      */
     readonly openSource: ((locate: (task: Task) => LineTarget | null) => void) | null;
-    /** Whether the hub may close, asked once the form has saved its fields: what was handed on is waited for. */
+    /**
+     * The task not written yet, and its create. Null for a host that writes
+     * what is handed on as it comes (a row the note has): nothing to create,
+     * and nothing a close loses but what cannot be saved.
+     */
+    readonly draft: HubDraft | null;
+    /**
+     * Whether the hub may close, asked once the form has saved its fields,
+     * or at once while they are shut: what is under way is waited for.
+     */
     closing(): CloseAnswer;
     /** The form to tell, once it is built. */
     bind(form: HubForm): void;

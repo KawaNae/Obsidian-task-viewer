@@ -136,9 +136,16 @@ export class RowHost implements PanelHost {
         this.panel?.close();
     };
 
-    /** All written, the hub closes; one refused, it stays open with why at the form's end. */
+    /** Each change is written as it comes: nothing to create. */
+    readonly draft = null;
+
+    /**
+     * All written, the hub closes; one refused, it stays open with why at the
+     * form's end. With the fields shut it closes at once: the source mode
+     * opened once the writes were done, and a row gone has nothing to wait for.
+     */
     closing(): CloseAnswer {
-        if (this.writing.size === 0) return 'close';
+        if (this.shut() !== null || this.writing.size === 0) return 'close';
         return this.settled().then(written => (written ? 'close' : 'stay'));
     }
 

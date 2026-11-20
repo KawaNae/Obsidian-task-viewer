@@ -6,7 +6,7 @@ import type { PluginContext } from '../../PluginContext';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import { DateFieldGroup } from '../form/DateFieldGroup';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
-import { IssueBoard, type IssueSlot } from '../form/FormIssue';
+import { IssueBoard, type FormIssue, type IssueSlot } from '../form/FormIssue';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
 import type { DateTimeFields } from '../TaskDateValidator';
@@ -61,8 +61,19 @@ export interface TaskHubFormDeps {
  * 外側、下へ払う、戻るのどれも、blur を待たずに打ちかけの欄を明示して保存する。
  * 保存できない値（読めない値、日付の規則に反する値）が残れば閉じずに問い
  * （`DraftGuard`）、[直す] にフォーカスを置く。[捨てて閉じる] はその値を
- * 元に戻し、ほかの欄を保存して閉じる。欄を保存した後に、閉じてよいかを
- * ホストに聞く（`HubHost.closing`）。
+ * 元に戻し、ほかの欄を保存して閉じる。まだ書いていないタスク（`HubHost.draft`）
+ * では、閉じると失うのは下書きの全部なので、問いは「まだ作成していません。
+ * 捨てますか」の1種類で、[捨てて閉じる] と [戻る] で答える。保存できない値が
+ * あるとき、または欄を保存した後に何か入れていれば問う。保存の後にも問うのは、
+ * 名前を打って blur せずに閉じたときに、問わずに名前を失わないためである。
+ * [戻る] は保存できない欄に、無ければ名前の欄にフォーカスを置く。どちらの
+ * ハブでも、[捨てて閉じる] と答えた後はその閉じる手順の中でもう問わない。
+ * 最後に、閉じてよいかをホストに聞く（`HubHost.closing`）。欄が止まって
+ * いる間は、何も保存せず、問わずにホストに聞く。
+ *
+ * まだ書いていないタスクには [作成] を出す（{@link create}）。押すと、読めない
+ * 打ちかけの欄があれば作らずにその欄へフォーカスを置き、無ければ打ちかけの
+ * 欄を保存してから作る。欄の Enter は欄を確定するだけで、作らない。
  *
  * 欄の DOM 構築とコミット/echo の取り込みは欄の部品が持つ: 名前、状態、
  * タグ、スタイル、プロパティは `fields/` 配下、日付は `DateFieldGroup`。
@@ -71,8 +82,10 @@ export interface TaskHubFormDeps {
  * 誤りの出す場所、所見、閉じる手順を持つ。
  */
 export class TaskHubForm implements HubForm {
-    /** Whether to throw away the values a close cannot save, asked before it closes. */
+    /** Whether to throw away what a close would lose (values it cannot save, a task not written yet), asked before it closes. */
     private readonly guard: DraftGuard<'close'>;
+    /** The user said to throw away what the close would lose: the close that goes on asks nothing more. */
+    private thrownAway = false;
     private actions!: FormActions;
     private fieldCtx: FieldGroupContext;
     private readonly issues: IssueBoard<HubField>;
@@ -101,9 +114,10 @@ export class TaskHubForm implements HubForm {
         });
         this.guard = new DraftGuard<'close'>({
             loss: () => this.loss(),
-            render: () => this.renderAsk(),
+            render: () => this.renderActions(),
             asked: () => this.actions.focusKeep(),
             goOn: () => {
+                this.thrownAway = true;
                 this.discardUnsaved();
                 this.deps.requestClose?.();
             },
@@ -178,7 +192,9 @@ export class TaskHubForm implements HubForm {
         // What is of the form as a whole is said at its end, and the question a close puts under it.
         c.appendChild(this.formSays);
         this.actions = new FormActions(c, {
-            actions: [],
+            actions: this.host.draft
+                ? [{ label: t('modal.create'), busyLabel: t('modal.newTask.creating'), tone: 'cta', run: () => this.create() }]
+                : [],
             ask: {
                 discardLabel: t('modal.hub.unsavedDiscard'),
                 keepLabel: t('modal.hub.unsavedFix'),
@@ -188,6 +204,7 @@ export class TaskHubForm implements HubForm {
         });
         // Typing in a field while asked is fixing it: the question is withdrawn.
         c.addEventListener('input', () => { this.guard.withdraw(); });
+        this.renderActions();
 
         // The row's dates as it opens: their placeholders, and a rule the line
         // breaks (rule 4) said under the field it is of, as the editor's menu
@@ -255,14 +272,51 @@ export class TaskHubForm implements HubForm {
      * Whether the hub may close now (the panel asks it after the source mode):
      * every field typed in and not committed is saved, as a blur would, with no
      * blur waited for. A value that cannot be saved keeps the hub open and asks
-     * whether to throw it away (`'stay'`). Saved, the host answers
-     * (`HubHost.closing`). Nothing is saved while the form is shut.
+     * whether to throw it away (`'stay'`); on a task not written yet, so does
+     * anything it was given, and what is asked about is the whole task. Saved, the host
+     * answers (`HubHost.closing`). While the form is shut nothing is saved
+     * and nothing asked: the host answers at once (a create under way is
+     * waited for).
      */
     beforeClose(): CloseAnswer {
-        if (this.shut) return 'close';
-        if (!this.guard.request('close')) return 'stay';
+        const goes = this.shut || this.saveForClose();
+        // What the user said to throw away is thrown away for the close it was said for, and no later one.
+        this.thrownAway = false;
+        return goes ? this.host.closing() : 'stay';
+    }
+
+    /**
+     * Save every field for a close, as a blur would: whether it goes on. Not
+     * when a value cannot be saved, nor when, saved, a task not written yet
+     * holds what was given (all that was typed is in it only now): the
+     * question is put then.
+     */
+    private saveForClose(): boolean {
+        if (!this.guard.request('close')) return false;
         for (const part of this.parts()) part.save();
-        return this.host.closing();
+        return this.guard.request('close');
+    }
+
+    // ==================== 作成 ====================
+
+    /**
+     * Create the task not written yet, as the fields hold it: a value typed
+     * that does not read keeps it from being created, and takes the focus
+     * (why is said under it); what is typed and reads is put in first, as a
+     * close saves it. A question a close put is withdrawn: creating is
+     * acting on what it was about.
+     */
+    private create(): void {
+        const draft = this.host.draft;
+        if (!draft?.canCreate()) return;
+        this.guard.withdraw();
+        const first = this.unsaved()[0];
+        if (first) {
+            first.input.focus();
+            return;
+        }
+        for (const part of this.parts()) part.save();
+        draft.create();
     }
 
     /** The parts of the form a close asks: the name, the dates, the style, the tags and the properties. */
@@ -279,11 +333,19 @@ export class TaskHubForm implements HubForm {
         return this.parts().flatMap(part => part.unsaved());
     }
 
-    /** What a close would lose: the values that cannot be saved, by their fields' names. */
+    /**
+     * What a close would lose. On a row, the values that cannot be saved, by
+     * their fields' names: the rest is written as it is saved. On a task not
+     * written yet, the whole of it, once it was given anything: a value typed
+     * that cannot be saved, or a change saved (`HubDraft.changed`). Nothing
+     * once the user said to throw it away.
+     */
     private loss(): Loss | null {
-        if (this.shut) return null;
+        if (this.shut || this.thrownAway) return null;
         const fields = this.unsaved();
-        return fields.length === 0 ? null : { kind: 'unsaved', fields: fields.map(one => one.label) };
+        const draft = this.host.draft;
+        if (draft) return fields.length > 0 || draft.changed() ? { kind: 'draft' } : null;
+        return fields.length > 0 ? { kind: 'unsaved', fields: fields.map(one => one.label) } : null;
     }
 
     /** Throw away what cannot be saved, as the close said to: those fields show their values again. */
@@ -291,20 +353,34 @@ export class TaskHubForm implements HubForm {
         for (const part of this.parts()) part.discardUnsaved();
     }
 
-    /** Fix, as asked: the question is withdrawn, and the first field that cannot be saved takes the focus. */
+    /**
+     * Keep, as asked: the question is withdrawn, and the first field that
+     * cannot be saved takes the focus; with none (a task not written yet
+     * kept), the name, the first of the fields.
+     */
     private fix(): void {
         const first = this.unsaved()[0];
         this.guard.keep();
-        first?.input.focus();
+        (first?.input ?? this.nameField.fieldElement())?.focus();
     }
 
-    /** The question a close puts, drawn at the form's end. */
-    private renderAsk(): void {
+    /**
+     * The buttons at the form's end: the question a close puts, its answer
+     * that keeps reading as what it keeps (the value to fix, the task to
+     * go on with), and the create as the host's draft says.
+     */
+    private renderActions(): void {
         const loss = this.guard.asking;
+        const draft = this.host.draft;
         const ask = loss?.kind === 'unsaved'
             ? t('modal.hub.unsavedAsk', { fields: loss.fields.join(t('modal.hub.fieldJoin')) })
-            : null;
-        this.actions.render({ busy: false, ask });
+            : loss?.kind === 'draft' ? t('modal.newTask.discardAsk') : null;
+        this.actions.render({
+            busy: draft?.creating() ?? false,
+            ctaEnabled: draft?.canCreate() ?? false,
+            ask,
+            ...(loss?.kind === 'draft' && { keep: t('modal.draft.keep') }),
+        });
     }
 
     // ==================== 外部変更の取り込み ====================
@@ -326,6 +402,14 @@ export class TaskHubForm implements HubForm {
 
     sayWrite(refusal: string | null): void {
         this.issues.set('write', refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }]);
+    }
+
+    sayPlace(issues: readonly FormIssue<never>[]): void {
+        this.issues.set('place', issues);
+    }
+
+    showDraft(): void {
+        this.renderActions();
     }
 
     /** Whether the form takes no edit: the host says why (`HubHost.shut`). */

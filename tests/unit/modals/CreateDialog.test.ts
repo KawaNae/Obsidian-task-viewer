@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { CreateDialog, placeText, type CreateHost, type CreateViewState } from '../../../src/modals/create/CreateDialog';
+import { CreateDialog, type CreateHost, type CreateViewState } from '../../../src/modals/create/CreateDialog';
+import { placeText } from '../../../src/modals/hub/DraftHost';
 import type { CreatePlace, PlaceFacts } from '../../../src/services/data/CreatePlaces';
 import type { IndexRefusal } from '../../../src/services/core/RefusalClause';
 import { refusalText, type WriteAnswer } from '../../../src/services/operations/WriteAnswer';

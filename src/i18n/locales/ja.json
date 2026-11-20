@@ -543,6 +543,8 @@
     },
     "newTask": {
       "creating": "作成しています…",
+      "formShut": "タスクを作成しています。作成が終わるまで、欄は編集できません。",
+      "discardAsk": "このタスクはまだ作成していません。捨てますか",
       "toHead": "{{note}} の見出し {{heading}} の先頭に置きます",
       "toEnd": "{{note}} の見出し {{heading}} の末尾に置きます",
       "toMade": "{{note}} の末尾に見出し {{heading}} を作り、その下に置きます",

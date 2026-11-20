@@ -1,11 +1,11 @@
-import { t } from '../../i18n';
 import { logWarn } from '../../log/log';
 import type { CreatePlace, Inherits, PlaceFacts } from '../../services/data/CreatePlaces';
 import type { IndexRefusal } from '../../services/core/RefusalClause';
 import { formatTaskLine } from '../../services/parsing/TaskLineFormat';
 import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import type { ValidationContext } from '../TaskDateValidator';
-import type { FormIssue, Tone } from '../form/FormIssue';
+import type { FormIssue } from '../form/FormIssue';
+import { placeIssues } from '../hub/DraftHost';
 
 /**
  * The create dialog: a new task line, and the place it goes
@@ -85,13 +85,10 @@ export class CreateDialog {
 
     state(): CreateViewState {
         const facts = this.facts;
-        const said = facts ? placeText(facts) : null;
-        const issues: FormIssue<never>[] = said ? [{ at: 'form', ...said }] : [];
-        if (facts?.kind === 'dailyNote' && facts.ignored) {
-            issues.push({ at: 'form', tone: 'warning', text: t('modal.newTask.ignored', { note: facts.path }) });
-        }
+        const said = facts ? placeIssues(facts) : [];
+        const blocked = said.some(issue => issue.tone === 'error');
+        const issues: FormIssue<never>[] = [...said];
         if (this.message !== null) issues.push({ at: 'form', tone: 'error', text: this.message });
-        const blocked = said?.tone === 'error';
         return {
             phase: this.phase,
             inherits: facts?.inherits ?? {},
@@ -152,28 +149,5 @@ export class CreateDialog {
     private render(): void {
         if (this.disposed) return;
         this.surface.render(this.state());
-    }
-}
-
-/**
- * Where a line put in the place `facts` names goes, in one sentence: an info,
- * or an error when it cannot go there (the heading names no one section, the
- * row is gone).
- */
-export function placeText(facts: PlaceFacts): { text: string; tone: Tone } {
-    switch (facts.kind) {
-        case 'gone':
-            return { text: t('modal.newTask.gone'), tone: 'error' };
-        case 'childOf':
-            return { text: t('modal.newTask.toChild', { parent: facts.parent }), tone: 'info' };
-        case 'dailyNote': {
-            const vars = { note: facts.path, heading: facts.section.heading };
-            if (facts.heading.kind === 'many') {
-                return { text: t('modal.newTask.headings', { ...vars, count: String(facts.heading.count) }), tone: 'error' };
-            }
-            if (facts.note === 'new') return { text: t('modal.newTask.toNew', vars), tone: 'info' };
-            if (facts.heading.kind === 'none') return { text: t('modal.newTask.toMade', vars), tone: 'info' };
-            return { text: t(facts.section.side === 'end' ? 'modal.newTask.toEnd' : 'modal.newTask.toHead', vars), tone: 'info' };
-        }
     }
 }
