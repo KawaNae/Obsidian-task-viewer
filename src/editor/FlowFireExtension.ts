@@ -4,7 +4,7 @@ import { editorInfoField } from 'obsidian';
 import type { StatusDefinition } from '../types';
 import { completes, isOperation } from '../services/flow/FlowTrigger';
 import type { FireOp } from '../services/flow/FlowExecutor';
-import { editLines, editorRow } from '../services/persistence/FileLines';
+import { editLines, keyedRow } from '../services/persistence/FileLines';
 import { firingTrials, type ApplyOps, type FiringOutcome } from '../services/persistence/FiringTrials';
 import { lineChanges } from './LineChanges';
 import { linesOf } from './EditorDoc';
@@ -99,7 +99,7 @@ export function fireFilter(host: EditorFireHost): Extension {
         const key = contentKeyOf(before);
         // Each row named by the line the transaction left it on, reading as it
         // left it: the write's session carries it across the fires above it.
-        const completed = rows.map(row => editorRow(row.line, row.text, key));
+        const completed = rows.map(row => keyedRow(row.line, row.text, key));
         const firing = firingTrials(host.applyOps, () => completed, () => host.fireOp(path));
         const edited = firing.trials.settle(edit => editLines(path, before, '\n', edit));
         if (!edited.written) {

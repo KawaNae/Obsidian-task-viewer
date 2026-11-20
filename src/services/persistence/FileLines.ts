@@ -491,10 +491,12 @@ export interface Landing {
  *   bring it back with other rows on its lines. In any other content the
  *   row is not written, however its line reads, until the index has read
  *   the file again.
- * - `key`: the editor's document when the editor pointed at the line
- *   ({@link editorRow}) — the one place a write takes a coordinate from
- *   outside. The line counts only in lines whose key is that one, the
- *   editor's or the file's.
+ * - `key`: content read outside the index, named by its key
+ *   (`contentKeyOf`), where the line was taken with its text
+ *   ({@link keyedRow}): an editor's document, as it showed the line, or a
+ *   note read for what it shows. This is the one way a write takes a
+ *   coordinate from outside. The line counts only in lines whose key is that
+ *   one, the editor's or the file's.
  */
 export interface RowRef {
     line: number;
@@ -505,13 +507,13 @@ export interface RowRef {
 }
 
 /**
- * The row at a line the editor pointed at: `line`, reading `text` as the
- * editor showed it, in the content whose key is `key`; with `subtree`, the
- * line and every line of its subtree as the editor showed them, for a write
- * that takes them away, made only if the file still reads them so, as a
- * delete that names its row is.
+ * The row at a line taken from content read outside the index: `line`,
+ * reading `text` as that content had it, in the content whose key is `key`;
+ * with `subtree`, the line and every line of its subtree as the content had
+ * them, for a write that takes them away, made only if the file still reads
+ * them so, as a delete that names its row is.
  */
-export function editorRow(line: number, text: string, key: ContentKey, subtree?: readonly string[]): RowRef {
+export function keyedRow(line: number, text: string, key: ContentKey, subtree?: readonly string[]): RowRef {
     return { line, subject: text.trim(), basis: { text, ...(subtree ? { subtree } : {}) }, in: { key } };
 }
 
@@ -541,7 +543,7 @@ export type RowTarget = RowRef | MarkedLine;
  *
  * `row` is the one way a write takes a line. A row is named with what the
  * write was planned from and the content its line is a coordinate in — the
- * index's reading, or the editor's document (`RowRef`) — and the line is
+ * index's reading, or content read outside it, by its key (`RowRef`) — and the line is
  * handed out only if the lines read as that. So every write that takes a line checks it once, and the
  * same check, and no write writes a plan over an edit the plan never saw.
  */

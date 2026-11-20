@@ -35,7 +35,7 @@ export type ApplyOps = (draft: LineDraft, session: WriteSession, target: RowRef,
  * document: the one core every write of lines runs (`editLines`, with the
  * same ops and the same check as a write to the file), turned into changes to
  * the document (`lineChanges`) and dispatched as one transaction. The line is taken only in the content it was taken in
- * (`RowRef.in`, `editorRow`): the editor has to read as it did.
+ * (`RowRef.in`, `keyedRow`): the editor has to read as it did.
  *
  * The transaction is a step of its own to undo (`isolateHistory`), whatever
  * was typed just before or after it. It is an operation in the editor, marked

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { editorRow } from '../../../src/services/persistence/FileLines';
+import { keyedRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { keyOf } from '../../../src/editor/EditorDoc';
 import { writeEditorLine } from '../../../src/editor/EditorWrite';
@@ -247,7 +247,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
     it('fires once when it completes the line, in the same write', async () => {
         const note = await open(['# note', WEEKLY, '']);
 
-        expect(await note.session.ops.writeLine(FILE, editorRow(1, WEEKLY, contentKeyOf(['# note', WEEKLY, ''])), [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }])).toBe(true);
+        expect(await note.session.ops.writeLine(FILE, keyedRow(1, WEEKLY, contentKeyOf(['# note', WEEKLY, ''])), [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }])).toBe(true);
 
         expect(note.writes()).toBe(1);
         expect(note.fired).toEqual(['週報']);
@@ -258,7 +258,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
         const checked = WEEKLY.replace('[ ]', '[x]');
         const note = await open(['# note', checked, '']);
 
-        expect(await note.session.ops.writeLine(FILE, editorRow(1, checked, contentKeyOf(['# note', checked, ''])), [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
+        expect(await note.session.ops.writeLine(FILE, keyedRow(1, checked, contentKeyOf(['# note', checked, ''])), [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
 
         expect(note.fired).toEqual([]);
     });
@@ -267,7 +267,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
         const lines = ['# note', '- [ ] T @2026-09-21 ==> move([[#Done]])', '\t- [ ] c', '- [ ] U', '## Done', ''];
         const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
         const editor = editorSession(session.ops.editorFireHost(), FILE, lines.join('\n'));
-        const at = editorRow(1, lines[1], keyOf(editor.state.doc));
+        const at = keyedRow(1, lines[1], keyOf(editor.state.doc));
         editor.close();
 
         expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: lines[1].replace('[ ]', '[x]') }], session.ops.editorLineHost())).toBe(true);
@@ -283,7 +283,7 @@ describe('the editor menu\'s rewrite of a line, in the editor', () => {
 
     it('fires once, in the transaction the menu made, a step of its own to undo, and writes nothing to the file', async () => {
         const note = await open(['# note', WEEKLY, '']);
-        const at = editorRow(1, WEEKLY, keyOf(note.editor.state.doc));
+        const at = keyedRow(1, WEEKLY, keyOf(note.editor.state.doc));
 
         expect(await writeEditorLine(note.editor.handle, FILE, at, [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }], host(note.session))).toBe(true);
 
@@ -298,7 +298,7 @@ describe('the editor menu\'s rewrite of a line, in the editor', () => {
     it('fires nothing when the line it rewrites was complete already', async () => {
         const checked = WEEKLY.replace('[ ]', '[x]');
         const note = await open(['# note', checked, '']);
-        const at = editorRow(1, checked, keyOf(note.editor.state.doc));
+        const at = keyedRow(1, checked, keyOf(note.editor.state.doc));
 
         expect(await writeEditorLine(note.editor.handle, FILE, at, [{ kind: 'update', text: checked.replace('[x]', '[-]') }], host(note.session))).toBe(true);
 

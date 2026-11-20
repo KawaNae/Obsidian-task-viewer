@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { editorRow } from '../../../src/services/persistence/FileLines';
+import { keyedRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { updateRow, writeBench, FILE, type Filed, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
@@ -297,7 +297,7 @@ describe('editor-driven writes', () => {
     it('the editor menu delete refuses when the disk line no longer reads what the editor showed', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         bench.edit(['メモ', '- [ ] A', '- [ ] B']);
-        await bench.writer.write(FILE, editorRow(1, '- [ ] B', contentKeyOf(['- [ ] A', '- [ ] B']), ['- [ ] B']), [{ kind: 'remove' }]);
+        await bench.writer.write(FILE, keyedRow(1, '- [ ] B', contentKeyOf(['- [ ] A', '- [ ] B']), ['- [ ] B']), [{ kind: 'remove' }]);
         expect(bench.lines()).toEqual(['メモ', '- [ ] A', '- [ ] B']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -308,7 +308,7 @@ describe('editor-driven writes', () => {
     it('the editor menu delete refuses when a child was added under the line since the editor showed it', async () => {
         const bench = await writeBench(shown);
         bench.edit(['- [ ] A', '\t- [ ] c', '\t- [ ] 外で足した子', '- [ ] B']);
-        await bench.writer.write(FILE, editorRow(0, '- [ ] A', contentKeyOf(shown), shown.slice(0, 2)), [{ kind: 'remove' }]);
+        await bench.writer.write(FILE, keyedRow(0, '- [ ] A', contentKeyOf(shown), shown.slice(0, 2)), [{ kind: 'remove' }]);
         expect(bench.lines()).toEqual(['- [ ] A', '\t- [ ] c', '\t- [ ] 外で足した子', '- [ ] B']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -316,14 +316,14 @@ describe('editor-driven writes', () => {
     it('the editor menu delete refuses when a child under the line was rewritten since the editor showed it', async () => {
         const bench = await writeBench(shown);
         bench.edit(['- [ ] A', '\t- [ ] c 書き換えた', '- [ ] B']);
-        await bench.writer.write(FILE, editorRow(0, '- [ ] A', contentKeyOf(shown), shown.slice(0, 2)), [{ kind: 'remove' }]);
+        await bench.writer.write(FILE, keyedRow(0, '- [ ] A', contentKeyOf(shown), shown.slice(0, 2)), [{ kind: 'remove' }]);
         expect(bench.lines()).toEqual(['- [ ] A', '\t- [ ] c 書き換えた', '- [ ] B']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
     it('the editor menu delete takes the line and the subtree the editor showed when the file still reads so', async () => {
         const bench = await writeBench(shown);
-        await bench.writer.write(FILE, editorRow(0, '- [ ] A', contentKeyOf(shown), shown.slice(0, 2)), [{ kind: 'remove' }]);
+        await bench.writer.write(FILE, keyedRow(0, '- [ ] A', contentKeyOf(shown), shown.slice(0, 2)), [{ kind: 'remove' }]);
         expect(bench.lines()).toEqual(['- [ ] B']);
         expect(bench.refused).toEqual([]);
     });

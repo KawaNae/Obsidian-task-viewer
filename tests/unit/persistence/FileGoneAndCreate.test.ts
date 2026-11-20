@@ -6,7 +6,7 @@ import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
 import { putInNote } from '../../../src/services/persistence/Notes';
 import { Block } from '../../../src/services/persistence/utils/Placement';
-import { editorRow, createFile } from '../../../src/services/persistence/FileLines';
+import { keyedRow, createFile } from '../../../src/services/persistence/FileLines';
 
 /**
  * The two writes that do not go through `processLines`: one whose file is not
@@ -35,7 +35,7 @@ describe('a write whose file is not there', () => {
     it.each(['missing', 'folder'] as const)('%s: a write to the line the editor pointed at is refused as gone, told once', async (kind) => {
         const { b } = await benchWithout(kind);
 
-        const outcome = await b.writer.write(FILE, editorRow(1, TASK, contentKeyOf([])), [{ kind: 'update', text: '- [x] 消える @2026-09-21' }]);
+        const outcome = await b.writer.write(FILE, keyedRow(1, TASK, contentKeyOf([])), [{ kind: 'update', text: '- [x] 消える @2026-09-21' }]);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'gone' });

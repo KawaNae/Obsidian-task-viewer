@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { editorRow } from '../../../src/services/persistence/FileLines';
+import { keyedRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { updateRow, writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
@@ -27,7 +27,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
     const afterMenu = async () => {
         const bench = await writeBench([ROW, '']);
         const task = bench.taskAt(0);
-        await bench.writer.write(FILE, editorRow(0, ROW, contentKeyOf([ROW, ''])), [{ kind: 'update', text: TICKED }]);
+        await bench.writer.write(FILE, keyedRow(0, ROW, contentKeyOf([ROW, ''])), [{ kind: 'update', text: TICKED }]);
         expect(bench.lines()).toEqual([TICKED, '']);
         return { bench, task };
     };
@@ -110,7 +110,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
 describe('the menu\'s own coordinate', () => {
     it('is refused when the line no longer reads what the editor showed', async () => {
         const bench = await writeBench(['- [ ] A', '']);
-        await bench.writer.write(FILE, editorRow(0, '- [ ] B', contentKeyOf(['- [ ] B', ''])), [{ kind: 'update', text: '- [x] B' }]);
+        await bench.writer.write(FILE, keyedRow(0, '- [ ] B', contentKeyOf(['- [ ] B', ''])), [{ kind: 'update', text: '- [x] B' }]);
 
         expect(bench.lines()).toEqual(['- [ ] A', '']);
         expect(bench.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ] B' }]);
