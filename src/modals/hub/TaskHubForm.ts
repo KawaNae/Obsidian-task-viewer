@@ -1,19 +1,15 @@
 import { DateUtils } from '../../utils/DateUtils';
-import { Notice, type App } from 'obsidian';
+import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import { type Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
 import type { IndexReads } from '../../services/core/TaskIndex';
-import type { Operations } from '../../services/operations/Operations';
 import { DateFieldGroup } from '../form/DateFieldGroup';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { IssueBoard, type IssueSlot } from '../form/FormIssue';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
 import type { DateTimeFields } from '../TaskDateValidator';
-import { logError } from '../../log/log';
-import { refusalNotice } from '../../services/core/RefusalClause';
-import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import { DraftGuard, type Loss } from '../form/DraftGuard';
 import { FormActions } from '../form/FormActions';
@@ -24,7 +20,7 @@ import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
 import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
-import { openSourceLine, type LineTarget } from './SourceLine';
+import type { HubForm, HubHost } from './HubHost';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
@@ -35,9 +31,6 @@ export interface TaskHubFormDeps {
     app: App;
     plugin: PluginContext;
     index: IndexReads;
-    operations: Operations;
-    /** 継承ラベルクリック等でファイルへ遷移した後に呼ぶ（パネルを閉じる） */
-    onNavigate?: () => void;
     /** Ask the hub to close, as the user would (`OverlayShell.requestClose`): what a close the user said to go on with does. */
     requestClose?: () => void;
 }
@@ -45,9 +38,9 @@ export interface TaskHubFormDeps {
 /**
  * タスクハブのプロパティ編集フォーム。
  *
- * 保存モデル: フィールド確定（blur / Enter / picker・clear / 選択）ごとに
- * 差分だけを updateTask する即時コミット。Save ボタンは持たない。
- * コミットは promise チェーンで直列化し、vault.process の競合を防ぐ。
+ * 値はホスト（`HubHost`）から読み、フィールド確定（blur / Enter /
+ * picker・clear / 選択）ごとに差分だけをホストへ渡す（`HubHost.put`）。
+ * いつ、どこへ書くかはホストが決める。Save ボタンは持たない。
  *
  * 欄は `bindField` で値に結ぶ。打った値は欄の codec で読み、読めない値は
  * 欄の下に理由を出して保存しない。外部変更（自分の書き込みの echo を含む）
@@ -60,37 +53,27 @@ export interface TaskHubFormDeps {
  * 欄の行の下とフォームの末尾である。行が日付の規則を破っていれば（規則4
  * など）、開いたときから破れた欄の下に出す。
  *
- * 書き込みの拒否: 書き込みは通知を出さない書き方で頼み
- * （`tellRefusal: false`）、拒まれた理由をフォームの末尾に1回だけ出す。拒まれた
- * 欄は打った値のまま残り（`bindField`）、もう一度確定すれば新しい版へ書く。
- * ハブが閉じた後に届いた拒否は通知で言う。
+ * 書き込みの拒否はホストが言う: 拒まれた理由はフォームの末尾に出す
+ * （`HubForm.sayWrite`）。拒まれた欄は打った値のまま残り（`bindField`）、
+ * もう一度確定すれば新しい版へ書く。
  *
  * 閉じる手順（{@link beforeClose}）: ×、Escape、
  * 外側、下へ払う、戻るのどれも、blur を待たずに打ちかけの欄を明示して保存する。
  * 保存できない値（読めない値、日付の規則に反する値）が残れば閉じずに問い
  * （`DraftGuard`）、[直す] にフォーカスを置く。[捨てて閉じる] はその値を
- * 元に戻し、ほかの欄を保存して閉じる。書き込みが途中なら答えを待ち、拒まれたら
- * 開いたまま理由を出す。
+ * 元に戻し、ほかの欄を保存して閉じる。欄を保存した後に、閉じてよいかを
+ * ホストに聞く（`HubHost.closing`）。
  *
  * 欄の DOM 構築とコミット/echo の取り込みは欄の部品が持つ: 名前、状態、
  * タグ、スタイル、プロパティは `fields/` 配下、日付は `DateFieldGroup`。
  * 欄の部品は自前の task コピーを持たず、`FieldGroupContext.getTask`
- * 経由で本体の `this.task` を都度読み、値は `queue` に渡す。本体は欄の並び、
- * 誤りの出す場所、閉じる手順、書き込みとその答えを持つ。
+ * 経由でホストの値を都度読み、値は `queue` でホストに渡す。本体は欄の並び、
+ * 誤りの出す場所、所見、閉じる手順を持つ。
  */
-export class TaskHubForm {
-    private task: Task;
-    /** The writes asked and not yet answered, each to whether it was written, for {@link drained} and the close. */
-    private writing = new Set<Promise<boolean>>();
-    /** The hub closed: a refusal that comes after is told by a notice. */
-    private closed = false;
+export class TaskHubForm implements HubForm {
     /** Whether to throw away the values a close cannot save, asked before it closes. */
     private readonly guard: DraftGuard<'close'>;
     private actions!: FormActions;
-    /** The row is gone from the index: nothing to write to. */
-    private missing = false;
-    /** The source mode holds the row: its draft is the one way to write it until it closes. */
-    private sourceOpen = false;
     private fieldCtx: FieldGroupContext;
     private readonly issues: IssueBoard<HubField>;
     /** Where the form says what is of it as a whole: at its end. */
@@ -108,10 +91,9 @@ export class TaskHubForm {
 
     constructor(
         private container: HTMLElement,
-        task: Task,
+        private readonly host: HubHost,
         private deps: TaskHubFormDeps,
     ) {
-        this.task = task;
         this.formSays = container.createDiv({ cls: 'tv-form__says tv-form__says--form' });
         this.issues = new IssueBoard<HubField>({
             field: (at) => this.slotOf(at),
@@ -127,13 +109,13 @@ export class TaskHubForm {
             },
         });
         this.fieldCtx = {
-            getTask: () => this.task,
+            getTask: () => this.host.task(),
             isShut: () => this.shut,
-            queue: (updates) => this.queue(updates),
+            queue: (updates) => this.host.put(updates),
             app: deps.app,
             plugin: deps.plugin,
             index: deps.index,
-            openSource: (locate) => this.openSource(locate),
+            openSource: (locate) => this.host.openSource(locate),
             issues: this.issues,
             findings: () => this.findings,
             locked: (field) => this.locks.has(field),
@@ -141,6 +123,7 @@ export class TaskHubForm {
         this.readFindings();
         this.render();
         this.sayFindings();
+        host.bind(this);
     }
 
     // ==================== DOM 構築 ====================
@@ -159,10 +142,10 @@ export class TaskHubForm {
         this.dateGroup = new DateFieldGroup(scheduleGroup, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
             icons: { start: PROPERTY_ICONS.start, end: PROPERTY_ICONS.end, due: PROPERTY_ICONS.due },
-            initial: dateFieldsOf(this.task),
-            current: () => dateFieldsOf(this.task),
+            initial: dateFieldsOf(this.host.task()),
+            current: () => dateFieldsOf(this.host.task()),
             buildOverlayTask: (f) => ({
-                ...this.task,
+                ...this.host.task(),
                 startDate: f.startDate || undefined,
                 startTime: f.startTime || undefined,
                 endDate: f.endDate || undefined,
@@ -172,8 +155,8 @@ export class TaskHubForm {
             getStartHour: () => this.deps.plugin.settings.startHour,
             taskLookup: (id) => this.deps.index.getTask(id),
             getValidationCtx: () => ({
-                hasImplicitStartDate: !!this.task.cascadeContext?.startDate,
-                implicitStartDate: this.task.cascadeContext?.startDate,
+                hasImplicitStartDate: !!this.host.task().cascadeContext?.startDate,
+                implicitStartDate: this.host.task().cascadeContext?.startDate,
             }),
             onCommit: (group, f) => this.commitDates(group, f),
             issues: (issues) => this.issues.set('dates', issues),
@@ -221,23 +204,11 @@ export class TaskHubForm {
         return this.dateGroup?.slot(at as DateKey) ?? null;
     }
 
-    // ==================== 出所の行 ====================
-
-    /** Open a line of the row's note and light it (`openSourceLine`); the hub closes, as for any navigation. */
-    private openSource(locate: (task: Task) => LineTarget | null): void {
-        void openSourceLine(
-            { app: this.deps.app, index: this.deps.index, reuseTab: this.deps.plugin.settings.reuseExistingTab },
-            this.task,
-            locate,
-        );
-        this.deps.onNavigate?.();
-    }
-
     // ==================== 所見 ====================
 
     /** Read the row's findings and the fields they lock from the model. */
     private readFindings(): void {
-        this.findings = hubFindings(this.task, this.deps.plugin.settings.scopeKeys);
+        this.findings = hubFindings(this.host.task(), this.deps.plugin.settings.scopeKeys);
         this.locks = lockedFields(this.findings);
     }
 
@@ -254,7 +225,7 @@ export class TaskHubForm {
                 label: t('modal.hub.openLine'),
                 run: () => {
                     const among = this.findings;
-                    this.openSource(row => (row === this.task
+                    this.host.openSource(row => (row === this.host.task()
                         ? { line: finding.line }
                         : { line: lineOfFinding(finding, among, row, this.deps.plugin.settings.scopeKeys) }));
                 },
@@ -266,65 +237,12 @@ export class TaskHubForm {
 
     private commitDates(group: DateGroupKey, f: DateTimeFields): Promise<boolean> | void {
         if (this.shut) return;
+        const task = this.host.task();
         const updates =
-            group === 'start' ? TaskUpdateBuilder.dateGroup(this.task, 'start', f.startDate, f.startTime)
-            : group === 'end' ? TaskUpdateBuilder.dateGroup(this.task, 'end', f.endDate, f.endTime)
-            : TaskUpdateBuilder.due(this.task, f.dueDate, f.dueTime);
-        return this.queue(updates);
-    }
-
-    /**
-     * 編集を書き込みに出す。
-     *
-     * フォームの model（`this.task`）は入力欄に打った値そのもので、索引の
-     * 写しではない。echo（refresh）が来る前に次のコミットが組み立てられても
-     * 打った値から組み立てるよう、model へ先に重ねる。echo は refresh(fresh)
-     * が正として上書きする。
-     *
-     * 続けて出した書き込みの順は操作の層が守る: 同じ行の書き込みは頼んだ
-     * 順に並び、2本目は1本目が残した読みから計画される（`onRow`）。
-     * 書けなかったときは {@link answered} が理由を言い、model を写しに戻す。
-     *
-     * @returns 書けたか（拒まれた欄は打った値を残す: `bindField`）
-     */
-    protected queue(updates: Partial<Task> | null): Promise<boolean> {
-        if (!updates) return Promise.resolve(true);
-        this.task = { ...this.task, ...updates };
-        const id = this.task.id;
-        const write: Promise<boolean> = this.deps.operations.updateTask(id, updates, { tellRefusal: false })
-            .then((answer) => {
-                this.answered(id, answer);
-                return answer.written;
-            })
-            .catch((e) => {
-                logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`);
-                return false;
-            })
-            .finally(() => { this.writing.delete(write); });
-        this.writing.add(write);
-        return write;
-    }
-
-    /**
-     * A write's answer. Written, the last refusal said is taken back. Refused,
-     * why is said at the form's end once (no notice: the write was asked with
-     * `tellRefusal: false`), and the model goes back to the index's copy: the
-     * fields refused keep what was typed, and are written again from the new
-     * reading when committed again. Once the hub has closed, a refusal is told
-     * by a notice, as any write's is.
-     */
-    private answered(id: string, answer: WriteAnswer): void {
-        if (this.closed) {
-            if (!answer.written && answer.refused) new Notice(refusalNotice(answer.refused));
-            return;
-        }
-        if (answer.written) {
-            this.issues.set('write', []);
-            return;
-        }
-        this.issues.set('write', [{ at: 'form', tone: 'error', text: refusalText(answer.refused) }]);
-        const fresh = this.deps.index.getTask(id);
-        if (fresh) this.refresh(fresh);
+            group === 'start' ? TaskUpdateBuilder.dateGroup(task, 'start', f.startDate, f.startTime)
+            : group === 'end' ? TaskUpdateBuilder.dateGroup(task, 'end', f.endDate, f.endTime)
+            : TaskUpdateBuilder.due(task, f.dueDate, f.dueTime);
+        return this.host.put(updates);
     }
 
     // ==================== 閉じる手順 ====================
@@ -333,27 +251,14 @@ export class TaskHubForm {
      * Whether the hub may close now (the panel asks it after the source mode):
      * every field typed in and not committed is saved, as a blur would, with no
      * blur waited for. A value that cannot be saved keeps the hub open and asks
-     * whether to throw it away (`'stay'`). A write under way is waited for: all
-     * written, the hub closes; one refused, it stays open with why at the
-     * form's end. Nothing is saved while the form is shut (the source holds
-     * the row, or the row is gone).
+     * whether to throw it away (`'stay'`). Saved, the host answers
+     * (`HubHost.closing`). Nothing is saved while the form is shut.
      */
     beforeClose(): CloseAnswer {
         if (this.shut) return 'close';
         if (!this.guard.request('close')) return 'stay';
         for (const part of this.parts()) part.save();
-        if (this.writing.size === 0) return 'close';
-        return this.settled().then(written => (written ? 'close' : 'stay'));
-    }
-
-    /** Resolves once every write asked so far is answered: whether all of them were written. */
-    private async settled(): Promise<boolean> {
-        let written = true;
-        while (this.writing.size > 0) {
-            const answers = await Promise.all(this.writing);
-            if (answers.includes(false)) written = false;
-        }
-        return written;
+        return this.host.closing();
     }
 
     /** The parts of the form a close asks: the name, the dates, the style, the tags and the properties. */
@@ -398,69 +303,36 @@ export class TaskHubForm {
         this.actions.render({ busy: false, ask });
     }
 
-    /** The hub closed: a refusal that comes after is told by a notice. */
-    dispose(): void {
-        this.closed = true;
-    }
-
     // ==================== 外部変更の取り込み ====================
 
     /**
-     * index の変更（自書き込みの echo / 外部編集）をフォームへ反映する。
+     * ホストの値をフォームへ反映する（自書き込みの echo / 外部編集 / 拒否の後の写し）。
      * focus 中・IME composition 中のフィールドはスキップ。
      */
-    refresh(fresh: Task): void {
-        this.task = fresh;
-        if (this.missing) {
-            // missing からの復帰時のみ全体を再有効化する。毎 echo で
-            // setEnabled(true) を通すと force rebuild が focus 中の入力を
-            // 破壊し、focus ガードの意味がなくなる。
-            this.missing = false;
-            this.showShut();
-        }
-
+    refresh(): void {
         this.readFindings();
         this.nameField.refresh();
         this.statusField.refresh();
-        this.dateGroup.set(dateFieldsOf(fresh));
+        this.dateGroup.set(dateFieldsOf(this.host.task()));
         this.styleField.refresh();
         this.tagsField.refresh();
         this.propsField.refresh();
         this.sayFindings();
     }
 
-    /** タスクが index から消えた（削除 / id 変化）ときの縮退表示 */
-    setMissing(): void {
-        if (this.missing) return;
-        this.missing = true;
-        this.showShut();
+    sayWrite(refusal: string | null): void {
+        this.issues.set('write', refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }]);
     }
 
-    /**
-     * The source mode opened or closed on the row. While it is open the form
-     * takes no edit: two ways of writing one row would have one of them
-     * refused (`changed`), and the draft is the user's work.
-     */
-    setSourceOpen(open: boolean): void {
-        if (this.sourceOpen === open) return;
-        this.sourceOpen = open;
-        this.showShut();
-    }
-
-    /** Resolves once every write queued so far is done: the source opens on what they left. */
-    async drained(): Promise<void> {
-        while (this.writing.size > 0) await Promise.all(this.writing);
-    }
-
-    /** Whether the form takes no edit, and why: the source open, or the row gone. */
+    /** Whether the form takes no edit: the host says why (`HubHost.shut`). */
     private get shut(): boolean {
-        return this.missing || this.sourceOpen;
+        return this.host.shut() !== null;
     }
 
-    /** The fields enabled or not, and the notice of why not, as the two states say. */
-    private showShut(): void {
-        this.setEnabled(!this.shut);
-        const notice = this.sourceOpen ? t('modal.hub.source.formShut') : this.missing ? t('modal.hub.taskMissing') : null;
+    /** The fields enabled or not, and the notice of why not, as the host says. */
+    showShut(): void {
+        const notice = this.host.shut();
+        this.setEnabled(notice === null);
         this.issues.set('shut', notice ? [{ at: 'form', tone: 'warning', text: notice }] : []);
     }
 

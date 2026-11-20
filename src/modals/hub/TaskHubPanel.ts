@@ -5,11 +5,12 @@ import type { PluginContext } from '../../PluginContext';
 import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
-import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
+import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
+import { RowHost } from './RowHost';
 import { indentUnit } from '../../utils/ObsidianConfig';
 
 export interface TaskHubDeps {
@@ -26,8 +27,8 @@ export interface TaskHubPanelOptions {
 /**
  * タスクハブパネル — 「タスクを開く」の単一の目的地。
  *
- * 上部にカードプレビュー（index.onChange でライブ再描画）、下部に
- * プロパティ編集フォーム（フィールド確定で即保存）。read-only タスクは
+ * 上部にカードプレビュー（行が index で変わるとホストが描き直させる）、下部に
+ * プロパティ編集フォーム（値の読み書きはホスト `RowHost`）。read-only タスクは
  * プレビューのみに縮退。プレビューの上の切り替えで、カードの代わりに
  * 行と部分木のソースを編集できる（TaskHubSource）。
  * 利用者が閉じる経路（×、Escape、外側、下へ払う、戻る、別のハブを開く）は
@@ -42,31 +43,34 @@ export interface TaskHubPanelOptions {
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
- * このクラスは domain logic（singleton・live update・preview・form）のみ。
+ * このクラスは domain logic（singleton・preview・form・source）のみ。
  */
 export class TaskHubPanel {
     private static active: TaskHubPanel | null = null;
     /** The hub asked for last; one asked for while another waits for a hub to close goes before it. */
     private static wanted: TaskHubPanel | null = null;
 
-    private task: Task;
     private overlay = new OverlayShell();
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
     private source: TaskHubSource | null = null;
-    private unsubscribe: (() => void) | null = null;
 
-    constructor(
-        private app: App,
-        task: Task,
-        private deps: TaskHubDeps,
-        private options: TaskHubPanelOptions = {},
-    ) {
-        // A segment of a split task is a key within the display: the hub
-        // works on its row, by the row's name.
-        const originalId = getOriginalTaskId(task);
-        this.task = deps.index.getTask(originalId) ?? { ...task, id: originalId };
+    /**
+     * Open the hub on a row the note already has (a segment of a split task
+     * opens its row's): its host writes each change to the row at once and
+     * follows the row in the index (`RowHost`).
+     */
+    static openRowHub(app: App, task: Task, deps: TaskHubDeps, options: TaskHubPanelOptions = {}): Promise<void> {
+        const host = new RowHost(task, { app, plugin: deps.plugin, index: deps.index, operations: deps.operations });
+        return new TaskHubPanel(app, host, deps, options).open();
     }
+
+    private constructor(
+        private app: App,
+        private readonly host: RowHost,
+        private deps: TaskHubDeps,
+        private options: TaskHubPanelOptions,
+    ) { }
 
     /**
      * Open, once the hub open now has given way as the user closing it
@@ -105,7 +109,11 @@ export class TaskHubPanel {
             takesBack: () => this.source?.takesBack() ?? false,
         });
 
-        this.setupLiveUpdates();
+        this.host.attach({
+            redrawPreview: () => this.renderPreview(),
+            follow: (row) => this.source?.follow(row),
+            close: () => this.close(),
+        });
     }
 
     private buildContent(bodyEl: HTMLElement): void {
@@ -116,18 +124,16 @@ export class TaskHubPanel {
 
         this.renderPreview();
 
-        if (this.task.isReadOnly) {
+        if (this.host.task().isReadOnly) {
             formHost.createDiv({
                 cls: 'task-hub__read-only-notice',
                 text: t('modal.hub.readOnlyNotice'),
             });
         } else {
-            this.form = new TaskHubForm(formHost, this.task, {
+            this.form = new TaskHubForm(formHost, this.host, {
                 app: this.app,
                 plugin: this.deps.plugin,
                 index: this.deps.index,
-                operations: this.deps.operations,
-                onNavigate: () => this.close(),
                 requestClose: () => { void this.overlay.requestClose(); },
             });
         }
@@ -140,31 +146,16 @@ export class TaskHubPanel {
             keep: () => this.source?.keep(),
             draftText: () => this.source?.draftText() ?? null,
         });
-        this.source = new TaskHubSource(this.task, {
-            drained: () => this.form?.drained() ?? Promise.resolve(),
+        this.source = new TaskHubSource(this.host.task(), {
+            drained: () => this.host.drained(),
             confirm: (id) => this.deps.operations.confirmTask(id),
             reread: (id) => this.deps.index.getTask(id),
             // The refusal is shown under the draft it leaves; a notice would say it twice.
             replace: (id, base, replacement) => this.deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
             indentUnit: () => indentUnit(this.app),
-            lockForm: (locked) => this.form?.setSourceOpen(locked),
+            lockForm: (locked) => this.host.setSourceOpen(locked),
             closeHub: () => this.close(),
         }, view);
-    }
-
-    private setupLiveUpdates(): void {
-        this.unsubscribe = this.deps.index.onChange((taskId) => {
-            if (taskId !== undefined && taskId !== this.task.id) return;
-            const fresh = this.deps.index.getTask(this.task.id);
-            if (fresh) {
-                this.task = fresh;
-                this.renderPreview();
-                this.form?.refresh(fresh);
-            } else {
-                this.form?.setMissing();
-            }
-            this.source?.follow(fresh);
-        });
     }
 
     private renderPreview(): void {
@@ -177,7 +168,7 @@ export class TaskHubPanel {
         const card = this.previewEl.createDiv('task-card task-card--in-hub-preview');
         const closePanel = () => this.close();
 
-        const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.index.getTask(id));
+        const dt = toDisplayTask(this.host.task(), settings.startHour, (id) => this.deps.index.getTask(id));
         this.deps.taskRenderer.render(card, dt, settings, {
             key: { scope: 'hub', name: dt.id },
             // The user asked to look at this task: all of it, its links
@@ -201,13 +192,11 @@ export class TaskHubPanel {
     private teardown(): void {
         if (TaskHubPanel.active === this) TaskHubPanel.active = null;
 
-        this.unsubscribe?.();
-        this.unsubscribe = null;
+        this.host.dispose();
         this.source?.dispose();
         this.source = null;
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
-        this.form?.dispose();
         this.form = null;
     }
 

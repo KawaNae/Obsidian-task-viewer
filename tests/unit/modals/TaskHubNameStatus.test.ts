@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { TaskHubForm } from '../../../src/modals/hub/TaskHubForm';
+import { RowHost } from '../../../src/modals/hub/RowHost';
 import { getStatusLabel } from '../../../src/constants/statusOptions';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
@@ -11,7 +12,9 @@ import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
  * The hub's name and status, as the form is built and used in a stand-in
  * DOM (`focusDom`): what each writes, on which key, and what it does not
  * while an IME converts, while the form is shut, or over a name that does
- * not read; what a close saves; what a change from outside shows.
+ * not read; what a close saves; what a change from outside shows. The form
+ * stands on a row's host (`RowHost`), which writes each change at once and
+ * follows the row in a stand-in index.
  */
 
 /** The parts of `document` the status menu's items draw their titles with. */
@@ -37,7 +40,7 @@ afterAll(() => { vi.unstubAllGlobals(); });
 
 interface MenuItem { checked: boolean; pick: () => void }
 
-/** A hub's form on a task, its writes answered as `written` says. */
+/** A hub's form on a task, its writes answered as `written` says; `change` is the index changing the row. */
 function setUp(task: Task = makeTask({ id: 'task-1', content: '元の名前', statusChar: ' ' }), written = true) {
     const doc = new FocusDoc();
     const root = doc.root();
@@ -61,15 +64,25 @@ function setUp(task: Task = makeTask({ id: 'task-1', content: '元の名前', st
         build(menu);
         menus.push({ items, anchor });
     });
-    const form = new TaskHubForm(asEl(root), task, {
-        app: { keymap: { pushScope: () => { }, popScope: () => { } } } as never,
-        plugin: { settings: DEFAULT_SETTINGS, menuPresenter: { present } } as never,
-        index: { getTasks: () => [], getTask: () => undefined } as never,
-        operations: { updateTask } as never,
-    });
+    let copy: Task | undefined;
+    const listeners: ((taskId?: string) => void)[] = [];
+    const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
+    const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present } } as never;
+    const index = {
+        getTasks: () => [],
+        getTask: () => copy,
+        onChange: (listener: (taskId?: string) => void) => { listeners.push(listener); return () => { }; },
+    } as never;
+    const host = new RowHost(task, { app, plugin, index, operations: { updateTask } as never });
+    const form = new TaskHubForm(asEl(root), host, { app, plugin, index });
+    host.attach({ redrawPreview: () => { }, follow: () => { }, close: () => { } });
+    const change = (row: Task | undefined) => {
+        copy = row;
+        for (const listener of listeners) listener(task.id);
+    };
     const name = form.fieldElement('name') as unknown as FocusEl;
     const pill = form.fieldElement('status') as unknown as FocusEl;
-    return { doc, root, form, name, pill, updateTask, present, menus };
+    return { doc, root, host, form, change, name, pill, updateTask, present, menus };
 }
 
 const key = (el: FocusEl, init: { key: string; keyCode?: number; isComposing?: boolean }) =>
@@ -95,7 +108,7 @@ describe('the hub\'s name', () => {
         s.name.focus();
         s.name.type('新しい名前');
         s.name.enter();
-        await s.form.drained();
+        await s.host.drained();
 
         expect(s.updateTask).toHaveBeenCalledTimes(1);
         expect(s.updateTask).toHaveBeenCalledWith('task-1', { content: '新しい名前' }, { tellRefusal: false });
@@ -106,7 +119,7 @@ describe('the hub\'s name', () => {
         s.name.focus();
         s.name.type('新しい名前');
         s.pill.focus();
-        await s.form.drained();
+        await s.host.drained();
 
         expect(s.updateTask).toHaveBeenCalledTimes(1);
         expect(s.updateTask).toHaveBeenCalledWith('task-1', { content: '新しい名前' }, { tellRefusal: false });
@@ -124,7 +137,7 @@ describe('the hub\'s name', () => {
         expect(s.updateTask).not.toHaveBeenCalled();
 
         s.name.enter();
-        await s.form.drained();
+        await s.host.drained();
         expect(s.updateTask).toHaveBeenCalledTimes(1);
     });
 
@@ -154,24 +167,24 @@ describe('the hub\'s name', () => {
 
     it('takes a name from outside when nothing is typed in it, and keeps what is typed when something is', () => {
         const s = setUp();
-        s.form.refresh(makeTask({ id: 'task-1', content: '外の名前', statusChar: ' ' }));
+        s.change(makeTask({ id: 'task-1', content: '外の名前', statusChar: ' ' }));
         expect(s.name.value).toBe('外の名前');
 
         s.name.focus();
         s.name.type('打ちかけ');
-        s.form.refresh(makeTask({ id: 'task-1', content: 'もう一度外', statusChar: ' ' }));
+        s.change(makeTask({ id: 'task-1', content: 'もう一度外', statusChar: ' ' }));
         expect(s.name.value).toBe('打ちかけ');
     });
 
     it('takes no edit while the form is shut, and takes them again once it opens', async () => {
         const s = setUp();
-        s.form.setSourceOpen(true);
+        s.host.setSourceOpen(true);
         expect(s.name.disabled).toBe(true);
         s.name.type('新しい名前');
         s.name.enter();
         expect(s.updateTask).not.toHaveBeenCalled();
 
-        s.form.setSourceOpen(false);
+        s.host.setSourceOpen(false);
         expect(s.name.disabled).toBe(false);
     });
 
@@ -202,7 +215,7 @@ describe('the hub\'s status', () => {
         const done = defs.findIndex(d => d.char === 'x');
         s.menus[0].items[done].pick();
         expect(pillLabel(s.pill)).toBe(labelOf('x'));
-        await s.form.drained();
+        await s.host.drained();
         expect(s.updateTask).toHaveBeenCalledTimes(1);
         expect(s.updateTask).toHaveBeenCalledWith('task-1', { statusChar: 'x' }, { tellRefusal: false });
     });
@@ -227,19 +240,19 @@ describe('the hub\'s status', () => {
 
     it('shows a status from outside', () => {
         const s = setUp();
-        s.form.refresh(makeTask({ id: 'task-1', content: '元の名前', statusChar: 'x' }));
+        s.change(makeTask({ id: 'task-1', content: '元の名前', statusChar: 'x' }));
         expect(pillLabel(s.pill)).toBe(labelOf('x'));
     });
 
     it('opens no menu while the form is shut, disabled and marked so, and opens one again once it opens', () => {
         const s = setUp();
-        s.form.setMissing();
+        s.change(undefined);
         expect(s.pill.disabled).toBe(true);
         expect(s.pill.classes.has('is-disabled')).toBe(true);
         event(s.pill, 'click');
         expect(s.present).not.toHaveBeenCalled();
 
-        s.form.refresh(makeTask({ id: 'task-1', content: '元の名前', statusChar: ' ' }));
+        s.change(makeTask({ id: 'task-1', content: '元の名前', statusChar: ' ' }));
         expect(s.pill.disabled).toBe(false);
         expect(s.pill.classes.has('is-disabled')).toBe(false);
         event(s.pill, 'click');
