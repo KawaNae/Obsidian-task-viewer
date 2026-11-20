@@ -47,6 +47,7 @@ export class FocusEl {
     value = '';
     disabled = false;
     placeholder = '';
+    readonly style: Record<string, string> = {};
 
     constructor(readonly ownerDocument: FocusDoc, cls = '') {
         cls.split(/\s+/).filter(Boolean).forEach(c => this.classes.add(c));
@@ -72,6 +73,25 @@ export class FocusEl {
     createSpan(o: { cls?: string; text?: string; attr?: Record<string, string> } = {}): FocusEl {
         return this.createEl('span', o);
     }
+    /** Move `child` to the end of this element's children, from wherever it was. */
+    appendChild(child: FocusEl): FocusEl {
+        if (child.parent) child.parent.children.splice(child.parent.children.indexOf(child), 1);
+        child.parent = this;
+        this.children.push(child);
+        return child;
+    }
+    /** Put `child` before `before` among this element's children, from wherever it was. */
+    insertBefore(child: FocusEl, before: FocusEl | null): FocusEl {
+        this.appendChild(child);
+        if (before) {
+            this.children.pop();
+            this.children.splice(this.children.indexOf(before), 0, child);
+        }
+        return child;
+    }
+    getBoundingClientRect(): { left: number; right: number; top: number; bottom: number } {
+        return { left: 0, right: 0, top: 0, bottom: 0 };
+    }
     appendText(text: string): void {
         this.createDiv().text = text;
     }
@@ -82,6 +102,16 @@ export class FocusEl {
         if (on) this.classes.add(cls);
         else this.classes.delete(cls);
     }
+    get classList(): { contains(c: string): boolean; add(c: string): void; remove(c: string): void; toggle(c: string, on: boolean): void } {
+        return {
+            contains: (c) => this.classes.has(c),
+            add: (c) => this.addClass(c),
+            remove: (c) => this.removeClass(c),
+            toggle: (c, on) => this.toggleClass(c, on),
+        };
+    }
+    /** Shown or hidden, as Obsidian's `toggle` does by the display. */
+    toggle(show: boolean): void { this.style.display = show ? '' : 'none'; }
     setAttribute(k: string, v: string): void { this.attrs.set(k, v); }
     removeAttribute(k: string): void { this.attrs.delete(k); }
 
