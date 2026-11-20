@@ -31,13 +31,19 @@
  * Escape and the user's "back" (Android's back gesture, the desktop mouse's
  * back button: `HistoryBack`) step back alike: a child popover open closes
  * first, else the overlay is asked to close.
+ *
+ * Overlays opened over one another (a dialog opened from the hub) are each
+ * a layer of the body, in the order they opened, and the top one alone
+ * takes what the user does: a press outside it, Escape (`takeEscape`), and
+ * the back, which Obsidian gives to the top of its stack, where an overlay
+ * is put as it opens.
  */
 
 import { setIcon, type Keymap } from 'obsidian';
 import type { PopoverAnchor } from './PopoverShell';
 import { positionElement, resolveHost } from './PopoverShell';
 import type { PopoverStack } from './PopoverStack';
-import { registerOverlay, unregisterOverlay } from './OverlayRegistry';
+import { overlayAbove, registerOverlay, unregisterOverlay, type ClosableOverlay } from './OverlayRegistry';
 import { inLayerAbove } from './LayerOrder';
 import { HotkeyShield } from './HotkeyShield';
 import { CloseGate, type CloseAnswer } from './CloseGate';
@@ -102,7 +108,44 @@ export interface OverlayOpenOpts {
     hostDoc?: Document;
 }
 
-export class OverlayShell {
+/** The child popovers an overlay steps back through (`PopoverStack`). */
+export type ChildPopovers = Pick<PopoverStack, 'isOpen' | 'closeAll'>;
+
+/**
+ * Escape or the back: a child popover open closes first, else the overlay
+ * is asked to close (`requestClose`).
+ */
+export function stepBack(childStack: ChildPopovers | null, requestClose: () => void): void {
+    if (childStack?.isOpen()) {
+        childStack.closeAll();
+    } else {
+        requestClose();
+    }
+}
+
+/**
+ * A key the overlay's document has, in the capture phase, as the overlay
+ * takes it: an Escape steps back (`step`) and goes no further, unless
+ * another overlay stands above this one (`overlayAbove`), whose Escape it
+ * is, or the body takes it itself (`yieldsEscape`).
+ *
+ * Every overlay listens on the document, in the order they opened, so the
+ * one under hears the key first and finds the one above still open.
+ */
+export function takeEscape(
+    e: KeyboardEvent,
+    overlay: ClosableOverlay,
+    yieldsEscape: ((e: KeyboardEvent) => boolean) | undefined,
+    step: () => void,
+): void {
+    if (e.key !== 'Escape') return;
+    if (overlayAbove(overlay)) return;
+    if (yieldsEscape?.(e)) return;
+    e.stopPropagation();
+    step();
+}
+
+export class OverlayShell implements ClosableOverlay {
     private rootEl: HTMLElement | null = null;
     private panelEl: HTMLElement | null = null;
     private handleEl: HTMLElement | null = null;
@@ -214,12 +257,7 @@ export class OverlayShell {
 
         // Escape
         const yieldsEscape = opts.yieldsEscape;
-        this.escapeHandler = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return;
-            if (yieldsEscape?.(e)) return;
-            e.stopPropagation();
-            this.stepBack();
-        };
+        this.escapeHandler = (e: KeyboardEvent) => takeEscape(e, this, yieldsEscape, () => this.stepBack());
         hostDoc.addEventListener('keydown', this.escapeHandler, true);
 
         // Back (Android's back, the mouse's back button): as Escape.
@@ -292,13 +330,8 @@ export class OverlayShell {
             || inLayerAbove(this.rootEl, node);
     }
 
-    /** Escape or the back: a child popover open closes first, else the overlay is asked to close. */
     private stepBack(): void {
-        if (this.childStack?.isOpen()) {
-            this.childStack.closeAll();
-        } else {
-            void this.requestClose();
-        }
+        stepBack(this.childStack, () => { void this.requestClose(); });
     }
 
     /** Close now, asking nothing: the window or the plugin going away, or the body closing itself. */
@@ -381,6 +414,11 @@ export class OverlayShell {
 
     isOpen(): boolean {
         return this.rootEl !== null && !this.closing;
+    }
+
+    /** The element on the body the overlay stands in, while it is open. */
+    layer(): Node | null {
+        return this.isOpen() ? this.rootEl : null;
     }
 
     getPanel(): HTMLElement | null { return this.panelEl; }
