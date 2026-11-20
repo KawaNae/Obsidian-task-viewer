@@ -410,13 +410,17 @@
 /*
  * 数字より目立たせない: countup の数字の muted より一段薄く、数字より小さく。
  * 数字の右肩、箱の右上の角の外に置く。角に 3px 重ねて、数字と鉛筆の間に
- * 押しても反応しない隙間を作らない。
+ * 押しても反応しない隙間を作らない。長い表示で右肩が輪の線にかかるときは、
+ * TimerOffsetIcon が測って左へ寄せ、少し上げる量（--tv-offset-icon-x、-y）を渡す。
  */
 .timer-widget__offset-icon {
     position: absolute;
     top: 0;
     left: 100%;
-    transform: translate(-3px, -3px);
+    transform: translate(
+        calc(-3px - var(--tv-offset-icon-x, 0px)),
+        calc(-3px - var(--tv-offset-icon-y, 0px))
+    );
     display: flex;
     color: var(--tv-text-faint);
     transition: color 120ms ease;

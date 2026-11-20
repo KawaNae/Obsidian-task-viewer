@@ -1475,7 +1475,7 @@ The widget's own:
 - `TimerLazyEnd` — when to write a later end onto a running line that has outlived its implied end
 - `TimerSendCheck` — whether a send may carry a timer's lines (`anchorsOf`)
 - `TimerPersistence`, `TimerTargetIdUtils`
-- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion. While the start can be shifted (`canOffsetStart`), the elapsed time is a button (`role`, `tabindex`, a pencil icon at the number's top right) that opens the shift menu on a press, Enter or Space; otherwise it is only a number. The tick keeps it in step
+- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion. While the start can be shifted (`canOffsetStart`), the elapsed time is a button (`role`, `tabindex`, a pencil icon at the number's top right) that opens the shift menu on a press, Enter or Space; otherwise it is only a number. The tick keeps it in step. `TimerOffsetIcon` keeps the pencil inside the ring's line: where the top right leaves its far corner less than 2px inside the line's inner edge (`16:40:00`, an overtime `-999:59`), it is raised 5px and moved left by the least that keeps the 2px, worked out from the circle at once (`offsetIconShift`); the digits keep their size. It is measured only when the pencil comes or the time's shape changes (its length or sign; the digits are `tabular-nums`), never on a tick, and a ring not laid out yet is measured at the next call
 - `FloatingOverlayHost`, `TimerWidgetWindowObserver` — the container, dragging, and moving between windows. The default corner is in the stylesheet (`.timer-widget`); the host keeps only a dragged position
 
 ### Audio notifications (`timer/AudioUtils.ts`)

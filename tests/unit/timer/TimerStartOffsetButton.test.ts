@@ -32,6 +32,13 @@ class FakeEl {
     parent: FakeEl | null = null;
     listeners = new Map<string, Listener[]>();
     icon: string | null = null;
+    props = new Map<string, string>();
+    style = {
+        setProperty: (name: string, value: string) => { this.props.set(name, value); },
+        removeProperty: (name: string) => { this.props.delete(name); },
+    };
+    /** 測った回数（`getBoundingClientRect` を読んだ回数）。 */
+    rectReads = 0;
 
     constructor(cls = '') {
         for (const c of cls.split(/\s+/).filter(Boolean)) this.classes.add(c);
@@ -95,7 +102,10 @@ class FakeEl {
         return event;
     }
 
+    get textContent(): string { return this.text + this.children.map(c => c.textContent).join(''); }
+
     getBoundingClientRect(): DOMRect {
+        this.rectReads += 1;
         return { left: 40, top: 50, right: 120, bottom: 80, width: 80, height: 30, x: 40, y: 50 } as DOMRect;
     }
 
@@ -296,5 +306,41 @@ describe('where the start cannot be shifted, the elapsed time is only a number',
         expectButton(display);
         display.dispatch('keydown', { key: 'Enter' });
         expect(h.presented).toHaveLength(1);
+    });
+});
+
+describe('the pencil is placed in the ring when it comes or the time changes its shape, not on each tick', () => {
+    it('placed when drawn; a tick of the same shape reads no layout; a longer time places it again', () => {
+        const h = build();
+        const timer = h.timerIn(RUNNING);
+        const { item, display } = h.draw(timer);
+        const pencil = pencilOf(display)!;
+        expect(pencil.rectReads).toBe(1);
+
+        h.tick(item, timer);
+        h.tick(item, timer);
+        expect(pencil.rectReads).toBe(1);
+
+        (timer as { clock: TimerState['clock'] }).clock = restart(Date.now() - 6_000_000);
+        h.tick(item, timer);
+        expect(display.querySelector('.timer-widget__time-text')?.text).toBe('100:00');
+        expect(pencil.rectReads).toBe(2);
+        h.tick(item, timer);
+        expect(pencil.rectReads).toBe(2);
+    });
+
+    it('a pencil that comes back on resume is placed', () => {
+        const h = build();
+        const timer = h.timerIn(RUNNING);
+        const { item, display } = h.draw(timer);
+
+        h.board.dispatch(timer, { type: 'stopped', then: 'suspend' });
+        h.board.dispatch(timer, { type: 'recorded' });
+        h.tick(item, timer);
+        expect(pencilOf(display)).toBeNull();
+
+        h.board.dispatch(timer, { type: 'resumed', pressedAt: Date.now() });
+        h.tick(item, timer);
+        expect(pencilOf(display)!.rectReads).toBe(1);
     });
 });
