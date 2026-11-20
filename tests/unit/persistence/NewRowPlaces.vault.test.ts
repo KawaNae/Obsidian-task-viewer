@@ -211,6 +211,25 @@ describe('a new row with its properties, put where each write puts a row', () =>
         readBack(session, FILE, task.content);
     });
 
+    it('is written with no indentation of its own, under a heading and at the end of a note alike (`createTask`)', async () => {
+        const { contents, session } = await open(['# n', '## Tasks', '- [ ] 既存', '', '## Last', 'text', '']);
+
+        expect(await session.ops.createTask(FILE, { line: '\t- [ ] 見出し' }, 'Tasks')).toBe(2);
+        await session.settle(FILE);
+        expect(await session.ops.createTask(FILE, { line: '    - [ ] 末尾' })).not.toBeNull();
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)!.split('\n')).toEqual(['# n', '## Tasks', '- [ ] 見出し', '- [ ] 既存', '', '## Last', 'text', '- [ ] 末尾', '']);
+    });
+
+    it('is told by its text, the spaces around it aside, when it is refused', async () => {
+        const { session } = await open(['## Tasks', '- [ ] a', '## Tasks', '']);
+
+        const put = await session.repository.putInNote(FILE, { heading: 'Tasks', level: 2, side: 'head' }, { line: ' \t- [ ] 新  ' });
+
+        expect(put.written ? null : put.refused).toEqual({ file: FILE, reason: { kind: 'headings', name: 'Tasks', count: 2 }, subject: '- [ ] 新' });
+    });
+
     it('is not written when its properties cannot be, and the user hears which line', async () => {
         const { contents, session } = await open(['# n', '## Tasks', '- [ ] P', '']);
         const before = contents.get(FILE);
