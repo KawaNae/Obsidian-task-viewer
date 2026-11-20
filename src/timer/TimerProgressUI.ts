@@ -28,6 +28,11 @@ export interface RingOptions {
 const STROKE_WIDTH = 6;
 
 export class TimerProgressUI {
+    /** The radius of the ring line's inner edge, in units of the view box of side `size`. */
+    static innerRadius(size: number): number {
+        return size / 2 - STROKE_WIDTH;
+    }
+
     static render(container: HTMLElement, state: RingState, options: RingOptions): void {
         const { block, size } = options;
         const radius = (size - STROKE_WIDTH) / 2;
