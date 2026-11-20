@@ -1033,3 +1033,40 @@ describe('NoteTasks の名前', () => {
         expect(tasks[1].parentId).toBe('tv-inline@0');
     });
 });
+
+/**
+ * What a row inherits of what its section gives (`NoteTasks.inheritedBy`):
+ * the dates and style it says itself, with a value or with none, are its
+ * own; an empty date says none; tags and properties go through whole. The
+ * reading gives each row what this says.
+ */
+describe('NoteTasks.inheritedBy', () => {
+    const given = {
+        startDate: '2031-02-01', startTime: '10:00', due: '2031-02-10',
+        color: 'red', linestyle: 'dashed', mask: '***',
+        tags: ['ft'], properties: { area: { key: 'area', value: { type: 'text' as const, text: 'lab', spelling: 'lab' } } },
+    };
+
+    it('leaves out each date and style the row says, with a value or with none, and keeps tags and properties', () => {
+        expect(NoteTasks.inheritedBy({ startDate: '2031-03-01', color: null, mask: '' }, given)).toEqual({
+            startTime: '10:00', due: '2031-02-10', linestyle: 'dashed', mask: '***',
+            tags: ['ft'], properties: given.properties,
+        });
+    });
+
+    it('takes an empty date as no say, and leaves what it was given as it was', () => {
+        const before = structuredClone(given);
+        expect(NoteTasks.inheritedBy({ startDate: '', due: undefined }, given)).toEqual(given);
+        expect(given).toEqual(before);
+    });
+
+    it('is nothing once the row says every one and nothing goes through', () => {
+        expect(NoteTasks.inheritedBy({ startDate: '2031-03-01' }, { startDate: '2031-02-01' })).toBeUndefined();
+        expect(NoteTasks.inheritedBy({}, {})).toBeUndefined();
+    });
+
+    it('is what the reading gives a row: the section\'s values less what the row says', () => {
+        const [row] = extractTasks(['# h', '- tv-start:: 2031-02-01', '- tv-color:: red', '- tv-linestyle:: dashed', '- [ ] t @2031-03-01', '    - tv-color::']);
+        expect(row.cascadeContext).toEqual({ linestyle: 'dashed' });
+    });
+});
