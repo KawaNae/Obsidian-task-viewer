@@ -543,6 +543,8 @@
     },
     "newTask": {
       "creating": "Creating…",
+      "formShut": "Creating the task. The fields cannot be edited until it is done.",
+      "discardAsk": "The task is not created yet. Discard it?",
       "toHead": "Puts the task at the top of the heading {{heading}} in {{note}}",
       "toEnd": "Puts the task at the end of the heading {{heading}} in {{note}}",
       "toMade": "Makes the heading {{heading}} at the end of {{note}} and puts the task under it",

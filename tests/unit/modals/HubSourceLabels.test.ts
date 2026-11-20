@@ -50,6 +50,7 @@ function formOn(openSource: HubHost['openSource']) {
         put: async () => true,
         shut: () => null,
         openSource,
+        draft: null,
         closing: () => 'close',
         bind: () => { },
     };

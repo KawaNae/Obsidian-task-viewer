@@ -58,6 +58,8 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         refresh: vi.fn(() => { told.push('form'); }),
         showShut: vi.fn(() => { told.push(`shut:${host.shut()}`); }),
         sayWrite(refusal) { this.said.push(refusal); },
+        sayPlace: vi.fn(),
+        showDraft: vi.fn(),
     };
     if (bound) host.bind(form);
     const panel: HubPanel = {

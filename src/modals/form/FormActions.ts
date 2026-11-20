@@ -43,6 +43,8 @@ export class FormActions {
     private readonly buttons: readonly { el: HTMLButtonElement; spec: FormAction }[];
     /** Whether cancel reads back, as the question last drawn says: what a press of it does. */
     private readsBack = false;
+    /** What the answer that keeps reads for the question last drawn; the ask's own label when it gave none. */
+    private keepLabel: string | null = null;
 
     constructor(container: HTMLElement, private readonly spec: {
         cancel?: { label?: string; run(): void };
@@ -68,11 +70,13 @@ export class FormActions {
      * the act reads its busy label. Cancel stays: the close it asks for waits
      * on what is under way. The form's act (`'cta'`) is offered only while
      * `ctaEnabled` (what the form holds can be acted on: a value that reads).
-     * `ask` is the question put now, null while none is.
+     * `ask` is the question put now, null while none is; `keep` what its
+     * answer that keeps reads, when it is not the ask's `keepLabel`.
      */
-    render(state: { busy: boolean; ctaEnabled?: boolean; ask?: string | null }): void {
+    render(state: { busy: boolean; ctaEnabled?: boolean; ask?: string | null; keep?: string }): void {
         const question = this.spec.ask ? state.ask ?? null : null;
         this.readsBack = question !== null;
+        this.keepLabel = state.keep ?? null;
         this.askEl?.setText(question ?? '');
         this.askEl?.toggle(this.readsBack);
         this.discardButton?.toggle(this.readsBack);
@@ -96,7 +100,7 @@ export class FormActions {
     }
 
     private cancelLabel(): string {
-        return this.readsBack && this.spec.ask ? this.spec.ask.keepLabel : this.spec.cancel?.label ?? t('modal.cancel');
+        return this.readsBack && this.spec.ask ? this.keepLabel ?? this.spec.ask.keepLabel : this.spec.cancel?.label ?? t('modal.cancel');
     }
 }
 
