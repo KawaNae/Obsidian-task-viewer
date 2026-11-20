@@ -21,15 +21,15 @@ afterAll(() => { vi.unstubAllGlobals(); });
 
 const text = (s: string): PropertyScalar => ({ type: 'text', text: s, spelling: s });
 
-/** A hub's properties on a task, its writes taken (or refused) as the hub's queue answers them. */
+/** A hub's properties on a task, its writes taken (or refused) as the hub's host answers them. */
 function setUp(properties: Properties = {}, opts: { refuse?: boolean } = {}) {
     const doc = new FocusDoc();
     let task: Task = makeTask({ properties });
     const writes: Properties[] = [];
     const ctx = {
-        getTask: () => task,
+        task: () => task,
         isShut: () => false,
-        queue: (updates: Partial<Task> | null) => {
+        put: (updates: Partial<Task> | null) => {
             if (updates?.properties) {
                 writes.push(updates.properties);
                 if (!opts.refuse) task = { ...task, properties: updates.properties };

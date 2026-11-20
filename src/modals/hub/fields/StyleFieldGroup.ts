@@ -85,7 +85,7 @@ export class StyleFieldGroup implements ClosingPart {
             input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         }
         this.inputs[field] = input;
-        input.value = this.ctx.getTask()[field] ?? '';
+        input.value = this.ctx.task()[field] ?? '';
 
         const sourceEl = row.createSpan({ cls: 'task-hub__source' });
         sourceEl.addEventListener('click', () => this.ctx.openSource(row => CascadeSource.lineOfStyleField(row, field, this.ctx.plugin.settings.scopeKeys[field])));
@@ -139,7 +139,7 @@ export class StyleFieldGroup implements ClosingPart {
         this.bound[field] = bindField(input, {
             codec: CODECS[field],
             // A row's own no value (`- tv-color::`) shows as no value of its own.
-            current: () => this.ctx.getTask()[field] ?? undefined,
+            current: () => this.ctx.task()[field] ?? undefined,
             commit: (value) => this.commit(field, value),
             issues: (issue) => this.ctx.issues.set(field, readIssue(field, issue)),
             takesEnter: () => suggest?.listShown ?? false,
@@ -151,13 +151,13 @@ export class StyleFieldGroup implements ClosingPart {
 
     private commit(field: StyleField, value: string | undefined): Promise<boolean> | void {
         if (this.ctx.isShut() || this.ctx.locked(field)) return;
-        return this.ctx.queue(TaskUpdateBuilder.styleField(this.ctx.getTask(), field, value ?? ''));
+        return this.ctx.put(TaskUpdateBuilder.styleField(this.ctx.task(), field, value ?? ''));
     }
 
     /** Write the row's own no value of `field`, which hides the value it inherits. */
     private hide(field: StyleField): void {
         if (this.ctx.isShut() || this.ctx.locked(field)) return;
-        void this.ctx.queue(TaskUpdateBuilder.styleHidden(this.ctx.getTask(), field));
+        void this.ctx.put(TaskUpdateBuilder.styleHidden(this.ctx.task(), field));
         this.refresh();
     }
 
@@ -180,7 +180,7 @@ export class StyleFieldGroup implements ClosingPart {
         const sourceEl = this.sourceEls[field];
         if (!input || !sourceEl) return;
 
-        const task = this.ctx.getTask();
+        const task = this.ctx.task();
         const cascadeValue = task.cascadeContext?.[field];
         // Inherited, a value or no value (a layer above hid it); null when the row says its own.
         const source = CascadeSource.forStyleField(task, field);
@@ -205,7 +205,7 @@ export class StyleFieldGroup implements ClosingPart {
 
     private updateColorSwatch(): void {
         if (!this.colorSwatch) return;
-        const value = this.inputs.color.value.trim() || this.ctx.getTask().cascadeContext?.color || '';
+        const value = this.inputs.color.value.trim() || this.ctx.task().cascadeContext?.color || '';
         this.colorSwatch.style.backgroundColor = value
             ? (/^[0-9a-fA-F]{3,6}$/.test(value) ? `#${value}` : value)
             : 'transparent';
@@ -214,7 +214,7 @@ export class StyleFieldGroup implements ClosingPart {
 
     /** 外部変更（echo）の取り込み。打ちかけの欄は `BoundField.set` が守る。 */
     refresh(): void {
-        const task = this.ctx.getTask();
+        const task = this.ctx.task();
         for (const field of FIELDS) {
             this.bound[field].set(task[field] ?? undefined);
             this.updateDecoration(field);

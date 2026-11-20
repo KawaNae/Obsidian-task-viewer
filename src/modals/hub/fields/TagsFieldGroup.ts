@@ -48,7 +48,7 @@ export class TagsFieldGroup implements ClosingPart {
         this.suggest?.close();
         this.sectionEl.empty();
 
-        const task = this.ctx.getTask();
+        const task = this.ctx.task();
         // A finding in the tags' block locks them as the form's shut does.
         const shut = this.ctx.isShut() || this.ctx.locked('tags');
         const contentTags = new Set(TagExtractor.fromContent(task.content ?? ''));
@@ -100,7 +100,7 @@ export class TagsFieldGroup implements ClosingPart {
             const typed = input.value;
             this.draft = '';
             input.value = '';
-            const write = this.commit([...this.ctx.getTask().tags, ...added]);
+            const write = this.commit([...this.ctx.task().tags, ...added]);
             // Refused: what was typed is the field's again, unless something was typed since.
             void write?.then((written) => {
                 if (written || this.draft !== '') return;
@@ -112,7 +112,7 @@ export class TagsFieldGroup implements ClosingPart {
         this.suggest = new ValueSuggest(this.ctx.app, input, {
             candidates: (query) => {
                 const q = query.trim().toLowerCase().replace(/^#/, '');
-                const selected = new Set(getEffectiveTags(this.ctx.getTask()).map(TagRule.key));
+                const selected = new Set(getEffectiveTags(this.ctx.task()).map(TagRule.key));
                 return FilterValueCollector.collectTags(this.ctx.index.getTasks())
                     .filter(v => !selected.has(TagRule.key(v)))
                     .filter(v => !q || v.toLowerCase().includes(q));
@@ -132,7 +132,7 @@ export class TagsFieldGroup implements ClosingPart {
             if (e.key === 'Backspace' && !input.value) {
                 // 空入力での Backspace は末尾の削除可能タグ（own 宣言かつ
                 // content 由来でない）を除去する — filter pill と同じ操作感
-                const current = this.ctx.getTask();
+                const current = this.ctx.task();
                 const removable = current.tags.filter(x => !contentTags.has(x));
                 const last = removable[removable.length - 1];
                 if (last) this.commit(current.tags.filter(x => x !== last));
@@ -143,7 +143,7 @@ export class TagsFieldGroup implements ClosingPart {
 
     private commit(tags: string[]): Promise<boolean> | undefined {
         if (this.ctx.isShut() || this.ctx.locked('tags')) return undefined;
-        const write = this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
+        const write = this.ctx.put(TaskUpdateBuilder.tags(this.ctx.task(), tags));
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。
         const restoreFocus = !!this.addInput && this.addInput.ownerDocument.activeElement === this.addInput;

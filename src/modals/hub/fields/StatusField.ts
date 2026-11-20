@@ -36,21 +36,21 @@ export class StatusField {
     private openMenu(): void {
         if (this.ctx.isShut()) return;
         this.ctx.plugin.menuPresenter.present(
-            (menu) => addStatusItems(menu, this.ctx.plugin.settings.statusDefinitions, this.ctx.getTask().statusChar, (char) => this.commit(char)),
+            (menu) => addStatusItems(menu, this.ctx.plugin.settings.statusDefinitions, this.ctx.task().statusChar, (char) => this.commit(char)),
             { kind: 'belowRect', rect: this.pill.getBoundingClientRect() },
         );
     }
 
     private commit(char: string): void {
         if (this.ctx.isShut()) return;
-        void this.ctx.queue(TaskUpdateBuilder.status(this.ctx.getTask(), char));
-        // The model holds the status picked once queued: the button shows it with no echo waited for.
+        void this.ctx.put(TaskUpdateBuilder.status(this.ctx.task(), char));
+        // The value holds the status picked once it is put: the button shows it with no echo waited for.
         this.render();
     }
 
     /** The checkbox preview of the status (as the filter popover's pill) and its label. */
     private render(): void {
-        const char = this.ctx.getTask().statusChar;
+        const char = this.ctx.task().statusChar;
         this.pill.empty();
         const checkbox = this.pill.createEl('input', { cls: 'task-list-item-checkbox tv-ctrl__status-checkbox' });
         checkbox.type = 'checkbox';
