@@ -4,14 +4,13 @@
  * holds the focus from the moment it opens, and an Enter an IME commits a
  * conversion with, or one an open list takes, is not the form's.
  *
- * The create dialog is opened from a card's menu ("Add child task"), as a
- * user opens it, with no hub under it, or over the hub it was opened from;
- * the filter menu from a Timeline's toolbar, with the note active beside
- * it. The note's bytes are read back from the disk.
+ * The hub on a task not written yet is opened from a card's menu ("Add
+ * child task"), as a user opens it, with no hub under it, or over the hub it
+ * was opened from; the filter menu from a Timeline's toolbar, with the note
+ * active beside it. The note's bytes are read back from the disk.
  *
  * Prerequisites:
- *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
- *     with a build that has OverlayShell's initialFocus and onFormEnter
+ *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/forms/shell-enter.test.ts
  */
@@ -41,16 +40,18 @@ const rowOf = name => {
     if (!task) throw new Error('no row ' + name);
     return task;
 };
-/** The create dialog's panel: a dialog with a name section that is not the hub's. */
-const createPanel = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__panel--dialog')]
-    .find(p => !p.classList.contains('task-hub') && p.querySelector('.tv-form__name-section')) ?? null;
+/** The hub on a task not written yet: the hub that offers a create. */
+const isDraft = p => !!p.querySelector('.task-hub__form > .tv-form__buttons > .mod-cta');
+const createPanel = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')].find(isDraft) ?? null;
 const nameInput = () => createPanel()?.querySelector('.tv-form__name-section input') ?? null;
-const hubPanel = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
+const createButton = () => createPanel().querySelector('.task-hub__form > .tv-form__buttons > .mod-cta');
+/** The hub on a row. */
+const hubPanel = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')].find(p => !isDraft(p)) ?? null;
 const key = (el, init) => el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
 const enter = (el, init = {}) => key(el, { key: 'Enter', code: 'Enter', keyCode: 13, ...init });
 const bold = () => key(document.activeElement, { key: 'b', code: 'KeyB', keyCode: 66, metaKey: true, ctrlKey: navigator.platform.indexOf('Mac') < 0 });
 const typeName = (text) => { const input = nameInput(); input.value = text; input.dispatchEvent(new Event('input', { bubbles: true })); };
-/** Open the create dialog from the card menu of the row named, and wait for the focus to come to its name. */
+/** Open the hub on a task not written yet from the card menu of the row named, and wait for the focus to come to its name. */
 const openCreate = async (name) => {
     const task = rowOf(name);
     // The card menu the hub's cards open, made as a hub first opens.
@@ -69,10 +70,10 @@ const openCreate = async (name) => {
     await until(() => nameInput() && document.activeElement === nameInput());
 };
 /**
- * Open the screen that makes a child task over the hub of the row named, as
+ * Open the hub on a task not written yet over the hub of the row named, as
  * a user does: the hub opened on the row, then its card's menu, Add child
  * task. Wait for both to be open and the focus on the name. The one place
- * a test draws a screen that makes a task over the hub.
+ * this file opens a hub over another.
  */
 const openCreateOverHub = async (name) => {
     const task = rowOf(name);
@@ -104,8 +105,15 @@ const dialogState = () => ({
     open: !!createPanel(),
     focused: !!nameInput() && document.activeElement === nameInput(),
     name: nameInput()?.value ?? null,
-    error: (() => { const el = createPanel()?.querySelector('.tv-form__name-section .tv-form__error'); return el && getComputedStyle(el).display !== 'none' ? el.textContent : null; })(),
+    /** Any error the hub says, under a field or at its end. */
+    errors: [...(createPanel()?.querySelectorAll('.tv-form__error') ?? [])].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent),
     invalid: nameInput()?.classList.contains('tv-ctrl__text-input--invalid') ?? null,
+    /** The name as the card shows it, its note's link left out: what the field committed. */
+    card: (() => {
+        const item = createPanel()?.querySelector('.task-hub__preview .task-card__content li')?.cloneNode(true);
+        item?.querySelector('.task-card__file-link')?.remove();
+        return item ? item.textContent.trim() : null;
+    })(),
 });
 `;
 
@@ -122,8 +130,9 @@ interface DialogState {
     open: boolean;
     focused: boolean;
     name: string | null;
-    error: string | null;
+    errors: string[];
     invalid: boolean | null;
+    card: string | null;
 }
 
 /** Close every overlay and the leaves the tests opened. */
@@ -132,6 +141,7 @@ function cleanUp(): void {
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
         await sleep(100);
         document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub__source-actions .tv-form__discard').forEach(b => b.click());
+        document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub__form > .tv-form__buttons > .tv-form__discard').forEach(b => b.click());
         for (const name of Object.keys(R)) { R[name]?.detach(); delete R[name]; }
         plugin.menuPresenter.dismiss();
         await sleep(250);
@@ -151,8 +161,8 @@ afterAll(async () => {
     await waitForFileDeindexed(TEST_FILE);
 });
 
-describe('the create dialog\'s name field', () => {
-    it('opens with the focus on the name, takes no Enter an IME commits a conversion with, and creates on the next Enter', async () => {
+describe('the name field of the hub on a task not written yet', () => {
+    it('opens with the focus on the name, takes no Enter an IME commits a conversion with, and the next Enter commits the name alone', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const steps = run<Record<string, DialogState>>(`
             await openCreate('親');
@@ -176,15 +186,20 @@ describe('the create dialog\'s name field', () => {
             await sleep(100);
             const composing = dialogState();
             enter(input);
+            await until(() => dialogState().card === '子');
+            const committed = { ...dialogState(), disk: await app.vault.adapter.read(${JSON.stringify(TEST_FILE)}) };
+            createButton().click();
             await until(() => !createPanel());
-            await sleep(500);
             const created = dialogState();
-            return JSON.stringify({ opened, chromium, webkit, windows, composing, created });
+            return JSON.stringify({ opened, chromium, webkit, windows, composing, committed, created });
         `);
         expect(steps.opened).toMatchObject({ open: true, focused: true, name: '' });
         for (const step of ['chromium', 'webkit', 'windows', 'composing']) {
-            expect(steps[step], step).toMatchObject({ open: true, name: '子' });
+            // Not committed: the card still shows the name it opened with.
+            expect(steps[step], step).toMatchObject({ open: true, name: '子', card: '' });
         }
+        // The Enter commits the name, and creates nothing: the create alone writes.
+        expect(steps.committed).toMatchObject({ open: true, name: '子', card: '子', disk: NOTE });
         expect(steps.created.open).toBe(false);
         // Indented by the vault's unit (a tab, or spaces).
         const lines = readTestFile(TEST_FILE).split('\n');
@@ -193,29 +208,20 @@ describe('the create dialog\'s name field', () => {
         expect(lines.filter((_, i) => i !== 2).join('\n')).toBe(NOTE);
     });
 
-    it('creates nothing on an Enter right after it opens: a name is needed, said under the field until one is typed', async () => {
+    it('creates nothing on an Enter right after it opens, and says nothing of the name', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
-        const steps = run<Record<string, DialogState>>(`
+        run(`
             await openCreate('親');
             enter(nameInput());
-            await sleep(200);
-            const empty = dialogState();
-            createPanel().querySelector('.mod-cta').click();
-            await sleep(200);
-            const clicked = dialogState();
-            typeName('名前');
-            await sleep(50);
-            const typed = dialogState();
-            return JSON.stringify({ empty, clicked, typed });
+            return 'ok';
         `);
-        const required = tr('modal.nameRequired');
-        expect(steps.empty).toMatchObject({ open: true, focused: true, error: required, invalid: true });
-        expect(steps.clicked).toMatchObject({ open: true, focused: true, error: required });
-        expect(steps.typed).toMatchObject({ open: true, error: null, invalid: false });
+        // Read in the next call: the Enter has had that time to make something.
+        const empty = run<DialogState>(`return JSON.stringify(dialogState());`);
+        expect(empty).toMatchObject({ open: true, focused: true, name: '', errors: [], invalid: false });
         expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 
-    it('leaves an Enter to the name\'s list while it is open: the Enter picks, and creates nothing', async () => {
+    it('leaves an Enter to the name\'s list while it is open: the Enter picks, and the next commits the name alone', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const base = TEST_FILE.replace(/\.md$/, '');
         const steps = run<Record<string, unknown>>(`
@@ -230,13 +236,16 @@ describe('the create dialog\'s name field', () => {
             await sleep(300);
             const picked = { ...dialogState(), listOpen: !!document.querySelector('.suggestion-container') };
             enter(input);
+            await until(() => dialogState().card.startsWith('見る'));
+            const committed = { open: !!createPanel(), disk: await app.vault.adapter.read(${JSON.stringify(TEST_FILE)}) };
+            createButton().click();
             await until(() => !createPanel());
-            await sleep(500);
-            return JSON.stringify({ highlighted, picked, closed: !createPanel() });
+            return JSON.stringify({ highlighted, picked, committed, closed: !createPanel() });
         `);
         const picked = steps.picked as DialogState & { listOpen: boolean };
         expect(picked).toMatchObject({ open: true, listOpen: false });
         expect(picked.name).toMatch(/^見る \[\[[^\]]+\]\]$/);
+        expect(steps.committed).toEqual({ open: true, disk: NOTE });
         expect(steps.closed).toBe(true);
         const line = readTestFile(TEST_FILE).split('\n')[2];
         expect(line.trimStart()).toBe(`- [ ] ${picked.name}`);
@@ -244,7 +253,7 @@ describe('the create dialog\'s name field', () => {
 });
 
 describe('every overlay keeps the note\'s hotkeys out and holds the focus', () => {
-    it('the create dialog: Mod+B in its name field leaves the note behind as it was', async () => {
+    it('the hub on a task not written yet: Mod+B in its name field leaves the note behind as it was', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`
             const editor = await openNote();
@@ -330,7 +339,7 @@ describe('every overlay keeps the note\'s hotkeys out and holds the focus', () =
 });
 
 describe('overlays opened over one another', () => {
-    it('the screen that makes a task over the hub: Escape closes it alone, the hub staying open, and the next Escape closes the hub', async () => {
+    it('the hub on a task not written yet over the hub on a row: Escape closes it alone, the hub on the row staying open, and the next Escape closes that', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const steps = run<Record<string, unknown>>(`
             await openCreateOverHub('親');
