@@ -49,6 +49,11 @@ const ALLOWED: Array<{ file: string; contains: string; reason: string }> = [
     { file: 'services/template/ViewTemplateLoader.ts', contains: '```json', reason: 'template JSON' },
     { file: 'services/template/TemplateNote.ts', contains: '```', reason: 'template JSON' },
     { file: 'timer/IntervalTemplateLoader.ts', contains: '```json', reason: 'template JSON' },
+    // The language of a line that opens a fence is replaced in a markdown
+    // rendered only to find a checkbox's line, so no plugin's script runs
+    // there. No block is read off it: the render reads them, and a line
+    // taken wrongly leaves a checkbox unable to write, not another line.
+    { file: 'services/data/FrameCheckboxes.ts', contains: 'const FENCE_OPEN = ', reason: 'a fence\'s language replaced for a render never shown' },
 ];
 
 function sources(dir: string): string[] {
