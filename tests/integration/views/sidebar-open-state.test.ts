@@ -49,6 +49,9 @@ function sidebarPrelude(name: string): string {
 /** The sidebar of a view, as `sidebarPrelude`'s `sidebar` reads it. */
 interface Sidebar { shown: boolean; button: boolean; saved: boolean; over: boolean }
 
+/** Whether the layout is set to slide, and whether the panel's transform ran a transition. */
+interface Slide { animate: boolean; slid: boolean }
+
 const look = (shown: boolean, saved: boolean, over: boolean): Sidebar => ({ shown, button: shown, saved, over });
 
 describe.each([
@@ -205,22 +208,46 @@ describe.each([
         expect(r).toEqual({ narrowedMore: look(true, false, true) });
     });
 
-    it('slides as the toggle opens and closes it, beside the view and over it', () => {
+    it('slides as the toggle, the backdrop and the back open and close it, and not as the view narrows', () => {
         openView(name, type, { showSidebar: true });
-        const r = ev<Record<string, boolean>>(`(async () => {
+        const r = ev<Record<string, Slide>>(`(async () => {
             ${sidebarPrelude(name)}
-            const slides = () => el().querySelector('.tv-sidebar').classList.contains('tv-sidebar--animate');
+            const panel = el().querySelector('.tv-sidebar__panel');
+            /**
+             * Do \`act\`, then read whether the layout is set to slide and
+             * whether the panel's own transform did move over a time: a
+             * change applied at once runs no transition.
+             */
+            const scene = async (act) => {
+                let slid = false;
+                const heard = (e) => { if (e.target === panel && e.propertyName === 'transform') slid = true; };
+                panel.addEventListener('transitionrun', heard);
+                try {
+                    await act();
+                } finally {
+                    panel.removeEventListener('transitionrun', heard);
+                }
+                return { animate: el().querySelector('.tv-sidebar').classList.contains('tv-sidebar--animate'), slid };
+            };
             await width(${WIDE});
+            const wideClosing = await scene(toggle);
+            const wideOpening = await scene(toggle);
+            const narrowed = await scene(() => width(${NARROW}));
+            const narrowOpening = await scene(toggle);
+            const byBackdrop = await scene(backdrop);
             await toggle();
-            const wideClosing = slides();
-            await toggle();
-            const wideOpening = slides();
-            await width(${NARROW});
-            const narrowed = slides();
-            await toggle();
-            return JSON.stringify({ wideClosing, wideOpening, narrowed, narrowOpening: slides() });
+            const byBack = await scene(back);
+            return JSON.stringify({ wideClosing, wideOpening, narrowed, narrowOpening, byBackdrop, byBack });
         })()`);
-        expect(r).toEqual({ wideClosing: true, wideOpening: true, narrowed: false, narrowOpening: true });
+        const slides: Slide = { animate: true, slid: true };
+        expect(r).toEqual({
+            wideClosing: slides,
+            wideOpening: slides,
+            narrowed: { animate: false, slid: false },
+            narrowOpening: slides,
+            byBackdrop: slides,
+            byBack: slides,
+        });
     });
 
     it('copies into its URI the showSidebar of the wide width, whatever was done over the view', () => {

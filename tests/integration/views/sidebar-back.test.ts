@@ -17,12 +17,17 @@
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/views/sidebar-back.test.ts
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { closeViews, ev, openView, PRELUDE, tr } from '../helpers/view-helper';
 import { UNTIL } from '../helpers/waits';
 
 const NARROW = 500;
 const WIDE = 1000;
+
+// A probe left in Obsidian's stack would take every back after it.
+afterEach(() => {
+    ev(`(() => { window.__tvBackProbe?.release(); return JSON.stringify(true); })()`);
+});
 
 afterAll(async () => {
     await closeViews();
@@ -44,6 +49,33 @@ function sidebarPrelude(name: string): string {
             if (!shown()) throw new Error('the sidebar did not open');
         };
         const back = async () => { window.history.back(); await wait(400); };
+        /**
+         * Put a probe of the test's own on Obsidian's stack of what takes the
+         * back, under whatever is put on it later, and count the backs that
+         * reach it: one reaches it only when nothing above it holds the back.
+         * It stands in the stack as a suggestion does, through the \`open\` and
+         * \`close\` of \`PopoverSuggest\`, the class the editor's suggestions
+         * extend, with no scope to push and no DOM to attach.
+         */
+        const probeBack = () => {
+            // Open, the sidebar may hold the back already, and the probe would stand over its hold.
+            if (shown()) throw new Error('the sidebar is open before the probe is put under it');
+            let proto = Object.getPrototypeOf(app.workspace.editorSuggest.suggests[0] ?? {});
+            while (proto && !['open', 'close', 'attachDom'].every(k => Object.hasOwn(proto, k))) proto = Object.getPrototypeOf(proto);
+            if (!proto) throw new Error('no PopoverSuggest to stand in the stack by');
+            const probe = {
+                app: { keymap: { pushScope() {}, popScope() {} } },
+                scope: null, isOpen: false, win: null, autoDestroy: null,
+                suggestions: { setSuggestions() {} },
+                attachDom() {}, detachDom() {},
+                backs: 0,
+                onHistoryBack() { this.backs++; },
+                release() { proto.close.call(probe); delete window.__tvBackProbe; },
+            };
+            proto.open.call(probe);
+            window.__tvBackProbe = probe;
+            return probe;
+        };
     `;
 }
 
@@ -75,17 +107,23 @@ describe.each([
         });
     });
 
-    it('leaves the back alone while it lies beside the view', () => {
+    it('leaves the back alone while it lies beside the view: the back goes on to what is under it', () => {
         const r = ev<Record<string, unknown>>(`(async () => {
             ${sidebarPrelude(name)}
-            await openAt(${WIDE});
-            const before = sidebar();
-            await back();
-            return JSON.stringify({ before, after: sidebar() });
+            const probe = probeBack();
+            try {
+                await openAt(${WIDE});
+                const before = sidebar();
+                await back();
+                return JSON.stringify({ before, after: sidebar(), backsUnder: probe.backs });
+            } finally {
+                probe.release();
+            }
         })()`);
         expect(r).toEqual({
             before: { shown: true, saved: true, over: false },
             after: { shown: true, saved: true, over: false },
+            backsUnder: 1,
         });
     });
 
@@ -138,24 +176,33 @@ describe.each([
     it('does not take the back from a tab shown over it, and is closed, holding none, once its tab is shown again', () => {
         const r = ev<Record<string, unknown>>(`(async () => {
             ${sidebarPrelude(name)}
-            await openAt(${NARROW});
-            const own = R[${JSON.stringify(name)}];
-            const other = app.workspace.getLeaf('tab');
-            await other.setViewState({ type: 'empty', active: true });
-            await wait(300);
-            await back();
-            const behind = sidebar();
-            other.detach();
-            app.workspace.setActiveLeaf(own, { focus: true });
-            await wait(400);
-            const shownAgain = sidebar();
-            await back();
-            return JSON.stringify({ behind, shownAgain, after: sidebar() });
+            const probe = probeBack();
+            try {
+                await openAt(${NARROW});
+                const own = R[${JSON.stringify(name)}];
+                const other = app.workspace.getLeaf('tab');
+                await other.setViewState({ type: 'empty', active: true });
+                await wait(300);
+                await back();
+                const behind = sidebar();
+                const backsUnderBehind = probe.backs;
+                other.detach();
+                app.workspace.setActiveLeaf(own, { focus: true });
+                await wait(400);
+                const shownAgain = sidebar();
+                await back();
+                return JSON.stringify({ behind, backsUnderBehind, shownAgain, after: sidebar(), backsUnder: probe.backs });
+            } finally {
+                probe.release();
+            }
         })()`);
         expect(r).toEqual({
             behind: { shown: true, saved: true, over: true },
+            // Held over the view, the back was let go of as the tab was hidden: it goes on to what is under it.
+            backsUnderBehind: 1,
             shownAgain: { shown: false, saved: true, over: true },
             after: { shown: false, saved: true, over: true },
+            backsUnder: 2,
         });
     });
 });
