@@ -30,6 +30,14 @@ export interface RenderOptions {
     doubleTap?: boolean;
     /** The view's mask mode applies to the card. Default true. */
     mask?: boolean;
+    /**
+     * Nothing is done on the card: no menu, no double tap, no checkbox, no
+     * child's ⋯, and its links are not followed, whatever the policies above
+     * say. For a card of a task that is not a line yet, which there is
+     * nothing to act on. Its checkboxes and links take no press, drawn as
+     * they are (not faded as a read-only card's). Default false.
+     */
+    inert?: boolean;
     hooks?: {
         /** A link in the card was followed. */
         onNavigate?: () => void;
@@ -83,6 +91,7 @@ function policiesOf(options: RenderOptions) {
         alwaysLinks: options.alwaysLinks ?? false,
         doubleTap: options.doubleTap ?? true,
         mask: options.mask ?? true,
+        inert: options.inert ?? false,
     };
 }
 
@@ -233,6 +242,7 @@ export function computeContentSignature(
         policies.alwaysLinks ? '1' : '0',
         policies.doubleTap ? '1' : '0',
         policies.mask ? '1' : '0',
+        policies.inert ? '1' : '0',
         maskMode ? '1' : '0',
         maskMode ? (getEffectiveMask(task) ?? '') : '',
         isExpanded ? '1' : '0',
@@ -321,7 +331,7 @@ export class TaskCardRenderer extends Component {
         const topRight: TopRightSpec = options.topRight ?? { mode: 'fields', config: TIME_TOP_RIGHT };
         const compact = options.compact ?? false;
         const policies = policiesOf(options);
-        const enableLinks = policies.alwaysLinks || settings.enableCardFileLink;
+        const enableLinks = !policies.inert && (policies.alwaysLinks || settings.enableCardFileLink);
         const masked = policies.mask && this.getMaskMode();
         const onNavigate = options.hooks?.onNavigate;
 
@@ -340,7 +350,8 @@ export class TaskCardRenderer extends Component {
         TaskStyling.applyTaskColor(container, getEffectiveColor(task) ?? null);
         TaskStyling.applyTaskLinestyle(container, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(container, task);
-        this.actions.bindMenu(container, options.hooks?.menu);
+        TaskStyling.applyInert(container, policies.inert);
+        if (!policies.inert) this.actions.bindMenu(container, options.hooks?.menu);
 
         // Compute content signature for render skip
         const topRightPieces = topRight.mode === 'fields'
@@ -379,7 +390,7 @@ export class TaskCardRenderer extends Component {
         this.cardComponents.set(container, cardComp);
 
         renderTopRight(container, topRightPieces);
-        if (policies.doubleTap) {
+        if (policies.doubleTap && !policies.inert) {
             bindTapIntents(container, {
                 onDoubleTap: (x, y) => {
                     const action = this.actions.doubleTapAction();
@@ -419,14 +430,14 @@ export class TaskCardRenderer extends Component {
                 countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
         } else if (task.childEntries.length > 0) {
-            late = this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, policies.expandChildren);
+            late = this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, policies.expandChildren, policies.inert);
         } else {
             late = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
         this.appendFileLink(contentContainer, task);
         this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
-        this.bindParentCheckbox(contentContainer, hold, settings, task.isReadOnly);
+        if (!policies.inert) this.bindParentCheckbox(contentContainer, hold, settings, task.isReadOnly);
 
         // Apply mask last so it overlays whatever child/inline renderer produced.
         const mask = getEffectiveMask(task);
@@ -581,7 +592,8 @@ export class TaskCardRenderer extends Component {
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
-        expandChildren = false
+        expandChildren: boolean,
+        inert: boolean,
     ): LateContent {
         const nameAt = (index: number) => hold.childAt(index);
         if (!expandChildren && items.length >= settings.childCollapseThreshold) {
@@ -595,6 +607,7 @@ export class TaskCardRenderer extends Component {
                 task.file,
                 component,
                 settings,
+                inert,
                 task.startDate,
                 this.getChildOverdueIcon(task, settings)
             );
@@ -611,6 +624,7 @@ export class TaskCardRenderer extends Component {
             task.file,
             component,
             settings,
+            inert,
             task.startDate
         );
     }

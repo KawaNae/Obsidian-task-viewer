@@ -109,6 +109,12 @@ export class TaskStyling {
         else delete el.dataset.readOnly;
     }
 
+    /** Marks a card nothing is done on (`RenderOptions.inert`): its checkboxes and links take no press. */
+    static applyInert(el: HTMLElement, inert: boolean): void {
+        if (inert) el.dataset.inert = 'true';
+        else delete el.dataset.inert;
+    }
+
     /**
      * Applies split-segment variant classes from a DisplayTask's split flags.
      * Time-axis views (Timeline / Schedule) split a task across day boundaries

@@ -40,6 +40,9 @@ function countChildCompletion(
  * A section is drawn whole when its draw returns: the notation and the
  * checkboxes are laid on the markdown at once (`renderCardMarkdown`). What a
  * draw returns tells only when the late content is in (`LateContent`).
+ *
+ * On a card nothing is done on (`RenderOptions.inert`), no checkbox is wired
+ * and no child's ⋯ is drawn.
  */
 export class ChildSectionRenderer {
     constructor(
@@ -58,6 +61,7 @@ export class ChildSectionRenderer {
         filePath: string,
         component: Component,
         settings: TaskViewerSettings,
+        inert: boolean,
         parentStartDate?: string,
         warnIcon = ''
     ): LateContent {
@@ -78,8 +82,8 @@ export class ChildSectionRenderer {
             childrenContainer.addClass('task-card__children--collapsed');
         }
 
-        const late = this.renderAndPostProcess(childrenContainer, items, nameAt, filePath, component, parentStartDate);
-        this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings, nameAt);
+        const late = this.renderAndPostProcess(childrenContainer, items, nameAt, filePath, component, inert, parentStartDate);
+        if (!inert) this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings, nameAt);
 
         toggle.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -110,6 +114,7 @@ export class ChildSectionRenderer {
         filePath: string,
         component: Component,
         settings: TaskViewerSettings,
+        inert: boolean,
         parentStartDate?: string
     ): LateContent {
         const childTexts = items.map((item) => item.markdown);
@@ -117,8 +122,8 @@ export class ChildSectionRenderer {
         const late = renderCardMarkdown(this.app, fullText, contentContainer, filePath, component);
 
         // Parent checkbox occupies the first task-list-item, so child mapping starts at offset=1.
-        this.insertChildNotations(contentContainer, items, nameAt, parentStartDate, 1);
-        this.checkboxWiring.wireChildCheckboxesWithOffset(contentContainer, items, settings, 1, nameAt);
+        this.insertChildNotations(contentContainer, items, nameAt, inert, parentStartDate, 1);
+        if (!inert) this.checkboxWiring.wireChildCheckboxesWithOffset(contentContainer, items, settings, 1, nameAt);
         return late;
     }
 
@@ -128,11 +133,12 @@ export class ChildSectionRenderer {
         nameAt: (index: number) => string | undefined,
         filePath: string,
         component: Component,
+        inert: boolean,
         parentStartDate?: string
     ): LateContent {
         const markdown = items.map((item) => item.markdown).join('\n');
         const late = renderCardMarkdown(this.app, markdown, container, filePath, component);
-        this.insertChildNotations(container, items, nameAt, parentStartDate, 0);
+        this.insertChildNotations(container, items, nameAt, inert, parentStartDate, 0);
         this.markPropertyLines(container, items);
         return late;
     }
@@ -141,6 +147,7 @@ export class ChildSectionRenderer {
         container: HTMLElement,
         items: ChildRenderItem[],
         nameAt: (index: number) => string | undefined,
+        inert: boolean,
         parentStartDate?: string,
         checkboxOffset: number = 0
     ): void {
@@ -159,10 +166,11 @@ export class ChildSectionRenderer {
             const handler = item.handler;
             const isTask = handler && handler.type === 'task';
 
-            // For tasks: show ⋯ menu button
+            // For tasks: show ⋯ menu button, on a card things are done on
             // For items with notation: show notation text
             let el: HTMLElement;
             if (isTask) {
+                if (inert) continue;
                 const index = i;
                 el = this.createChildMenuButton(() => nameAt(index));
             } else if (item.notation) {
