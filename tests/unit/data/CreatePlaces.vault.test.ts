@@ -13,7 +13,8 @@ vi.mock('obsidian', async () => {
  * What the create dialog is told of a place before the line is written
  * (`CreatePlaces.facts`): where the line goes, and what it inherits there —
  * what the reading gives the line once it is written, and nothing else (a
- * daily note's day is not given).
+ * daily note's day is not given) — with where each value comes from, as the
+ * reading says it of the line once it is written (`inheritedFrom`).
  */
 
 const DAY = '2031-01-15';
@@ -48,6 +49,21 @@ describe('a daily note as a place', () => {
         expect(facts.inherits).toMatchObject({ startDate: '2031-01-15', startTime: '10:00', color: 'ff0000' });
     });
 
+    it('says where each inherited value comes from, as the reading says it of the line once it is written', async () => {
+        const { session, places: p } = await places({
+            [NOTE]: ['---', 'tags: [ft]', 'tv-start: "2031-01-15"', '---', '## Tasks', '- tv-color:: ff0000', '- area:: lab', '- [ ] 既存', ''].join('\n'),
+        });
+        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
+        expect(facts.inheritedFrom?.fields.startDate).toMatchObject({ kind: 'frontmatter' });
+        expect(facts.inheritedFrom?.fields.color).toMatchObject({ kind: 'section' });
+        expect(Object.keys(facts.inheritedFrom?.properties ?? {})).toEqual(['area']);
+
+        await p.create({ kind: 'dailyNote', date: DAY }, { line: '- [ ] 新しい' }, { tellRefusal: false });
+        const written = session.index.getTasks().find(task => task.content === '新しい')!;
+        expect(facts.inheritedFrom).toEqual(written.inheritedFrom);
+        expect(facts.inherits).toEqual(written.cascadeContext);
+    });
+
     it('there without the heading: the write makes it at the end, where the line inherits the frontmatter', async () => {
         const { places: p } = await places({ [NOTE]: ['---', 'tv-due: "2031-01-20"', '---', '# day', ''].join('\n') });
         const facts = await p.facts({ kind: 'dailyNote', date: DAY });
@@ -69,6 +85,7 @@ describe('a daily note as a place', () => {
         const { places: p } = await places({ [NOTE]: '## Tasks\n## Tasks\n' });
         const facts = await p.facts({ kind: 'dailyNote', date: DAY });
         expect(facts).toMatchObject({ heading: { kind: 'many', count: 2 }, inherits: {} });
+        expect(facts.inheritedFrom).toBeUndefined();
     });
 
     it('not there: read as its template makes it for the day', async () => {
@@ -100,7 +117,17 @@ describe('the head of a row\'s children as a place', () => {
         const { session, places: p } = await places({ 'n.md': LINES.replace('親', '親 @2031-03-01') });
         const parent = session.index.getTasks().find(task => task.content === '親')!;
         const facts = await p.facts({ kind: 'childOf', taskId: parent.id });
-        expect(facts).toEqual({ kind: 'childOf', parent: '親', inherits: { startDate: '2031-02-01' } });
+        expect(facts).toMatchObject({ kind: 'childOf', parent: '親', inherits: { startDate: '2031-02-01' } });
+        expect(Object.keys(facts.inherits)).toEqual(['startDate']);
+    });
+
+    it('says where each inherited value comes from as the reading says it of the children there', async () => {
+        const { session, places: p } = await places({ 'n.md': LINES });
+        const parent = session.index.getTasks().find(task => task.content === '親')!;
+        const child = session.index.getTasks().find(task => task.content === '子')!;
+        const facts = await p.facts({ kind: 'childOf', taskId: parent.id });
+        expect(facts.inheritedFrom?.fields.startDate).toMatchObject({ kind: 'section', line: 1 });
+        expect(facts.inheritedFrom).toEqual(child.inheritedFrom);
     });
 
     it('a row no longer in the index: gone', async () => {

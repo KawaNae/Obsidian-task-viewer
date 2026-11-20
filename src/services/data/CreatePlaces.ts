@@ -6,6 +6,7 @@ import { dailyNotes, notePath } from '../../utils/PeriodicNotes';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { NoteSections } from '../parsing/tree/NoteSections';
 import { NoteTasks } from '../parsing/tree/NoteTasks';
+import type { ResolvedSources, SectionNode } from '../parsing/tree/Sections';
 import { Outline } from '../parsing/utils/Outline';
 import { Destination, type Section } from '../persistence/Destination';
 import { draftOver, splitLines } from '../persistence/FileLines';
@@ -27,9 +28,20 @@ export type CreatePlace =
 export type Inherits = NonNullable<Task['cascadeContext']>;
 
 /**
+ * What a line put in a place inherits there (`inherits`), and where each of
+ * those values comes from (`inheritedFrom`, as a row's holds it; absent when
+ * no layer above says anything).
+ */
+export interface Inheritance {
+    inherits: Inherits;
+    inheritedFrom?: ResolvedSources;
+}
+
+/**
  * What a place is, for the create dialog to say before the line is written
  * (`CreatePlaces.facts`), and what a line put there inherits (`inherits`):
- * what the read layer gives the line once it is written, and nothing else.
+ * what the read layer gives the line once it is written, and nothing else,
+ * with where it comes from (`inheritedFrom`).
  * A daily note's day is not one of them: the reading gives a line no date of
  * the note's name.
  *
@@ -49,10 +61,9 @@ export type PlaceFacts =
         note: 'existing' | 'new';
         heading: HeadingLookup;
         ignored: boolean;
-        inherits: Inherits;
-    }
-    | { kind: 'childOf'; parent: string; inherits: Inherits }
-    | { kind: 'gone'; inherits: Inherits };
+    } & Inheritance
+    | { kind: 'childOf'; parent: string } & Inheritance
+    | { kind: 'gone' } & Inheritance;
 
 /** A task line as the reading takes it, put where a new line goes to find the section it lands in. */
 const PROBE = '- [ ] _';
@@ -100,7 +111,7 @@ export class CreatePlaces {
             const parent = this.getTask(place.taskId);
             if (!parent) return { kind: 'gone', inherits: {} };
             const lines = await this.linesOf(parent.file);
-            return { kind: 'childOf', parent: parent.content, inherits: inheritsAt(lines ?? [], parent.line, settings) };
+            return { kind: 'childOf', parent: parent.content, ...inheritanceAt(lines ?? [], parent.line, settings) };
         }
 
         const desc = dailyNotes(this.app);
@@ -124,8 +135,7 @@ export class CreatePlaces {
         }
         const read = FileParsePipeline.resolveSections(working, settings);
         if (!read) return { ...facts, ignored: true, inherits: {} };
-        const landed = NoteSections.at(read.root, at);
-        return { ...facts, ignored: false, inherits: landed ? NoteTasks.inheritance(landed) : {} };
+        return { ...facts, ignored: false, ...inheritanceOf(NoteSections.at(read.root, at)) };
     }
 
     /**
@@ -150,8 +160,14 @@ export class CreatePlaces {
 }
 
 /** What a line standing at `row` of `lines` inherits: its section's resolved values; none in a note the index does not read. */
-function inheritsAt(lines: readonly string[], row: number, settings: TaskViewerSettings): Inherits {
+function inheritanceAt(lines: readonly string[], row: number, settings: TaskViewerSettings): Inheritance {
     const read = FileParsePipeline.resolveSections(lines, settings);
-    const section = read ? NoteSections.at(read.root, row) : undefined;
-    return section ? NoteTasks.inheritance(section) : {};
+    return inheritanceOf(read ? NoteSections.at(read.root, row) : undefined);
+}
+
+/** What a line standing in `section` inherits, and from where, as the reading gives a row there (`NoteTasks`); none with no section. */
+function inheritanceOf(section: SectionNode | undefined): Inheritance {
+    if (!section) return { inherits: {} };
+    const inheritedFrom = NoteTasks.sourcesOf(section);
+    return inheritedFrom ? { inherits: NoteTasks.inheritance(section), inheritedFrom } : { inherits: NoteTasks.inheritance(section) };
 }
