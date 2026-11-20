@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { contentKeyOf } from '../../../../src/services/core/ContentKey';
 import type { FrameCard } from '../../../../src/services/data/MarkdownFrames';
 import type { FrameRead } from '../../../../src/views/sidebar/MarkdownFrameReader';
 import type { MarkdownFrameViewHost } from '../../../../src/views/sidebar/MarkdownFrameView';
@@ -137,12 +138,25 @@ afterEach(() => {
 
 const PATH = 'Habits.md';
 
-/** A card of the markdown `markdown`, opened by `heading`, with no style and no mask unless `more` gives one. */
-const card = (heading: string | null, markdown: string, more: Partial<FrameCard> = {}): FrameCard =>
+/** A card read of the markdown `markdown`, opened by `heading`, with no style and no mask unless `more` gives one; where its lines are, `noteOf` says. */
+type ReadCard = Omit<FrameCard, 'rows'>;
+const card = (heading: string | null, markdown: string, more: Partial<ReadCard> = {}): ReadCard =>
     ({ heading, markdown, color: null, linestyle: null, mask: null, ...more });
 
-/** What a frame read of the whole note at `path`: `cards`. */
-const noteOf = (cards: FrameCard[], path = PATH): FrameRead => ({ reading: { kind: 'note', cards }, title: 'Habits', path });
+/**
+ * What a frame read of the whole note at `path`, whose lines are `above` and
+ * then the cards' markdown, one card after another: `cards`, each on its own
+ * lines of the note, and the key of the note's lines.
+ */
+const noteOf = (cards: ReadCard[], path = PATH, above: string[] = []): FrameRead => {
+    const lines = [...above];
+    const read = cards.map((c): FrameCard => {
+        const from = lines.length;
+        if (c.markdown !== '') lines.push(...c.markdown.split('\n'));
+        return { ...c, rows: { from, to: lines.length, lines: Array.from({ length: lines.length - from }, (_, k) => from + k) } };
+    });
+    return { reading: { kind: 'note', cards: read }, title: 'Habits', path, key: contentKeyOf(lines) };
+};
 
 async function frameView(options: { collapsed?: boolean; placed?: boolean; masked?: boolean } = {}) {
     const { MarkdownFrameView } = await import('../../../../src/views/sidebar/MarkdownFrameView');
@@ -416,7 +430,7 @@ describe('a markdown frame whose note or section is not there', () => {
         expect(f.cards()[0].all('markdown-frame__missing-relink')).toHaveLength(1);
         expect(f.cards()[0].all('markdown-frame__missing-remove')).toHaveLength(1);
 
-        f.view.show({ reading: { kind: 'no-heading' }, title: 'Habits', path: PATH });
+        f.view.show({ reading: { kind: 'no-heading' }, title: 'Habits', path: PATH, key: contentKeyOf(['# Other']) });
         expect(f.cards()).toHaveLength(1);
 
         f.view.show(noteOf([card('## A', '## A'), card('## B', '## B')]));

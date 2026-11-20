@@ -142,7 +142,9 @@ export class MarkdownFrameView {
      * show the same; one that none is takes, in order, a drawn card no
      * wanted card took, which keeps what it shows while it waits to render
      * (`MarkdownFrameCard.paint`); and a card is made for each still left.
-     * The drawn cards none took are ended. The cards are then put in their
+     * Each is handed what it is to show, one that shows the same already
+     * too, so that it has where its lines are in the note as last read
+     * without being rendered again. The drawn cards none took are ended. The cards are then put in their
      * order, moving only those out of their place.
      *
      * Markdown waits while the frame is folded, while its element stands in
@@ -195,13 +197,13 @@ export class MarkdownFrameView {
         const { read } = this;
         if (!read) return null;
         if (read.path === null) return [{ content: { kind: 'missing', what: 'no-note' }, style: NO_STYLE }];
-        const { reading, path } = read;
+        const { reading, path, key } = read;
         if (reading.kind === 'no-heading') return [{ content: { kind: 'missing', what: 'no-heading' }, style: NO_STYLE }];
         const masked = this.host.masked();
         return reading.cards.map(card => ({
             content: masked && card.mask !== null
                 ? { kind: 'mask', heading: card.heading, text: card.mask, path }
-                : { kind: 'body', markdown: card.markdown, path },
+                : { kind: 'body', markdown: card.markdown, path, key, lines: card.rows.lines },
             style: { color: card.color, linestyle: card.linestyle, opensWithHeading: card.heading !== null },
         }));
     }
