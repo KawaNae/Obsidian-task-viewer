@@ -242,6 +242,25 @@ describe('the cards of a markdown frame', () => {
         expect(f.texts()).toEqual(['## A\na', '## B\nb, more', '## C\nc']);
     });
 
+    it('renders no card again when only where its lines are in the note changed, and hands each the key and the lines read last', async () => {
+        const f = await frameView();
+        const cards = [card(null, 'intro'), card('## A', '## A\na'), card('## B', '## B\nb')];
+        f.view.show(noteOf(cards));
+        const contents = f.contents();
+        renders.length = 0;
+
+        // A line put above them all: the note's key and every card's lines change, none of the markdown.
+        f.view.show(noteOf(cards, PATH, ['- [ ] added above']));
+        const key = contentKeyOf(['- [ ] added above', 'intro', '## A', 'a', '## B', 'b']);
+        expect(renders).toEqual([]);
+        expect(f.contents()).toEqual(contents);
+        expect(f.view['cards'].map(c => c.content)).toEqual([
+            { kind: 'body', markdown: 'intro', path: PATH, key, lines: [1] },
+            { kind: 'body', markdown: '## A\na', path: PATH, key, lines: [2, 3] },
+            { kind: 'body', markdown: '## B\nb', path: PATH, key, lines: [4, 5] },
+        ]);
+    });
+
     it('renders only the card added, and moves no other card', async () => {
         const f = await frameView();
         f.view.show(noteOf([card('## A', '## A'), card('## C', '## C')]));
@@ -437,5 +456,15 @@ describe('a markdown frame whose note or section is not there', () => {
         expect(f.root.classes.has('markdown-frame--missing')).toBe(false);
         expect(f.texts()).toEqual(['## A', '## B']);
         expect(f.cards().flatMap(el => el.all('markdown-frame__missing'))).toEqual([]);
+    });
+});
+
+describe('whether a card shows what it is to show already', () => {
+    it('does not ask where a body\'s lines are in the note, only its markdown and its path', async () => {
+        const { sameContent } = await import('../../../../src/views/sidebar/MarkdownFrameCard');
+        const body = { kind: 'body', markdown: '- [ ] a', path: PATH, key: contentKeyOf(['- [ ] a']), lines: [0] } as const;
+        expect(sameContent(body, { ...body, key: contentKeyOf(['x', '- [ ] a']), lines: [1] })).toBe(true);
+        expect(sameContent(body, { ...body, markdown: '- [x] a' })).toBe(false);
+        expect(sameContent(body, { ...body, path: 'Moved/Habits.md' })).toBe(false);
     });
 });

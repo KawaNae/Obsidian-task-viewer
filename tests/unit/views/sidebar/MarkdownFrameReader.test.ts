@@ -76,6 +76,20 @@ describe('the reader of a markdown frame', () => {
         });
     });
 
+    it('hands on the key of the lines it read, cut as a write cuts them, and a new key once the note was written to', async () => {
+        const frame = readerOver('Folder/Note#Memo');
+        frame.name('Folder/Note', 'Folder/Note.md');
+        frame.reader.follow();
+        await frame.pending[0].end(MEMO_NOTE.replaceAll('\n', '\r\n'));
+        void frame.reader.read();
+        await frame.pending[1].end(['# Memo', 'first, then more', '# Other', 'second'].join('\n'));
+
+        const keys = frame.reads.map(read => (read.path === null ? null : read.key));
+        expect(keys[0]).toBe(contentKeyOf(MEMO_NOTE.split('\n')));
+        expect(keys[1]).toBe(contentKeyOf(['# Memo', 'first, then more', '# Other', 'second']));
+        expect(keys[1]).not.toBe(keys[0]);
+    });
+
     it('turns to the note again only when the link names another file, or the file is at another path', () => {
         const frame = readerOver('Note');
         const note = frame.name('Note', 'Note.md');

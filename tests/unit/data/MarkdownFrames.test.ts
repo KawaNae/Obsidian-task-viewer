@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { frameLink, frameLinkAt, frameTarget, frameTitle, readFrameContent, type FrameContent } from '../../../src/services/data/MarkdownFrames';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { splitLines } from '../../../src/services/persistence/FileLines';
 import { headingLinks } from '../../../src/services/parsing/utils/HeadingLinks';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
@@ -385,5 +386,62 @@ describe('readFrameContent: the whole note', () => {
     it('reads a tv-ignore\'d note as any other', () => {
         const note = ['---', 'tv-ignore: true', 'tv-color: red', '---', 'intro', '## A', 'body'];
         expect(read(note, '')).toEqual({ kind: 'note', cards: [{ ...plain(null, 'intro'), color: 'red' }, { ...plain('## A', '## A\nbody'), color: 'red' }] });
+    });
+});
+
+describe('readFrameContent: the lines of the note a card stands on', () => {
+    /** Each card's rows. */
+    const rowsOf = (lines: string[], subpath: string) => {
+        const content = readFrameContent(lines, subpath, DEFAULT_SETTINGS);
+        return content.kind === 'no-heading' ? undefined : content.cards.map(card => card.rows);
+    };
+
+    it('gives a card under the section\'s heading its lines from under the heading, and a nested heading\'s card its lines from the heading on', () => {
+        const note = ['# Top', 'intro', '## A', 'a', '### Deep', 'd', '## B', 'b'];
+        expect(rowsOf(note, '#Top')).toEqual([
+            { from: 1, to: 2, lines: [1] },
+            { from: 2, to: 6, lines: [2, 3, 4, 5] },
+            { from: 6, to: 8, lines: [6, 7] },
+        ]);
+    });
+
+    it('gives a card a setext heading opens both of the heading\'s lines', () => {
+        expect(rowsOf(['# Top', 'Under', '---', 'u'], '#Top')).toEqual([{ from: 1, to: 4, lines: [1, 2, 3] }]);
+    });
+
+    it('skips the property lines left out of the markdown, and the lines under them, within the card\'s range', () => {
+        const note = ['## A', 'text', '### Sub', '- tv-linestyle:: dashed', '- area::', '    - lab', '', 'sub text'];
+        expect(rowsOf(note, '#A')).toEqual([
+            { from: 1, to: 2, lines: [1] },
+            { from: 2, to: 8, lines: [2, 6, 7] },
+        ]);
+    });
+
+    it('keeps the blank lines taken off a card\'s two ends in its range, and none of them among its lines', () => {
+        expect(rowsOf(['## A', '', '　', 'one', '', 'two', '', ' ', '## B'], '#A')).toEqual([{ from: 1, to: 8, lines: [3, 4, 5] }]);
+        expect(rowsOf(['## A', '- tv-color:: teal', '', 'text'], '#A')).toEqual([{ from: 1, to: 4, lines: [3] }]);
+    });
+
+    it('gives an empty card its range and no line', () => {
+        expect(rowsOf(['## A', '', '', '## B'], '#A')).toEqual([{ from: 1, to: 3, lines: [] }]);
+        expect(rowsOf([], '')).toEqual([{ from: 0, to: 0, lines: [] }]);
+    });
+
+    it('starts the whole note\'s first card past the frontmatter', () => {
+        const note = ['---', 'tv-color: red', '---', '', 'intro', '## A', 'a'];
+        expect(rowsOf(note, '')).toEqual([
+            { from: 3, to: 5, lines: [4] },
+            { from: 5, to: 7, lines: [5, 6] },
+        ]);
+    });
+
+    it('stands on the lines a note written with CRLF, or a lone CR, is cut into', () => {
+        const { lines } = splitLines('---\r\na: 1\r\n---\r\n# Top\r\n- tv-color:: teal\r\n\r\nintro\r\n## A\ra\r\n');
+        const content = readFrameContent(lines, '#Top', DEFAULT_SETTINGS);
+        expectRowsHold(lines, content);
+        expect(rowsOf(lines, '#Top')).toEqual([
+            { from: 4, to: 7, lines: [6] },
+            { from: 7, to: 10, lines: [7, 8] },
+        ]);
     });
 });
