@@ -491,7 +491,8 @@ export class TimerRenderer {
         display.setAttribute('tabindex', '0');
         display.setAttribute('aria-label', t('timer.offsetStart'));
         if (!icon) {
-            setIcon(display.createSpan({ cls: 'timer-widget__offset-icon', attr: { 'aria-hidden': 'true' } }), 'pencil');
+            // Obsidian は `pencil` を下線付きの Lucide の `edit-3` に読み替えるので、Lucide の名前で引く。
+            setIcon(display.createSpan({ cls: 'timer-widget__offset-icon', attr: { 'aria-hidden': 'true' } }), 'lucide-pencil');
         }
     }
 

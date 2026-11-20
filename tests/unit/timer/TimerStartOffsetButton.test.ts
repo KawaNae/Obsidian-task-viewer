@@ -179,7 +179,7 @@ function expectButton(display: FakeEl): void {
     expect(display.getAttribute('tabindex')).toBe('0');
     expect(display.getAttribute('aria-label')).toBe(t('timer.offsetStart'));
     expect(display.classes.has('timer-widget__time-display--offsettable')).toBe(true);
-    expect(pencilOf(display)?.icon).toBe('pencil');
+    expect(pencilOf(display)?.icon).toBe('lucide-pencil');
     expect(pencilOf(display)?.getAttribute('aria-hidden')).toBe('true');
 }
 

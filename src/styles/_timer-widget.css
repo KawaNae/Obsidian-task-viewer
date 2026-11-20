@@ -371,7 +371,7 @@
 
 /*
  * 箱は数字を囲むだけの大きさで、鉛筆（.timer-widget__offset-icon）は箱の外の
- * 真下に置く。鉛筆のある間も無い間も箱は同じ形で、数字は輪の中央から動かない。
+ * 右肩に置く。鉛筆のある間も無い間も箱は同じ形で、数字は輪の中央から動かない。
  */
 .timer-widget__time-display {
     font-size: 1.5rem;
@@ -408,23 +408,23 @@
 }
 
 /*
- * 数字より目立たせない: countup の数字と同じ muted で、数字より小さく。
- * 数字の真下の中央に置き、桁が増えても輪の線へ寄らない。箱の下辺に 2px
- * 重ねて、数字と鉛筆の間に押しても反応しない隙間を作らない。
+ * 数字より目立たせない: countup の数字の muted より一段薄く、数字より小さく。
+ * 数字の右肩、箱の右上の角の外に置く。角に 3px 重ねて、数字と鉛筆の間に
+ * 押しても反応しない隙間を作らない。
  */
 .timer-widget__offset-icon {
     position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translate(-50%, -2px);
+    top: 0;
+    left: 100%;
+    transform: translate(-3px, -3px);
     display: flex;
-    color: var(--tv-text-muted);
+    color: var(--tv-text-faint);
     transition: color 120ms ease;
 }
 
 .timer-widget__offset-icon svg {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
 }
 
 .timer-widget__time-display--offsettable:hover .timer-widget__offset-icon,
