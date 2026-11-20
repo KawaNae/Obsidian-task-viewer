@@ -16,7 +16,6 @@ import { bindField, type BoundField } from '../form/bindField';
 import { IssueBoard, readIssue, type IssueSlot } from '../form/FormIssue';
 import { TaskContentInput } from '../../services/parsing/tv-inline/TaskContentInput';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
-import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
 import type { DateTimeFields } from '../TaskDateValidator';
 import { logError } from '../../log/log';
@@ -141,7 +140,6 @@ export class TaskHubForm {
             app: deps.app,
             plugin: deps.plugin,
             index: deps.index,
-            sourceLabel: (source) => this.sourceLabel(source),
             openSource: (locate) => this.openSource(locate),
             issues: this.issues,
             findings: () => this.findings,
@@ -293,10 +291,6 @@ export class TaskHubForm {
     }
 
     // ==================== 共通小物 ====================
-
-    private sourceLabel(source: CascadeSourceKind): string {
-        return source === 'file' ? t('modal.hub.inheritedFromFile') : t('modal.hub.inheritedFromSection');
-    }
 
     /** Open a line of the row's note and light it (`openSourceLine`); the hub closes, as for any navigation. */
     private openSource(locate: (task: Task) => LineTarget | null): void {

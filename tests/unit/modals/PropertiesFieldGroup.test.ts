@@ -39,7 +39,6 @@ function setUp(properties: Properties = {}, opts: { refuse?: boolean } = {}) {
         app: { keymap: { pushScope: () => { }, popScope: () => { } } },
         plugin: { settings: DEFAULT_SETTINGS },
         index: { getTasks: () => [] },
-        sourceLabel: () => '',
         openSource: () => { },
         findings: () => [],
         locked: () => false,
