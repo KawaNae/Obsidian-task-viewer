@@ -22,7 +22,7 @@ import { keyOf } from './EditorDoc';
 import { writeEditorLine, type EditorLineHost } from './EditorWrite';
 import { taskShownAt, type ShownTaskLookup } from './ShownTask';
 import type { ContentKey } from '../services/core/ContentKey';
-import { editorRow, type RowRef } from '../services/persistence/FileLines';
+import { keyedRow, type RowRef } from '../services/persistence/FileLines';
 import type { TaskOp } from '../services/persistence/TaskOps';
 
 const taskIndexChanged = StateEffect.define<void>();
@@ -191,7 +191,7 @@ export function createTaskMenuExtension(
 
                 // The line holds only in the content the menu was opened in.
                 const key = keyOf(view.state.doc);
-                const at = editorRow(lineNumber, lineText, key);
+                const at = keyedRow(lineNumber, lineText, key);
                 // What a delete takes, as the editor shows it now: the line
                 // and its subtree. The write takes it only if they still
                 // read so.
@@ -203,7 +203,7 @@ export function createTaskMenuExtension(
                 const ops: CheckboxLineOps = {
                     updateLine: (content) => write(at, [{ kind: 'update', text: content }]),
                     insertLineAfter: (content) => write(at, [{ kind: 'copies', side: 'below', lines: [content], children: false }]),
-                    deleteLine: () => write(editorRow(lineNumber, lineText, key, subtree), [{ kind: 'remove' }]),
+                    deleteLine: () => write(keyedRow(lineNumber, lineText, key, subtree), [{ kind: 'remove' }]),
                 };
 
                 checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops);

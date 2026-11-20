@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { editorRow } from '../../../src/services/persistence/FileLines';
+import { keyedRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE, type Filed } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
@@ -109,7 +109,7 @@ describe('what the editor menu delete reports (write, remove)', () => {
             '- [ ] 次 @2026-09-21',
         ]);
 
-        await b.writer.write(FILE, editorRow(0, b.lines()[0], contentKeyOf(b.lines()), b.lines().slice(0, 2)), [{ kind: 'remove' }]);
+        await b.writer.write(FILE, keyedRow(0, b.lines()[0], contentKeyOf(b.lines()), b.lines().slice(0, 2)), [{ kind: 'remove' }]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
         expect(b.lines()).toEqual(['- [ ] 次 @2026-09-21']);
@@ -125,7 +125,7 @@ describe('what the editor menu delete reports (write, remove)', () => {
         for (const at of [1, 3, 4, 6]) {
             const b = await writeBench(note);
 
-            await b.writer.write(FILE, editorRow(at, note[at], contentKeyOf(note), [note[at]]), [{ kind: 'remove' }]);
+            await b.writer.write(FILE, keyedRow(at, note[at], contentKeyOf(note), [note[at]]), [{ kind: 'remove' }]);
 
             expect(only(b.filed).edits).toEqual([{ kind: 'removed', at, count: 1 }]);
             expect(b.lines()).toEqual(note.filter((_, i) => i !== at));
@@ -135,7 +135,7 @@ describe('what the editor menu delete reports (write, remove)', () => {
     it('files nothing when the coordinate is past the end', async () => {
         const b = await writeBench(['- [ ] 親 @2026-09-21']);
 
-        await b.writer.write(FILE, editorRow(5, '- [ ] 親 @2026-09-21', contentKeyOf(b.lines()), ['- [ ] 親 @2026-09-21']), [{ kind: 'remove' }]);
+        await b.writer.write(FILE, keyedRow(5, '- [ ] 親 @2026-09-21', contentKeyOf(b.lines()), ['- [ ] 親 @2026-09-21']), [{ kind: 'remove' }]);
 
         expect(b.filed).toEqual([]);
         expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ] 親 @2026-09-21' }]);

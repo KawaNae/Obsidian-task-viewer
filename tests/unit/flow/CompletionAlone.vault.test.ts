@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { editorRow } from '../../../src/services/persistence/FileLines';
+import { keyedRow } from '../../../src/services/persistence/FileLines';
 import { Notice } from '../mocks/obsidian';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
@@ -53,7 +53,7 @@ describe('a completion whose fire would disturb the note', () => {
 
     it('is written alone in one write, from the editor menu on a note no editor shows', async () => {
         const note = await open();
-        const at = editorRow(2, NOTE[2], contentKeyOf(NOTE));
+        const at = keyedRow(2, NOTE[2], contentKeyOf(NOTE));
         expect(await note.session.ops.writeLine(FILE, at, [{ kind: 'update', text: DONE[2] }])).toBe(true);
         await note.session.flowSettled(FILE);
         expect(note.contents.get(FILE)).toBe(DONE.join('\n'));

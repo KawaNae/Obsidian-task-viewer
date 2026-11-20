@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { editorRow } from '../../../src/services/persistence/FileLines';
+import { keyedRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { Notice } from '../mocks/obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
@@ -68,7 +68,7 @@ describe('the editor\'s duplicate (one line by the `copies` op, copyOf)', () => 
     it('is spelled as the row it copies, not as the sibling below it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [ ] V', '']);
 
-        expect(await session.ops.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
+        expect(await session.ops.writeLine(FILE, keyedRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '\t- [ ] T', '    - [ ] V', '']);
@@ -79,7 +79,7 @@ describe('the editor\'s duplicate (one line by the `copies` op, copyOf)', () => 
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
 
-        expect(await session.ops.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
+        expect(await session.ops.writeLine(FILE, keyedRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '\t- [ ] T', '- [ ] U', '']);
