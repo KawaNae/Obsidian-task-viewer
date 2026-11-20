@@ -789,7 +789,8 @@ export class Operations {
      * index, in the file: a row named by that content's key, its line
      * number and the line's text there (`keyedRow`), written only while the
      * file reads as that content. The editor menu's write comes here when
-     * the editor it was opened in no longer shows the file (`shows`). A
+     * the editor it was opened in no longer shows the file (`shows`), and a
+     * checkbox of a markdown frame's card with the lines the frame read. A
      * rewrite that completes the line — an `update` whose text `completes`
      * the line as it was read — fires in the same write, as a card's does
      * (see writeUpdate), its `fire` the last op of the write.

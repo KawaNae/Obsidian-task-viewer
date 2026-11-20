@@ -867,7 +867,8 @@
     "noteNotFound": "ノートが見つかりません",
     "sectionNotFound": "セクションが見つかりません",
     "relink": "選び直す",
-    "relinkSection": "セクションを選び直す"
+    "relinkSection": "セクションを選び直す",
+    "checkboxUnmatched": "書き込みませんでした: このチェックボックスがノートのどの行かを確かめられません"
   },
   "pinnedList": {
     "addList": "リストを追加",

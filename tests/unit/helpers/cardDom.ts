@@ -66,13 +66,15 @@ export class FakeEl {
     get className(): string { return [...this.classes].join(' '); }
     set className(cls: string) { this.classes = new Set(cls.split(/\s+/).filter(Boolean)); }
     get isConnected(): boolean { return true; }
+    /** The document the element was made in: one that makes elements of its own, as a pop-out window's does. */
+    get ownerDocument(): { createElement(tag: string): FakeEl } { return { createElement: (tag: string) => new FakeEl(tag) }; }
     get textContent(): string { return this.childNodes.map(n => n.textContent).join(''); }
     set textContent(text: string) {
         this.empty();
         if (text) this.appendChild(new FakeText(text));
     }
 
-    createDiv(cls = ''): FakeEl { return this.appendChild(new FakeEl('div', cls)); }
+    createDiv(o: string | { cls?: string; text?: string } = ''): FakeEl { return this.createEl('div', typeof o === 'string' ? { cls: o } : o); }
     createSpan(cls = ''): FakeEl { return this.appendChild(new FakeEl('span', cls)); }
     createEl(tag: string, o: { cls?: string; text?: string; attr?: Record<string, string> } = {}): FakeEl {
         const el = this.appendChild(new FakeEl(tag, o.cls));
@@ -154,6 +156,10 @@ export class FakeEl {
         return out;
     }
     querySelector(selector: string): FakeEl | null { return this.querySelectorAll(selector)[0] ?? null; }
+    contains(node: FakeNode | null): boolean {
+        for (let at: FakeNode | null = node; at; at = at.parentElement) if (at === this) return true;
+        return false;
+    }
 
     /** The text nodes under this element, in document order. */
     texts(): FakeText[] {
@@ -167,7 +173,7 @@ function dataKey(name: string): string | null {
     return name.slice(5).replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
-/** One compound selector: `tag.class[attr="v"]:not(.class)`, or `:scope`. */
+/** One compound selector: `tag.class[attr="v"]:not(.class)` (`^=` and `*=` too), or `:scope`. */
 function matchesCompound(el: FakeEl, compound: string, scope: FakeEl): boolean {
     if (compound === ':scope') return el === scope;
     let rest = compound;
@@ -181,9 +187,11 @@ function matchesCompound(el: FakeEl, compound: string, scope: FakeEl): boolean {
         if (part.startsWith('.')) {
             if (!el.classes.has(part.slice(1))) return false;
         } else if (part.startsWith('[')) {
-            const m = part.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/)!;
-            const value = el.getAttribute(m[1]);
-            if (value === null || (m[2] !== undefined && value !== m[2])) return false;
+            const m = part.match(/^\[([\w-]+)(?:([\^*]?)="([^"]*)")?\]$/)!;
+            const value = m[1] === 'class' ? el.className : el.getAttribute(m[1]);
+            if (value === null) return false;
+            const [, , op, want] = m;
+            if (want !== undefined && !(op === '^' ? value.startsWith(want) : op === '*' ? value.includes(want) : value === want)) return false;
         } else {
             if (matchesCompound(el, part.slice(5, -1), scope)) return false;
         }

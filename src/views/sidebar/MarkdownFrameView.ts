@@ -39,6 +39,8 @@
  */
 
 import type { App } from 'obsidian';
+import type { ContentKey } from '../../services/core/ContentKey';
+import type { BoxLine } from '../../services/data/FrameCheckboxes';
 import { renderSectionHeader, type SectionHeaderClasses, type SectionHeaderHandle } from '../sharedUI/ListSectionRenderer';
 import { MarkdownFrameCard, sameContent, type CardContent, type CardStyle } from './MarkdownFrameCard';
 import type { FrameRead } from './MarkdownFrameReader';
@@ -70,6 +72,13 @@ export interface MarkdownFrameViewHost {
     remove(): void;
     /** Choose again the section the frame shows. */
     relink(): void;
+    /**
+     * Write `write`, a checkbox's line, to the note at `path`, its line a
+     * line of the content whose key is `key`: written only while the note
+     * reads as that content, and told when it is not. The content may
+     * be older than the frame's last reading: the one a card still shows.
+     */
+    writeBox(path: string, key: ContentKey, write: BoxLine): void;
 }
 
 /** What one card of the frame is to show, and how it is styled. */
