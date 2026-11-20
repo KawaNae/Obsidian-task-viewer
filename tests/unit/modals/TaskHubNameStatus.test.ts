@@ -188,6 +188,19 @@ describe('the hub\'s name', () => {
         expect(s.name.disabled).toBe(false);
     });
 
+    it('lets a close go at once while the form is shut, saving nothing and not waiting for a write under way', () => {
+        const s = setUp();
+        s.name.focus();
+        s.name.type('新しい名前');
+        s.name.enter();
+        expect(s.updateTask).toHaveBeenCalledTimes(1);
+
+        s.change(undefined);
+        s.name.type('もう一度');
+        expect(s.form.beforeClose()).toBe('close');
+        expect(s.updateTask).toHaveBeenCalledTimes(1);
+    });
+
     it('takes the focus when the form is asked to focus it', () => {
         const s = setUp();
         s.form.focusField('name');
@@ -257,6 +270,17 @@ describe('the hub\'s status', () => {
         expect(s.pill.classes.has('is-disabled')).toBe(false);
         event(s.pill, 'click');
         expect(s.present).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes nothing when a status is picked from a menu opened before the form was shut', () => {
+        const s = setUp();
+        event(s.pill, 'click');
+        expect(s.menus).toHaveLength(1);
+
+        s.change(undefined);
+        s.menus[0].items[DEFAULT_SETTINGS.statusDefinitions.findIndex(d => d.char === 'x')].pick();
+        expect(s.updateTask).not.toHaveBeenCalled();
+        expect(pillLabel(s.pill)).toBe(labelOf(' '));
     });
 
     it('takes the focus when the form is asked to focus it', () => {
