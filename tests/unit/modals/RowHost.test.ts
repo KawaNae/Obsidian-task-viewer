@@ -29,7 +29,8 @@ vi.mock('../../../src/modals/hub/SourceLine', () => ({ openSourceLine }));
 
 const REFUSED: IndexRefusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '元の名前' };
 
-function hostAnswering(written: boolean, fresh: Task | undefined, refused: IndexRefusal | null = REFUSED) {
+/** A host on a row, its writes answered as `written` says; `bound` false for a hub with no form (a read-only row). */
+function hostAnswering(written: boolean, fresh: Task | undefined, refused: IndexRefusal | null = REFUSED, bound = true) {
     const opened = makeTask({ id: 'task-1', content: '元の名前' });
     const updateTask = vi.fn(async (): Promise<WriteAnswer> => (written ? { written: true } : { written: false, refused }));
     /** The index's copy of the row; the host reads it once as it is made. */
@@ -56,7 +57,7 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         showShut: vi.fn(() => { told.push(`shut:${host.shut()}`); }),
         sayWrite(refusal) { this.said.push(refusal); },
     };
-    host.bind(form);
+    if (bound) host.bind(form);
     const panel: RowPanel = {
         redrawPreview: vi.fn(() => { told.push('preview'); }),
         follow: vi.fn((row: Task | undefined) => { told.push(`follow:${row?.content ?? 'none'}`); }),
@@ -231,6 +232,18 @@ describe('RowHost following the row', () => {
         h.change(makeTask({ id: 'task-1', content: 'A' }));
         h.change(makeTask({ id: 'task-1', content: 'B' }));
         expect(h.form.showShut).not.toHaveBeenCalled();
+    });
+
+    it('draws the card and tells the source with no form to tell, as on a read-only row', () => {
+        const h = hostAnswering(true, undefined, REFUSED, false);
+        h.host.attach(h.panel);
+
+        h.change(makeTask({ id: 'task-1', content: '外の名前' }));
+        h.change(undefined);
+        h.change(makeTask({ id: 'task-1', content: '戻った' }));
+
+        expect(h.told).toEqual(['preview', 'follow:外の名前', 'follow:none', 'preview', 'follow:戻った']);
+        expect(h.host.shut()).toBeNull();
     });
 
     it('no longer follows the row once the hub has closed', () => {
