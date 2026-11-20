@@ -88,4 +88,9 @@ describe('CascadeSource', () => {
         expect(CascadeSource.lineOfStyleField(root('under'), 'mask', 'tv-mask')).toEqual({ line: 5 });
         expect(CascadeSource.lineOfTag(root('under'), 'top')).toEqual({ line: 6 });
     });
+
+    it('labels a value of the note as the file\'s, and one of a heading\'s section as the section\'s', () => {
+        expect(CascadeSource.label('file')).toBe('inherited: file');
+        expect(CascadeSource.label('section')).toBe('inherited: section');
+    });
 });
