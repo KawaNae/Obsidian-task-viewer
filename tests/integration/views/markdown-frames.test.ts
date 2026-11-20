@@ -943,13 +943,13 @@ describe.each([
         expect(r.notices).toEqual([]);
     });
 
-    it('writes nothing for a checkbox of a note embedded in the body, leaves it as it is, and says the checkbox matches no line', () => {
+    it("writes nothing for a checkbox of a note embedded in the body, leaves it as it is, and says it is the embedded note's", () => {
         const r = clickBox('box in an embed');
         expect(r.found).toBe(true);
         expect(r.checked).toBe(false);
         expect(r.notes).toEqual({ [`${BOXES}.md`]: BOXES_NOTE, [`${EMBEDDED}.md`]: EMBEDDED_NOTE, [`${QUERIED}.md`]: QUERIED_NOTE });
         expect(r.checkedAfter).toBe(false);
-        expect(r.notices).toEqual([tr('sidebar.checkboxUnmatched')]);
+        expect(r.notices).toEqual([tr('sidebar.checkboxEmbedded')]);
     });
 
     it('leaves a checkbox of a Dataview task list to Dataview, which writes the note on each click', () => {
