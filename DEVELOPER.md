@@ -1441,7 +1441,7 @@ Shared with the standalone view:
 - `TimerClock` — the running or frozen clock (`readSeconds`, `freeze`, `resume`, `restart`, `shift`)
 - `IntervalMath` — moves the interval cursor, the round text, total duration, the Pomodoro segments
 - `TimerProgress` — what a measure shows (`progressOf`) and what a tick brings (`tickOf`)
-- `TimerProgressUI` — draws the ring and the time from `progressOf`, under the block it is given (`timer-widget__` or `timer-view__`)
+- `TimerProgressUI` — draws the ring and the time from `progressOf`, under the block it is given (`timer-widget__` or `timer-view__`). A tick writes only the time's own span (`__time-text`), so what a caller hangs on the time display stays
 - `TimerControlButton` — one control button; the view passes a variant (primary, secondary, danger), the widget's buttons have one look
 - `TimerSettingsMenu` — the duration menu (Pomodoro and countdown lengths)
 - `AudioUtils` — sounds (below)
@@ -1459,7 +1459,7 @@ The widget's own:
 - `TimerLazyEnd` — when to write a later end onto a running line that has outlived its implied end
 - `TimerSendCheck` — whether a send may carry a timer's lines (`anchorsOf`)
 - `TimerPersistence`, `TimerTargetIdUtils`
-- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion
+- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion. While the start can be shifted (`canOffsetStart`), the elapsed time is a button (`role`, `tabindex`, a pencil icon under the number) that opens the shift menu on a press, Enter or Space; otherwise it is only a number. The tick keeps it in step
 - `FloatingOverlayHost`, `TimerWidgetWindowObserver` — the container, dragging, and moving between windows. The default corner is in the stylesheet (`.timer-widget`); the host keeps only a dragged position
 
 ### Audio notifications (`timer/AudioUtils.ts`)

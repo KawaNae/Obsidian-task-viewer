@@ -5,6 +5,10 @@
  * `progressOf` answers. The widget and the standalone view share it; the
  * classes are built from the block name (`timer-widget__progress-ring`,
  * `timer-view__progress-ring`, ...).
+ *
+ * The time is a span of its own inside the time display, and an update writes
+ * only that span: the widget hangs its pencil on the display, and a tick must
+ * not wipe it.
  */
 
 import type { Progress, Tone } from './TimerProgress';
@@ -55,7 +59,7 @@ export class TimerProgressUI {
         container.appendChild(svg);
 
         const timeDisplay = container.createDiv(`${block}__time-display`);
-        timeDisplay.setText(options.format(state.displaySeconds));
+        timeDisplay.createSpan({ cls: `${block}__time-text`, text: options.format(state.displaySeconds) });
         if (state.countupLike) {
             timeDisplay.addClass(`${block}__time-display--countup`);
         }
@@ -81,7 +85,7 @@ export class TimerProgressUI {
 
         const timeDisplay = itemEl.querySelector(`.${block}__time-display`) as HTMLElement | null;
         if (timeDisplay) {
-            timeDisplay.setText(options.format(state.displaySeconds));
+            timeDisplay.querySelector(`.${block}__time-text`)?.setText(options.format(state.displaySeconds));
             timeDisplay.toggleClass(`${block}__time-display--countup`, state.countupLike);
         }
 

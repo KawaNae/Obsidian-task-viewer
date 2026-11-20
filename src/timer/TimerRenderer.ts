@@ -31,6 +31,7 @@ import { TimerProgressUI, type RingOptions, type RingState } from './TimerProgre
 import { TimerSettingsMenu } from './TimerSettingsMenu';
 import { OFFSET_PRESET_MINUTES, canOffsetStart, rememberedStart, startLabel } from './TimerStartOffset';
 import { TimerStartOffsetModal } from '../modals/TimerStartOffsetModal';
+import type { MenuAnchor } from '../interaction/menu/MenuPresenter';
 import { onFormEnter } from '../modals/form/formEnter';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
@@ -441,25 +442,57 @@ export class TimerRenderer {
     // ─── 開始をずらす ────────────────────────────────────────
 
     /**
-     * 経過時間の表示を、開始をずらすメニューの入口にする（countup と countdown）。
-     * 押せる見た目は走っている区間だけに付け（{@link syncStartOffset}）、押した
+     * 経過時間の表示を、開始をずらすメニューを開くボタンにする（countup と countdown）。
+     * ボタンになるのは走っている区間だけで（{@link syncStartOffset}）、押した
      * ときにも確かめる — 表示の要素は状態が変わっても組み直されないことがある。
+     *
+     * 表示の要素は輪の部品（`TimerProgressUI`）が描き、tick もその要素を書き直すので、
+     * 要素は替えずに役割を付け外しする。`button` にして押せない間を disabled にすると、
+     * 押せないボタンとして読み上げられ、表示の上から始めるウィジェットのドラッグも
+     * 要素の側で止まりうる。
+     *
+     * キーで開いたメニューは表示の下に出す（押した点が無い）。
      */
     private bindStartOffset(container: HTMLElement, timer: TimerState): void {
         if (timer.measure.type !== 'countup' && timer.measure.type !== 'countdown') return;
         const display = container.querySelector('.timer-widget__time-display') as HTMLElement | null;
         if (!display) return;
-        display.setAttribute('aria-label', t('timer.offsetStart'));
         display.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.showStartOffsetMenu(e, timer);
+            this.showStartOffsetMenu(timer, { kind: 'mouseEvent', event: e });
+        });
+        display.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            e.stopPropagation();
+            this.showStartOffsetMenu(timer, { kind: 'belowRect', rect: display.getBoundingClientRect() });
         });
         this.syncStartOffset(container, timer);
     }
 
+    /**
+     * 押せる間だけ、経過時間の表示をボタンにする: 役割、Tab で止まること、名前、
+     * 鉛筆。押せない間はただの数字に戻す。tick からも呼ぶ。
+     */
     private syncStartOffset(el: HTMLElement, timer: TimerState): void {
         const display = el.querySelector('.timer-widget__time-display') as HTMLElement | null;
-        display?.toggleClass('timer-widget__time-display--offsettable', canOffsetStart(timer));
+        if (!display) return;
+        const offsettable = canOffsetStart(timer);
+        display.toggleClass('timer-widget__time-display--offsettable', offsettable);
+        const icon = display.querySelector('.timer-widget__offset-icon');
+        if (!offsettable) {
+            display.removeAttribute('role');
+            display.removeAttribute('tabindex');
+            display.removeAttribute('aria-label');
+            icon?.remove();
+            return;
+        }
+        display.setAttribute('role', 'button');
+        display.setAttribute('tabindex', '0');
+        display.setAttribute('aria-label', t('timer.offsetStart'));
+        if (!icon) {
+            setIcon(display.createSpan({ cls: 'timer-widget__offset-icon', attr: { 'aria-hidden': 'true' } }), 'pencil');
+        }
     }
 
     /**
@@ -467,7 +500,7 @@ export class TimerRenderer {
      * 「N 分前」は選んだ時点の今から数える。書き込みと状態の移し方は
      * {@link TimerLifecycle.offsetStart} が持つ。
      */
-    private showStartOffsetMenu(e: MouseEvent, timer: TimerState): void {
+    private showStartOffsetMenu(timer: TimerState, anchor: MenuAnchor): void {
         const { board, lifecycle, plugin } = this.deps;
         if (!board.has(timer) || !canOffsetStart(timer)) return;
         const offset = (startMs: number): void => void lifecycle.offsetStart(timer, startMs);
@@ -493,7 +526,7 @@ export class TimerRenderer {
                     // The dialog waits for the write and says a refusal inside it.
                     .onClick(() => new TimerStartOffsetModal(this.deps.app, (startMs) => lifecycle.offsetStart(timer, startMs, { tellRefusal: false })).open());
             });
-        }, { kind: 'mouseEvent', event: e });
+        }, anchor);
     }
 
     // ─── ポモドーロの設定 ────────────────────────────────────
