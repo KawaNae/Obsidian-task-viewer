@@ -54,7 +54,6 @@ export function timerOn(task: Task, mode: RecordMode, kind: MeasureKind = 'count
         opening: null,
         recorded: { seconds: 0, count: 0 },
         priorStartMs: null,
-        draft: null,
         expanded: true,
     };
 }
@@ -76,7 +75,6 @@ export function timerOnDay(date: string, kind: MeasureKind = 'countup'): TimerSt
         opening: null,
         recorded: { seconds: 0, count: 0 },
         priorStartMs: null,
-        draft: null,
         expanded: true,
     };
 }

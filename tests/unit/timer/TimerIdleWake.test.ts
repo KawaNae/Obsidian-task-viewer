@@ -54,7 +54,6 @@ function countup(board: TimerBoard, running = true): TimerState {
         opening: null,
         recorded: { seconds: running ? 0 : 60, count: running ? 0 : 1 },
         priorStartMs: null,
-        draft: null,
         expanded: true,
     };
     board.add(timer);

@@ -121,21 +121,14 @@ describe('daily note timers own a running line too', () => {
         expect(h.appended[0]).toMatch(/^- \[ \]\s+@/);
     });
 
-    it('carries the draft into the line when one was typed before the write landed', async () => {
-        const h = makeHarness();
-        await h.recorder.writeStart(makeDailyTimer({ draft: '資料集め' }), null);
-
-        expect(h.appended[0]).toContain('資料集め');
-    });
-
     it('carries the name of the previous record into the next session', async () => {
         // 兄弟レコードは同名。継ぐ対象タスクが無いデイリーでは、直前のレコードが
         // 名前の出どころになる（毎回打ち直させない）。
         const h = makeHarness();
-        const timer = makeDailyTimer({ draft: '資料集め' });
+        const timer = makeDailyTimer();
         await h.recorder.writeStart(timer, null);
-        // 下書きは行に書き出して消えている（TimerContentBinding）。名前の正は行。
-        Object.assign(timer, step(timer, { type: 'drafted', draft: null }, Date.now()));
+        // 名前はハブで行に書かれ、索引の読み直しで行の content に載る。
+        h.tasks[0] = { ...h.tasks[0], content: '資料集め' };
 
         await h.recorder.startNextSession(timer);
 

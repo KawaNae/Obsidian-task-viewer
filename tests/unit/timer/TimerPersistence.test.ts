@@ -48,7 +48,6 @@ function countup(overrides: Partial<TimerState> = {}): TimerState {
         opening: null,
         recorded: { seconds: 0, count: 0 },
         priorStartMs: null,
-        draft: null,
         expanded: true,
         ...overrides,
     };
@@ -95,7 +94,6 @@ describe('saving the timers (version 9)', () => {
                 session: { kind: 'pending', record: { endMs: NOW, seconds: 700, then: 'close' } },
                 opening: { tail: 'tv-t-9', owned: ['tv-t-1', 'tv-t-9'] },
                 priorStartMs: NOW - 3_600_000,
-                draft: '打ちかけの名前',
             }),
         ];
         persistence().persist(timers, null);
@@ -110,6 +108,23 @@ describe('saving the timers (version 9)', () => {
         const [restored] = persistence().restore().timers;
         expect(restored).toEqual(countup());
         expect(Object.keys(restored)).not.toContain('intervalId');
+    });
+
+    it('reads a version 9 save that still carries the name draft, and drops the draft', () => {
+        const p = persistence();
+        p.persist([countup({ id: 'typed' }), countup({ id: 'empty' }), countup({ id: 'none' })], null);
+        rewrite(p, payload => {
+            payload.timers[0].draft = '打ちかけの名前';
+            payload.timers[1].draft = null;
+        });
+
+        const { timers } = persistence().restore();
+        expect(timers).toEqual([countup({ id: 'typed' }), countup({ id: 'empty' }), countup({ id: 'none' })]);
+        for (const timer of timers) expect(Object.keys(timer)).not.toContain('draft');
+
+        persistence().persist(timers, null);
+        const saved = JSON.parse(store.get(p.storageKey())!);
+        for (const timer of saved.timers) expect(Object.keys(timer)).not.toContain('draft');
     });
 
     it('round-trips the time the suggestion came up, with no timer open', () => {
@@ -162,7 +177,7 @@ describe('reading the saved timers strictly', () => {
                 t.session = { kind: 'pending', record: { seconds: 5, then: 'close' } };
             },
             'an opening without its tail': t => { t.opening = { owned: [] }; },
-            'a missing field': t => { delete t.draft; },
+            'a missing field': t => { delete t.priorStartMs; },
             'an old field in place of a new one': t => { delete t.tail; t.tailRecordBlockId = 'tv-t-1'; },
         };
         p.persist([good, ...Object.keys(broken).map(id => countup({ id }))], null);

@@ -40,8 +40,6 @@ export type TimerEvent =
     | { type: 'followed'; file: string }
     /** 表示の写し。 */
     | { type: 'synced'; name: string; color: string }
-    /** 名前の下書き。 */
-    | { type: 'drafted'; draft: string | null }
     | { type: 'toggled' };
 
 /** 出来事 `event` を時刻 `nowMs` に受けた次の状態。受けない状態では同じ状態を返す。 */
@@ -99,8 +97,6 @@ export function step(state: TimerState, event: TimerEvent, nowMs: number): Timer
             return { ...state, file: event.file };
         case 'synced':
             return { ...state, name: event.name, color: event.color };
-        case 'drafted':
-            return { ...state, draft: event.draft };
         case 'toggled':
             return { ...state, expanded: !state.expanded };
     }

@@ -22,7 +22,7 @@ function timer(measure: Measure, clock: Clock, session: Session, recordedSeconds
     return {
         id: 'timer-1', subject: { kind: 'task', anchor: 'box' }, file: 'notes/a.md', name: 'A', color: '', mode: 'child',
         measure, clock, session, tail: null, owned: [], opening: null,
-        recorded: { seconds: recordedSeconds, count: 1 }, priorStartMs: null, draft: null, expanded: true,
+        recorded: { seconds: recordedSeconds, count: 1 }, priorStartMs: null, expanded: true,
     };
 }
 

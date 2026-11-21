@@ -211,7 +211,6 @@ export class TimerWidget implements SendTimers {
             opening: null,
             recorded: { seconds: 0, count: 0 },
             priorStartMs,
-            draft: null,
             expanded: true,
         };
     }

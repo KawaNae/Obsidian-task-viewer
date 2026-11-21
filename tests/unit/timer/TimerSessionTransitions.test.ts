@@ -64,7 +64,7 @@ function running(board: TimerBoard, measure: Measure = { type: 'countup' }, over
         clock: restart(Date.now() - 600_000),
         session: { kind: 'running', from: 0 },
         tail: 'tv-t-abc1234', owned: ['tv-t-abc1234'], opening: null,
-        recorded: { seconds: 0, count: 0 }, priorStartMs: null, draft: null, expanded: true,
+        recorded: { seconds: 0, count: 0 }, priorStartMs: null, expanded: true,
         ...overrides,
     };
     board.add(timer);
