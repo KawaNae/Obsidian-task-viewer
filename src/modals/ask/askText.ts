@@ -10,12 +10,15 @@ import { ask } from './Ask';
 export interface TextSpec<T> {
     title: string;
     label: string;
-    /** The field's first text, selected so that what is typed replaces it. */
+    /** The field's first text. */
     initial: string;
     /** How the text reads (a codec of `utils/values`). */
     codec: FieldCodec<T>;
     submitLabel: string;
-    /** A keyboard of digits on a phone, for a number. */
+    /**
+     * A number: a keyboard of digits on a phone, and the field's text
+     * selected as the dialog opens, a short value typed over whole.
+     */
     numeric?: boolean;
     /**
      * Act on the value read, and answer when done: null to close, or what
@@ -27,10 +30,11 @@ export interface TextSpec<T> {
 }
 
 /**
- * Ask for one value, in a dialog of a field. The focus opens on the field,
- * its text selected. The form's Enter (`onFormEnter`) or the submit button
- * reads the text: what does not read is said under the field, the field
- * marked, and the dialog stays open. A value read is handed
+ * Ask for one value, in a dialog of a field. The focus opens on the field:
+ * a number's text selected, any other text with the caret after it, mended
+ * rather than typed over (a name). The form's Enter (`onFormEnter`) or the
+ * submit button reads the text: what does not read is said under the
+ * field, the field marked, and the dialog stays open. A value read is handed
  * to `submit`, waited for, and the dialog closes once it has gone; what
  * keeps it from going is said under the field, or above the buttons.
  * Typing again takes back what was said.
@@ -86,7 +90,7 @@ export async function askText<T>(app: App, spec: TextSpec<T>): Promise<void> {
                 actions: [{ label: spec.submitLabel, tone: 'cta', run: () => { void submit(); } }],
             });
             return {
-                focus: input,
+                focus: { to: input, selection: spec.numeric ? 'all' : 'end' },
                 beforeClose: () => pending
                     ? pending.then((why): 'close' | 'stay' => (why === null ? 'close' : 'stay'))
                     : 'close',

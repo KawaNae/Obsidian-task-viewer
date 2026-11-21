@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { focusOnceOpen, type OpeningOverlay } from '../../../../src/views/sharedUI/OverlayShell';
+import { focusOnceOpen, type FieldFocus, type OpeningOverlay, type SelectionOnFocus } from '../../../../src/views/sharedUI/OverlayShell';
 
 /**
  * An overlay's first focus, as the shell puts it a frame after it opens
  * (`focusOnceOpen`): on the field the body names once the open animation
- * has stopped, on the panel until then.
+ * has stopped, on the panel until then, the field's text met as the body
+ * says (all of it selected, or the caret after it).
  */
 
 /** An animation in the overlay (the sheet sliding up), ended or cancelled by the test. */
@@ -34,19 +35,31 @@ class MockDocument {
 /** What takes the focus: it becomes the document's active element, and says each time it did. */
 class MockFocusable {
     focused: FocusOptions[] = [];
-    constructor(protected doc: MockDocument, private takes = true) {}
+    constructor(readonly ownerDocument: MockDocument, private takes = true) {}
     focus(options?: FocusOptions) {
         if (!this.takes) return;
         this.focused.push(options ?? {});
-        this.doc.activeElement = this;
+        this.ownerDocument.activeElement = this;
     }
 }
 
-/** A text field: its text selected by `select`. */
+/** A text field: what of its text is selected, and how far it is scrolled in itself. */
 class MockField extends MockFocusable {
-    value = '名前';
-    selected = false;
-    select() { this.selected = true; }
+    value = 'とても長い名前';
+    /** Where the browser puts the caret of a field focused by script: at its start. */
+    selectionStart: number | null = 0;
+    selectionEnd: number | null = 0;
+    scrollLeft = 0;
+    scrollWidth = 480;
+    scrollTop = 0;
+    scrollHeight = 0;
+    select() { this.setSelectionRange(0, this.value.length); }
+    setSelectionRange(start: number, end: number) {
+        this.selectionStart = start;
+        this.selectionEnd = end;
+    }
+    get selected() { return this.selectionStart === 0 && this.selectionEnd === this.value.length; }
+    get caretAtEnd() { return this.selectionStart === this.value.length && this.selectionEnd === this.value.length; }
 }
 
 /** The overlay's root: the DOM lists what animates in it, unless it cannot (`getAnimations`). */
@@ -73,7 +86,7 @@ class MockWindow {
 /** Let the promises the first focus waits on settle. */
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-function setup(opts: { animations?: MockAnimation[]; listsAnimations?: boolean } = {}) {
+function setup(opts: { animations?: MockAnimation[]; listsAnimations?: boolean; selection?: SelectionOnFocus } = {}) {
     const win = new MockWindow();
     const doc = new MockDocument();
     const root = opts.listsAnimations === false ? {} : Object.assign(new MockRoot(), { animations: opts.animations ?? [] });
@@ -82,7 +95,7 @@ function setup(opts: { animations?: MockAnimation[]; listsAnimations?: boolean }
     /** Another part of the surface: a button, another field. */
     const other = new MockFocusable(doc);
     const outside = new MockFocusable(doc);
-    const state = { current: true, target: field as MockFocusable | null };
+    const state = { current: true, target: { to: field, selection: opts.selection ?? 'all' } as FieldFocus | null };
     const overlay: OpeningOverlay = {
         root: root as unknown as Element,
         panel: panel as unknown as HTMLElement,
@@ -233,7 +246,7 @@ describe('focusOnceOpen', () => {
 
         it('focuses the panel when what the body named does not take the focus (hidden, or disabled)', () => {
             const { win, doc, panel, state } = setup();
-            state.target = new MockFocusable(doc as MockDocument, false);
+            state.target = { to: new MockFocusable(doc as MockDocument, false), selection: 'all' };
 
             win.frame();
 
@@ -247,6 +260,63 @@ describe('focusOnceOpen', () => {
             win.frame();
 
             expect(doc.activeElement).toBeNull();
+        });
+    });
+
+    describe('the field\'s text, as the body says', () => {
+        it('selects all of it when the body asks it selected', () => {
+            const { win, field } = setup({ selection: 'all' });
+            win.frame();
+            expect(field.selected).toBe(true);
+            expect(field.scrollLeft).toBe(0);
+        });
+
+        it('puts the caret after it, the field scrolled in itself to its end, when the body asks the caret at the end', () => {
+            const { win, doc, panel, field } = setup({ selection: 'end' });
+            win.frame();
+            expect(doc.activeElement).toBe(field);
+            expect(field.caretAtEnd).toBe(true);
+            expect(field.selected).toBe(false);
+            expect(field.scrollLeft).toBe(field.scrollWidth);
+            expect(field.focused).toEqual([{ preventScroll: true }]);
+            expect(panel.focused).toEqual([]);
+        });
+
+        it('puts the caret after it once the open animation has stopped', async () => {
+            const slide = new MockAnimation();
+            const { win, field } = setup({ animations: [slide], selection: 'end' });
+            win.frame();
+            slide.end();
+            await flush();
+            expect(field.caretAtEnd).toBe(true);
+        });
+
+        it('leaves the text as it is when the body says nothing of it (a button, an editor)', () => {
+            const { win, doc, field, state } = setup();
+            state.target = { to: field };
+            win.frame();
+            expect(doc.activeElement).toBe(field);
+            expect(field.selectionStart).toBe(0);
+            expect(field.selectionEnd).toBe(0);
+        });
+
+        it('leaves a field with no caret (a native colour or date input) focused and as it is', () => {
+            const { win, doc, field } = setup({ selection: 'end' });
+            field.selectionStart = null;
+            field.selectionEnd = null;
+            win.frame();
+            expect(doc.activeElement).toBe(field);
+            expect(field.selectionStart).toBeNull();
+            expect(field.scrollLeft).toBe(0);
+        });
+
+        it('meets no text of a field that did not take the focus', () => {
+            const { win, doc, panel, state } = setup();
+            const hidden = new MockField(doc as MockDocument, false);
+            state.target = { to: hidden, selection: 'end' };
+            win.frame();
+            expect(doc.activeElement).toBe(panel);
+            expect(hidden.selectionStart).toBe(0);
         });
     });
 });

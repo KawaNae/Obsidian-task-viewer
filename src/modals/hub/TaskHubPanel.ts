@@ -127,6 +127,8 @@ class OneAtATime {
  * keymap）。フォームの欄やソースのエディタのキーが背後のノートに効かないように。
  * 初めのフォーカスは focusField の欄、無ければパネル自身（OverlayShell の
  * initialFocus）。開いた直後から止まり、スマホでキーボードは上がらない。
+ * 欄の文字は、メニューから欄を選んだときと同じ規則で、全部
+ * 選ぶか末尾にカーソルを置く（TaskHubForm の selectionOnFocus）。
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
@@ -224,7 +226,7 @@ export class TaskHubPanel {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog task-hub',
             keymap: this.app.keymap,
-            initialFocus: () => (focusField ? this.form?.fieldElement(focusField) ?? null : null),
+            initialFocus: () => (focusField ? this.form?.focusOf(focusField) ?? null : null),
             build: (bodyEl) => this.buildContent(bodyEl),
             onClose: () => this.teardown(),
             // The source's draft first: while the source is open the form is shut.

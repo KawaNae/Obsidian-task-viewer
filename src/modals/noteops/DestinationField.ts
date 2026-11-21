@@ -75,9 +75,9 @@ export class DestinationField {
             : { input: this.headingInput, message: this.headingSays };
     }
 
-    /** Focus the note field. */
-    focus(options?: FocusOptions): void {
-        this.note.input.focus(options);
+    /** The input of the note field, or of the heading. */
+    input(at: 'note' | 'heading'): HTMLInputElement {
+        return at === 'note' ? this.note.input : this.headingInput;
     }
 }
 

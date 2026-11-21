@@ -40,7 +40,7 @@ export function askChoice<C extends string>(app: App, spec: ChoiceSpec<C>): Prom
                 cancel: { run: hands.cancel },
                 actions: spec.choices.map(one => ({ label: one.label, tone: one.tone, run: () => hands.answer(one.value) })),
             });
-            return { focus: actions.cancelButton };
+            return { focus: { to: actions.cancelButton } };
         },
     });
 }

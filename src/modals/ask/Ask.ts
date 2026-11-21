@@ -1,4 +1,4 @@
-import type { CloseAnswer, Focusable, OverlayOpenOpts } from '../../views/sharedUI/OverlayShell';
+import type { CloseAnswer, FieldFocus, OverlayOpenOpts } from '../../views/sharedUI/OverlayShell';
 
 /**
  * What a question asks of the overlay it stands in (`OverlayShell`): to
@@ -22,8 +22,12 @@ export interface AskHands<A> {
 
 /** What the body of a question tells the shell once drawn. */
 export interface AskBody {
-    /** The first focus: cancel in a dialog of buttons, the field in one of text, so an Enter pressed at once writes nothing. */
-    focus: Focusable | null;
+    /**
+     * The first focus: cancel in a dialog of buttons, the field in one of
+     * text, so an Enter pressed at once writes nothing; and how the field's
+     * text is met there.
+     */
+    focus: FieldFocus | null;
     /** Whether a close asked for may go on (one waiting for a write). */
     beforeClose?: () => CloseAnswer;
 }
