@@ -32,8 +32,7 @@ function build(records = true) {
         releaseAnchors: async () => { },
         extendRunningSession: async () => undefined,
     } as unknown as TimerRecorder;
-    const content = { flush: async () => true, discard: () => { }, release: () => { } };
-    const lifecycle = new TimerLifecycle({ board, runtime: new TimerRuntime(), recorder, content, renderTimes: () => { } });
+    const lifecycle = new TimerLifecycle({ board, runtime: new TimerRuntime(), recorder, renderTimes: () => { } });
     return { board, lifecycle };
 }
 

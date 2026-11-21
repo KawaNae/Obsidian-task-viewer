@@ -143,7 +143,7 @@ function build() {
             menuPresenter: { present: (_build: unknown, anchor: MenuAnchor) => { presented.push(anchor); return null; } },
         } as never,
         board, runtime: new TimerRuntime(), lifecycle: {} as TimerLifecycle,
-        contentBinding: {} as never, container: {} as never,
+        tailRow: () => undefined, container: {} as never,
         startTimer: () => { },
     });
     const internals = renderer as unknown as {

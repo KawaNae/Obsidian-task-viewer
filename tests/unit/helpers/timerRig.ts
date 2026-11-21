@@ -1,5 +1,4 @@
 import type { Task } from '../../../src/types';
-import { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { TimerRuntime } from '../../../src/timer/TimerRuntime';
 import { TimerWidget } from '../../../src/timer/TimerWidget';
@@ -12,14 +11,13 @@ import type { VaultSession } from './vaultSession';
 
 /**
  * The widget's parts over a vault session, as `TimerWidget` wires them, but
- * on the session's board and recorder: a lifecycle, its runtime and the name
- * binding. Nothing is drawn.
+ * on the session's board and recorder: a lifecycle and its runtime. Nothing
+ * is drawn.
  */
 export function timerRig(s: VaultSession) {
     const runtime = new TimerRuntime();
-    const content = new TimerContentBinding(s.plugin as never, s.board, s.recorder);
-    const lifecycle = new TimerLifecycle({ board: s.board, runtime, recorder: s.recorder, content, renderTimes: () => { } });
-    return { board: s.board, recorder: s.recorder, runtime, content, lifecycle };
+    const lifecycle = new TimerLifecycle({ board: s.board, runtime, recorder: s.recorder, renderTimes: () => { } });
+    return { board: s.board, recorder: s.recorder, runtime, lifecycle };
 }
 
 export type TimerRig = ReturnType<typeof timerRig>;

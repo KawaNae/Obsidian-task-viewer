@@ -18,7 +18,11 @@ export interface IdleBoard {
     sinceMs: number;
 }
 
-/** 組み直さずに済む出来事。入力欄を組み直すと、打っている名前とフォーカスを失う。 */
+/**
+ * 組み直さずに済む出来事。見出しの名前と押せるか、名前と色の写し、ファイル名は
+ * 索引の通知が合わせる（`TimerRenderer.syncFromIndex`）。組み直すと見出しのボタンの
+ * フォーカスを失う。
+ */
 const QUIET: ReadonlySet<TimerEvent['type']> = new Set(['drafted', 'synced', 'opening', 'landed', 'followed']);
 
 export interface BoardOutlet {

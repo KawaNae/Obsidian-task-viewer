@@ -4,7 +4,6 @@ import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { TimerRenderer } from '../../../src/timer/TimerRenderer';
 import { TimerRuntime } from '../../../src/timer/TimerRuntime';
 import type { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import type { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
 import { freeze, restart } from '../../../src/timer/TimerClock';
 import { pomodoroGroups, START_CURSOR } from '../../../src/timer/IntervalMath';
 import { newTimerId, type Session, type TimerState } from '../../../src/timer/TimerState';
@@ -37,7 +36,7 @@ function fakeContainer(labels: string[]): unknown {
     };
 }
 
-function build(opts: { flushOk?: boolean; recordOk?: boolean } = {}) {
+function build(opts: { recordOk?: boolean } = {}) {
     const board = new TimerBoard({ persist: () => { }, render: () => { } });
     const runtime = new TimerRuntime();
     const recorder = {
@@ -45,11 +44,10 @@ function build(opts: { flushOk?: boolean; recordOk?: boolean } = {}) {
         extendRunningSession: async () => Date.now() + 3_600_000,
         releaseAnchors: async () => { },
     } as unknown as TimerRecorder;
-    const content = { flush: async () => opts.flushOk ?? true, discard: () => { }, release: () => { } };
-    const lifecycle = new TimerLifecycle({ board, runtime, recorder, content, renderTimes: () => { } });
+    const lifecycle = new TimerLifecycle({ board, runtime, recorder, renderTimes: () => { } });
     const renderer = new TimerRenderer({
         app: {} as never, plugin: {} as never, board, runtime, lifecycle,
-        contentBinding: {} as TimerContentBinding,
+        tailRow: () => undefined,
         container: {} as never,
         startTimer: () => { },
     });
@@ -102,10 +100,10 @@ describe('the controls follow the session alone', () => {
 describe('a run stopped under a second and not recorded waits to record', () => {
     afterEach(() => vi.useRealTimers());
 
-    it('■ at 0.5 s whose name cannot be written: no start button, ■ is there to retry, ✕ asks first', async () => {
+    it('■ at 0.5 s whose record cannot be written: no start button, ■ is there to retry, ✕ asks first', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date(2026, 8, 21, 9, 0, 0));
-        const h = build({ flushOk: false });
+        const h = build({ recordOk: false });
         const timer = timerIn(h.board, { kind: 'running', from: 0 });
 
         vi.setSystemTime(new Date(2026, 8, 21, 9, 0, 0, 500));

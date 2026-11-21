@@ -32,18 +32,6 @@ import { trackKeyboard, keyboardTop } from '../utils/KeyboardState';
  */
 const DRAG_THRESHOLD_PX = 5;
 
-export interface FloatingOverlayHostOptions {
-    /**
-     * Selectors inside the container where a press must not become a drag
-     * even when it moves: fields, where moving the pointer selects text. A
-     * press elsewhere that does not move is a plain click on what it pressed
-     * (a button, the elapsed time); the drag starts only once it moves. The
-     * drag handler ignores pointerdown when target.closest(selector) matches
-     * any of these.
-     */
-    nonDraggableSelectors: string[];
-}
-
 export class FloatingOverlayHost {
     private container: HTMLElement | null = null;
     private win: Window | null = null;
@@ -62,8 +50,6 @@ export class FloatingOverlayHost {
      * on every attach so the widget tracks the user's choice across windows.
      */
     private userPosition: { left: number; top: number } | null = null;
-
-    constructor(private opts: FloatingOverlayHostOptions) {}
 
     /** Creates the container in `doc`. The caller detaches the previous one first (`TimerWidgetWindowObserver`). */
     attach(win: Window, doc: Document, className: string): HTMLElement {
@@ -217,11 +203,6 @@ export class FloatingOverlayHost {
         // 捕捉した container へ付け替えられる）。
         header.addEventListener('pointerdown', (e) => {
             if (e.button !== 0) return;
-            const target = e.target as HTMLElement;
-            for (const sel of this.opts.nonDraggableSelectors) {
-                if (target.closest(sel)) return;
-            }
-
             this.press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
         });
 

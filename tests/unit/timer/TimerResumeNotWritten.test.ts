@@ -9,8 +9,7 @@ import { rowOf } from '../helpers/anchoredRow';
 
 /**
  * ▶ は新しい走行中の行を尻尾の兄弟に書き、書けてから走る（`TimerLifecycle.resume`）。
- * 行か、中断中に打った名前を書けなければ、何も動かずに中断のまま残る。通知は
- * 書き込みの層の1回だけ。
+ * 行を書けなければ、何も動かずに中断のまま残る。通知は書き込みの層の1回だけ。
  *
  * 書く前に走り出すと、尻尾は1本目の書き終えた記録を指したまま走り、2本目の end の
  * 書き足しと名前が1本目の記録を書き換える（child と self の両方）。
@@ -115,13 +114,13 @@ describe('a resume whose line cannot be written stays suspended', () => {
             expect(timer.tail).not.toBeNull();
             expect(timer.tail).not.toBe(firstTail);
 
-            // 走行中（2本目）: end の書き足しと名前の書き込み。
+            // 走行中（2本目）: end の書き足しと、ハブでの名前の書き込み。
             withReadService(s);
             vi.setSystemTime(at(9, 45));
             await s.recorder.extendRunningSession(timer);
             await s.settle(FILE);
-            rig.board.dispatch(timer, { type: 'drafted', draft: '2本目の作業' });
-            expect(await rig.content.flush(timer)).toBe(true);
+            const tail = s.recorder.tailInIndex(timer)!;
+            expect((await s.ops.updateTask(tail.id, { content: '2本目の作業' })).written).toBe(true);
             await s.settle(FILE);
 
             const running = contents.get(FILE)!;
@@ -139,35 +138,6 @@ describe('a resume whose line cannot be written stays suspended', () => {
             s.dispose();
         });
     }
-
-    it('a name typed while suspended, on a note that cannot be written: one notice, still suspended', async () => {
-        const { s, contents, rig, timer } = await suspendedAfterFirst('child');
-        const afterFirst = contents.get(FILE)!;
-        rig.board.dispatch(timer, { type: 'drafted', draft: '中断中に直した名前' });
-
-        const vault = (s.app as unknown as { vault: { process: (...a: unknown[]) => unknown } }).vault;
-        const real = vault.process;
-        vault.process = async () => { throw new Error('disk full'); };
-        vi.setSystemTime(at(9, 20));
-        Notice.messages.length = 0;
-        await resumeAndWait(s, rig, timer);
-
-        expect(Notice.messages).toHaveLength(1);
-        expect(timer.session).toEqual({ kind: 'suspended' });
-        expect(timer.draft).toBe('中断中に直した名前');
-        expect(contents.get(FILE)).toBe(afterFirst);
-
-        // 書けるようになれば、もう一度 ▶ で名前も行も書く。名前は直前の記録の行宛て。
-        vault.process = real;
-        Notice.messages.length = 0;
-        await resumeAndWait(s, rig, timer);
-        expect(Notice.messages).toHaveLength(0);
-        expect(timer.session.kind).toBe('running');
-        expect(timer.draft).toBeNull();
-        const text = contents.get(FILE)!;
-        expect(text.split('\n').find(l => l.includes('09:00>09:10'))).toContain('中断中に直した名前');
-        s.dispose();
-    });
 });
 
 describe('the target row is the tail of a self timer in its first session only', () => {

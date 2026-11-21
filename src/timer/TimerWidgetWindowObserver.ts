@@ -20,11 +20,6 @@ import type { App, WorkspaceLeaf, WorkspaceWindow } from 'obsidian';
 import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { FloatingOverlayHost } from './FloatingOverlayHost';
 
-const NON_DRAGGABLE_SELECTORS = [
-    '.timer-widget__item input',
-    '.timer-widget__item textarea',
-];
-
 export type PinState = 'pinned' | 'pending';
 
 export class TimerWidgetWindowObserver {
@@ -38,9 +33,7 @@ export class TimerWidgetWindowObserver {
         private plugin: PluginContext & EventRegistrar,
         private widget: { render(): void },
     ) {
-        this.host = new FloatingOverlayHost({
-            nonDraggableSelectors: NON_DRAGGABLE_SELECTORS,
-        });
+        this.host = new FloatingOverlayHost();
         this.host.setOnDragEnd(() => this.flushPendingMigration());
     }
 

@@ -15,7 +15,7 @@
 
 import { instantText } from '../utils/DayWindow';
 import { type App, setIcon } from 'obsidian';
-import type { DisplayTask } from '../types';
+import type { DisplayTask, Task } from '../types';
 import type { PluginContext } from '../PluginContext';
 import type { IntervalGroup } from './IntervalMath';
 import { createControlButton } from './TimerControlButton';
@@ -33,13 +33,11 @@ import { OFFSET_PRESET_MINUTES, canOffsetStart, rememberedStart, startLabel } fr
 import { placeOffsetIcon } from './TimerOffsetIcon';
 import { TimerStartOffsetModal } from '../modals/TimerStartOffsetModal';
 import type { MenuAnchor } from '../interaction/menu/MenuPresenter';
-import { onFormEnter } from '../modals/form/formEnter';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
 import { getEffectiveColor } from '../services/data/EffectiveProperties';
 import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
-import type { TimerContentBinding } from './TimerContentBinding';
-import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
+import { TimerTitle } from './TimerTitle';
 
 /** 提案が出た直後の ✕ と ▶ を捨てる間（直前のタイマーの ✕ の2度押しの誤打）。 */
 const IDLE_GUARD_MS = 500;
@@ -53,7 +51,8 @@ export interface RendererDeps {
     board: TimerBoard;
     runtime: TimerRuntime;
     lifecycle: TimerLifecycle;
-    contentBinding: TimerContentBinding;
+    /** The timer's tail row as the index last read it, whose name the header shows (`TimerRecorder.tailInIndex`). */
+    tailRow(timer: TimerState): Task | undefined;
     container: {
         ensureContainer(): HTMLElement;
         destroyContainer(): void;
@@ -67,11 +66,15 @@ export interface RendererDeps {
 
 export class TimerRenderer {
     private suggester: NextTaskSuggester;
-    /** {@link growTitleInputs} の次フレーム再適用ぶんの未発火 rAF。destroy で取り消す。 */
-    private titleGrowFrame: { win: Window; id: number } | null = null;
+    private title: TimerTitle;
 
     constructor(private deps: RendererDeps) {
         this.suggester = new NextTaskSuggester(deps.plugin);
+        this.title = new TimerTitle({
+            app: deps.app,
+            tailRow: (timer) => deps.tailRow(timer),
+            openTaskHub: (taskId, options) => deps.plugin.openTaskHub(taskId, options),
+        });
     }
 
     // ─── Render ──────────────────────────────────────────────
@@ -81,6 +84,7 @@ export class TimerRenderer {
         const { board, container: host } = this.deps;
         const timers = board.values();
         const idle = board.idle;
+        this.title.clear();
         if (timers.length === 0 && !idle) {
             host.destroyContainer();
             return;
@@ -95,9 +99,6 @@ export class TimerRenderer {
             itemEl.dataset.idle = 'true';
             this.fillIdleItem(itemEl, idle, now);
         }
-        // 全 item が出揃った後（loop の外）でオートグロー — item 構築中に掛けると
-        // 兄弟がまだ無い未沈静化のレイアウトで scrollHeight を測ってしまう。
-        this.growTitleInputs(container);
     }
 
     /**
@@ -126,10 +127,10 @@ export class TimerRenderer {
     }
 
     /**
-     * 索引が変わったときに、各 widget の名前欄、名前と色、ファイル名を索引の
-     * 読みから合わせ直す（{@link syncFromIndex}）。tick は時間の表示しか進めない
+     * 索引が変わったときに、各 widget の名前とそのボタン、名前と色の写し、ファイル名を
+     * 索引の読みから合わせ直す（{@link syncFromIndex}）。tick は時間の表示しか進めない
      * ので、読みの変化はここから届く — 復元の描画は最初のスキャンの前に走り、
-     * そのときの名前欄は空になる。
+     * そのときの名前は押せないただの文字になる。
      */
     refreshFromIndex(): void {
         const timers = this.deps.board.values();
@@ -144,10 +145,7 @@ export class TimerRenderer {
     // ─── Destroy ─────────────────────────────────────────────
 
     destroy(): void {
-        if (this.titleGrowFrame) {
-            this.titleGrowFrame.win.cancelAnimationFrame(this.titleGrowFrame.id);
-            this.titleGrowFrame = null;
-        }
+        this.title.clear();
         this.deps.container.destroyContainer();
     }
 
@@ -170,24 +168,9 @@ export class TimerRenderer {
         const header = itemEl.createDiv('timer-widget__header');
         const titleContainer = header.createDiv('timer-widget__title');
 
-        // 走っている行（尻尾）の content をその場で編集する。self も含めて
-        // 同じ扱いで、self の編集は対象タスク行そのものの改名になる。
-        // textarea: 記法は 1 行のままだが、長い名前は表示だけ複数行に
-        // 折り返す（オートグローで高さを追従、Enter は改行させず確定）。
-        const labelInput = titleContainer.createEl('textarea', {
-            cls: 'timer-widget__title-input',
-            // 名前の無い行（空の `- [ ]` など）でも、何を
-            // 計っているのかは見えている必要がある。
-            placeholder: timer.name || '—',
-            attr: { rows: '1', wrap: 'soft' },
-        });
-        // textarea に value 属性は無いので明示代入。オートグローは
-        // ここではまだ掛けない — 兄弟がまだ出揃っていない（render 全体
-        // の組み立て完了後に growTitleInputs でまとめて掛ける）。
-        labelInput.value = this.deps.contentBinding.displayValue(timer);
-        this.bindTitleInputConfirmKey(labelInput);
-        this.deps.contentBinding.bind(timer, labelInput);
-
+        // The name of the row the timer runs on (its tail), a button to that row's hub.
+        // A self timer's tail is its subject's own row.
+        this.title.mount(titleContainer, timer);
         this.syncFileName(titleContainer, timer);
 
         if (timer.session.kind === 'pending') {
@@ -327,7 +310,10 @@ export class TimerRenderer {
     // ─── 索引への追随 ────────────────────────────────────────
 
     /**
-     * 索引の読みに widget の見出しを合わせる: 入力欄、名前と色、ファイル名。
+     * 索引の読みに widget の見出しを合わせる: 名前とそのボタン、名前と色の写し、ファイル名。
+     *
+     * 見出しの名前は尻尾の行から描き、行を引ける間だけボタンにする（`TimerTitle`）。
+     * 行が無い間に出す対象の名前の写しを先に合わせてから描く。
      *
      * 名前と色は対象の行（`subject.anchor` の行）から取り直し、変わっていれば
      * 表示の写しを当てる（`synced`）。デイリーノートは対象の行を持たないが、
@@ -339,11 +325,6 @@ export class TimerRenderer {
      * ファイル名もここで追随する。
      */
     private syncFromIndex(itemEl: HTMLElement, timer: TimerState): void {
-        // 入力欄は索引の読み（尻尾の行）に追随する（打鍵中と未書き込みの入力が
-        // あるときは binding が見送る）。デイリーノートでも尻尾があれば同じ扱い。
-        const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLTextAreaElement | null;
-        if (inputEl) this.deps.contentBinding.syncFromFile(timer, inputEl);
-
         if (timer.subject.kind === 'task') {
             const task = this.deps.plugin.getIndex().getTaskByAnchor(timer.file, timer.subject.anchor);
             if (task) {
@@ -353,12 +334,13 @@ export class TimerRenderer {
                 if (name !== timer.name || color !== timer.color) {
                     this.deps.board.dispatch(timer, { type: 'synced', name, color });
                 }
-                if (inputEl) inputEl.placeholder = timer.name || '—';
             }
         }
 
         const titleEl = itemEl.querySelector('.timer-widget__title') as HTMLElement | null;
-        if (titleEl) this.syncFileName(titleEl, timer);
+        if (!titleEl) return;
+        this.title.sync(titleEl, timer);
+        this.syncFileName(titleEl, timer);
     }
 
     /**
@@ -614,49 +596,6 @@ export class TimerRenderer {
             'aria-label',
             state === 'pinned' ? t('timer.pinPinned') : t('timer.pinPending'),
         );
-    }
-
-    // ─── 名前の入力欄 ────────────────────────────────────────
-
-    /**
-     * フォームの Enter（`onFormEnter`）で改行せず確定させる。IME の確定の
-     * Enter は確定だけで、次の Enter が確定させる。改行はスペースに畳んで
-     * 記録するので textarea に残っても実害は無いが、Enter 経由では最初から
-     * 入れさせない。
-     */
-    private bindTitleInputConfirmKey(el: HTMLTextAreaElement): void {
-        onFormEnter(el, () => el.blur());
-    }
-
-    /**
-     * container 内の全 title textarea にオートグローを掛け直す。**呼び出し側
-     * は DOM の組み立てが完全に終わってから呼ぶこと** — item 構築の途中（兄弟
-     * がまだ append されていない）で呼ぶと、沈静化前のレイアウトで測った小さい
-     * scrollHeight が inline style に焼き付く（実測: 200 字で render 前 152px
-     * → render 後 114px。scrollHeight 自体は 152 のまま — ヘルパは正しく、呼ぶ
-     * 時点が早すぎるのが原因）。
-     *
-     * 同期 1 回だけでは足りないケースがあるため、Timeline のスクロール復元と
-     * 同じ「sync + 次フレーム再適用」で収束させる。window は popout を考慮し
-     * container 自身から解決する（`HostWindow.ts` と同じ理由）。
-     */
-    private growTitleInputs(container: HTMLElement): void {
-        const grow = (): void => {
-            container.querySelectorAll('.timer-widget__title-input')
-                .forEach((el) => autoGrowTextarea(el as HTMLTextAreaElement));
-        };
-        grow();
-
-        if (this.titleGrowFrame) {
-            this.titleGrowFrame.win.cancelAnimationFrame(this.titleGrowFrame.id);
-            this.titleGrowFrame = null;
-        }
-        const win = container.ownerDocument.defaultView ?? window;
-        const id = win.requestAnimationFrame(() => {
-            this.titleGrowFrame = null;
-            grow();
-        });
-        this.titleGrowFrame = { win, id };
     }
 }
 

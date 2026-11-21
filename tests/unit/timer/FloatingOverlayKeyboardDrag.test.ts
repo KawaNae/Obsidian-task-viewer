@@ -65,7 +65,7 @@ function setup() {
     const win = new MockWindow();
     const container = new MockContainer();
     const doc = { body: { createDiv: () => container } };
-    const host = new FloatingOverlayHost({ nonDraggableSelectors: ['input'] });
+    const host = new FloatingOverlayHost();
     host.attach(win as unknown as Window, doc as unknown as Document, 'timer-widget');
     return { win, container };
 }

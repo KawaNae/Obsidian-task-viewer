@@ -780,6 +780,7 @@
     "minutesRange": "分 ({{min}}〜{{max}})",
     "minutesAtLeast": "分 ({{min}} 以上)",
     "offsetStart": "開始をずらす",
+    "openTask": "タスクを開く",
     "offsetMinutesAgo": "{{minutes}} 分前から",
     "offsetFromTime": "{{time}} から",
     "offsetCustom": "ずらす量を指定...",
