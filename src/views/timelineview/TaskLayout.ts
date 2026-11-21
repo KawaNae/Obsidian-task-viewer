@@ -127,8 +127,8 @@ export class TaskLayout {
 
             // A group is put side by side only if each of its columns is at
             // least the narrowest a card may be. A group that is not is laid
-            // out as its cards one by one, which can only narrow the levels
-            // of the others, so the groups left are checked again until all
+            // out as its cards one by one, which can narrow the columns of
+            // the others, so the groups left are checked again until all
             // fit. A group is wholly side by side or not at all.
             let groups = sideBySideOn ? nameCollisionGroups(cluster, sideBySide!.pxPerMinute) : [];
             let result = placeCluster(cluster, groups, usablePx);
@@ -251,9 +251,10 @@ function nameCollisionGroups(cluster: Item[], pxPerMinute: number): Item[][] {
 
 /**
  * Lays out one cluster (in start order) with each group taking one level as
- * one card from its first start to its last end, and splits the group's
- * slot into its columns. Gives each card's slot and level, and each group's
- * column width in px (in the order of `groups`).
+ * one card from its first start to its last end, and splits the span from
+ * the left of the group's level to the group's right edge into its columns.
+ * Gives each card's slot and level, and each group's column width in px (in
+ * the order of `groups`).
  */
 function placeCluster(
     cluster: Item[],
@@ -295,6 +296,42 @@ function placeCluster(
     const step = maxLevel > 1 ? (100 - width) / (maxLevel - 1) : 0;
     const gap = usablePx > 0 ? SIDE_BY_SIDE_GAP_PX / usablePx * 100 : 0;
 
+    const columnsOf = new Map<Unit, { columns: number[]; columnCount: number }>();
+    for (const unit of units) {
+        if (unit.members.length > 1) {
+            columnsOf.set(unit, assignFirstFreeColumns(unit.members, m => m.start, m => m.end));
+        }
+    }
+
+    // A group reaches right of its level's slot, as far as its columns
+    // would reach were each shifted a level on from the one before, and no
+    // further than the lane's edge. A unit of a higher level that overlaps
+    // a card of the group's last column stops it a step short of its own
+    // right edge, so the card at the group's right and a card in front
+    // overlapping it in time do not end at one place.
+    // That unit lies further right than the group's own slot by a step at
+    // least, so the group is never narrower than its slot. A group's right
+    // edge depends on those of the groups above it, so the highest level
+    // goes first.
+    const rightOf = new Map<Unit, number>();
+    const rightEdge = (unit: Unit): number =>
+        rightOf.get(unit) ?? (levels.get(unit)! - 1) * step + width;
+    const overlaps = (a: Item, b: Item): boolean => a.start < b.end && b.start < a.end;
+    const groupUnits = units.filter(unit => unit.members.length > 1)
+        .sort((a, b) => levels.get(b)! - levels.get(a)!);
+    for (const unit of groupUnits) {
+        const level = levels.get(unit)!;
+        const { columns, columnCount } = columnsOf.get(unit)!;
+        const lastColumn = unit.members.filter((_, i) => columns[i] === columnCount - 1);
+        let right = Math.min((level + columnCount - 2) * step + width, 100);
+        for (const other of units) {
+            if (levels.get(other)! <= level) continue;
+            if (!lastColumn.some(m => other.members.some(o => overlaps(m, o)))) continue;
+            right = Math.min(right, rightEdge(other) - step);
+        }
+        rightOf.set(unit, right);
+    }
+
     const slots = new Map<Item, { width: number; left: number; level: number }>();
     const columnWidthPx = new Array<number>(groups.length).fill(0);
     for (const unit of units) {
@@ -304,8 +341,8 @@ function placeCluster(
             slots.set(unit.members[0], { width, left, level });
             continue;
         }
-        const { columns, columnCount } = assignFirstFreeColumns(unit.members, m => m.start, m => m.end);
-        const slotPx = width / 100 * usablePx;
+        const { columns, columnCount } = columnsOf.get(unit)!;
+        const slotPx = (rightOf.get(unit)! - left) / 100 * usablePx;
         const columnPx = (slotPx - (columnCount - 1) * SIDE_BY_SIDE_GAP_PX) / columnCount;
         const columnWidth = columnPx / usablePx * 100;
         unit.members.forEach((member, i) => {
