@@ -245,7 +245,7 @@ describe('a timer\'s three ways to start on a completed task', () => {
             const mode = started?.mode ?? null;
             if (started) {
                 await until(() => started.tail && !started.opening);
-                widget.lifecycle.close(started, true);
+                await widget.lifecycle.close(started);
                 await sleep(500);
             }
             return JSON.stringify({ opened, mode });

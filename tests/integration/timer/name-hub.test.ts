@@ -152,7 +152,7 @@ function closeTimer(id: string): void {
     obsidianEval(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
         const timer = widget.board.get(${JSON.stringify(id)});
-        if (timer) widget.lifecycle.close(timer, true);
+        if (timer) await widget.lifecycle.close(timer);
         await new Promise(r => setTimeout(r, 500));
         return JSON.stringify(true);
     })()`);
