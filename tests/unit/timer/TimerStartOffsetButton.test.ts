@@ -240,8 +240,8 @@ describe('the elapsed time of a running countup or countdown is a button that op
         h.tick(item, timer);
 
         expectButton(display);
-        expect(display.children.map(c => [...c.classes])).toEqual([['timer-widget__time-text']]);
-        expect(display.querySelector('.timer-widget__time-text')?.text).toBe('10:00');
+        expect(display.children).toEqual([]);
+        expect(display.text).toBe('10:00');
     });
 });
 

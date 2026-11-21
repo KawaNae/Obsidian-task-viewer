@@ -110,7 +110,7 @@ describe('TimerProgressUI', () => {
             'timer-view__progress-ring-progress',
             'timer-view__progress-ring-progress--break',
         ]);
-        expect(root.querySelector('.timer-view__time-display .timer-view__time-text')?.text).toBe('75s');
+        expect(root.querySelector('.timer-view__time-display')?.text).toBe('75s');
         expect(root.querySelector('[data-repeat-display="ring"]')?.text).toBe('Break 2/4');
         expect(root.all().some(el => [...el.classes].some(c => c.startsWith('timer-widget__')))).toBe(false);
     });
@@ -138,20 +138,22 @@ describe('TimerProgressUI', () => {
         expect(circle.classes.has('timer-widget__progress-ring-progress--overtime')).toBe(true);
         expect(circle.classes.has('timer-widget__progress-ring-progress--break')).toBe(false);
         const time = root.querySelector('.timer-widget__time-display')!;
-        expect(time.querySelector('.timer-widget__time-text')?.text).toBe('-30s');
+        expect(time.text).toBe('-30s');
         expect(time.classes.has('timer-widget__time-display--countup')).toBe(true);
         expect(root.querySelector('[data-repeat-display="ring"]')).toBeNull();
     });
 
-    it('update writes the time alone and keeps what the caller hung on the time display', () => {
+    it('update writes the time into the same time display and keeps what the caller set on it', () => {
         const root = new FakeEl();
         TimerProgressUI.render(root as unknown as HTMLElement, ring(), options('timer-widget'));
         const display = root.querySelector('.timer-widget__time-display')!;
-        const hung = display.createDiv('hung');
+        display.setAttribute('role', 'button');
 
         TimerProgressUI.update(root as unknown as HTMLElement, ring({ displaySeconds: 90 }), options('timer-widget'));
 
-        expect(display.querySelector('.timer-widget__time-text')?.text).toBe('90s');
-        expect(display.querySelector('.hung')).toBe(hung);
+        expect(root.querySelector('.timer-widget__time-display')).toBe(display);
+        expect(display.text).toBe('90s');
+        expect(display.children).toEqual([]);
+        expect(display.attrs.get('role')).toBe('button');
     });
 });
