@@ -1,5 +1,5 @@
 import {
-    DEFAULT_SETTINGS, normalizeScopeKeys,
+    DEFAULT_SETTINGS, TIMELINE_OVERLAP_MODES, normalizeScopeKeys,
     type ScopeKeys, type StatusDefinition, type TaskViewerSettings,
 } from '../types';
 import { ScopeKeyInput } from '../services/parsing/utils/PropertyKeyInput';
@@ -184,6 +184,8 @@ export const SETTINGS_SCHEMA = {
     fixMobileGradientWidth: bool,
     showAllDay: bool,
     showTimeline: bool,
+    overlapMode: oneOf(TIMELINE_OVERLAP_MODES),
+    sideBySideMinWidth: int({ min: 80, max: 160 }),
     showWeekRow: bool,
     enableTasksPlugin: bool,
     enableDayPlanner: bool,

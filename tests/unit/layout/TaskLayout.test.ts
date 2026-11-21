@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskLayout, type LaneGeometry, type LaneSlot, type SideBySideInput } from '../../../src/views/timelineview/TaskLayout';
+import { TaskLayout, narrowestSideBySidePx, type LaneGeometry, type LaneSlot, type SideBySideInput } from '../../../src/views/timelineview/TaskLayout';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
@@ -320,6 +320,58 @@ describe('TaskLayout side by side', () => {
         expect(gap(120)).toEqual({ a: undefined, b: 10 });
     });
 
+    it('puts three cards side by side as one group where each hides the next one\'s name, though the first and the last do not', () => {
+        // At 2px a minute: A to B and B to C are 20px, above the 34.8px name
+        // row; A to C is 40px, below it.
+        const r = slots(
+            [card('A', '10:00', '12:00'), card('B', '10:10', '12:00'), card('C', '10:20', '12:00')],
+            sideBySide(2, WIDE),
+        );
+        // (400px - 6px) / 3 = 131.3px each, 32.833% of the lane.
+        expect([r.A, r.B, r.C].map(place)).toEqual([[0, 32.833], [33.583, 32.833], [67.167, 32.833]]);
+        expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
+    });
+
+    it('puts a card of a group in the column of one that ended before it starts', () => {
+        // A and B are 10px apart, B and C 25px, both above the 26px name row
+        // of a card of 30 minutes; C starts after A ends.
+        const r = slots(
+            [card('A', '10:00', '10:30'), card('B', '10:10', '10:40'), card('C', '10:35', '11:00')],
+            sideBySide(1, WIDE),
+        );
+        expect(place(r.A)).toEqual([0, 49.625]);
+        expect(place(r.B)).toEqual([50.375, 49.625]);
+        expect(place(r.C)).toEqual([0, 49.625]);
+        expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
+    });
+
+    describe('with a narrowest of 0', () => {
+        it('puts three cards starting together side by side in a lane too narrow for 120px', () => {
+            const tasks = () => [card('a', '10:00', '11:00'), card('b', '10:00', '11:00'), card('c', '10:00', '11:00')];
+            // A lane of a 7-day view, 150px: (150 - 6) / 3 = 48px each.
+            expect(Object.values(slots(tasks(), sideBySide(1, 150))).map(s => s.liesOver).sort())
+                .toEqual([false, true, true]);
+            const r = slots(tasks(), sideBySide(1, 150, 0));
+            expect([r.a, r.b, r.c].map(s => s.liesOver)).toEqual([false, false, false]);
+            expect([r.a, r.b, r.c].map(s => s.width.toFixed(3))).toEqual(['32.000', '32.000', '32.000']);
+        });
+
+        it('shifts only a group whose columns would be narrower than nothing, keeping one exactly 0 side by side', () => {
+            const at = (h: number, n: number) =>
+                Array.from({ length: n }, (_, i) => card(`${h}-${i}`, `${h}:0${i}`, `${h}:30`));
+            // 9px: four columns are (9 - 9) / 4 = 0px; five are (9 - 12) / 5 < 0.
+            const r = slots([...at(10, 4), ...at(14, 5)], sideBySide(1, 9, 0));
+            expect([0, 1, 2, 3].map(i => r[`10-${i}`].liesOver)).toEqual([false, false, false, false]);
+            expect([1, 2, 3, 4].map(i => r[`14-${i}`].liesOver)).toEqual([true, true, true, true]);
+        });
+
+        it('shifts a card starting below the name row of the card it overlaps', () => {
+            const r = slots([card('a', '10:00', '11:00'), card('b', '10:35', '11:00')], sideBySide(1, WIDE, 0));
+            expect(place(r.b)).toEqual([15, 85]);
+            expect(r.b.liesOver).toBe(true);
+        });
+    });
+
     it('lays every day out as without side by side when the narrowest is never', () => {
         const days: DisplayTask[][] = [
             pair(),
@@ -336,5 +388,14 @@ describe('TaskLayout side by side', () => {
             }
             for (const slot of Object.values(plain)) expect(slot.liesOver).toBe(slot.left > 0);
         }
+    });
+});
+
+describe('narrowestSideBySidePx', () => {
+    it('never puts cards side by side to cascade, at the threshold for auto, and at any width side by side', () => {
+        expect(narrowestSideBySidePx('cascade', 120)).toBeNull();
+        expect(narrowestSideBySidePx('auto', 120)).toBe(120);
+        expect(narrowestSideBySidePx('auto', 80)).toBe(80);
+        expect(narrowestSideBySidePx('sideBySide', 120)).toBe(0);
     });
 });

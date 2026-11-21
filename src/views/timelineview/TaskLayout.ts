@@ -1,4 +1,4 @@
-import type { DisplayTask } from '../../types';
+import type { DisplayTask, TimelineOverlapMode } from '../../types';
 import { minutesOfSpan } from '../../utils/DayWindow';
 import { assignFirstFreeColumns, buildOverlapClusters } from '../sharedLogic/OverlapClusters';
 import { SIDE_BY_SIDE_GAP_PX, nameRowHeightPx } from './TimedCardGeometry';
@@ -41,11 +41,27 @@ export interface LaneGeometry {
 /**
  * What the layout needs, besides the lane's width, to put cards side by
  * side where one would hide the name of another: the lane's scale in px a
- * minute, and the narrowest a card may become (`null`: never side by side).
+ * minute, and the narrowest a card may become. `null` never puts cards
+ * side by side; 0 puts them side by side whatever the lane's width, short
+ * of a column narrower than nothing; a positive number puts a group side
+ * by side only where each of its columns is at least that wide.
  */
 export interface SideBySideInput {
     pxPerMinute: number;
     minCardWidthPx: number | null;
+}
+
+/**
+ * The narrowest a card put side by side may be, for a way of laying out
+ * cards that would hide each other's names (`SideBySideInput.minCardWidthPx`):
+ * never for `cascade`, `thresholdPx` for `auto`, any width for `sideBySide`.
+ */
+export function narrowestSideBySidePx(mode: TimelineOverlapMode, thresholdPx: number): number | null {
+    switch (mode) {
+        case 'cascade': return null;
+        case 'auto': return thresholdPx;
+        case 'sideBySide': return 0;
+    }
 }
 
 interface Item {

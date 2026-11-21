@@ -10,7 +10,10 @@ import { F, T } from '../../services/viewConfig/FieldCodecs';
 import { ViewConfigCodec } from '../../services/viewConfig/ViewConfigCodec';
 import type { ViewSchema } from '../../services/viewConfig/ViewConfigSchema';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import { listFramesOf, type SidebarFrame, type AstronomyDisplay } from '../../types';
+import {
+    listFramesOf, TIMELINE_OVERLAP_MODES,
+    type SidebarFrame, type AstronomyDisplay, type TimelineOverlapMode,
+} from '../../types';
 
 /** Timeline days-per-screen bounds. Single constant closes the upper limit
  *  everywhere it's checked (schema, toolbar stepper, CLI export-image). At
@@ -34,6 +37,8 @@ export interface TimelineConfig {
     showAllDay?: boolean;
     /** Per-view override of timeline section visibility. undefined = follow global. */
     showTimeline?: boolean;
+    /** Per-view override of how cards that would hide each other's names are laid out. undefined = follow global. */
+    overlapMode?: TimelineOverlapMode;
 }
 
 export interface TimelineTransient {
@@ -71,6 +76,8 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         zoomLevel:        F.float('zoomLevel', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
         showAllDay:       F.boolean('showAllDay'),
         showTimeline:     F.boolean('showTimeline'),
+        // No default: a view that sets none follows the global setting.
+        overlapMode:      F.stringEnum('overlapMode', TIMELINE_OVERLAP_MODES),
     },
     anchorKey: 'date',
     listsOf: (config) => listFramesOf(config.sidebar ?? []),
@@ -86,6 +93,14 @@ export const TimelineCodec = new ViewConfigCodec(TimelineSchema);
 /** The zoom drawn: the view's own, or the global setting. */
 export function effectiveZoom(state: Readonly<TimelineState>, settings: { zoomLevel: number }): number {
     return state.zoomLevel ?? settings.zoomLevel;
+}
+
+/** How the view lays out cards that would hide each other's names: its own, or the global setting. */
+export function effectiveOverlapMode(
+    state: Readonly<TimelineState>,
+    settings: { overlapMode: TimelineOverlapMode },
+): TimelineOverlapMode {
+    return state.overlapMode ?? settings.overlapMode;
 }
 
 /** The days per screen drawn. */

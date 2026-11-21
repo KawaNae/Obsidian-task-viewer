@@ -6,6 +6,16 @@ export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
 
 export type DoubleTapAction = 'detail' | 'open' | 'menu';
 
+/**
+ * How Timeline lays out timed cards where a later card would hide the name
+ * of an earlier one it overlaps in time: shifted right over it (`cascade`),
+ * side by side when each card would be at least `sideBySideMinWidth` wide
+ * (`auto`), or side by side whatever the width (`sideBySide`). A card that
+ * starts below the earlier's name is shifted right in every mode.
+ */
+export const TIMELINE_OVERLAP_MODES = ['cascade', 'auto', 'sideBySide'] as const;
+export type TimelineOverlapMode = typeof TIMELINE_OVERLAP_MODES[number];
+
 export interface TaskViewerSettings {
     startHour: number;
     applyGlobalStyles: boolean;
@@ -66,6 +76,10 @@ export interface TaskViewerSettings {
     fixMobileGradientWidth: boolean;
     showAllDay: boolean;
     showTimeline: boolean;
+    /** How Timeline lays out cards that would hide each other's names, where a view sets none. */
+    overlapMode: TimelineOverlapMode;
+    /** In `auto`, the narrowest a card may be, in px, for its cards to be put side by side. */
+    sideBySideMinWidth: number;
     showWeekRow: boolean;
     // External parser support (read-only).
     enableTasksPlugin: boolean;
@@ -177,6 +191,8 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     fixMobileGradientWidth: true,
     showAllDay: true,
     showTimeline: true,
+    overlapMode: 'auto',
+    sideBySideMinWidth: 120,
     showWeekRow: true,
     enableTasksPlugin: false,
     enableDayPlanner: false,
