@@ -793,6 +793,9 @@
     "offsetAgoMinutes": "{{minutes}} 分前",
     "offsetAgoHours": "{{hours}} 時間 {{minutes}} 分前",
     "offsetApply": "ずらす",
+    "menu": "タイマーのメニュー",
+    "discard": "記録せずに閉じる",
+    "close": "閉じる（記録済み）",
     "template": {
       "namePlaceholder": "テンプレート名",
       "browse": "一覧から選ぶ",

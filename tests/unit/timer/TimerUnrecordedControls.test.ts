@@ -46,7 +46,7 @@ function build(opts: { recordOk?: boolean } = {}) {
     } as unknown as TimerRecorder;
     const lifecycle = new TimerLifecycle({ board, runtime, recorder, renderTimes: () => { } });
     const renderer = new TimerRenderer({
-        app: {} as never, plugin: {} as never, board, runtime, lifecycle,
+        app: {} as never, plugin: {} as never, board, lifecycle,
         tailRow: () => undefined,
         container: {} as never,
         startTimer: () => { },
@@ -100,7 +100,7 @@ describe('the controls follow the session alone', () => {
 describe('a run stopped under a second and not recorded waits to record', () => {
     afterEach(() => vi.useRealTimers());
 
-    it('■ at 0.5 s whose record cannot be written: no start button, ■ is there to retry, ✕ asks first', async () => {
+    it('■ at 0.5 s whose record cannot be written: no start button, and ■ is there to retry', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date(2026, 8, 21, 9, 0, 0));
         const h = build({ recordOk: false });
@@ -118,6 +118,5 @@ describe('a run stopped under a second and not recorded waits to record', () => 
         const labels = h.controls(timer);
         expect(labels).not.toContain(t('timer.start'));
         expect(labels).toEqual(RUN);
-        expect(h.lifecycle.close(timer, false)).toBe('confirm');
     });
 });

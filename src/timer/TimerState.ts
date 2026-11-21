@@ -4,7 +4,7 @@
  * 求める。状態を変えるのは `TimerTransitions.step` だけで、`TimerBoard.dispatch`
  * が当てる。
  *
- * 実行時の予定（tick、往復中の操作、end の書き足しの門、✕ の確認）は保存しない
+ * 実行時の予定（tick、往復中の操作、end の書き足しの門）は保存しない
  * ので、ここには置かない（`TimerRuntime`）。
  */
 
@@ -122,7 +122,7 @@ export function targetOf(timer: Pick<TimerState, 'subject'>): string | null {
     return timer.subject.kind === 'task' ? timer.subject.anchor : null;
 }
 
-/** 走っているか、記録待ちか。どちらもノートに走行中の行を持ち、✕ は確認の2打を要る。 */
+/** 走っているか、記録待ちか。どちらもノートに走行中の行を持ち、閉じる項目は記録せずに閉じる。 */
 export function holdsRun(timer: Pick<TimerState, 'session'>): boolean {
     return timer.session.kind !== 'suspended';
 }

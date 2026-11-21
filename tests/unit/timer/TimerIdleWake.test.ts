@@ -89,8 +89,8 @@ describe('the suggestion comes up when nothing runs', () => {
 
     it('comes up when a running timer is thrown away', async () => {
         const running = countup(h.board);
-        expect(h.lifecycle.close(running, true)).toBe('closing');
-        await vi.waitFor(() => expect(h.board.has(running)).toBe(false));
+        await h.lifecycle.close(running);
+        expect(h.board.has(running)).toBe(false);
         expect(h.board.idle).not.toBeNull();
     });
 

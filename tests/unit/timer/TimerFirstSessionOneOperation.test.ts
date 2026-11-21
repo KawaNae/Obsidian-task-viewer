@@ -8,9 +8,9 @@ import { widgetOver } from '../helpers/timerRig';
 /**
  * 開始の書き込み（1 本目の行）も、1 つのタイマーの 1 操作
  * （`TimerWidget.startTimer` → `TimerLifecycle.begin` → `exclusive`）。往復中に
- * 押された ■ や ✕ は、ほかの往復中の操作と同じく捨てる。
+ * 押された ■ や閉じる項目は、ほかの往復中の操作と同じく捨てる。
  *
- * 通せば、■ は書きかけの行の横に記録を1行足して閉じ、✕ はまだ無い行を消しに
+ * 通せば、■ は書きかけの行の横に記録を1行足して閉じ、閉じる項目はまだ無い行を消しに
  * 行って閉じる。どちらも、あとから書き上がった走行中の行がノートに残る。
  */
 function stubWindow(): void {
@@ -96,17 +96,17 @@ describe('a stop or a discard pressed while the start write is on its way is dro
         s.dispose();
     });
 
-    it('✕ during the start write is dropped: the timer stays, and ✕ afterwards takes its line away', async () => {
+    it('the close item during the start write is dropped: the timer stays, and the close item afterwards takes its line away', async () => {
         const { s, contents, widget, timer } = await started();
         Notice.messages.length = 0;
-        expect(widget.lifecycle.close(timer, true)).toBe('closing');
+        void widget.lifecycle.close(timer);
         await firstLineLanded(s, widget, timer);
 
         expect(widget.board.has(timer)).toBe(true);
         expect(timer.session.kind).toBe('running');
         expect(openLines(contents.get(FILE)!)).toHaveLength(1);
 
-        expect(widget.lifecycle.close(timer, true)).toBe('closing');
+        await widget.lifecycle.close(timer);
         await settleAll(s);
 
         expect(Notice.messages).toEqual([]);

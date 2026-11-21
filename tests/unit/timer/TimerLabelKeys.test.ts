@@ -7,7 +7,7 @@ import ja from '../../../src/i18n/locales/ja.json';
  * ロケールにしか無いと、その言語だけ空ラベルのボタンが出る（アイコンだけの
  * ボタンに見えて何のボタンか分からなくなる）。
  */
-const BUTTON_LABEL_KEYS = ['start', 'stop', 'resume', 'pause', 'suspend', 'finish', 'suspended'] as const;
+const BUTTON_LABEL_KEYS = ['start', 'stop', 'resume', 'pause', 'suspend', 'finish', 'suspended', 'menu', 'discard', 'close'] as const;
 
 const locales: Record<string, Record<string, string>> = {
     en: (en as unknown as { timer: Record<string, string> }).timer,
