@@ -29,7 +29,7 @@ import { createEmptyFilterState } from '../../services/filter/FilterTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { ViewSidebar } from '../sidebar/ViewSidebar';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
-import { HostFrameScheduler } from '../../utils/HostWindow';
+import { HostFrameScheduler, hostWindow } from '../../utils/HostWindow';
 import type { CardReconciler } from '../sharedUI/CardReconciler';
 import { TaskViewerView } from '../base/TaskViewerView';
 import {
@@ -38,6 +38,9 @@ import {
 } from './TimelineSchema';
 import { narrowestSideBySidePx } from './TaskLayout';
 import { TimelineDays, windowDates, windowEnd, type DayWindow } from './TimelineDays';
+
+/** How long a wheel zoom waits for its next step before its cards are placed again. */
+const ZOOM_SETTLE_MS = 250;
 
 
 
@@ -106,6 +109,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
     private pinchInitialMidY: number = 0;
     private pinchInitialScrollTop: number = 0;
     private isPinching: boolean = false;
+    /** The wait after a wheel zoom's last step, in the window it was set in. */
+    private zoomSettle: { win: Window; id: number } | null = null;
     private readonly hoverParent = new TaskViewHoverParent();
 
     // ==================== Lifecycle ====================
@@ -295,6 +300,7 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
 
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
             this.update({ zoomLevel: newZoom }, { draw: false });
+            this.placeLanesWhenZoomSettles();
         }, { passive: false });
 
         // Pinch zoom (touch devices)
@@ -341,10 +347,16 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
 
         this.registerDomEvent(this.container, 'touchend', (e: TouchEvent) => {
             if (!this.isPinching) return;
-            if (e.touches.length < 2) this.isPinching = false;
+            if (e.touches.length < 2) {
+                this.isPinching = false;
+                // The pinch drew no cards; they are placed by the zoom it ends on.
+                this.timelineRenderer.placeLanesAgain();
+            }
         }, { passive: true });
         this.registerDomEvent(this.container, 'touchcancel', () => {
+            if (!this.isPinching) return;
             this.isPinching = false;
+            this.timelineRenderer.placeLanesAgain();
         }, { passive: true });
 
         this.stickyAnchorObserver = new ResizeObserver(() => {
@@ -388,6 +400,30 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             this.stickyAnchorObserver = null;
         }
         this.frames.dispose();
+        this.cancelZoomSettle();
+        this.timelineRenderer?.dispose();
+    }
+
+    /**
+     * A wheel zoom comes in steps and draws no cards, so they are placed by
+     * the new zoom once no step has come for a while, not at every step.
+     * The wait runs on the view's own window, which a popout's view does
+     * not share with the main one.
+     */
+    private placeLanesWhenZoomSettles(): void {
+        this.cancelZoomSettle();
+        const win = hostWindow(this.container);
+        const id = win.setTimeout(() => {
+            this.zoomSettle = null;
+            this.timelineRenderer.placeLanesAgain();
+        }, ZOOM_SETTLE_MS);
+        this.zoomSettle = { win, id };
+    }
+
+    private cancelZoomSettle(): void {
+        if (!this.zoomSettle) return;
+        this.zoomSettle.win.clearTimeout(this.zoomSettle.id);
+        this.zoomSettle = null;
     }
 
     /** The zoom drawn: the view's own, or the global setting. */

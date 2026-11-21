@@ -155,16 +155,18 @@ export class GridRenderer {
                 col.dataset.date = date;
                 return col;
             });
-            const lane = cols.length > 0 ? timelineRenderer.measureLane(cols[0]) : undefined;
+            timelineRenderer.beginLanes(cols);
             dates.forEach((date, i) => {
                 const col = cols[i];
                 const timedTasks = categorizedByDate.get(date)?.timed ?? [];
                 timelineRenderer.render(col, date, timedTasks, reconciler, {
                     showSunTimes: astronomyDisplay.sunTimes,
-                    lane,
                 });
                 timelineRenderer.addCreateTaskListeners(col, date);
             });
+        } else {
+            // The last draw's columns are gone; nothing is left to place again.
+            timelineRenderer.beginLanes([]);
         }
     }
 

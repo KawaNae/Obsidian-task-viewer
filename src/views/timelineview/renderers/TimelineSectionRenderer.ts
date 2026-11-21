@@ -19,7 +19,34 @@ import {
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
+/**
+ * What a day column was drawn with, kept so that its cards can be placed
+ * again (width, left, rank, halo, the gap to a name band above) without
+ * being drawn again.
+ */
+interface DrawnLane {
+    tasks: DisplayTask[];
+    cards: Map<string, HTMLElement>;
+}
+
+/**
+ * Draws a day column's timed cards, and places them again, without a draw,
+ * where what decides their places changes while what they show does not:
+ * the column's width (the pane resized), and the zoom once a wheel or a
+ * pinch has finished changing it, which is not drawn while it changes.
+ */
 export class TimelineSectionRenderer {
+    /** The columns of the last draw. */
+    private readonly lanes = new Map<HTMLElement, DrawnLane>();
+    /** The lane every column of the last draw is laid out in (`measureLane`). */
+    private geometry: LaneGeometry | undefined;
+    /**
+     * The column whose width is watched. Every day's column is as wide
+     * (one grid track each), so the first stands for all.
+     */
+    private watched: HTMLElement | null = null;
+    private readonly laneResize = this.createLaneObserver();
+
     constructor(
         private plugin: PluginContext & TimerHost,
         private taskRenderer: TaskCardRenderer,
@@ -27,17 +54,32 @@ export class TimelineSectionRenderer {
         private getNarrowestSideBySide: () => number | null,
     ) { }
 
+    /**
+     * Start a draw's columns, before their cards go in: forget the last
+     * draw's, measure the lane once for all, and watch the first column's
+     * width. A draw with no timed section passes none.
+     */
+    public beginLanes(cols: HTMLElement[]): void {
+        this.lanes.clear();
+        if (this.watched) this.laneResize.unobserve(this.watched);
+        this.watched = cols[0] ?? null;
+        this.geometry = this.watched ? this.measureLane(this.watched) : undefined;
+        if (this.watched) this.laneResize.observe(this.watched);
+    }
+
     public render(
         container: HTMLElement,
         date: string,
         timedTasks: DisplayTask[],
         reconciler: CardReconciler,
-        renderOptions: { showSunTimes: boolean; lane?: LaneGeometry } = { showSunTimes: false },
+        renderOptions: { showSunTimes: boolean } = { showSunTimes: false },
     ) {
         const startHour = this.plugin.settings.startHour;
+        const lane: DrawnLane = { tasks: timedTasks, cards: new Map() };
+        this.lanes.set(container, lane);
 
         // Calculate layout for overlapping tasks
-        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour, renderOptions.lane, this.sideBySideInput());
+        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour, this.geometry, this.sideBySideInput());
 
         timedTasks.forEach(task => {
             if (!task.drawn) return;
@@ -47,6 +89,7 @@ export class TimelineSectionRenderer {
             const el = reused ?? container.createDiv('task-card');
             markHandleSurface(el, 'timeline');
             if (reused) container.appendChild(reused);
+            lane.cards.set(task.id, el);
 
             this.decorateLane(el, task, layout, startHour);
 
@@ -63,15 +106,13 @@ export class TimelineSectionRenderer {
 
     /**
      * The lane of a day's column as laid out now, for TaskLayout to tell
-     * which cards a short card's name band lies over: the width the cards'
-     * percentages are of, and where a band's halo starts in from a card's
-     * sides (the band's notches less the halo's reach, read from the CSS
-     * that draws them). Every day's column is as wide, so one is measured
-     * per render. Undefined while the column has no width (not laid out).
-     * The column's width can change without a render (the window resized);
-     * what the cards were given then holds until the next render.
+     * which cards a short card's name band lies over and how wide the cards
+     * put side by side are: the width the cards' percentages are of, and
+     * where a band's halo starts in from a card's left (the band's notch
+     * less the halo's reach, read from the CSS that draws them). Undefined
+     * while the column has no width (not laid out).
      */
-    public measureLane(col: HTMLElement): LaneGeometry | undefined {
+    private measureLane(col: HTMLElement): LaneGeometry | undefined {
         const width = col.clientWidth - LANE_INSET_PX;
         if (width <= 0) return undefined;
         const style = getComputedStyle(col);
@@ -80,6 +121,57 @@ export class TimelineSectionRenderer {
             width,
             bandInset: px('--task-card-overflow-ext-offset') - px('--task-card-halo-inline'),
         };
+    }
+
+    /**
+     * Place the cards of every column drawn again, by the lane, the zoom and
+     * the view's way of laying out as they are now, without drawing them.
+     */
+    public placeLanesAgain(): void {
+        for (const [col, lane] of this.lanes) this.placeLane(col, lane);
+    }
+
+    /** Stop watching the columns' width. */
+    public dispose(): void {
+        this.laneResize.disconnect();
+        this.lanes.clear();
+        this.watched = null;
+    }
+
+    /**
+     * The one place the observer of the columns' width is made, created in
+     * the plugin's window as the view's other observers are.
+     */
+    private createLaneObserver(): ResizeObserver {
+        return new ResizeObserver(() => this.laneResized());
+    }
+
+    /**
+     * The watched column's width changed, or it was first laid out: measure
+     * it again and, if the lane is another width, place every column's cards
+     * again. A lane of the width the draw measured writes nothing.
+     */
+    private laneResized(): void {
+        if (!this.watched) return;
+        const geometry = this.measureLane(this.watched);
+        if (geometry?.width === this.geometry?.width) return;
+        this.geometry = geometry;
+        this.placeLanesAgain();
+    }
+
+    /** Lay a column's cards out again and rewrite their places. */
+    private placeLane(col: HTMLElement, lane: DrawnLane): void {
+        const layout = TaskLayout.calculateTaskLayout(
+            lane.tasks,
+            this.plugin.settings.startHour,
+            this.geometry,
+            this.sideBySideInput(),
+        );
+        for (const [id, el] of lane.cards) {
+            const slot = layout.get(id);
+            // A card the reconciler has since moved to another column is that column's.
+            if (slot && el.parentElement === col) this.placeInLane(el, slot);
+        }
     }
 
     /**
