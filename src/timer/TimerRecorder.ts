@@ -487,20 +487,17 @@ export class TimerRecorder {
     /**
      * レコードが名乗る名前の素。**行を新しく作るときだけ**使う。
      *
-     * 行が既にあるなら content の正はその行で、widget の入力欄がその行を直接書き
-     * 換える（`TimerContentBinding`）。ここへ来るのは書く相手がまだ無い場合だけで、
-     * 未書き込みの下書き（`draft`）があればそれ、無ければ**対象タスクの名前を継ぐ**。
-     * セッションは同じ作業の分割であって別物ではないので、名前を落とすと後から
-     * 読めない。走行中の行（{@link buildSessionPlaceholder}）と予備の記録
-     * （{@link addRecord}）が同じ規則に乗る。
+     * 行が既にあるなら content の正はその行で、名前はその行のハブで直す
+     * （widget は名前を書かない）。task は**対象タスクの名前を継ぐ**。セッションは
+     * 同じ作業の分割であって別物ではないので、名前を落とすと後から読めない。
+     * 走行中の行（{@link buildSessionPlaceholder}）と予備の記録（{@link addRecord}）が
+     * 同じ規則に乗る。
      */
     private sessionName(timer: TimerState): string {
-        const drafted = timer.draft?.trim();
-        if (drafted) return drafted;
         if (timer.subject.kind === 'task') return timer.name.trim();
 
         // デイリーノートの `name` は日付で、作業名として継ぐと「2026-08-17 を
-        // 25 分やった」という読めない記録が残る。1 本目は空で始めて widget で
+        // 25 分やった」という読めない記録が残る。1 本目は空で始めてハブで
         // 付けさせ、2 本目以降は直前のレコードから継ぐ（兄弟レコードは同名）。
         const tail = this.tailInIndex(timer);
         return tail ? splitTimerIcon(tail.content).name : '';

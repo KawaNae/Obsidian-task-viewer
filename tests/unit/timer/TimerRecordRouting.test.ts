@@ -104,13 +104,6 @@ describe('recordSessionEnd: one run writes one line', () => {
         expect(gone.inserted[0]).toContain('⏱️ parent');
     });
 
-    it('the added record takes the draft over the task name', async () => {
-        const gone = makeHarness({ childExists: false });
-        await gone.recorder.recordSessionEnd(makeTimer(gone, { draft: '資料集め' }), recordFor());
-        expect(gone.inserted[0]).toContain('⏱️ 資料集め');
-        expect(gone.inserted[0]).not.toContain('parent');
-    });
-
     it('the running line and the added record go by the same name', async () => {
         const gone = makeHarness({ childExists: false });
         const timer = makeTimer(gone, { tail: null, owned: [] });

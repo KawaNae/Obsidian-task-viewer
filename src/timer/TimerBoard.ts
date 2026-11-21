@@ -23,7 +23,7 @@ export interface IdleBoard {
  * 索引の通知が合わせる（`TimerRenderer.syncFromIndex`）。組み直すと見出しのボタンの
  * フォーカスを失う。
  */
-const QUIET: ReadonlySet<TimerEvent['type']> = new Set(['drafted', 'synced', 'opening', 'landed', 'followed']);
+const QUIET: ReadonlySet<TimerEvent['type']> = new Set(['synced', 'opening', 'landed', 'followed']);
 
 export interface BoardOutlet {
     /** 表と提案を保存する。 */

@@ -18,6 +18,10 @@ import { logError, logInfo } from '../log/log';
  * v9: タイマーを状態（主題、測り方、時計、記録の区切り）で保存し、提案（idle）を
  * 表の外に置いた。ストレージキーに版が入るので、旧い版の状態は読まずに捨てる
  * （移し替えはしない）。復元のときに旧いキーを掃除する。
+ *
+ * 版は、残る欄の意味が変わるときに上げる。欄を消すだけなら上げない。読みは
+ * 知らない欄を見ず、読んだ表を写す（`toPersisted`）ときにそれを落とす。v9 の
+ * 保存が持っていた名前の下書き（`draft`）は、こうして読みのときに捨てる。
  */
 export const STORAGE_VERSION = 9;
 /** 掃除する旧い版。 */
@@ -137,7 +141,6 @@ function isTimerState(value: unknown): value is TimerState {
         && (value.opening === null || isOpening(value.opening))
         && isObject(recorded) && isNumber(recorded.seconds) && isNumber(recorded.count)
         && (value.priorStartMs === null || isNumber(value.priorStartMs))
-        && (value.draft === null || isString(value.draft))
         && typeof value.expanded === 'boolean';
 }
 
@@ -158,7 +161,6 @@ function toPersisted(timer: TimerState): TimerState {
         opening: timer.opening,
         recorded: timer.recorded,
         priorStartMs: timer.priorStartMs,
-        draft: timer.draft,
         expanded: timer.expanded,
     };
 }

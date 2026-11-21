@@ -19,7 +19,6 @@ import type { Session, TimerState } from '../../../src/timer/TimerState';
  * | opening、landed | 書いている途中の錨と、書けたあとの尻尾、自分の錨、ノート |
  * | followed  | 送る操作とノートの改名のあとのノート |
  * | synced    | 表示の写し |
- * | drafted   | 名前の下書き |
  * | toggled   | 開閉 |
  */
 
@@ -42,7 +41,6 @@ function state(overrides: Partial<TimerState> = {}): TimerState {
         opening: null,
         recorded: { seconds: 0, count: 0 },
         priorStartMs: null,
-        draft: null,
         expanded: true,
         ...overrides,
     };
@@ -199,13 +197,11 @@ describe('what any session takes', () => {
     const sessions: [string, Partial<TimerState>][] = [['running', {}], ['pending', PENDING()], ['suspended', SUSPENDED]];
 
     for (const [name, overrides] of sessions) {
-        it(`${name}: followed, synced, drafted and toggled change only their own field`, () => {
+        it(`${name}: followed, synced and toggled change only their own field`, () => {
             const s = state(overrides);
             const cases: [TimerEvent, Partial<TimerState>][] = [
                 [{ type: 'followed', file: 'X.md' }, { file: 'X.md' }],
                 [{ type: 'synced', name: 'B', color: '#0f0' }, { name: 'B', color: '#0f0' }],
-                [{ type: 'drafted', draft: '打ちかけ' }, { draft: '打ちかけ' }],
-                [{ type: 'drafted', draft: null }, { draft: null }],
                 [{ type: 'toggled' }, { expanded: !s.expanded }],
             ];
             for (const [event, changed] of cases) {

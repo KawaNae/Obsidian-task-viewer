@@ -173,7 +173,7 @@ function build() {
             clock: session.kind === 'running' ? clock : freeze(clock, now),
             session,
             tail: 'tv-tail', owned: [], opening: null,
-            recorded: { seconds: 0, count: 0 }, priorStartMs: null, draft: null, expanded: true,
+            recorded: { seconds: 0, count: 0 }, priorStartMs: null, expanded: true,
         };
         board.add(timer);
         return timer;

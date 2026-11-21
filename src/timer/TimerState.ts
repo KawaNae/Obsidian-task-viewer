@@ -102,12 +102,6 @@ export interface TimerState {
      * self で、行の start に時刻があるときだけ。ほかは null。
      */
     priorStartMs: number | null;
-    /**
-     * 尻尾の行がまだ無い間の名前の下書き。名前の正は尻尾の行で、入力欄はその
-     * 編集器である（`TimerContentBinding`）。行が無い間と、書けなかった間だけ
-     * ここに溜め、行が生えたら書き出す。
-     */
-    draft: string | null;
     expanded: boolean;
 }
 

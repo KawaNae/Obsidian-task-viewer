@@ -44,7 +44,7 @@ function timerNamed(name: string): TimerState {
         clock: restart(Date.now()),
         session: { kind: 'running', from: 0 },
         tail: 'tv-tail', owned: [], opening: null,
-        recorded: { seconds: 0, count: 0 }, priorStartMs: null, draft: null, expanded: true,
+        recorded: { seconds: 0, count: 0 }, priorStartMs: null, expanded: true,
     };
 }
 
