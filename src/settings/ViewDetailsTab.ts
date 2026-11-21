@@ -1,11 +1,12 @@
 import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
-import type { TaskViewerSettings } from '../types';
+import { TIMELINE_OVERLAP_MODES, type TaskViewerSettings, type TimelineOverlapMode } from '../types';
 import { SETTINGS_SCHEMA } from './SettingsSchema';
 import type { SettingFields } from './SettingFields';
+import { OVERLAP_MODE_LABEL } from './TimelineOverlapModeLabel';
 
-type CountKey = 'pastDaysToShow' | 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes' | 'pinnedListPageSize';
+type CountKey = 'pastDaysToShow' | 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes' | 'pinnedListPageSize' | 'sideBySideMinWidth';
 
 export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
     /** A whole number of the settings, read by its range in the settings' table. */
@@ -65,6 +66,25 @@ export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFi
                 plugin.settings.showTimeline = value;
                 await plugin.saveSettings();
             }));
+
+    new Setting(el)
+        .setName(t('settings.views.overlapMode'))
+        .setDesc(t('settings.views.overlapModeDesc'))
+        .addDropdown(dropdown => {
+            for (const mode of TIMELINE_OVERLAP_MODES) dropdown.addOption(mode, OVERLAP_MODE_LABEL[mode]());
+            dropdown
+                .setValue(plugin.settings.overlapMode)
+                .onChange(async (value) => {
+                    plugin.settings.overlapMode = value as TimelineOverlapMode;
+                    await plugin.saveSettings();
+                });
+        });
+
+    // Shown whatever the global choice, since a view that chooses auto for
+    // itself is put side by side at this width too.
+    count(new Setting(el)
+        .setName(t('settings.views.sideBySideMinWidth'))
+        .setDesc(t('settings.views.sideBySideMinWidthDesc')), 'sideBySideMinWidth', '120');
 
     new Setting(el)
         .setName(t('settings.views.showWeekRow'))

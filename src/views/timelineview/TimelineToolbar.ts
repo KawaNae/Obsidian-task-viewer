@@ -10,6 +10,8 @@ import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import type { ViewToolbarContext } from '../base/TaskViewerView';
 import type { DayWindow } from './TimelineDays';
 import { daysToShowOf, effectiveZoom, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW, type TimelineState } from './TimelineSchema';
+import { TIMELINE_OVERLAP_MODES } from '../../types';
+import { OVERLAP_MODE_LABEL } from '../../settings/TimelineOverlapModeLabel';
 
 /** What Timeline does that is not a change of its state, or reads from more than it. */
 export interface TimelineCommands {
@@ -178,20 +180,47 @@ export class TimelineToolbar extends ViewToolbarBase {
         });
     }
 
+    /**
+     * The view's own way of laying out cards that would hide each other's
+     * names, or the global setting's (no value of its own).
+     */
+    private appendOverlapMode(menu: Menu): void {
+        const current = this.store.get().overlapMode;
+        menu.addItem((item) => {
+            item.setTitle(t('viewOptions.overlapMode'));
+            const sub = item.setSubmenu();
+            sub.addItem((choice) => {
+                choice.setTitle(t('viewOptions.followGlobal'))
+                    .setChecked(current === undefined)
+                    .onClick(() => this.store.update({ overlapMode: undefined }));
+            });
+            sub.addSeparator();
+            for (const mode of TIMELINE_OVERLAP_MODES) {
+                sub.addItem((choice) => {
+                    choice.setTitle(OVERLAP_MODE_LABEL[mode]())
+                        .setChecked(current === mode)
+                        .onClick(() => this.store.update({ overlapMode: mode }));
+                });
+            }
+        });
+    }
+
     private appendFollowGlobal(menu: Menu): void {
         const state = this.store.get();
         const astro = state.astronomyDisplay;
         const hasAstroOverride = astro != null && Object.keys(astro).length > 0;
         const hasAllDayOverride = state.showAllDay !== undefined;
         const hasTimelineOverride = state.showTimeline !== undefined;
+        const hasOverlapOverride = state.overlapMode !== undefined;
         menu.addItem((item) => {
             item.setTitle(t('viewOptions.followGlobal'))
                 .setIcon('rotate-ccw')
-                .setDisabled(!hasAstroOverride && !hasAllDayOverride && !hasTimelineOverride)
+                .setDisabled(!hasAstroOverride && !hasAllDayOverride && !hasTimelineOverride && !hasOverlapOverride)
                 .onClick(() => this.store.update({
                     astronomyDisplay: undefined,
                     showAllDay: undefined,
                     showTimeline: undefined,
+                    overlapMode: undefined,
                 }));
         });
     }
@@ -257,6 +286,7 @@ export class TimelineToolbar extends ViewToolbarBase {
                 onChange: (next) => this.store.update({ astronomyDisplay: next }),
             });
             this.appendSectionToggles(menu);
+            this.appendOverlapMode(menu);
             this.appendFollowGlobal(menu);
         });
     }
