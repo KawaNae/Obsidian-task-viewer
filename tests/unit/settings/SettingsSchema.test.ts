@@ -59,6 +59,28 @@ describe('readSettings', () => {
         ]);
     });
 
+    it('takes each way of laying out Timeline\'s overlapping cards, and a narrowest from 80px to 160px', () => {
+        for (const overlapMode of ['cascade', 'auto', 'sideBySide'] as const) {
+            for (const sideBySideMinWidth of [80, 160]) {
+                const { settings, fixes } = readSettings({ overlapMode, sideBySideMinWidth });
+                expect([settings.overlapMode, settings.sideBySideMinWidth]).toEqual([overlapMode, sideBySideMinWidth]);
+                expect(fixes).toEqual([]);
+            }
+        }
+    });
+
+    it('gives the defaults for a way of laying out it does not know and a narrowest out of range', () => {
+        for (const sideBySideMinWidth of [79, 161]) {
+            const { settings, fixes } = readSettings({ overlapMode: 'side', sideBySideMinWidth });
+            expect(settings.overlapMode).toBe(DEFAULT_SETTINGS.overlapMode);
+            expect(settings.sideBySideMinWidth).toBe(DEFAULT_SETTINGS.sideBySideMinWidth);
+            expect(fixes).toEqual([
+                { path: 'overlapMode', issue: { code: 'oneOf', allowed: ['cascade', 'auto', 'sideBySide'] } },
+                { path: 'sideBySideMinWidth', issue: { code: 'range', min: 80, max: 160 } },
+            ]);
+        }
+    });
+
     // No upper bound on the work and the break.
     it('takes a work and a break of any length of a minute or more', () => {
         const { settings, fixes } = readSettings({ pomodoroWorkMinutes: 200, pomodoroBreakMinutes: 90 });

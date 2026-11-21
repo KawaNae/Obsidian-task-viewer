@@ -32,7 +32,11 @@ import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import type { CardReconciler } from '../sharedUI/CardReconciler';
 import { TaskViewerView } from '../base/TaskViewerView';
-import { TimelineCodec, daysToShowOf, effectiveZoom, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
+import {
+    TimelineCodec, daysToShowOf, effectiveOverlapMode, effectiveZoom,
+    type TimelineConfig, type TimelineTransient,
+} from './TimelineSchema';
+import { narrowestSideBySidePx } from './TaskLayout';
 import { TimelineDays, windowDates, windowEnd, type DayWindow } from './TimelineDays';
 
 
@@ -213,7 +217,15 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.taskRenderer);
-        this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.taskRenderer, () => this.zoom());
+        this.timelineRenderer = new TimelineSectionRenderer(
+            this.plugin,
+            this.taskRenderer,
+            () => this.zoom(),
+            () => narrowestSideBySidePx(
+                effectiveOverlapMode(this.state, this.plugin.settings),
+                this.plugin.settings.sideBySideMinWidth,
+            ),
+        );
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
             plugin: this.plugin,

@@ -5,7 +5,7 @@ import type { TimerHost } from '../../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { TaskLayout, type LaneGeometry, type LaneSlot } from '../TaskLayout';
+import { TaskLayout, type LaneGeometry, type LaneSlot, type SideBySideInput } from '../TaskLayout';
 import { LANE_INSET_PX } from '../TimedCardGeometry';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
@@ -24,6 +24,7 @@ export class TimelineSectionRenderer {
         private plugin: PluginContext & TimerHost,
         private taskRenderer: TaskCardRenderer,
         private getZoomLevel: () => number,
+        private getNarrowestSideBySide: () => number | null,
     ) { }
 
     public render(
@@ -36,7 +37,7 @@ export class TimelineSectionRenderer {
         const startHour = this.plugin.settings.startHour;
 
         // Calculate layout for overlapping tasks
-        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour, renderOptions.lane);
+        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour, renderOptions.lane, this.sideBySideInput());
 
         timedTasks.forEach(task => {
             if (!task.drawn) return;
@@ -79,6 +80,16 @@ export class TimelineSectionRenderer {
             width,
             bandInset: px('--task-card-overflow-ext-offset') - px('--task-card-halo-inline'),
         };
+    }
+
+    /**
+     * What TaskLayout needs, besides the lane, to put cards side by side,
+     * read when the cards are placed so it follows the zoom and the view's
+     * choice as they are then.
+     */
+    private sideBySideInput(): SideBySideInput {
+        // --hour-height is 60px a zoom step, so a minute is the zoom in px.
+        return { pxPerMinute: this.getZoomLevel(), minCardWidthPx: this.getNarrowestSideBySide() };
     }
 
     /**
