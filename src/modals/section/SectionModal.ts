@@ -48,9 +48,10 @@ export class SectionModal implements SectionSurface {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog tv-section',
             keymap: this.app.keymap,
-            // A note's or a heading's name, mended rather than typed over.
+            // A note's or a heading's name is picked from candidates, so selected
+            // whole to be replaced by the next pick.
             initialFocus: () => (this.field
-                ? { to: this.field.input(this.opts.initial.note.picked === null ? 'note' : 'heading'), selection: 'end' }
+                ? { to: this.field.input(this.opts.initial.note.picked === null ? 'note' : 'heading'), selection: 'all' }
                 : null),
             build: (bodyEl) => this.build(bodyEl),
             onClose: () => {

@@ -66,10 +66,11 @@ export class SendModal implements SendSurface {
             panelClass: 'tv-overlay__panel--dialog tv-send',
             keymap: this.app.keymap,
             // The first draft, which puts its own caret; the note field when
-            // no row opened in the editor, its name mended rather than typed over.
+            // no row opened in the editor, a name picked from candidates, so
+            // selected whole to be replaced by the next pick.
             initialFocus: () => {
                 const editor = this.dialog?.firstEditor();
-                return editor ? { to: editor } : { to: this.field.input('note'), selection: 'end' };
+                return editor ? { to: editor } : { to: this.field.input('note'), selection: 'all' };
             },
             build: (bodyEl) => this.build(bodyEl),
             onClose: () => {

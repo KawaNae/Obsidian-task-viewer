@@ -17,7 +17,7 @@ export interface TextSpec<T> {
     submitLabel: string;
     /**
      * A number: a keyboard of digits on a phone, and the field's text
-     * selected as the dialog opens, a short value typed over whole.
+     * selected as the dialog opens, a value of fixed shape typed over whole.
      */
     numeric?: boolean;
     /**

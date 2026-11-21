@@ -31,8 +31,8 @@ export type TaskHubFocusField =
 /**
  * How the text of each of the hub's fields is met as the focus comes to it,
  * the hub opening on it or its menu asking for it. A date, a time, a line
- * style and a colour are short values typed over whole: their text is
- * selected. A name, a tag, a mask and a property are texts added to or
+ * style and a colour are values of fixed shape, retyped whole: their text is
+ * selected. A name, a tag, a mask and a property are free texts added to or
  * mended: the caret goes after them, so a key pressed by a slip does not
  * replace them. The status is a button, focused alone.
  */
