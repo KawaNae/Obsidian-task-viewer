@@ -2,9 +2,20 @@ import type { DisplayTask } from '../../types';
 import { minutesOfSpan } from '../../utils/DayWindow';
 import { buildOverlapClusters } from '../sharedLogic/OverlapClusters';
 
+/**
+ * Where a timed card sits in its day's lane: its width and left offset, in
+ * percent of the lane, and its rank, the place it stands in front of the
+ * day's other cards (1 is the back, the number of cards the front).
+ */
+export interface LaneSlot {
+    width: number;
+    left: number;
+    rank: number;
+}
+
 export class TaskLayout {
-    static calculateTaskLayout(tasks: DisplayTask[], startHour: number): Map<string, { width: number, left: number, zIndex: number }> {
-        const layout = new Map<string, { width: number, left: number, zIndex: number }>();
+    static calculateTaskLayout(tasks: DisplayTask[], startHour: number): Map<string, LaneSlot> {
+        const layout = new Map<string, LaneSlot>();
         if (tasks.length === 0) return layout;
 
         // 1. What each task is drawn over, in minutes of its visual day.
@@ -23,6 +34,9 @@ export class TaskLayout {
             item => item.start,
             item => item.end,
         );
+
+        // Each card's level and span, gathered across clusters for the ranks.
+        const placed: { id: string; level: number; start: number; end: number }[] = [];
 
         // 4. Process each cluster independently
         for (const cluster of clusters) {
@@ -87,11 +101,35 @@ export class TaskLayout {
                 const stepIndex = level - 1;
 
                 const left = stepIndex * step;
-                const zIndex = level;
 
-                layout.set(item.task.id, { width, left, zIndex });
+                layout.set(item.task.id, { width, left, rank: 0 });
+                placed.push({ id: item.task.id, level, start: item.start, end: item.end });
             }
         }
+
+        // 5. Rank the day's cards, back to front. A card in front of another
+        //    traces the part of its outline over the other in the view's
+        //    background colour.
+        //    - Two cards whose times overlap have different levels, and the
+        //      one shifted right (the higher level) stands in front.
+        //    - Two cards of one level never overlap in time. The earlier one
+        //      stands in front, so that a short card's name band, which hangs
+        //      below its end, lies over the card after it.
+        //    Comparing levels first keeps the order total where the two
+        //    pairwise rules would go round in a circle (Q 20:00-20:10 level 1,
+        //    P 20:05-21:00 level 2, R 20:10-20:20 level 3: R, P, Q front to
+        //    back). One level and one start only meet for a card of no length
+        //    beside a longer one; the one ending first stands in front, as an
+        //    earlier card does, and the ID settles the rest.
+        placed.sort((a, b) => {
+            if (a.level !== b.level) return a.level - b.level;
+            if (a.start !== b.start) return b.start - a.start;
+            if (a.end !== b.end) return b.end - a.end;
+            return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+        });
+        placed.forEach((p, i) => {
+            layout.get(p.id)!.rank = i + 1;
+        });
 
         return layout;
     }

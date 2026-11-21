@@ -7,7 +7,7 @@ import { minutesOfSpan } from '../../utils/DayWindow';
  * ({@link compareWritten}).
  */
 
-// The same minutes TaskLayout stacks by, so timedTasks index order matches level order (shadow stacking integrity).
+// The same minutes TaskLayout places cards by, so a lane draws its cards in the order TaskLayout reads them.
 function minutesOf(task: DisplayTask, startHour: number): { start: number; end: number } {
     return task.drawn ? minutesOfSpan(task.drawn, startHour) : { start: 0, end: 0 };
 }
