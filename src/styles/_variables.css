@@ -89,9 +89,12 @@
            < view drawer 260 (sidebar panel)
            Lane cards: a card's z-index is its rank in its lane, `--lane-z`,
            capped at --z-task-card-max (`.task-card` in _task-card.css). The
-           script writes only the rank (Timeline's time lanes: overlap
-           stacking); a lane of one rank sets it here (--z-allday-card). A
-           card without a rank stands at the floor, --z-task-card.
+           script writes only the rank: in Timeline's time lanes, the card's
+           place among its day's cards, 1 to their number (TaskLayout: the
+           card shifted right of one it overlaps in time is in front of it,
+           and of two that do not overlap the earlier is in front); a lane of
+           one rank sets it here (--z-allday-card). A card without a rank
+           stands at the floor, --z-task-card.
            Grid band (Calendar's week rows, Timeline's all-day row): cells
            (0) < cards (1, all-day 10) / due arrow (5) < grid ghost (10).
            Schedule has no selection and no lane rank: its cards stand at

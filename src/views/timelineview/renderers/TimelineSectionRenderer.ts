@@ -5,7 +5,7 @@ import type { TimerHost } from '../../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { TaskLayout } from '../TaskLayout';
+import { TaskLayout, type LaneSlot } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
@@ -17,11 +17,6 @@ import {
 } from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
-
-// The gap between the ranks of successive cards in a lane. The z-index is
-// CSS's: the rank capped under the selected card (`.task-card`, ladder [B]
-// in _variables.css).
-const Z_GAP = 10;
 
 export class TimelineSectionRenderer {
     constructor(
@@ -42,7 +37,7 @@ export class TimelineSectionRenderer {
         // Calculate layout for overlapping tasks
         const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour);
 
-        timedTasks.forEach((task, index) => {
+        timedTasks.forEach(task => {
             if (!task.drawn) return;
 
             const key = { scope: `lane-${date}`, name: task.id };
@@ -51,7 +46,7 @@ export class TimelineSectionRenderer {
             markHandleSurface(el, 'timeline');
             if (reused) container.appendChild(reused);
 
-            this.decorateLane(el, task, index, layout, startHour);
+            this.decorateLane(el, task, layout, startHour);
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
                 key,
@@ -83,19 +78,18 @@ export class TimelineSectionRenderer {
     private decorateLane(
         el: HTMLElement,
         task: DisplayTask,
-        index: number,
-        layout: ReturnType<typeof TaskLayout.calculateTaskLayout>,
+        layout: Map<string, LaneSlot>,
         startHour: number,
     ): void {
         // Reset + apply split-segment variant classes (idempotent).
         TaskStyling.applySplitClasses(el, task);
 
         // Position: what the card is drawn over, in minutes of its visual day,
-        // the same minutes TaskLayout stacks by.
+        // the same minutes TaskLayout places cards by.
         const { start: relativeStart, end: endMinutes } = minutesOfSpan(task.drawn!, startHour);
         const duration = endMinutes - relativeStart;
 
-        const taskLayout = layout.get(task.id) || { width: 100, left: 0, zIndex: 1 };
+        const taskLayout = layout.get(task.id) || { width: 100, left: 0, rank: 1 };
         const widthFraction = taskLayout.width / 100;
         const leftFraction = taskLayout.left / 100;
 
@@ -103,7 +97,10 @@ export class TimelineSectionRenderer {
         el.style.setProperty('--duration-minutes', String(duration));
         el.style.width = `calc((100% - 8px) * ${widthFraction})`;
         el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
-        el.style.setProperty('--lane-z', String(index * Z_GAP + taskLayout.zIndex));
+        // The rank is the card's place in front of the day's other cards
+        // (TaskLayout); the z-index is CSS's, the rank capped under the
+        // selected card (`.task-card`, ladder [B] in _variables.css).
+        el.style.setProperty('--lane-z', String(taskLayout.rank));
 
         // cascade-offset: leftmost = unset, 重なって右にずれた card に '1'。
         if (taskLayout.left > 0) {
