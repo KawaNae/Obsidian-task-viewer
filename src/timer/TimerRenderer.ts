@@ -27,7 +27,6 @@ import { getDisplayFileName, getTaskDisplayName } from '../services/display/Task
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI, type RingOptions, type RingState } from './TimerProgressUI';
 import { canOffsetStart } from './TimerStartOffset';
-import { placeOffsetIcon } from './TimerOffsetIcon';
 import { addStartOffsetItems, buildTimerMenu } from './TimerWidgetMenu';
 import type { MenuAnchor } from '../interaction/menu/MenuPresenter';
 import { TimeFormatter } from '../utils/TimeFormatter';
@@ -412,36 +411,23 @@ export class TimerRenderer {
     }
 
     /**
-     * 押せる間だけ、経過時間の表示をボタンにする: 役割、Tab で止まること、名前、
-     * 鉛筆。押せない間はただの数字に戻す。tick からも呼ぶ。鉛筆は輪の線の内側に
-     * 置く（{@link placeOffsetIcon}。測るのは鉛筆を出したときと数字の形が変わった
-     * ときだけ）。
+     * 押せる間だけ、経過時間の表示をボタンにする: 役割、Tab で止まること、名前。
+     * 押せない間はただの数字に戻す。tick からも呼ぶ。
      */
     private syncStartOffset(el: HTMLElement, timer: TimerState): void {
         const display = el.querySelector('.timer-widget__time-display') as HTMLElement | null;
         if (!display) return;
         const offsettable = canOffsetStart(timer);
         display.toggleClass('timer-widget__time-display--offsettable', offsettable);
-        const icon = display.querySelector('.timer-widget__offset-icon');
         if (!offsettable) {
             display.removeAttribute('role');
             display.removeAttribute('tabindex');
             display.removeAttribute('aria-label');
-            icon?.remove();
             return;
         }
         display.setAttribute('role', 'button');
         display.setAttribute('tabindex', '0');
         display.setAttribute('aria-label', t('timer.offsetStart'));
-        if (!icon) {
-            // Obsidian は `pencil` を下線付きの Lucide の `edit-3` に読み替えるので、Lucide の名前で引く。
-            setIcon(display.createSpan({ cls: 'timer-widget__offset-icon', attr: { 'aria-hidden': 'true' } }), 'lucide-pencil');
-        }
-        const ring = el.querySelector('.timer-widget__progress-ring');
-        if (ring) {
-            const { size } = this.ringOptions();
-            placeOffsetIcon(display, ring, size, TimerProgressUI.innerRadius(size));
-        }
     }
 
     /**
