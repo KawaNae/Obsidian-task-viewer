@@ -58,7 +58,8 @@ export class TimerStartOffsetModal {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog tv-timer-offset',
             keymap: this.app.keymap,
-            initialFocus: () => this.input(),
+            // A number of minutes or a time: a value typed over whole.
+            initialFocus: () => ({ to: this.input(), selection: 'all' }),
             build: (bodyEl) => this.build(bodyEl),
             onClose: () => this.stopTick?.(),
         });

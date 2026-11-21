@@ -54,18 +54,13 @@ import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { trackKeyboard } from '../../utils/KeyboardState';
 import { runningAnimations, whenStopped } from '../../utils/Animations';
+import { focusField, type FieldFocus } from '../../utils/FieldFocus';
 import { t } from '../../i18n';
 
 export type OverlayMode = 'anchored' | 'centered';
 export type { CloseAnswer };
 
-/**
- * What an overlay's first focus goes to: an element of the body, or a part
- * of it that focuses itself (a CodeMirror editor, which puts its caret).
- */
-export interface Focusable {
-    focus(options?: FocusOptions): void;
-}
+export type { Focusable, FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 
 export interface OverlayOpenOpts {
     mode: OverlayMode;
@@ -84,11 +79,12 @@ export interface OverlayOpenOpts {
      * What the focus goes to once the overlay has opened: a frame after it
      * opens (the frame of the window it stands in, so a popout's), or once
      * its open animation has ended, the panel holding the focus until then
-     * (`focusOnceOpen`). A text field's text is selected, so what is typed
-     * replaces it. Not given, or naming nothing, the panel itself takes the
-     * focus.
+     * (`focusOnceOpen`). The body says how a text field's text is met
+     * there, all of it selected or the caret after it, as the field's kind
+     * asks: the shell knows no field. Not given, or naming nothing, the
+     * panel itself takes the focus.
      */
-    initialFocus?: () => Focusable | null;
+    initialFocus?: () => FieldFocus | null;
     onClose?: () => void;
     /**
      * Asked before a close the user asks for (the close button, Escape, the
@@ -161,8 +157,8 @@ export interface OpeningOverlay {
     isCurrent: () => boolean;
     /** Whether `node` is in the overlay's surface. */
     holds: (node: Node | null) => boolean;
-    /** What the body asks the focus to go to (`initialFocus`), asked when it goes. */
-    target: () => Focusable | null;
+    /** What the body asks the focus to go to, and how its text is met (`initialFocus`), asked when it goes. */
+    target: () => FieldFocus | null;
 }
 
 /**
@@ -199,17 +195,13 @@ export function focusOnceOpen(win: Window, overlay: OpeningOverlay): void {
 }
 
 /**
- * Put the focus on what the body asks, a text field with its text selected,
- * and on the panel when it names nothing or the focus did not go into the
- * surface (an element hidden, or disabled).
+ * Put the focus on what the body asks, its text met as the body says
+ * (`focusField`), and on the panel when it names nothing or the focus did
+ * not go into the surface (an element hidden, or disabled).
  */
 function focusFirst({ panel, doc, holds, target }: OpeningOverlay): void {
     const to = target();
-    if (to) {
-        to.focus({ preventScroll: true });
-        const field = to as Partial<HTMLInputElement>;
-        if (doc.activeElement === (to as unknown) && typeof field.select === 'function') field.select();
-    }
+    if (to) focusField(to, { preventScroll: true });
     if (!holds(doc.activeElement)) panel.focus({ preventScroll: true });
 }
 

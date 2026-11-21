@@ -11,7 +11,10 @@
  * - `empty()` takes the children out from the last, as Obsidian's does
  *   (`Node.prototype.empty` in its `app.js`).
  * - `focus()` sends `blur` to the element that had the focus, with the
- *   element focused now as its `relatedTarget`.
+ *   element focused now as its `relatedTarget`. It leaves the text's
+ *   selection where it was, at the start of a field never focused.
+ * - A field's text is selected (`select`, `setSelectionRange`), and the
+ *   field scrolled in itself (`scrollLeft`, `scrollTop`), as an input's.
  * - An event is heard by the listeners put on in the capture phase of the
  *   target's ancestors, from the top, then by the target's own; it does not
  *   bubble, as a blur does not. A listener put on with a `signal` is taken
@@ -48,6 +51,12 @@ export class FocusEl {
     disabled = false;
     placeholder = '';
     readonly style: Record<string, string> = {};
+    selectionStart: number | null = 0;
+    selectionEnd: number | null = 0;
+    scrollLeft = 0;
+    scrollTop = 0;
+    scrollWidth = 0;
+    scrollHeight = 0;
 
     constructor(readonly ownerDocument: FocusDoc, cls = '') {
         cls.split(/\s+/).filter(Boolean).forEach(c => this.classes.add(c));
@@ -174,6 +183,12 @@ export class FocusEl {
     /** The first descendant with the class `cls`. */
     find(cls: string): FocusEl | null {
         return this.findAll(cls)[0] ?? null;
+    }
+
+    select(): void { this.setSelectionRange(0, this.value.length); }
+    setSelectionRange(start: number, end: number): void {
+        this.selectionStart = start;
+        this.selectionEnd = end;
     }
 
     /** Type `text` as a person does: the value, then an `input` event. */

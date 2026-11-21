@@ -29,8 +29,6 @@ function stubElement(): Record<string, unknown> {
 
 beforeAll(() => {
     vi.stubGlobal('Element', FocusEl);
-    // No stand-in element is an input to select the text of.
-    vi.stubGlobal('HTMLInputElement', class { });
     vi.stubGlobal('document', {
         createDocumentFragment: () => ({ appendChild: () => { } }),
         createElement: () => stubElement(),

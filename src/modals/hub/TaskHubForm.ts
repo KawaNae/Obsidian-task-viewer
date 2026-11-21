@@ -21,11 +21,32 @@ import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
 import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
 import type { HubForm, HubHost } from './HubHost';
+import { focusField, type FieldFocus, type SelectionOnFocus } from '../../utils/FieldFocus';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
     | 'tags' | 'color' | 'linestyle' | 'mask' | 'properties'
     | `property:${string}`;
+
+/**
+ * How the text of each of the hub's fields is met as the focus comes to it,
+ * the hub opening on it or its menu asking for it. A date, a time, a line
+ * style and a colour are short values typed over whole: their text is
+ * selected. A name, a tag, a mask and a property are texts added to or
+ * mended: the caret goes after them, so a key pressed by a slip does not
+ * replace them. The status is a button, focused alone.
+ */
+export function selectionOnFocus(field: TaskHubFocusField): SelectionOnFocus | undefined {
+    switch (field) {
+        case 'start': case 'end': case 'due':
+        case 'linestyle': case 'color':
+            return 'all';
+        case 'status':
+            return undefined;
+        default:
+            return 'end';
+    }
+}
 
 export interface TaskHubFormDeps {
     app: App;
@@ -435,14 +456,23 @@ export class TaskHubForm implements HubForm {
 
     // ==================== focus ====================
 
-    /** Focus the field named, its text selected (a property of the hub's menu). */
+    /** Focus the field named, its text met as its kind asks (a property of the hub's menu). */
     focusField(field: TaskHubFocusField): void {
-        const target = this.fieldElement(field);
-        target?.focus();
-        if (target instanceof HTMLInputElement) target.select();
+        const to = this.focusOf(field);
+        if (to) focusField(to);
     }
 
-    /** The element of the field named: what the hub opens on (`initialFocus`) and the menu focuses. */
+    /**
+     * Where the focus goes for the field named, and how its text is met
+     * there (`selectionOnFocus`): what the hub opens on (`initialFocus`)
+     * and what the menu focuses alike. Null when the form has no such field.
+     */
+    focusOf(field: TaskHubFocusField): FieldFocus | null {
+        const to = this.fieldElement(field);
+        return to ? { to, selection: selectionOnFocus(field) } : null;
+    }
+
+    /** The element of the field named. */
     fieldElement(field: TaskHubFocusField): HTMLElement | null {
         if (field.startsWith('property:')) {
             return this.propsField.fieldElement(field.slice('property:'.length));
