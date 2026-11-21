@@ -1408,7 +1408,7 @@ A widget timer is one `TimerState`. It holds only what cannot be derived; elapse
 | `file`, `tail`, `owned`, `opening` | | The note its lines are in, the `^id` of the line it records into, the `^id`s it put on itself, and the write in flight |
 | `mode` | `'self' \| 'child' \| 'sibling'` | Where the first record goes. From the second on, a record is always the tail's sibling |
 
-There is no "not started" state: a timer runs from the moment it is started. `name` and `color` are display copies, refreshed from the target row whenever the index changes. The runtime schedule (the one tick, operations in flight, the lazy-end gate, the ✕ confirmation) lives in `TimerRuntime` and is never saved.
+There is no "not started" state: a timer runs from the moment it is started. `name` and `color` are display copies, refreshed from the target row whenever the index changes. The runtime schedule (the one tick, operations in flight, the lazy-end gate) lives in `TimerRuntime` and is never saved.
 
 ### Transitions
 
@@ -1421,14 +1421,14 @@ There is no "not started" state: a timer runs from the moment it is started. `na
 | running | ■, or the last Pomodoro segment ends (no auto repeat) | the record | closed, anchors taken off | pending |
 | running | a segment ends with more to come | nothing | next segment (sound) | — |
 | running | shift the start (countup, countdown) | the running line's start | the clock starts `from` seconds before the new start | nothing moves |
-| running, pending | ✕ twice (confirm) | deletes the running line, if it wrote that line | closed | closed |
+| running, pending | the gear menu's close item (Close without recording) | deletes the running line, if it wrote that line | closed | closed |
 | pending | ⏸ or ■ | the fixed record again | as pressed | stays pending |
 | suspended | ▶ | a new running line (the tail's sibling) | running: countup from 0, countdown and Pomodoro where they stopped | stays suspended |
-| suspended | ■ or ✕ | nothing | closed, anchors taken off | — |
+| suspended | ■, or the gear menu's close item (Close (recorded)) | nothing | closed, anchors taken off | — |
 
 Every run is one record, whichever the measure; only the clock differs on ▶. A countup counts again from 0, while a countdown's time left and a Pomodoro's segments go on from where they stopped, and the new record counts from the reading at the press (`session.from`). While suspended, the widget shows the frozen clock by its measure (a countdown's time left, below zero past it; a Pomodoro segment's time left), and a countup shows the records so far, since its clock starts again (`TimerRenderer.timerRing`).
 
-`TimerLifecycle.close(timer, confirmed)` answers the ✕ from `session.kind` alone; the renderer only draws the confirmation. The next-task suggestion (`TimerBoard.idle`, `NextTaskSuggester`) is not a timer: it appears when no timer holds a run and disappears when one starts.
+`TimerLifecycle.close(timer)` decides what a close does from the session when it lands: a running or pending timer has its running line thrown away (`TimerRecorder.discardRunningPlaceholder`) and is closed, and a suspended one, whose records are written, is only closed. There is no confirmation state: the two steps of opening the gear and choosing the item are the confirmation, and the item's words, read from the session when the menu opens, say what becomes of the record. A close goes through `exclusive` like the other operations, so one that arrives while a write is on its way is dropped, and a timer no longer on the board does nothing. The next-task suggestion (`TimerBoard.idle`, `NextTaskSuggester`) is not a timer: it appears when no timer holds a run and disappears when one starts.
 
 ### Starting
 
@@ -1457,7 +1457,7 @@ Shared with the standalone view:
 - `TimerClock` — the running or frozen clock (`readSeconds`, `freeze`, `resume`, `restart`, `shift`)
 - `IntervalMath` — moves the interval cursor, the round text, total duration, the Pomodoro segments
 - `TimerProgress` — what a measure shows (`progressOf`) and what a tick brings (`tickOf`)
-- `TimerProgressUI` — draws the ring and the time from `progressOf`, under the block it is given (`timer-widget__` or `timer-view__`). A tick writes only the time's own span (`__time-text`), so what a caller hangs on the time display stays
+- `TimerProgressUI` — draws the ring and the time from `progressOf`, under the block it is given (`timer-widget__` or `timer-view__`). The time is the time display's own text; a tick rewrites that text on the same element, so the attributes and listeners a caller put on it (the shift button's) stay
 - `TimerControlButton` — one control button; the view passes a variant (primary, secondary, danger), the widget's buttons have one look
 - `TimerSettingsMenu` — the duration menu (Pomodoro and countdown lengths)
 - `AudioUtils` — sounds (below)
@@ -1471,11 +1471,12 @@ The widget's own:
 - `TimerRecorder` — the line writes: the first line, running lines, records, putting anchors on and off. The record notice is one sentence (`notice.timerRecorded`)
 - `TimerStartRules`, `TimerStartMode` — whether and how a start may use `self`
 - `TimerStartOffset` — where "shift the start" lands (the menu and `TimerStartOffsetModal`)
+- `TimerWidgetMenu` — the menus of a started timer: the gear's menu (`buildTimerMenu`) and the shift menu the elapsed time opens. Both add the shift section with the same function (`addStartOffsetItems`), so the two offer the same shifts. The gear's menu is the shift section (while `canOffsetStart`), the Pomodoro section (work and break lengths through `TimerSettingsMenu`, auto repeat), a separator when either is there, and the close item (`addCloseItem`), marked as a warning while the timer holds a running line. A section is a disabled heading with its choices indented by two spaces. The two sections never come together, since a Pomodoro cannot shift its start
 - `TimerTitle` — the name in a timer's header: the name of the line the timer runs on (its tail, as the index last read it), drawn as a card draws a name (`renderCardMarkdown`, without embeds and the timer icon), and a button (`role`, `tabindex`) that opens that line's hub with the name field focused (`PluginContext.openTaskHub`). It is a button only while the index has the line; before the start lands, before the first scan after a restore, and after the line is deleted, it is the timer's copy of its subject's name as faint plain text, as is a line with no name (a daily note's first, which shows the date). A link in the name is not followed: a press on it is the name's. The widget writes no name; the name is changed in the hub and comes back through the index. A name drawn from the same source is not drawn again on an index change
 - `TimerLazyEnd` — when to write a later end onto a running line that has outlived its implied end
 - `TimerSendCheck` — whether a send may carry a timer's lines (`anchorsOf`)
 - `TimerPersistence`, `TimerTargetIdUtils`
-- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion. The name in the header is `TimerTitle`'s: the renderer mounts it when it builds an item, and has it drawn again on each index change (`syncFromIndex`). While the start can be shifted (`canOffsetStart`), the elapsed time is a button (`role`, `tabindex`, a pencil icon at the number's top right) that opens the shift menu on a press, Enter or Space; otherwise it is only a number. The tick keeps it in step. `TimerOffsetIcon` keeps the pencil inside the ring's line: where the top right leaves its far corner less than 2px inside the line's inner edge (`16:40:00`, an overtime `-999:59`), it is raised 5px and moved left by the least that keeps the 2px, worked out from the circle at once (`offsetIconShift`); the digits keep their size. It is measured only when the pencil comes or the time's shape changes (its length or sign; the digits are `tabular-nums`), never on a tick, and a ring not laid out yet is measured at the next call
+- `TimerRenderer`, `NextTaskSuggester` — the widget's DOM and the next-task suggestion. The name in the header is `TimerTitle`'s: the renderer mounts it when it builds an item, and has it drawn again on each index change (`syncFromIndex`). A started timer's header ends in two buttons, fold and the gear (`aria-label` "Timer menu"), whose menu is `TimerWidgetMenu`'s; a press opens it at the pointer, and a click from the keyboard (`detail` 0) below the button. The next-task suggestion's item keeps its ✕. While the start can be shifted (`canOffsetStart`), the elapsed time is a button (`role`, `tabindex`, `aria-label`) that opens the shift menu on a press, Enter or Space; otherwise it is only a number. The tick keeps it in step
 - `FloatingOverlayHost`, `TimerWidgetWindowObserver` — the container, dragging, and moving between windows. The default corner is in the stylesheet (`.timer-widget`); the host keeps only a dragged position
 
 ### Audio notifications (`timer/AudioUtils.ts`)
