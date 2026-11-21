@@ -857,12 +857,75 @@
     height: var(--task-card-real-height);
 }
 
+/* === Content under a name band ===
+
+   A short card's name band (the overflow extension below) hangs from its
+   top over the card after it, with its halo below it. The card under it
+   moves its content (the time row and the name) down by as much of its top
+   as the band and halo cover, so that they show below the band.
+
+   How much is covered: the band and halo reach floor-height + halo-block
+   below the top of the card in front, and this card starts
+   `--band-gap-minutes` after it (TaskLayout, written by the lane; absent
+   when no card's band can lie over this one, and then nothing moves). It is
+   declared on the card, where the gap and the zoom are; with no gap it is
+   invalid and the uses below fall back to 0. The drag ghost carries the
+   card's gap with it.
+
+   The content moves no further than leaves its first name line whole: the
+   card's height, less its bottom padding (2px, `.task-card`), less where
+   that line ends below the card's top (`--task-card-name-line-end`, beside
+   the rule that sets the content's top margin). A card too low for that
+   leaves its content where it is.
+
+   The rules are on the content, not the card: the card's own height decides
+   which content shows (the queries below), and a query on the card applies
+   to its children only. A card short enough to carry a band itself
+   (`height < 22px`) moves nothing: its content is the band. A selected card
+   keeps its content moved, though it stands in front of the band then, so
+   that a press does not shift what it pressed. */
+.timeline-view .timeline-scroll-area__day-column > .task-card,
+.timeline-view .task-card--ghost-positioned {
+    --task-card-band-cover: max(0px, calc(
+        var(--task-card-floor-height) + var(--task-card-halo-block)
+        - var(--band-gap-minutes) * var(--hour-height) / 60
+    ));
+}
+.timeline-view :is(.timeline-scroll-area__day-column > .task-card, .task-card--ghost-positioned) > :is(.task-card__time, .task-card__content) {
+    /* Where the first name line ends below the card's top, with the time
+       row above it: the card's top padding (2px), the content's top margin
+       (0.8em - 2px), the list's and its item's top margins and one line.
+       Measured at the default font size and theme line height, not derived:
+       a theme or font size that changes them moves the real line, and the
+       content then stops short of or past leaving that line whole by the
+       difference. */
+    --task-card-name-line-end: 34.8px;
+    --task-card-content-shift: clamp(
+        0px,
+        var(--task-card-band-cover, 0px),
+        calc(var(--task-card-real-height) - 2px - var(--task-card-name-line-end))
+    );
+}
+.timeline-view :is(.timeline-scroll-area__day-column > .task-card, .task-card--ghost-positioned) > .task-card__time {
+    top: calc(2px + var(--task-card-content-shift, 0px));
+}
+.timeline-view :is(.timeline-scroll-area__day-column > .task-card, .task-card--ghost-positioned).task-card--split-continues-before > .task-card__time {
+    top: calc(2px + var(--task-card-split-zig) + var(--task-card-content-shift, 0px));
+}
+.timeline-view :is(.timeline-scroll-area__day-column > .task-card, .task-card--ghost-positioned) > .task-card__content {
+    margin-top: calc(0.8em - 2px + var(--task-card-content-shift, 0px));
+}
+
 @container tv-timed-card (height <= 32px) {
     .task-card__time {
         display: none;
     }
-    .task-card .task-card__content {
-        margin-top: 0;
+    /* No time row, so the name starts at the content's top: the first name
+       line ends 0.8em - 2px higher than with it (26px against 34.8px, the
+       same measurement and the same limits). */
+    .timeline-view :is(.timeline-scroll-area__day-column > .task-card, .task-card--ghost-positioned) > .task-card__content {
+        --task-card-name-line-end: 26px;
+        margin-top: var(--task-card-content-shift, 0px);
     }
 }
 
@@ -931,6 +994,11 @@
             );
         margin-top: 0;
         overflow: hidden;
+    }
+    /* The content is the band itself, hung from the card's top: it does
+       not move for a band in front (Content under a name band). */
+    .timeline-view :is(.timeline-scroll-area__day-column > .task-card, .task-card--ghost-positioned) > .task-card__content {
+        --task-card-content-shift: 0px;
     }
     .task-card__content > ul {
         margin: 0;

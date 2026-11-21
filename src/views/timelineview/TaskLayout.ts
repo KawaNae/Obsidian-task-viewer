@@ -6,15 +6,40 @@ import { buildOverlapClusters } from '../sharedLogic/OverlapClusters';
  * Where a timed card sits in its day's lane: its width and left offset, in
  * percent of the lane, and its rank, the place it stands in front of the
  * day's other cards (1 is the back, the number of cards the front).
+ *
+ * `bandGap` is, in minutes, how long after the start of the nearest card
+ * whose name band may hang over this card's top this card starts: of the
+ * cards in front of it that end by its start and whose band, with its halo,
+ * lies over it from side to side, the one that starts last. A short card's
+ * band hangs a fixed height from its own top, so CSS turns the gap into how
+ * much of this card's top the band covers, at whatever zoom; a card in
+ * front with no band yields nothing there. Absent when no card can.
  */
 export interface LaneSlot {
     width: number;
     left: number;
     rank: number;
+    bandGap?: number;
+}
+
+/**
+ * The lane the cards are laid out in, in px: `width` is what the cards'
+ * percentages are of, and `bandInset` how far in from a card's left edge
+ * its name band's halo starts; the band reaches the card's right edge. A
+ * band covers only the cards it lies over right of that, not those under
+ * its notch.
+ */
+export interface LaneGeometry {
+    width: number;
+    bandInset: number;
 }
 
 export class TaskLayout {
-    static calculateTaskLayout(tasks: DisplayTask[], startHour: number): Map<string, LaneSlot> {
+    /**
+     * `lane` is the lane as drawn. Without it (a lane not laid out yet) a
+     * band is taken to lie over the card's whole width.
+     */
+    static calculateTaskLayout(tasks: DisplayTask[], startHour: number, lane?: LaneGeometry): Map<string, LaneSlot> {
         const layout = new Map<string, LaneSlot>();
         if (tasks.length === 0) return layout;
 
@@ -130,6 +155,34 @@ export class TaskLayout {
         placed.forEach((p, i) => {
             layout.get(p.id)!.rank = i + 1;
         });
+
+        // 6. The gap to the card whose band may hang over each card's top.
+        //    Only a card in front can lie over it, and only one that ends by
+        //    its start hangs a band there: a card in front whose time
+        //    overlaps it (two cards starting together, the shorter shifted
+        //    right) covers it with its body, not with a band. Of those, the
+        //    one starting last lies lowest over its top. The same level is
+        //    not enough to find it: a card shifted right in one cluster lies
+        //    over the first card of the next, and a card of no length stands
+        //    in front of a longer one starting with it.
+        const scale = lane ? lane.width / 100 : 1;
+        const bandInset = lane ? lane.bandInset : 0;
+        for (const n of placed) {
+            const below = layout.get(n.id)!;
+            const belowLeft = below.left * scale;
+            const belowRight = (below.left + below.width) * scale;
+            let gap: number | undefined;
+            for (const p of placed) {
+                const front = layout.get(p.id)!;
+                if (front.rank <= below.rank || p.end > n.start) continue;
+                const bandStart = front.left * scale + bandInset;
+                const bandEnd = (front.left + front.width) * scale;
+                if (bandStart >= belowRight || bandEnd <= belowLeft) continue;
+                const g = n.start - p.start;
+                if (gap === undefined || g < gap) gap = g;
+            }
+            if (gap !== undefined) below.bandGap = gap;
+        }
 
         return layout;
     }

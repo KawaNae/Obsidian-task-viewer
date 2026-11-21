@@ -5,7 +5,7 @@ import type { TimerHost } from '../../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { TaskLayout, type LaneSlot } from '../TaskLayout';
+import { TaskLayout, type LaneGeometry, type LaneSlot } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
@@ -17,6 +17,10 @@ import {
 } from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
+
+// A lane card stands this far in from each side of its day's column; its
+// width and left offset are percentages of the rest.
+const LANE_MARGIN_PX = 4;
 
 export class TimelineSectionRenderer {
     constructor(
@@ -30,12 +34,12 @@ export class TimelineSectionRenderer {
         date: string,
         timedTasks: DisplayTask[],
         reconciler: CardReconciler,
-        renderOptions: { showSunTimes: boolean } = { showSunTimes: false },
+        renderOptions: { showSunTimes: boolean; lane?: LaneGeometry } = { showSunTimes: false },
     ) {
         const startHour = this.plugin.settings.startHour;
 
         // Calculate layout for overlapping tasks
-        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour);
+        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour, renderOptions.lane);
 
         timedTasks.forEach(task => {
             if (!task.drawn) return;
@@ -57,6 +61,27 @@ export class TimelineSectionRenderer {
         if (renderOptions.showSunTimes) {
             this.renderSunIndicators(container, date, startHour);
         }
+    }
+
+    /**
+     * The lane of a day's column as laid out now, for TaskLayout to tell
+     * which cards a short card's name band lies over: the width the cards'
+     * percentages are of, and where a band's halo starts in from a card's
+     * sides (the band's notches less the halo's reach, read from the CSS
+     * that draws them). Every day's column is as wide, so one is measured
+     * per render. Undefined while the column has no width (not laid out).
+     * The column's width can change without a render (the window resized);
+     * what the cards were given then holds until the next render.
+     */
+    public measureLane(col: HTMLElement): LaneGeometry | undefined {
+        const width = col.clientWidth - 2 * LANE_MARGIN_PX;
+        if (width <= 0) return undefined;
+        const style = getComputedStyle(col);
+        const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
+        return {
+            width,
+            bandInset: px('--task-card-overflow-ext-offset') - px('--task-card-halo-inline'),
+        };
     }
 
     /**
@@ -95,12 +120,21 @@ export class TimelineSectionRenderer {
 
         el.style.setProperty('--start-minutes', String(relativeStart));
         el.style.setProperty('--duration-minutes', String(duration));
-        el.style.width = `calc((100% - 8px) * ${widthFraction})`;
-        el.style.left = `calc(4px + (100% - 8px) * ${leftFraction})`;
+        el.style.width = `calc((100% - ${2 * LANE_MARGIN_PX}px) * ${widthFraction})`;
+        el.style.left = `calc(${LANE_MARGIN_PX}px + (100% - ${2 * LANE_MARGIN_PX}px) * ${leftFraction})`;
         // The rank is the card's place in front of the day's other cards
         // (TaskLayout); the z-index is CSS's, the rank capped under the
         // selected card (`.task-card`, ladder [B] in _variables.css).
         el.style.setProperty('--lane-z', String(taskLayout.rank));
+        // Minutes from the start of the card whose name band may hang over
+        // this card's top (TaskLayout); CSS turns it into how far this
+        // card's content moves down. It is in minutes, so a zoom needs no
+        // rewrite. Absent, nothing moves.
+        if (taskLayout.bandGap !== undefined) {
+            el.style.setProperty('--band-gap-minutes', String(taskLayout.bandGap));
+        } else {
+            el.style.removeProperty('--band-gap-minutes');
+        }
 
         // cascade-offset: leftmost = unset, 重なって右にずれた card に '1'。
         if (taskLayout.left > 0) {
