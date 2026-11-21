@@ -197,23 +197,18 @@ describe('recordSessionEnd: one run writes one line', () => {
 /**
  * 上は recordSessionEnd そのものしか見ない。⏸ と ■ がそこを通ることは、呼び口が
  * 1 つであることをソースで固定する: 描画は lifecycle の stop を呼ぶだけで、記録は
- * lifecycle の 1 か所から、名前の書き出しの直後に書く。
+ * lifecycle の 1 か所から書く。
  */
 describe('the stops record through one place', () => {
     it('TimerRenderer leaves the stop to TimerLifecycle', async () => {
         const { readFileSync } = await import('node:fs');
         const source = readFileSync('src/timer/TimerRenderer.ts', 'utf8');
         expect(source).not.toMatch(/recorder\.recordSessionEnd\(/);
-        expect(source).not.toMatch(/content\.flush\(/);
     });
 
-    it('TimerLifecycle records from exactly one place, right after the name is written', async () => {
+    it('TimerLifecycle records from exactly one place', async () => {
         const { readFileSync } = await import('node:fs');
         const source = readFileSync('src/timer/TimerLifecycle.ts', 'utf8');
         expect(source.match(/recorder\.recordSessionEnd\(/g)).toHaveLength(1);
-        // 名前を書けなければ記録に進まず、書けたら直後に記録する。
-        expect(source).toMatch(
-            /if \(!\(await this\.content\.flush\(timer\)\)\) return;\s*\n\s*if \(!\(await this\.recorder\.recordSessionEnd\(timer, record\)\)\) return;/
-        );
     });
 });

@@ -25,9 +25,8 @@ function build() {
     const discardRunningPlaceholder = vi.fn(async (_timer: TimerState) => { });
     const releaseAnchors = vi.fn(async (_timer: TimerState) => { });
     const recorder = { discardRunningPlaceholder, releaseAnchors } as unknown as TimerRecorder;
-    const content = { flush: vi.fn(async () => true), discard: vi.fn(), release: vi.fn() };
-    const lifecycle = new TimerLifecycle({ board, runtime: new TimerRuntime(), recorder, content, renderTimes: () => { } });
-    return { board, lifecycle, discardRunningPlaceholder, releaseAnchors, content };
+    const lifecycle = new TimerLifecycle({ board, runtime: new TimerRuntime(), recorder, renderTimes: () => { } });
+    return { board, lifecycle, discardRunningPlaceholder, releaseAnchors };
 }
 
 function timerIn(board: TimerBoard, session: Session, measure: Measure = { type: 'countup' }, startedSecondsAgo = 90): TimerState {
@@ -89,7 +88,6 @@ describe('✕ asks first whenever the timer holds a running line', () => {
         expect(h.lifecycle.close(timer, true)).toBe('closing');
 
         await vi.waitFor(() => expect(h.board.has(timer)).toBe(false));
-        expect(h.content.discard).toHaveBeenCalledWith(timer);
         expect(h.discardRunningPlaceholder).toHaveBeenCalledWith(timer);
     });
 

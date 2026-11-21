@@ -15,7 +15,6 @@ import { askTimerStart } from '../modals/ask/timerStartChoice';
 import { decideStart } from './TimerStartRules';
 import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
-import { TimerContentBinding } from './TimerContentBinding';
 import { TimerPersistence } from './TimerPersistence';
 import { TimerBoard } from './TimerBoard';
 import { TimerRuntime } from './TimerRuntime';
@@ -24,7 +23,6 @@ import type { Measure } from './TimerProgress';
 import { restart } from './TimerClock';
 import { pomodoroGroups, START_CURSOR } from './IntervalMath';
 import { TimerWidgetWindowObserver, type PinState } from './TimerWidgetWindowObserver';
-import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
 import { getTaskDisplayName } from '../services/display/TaskContent';
 import { getEffectiveColor } from '../services/data/EffectiveProperties';
 import { DateUtils } from '../utils/DateUtils';
@@ -58,7 +56,6 @@ export class TimerWidget implements SendTimers {
     readonly recorder: TimerRecorder;
     readonly lifecycle: TimerLifecycle;
     private renderer: TimerRenderer;
-    private contentBinding: TimerContentBinding;
     private persistence: TimerPersistence;
     private observer: TimerWidgetWindowObserver | null = null;
     /** 索引の変化の購読を解く。{@link activate} で結び、{@link destroy} で解く。 */
@@ -76,13 +73,10 @@ export class TimerWidget implements SendTimers {
             dispatch: (timer, event) => this.board.dispatch(timer, event),
             timers: () => this.board.values(),
         });
-        // 値を書き換えた直後にオートグローを掛け直す（input 時 / syncFromFile 時）。
-        this.contentBinding = new TimerContentBinding(plugin, this.board, this.recorder, autoGrowTextarea);
         this.lifecycle = new TimerLifecycle({
             board: this.board,
             runtime: this.runtime,
             recorder: this.recorder,
-            content: this.contentBinding,
             renderTimes: () => this.renderer.renderTimes(),
         });
         this.renderer = new TimerRenderer({
@@ -91,7 +85,7 @@ export class TimerWidget implements SendTimers {
             board: this.board,
             runtime: this.runtime,
             lifecycle: this.lifecycle,
-            contentBinding: this.contentBinding,
+            tailRow: (timer) => this.recorder.tailInIndex(timer),
             container: this,
             startTimer: (task) => this.startTimer(task, 'self', { kind: 'countup' }),
         });
@@ -102,7 +96,7 @@ export class TimerWidget implements SendTimers {
      * after `workspace.onLayoutReady` so the observer can resolve which window
      * currently holds the active leaf.
      *
-     * widget の表示（名前欄、名前、色）は索引の読みから作るので、索引が変わる
+     * widget の表示（見出しの名前、名前と色の写し）は索引の読みから作るので、索引が変わる
      * たびに合わせ直す。tick は時間の表示だけを進める。
      */
     activate(): void {

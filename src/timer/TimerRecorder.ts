@@ -474,11 +474,11 @@ export class TimerRecorder {
     /**
      * 行を引くノートを読めなかったことを伝える（`AnchoredRow` の `unreadable`）。
      * 行が無いとは言えないので、書かずに止める。書けなかったと答える呼び手の
-     * 通知の1回（名前の書き出し `TimerContentBinding` も使う）。
+     * 通知の1回。
      *
      * @returns 書けなかった（false）。
      */
-    noticeUnreadable(timer: TimerState, site: string): false {
+    private noticeUnreadable(timer: TimerState, site: string): false {
         logWarn(`[TimerRecorder] ${site}: ${timer.file} could not be read (${describeTimerAnchor(timer)})`);
         new Notice(t('notice.notReadable', { subject: timer.name }));
         return false;

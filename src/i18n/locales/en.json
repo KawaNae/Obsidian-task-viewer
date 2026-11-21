@@ -780,6 +780,7 @@
     "minutesRange": "Minutes ({{min}}-{{max}})",
     "minutesAtLeast": "Minutes ({{min}} or more)",
     "offsetStart": "Shift the start",
+    "openTask": "Open the task",
     "offsetMinutesAgo": "From {{minutes}} min ago",
     "offsetFromTime": "From {{time}}",
     "offsetCustom": "Set the shift...",

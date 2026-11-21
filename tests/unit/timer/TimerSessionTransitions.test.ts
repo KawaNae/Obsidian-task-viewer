@@ -24,7 +24,6 @@ import { newTimerId, type PendingRecord, type TimerState } from '../../../src/ti
 
 /** 書き込みの成否。既定は「書けた」。テストが途中で書き換えて失敗を起こす。 */
 interface WriteResults {
-    flush: boolean;
     record: boolean;
     next: boolean;
 }
@@ -33,7 +32,7 @@ function build() {
     const order: string[] = [];
     /** 記録のたびに、固定した記録。 */
     const records: PendingRecord[] = [];
-    const results: WriteResults = { flush: true, record: true, next: true };
+    const results: WriteResults = { record: true, next: true };
     const recorder = {
         recordSessionEnd: async (_timer: TimerState, record: PendingRecord) => {
             order.push('record');
@@ -45,15 +44,10 @@ function build() {
         releaseAnchors: async () => { order.push('releaseAnchors'); },
         extendRunningSession: async () => Date.now() + 3_600_000,
     } as unknown as TimerRecorder;
-    const content = {
-        flush: async () => { order.push('flush'); return results.flush; },
-        discard: () => { order.push('discardContent'); },
-        release: () => { order.push('release'); },
-    };
     let persisted = 0;
     const board = new TimerBoard({ persist: () => { persisted++; }, render: () => { } });
     const runtime = new TimerRuntime();
-    const lifecycle = new TimerLifecycle({ board, runtime, recorder, content, renderTimes: () => { } });
+    const lifecycle = new TimerLifecycle({ board, runtime, recorder, renderTimes: () => { } });
     return { board, runtime, lifecycle, order, records, results, persistedCount: () => persisted };
 }
 
@@ -91,8 +85,7 @@ describe('the exits', () => {
             const timer = running(h.board);
             await h.lifecycle.stop(timer, 'suspend');
 
-            // 記録は走行中の行の名前を読むので、打った名前を先に書き出す。
-            expect(h.order).toEqual(['flush', 'record']);
+            expect(h.order).toEqual(['record']);
             expect(h.records).toEqual([{ endMs: T0, seconds: 600, then: 'suspend' }]);
             expect(h.board.has(timer)).toBe(true);
             expect(timer.session).toEqual({ kind: 'suspended' });
@@ -126,7 +119,7 @@ describe('the exits', () => {
             const timer = running(h.board, POMODORO);
             await h.lifecycle.stop(timer, 'suspend');
 
-            expect(h.order).toEqual(['flush', 'record']);
+            expect(h.order).toEqual(['record']);
             expect(timer.session).toEqual({ kind: 'suspended' });
             expect(timer.recorded).toEqual({ seconds: 600, count: 1 });
         });
@@ -144,9 +137,7 @@ describe('the exits', () => {
             expect(timer.session).toEqual({ kind: 'suspended' });
             await resumed;
 
-            // 中断中に打たれた名前は直前の記録の行宛て。新しい行の前に書き出し、
-            // 往復の間に打たれた名前は新しい行が受け取る。
-            expect(h.order).toEqual(['flush', 'nextSession', 'flush']);
+            expect(h.order).toEqual(['nextSession']);
             expect(timer.session).toEqual({ kind: 'running', from: 0 });
             expect(timer.clock).toEqual({ kind: 'running', startMs: T0 + 300_000 });
             expect(timer.recorded).toEqual({ seconds: 600, count: 1 }); // 合計は保持
@@ -183,17 +174,6 @@ describe('the exits', () => {
             expect(timer.clock).toEqual({ kind: 'frozen', seconds: 600 });
         });
 
-        it('does not write a new line when the typed name could not be written', async () => {
-            const timer = running(h.board);
-            await h.lifecycle.stop(timer, 'suspend');
-            h.order.length = 0;
-            h.results.flush = false;
-
-            await h.lifecycle.resume(timer);
-            expect(h.order).toEqual(['flush']);
-            expect(timer.session).toEqual({ kind: 'suspended' });
-        });
-
         it('is a no-op for a running timer', async () => {
             const timer = running(h.board);
             await h.lifecycle.resume(timer);
@@ -206,10 +186,9 @@ describe('the exits', () => {
             const timer = running(h.board);
             await h.lifecycle.stop(timer, 'close');
 
-            // 記録して閉じるだけ。完了は checkbox でユーザーが宣言する。閉じたあと、
-            // 打った名前を書き切ってから錨を外す。
+            // 記録して閉じるだけ。完了は checkbox でユーザーが宣言する。閉じたあと錨を外す。
             await vi.waitFor(() => expect(h.order).toContain('releaseAnchors'));
-            expect(h.order).toEqual(['flush', 'record', 'flush', 'release', 'releaseAnchors']);
+            expect(h.order).toEqual(['record', 'releaseAnchors']);
             expect(h.records).toEqual([{ endMs: T0, seconds: 600, then: 'close' }]);
             expect(h.board.has(timer)).toBe(false);
         });
@@ -240,8 +219,7 @@ describe('the exits', () => {
             expect(h.lifecycle.close(timer, true)).toBe('closing');
             await vi.waitFor(() => expect(h.order).toContain('releaseAnchors'));
 
-            // 行ごと消えるので、打った名前は書かずに捨てる。
-            expect(h.order.slice(0, 2)).toEqual(['discardContent', 'discard']);
+            expect(h.order[0]).toBe('discard');
             expect(h.order).not.toContain('record');
             expect(timer.recorded.count).toBe(0);
             expect(h.board.has(timer)).toBe(false);
@@ -259,11 +237,7 @@ describe('the exits', () => {
             await h.lifecycle.stop(timer, 'close');
 
             // 1 つの走行 = 1 つの記録。開始で行を書き、終いに記録する、が 2 周。
-            expect(h.order.slice(0, 7)).toEqual([
-                'flush', 'record',
-                'flush', 'nextSession', 'flush',
-                'flush', 'record',
-            ]);
+            expect(h.order.slice(0, 3)).toEqual(['record', 'nextSession', 'record']);
             expect(h.records.map(r => r.seconds)).toEqual([600, 300]);
             expect(h.board.has(timer)).toBe(false);
         });
@@ -306,19 +280,19 @@ describe('an exit whose record was not written', () => {
                 await h.lifecycle.stop(timer, 'close');
                 h.board.flush();
 
-                expect(h.order).toEqual(['flush', 'record']);
+                expect(h.order).toEqual(['record']);
                 expectKept(timer, 'close', before);
             });
 
-            it('⏸ stays waiting (not suspended) when the typed name could not be written', async () => {
+            it('⏸ stays waiting (not suspended) when the record fails', async () => {
                 const timer = running(h.board, measure);
-                h.results.flush = false;
+                h.results.record = false;
                 const before = h.persistedCount();
 
                 await h.lifecycle.stop(timer, 'suspend');
                 h.board.flush();
 
-                expect(h.order).toEqual(['flush']);
+                expect(h.order).toEqual(['record']);
                 expectKept(timer, 'suspend', before);
             });
         });

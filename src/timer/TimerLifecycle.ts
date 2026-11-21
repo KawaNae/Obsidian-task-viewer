@@ -17,21 +17,10 @@ import { canOffsetStart } from './TimerStartOffset';
 import type { Task } from '../types';
 import { notWritten, type WriteAnswer, type WriteTelling } from '../services/operations/WriteAnswer';
 
-/** 名前の入力欄の書き出し（`TimerContentBinding`）。 */
-export interface ContentOutlet {
-    /** @returns 打った名前を書けたか（書くものが無ければ書けたと答える）。 */
-    flush(timer: TimerState): Promise<boolean>;
-    /** 書いていない名前を捨てる（✕ の破棄。行ごと消える）。 */
-    discard(timer: TimerState): void;
-    /** 閉じたタイマーの書き出しの予定を落とす。 */
-    release(timerId: string): void;
-}
-
 export interface LifecycleDeps {
     board: TimerBoard;
     runtime: TimerRuntime;
     recorder: TimerRecorder;
-    content: ContentOutlet;
     /** tick の描き直し: 時間の表示だけを進める。 */
     renderTimes(): void;
 }
@@ -40,13 +29,11 @@ export class TimerLifecycle {
     private board: TimerBoard;
     private runtime: TimerRuntime;
     private recorder: TimerRecorder;
-    private content: ContentOutlet;
 
     constructor(private deps: LifecycleDeps) {
         this.board = deps.board;
         this.runtime = deps.runtime;
         this.recorder = deps.recorder;
-        this.content = deps.content;
     }
 
     // ─── 開始 ─────────────────────────────────────────────────
@@ -67,8 +54,6 @@ export class TimerLifecycle {
                 return;
             }
             this.runtime.lazyEndFloorMs.delete(timer.id);
-            // 書き込みの往復中に打たれた名前は下書きに溜まっている。行が生えた今なら書ける。
-            await this.content.flush(timer);
         });
     }
 
@@ -97,16 +82,11 @@ export class TimerLifecycle {
         });
     }
 
-    /**
-     * 固定した記録を書く。記録は走行中の行の名前を読むので、打った名前を先に
-     * 書き出す。名前を書けなければ記録に進まない — 古い名前で記録を書けば通知が
-     * 拒否と成功の2回になり、打った名前は行き先を失う。
-     */
+    /** 固定した記録を書く。書けたら ⏸ は中断、■ は閉じる。書けなければ記録待ちのまま残る。 */
     private async record(timer: TimerState): Promise<void> {
         const session = timer.session;
         if (session.kind !== 'pending') return;
         const record = session.record;
-        if (!(await this.content.flush(timer))) return;
         if (!(await this.recorder.recordSessionEnd(timer, record))) return;
         if (record.then === 'close') {
             this.closeNow(timer);
@@ -126,16 +106,11 @@ export class TimerLifecycle {
         if (timer.session.kind !== 'suspended') return Promise.resolve();
         const pressedAt = Date.now();
         return this.exclusive(timer, async () => {
-            // 中断中に打たれた名前は直前の記録の行宛て。新しい行を書く前に書き出す。
-            const began = await this.content.flush(timer)
-                && await this.recorder.startNextSession(timer, pressedAt);
-            if (!began) return;
+            if (!(await this.recorder.startNextSession(timer, pressedAt))) return;
             this.board.dispatch(timer, { type: 'resumed', pressedAt });
             this.runtime.lazyEndFloorMs.delete(timer.id);
             this.board.setIdle(null);
             AudioUtils.playStartSound();
-            // 往復の間に打たれた名前は、新しい行が受け取る。
-            await this.content.flush(timer);
         });
     }
 
@@ -185,31 +160,25 @@ export class TimerLifecycle {
 
     /**
      * 今の走行を記録せずに閉じる。自分で書いた走行中の行は道連れにする（判断は
-     * `TimerRecorder.discardRunningPlaceholder`）。名前の下書きは行ごと消えるので書かない。
+     * `TimerRecorder.discardRunningPlaceholder`）。
      */
     private discard(timer: TimerState): Promise<void> {
         return this.exclusive(timer, async () => {
-            this.content.discard(timer);
             await this.recorder.discardRunningPlaceholder(timer);
             this.closeNow(timer);
         });
     }
 
     /**
-     * 表から外し、後始末をする: 打った名前を書き切ってから、このタイマーが付けた
-     * 錨を外す（ほかのタイマーが頼る錨は残す。`TimerRecorder.releaseAnchors`）。
-     * 尻尾の錨を先に外すと、名前の書き先を引けなくなる。
+     * 表から外し、後始末をする: このタイマーが付けた錨を外す（ほかのタイマーが
+     * 頼る錨は残す。`TimerRecorder.releaseAnchors`）。
      */
     private closeNow(timer: TimerState): void {
         if (!this.board.has(timer)) return;
         this.board.remove(timer);
         this.runtime.forget(timer.id);
         this.wakeIdle();
-        void (async () => {
-            await this.content.flush(timer);
-            this.content.release(timer.id);
-            await this.recorder.releaseAnchors(timer);
-        })();
+        void this.recorder.releaseAnchors(timer);
     }
 
     // ─── 提案 ─────────────────────────────────────────────────
