@@ -95,17 +95,22 @@
    the card's z-index makes), so only its rim outside the card shows, and it
    lets presses through to the card behind (`pointer-events: none`).
 
-   Two parts of a card lie over another, and each draws its own box:
+   The halo reaches --task-card-halo-inline past a left or right edge and
+   --task-card-halo-block past a top or bottom one. Two parts of a card lie
+   over another, and each draws its own box:
      - A card shifted right (`data-cascade-offset`, set by
        TimelineSectionRenderer when its offset is above 0) lies over the
-       card it overlaps along its left, top and bottom: `::before`, 3px top
-       and bottom, 4px left, none on the right (that edge is under the card
-       itself).
+       card it overlaps along its left, top and bottom: `::before`, past
+       those three edges and not past the right one (that edge is under the
+       card itself).
      - A card with a name band (shorter than the band, section 8) lies over
        the card after it with the band hanging below its end: `::after`
-       around the band, 4px left and 3px below. It is declared under the
-       band's own height query, so a zoom that grows the card past the band
-       drops the halo with it, with no redraw.
+       around the band, past its left and bottom edges and not past the
+       right one, which is the card's own. The card's own body left of the
+       band gets none, so the card after it keeps its top edge there. It is
+       declared under the band's own height
+       query, so a zoom that grows the card past the band drops the halo
+       with it, with no redraw.
 
    On a split's cut edge (sawtooth) the cascade halo is suppressed, or a
    strip of background would run along the teeth's tips:
@@ -115,13 +120,17 @@
 .timeline-view .task-card[data-cascade-offset]::before {
     content: '';
     position: absolute;
-    inset: -3px 0 -3px -4px;
+    inset:
+        calc(-1 * var(--task-card-halo-block))
+        0
+        calc(-1 * var(--task-card-halo-block))
+        calc(-1 * var(--task-card-halo-inline));
     background: var(--tv-bg-primary);
     border-radius:
-        calc(var(--task-card-border-radius) + 4px)
-        calc(var(--task-card-border-radius) + 3px)
-        calc(var(--task-card-border-radius) + 3px)
-        calc(var(--task-card-border-radius) + 4px);
+        calc(var(--task-card-border-radius) + var(--task-card-halo-inline))
+        calc(var(--task-card-border-radius) + var(--task-card-halo-block))
+        calc(var(--task-card-border-radius) + var(--task-card-halo-block))
+        calc(var(--task-card-border-radius) + var(--task-card-halo-inline));
     z-index: -2;
     pointer-events: none;
 }
@@ -863,9 +872,12 @@
    keeps its true geometry — background, accent bar (= the real duration),
    handles, drag, resize and overlap math all stay in the original
    coordinate system — and the content is lifted out of the flow into a
-   fixed-height box offset to the right, overlaid on top. Both boxes share
-   one surface color, so they read as a single shape with a rectangular
-   notch cut out of the lower left.
+   fixed-height box hanging from the card's top, overlaid on top, inset from
+   the card's left (--task-card-overflow-ext-offset) and reaching its right.
+   Both boxes share one surface color, so they read as a single shape: the
+   card's body runs across the top, out past the box's left, and the box
+   hangs below it with a rectangular notch cut out of the lower left. The
+   body showing left of the box keeps the task's length readable over it.
 
    Today the only trigger is a timeline timed card too short to fit one
    line, so the rules live in this view section and key off the card's own
@@ -892,26 +904,31 @@
         padding: 0 6px;
         box-sizing: border-box;
         background: var(--task-card-surface);
-        border-radius: var(--task-card-border-radius);
-        /* Only the TOP-left corner is squared off. It is the one that sits
-           inside the host band, where the frame clip below cuts the left edge
-           with a straight vertical line — a rounded arc there pokes out past
-           that cut and hangs a stray sliver under the top edge. The BOTTOM-left
-           corner is an outer corner of the union outline (the free end of the
-           notch), sits below the host band, and its arc falls inside the
-           clip's x < frame-width + 0.5px cut only up to a point: the radius
+        /* Only the TOP-left corner is squared off. It sits inside the host's
+           body, where the frame clip below cuts the left edge with a
+           straight vertical line — a rounded arc there pokes out past that
+           cut and hangs a stray sliver under the top edge, and on a body as
+           thin as 2px it leaves a gap under the body. The BOTTOM-left corner
+           is an outer corner of the union outline (the free end of the
+           notch), sits below the host's body, and its arc falls inside the
+           clip's frame-width + 0.5px cut only up to a point: the radius
            can't exceed how far the extension overhangs below the host (floor
            - real-height), or the arc reaches up into the notch corner's
            mitre square and punches a hole in the frame. min() caps it at the
            overhang so short overhangs (real-height > 18px) get a
-           proportionally smaller — down to square — corner instead.
-           `::after` inherits both via `border-radius: inherit`; don't set
+           proportionally smaller — down to square — corner instead. The two
+           right corners are the union outline's own, on the card's right
+           edge, and keep the card's radius.
+           `::after` inherits them via `border-radius: inherit`; don't set
            radius on `::after` directly or it'll disagree with the clip. */
-        border-top-left-radius: 0;
-        border-bottom-left-radius: min(
-            var(--task-card-border-radius),
-            calc(var(--task-card-floor-height) - var(--task-card-real-height))
-        );
+        border-radius:
+            0
+            var(--task-card-border-radius)
+            var(--task-card-border-radius)
+            min(
+                var(--task-card-border-radius),
+                calc(var(--task-card-floor-height) - var(--task-card-real-height))
+            );
         margin-top: 0;
         overflow: hidden;
     }
@@ -961,32 +978,42 @@
         content: '';
         position: absolute;
         top: 0;
-        left: calc(var(--task-card-overflow-ext-offset) - 4px);
+        left: calc(var(--task-card-overflow-ext-offset) - var(--task-card-halo-inline));
         right: 0;
-        height: calc(var(--task-card-floor-height) + 3px);
+        height: calc(var(--task-card-floor-height) + var(--task-card-halo-block));
         background: var(--tv-bg-primary);
         border-radius: 0 0
-            calc(var(--task-card-border-radius) + 3px)
-            calc(var(--task-card-border-radius) + 4px);
+            calc(var(--task-card-border-radius) + var(--task-card-halo-block))
+            calc(var(--task-card-border-radius) + var(--task-card-halo-inline));
         z-index: -2;
         pointer-events: none;
     }
 
     /* Selection / hover frame follows the union outline of the two boxes.
-       Each box draws its own full frame and then clips away the one segment
-       that runs through the interior: the host drops the part of its bottom
-       edge that the extension covers (x >= offset), and the extension drops
-       the part of its left edge that runs down the host's band
-       (y < the host's real height). What survives is a single loop around
-       the outside, notch included. */
+       Each box draws its own full frame and then clips away the segments
+       that run through the interior: the host drops the part of its bottom
+       edge that the extension covers (x > offset), and the extension drops
+       the part of its left edge that runs down the host's body (y < the
+       host's real height). What survives is a single loop around the
+       outside, notch included.
+
+       A box's border is painted snapped to whole device pixels, but a
+       clip-path is not: a clip edge laid on the box's own edge at a
+       fractional x cuts a sliver off the snapped border and leaves a dim
+       pixel there (a card's left and width are fractions of the lane, so
+       its edges usually are fractional). So every clip edge that is not a
+       cut lies 1px outside the box, where there is nothing to clip. The
+       host's kept piece of bottom edge also reaches a frame-width past the
+       notch, under the extension's opaque background, so the extension's
+       snapped edge, not the host's clip, is what ends it. */
     .task-card:where(:not(.task-card--in-hub-preview)):hover .task-card__shape::after,
     .task-card.is-selected .task-card__shape::after {
         clip-path: polygon(
-            0 0, 100% 0,
-            100% calc(100% - var(--task-card-frame-width, 1px)),
-            var(--task-card-overflow-ext-offset) calc(100% - var(--task-card-frame-width, 1px)),
-            var(--task-card-overflow-ext-offset) 100%,
-            0 100%
+            -1px -1px, calc(100% + 1px) -1px,
+            calc(100% + 1px) calc(100% - var(--task-card-frame-width, 1px)),
+            calc(var(--task-card-overflow-ext-offset) + var(--task-card-frame-width, 1px)) calc(100% - var(--task-card-frame-width, 1px)),
+            calc(var(--task-card-overflow-ext-offset) + var(--task-card-frame-width, 1px)) calc(100% + 1px),
+            -1px calc(100% + 1px)
         );
     }
     .task-card:where(:not(.task-card--in-hub-preview)):hover .task-card__content::after,
@@ -997,15 +1024,15 @@
         border: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
         border-radius: inherit;
         pointer-events: none;
-        /* Overclip the seam by 0.5px past frame-width to swallow the
+        /* Overclip the left cut by 0.5px past frame-width to swallow the
            sub-pixel AA residue that a clip cut exactly at frame-width leaves
-           behind as a faint vertical line through the host band — the
+           behind as a faint vertical line through the host's body — the
            interior there is transparent, so cutting a bit deep is harmless.
            The top-left frame-width corner stays put so the top edge doesn't
            get a hole punched in it while selected.
 
-           The notch stops 1 frame-width ABOVE the host's bottom edge, not
-           at it: that last square (x 0..frame-width, y real-height-frame-
+           The cut stops 1 frame-width ABOVE the host's bottom edge, not at
+           it: that last square (x 0..frame-width, y real-height-frame-
            width..real-height) is the notch corner's mitre — where the
            host's bottom edge turns into the extension's left edge — and it
            has to be drawn from here. `__shape` sits at z-index: -1, so its
@@ -1013,11 +1040,12 @@
            widening the host's bottom edge instead can't make the corner
            visible (confirmed against the real host). */
         clip-path: polygon(
-            0 0, 100% 0, 100% 100%, 0 100%,
-            0 calc(var(--task-card-real-height) - var(--task-card-frame-width, 1px)),
+            -1px -1px, calc(100% + 1px) -1px,
+            calc(100% + 1px) calc(100% + 1px), -1px calc(100% + 1px),
+            -1px calc(var(--task-card-real-height) - var(--task-card-frame-width, 1px)),
             calc(var(--task-card-frame-width, 1px) + 0.5px) calc(var(--task-card-real-height) - var(--task-card-frame-width, 1px)),
             calc(var(--task-card-frame-width, 1px) + 0.5px) var(--task-card-frame-width, 1px),
-            0 var(--task-card-frame-width, 1px)
+            -1px var(--task-card-frame-width, 1px)
         );
     }
 }
