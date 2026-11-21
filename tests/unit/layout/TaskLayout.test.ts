@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskLayout } from '../../../src/views/timelineview/TaskLayout';
+import { TaskLayout, type LaneGeometry } from '../../../src/views/timelineview/TaskLayout';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
@@ -89,5 +89,57 @@ describe('TaskLayout', () => {
         const undrawn = { ...card('none', '08:00', '09:00'), drawn: null };
         const r = ranks([undrawn, card('a', '10:00', '11:00')]);
         expect(r).toEqual({ a: 1 });
+    });
+
+    describe('the gap to the card whose name band may hang over a card', () => {
+        function gaps(tasks: DisplayTask[], lane?: LaneGeometry): Record<string, number | undefined> {
+            const layout = TaskLayout.calculateTaskLayout(tasks, START_HOUR, lane);
+            return Object.fromEntries([...layout].map(([id, slot]) => [id, slot.bandGap]));
+        }
+
+        it('takes it from a short card shifted right in one cluster, over the first card of the next', () => {
+            // L and A overlap, so A is shifted right; B starts as both end.
+            const g = gaps([card('L', '10:00', '11:05'), card('A', '11:00', '11:05'), card('B', '11:05', '12:00')]);
+            expect(g.B).toBe(5);
+        });
+
+        it('takes it from a card of no length in front of a longer card starting with it', () => {
+            const g = gaps([card('long', '17:00', '18:00'), card('point', '17:00', '17:00')]);
+            expect(g.long).toBe(0);
+            expect(g.point).toBeUndefined();
+        });
+
+        it('gives none to two long cards starting together, the one in front covering the other with its body', () => {
+            const g = gaps([card('A', '19:00', '20:00'), card('B', '19:00', '19:30')]);
+            expect(g).toEqual({ A: undefined, B: undefined });
+        });
+
+        it('takes the card that starts last where short cards follow one another', () => {
+            const g = gaps([card('A', '21:00', '21:05'), card('B', '21:05', '21:10'), card('C', '21:10', '22:00')]);
+            expect(g).toEqual({ A: undefined, B: 5, C: 5 });
+        });
+
+        it('takes none from a card behind', () => {
+            // K stands alone at level 1; N overlaps M and is shifted right, so
+            // it stands in front of K although K ends before it starts.
+            const g = gaps([card('K', '08:00', '08:05'), card('M', '08:10', '09:00'), card('N', '08:20', '08:50')]);
+            expect(g.M).toBe(10);
+            expect(g.N).toBeUndefined();
+        });
+
+        it('takes none from a card whose band lies over it only under the band\'s notch', () => {
+            // A is shifted right (15% to 100%); B is the first of four cards
+            // that overlap, so it spans 0 to 55%. In a lane 40px wide A's band
+            // starts at 6 + 20 = 26px and B ends at 22px; in one 400px wide
+            // the band starts at 80px and B ends at 220px.
+            const tasks = [
+                card('L', '10:00', '11:05'), card('A', '11:00', '11:05'),
+                card('B', '11:05', '12:00'), card('X', '11:10', '12:00'),
+                card('Y', '11:15', '12:00'), card('Z', '11:20', '12:00'),
+            ];
+            expect(TaskLayout.calculateTaskLayout(tasks, START_HOUR).get('B')).toMatchObject({ left: 0, width: 55 });
+            expect(gaps(tasks, { width: 40, bandInset: 20 }).B).toBe(65);
+            expect(gaps(tasks, { width: 400, bandInset: 20 }).B).toBe(5);
+        });
     });
 });

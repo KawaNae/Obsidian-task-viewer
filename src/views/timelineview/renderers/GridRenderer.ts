@@ -148,12 +148,20 @@ export class GridRenderer {
 
             const splitResult = splitTasks(timed, { type: 'visual-date', startHour });
             const categorizedByDate = categorizeTasksByDate(splitResult, dates, startHour);
-            dates.forEach(date => {
+            // The columns go in before their cards, so the lane is measured
+            // once, before a card makes the layout dirty again.
+            const cols = dates.map(date => {
                 const col = timelineGrid.createDiv('timeline-scroll-area__day-column');
                 col.dataset.date = date;
+                return col;
+            });
+            const lane = cols.length > 0 ? timelineRenderer.measureLane(cols[0]) : undefined;
+            dates.forEach((date, i) => {
+                const col = cols[i];
                 const timedTasks = categorizedByDate.get(date)?.timed ?? [];
                 timelineRenderer.render(col, date, timedTasks, reconciler, {
                     showSunTimes: astronomyDisplay.sunTimes,
+                    lane,
                 });
                 timelineRenderer.addCreateTaskListeners(col, date);
             });
