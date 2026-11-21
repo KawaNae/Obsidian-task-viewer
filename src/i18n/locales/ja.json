@@ -115,6 +115,13 @@
       "showAllDayDesc": "終日タスクセクションの既定の表示状態。ビューごとに上書き可能。",
       "showTimeline": "タイムラインを表示",
       "showTimelineDesc": "時間軸セクションの既定の表示状態。ビューごとに上書き可能。",
+      "overlapMode": "重なるカードの並べ方",
+      "overlapModeDesc": "Timeline で、後のカードが前のカードの名前を隠すときの並べ方。名前より下で始まるカードは、どれを選んでも右へずらして重ねる",
+      "overlapModeCascade": "ずらして配置",
+      "overlapModeAuto": "自動で切り替え",
+      "overlapModeSideBySide": "横並び",
+      "sideBySideMinWidth": "横に並べる最小の幅 (px)",
+      "sideBySideMinWidthDesc": "「自動で切り替え」のとき、1枚の幅がこの値以上なら横に並べ、足りなければずらして重ねる",
       "showWeekRow": "週番号行を表示",
       "showWeekRowDesc": "タイムライン・スケジュールの日付ヘッダー上部に週番号行を表示します。",
       "mobileTopOffset": "モバイル上部オフセット (px)",
@@ -268,7 +275,8 @@
     "toggleMoonPhase": "月相",
     "toggleAllDay": "終日",
     "toggleTimeline": "タイムライン",
-    "followGlobal": "全体設定に従う"
+    "followGlobal": "全体設定に従う",
+    "overlapMode": "重なるカードの並べ方"
   },
   "toolbar": {
     "today": "今日",
