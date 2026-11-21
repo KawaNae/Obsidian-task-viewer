@@ -187,8 +187,9 @@ describe('the name in a timer\'s header', () => {
             const id = ${JSON.stringify(open)};
             const asked = await counting(() => mouse(middle(nameEl(id)), [[0, 0]]));
             await until(() => hub() && nameInput());
-            await sleep(150);
-            const parent = plugin.getIndex().getTasks().find(t => t.file === FILE && t.content === '親' && !t.parentId);
+            // The first focus comes to the field once the hub's open animation has ended.
+            await until(() => document.activeElement === nameInput());
+            const parent =plugin.getIndex().getTasks().find(t => t.file === FILE && t.content === '親' && !t.parentId);
             return JSON.stringify({
                 looks: looks(id),
                 asked,
@@ -219,7 +220,8 @@ describe('the name in a timer\'s header', () => {
                 nameEl(id).focus();
                 key(nameEl(id), 'Enter', 13);
                 await until(() => hub() && nameInput());
-                await sleep(150);
+                // The first focus comes to the field once the hub's open animation has ended.
+                await until(() => document.activeElement === nameInput());
             });
             out.asked = asked;
             out.hub = { name: nameInput().value, focused: document.activeElement === nameInput() };
