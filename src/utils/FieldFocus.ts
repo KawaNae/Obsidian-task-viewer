@@ -14,10 +14,11 @@ export interface Focusable {
 /**
  * How a text field's text is met as the focus comes to it.
  *
- * - `'all'`: all of it selected, so what is typed replaces it: a short
- *   value typed over whole (a date, a time, a line style, a colour).
- * - `'end'`: the caret after it, so a text is added to or mended without
- *   its being replaced by a slip of the key (a name, a tag).
+ * - `'all'`: all of it selected, so what is typed replaces it: a value of
+ *   fixed shape (a date, a time, a line style, a colour, a number) or one
+ *   picked from candidates (a note, a heading), which is retyped whole.
+ * - `'end'`: the caret after it, so a free text is added to or mended
+ *   without its being replaced by a slip of the key (a name, a tag).
  */
 export type SelectionOnFocus = 'all' | 'end';
 
