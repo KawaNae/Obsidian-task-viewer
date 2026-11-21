@@ -83,23 +83,35 @@
     border-radius: var(--task-card-border-radius);
 }
 
-/* === Cascade outline halo (Timeline only) ===
+/* === Outline halo (Timeline only) ===
 
-   timeline view の cascade で左にずれていない card (leftmost) は通常表示。
-   左にずれた card (level >= 2) には ::before で host の外側にタイムライン
-   背景色 (--tv-bg-primary) の halo を出して、背面 card との間にスペーサー
-   を挟んだように見せる（前面 card が背面 card に被さる際の境界を明確化）。
-   halo の太さは上下 3px、左 4px、右 0（右辺は前面 card の下に隠れる前提）。
-   背景色なので column の bg と溶けて空白として知覚され、cascade card の
-   左辺で背面 card を「掘り出している」効果になる。
-   `data-cascade-offset` は TimelineSectionRenderer が `taskLayout.left > 0`
-   のとき "1" を立てる。CSS は「存在チェック」だけで動作する。
+   A card in front of another traces the part of its outline that lies over
+   the other in the timeline's background colour (--tv-bg-primary), so the
+   card behind reads as cut away along the front card's shape rather than as
+   one surface with it. Which card is in front is its rank in the day
+   (`--lane-z`, from TaskLayout): the card shifted right of one it overlaps
+   in time, and of two that do not overlap, the earlier. The halo is a box
+   behind the card's own surfaces (z-index -2, inside the stacking context
+   the card's z-index makes), so only its rim outside the card shows, and it
+   lets presses through to the card behind (`pointer-events: none`).
 
-   split の cut 辺 (sawtooth) では halo を抑止する:
-     continues-after → 下辺の halo 抑止 (bottom: 0)
-     continues-before → 上辺の halo 抑止 (top: 0)
-     both → 上下辺の halo 抑止
-   抑止しないと、sawtooth の山頂点と平行に背景色帯が出てしまう。 */
+   Two parts of a card lie over another, and each draws its own box:
+     - A card shifted right (`data-cascade-offset`, set by
+       TimelineSectionRenderer when its offset is above 0) lies over the
+       card it overlaps along its left, top and bottom: `::before`, 3px top
+       and bottom, 4px left, none on the right (that edge is under the card
+       itself).
+     - A card with a name band (shorter than the band, section 8) lies over
+       the card after it with the band hanging below its end: `::after`
+       around the band, 4px left and 3px below. It is declared under the
+       band's own height query, so a zoom that grows the card past the band
+       drops the halo with it, with no redraw.
+
+   On a split's cut edge (sawtooth) the cascade halo is suppressed, or a
+   strip of background would run along the teeth's tips:
+     continues-after → bottom halo off (bottom: 0)
+     continues-before → top halo off (top: 0)
+     both → top and bottom off */
 .timeline-view .task-card[data-cascade-offset]::before {
     content: '';
     position: absolute;
@@ -941,6 +953,23 @@
            rule's `!important`. */
         vertical-align: top;
         top: calc((var(--task-card-floor-height) - var(--checkbox-size, 16px)) / 2) !important;
+    }
+
+    /* The band's halo (section 2, Outline halo). Lane cards only: a drag
+       ghost lies over nothing it should cut away. */
+    .timeline-view .timeline-scroll-area__day-column > .task-card::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: calc(var(--task-card-overflow-ext-offset) - 4px);
+        right: 0;
+        height: calc(var(--task-card-floor-height) + 3px);
+        background: var(--tv-bg-primary);
+        border-radius: 0 0
+            calc(var(--task-card-border-radius) + 3px)
+            calc(var(--task-card-border-radius) + 4px);
+        z-index: -2;
+        pointer-events: none;
     }
 
     /* Selection / hover frame follows the union outline of the two boxes.
