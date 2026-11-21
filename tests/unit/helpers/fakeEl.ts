@@ -2,7 +2,7 @@
  * A stand-in for an element, for drawing code run without a DOM: only what
  * the timer widget's header touches (Obsidian's `createDiv`, `createSpan`,
  * `createEl`, `setText`, `empty`, `toggleClass`), attributes, `dataset`,
- * listeners, and selectors of one class (`.a`) or one tag (`a`).
+ * listeners, a fixed box, and selectors of one class (`.a`) or one tag (`a`).
  */
 
 type Listener = (e: unknown) => void;
@@ -35,9 +35,10 @@ export class FakeEl {
         return child;
     }
 
-    createEl(tag: string, options: { cls?: string; text?: string } = {}): FakeEl {
+    createEl(tag: string, options: { cls?: string; text?: string; attr?: Record<string, string> } = {}): FakeEl {
         const child = this.appendChild(new FakeEl(options.cls, tag));
         if (options.text !== undefined) child.text = options.text;
+        for (const [name, value] of Object.entries(options.attr ?? {})) child.setAttribute(name, value);
         return child;
     }
 
@@ -45,7 +46,7 @@ export class FakeEl {
         return this.createEl('div', { cls });
     }
 
-    createSpan(options: { cls?: string; text?: string } = {}): FakeEl {
+    createSpan(options: { cls?: string; text?: string; attr?: Record<string, string> } = {}): FakeEl {
         return this.createEl('span', options);
     }
 
@@ -93,6 +94,11 @@ export class FakeEl {
     }
 
     get textContent(): string { return this.text + this.children.map(c => c.textContent).join(''); }
+
+    /** One fixed box for every element. */
+    getBoundingClientRect(): DOMRect {
+        return { left: 40, top: 50, right: 64, bottom: 74, width: 24, height: 24, x: 40, y: 50 } as DOMRect;
+    }
 
     private matches(selector: string): boolean {
         return selector.startsWith('.') ? this.classes.has(selector.slice(1)) : this.tag === selector;

@@ -17,21 +17,18 @@ import { instantText } from '../utils/DayWindow';
 import { type App, setIcon } from 'obsidian';
 import type { DisplayTask, Task } from '../types';
 import type { PluginContext } from '../PluginContext';
-import type { IntervalGroup } from './IntervalMath';
 import { createControlButton } from './TimerControlButton';
 import type { TimerLifecycle } from './TimerLifecycle';
 import type { TimerBoard, IdleBoard } from './TimerBoard';
-import type { TimerRuntime } from './TimerRuntime';
 import { finished, type TimerState } from './TimerState';
 import { readSeconds } from './TimerClock';
 import { progressOf, type Measure } from './TimerProgress';
 import { getDisplayFileName, getTaskDisplayName } from '../services/display/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI, type RingOptions, type RingState } from './TimerProgressUI';
-import { TimerSettingsMenu } from './TimerSettingsMenu';
-import { OFFSET_PRESET_MINUTES, canOffsetStart, rememberedStart, startLabel } from './TimerStartOffset';
+import { canOffsetStart } from './TimerStartOffset';
 import { placeOffsetIcon } from './TimerOffsetIcon';
-import { TimerStartOffsetModal } from '../modals/TimerStartOffsetModal';
+import { addStartOffsetItems, buildTimerMenu } from './TimerWidgetMenu';
 import type { MenuAnchor } from '../interaction/menu/MenuPresenter';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
@@ -39,17 +36,17 @@ import { getEffectiveColor } from '../services/data/EffectiveProperties';
 import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
 import { TimerTitle } from './TimerTitle';
 
-/** 提案が出た直後の ✕ と ▶ を捨てる間（直前のタイマーの ✕ の2度押しの誤打）。 */
+/**
+ * 提案が出た直後の ✕ と ▶ を捨てる間。直前のタイマーを閉じた ■ や閉じる項目を
+ * 続けて押したとき、2打目が提案に当たらないため（▶ は ■ のあった操作の列に、
+ * ✕ は見出しの右端に出る）。
+ */
 const IDLE_GUARD_MS = 500;
-/** ✕ の確認を見せる間と、確認が下りるときのフェード。 */
-const CLOSE_CONFIRM_MS = 2000;
-const CLOSE_FADE_MS = 500;
 
 export interface RendererDeps {
     app: App;
     plugin: PluginContext;
     board: TimerBoard;
-    runtime: TimerRuntime;
     lifecycle: TimerLifecycle;
     /** The timer's tail row as the index last read it, whose name the header shows (`TimerRecorder.tailInIndex`). */
     tailRow(timer: TimerState): Task | undefined;
@@ -192,24 +189,21 @@ export class TimerRenderer {
             }
         }
 
-        // ウィジェットの interval はポモドーロだけ。
-        if (timer.measure.type === 'interval') {
-            const settingsBtn = header.createEl('button', { cls: 'tv-icon-btn timer-widget__settings-btn' });
-            setIcon(settingsBtn, 'settings');
-            settingsBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.showSettingsMenu(e, timer);
-            };
-        }
-
         const toggleBtn = header.createEl('button', { cls: 'tv-icon-btn timer-widget__toggle-btn' });
         setIcon(toggleBtn, timer.expanded ? 'chevron-down' : 'chevron-right');
         toggleBtn.onclick = () => this.deps.board.dispatch(timer, { type: 'toggled' });
 
-        const closeBtn = header.createEl('button', { cls: 'tv-icon-btn timer-widget__close-btn' });
-        setIcon(closeBtn, 'x');
-        closeBtn.toggleClass('timer-widget__close-btn--confirming', this.deps.runtime.closeConfirm.has(timer.id));
-        closeBtn.onclick = () => this.onClose(timer);
+        // The gear is the last button of every started timer's header, and its
+        // menu holds the close item: closing takes the gear and then the item.
+        const menuBtn = header.createEl('button', {
+            cls: 'tv-icon-btn timer-widget__settings-btn',
+            attr: { 'aria-label': t('timer.menu') },
+        });
+        setIcon(menuBtn, 'settings');
+        menuBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.showTimerMenu(timer, menuAnchor(e, menuBtn));
+        };
 
         if (timer.expanded) {
             const content = itemEl.createDiv('timer-widget__content');
@@ -223,43 +217,7 @@ export class TimerRenderer {
     }
 
     /**
-     * ✕。確認を要るかは lifecycle が答え（{@link TimerLifecycle.close}）、ここは
-     * 確認の見た目だけを持つ。確認の予定は `TimerRuntime.closeConfirm` に置き、
-     * 組み直しをまたいでも確認の2打目が通る。
-     */
-    private onClose(timer: TimerState): void {
-        const { lifecycle, runtime } = this.deps;
-        const verdict = lifecycle.close(timer, runtime.closeConfirm.has(timer.id));
-        if (verdict === 'closing') {
-            this.clearCloseConfirm(timer.id);
-            return;
-        }
-        this.closeButtonOf(timer.id)?.addClass('timer-widget__close-btn--confirming');
-        runtime.closeConfirm.set(timer.id, window.setTimeout(() => {
-            runtime.closeConfirm.delete(timer.id);
-            const closeBtn = this.closeButtonOf(timer.id);
-            if (!closeBtn) return;
-            closeBtn.removeClass('timer-widget__close-btn--confirming');
-            closeBtn.addClass('timer-widget__close-btn--fading');
-            window.setTimeout(() => closeBtn.removeClass('timer-widget__close-btn--fading'), CLOSE_FADE_MS);
-        }, CLOSE_CONFIRM_MS));
-    }
-
-    /** 今の DOM の ✕ ボタン（確認の間に組み直されていれば、新しい方）。 */
-    private closeButtonOf(timerId: string): HTMLElement | null {
-        const container = this.deps.container.ensureContainer();
-        return this.itemOf(container, timerId)?.querySelector('.timer-widget__close-btn') as HTMLElement | null ?? null;
-    }
-
-    private clearCloseConfirm(timerId: string): void {
-        const id = this.deps.runtime.closeConfirm.get(timerId);
-        if (id === undefined) return;
-        window.clearTimeout(id);
-        this.deps.runtime.closeConfirm.delete(timerId);
-    }
-
-    /**
-     * 操作。種類を問わず同じ状態機械に乗る（✕ はヘッダ）。
+     * 操作。種類を問わず同じ状態機械に乗る（閉じる項目はヘッダのギアのメニュー）。
      *
      *   走行中   … [⏸ 中断][■ 終了]
      *   記録待ち … [⏸ 中断][■ 終了]（固定した記録を書き直す。押した方が行き先。
@@ -487,85 +445,20 @@ export class TimerRenderer {
     }
 
     /**
-     * 開始をずらすメニュー: 「N 分前から」、覚えた時刻（あれば）、「ずらす量を指定…」。
-     * 「N 分前」は選んだ時点の今から数える。書き込みと状態の移し方は
-     * {@link TimerLifecycle.offsetStart} が持つ。
+     * 経過時間から開く、開始をずらすメニュー。節はギアのメニューと同じ関数で組む
+     * （{@link addStartOffsetItems}）。
      */
     private showStartOffsetMenu(timer: TimerState, anchor: MenuAnchor): void {
-        const { board, lifecycle, plugin } = this.deps;
-        if (!board.has(timer) || !canOffsetStart(timer)) return;
-        const offset = (startMs: number): void => void lifecycle.offsetStart(timer, startMs);
-        const now = Date.now();
-        const remembered = rememberedStart(timer, now, plugin.settings.startHour);
-
-        plugin.menuPresenter.present((menu) => {
-            for (const minutes of OFFSET_PRESET_MINUTES) {
-                menu.addItem((item) => {
-                    item.setTitle(t('timer.offsetMinutesAgo', { minutes }))
-                        .onClick(() => offset(Date.now() - minutes * 60_000));
-                });
-            }
-            if (remembered !== null) {
-                menu.addItem((item) => {
-                    item.setTitle(t('timer.offsetFromTime', { time: startLabel(remembered, now) }))
-                        .onClick(() => offset(remembered));
-                });
-            }
-            menu.addSeparator();
-            menu.addItem((item) => {
-                item.setTitle(t('timer.offsetCustom'))
-                    // The dialog waits for the write and says a refusal inside it.
-                    .onClick(() => new TimerStartOffsetModal(this.deps.app, (startMs) => lifecycle.offsetStart(timer, startMs, { tellRefusal: false })).open());
-            });
-        }, anchor);
+        if (!this.deps.board.has(timer) || !canOffsetStart(timer)) return;
+        this.deps.plugin.menuPresenter.present((menu) => addStartOffsetItems(menu, timer, this.deps), anchor);
     }
 
-    // ─── ポモドーロの設定 ────────────────────────────────────
+    // ─── ギアのメニュー ──────────────────────────────────────
 
-    /**
-     * ポモドーロの設定メニュー。設定の分を書き換え、走っているタイマーの区間の長さと
-     * 自動の繰り返しも替える（`retimed`）。メニューの組み立ては `TimerSettingsMenu` が
-     * 持ち、ここは行き先だけを渡す。区間の並びはポモドーロの形（work、break の
-     * 1 組。`pomodoroGroups`）。
-     */
-    private showSettingsMenu(e: MouseEvent, timer: TimerState): void {
-        const { board, plugin } = this.deps;
-        if (!board.has(timer) || timer.measure.type !== 'interval') return;
-
-        /** 1 組目を `change` で替えた区間の並び。 */
-        const retime = (change: (group: IntervalGroup) => IntervalGroup): void => {
-            if (timer.measure.type !== 'interval') return;
-            const groups = timer.measure.groups.map((group, i) => i === 0 ? change(group) : group);
-            board.dispatch(timer, { type: 'retimed', groups });
-        };
-        const applyMinutes = async (
-            key: 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes',
-            segmentIndex: number,
-            minutes: number,
-        ): Promise<void> => {
-            plugin.settings[key] = minutes;
-            retime(group => ({
-                ...group,
-                segments: group.segments.map((segment, i) =>
-                    i === segmentIndex ? { ...segment, durationSeconds: minutes * 60 } : segment),
-            }));
-            await plugin.saveSettings();
-        };
-        const firstGroup = (): IntervalGroup | undefined =>
-            timer.measure.type === 'interval' ? timer.measure.groups[0] : undefined;
-
-        plugin.menuPresenter.present((menu) => {
-            TimerSettingsMenu.addPomodoroFields(menu, this.deps.app, {
-                getWorkMinutes: () => plugin.settings.pomodoroWorkMinutes,
-                setWorkMinutes: (minutes) => applyMinutes('pomodoroWorkMinutes', 0, minutes),
-                getBreakMinutes: () => plugin.settings.pomodoroBreakMinutes,
-                setBreakMinutes: (minutes) => applyMinutes('pomodoroBreakMinutes', 1, minutes),
-                autoRepeat: {
-                    isOn: () => firstGroup()?.repeatCount === 0,
-                    toggle: () => retime(group => ({ ...group, repeatCount: group.repeatCount === 0 ? 1 : 0 })),
-                },
-            });
-        }, { kind: 'mouseEvent', event: e });
+    /** The gear's menu of a started timer ({@link buildTimerMenu}). */
+    private showTimerMenu(timer: TimerState, anchor: MenuAnchor): void {
+        if (!this.deps.board.has(timer)) return;
+        this.deps.plugin.menuPresenter.present((menu) => buildTimerMenu(menu, timer, this.deps), anchor);
     }
 
     // ─── Pin badge ───────────────────────────────────────────
@@ -624,6 +517,16 @@ export function headerTimeText(measure: Measure, ring: RingState): string {
 function idleRing(idle: IdleBoard, now: number): RingState {
     const seconds = readSeconds({ kind: 'running', startMs: idle.sinceMs }, now);
     return { ...progressOf({ type: 'countup' }, seconds), tone: 'plain' };
+}
+
+/**
+ * Where a button's menu opens: at the pointer for a press, and below the button
+ * for a click from the keyboard, which has no pointer (`detail` is 0).
+ */
+function menuAnchor(e: MouseEvent, button: HTMLElement): MenuAnchor {
+    return e.detail === 0
+        ? { kind: 'belowRect', rect: button.getBoundingClientRect() }
+        : { kind: 'mouseEvent', event: e };
 }
 
 /** 提案が出た直後か（{@link IDLE_GUARD_MS}）。 */

@@ -9,7 +9,7 @@ import type { Measure } from '../../../src/timer/TimerProgress';
 import { newTimerId, type PendingRecord, type TimerState } from '../../../src/timer/TimerState';
 
 /**
- * 出口（⏸ 中断 / ▶ 再開 / ■ 終了 / ✕ 破棄）の遷移（`TimerLifecycle`）。
+ * 出口（⏸ 中断 / ▶ 再開 / ■ 終了 / 記録せずに閉じる）の遷移（`TimerLifecycle`）。
  *
  * 記録の中身は recorder が持つので、ここで見るのは「いつ呼ばれるか」と「呼んだ
  * 後の状態」。規則は「書けてから状態を進める」。⏸ と ■ は時計を止めて記録を固定し
@@ -213,11 +213,11 @@ describe('the exits', () => {
         });
     });
 
-    describe('✕ discard', () => {
+    describe('the close item, while running', () => {
         it('drops the run without recording it, and cleans up its line', async () => {
             const timer = running(h.board);
-            expect(h.lifecycle.close(timer, true)).toBe('closing');
-            await vi.waitFor(() => expect(h.order).toContain('releaseAnchors'));
+            await h.lifecycle.close(timer);
+            expect(h.order).toContain('releaseAnchors');
 
             expect(h.order[0]).toBe('discard');
             expect(h.order).not.toContain('record');

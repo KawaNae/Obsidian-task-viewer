@@ -7,7 +7,7 @@ import { begin, timerOn, timerRig, type TimerRig } from '../helpers/timerRig';
 
 /**
  * 1 つのタイマーの操作は 1 つずつ（`TimerRuntime.busy`、`TimerLifecycle.exclusive`）。
- * 記録の往復中に押された ⏸、■、▶、✕ は捨てる。ボタンは記録が返るまで描き直され
+ * 記録の往復中に押された ⏸、■、▶、閉じる項目は捨てる。ボタンは記録が返るまで描き直され
  * ないので、二度押しはそのまま届く。通せば同じ走行を二度記録し、通知も二度出る。
  */
 (globalThis as unknown as { window: unknown }).window = {
@@ -85,12 +85,12 @@ describe('a second press while the record is on its way is dropped', () => {
         s.dispose();
     });
 
-    it('✕ pressed while ⏸ is on its way is dropped: the record stays, the timer stays', async () => {
+    it('the close item chosen while ⏸ is on its way is dropped: the record stays, the timer stays', async () => {
         const { s, contents, rig, timer } = await runningTimer('child');
         const suspending = rig.lifecycle.stop(timer, 'suspend');
-        // 押した時点では記録待ち: ノートに走行中の行を持つので、確認の 2 打目で捨てに行く。
-        expect(rig.lifecycle.close(timer, true)).toBe('closing');
-        await suspending;
+        // 押した時点では記録待ち: ノートに走行中の行を持つので、記録せずに閉じに行く。
+        const closing = rig.lifecycle.close(timer);
+        await Promise.all([suspending, closing]);
         await settleAll(s);
 
         expect(rig.board.has(timer)).toBe(true);

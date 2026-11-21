@@ -793,6 +793,9 @@
     "offsetAgoMinutes": "{{minutes}} min ago",
     "offsetAgoHours": "{{hours}} h {{minutes}} min ago",
     "offsetApply": "Shift",
+    "menu": "Timer menu",
+    "discard": "Close without recording",
+    "close": "Close (recorded)",
     "template": {
       "namePlaceholder": "Template name",
       "browse": "Browse",

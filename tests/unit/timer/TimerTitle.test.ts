@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimerTitle } from '../../../src/timer/TimerTitle';
 import { TimerBoard } from '../../../src/timer/TimerBoard';
 import { TimerRenderer } from '../../../src/timer/TimerRenderer';
-import { TimerRuntime } from '../../../src/timer/TimerRuntime';
 import type { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { restart } from '../../../src/timer/TimerClock';
 import { newTimerId, type TimerState } from '../../../src/timer/TimerState';
@@ -271,7 +270,7 @@ describe('a folded widget keeps the name button in its header', () => {
         const renderer = new TimerRenderer({
             app: {} as never,
             plugin: { openTaskHub: (taskId: string) => { opened.push(taskId); } } as never,
-            board, runtime: new TimerRuntime(), lifecycle: {} as TimerLifecycle,
+            board, lifecycle: {} as TimerLifecycle,
             tailRow: () => row, container: {} as never,
             startTimer: () => { },
         });

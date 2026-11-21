@@ -83,7 +83,6 @@ export class TimerWidget implements SendTimers {
             app,
             plugin,
             board: this.board,
-            runtime: this.runtime,
             lifecycle: this.lifecycle,
             tailRow: (timer) => this.recorder.tailInIndex(timer),
             container: this,

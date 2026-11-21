@@ -1,7 +1,7 @@
 /**
  * タイマーの操作: 開始の書き込み（{@link TimerLifecycle.begin}）、⏸ と ■
  * （{@link TimerLifecycle.stop}）、▶（{@link TimerLifecycle.resume}）、開始をずらす、
- * ✕（{@link TimerLifecycle.close}）、tick（区間の送り、周の終わり、end の書き足し）。
+ * 閉じる項目（{@link TimerLifecycle.close}）、tick（区間の送り、周の終わり、end の書き足し）。
  *
  * 規則は「書けてから状態を進める」。書き込みを待ってから出来事を `TimerBoard` に
  * 当てる。状態がどう移るかは `TimerTransitions` が答える。
@@ -142,29 +142,21 @@ export class TimerLifecycle {
     // ─── 閉じる ───────────────────────────────────────────────
 
     /**
-     * ✕。分かれ目は記録の区切り（`session.kind`）だけで決まる。中断中は記録を書き
-     * 終えているので確認なしで閉じる。走っているか記録待ちなら、ノートに走行中の行を
-     * 持つので、確認の2打目（`confirmed`）で行ごと捨てる。
+     * The gear menu's close item. Which close it is follows the session when the
+     * press lands, so a Pomodoro that went from running to waiting while the menu
+     * was open is still thrown away: a timer that holds a running line (running
+     * or waiting to record) is closed without recording it, taking with it the
+     * running line it wrote (`TimerRecorder.discardRunningPlaceholder` decides
+     * what goes); a suspended one has recorded everything and is only closed.
      *
-     * @returns 確認を求めるか（`confirm`）、閉じる操作を始めたか（`closing`）。
+     * The confirmation is the menu itself (the gear, then the item). Like every
+     * other operation it waits its turn (`exclusive`), so a close pressed while a
+     * write is on its way is dropped, and a timer already gone does nothing.
      */
-    close(timer: TimerState, confirmed: boolean): 'confirm' | 'closing' {
-        if (!holdsRun(timer)) {
-            this.closeNow(timer);
-            return 'closing';
-        }
-        if (!confirmed) return 'confirm';
-        void this.discard(timer);
-        return 'closing';
-    }
-
-    /**
-     * 今の走行を記録せずに閉じる。自分で書いた走行中の行は道連れにする（判断は
-     * `TimerRecorder.discardRunningPlaceholder`）。
-     */
-    private discard(timer: TimerState): Promise<void> {
+    close(timer: TimerState): Promise<void> {
         return this.exclusive(timer, async () => {
-            await this.recorder.discardRunningPlaceholder(timer);
+            if (!this.board.has(timer)) return;
+            if (holdsRun(timer)) await this.recorder.discardRunningPlaceholder(timer);
             this.closeNow(timer);
         });
     }

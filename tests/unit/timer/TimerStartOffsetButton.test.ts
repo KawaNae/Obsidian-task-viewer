@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimerBoard } from '../../../src/timer/TimerBoard';
 import type { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { TimerRenderer, timerRing } from '../../../src/timer/TimerRenderer';
-import { TimerRuntime } from '../../../src/timer/TimerRuntime';
 import { TimerProgressUI } from '../../../src/timer/TimerProgressUI';
 import { freeze, restart } from '../../../src/timer/TimerClock';
 import { pomodoroGroups, START_CURSOR } from '../../../src/timer/IntervalMath';
@@ -142,7 +141,7 @@ function build() {
             settings: { startHour: 0 },
             menuPresenter: { present: (_build: unknown, anchor: MenuAnchor) => { presented.push(anchor); return null; } },
         } as never,
-        board, runtime: new TimerRuntime(), lifecycle: {} as TimerLifecycle,
+        board, lifecycle: {} as TimerLifecycle,
         tailRow: () => undefined, container: {} as never,
         startTimer: () => { },
     });
