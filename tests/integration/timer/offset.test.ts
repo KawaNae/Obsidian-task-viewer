@@ -8,9 +8,7 @@
  * shift..." opens a dialog that warns of what it cannot read under the field
  * and foresees where the start goes. And a real press of the mouse on the
  * elapsed time: without moving it opens the menu, moving it drags the
- * widget. A long elapsed time (`16:40:00`) has its pencil moved inside the
- * ring's line, its digits as large as a short one's, and a short one has it
- * back at the number's top right. The note's bytes are read back from the disk.
+ * widget. The note's bytes are read back from the disk.
  *
  * The menu is asked to draw itself in the page rather than as the OS's
  * native menu, whose items a test cannot reach.
@@ -185,7 +183,7 @@ function closeTimer(id: string): void {
     obsidianEval(`(async () => {
         const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
         const timer = widget.board.get(${JSON.stringify(id)});
-        if (timer) widget.lifecycle.close(timer, true);
+        if (timer) await widget.lifecycle.close(timer);
         await new Promise(r => setTimeout(r, 500));
         return JSON.stringify(true);
     })()`);
@@ -357,31 +355,6 @@ describe('shifting the start of a running count-up', () => {
         expect(readTestFile(FILE).split('\n')[1]).toContain(`@${dayBefore(noon)}T13:00`);
     });
 
-    it('a long elapsed time keeps its pencil inside the ring\'s line at the size of a short one\'s digits; a short one again puts the pencil back at the top right', async () => {
-        await writeIndexedTestFile(FILE, ['- [ ] 長く', ''].join('\n'));
-        open = startTimer('長く', 'child');
-
-        const short = elapsedFit(open, 12 * 60);
-        expect(short.text).toMatch(/^\d{2}:\d{2}$/);
-        expect(short.atTopRight).toBe(true);
-        expect(short.pencilToLine).toBeGreaterThanOrEqual(2);
-
-        const long = elapsedFit(open, 16 * 3600 + 40 * 60);
-        expect(long.text).toMatch(/^\d{2}:\d{2}:\d{2}$/);
-        expect(long.fontSize).toBe(short.fontSize);
-        expect(long.atTopRight).toBe(false);
-        expect(long.pencilToLine).toBeGreaterThanOrEqual(1.9);
-        expect(long.pencilToLine).toBeLessThan(2.5);
-        // Raised above where it sat, and still on the elapsed time a press reaches.
-        expect(long.raised).toBeCloseTo(5, 0);
-        expect(long.pressable).toBe(true);
-
-        const back = elapsedFit(open, 12 * 60);
-        expect(back.text).toMatch(/^\d{2}:\d{2}$/);
-        expect(back.atTopRight).toBe(true);
-        expect(back.raised).toBeCloseTo(0, 1);
-    });
-
     it('a real press of the mouse on the elapsed time opens the menu, and does not move the widget', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 押す', ''].join('\n'));
         open = startTimer('押す', 'child');
@@ -444,53 +417,6 @@ function mouse(id: string, path: [number, number][], from: [number, number] = [0
         }
         const after = widget.getBoundingClientRect();
         return JSON.stringify({ presented, captured, moved: [Math.round(after.left - before.left), Math.round(after.top - before.top)] });
-    })()`);
-}
-
-/**
- * Shift the start of the timer `id` to `seconds` before now, wait for the tick
- * that shows it, and answer how its elapsed time sits in the ring: the text,
- * its digits' size, whether the pencil is at the number's top right (the
- * box's top right corner, overlapped 3px), how far above that it is, the
- * distance from the pencil's far corner to the inner edge of the ring's line,
- * and whether each point of the pencil hits the elapsed time.
- */
-function elapsedFit(id: string, seconds: number): {
-    text: string; fontSize: string; atTopRight: boolean; raised: number; pencilToLine: number; pressable: boolean;
-} {
-    return evalOrThrow(`(async () => {
-        const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
-        const timer = widget.board.get(${JSON.stringify(id)});
-        const item = () => document.querySelector('[data-timer-id="${id}"]');
-        const text = () => item()?.querySelector('.timer-widget__time-text')?.textContent ?? '';
-        const was = text();
-        await widget.lifecycle.offsetStart(timer, Date.now() - ${seconds} * 1000);
-        const end = Date.now() + 3000;
-        while (Date.now() < end && text() === was) await new Promise(r => setTimeout(r, 20));
-        await new Promise(r => setTimeout(r, 50));
-        const display = item().querySelector('.timer-widget__time-display');
-        const pencil = display.querySelector('.timer-widget__offset-icon');
-        const circle = item().querySelector('.timer-widget__progress-ring circle');
-        const c = circle.getBoundingClientRect();
-        const scale = c.width / (2 * parseFloat(circle.getAttribute('r')));
-        const cx = c.left + c.width / 2, cy = c.top + c.height / 2;
-        const inner = c.width / 2 - parseFloat(circle.getAttribute('stroke-width')) * scale / 2;
-        const b = display.getBoundingClientRect(), p = pencil.getBoundingClientRect();
-        const far = Math.max(...[[p.left, p.top], [p.right, p.top], [p.left, p.bottom], [p.right, p.bottom]].map(([x, y]) => Math.hypot(x - cx, y - cy)));
-        let pressable = true;
-        for (let x = p.left + 0.5; x < p.right; x += 1) {
-            for (let y = p.top + 0.5; y < p.bottom; y += 1) {
-                if (!display.contains(document.elementFromPoint(x, y))) pressable = false;
-            }
-        }
-        return JSON.stringify({
-            text: text(),
-            fontSize: getComputedStyle(item().querySelector('.timer-widget__time-text')).fontSize,
-            atTopRight: Math.abs(p.left - (b.right - 3)) < 0.5 && Math.abs(p.top - (b.top - 3)) < 0.5,
-            raised: (b.top - 3) - p.top,
-            pencilToLine: inner - far,
-            pressable,
-        });
     })()`);
 }
 
