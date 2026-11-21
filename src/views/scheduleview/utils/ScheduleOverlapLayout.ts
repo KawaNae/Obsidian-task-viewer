@@ -1,5 +1,5 @@
 import type { ClusteredTaskAssignment, TimedDisplayTask } from '../ScheduleTypes';
-import { buildOverlapClusters } from '../../sharedLogic/OverlapClusters';
+import { assignFirstFreeColumns, buildOverlapClusters } from '../../sharedLogic/OverlapClusters';
 
 export class ScheduleOverlapLayout {
     /** start 昇順 → end 降順 → file → line の安定順序（クラスタ検出と列割り当てで共用） */
@@ -26,34 +26,11 @@ export class ScheduleOverlapLayout {
 
     assignClusterColumns(cluster: TimedDisplayTask[]): ClusteredTaskAssignment[] {
         const sorted = cluster.slice().sort(ScheduleOverlapLayout.compareTasks);
-
-        const columnEndMinutes: number[] = [];
-        const assigned: Array<{ task: TimedDisplayTask; column: number }> = [];
-
-        for (const task of sorted) {
-            let column = -1;
-            for (let i = 0; i < columnEndMinutes.length; i++) {
-                if (task.visualStartMinute >= columnEndMinutes[i]) {
-                    column = i;
-                    break;
-                }
-            }
-
-            if (column === -1) {
-                column = columnEndMinutes.length;
-                columnEndMinutes.push(task.visualEndMinute);
-            } else {
-                columnEndMinutes[column] = task.visualEndMinute;
-            }
-
-            assigned.push({ task, column });
-        }
-
-        const columnCount = Math.max(1, columnEndMinutes.length);
-        return assigned.map((item) => ({
-            task: item.task,
-            column: item.column,
-            columnCount,
-        }));
+        const { columns, columnCount } = assignFirstFreeColumns(
+            sorted,
+            t => t.visualStartMinute,
+            t => t.visualEndMinute,
+        );
+        return sorted.map((task, i) => ({ task, column: columns[i], columnCount }));
     }
 }

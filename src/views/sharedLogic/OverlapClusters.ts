@@ -52,3 +52,30 @@ export function buildOverlapClusters<T>(
 
     return clusters;
 }
+
+/**
+ * Puts each item in the first column whose last item has ended by its start,
+ * opening a new column when none has. `sorted` must be in start order; the
+ * columns come back in the same order, with how many were opened.
+ *
+ * Schedule lays a whole cluster out this way, and Timeline the cards it puts
+ * side by side.
+ */
+export function assignFirstFreeColumns<T>(
+    sorted: T[],
+    getStart: (item: T) => number,
+    getEnd: (item: T) => number,
+): { columns: number[]; columnCount: number } {
+    const columnEnds: number[] = [];
+    const columns = sorted.map((item) => {
+        let column = columnEnds.findIndex(end => getStart(item) >= end);
+        if (column === -1) {
+            column = columnEnds.length;
+            columnEnds.push(getEnd(item));
+        } else {
+            columnEnds[column] = getEnd(item);
+        }
+        return column;
+    });
+    return { columns, columnCount: Math.max(1, columnEnds.length) };
+}

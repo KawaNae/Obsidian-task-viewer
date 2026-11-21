@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskLayout, type LaneGeometry } from '../../../src/views/timelineview/TaskLayout';
+import { TaskLayout, type LaneGeometry, type LaneSlot, type SideBySideInput } from '../../../src/views/timelineview/TaskLayout';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
@@ -141,5 +141,200 @@ describe('TaskLayout', () => {
             expect(gaps(tasks, { width: 40, bandInset: 20 }).B).toBe(65);
             expect(gaps(tasks, { width: 400, bandInset: 20 }).B).toBe(5);
         });
+    });
+});
+
+// A lane of 400px for its cards, so 3px of gap is 0.75% of it.
+const WIDE = 400;
+
+interface Input {
+    lane: LaneGeometry;
+    sideBySide: SideBySideInput;
+}
+
+function slots(tasks: DisplayTask[], input?: Input): Record<string, LaneSlot> {
+    return Object.fromEntries(TaskLayout.calculateTaskLayout(tasks, START_HOUR, input?.lane, input?.sideBySide));
+}
+
+function sideBySide(pxPerMinute: number, laneWidthPx: number, minCardWidthPx: number | null = 120): Input {
+    return {
+        lane: { width: laneWidthPx, bandInset: 0 },
+        sideBySide: { pxPerMinute, minCardWidthPx },
+    };
+}
+
+function place(slot: LaneSlot): [number, number] {
+    return [Number(slot.left.toFixed(3)), Number(slot.width.toFixed(3))];
+}
+
+describe('TaskLayout side by side', () => {
+    const pair = () => [card('a', '10:00', '11:00'), card('b', '10:05', '11:00')];
+
+    it('puts two cards starting 5 minutes apart in two columns where each is wide enough', () => {
+        const r = slots(pair(), sideBySide(1, WIDE));
+        // (400px - 3px) / 2 = 198.5px each, 49.625% of the lane.
+        expect(place(r.a)).toEqual([0, 49.625]);
+        expect(place(r.b)).toEqual([50.375, 49.625]);
+        expect(r.a.liesOver).toBe(false);
+        expect(r.b.liesOver).toBe(false);
+        expect(r.b.rank).not.toBe(r.a.rank);
+    });
+
+    it('shifts the same two cards as before where a column would be too narrow', () => {
+        // 200px for the cards: (200 - 3) / 2 = 98.5px < 120px.
+        const r = slots(pair(), sideBySide(1, 200));
+        expect(place(r.a)).toEqual([0, 85]);
+        expect(place(r.b)).toEqual([15, 85]);
+        expect(r.b.liesOver).toBe(true);
+    });
+
+    it('puts them side by side when a column is exactly the narrowest a card may be', () => {
+        // 243px for the cards: (243 - 3) / 2 = 120px.
+        expect(slots(pair(), sideBySide(1, 243)).b.liesOver).toBe(false);
+        expect(slots(pair(), sideBySide(1, 242)).b.liesOver).toBe(true);
+    });
+
+    it('puts cards 15 minutes apart side by side at a small scale and shifts them at a large one', () => {
+        const tasks = () => [card('a', '10:00', '11:00'), card('b', '10:15', '11:00')];
+        // 15px is above the bottom of the 34.8px name row; 60px is below it.
+        expect(place(slots(tasks(), sideBySide(1, WIDE)).b)).toEqual([50.375, 49.625]);
+        expect(place(slots(tasks(), sideBySide(4, WIDE)).b)).toEqual([15, 85]);
+    });
+
+    it('takes the name row of a card with a time row as 34.8px', () => {
+        // 60 minutes at 1px: 57px high, with a time row.
+        const at34 = slots([card('a', '10:00', '11:00'), card('b', '10:34', '11:00')], sideBySide(1, WIDE));
+        const at35 = slots([card('a', '10:00', '11:00'), card('b', '10:35', '11:00')], sideBySide(1, WIDE));
+        expect(at34.b.liesOver).toBe(false);
+        expect(at35.b.liesOver).toBe(true);
+    });
+
+    it('takes the name row of a card with no time row as 26px', () => {
+        // 30 minutes at 1px: 27px high, no time row.
+        const at25 = slots([card('a', '10:00', '10:30'), card('b', '10:25', '10:40')], sideBySide(1, WIDE));
+        const at26 = slots([card('a', '10:00', '10:30'), card('b', '10:26', '10:40')], sideBySide(1, WIDE));
+        expect(at25.b.liesOver).toBe(false);
+        expect(at26.b.liesOver).toBe(true);
+        // 35 minutes at 1px: 32px high, the highest with no time row.
+        const at32 = slots([card('a', '10:00', '10:35'), card('b', '10:26', '10:40')], sideBySide(1, WIDE));
+        expect(at32.b.liesOver).toBe(true);
+    });
+
+    it('takes the name row of a card with a name band as 22px, and a card starting at its bottom as clear of it', () => {
+        // 12 minutes at 2px: 21px high, a band of 22px.
+        const at20 = slots([card('a', '10:00', '10:12'), card('b', '10:10', '10:40')], sideBySide(2, WIDE));
+        const at22 = slots([card('a', '10:00', '10:12'), card('b', '10:11', '10:40')], sideBySide(2, WIDE));
+        expect(at20.b.liesOver).toBe(false);
+        expect(at22.b.liesOver).toBe(true);
+    });
+
+    it('shifts all of three cards that hide each other\'s names where three columns do not fit', () => {
+        const tasks = () => [card('a', '10:00', '11:00'), card('b', '10:05', '11:00'), card('c', '10:10', '11:00')];
+        // 300px: (300 - 6) / 3 = 98px < 120px. Two would fit, but none is put side by side.
+        const narrow = slots(tasks(), sideBySide(1, 300));
+        expect([narrow.a, narrow.b, narrow.c].map(place)).toEqual([[0, 70], [15, 70], [30, 70]]);
+        // 400px: (400 - 6) / 3 = 131.3px.
+        const wide = slots(tasks(), sideBySide(1, WIDE));
+        expect([wide.a, wide.b, wide.c].map(s => s.liesOver)).toEqual([false, false, false]);
+        expect(wide.a.left).toBe(0);
+        expect(wide.c.left).toBeGreaterThan(wide.b.left);
+        expect(wide.b.left).toBeGreaterThan(wide.a.left);
+    });
+
+    it('checks a group again when another group of its cluster is not put side by side', () => {
+        // With both groups side by side the levels are two, 340px wide, and
+        // long's group fits ((340 - 3) / 2 = 168.5px) where x's does not
+        // ((340 - 6) / 3 = 111.3px). Laid out one by one, x's group makes
+        // five levels, 160px wide, where long's no longer fits ((160 - 3) / 2).
+        const r = slots(
+            [
+                card('long', '10:00', '13:00'),
+                card('long2', '10:05', '13:00'),
+                card('x', '11:00', '11:30'),
+                card('y', '11:05', '11:30'),
+                card('z', '11:10', '11:30'),
+            ],
+            sideBySide(1, WIDE),
+        );
+        expect([r.long, r.long2, r.x, r.y, r.z].map(place))
+            .toEqual([[0, 40], [15, 40], [30, 40], [45, 40], [60, 40]]);
+    });
+
+    it('joins A and B, and B and C, into one group, giving it as many columns as cards overlap at once', () => {
+        // A (a band) and B, 15px apart; B and C, 15px apart; C starts after A ends.
+        const r = slots(
+            [card('A', '10:00', '10:20'), card('B', '10:15', '11:00'), card('C', '10:30', '11:00')],
+            sideBySide(1, WIDE),
+        );
+        expect(place(r.A)).toEqual([0, 49.625]);
+        expect(place(r.B)).toEqual([50.375, 49.625]);
+        expect(place(r.C)).toEqual([0, 49.625]);
+        expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
+    });
+
+    it('puts a group inside a long card on the second level, halved, tracing its outline', () => {
+        const r = slots(
+            [card('long', '10:00', '13:00'), card('x', '10:40', '11:30'), card('y', '10:45', '11:30')],
+            sideBySide(1, WIDE),
+        );
+        expect(place(r.long)).toEqual([0, 85]);
+        expect(r.long.liesOver).toBe(false);
+        // (340px - 3px) / 2 = 168.5px each, 42.125% of the lane.
+        expect(place(r.x)).toEqual([15, 42.125]);
+        expect(place(r.y)).toEqual([57.875, 42.125]);
+        expect(r.x.liesOver).toBe(true);
+        expect(r.y.liesOver).toBe(true);
+        expect(r.x.rank).toBeGreaterThan(r.long.rank);
+        expect(r.y.rank).toBeGreaterThan(r.long.rank);
+    });
+
+    it('never groups two cards that do not overlap in time, though the later starts on the name', () => {
+        // Inside long, short and next follow each other, next 5px below the
+        // top of short's 22px band; next and beside start 1px apart.
+        const r = slots(
+            [
+                card('long', '10:00', '11:00'),
+                card('short', '10:40', '10:45'),
+                card('next', '10:45', '11:00'),
+                card('beside', '10:46', '11:00'),
+            ],
+            sideBySide(1, WIDE),
+        );
+        expect(place(r.short)).toEqual([15, 85]);
+        expect(place(r.next)).toEqual([15, 42.125]);
+        expect(place(r.beside)).toEqual([57.875, 42.125]);
+    });
+
+    it('takes the gap to a name band from the places the cards end up in side by side', () => {
+        // s spans the lane, its band from 220px to 400px. Shifted, a spans 0
+        // to 340px under the band and b, a level up, stands in front of s.
+        // Side by side, a spans 0 to 198.5px, clear of the band, and b, from
+        // 201.5px, shares s's level and stands behind it.
+        const tasks = () => [card('s', '09:55', '10:00'), card('a', '10:00', '11:00'), card('b', '10:05', '11:00')];
+        const lane = { width: WIDE, bandInset: 220 };
+        const gap = (minCardWidthPx: number | null) => {
+            const layout = TaskLayout.calculateTaskLayout(tasks(), START_HOUR, lane, { pxPerMinute: 1, minCardWidthPx });
+            return { a: layout.get('a')!.bandGap, b: layout.get('b')!.bandGap };
+        };
+        expect(gap(null)).toEqual({ a: 5, b: undefined });
+        expect(gap(120)).toEqual({ a: undefined, b: 10 });
+    });
+
+    it('lays every day out as without side by side when the narrowest is never', () => {
+        const days: DisplayTask[][] = [
+            pair(),
+            [card('a', '10:00', '11:00'), card('b', '10:05', '11:00'), card('c', '10:10', '11:00')],
+            [card('long', '10:00', '13:00'), card('x', '10:40', '11:30'), card('y', '10:45', '11:30')],
+            [card('Q', '20:00', '20:10'), card('P', '20:05', '21:00'), card('R', '20:10', '20:20')],
+            [card('s', '23:26', '23:35'), card('n', '23:36', '23:59')],
+            [card('p', '09:00', '09:00'), card('l', '09:00', '10:00'), card('m', '09:00', '09:30')],
+        ];
+        for (const tasks of days) {
+            const plain = slots(tasks);
+            for (const input of [sideBySide(1, WIDE, null), sideBySide(4, 1992, null)]) {
+                expect(slots(tasks, input)).toEqual(plain);
+            }
+            for (const slot of Object.values(plain)) expect(slot.liesOver).toBe(slot.left > 0);
+        }
     });
 });

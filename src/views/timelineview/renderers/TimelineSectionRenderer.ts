@@ -6,6 +6,7 @@ import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBi
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { TaskLayout, type LaneGeometry, type LaneSlot } from '../TaskLayout';
+import { LANE_INSET_PX } from '../TimedCardGeometry';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
@@ -17,10 +18,6 @@ import {
 } from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
-
-// A lane card stands this far in from each side of its day's column; its
-// width and left offset are percentages of the rest.
-const LANE_MARGIN_PX = 4;
 
 export class TimelineSectionRenderer {
     constructor(
@@ -74,7 +71,7 @@ export class TimelineSectionRenderer {
      * what the cards were given then holds until the next render.
      */
     public measureLane(col: HTMLElement): LaneGeometry | undefined {
-        const width = col.clientWidth - 2 * LANE_MARGIN_PX;
+        const width = col.clientWidth - LANE_INSET_PX;
         if (width <= 0) return undefined;
         const style = getComputedStyle(col);
         const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
@@ -114,30 +111,34 @@ export class TimelineSectionRenderer {
         const { start: relativeStart, end: endMinutes } = minutesOfSpan(task.drawn!, startHour);
         const duration = endMinutes - relativeStart;
 
-        const taskLayout = layout.get(task.id) || { width: 100, left: 0, rank: 1 };
-        const widthFraction = taskLayout.width / 100;
-        const leftFraction = taskLayout.left / 100;
-
         el.style.setProperty('--start-minutes', String(relativeStart));
         el.style.setProperty('--duration-minutes', String(duration));
-        el.style.width = `calc((100% - ${2 * LANE_MARGIN_PX}px) * ${widthFraction})`;
-        el.style.left = `calc(${LANE_MARGIN_PX}px + (100% - ${2 * LANE_MARGIN_PX}px) * ${leftFraction})`;
+        this.placeInLane(el, layout.get(task.id) ?? { width: 100, left: 0, rank: 1, liesOver: false });
+    }
+
+    /** The card's place across its lane and in front of the others, from TaskLayout. */
+    private placeInLane(el: HTMLElement, slot: LaneSlot): void {
+        const inset = LANE_INSET_PX;
+        el.style.width = `calc((100% - ${inset}px) * ${slot.width / 100})`;
+        el.style.left = `calc(${inset / 2}px + (100% - ${inset}px) * ${slot.left / 100})`;
         // The rank is the card's place in front of the day's other cards
         // (TaskLayout); the z-index is CSS's, the rank capped under the
         // selected card (`.task-card`, ladder [B] in _variables.css).
-        el.style.setProperty('--lane-z', String(taskLayout.rank));
+        el.style.setProperty('--lane-z', String(slot.rank));
         // Minutes from the start of the card whose name band may hang over
         // this card's top (TaskLayout); CSS turns it into how far this
         // card's content moves down. It is in minutes, so a zoom needs no
         // rewrite. Absent, nothing moves.
-        if (taskLayout.bandGap !== undefined) {
-            el.style.setProperty('--band-gap-minutes', String(taskLayout.bandGap));
+        if (slot.bandGap !== undefined) {
+            el.style.setProperty('--band-gap-minutes', String(slot.bandGap));
         } else {
             el.style.removeProperty('--band-gap-minutes');
         }
 
-        // cascade-offset: leftmost = unset, 重なって右にずれた card に '1'。
-        if (taskLayout.left > 0) {
+        // A card lying over another it overlaps in time traces its outline
+        // over it in the background colour (the cascade halo). A card put
+        // side by side to the right of another lies over none.
+        if (slot.liesOver) {
             el.dataset.cascadeOffset = '1';
         } else {
             delete el.dataset.cascadeOffset;

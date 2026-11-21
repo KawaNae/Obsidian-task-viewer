@@ -99,10 +99,11 @@
    --task-card-halo-block past a top or bottom one. Two parts of a card lie
    over another, and each draws its own box:
      - A card shifted right (`data-cascade-offset`, set by
-       TimelineSectionRenderer when its offset is above 0) lies over the
-       card it overlaps along its left, top and bottom: `::before`, past
-       those three edges and not past the right one (that edge is under the
-       card itself).
+       TimelineSectionRenderer when TaskLayout says it lies over a card it
+       overlaps in time; a card put side by side right of another does not)
+       lies over the card it overlaps along its left, top and bottom:
+       `::before`, past those three edges and not past the right one (that
+       edge is under the card itself).
      - A card with a name band (shorter than the band, section 8) lies over
        the card after it with the band hanging below its end: `::after`
        around the band, past its left and bottom edges and not past the
