@@ -7,13 +7,17 @@ import {
 } from './CardRanges';
 
 /**
- * The most short cards whose directions are chosen together, every way
- * they could go tried. Each card more doubles the ways; a larger set is
- * taken this many cards at a time in start order (`chooseBandDirections`).
+ * The most short cards whose directions are open and whose bands may still
+ * meet the bands of the cards after them: each one more doubles the ways
+ * the cards after them are weighed against (`chooseBandDirections`). A card
+ * that would make one more keeps its band down.
  */
-export const MAX_CARDS_DECIDED_TOGETHER = 12;
+export const MAX_OPEN_CARDS_IN_REACH = 12;
 
+/** 0 up, 1 down: the bit a short card's direction is written as. */
 const DIRECTIONS: readonly BandDirection[] = ['up', 'down'];
+const UP = 0;
+const DOWN = 1;
 
 /**
  * What one way of the bands costs, compared in this order, the least
@@ -22,17 +26,56 @@ const DIRECTIONS: readonly BandDirection[] = ['up', 'down'];
  */
 type Cost = [clashes: number, coveredTops: number, ups: number];
 
-function cheaper(a: Cost, b: Cost): boolean {
-    for (let i = 0; i < a.length; i++) {
-        if (a[i] !== b[i]) return a[i] < b[i];
-    }
-    return false;
+/** The costs of the ways of the cards from one place on, one for each way of the open cards before it. */
+interface Costs {
+    clashes: Int32Array;
+    coveredTops: Int32Array;
+    ups: Int32Array;
+}
+
+function costsOf(size: number): Costs {
+    return { clashes: new Int32Array(size), coveredTops: new Int32Array(size), ups: new Int32Array(size) };
+}
+
+/** Whether `a` costs less than `b`'s entry `j`, compared in `Cost`'s order. */
+function cheaperThan(a: Cost, b: Costs, j: number): boolean {
+    if (a[0] !== b.clashes[j]) return a[0] < b.clashes[j];
+    if (a[1] !== b.coveredTops[j]) return a[1] < b.coveredTops[j];
+    return a[2] < b.ups[j];
+}
+
+function sameAs(a: Cost, b: Costs, j: number): boolean {
+    return a[0] === b.clashes[j] && a[1] === b.coveredTops[j] && a[2] === b.ups[j];
+}
+
+/** The number of bits set in `x`. */
+function bitCount(x: number): number {
+    x -= (x >>> 1) & 0x55555555;
+    x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+    return Math.imul((x + (x >>> 4)) & 0x0f0f0f0f, 0x01010101) >>> 24;
 }
 
 /** Start order, the longer first on a tie. */
 function byStart(a: CardRange, b: CardRange): number {
     if (a.start !== b.start) return a.start - b.start;
     return (b.end - b.start) - (a.end - a.start);
+}
+
+/** What a short card can do: go either way, or only `up` or `down`. */
+type Choice = 'open' | BandDirection;
+
+/** What one short card adds to a way's cost, read by its place `k` in start order. */
+interface Step {
+    choice: Choice;
+    /** The open cards before it whose bands may still meet a band from here on, by start order, the earliest at bit 0. */
+    open: number[];
+    /** How many of `open`, and of the card itself when it is open, from the earliest, no band from the next card on can meet. */
+    dropped: number;
+    /** By its direction: what it costs against the longer cards and the cards before it whose direction is not open, and itself going up. */
+    fixed: [Cost, Cost];
+    /** By its direction: the bits of `open` whose band hides a name or its name, the open card going up, and going down. */
+    clashIfUp: [number, number];
+    clashIfDown: [number, number];
 }
 
 /**
@@ -43,112 +86,191 @@ function byStart(a: CardRange, b: CardRange): number {
  * band and are not in the map; two of them cost the same whichever way
  * the bands go, so they are not counted.
  *
- * Only short cards whose bands could meet, one way or the other, change
- * each other's cost, so the cards are split into sets joined by such
- * pairs and each set is chosen on its own. A set's ways are tried in the
- * order of its cards' directions written in start order, up before down,
- * and the first of the cheapest is kept, so on a tie the earlier cards go
- * up. A set of more than `MAX_CARDS_DECIDED_TOGETHER` cards is chosen that
- * many cards at a time in start order, each lot counted also against the
- * cards of the lots before it.
+ * Of the ways of the bands that cost the least, the one kept has the
+ * earlier cards up: written in start order, up before down, it comes
+ * first. A short card's cost is its own (against the longer cards, and
+ * whether it goes up) and one for each other short card its band can
+ * meet. So the cards are taken in start order, and at each card only the
+ * directions of the cards before it whose bands may still meet a band from
+ * there on change what the rest costs. Those cards lie within a band's
+ * height or so of it, and the work at each card grows with how many of
+ * them there are, not with the day's cards.
  *
  * A band going up that would rise above the lane's first minute (`topPx`
  * 0) is not tried: above the lane is the all-day row or the day's header,
- * which the band would lie over.
+ * which the band would lie over. Where more than `MAX_OPEN_CARDS_IN_REACH`
+ * short cards whose direction is open would be in reach of the cards after
+ * them, the card that would make one more, in start order, keeps its band
+ * down, as two cards at one time do whose bands meet whichever way they go.
+ * Which card that is follows from the cards' places alone.
  */
 export function chooseBandDirections(cards: readonly CardRange[], haloPx: number): Map<CardRange, BandDirection> {
     const shorts = cards.filter(card => card.short).sort(byStart);
-    const longs = cards.filter(card => !card.short);
+    const steps = stepsOf(shorts, cards.filter(card => !card.short), haloPx);
+    const n = shorts.length;
+
+    // From the last card back: `after[k]` is, for each way of `steps[k].open`,
+    // the least the cards from k on cost.
+    const after: Costs[] = new Array(n + 1);
+    const cost: Cost = [0, 0, 0];
+    after[n] = costsOf(1);
+    for (let k = n - 1; k >= 0; k--) {
+        const step = steps[k];
+        const rest = after[k + 1];
+        const here = costsOf(1 << step.open.length);
+        const ways = directionsOf(step.choice);
+        for (let m = 0; m < 1 << step.open.length; m++) {
+            let first = true;
+            for (const d of ways) {
+                costOfStep(step, m, d, rest, cost);
+                if (first || cheaperThan(cost, here, m)) {
+                    first = false;
+                    here.clashes[m] = cost[0];
+                    here.coveredTops[m] = cost[1];
+                    here.ups[m] = cost[2];
+                }
+            }
+        }
+        after[k] = here;
+    }
+
+    // From the first card on, each going up if the least cost still holds.
     const directions = new Map<CardRange, BandDirection>();
-
-    // A short card's own cost against the longer cards, for each direction.
-    const own = shorts.map(s => DIRECTIONS.map((dir): Cost => {
-        let clashes = 0;
-        let coveredTops = 0;
-        for (const x of longs) {
-            if (coversTop(s, dir, x, haloPx)) coveredTops++;
-            else if (bandClash(s, dir, x, 'down', haloPx)) clashes++;
-        }
-        return [clashes, coveredTops, dir === 'up' ? 1 : 0];
-    }));
-    const canGoUp = shorts.map(s => bandRangePx(s, 'up')[0] >= 0);
-
-    for (const set of setsWhoseBandsMayMeet(shorts)) {
-        const way: number[] = [];
-        for (let from = 0; from < set.length; from += MAX_CARDS_DECIDED_TOGETHER) {
-            way.push(...cheapestWay(way, Math.min(MAX_CARDS_DECIDED_TOGETHER, set.length - from), {
-                canGoUp: p => canGoUp[set[p]],
-                own: p => own[set[p]],
-                clash: (p, dp, q, dq) =>
-                    bandClash(shorts[set[p]], DIRECTIONS[dp], shorts[set[q]], DIRECTIONS[dq], haloPx),
-            }));
-        }
-        set.forEach((i, p) => directions.set(shorts[i], DIRECTIONS[way[p]]));
+    let m = 0;
+    for (let k = 0; k < n; k++) {
+        const step = steps[k];
+        const d = directionsOf(step.choice).find(d => sameAs(costOfStep(step, m, d, after[k + 1], cost), after[k], m))!;
+        directions.set(shorts[k], DIRECTIONS[d]);
+        m = nextWay(step, m, d);
     }
     return directions;
 }
 
-/** The short cards (indices in start order) joined where their bands could meet, one way or the other. */
-function setsWhoseBandsMayMeet(shorts: CardRange[]): number[][] {
-    const parent = shorts.map((_, i) => i);
-    const find = (i: number): number => {
-        while (parent[i] !== i) {
-            parent[i] = parent[parent[i]];
-            i = parent[i];
-        }
-        return i;
-    };
-    const bands = shorts.map(s => DIRECTIONS.map(dir => bandRangePx(s, dir)));
-    for (let i = 0; i < shorts.length; i++) {
-        for (let j = i + 1; j < shorts.length; j++) {
-            const meet = bands[i].some(a => bands[j].some(b => Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 1));
-            if (meet) parent[find(j)] = find(i);
-        }
-    }
-    const sets = new Map<number, number[]>();
-    shorts.forEach((_, i) => {
-        const root = find(i);
-        const set = sets.get(root);
-        if (set) set.push(i);
-        else sets.set(root, [i]);
-    });
-    return [...sets.values()];
+function directionsOf(choice: Choice): number[] {
+    if (choice === 'open') return [UP, DOWN];
+    return [choice === 'up' ? UP : DOWN];
 }
 
-/** What `cheapestWay` reads of a set's cards, by their place `p` in start order, 0 up and 1 down. */
-interface SetCosts {
-    canGoUp: (p: number) => boolean;
-    own: (p: number) => Cost[];
-    clash: (p: number, dp: number, q: number, dq: number) => boolean;
+/** The way of the next step's open cards, after card `step` goes `d` with the open cards before it going `m`. */
+function nextWay(step: Step, m: number, d: number): number {
+    const all = step.choice === 'open' ? m | (d << step.open.length) : m;
+    return all >>> step.dropped;
+}
+
+/** What the cards from `step` on cost, it going `d` and the open cards before it `m`, the rest at their least: written to `out`. */
+function costOfStep(step: Step, m: number, d: number, rest: Costs, out: Cost): Cost {
+    const own = step.fixed[d];
+    const downs = m & step.clashIfDown[d];
+    const ups = ~m & ((1 << step.open.length) - 1) & step.clashIfUp[d];
+    const j = nextWay(step, m, d);
+    out[0] = own[0] + bitCount(downs) + bitCount(ups) + rest.clashes[j];
+    out[1] = own[1] + rest.coveredTops[j];
+    out[2] = own[2] + rest.ups[j];
+    return out;
 }
 
 /**
- * The cheapest way of the next `n` cards of a set after those `decided`,
- * every way tried, each counted with the clashes among the `n` and with
- * the cards decided. A way is the number whose bits from the highest are
- * the cards' directions in start order, 0 up and 1 down, so counting up
- * tries the earlier cards up first. All down is always open.
+ * Each short card's `Step`, `shorts` in start order. Whether two bands
+ * can meet is told first by the span both directions of a band cover
+ * together: a card whose span ends 1px or less below the top of every
+ * later card's span meets none of them.
  */
-function cheapestWay(decided: number[], n: number, costs: SetCosts): number[] {
-    const first = decided.length;
-    let best: { cost: Cost; way: number[] } | null = null;
-    for (let v = 0; v < 1 << n; v++) {
-        const way = Array.from({ length: n }, (_, p) => (v >> (n - 1 - p)) & 1);
-        if (way.some((d, p) => d === 0 && !costs.canGoUp(first + p))) continue;
-        const cost: Cost = [0, 0, 0];
-        way.forEach((d, p) => {
-            const c = costs.own(first + p)[d];
-            cost[0] += c[0];
-            cost[1] += c[1];
-            cost[2] += c[2];
-            for (let q = 0; q < first; q++) {
-                if (costs.clash(q, decided[q], first + p, d)) cost[0]++;
+function stepsOf(shorts: CardRange[], longs: CardRange[], haloPx: number): Step[] {
+    const n = shorts.length;
+    const spans = shorts.map(s => {
+        const up = bandRangePx(s, 'up');
+        const down = bandRangePx(s, 'down');
+        return [Math.min(up[0], down[0]), Math.max(up[1], down[1])] as const;
+    });
+    // The highest top of a span from card k on.
+    const highestFrom = new Array<number>(n + 1);
+    highestFrom[n] = Infinity;
+    for (let k = n - 1; k >= 0; k--) highestFrom[k] = Math.min(spans[k][0], highestFrom[k + 1]);
+    const reaches = (i: number, k: number) => spans[i][1] - highestFrom[k] >= 1;
+
+    const ownCosts = ownCostsAgainst(shorts, spans, longs, haloPx);
+    const steps: Step[] = [];
+    const chosen: (BandDirection | null)[] = shorts.map(() => null);
+    let open: number[] = [];
+    let fixed: number[] = [];
+    for (let k = 0; k < n; k++) {
+        const s = shorts[k];
+        fixed = fixed.filter(i => reaches(i, k));
+        const step: Step = {
+            choice: bandRangePx(s, 'up')[0] >= 0 ? 'open' : 'down',
+            open,
+            dropped: 0,
+            fixed: [[...ownCosts[k][UP]] as Cost, [...ownCosts[k][DOWN]] as Cost],
+            clashIfUp: [0, 0],
+            clashIfDown: [0, 0],
+        };
+        for (const d of [UP, DOWN]) {
+            for (const i of fixed) {
+                if (bandClash(shorts[i], chosen[i]!, s, DIRECTIONS[d], haloPx)) step.fixed[d][0]++;
             }
-            for (let q = p + 1; q < n; q++) {
-                if (costs.clash(first + p, d, first + q, way[q])) cost[0]++;
-            }
-        });
-        if (!best || cheaper(cost, best.cost)) best = { cost, way };
+            open.forEach((i, p) => {
+                if (bandClash(shorts[i], 'up', s, DIRECTIONS[d], haloPx)) step.clashIfUp[d] |= 1 << p;
+                if (bandClash(shorts[i], 'down', s, DIRECTIONS[d], haloPx)) step.clashIfDown[d] |= 1 << p;
+            });
+        }
+        // The cards in reach of the next one, earliest first; a card past
+        // the first that reaches it stays, whether or not it reaches.
+        const ahead = (list: number[]) => {
+            let from = 0;
+            while (from < list.length && !reaches(list[from], k + 1)) from++;
+            return from;
+        };
+        if (step.choice === 'open') {
+            const withIt = [...open, k];
+            if (withIt.length - ahead(withIt) > MAX_OPEN_CARDS_IN_REACH) step.choice = 'down';
+        }
+        if (step.choice === 'open') {
+            const withIt = [...open, k];
+            step.dropped = ahead(withIt);
+            open = withIt.slice(step.dropped);
+        } else {
+            step.dropped = ahead(open);
+            open = open.slice(step.dropped);
+            chosen[k] = step.choice;
+            fixed.push(k);
+        }
+        steps.push(step);
     }
-    return best!.way;
+    return steps;
+}
+
+/**
+ * Each short card's cost against the longer cards, for each direction,
+ * with 1 for going up. A band can hide only the names that lie within its
+ * `span`, so only the longer cards whose names start there or less than
+ * the longest name row above it are tried.
+ */
+function ownCostsAgainst(
+    shorts: CardRange[],
+    spans: (readonly [number, number])[],
+    longs: CardRange[],
+    haloPx: number,
+): [Cost, Cost][] {
+    const byTop = longs.slice().sort((a, b) => a.topPx - b.topPx);
+    const longestNameRow = byTop.reduce((most, x) => Math.max(most, x.nameRowPx), 0);
+    return shorts.map((s, k) => {
+        const [top, bottom] = spans[k];
+        let from = 0;
+        let to = byTop.length;
+        while (from < to) {
+            const mid = (from + to) >> 1;
+            if (byTop[mid].topPx + longestNameRow <= top) from = mid + 1;
+            else to = mid;
+        }
+        return DIRECTIONS.map((dir): Cost => {
+            let clashes = 0;
+            let coveredTops = 0;
+            for (let i = from; i < byTop.length && byTop[i].topPx < bottom; i++) {
+                const x = byTop[i];
+                if (coversTop(s, dir, x, haloPx)) coveredTops++;
+                else if (bandClash(s, dir, x, 'down', haloPx)) clashes++;
+            }
+            return [clashes, coveredTops, dir === 'up' ? 1 : 0];
+        }) as [Cost, Cost];
+    });
 }
