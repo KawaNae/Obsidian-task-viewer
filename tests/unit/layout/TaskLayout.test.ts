@@ -5,6 +5,7 @@ import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
 import { assignFirstFreeColumns } from '../../../src/views/sharedLogic/OverlapClusters';
 import { SIDE_BY_SIDE_GAP_PX, nameRowHeightPx } from '../../../src/views/timelineview/TimedCardGeometry';
+import { cardRange } from '../../../src/views/timelineview/CardRanges';
 
 const START_HOUR = 0;
 
@@ -114,10 +115,16 @@ describe('TaskLayout', () => {
             return Object.fromEntries([...layout].map(([id, slot]) => [id, slot.bandGap]));
         }
 
+        // A band that would rise above the lane's first minute does not go
+        // up, so the short cards of these scenes start near the lane's top
+        // to hang their bands down over the cards after them.
+
         it('takes it from a short card shifted right in one cluster, over the first card of the next', () => {
-            // L and A overlap, so A is shifted right; B starts as both end.
-            const g = gaps([card('L', '10:00', '11:05'), card('A', '11:00', '11:05'), card('B', '11:05', '12:00')]);
-            expect(g.B).toBe(5);
+            // L and A overlap, so A is shifted right; B starts as L ends,
+            // 10px below A's top, and moves its content down from under the
+            // band, so it overlaps neither and starts the next cluster.
+            const g = gaps([card('L', '00:00', '00:25'), card('A', '00:15', '00:20'), card('B', '00:25', '02:00')]);
+            expect(g.B).toBe(10);
         });
 
         it('takes it from a card of no length in front of a longer card starting with it', () => {
@@ -132,16 +139,27 @@ describe('TaskLayout', () => {
         });
 
         it('takes the card that starts last where short cards follow one another', () => {
-            const g = gaps([card('A', '21:00', '21:05'), card('B', '21:05', '21:10'), card('C', '21:10', '22:00')]);
-            expect(g).toEqual({ A: undefined, B: 5, C: 5 });
+            // A and B, whose bands meet, are put side by side; both bands
+            // hang over C's top, which moves its content down from under them.
+            const lane = laneOf({ widthPx: WIDE, bandInsetPx: 20, narrowestSideBySidePx: 120 });
+            const g = gaps([card('A', '00:00', '00:05'), card('B', '00:05', '00:10'), card('C', '00:10', '02:00')], lane);
+            expect(g).toEqual({ A: undefined, B: undefined, C: 5 });
         });
 
         it('takes none from a card behind', () => {
-            // K stands alone at level 1; N overlaps M and is shifted right, so
-            // it stands in front of K although K ends before it starts.
-            const g = gaps([card('K', '08:00', '08:05'), card('M', '08:10', '09:00'), card('N', '08:20', '08:50')]);
-            expect(g.M).toBe(10);
-            expect(g.N).toBeUndefined();
+            // Shifted, A and B lie over each other's bands, so each band
+            // would stand in front of the other card and either may; B takes
+            // the gap to A's band only where A stands in front of it.
+            const layout = TaskLayout.calculateTaskLayout(
+                [card('A', '00:00', '00:05'), card('B', '00:05', '00:10')],
+                START_HOUR,
+                UNLAID,
+            );
+            const a = layout.get('A')!;
+            const b = layout.get('B')!;
+            expect([a.band, b.band]).toEqual(['down', 'down']);
+            expect(b.bandGap).toBe(a.rank > b.rank ? 5 : undefined);
+            expect(a.bandGap).toBeUndefined();
         });
 
         it('takes none from a card whose band lies over it only under the band\'s notch', () => {
@@ -150,13 +168,13 @@ describe('TaskLayout', () => {
             // starts at 6 + 20 = 26px and B ends at 22px; in one 400px wide
             // the band starts at 80px and B ends at 220px.
             const tasks = [
-                card('L', '10:00', '11:05'), card('A', '11:00', '11:05'),
-                card('B', '11:05', '12:00'), card('X', '11:10', '12:00'),
-                card('Y', '11:15', '12:00'), card('Z', '11:20', '12:00'),
+                card('L', '00:00', '00:25'), card('A', '00:15', '00:20'),
+                card('B', '00:25', '02:00'), card('X', '00:30', '02:00'),
+                card('Y', '00:35', '02:00'), card('Z', '00:40', '02:00'),
             ];
             expect(TaskLayout.calculateTaskLayout(tasks, START_HOUR, UNLAID).get('B')).toMatchObject({ left: 0, width: 55 });
-            expect(gaps(tasks, laneOf({ widthPx: 40, bandInsetPx: 20 })).B).toBe(65);
-            expect(gaps(tasks, laneOf({ widthPx: 400, bandInsetPx: 20 })).B).toBe(5);
+            expect(gaps(tasks, laneOf({ widthPx: 40, bandInsetPx: 20 })).B).toBeUndefined();
+            expect(gaps(tasks, laneOf({ widthPx: 400, bandInsetPx: 20 })).B).toBe(10);
         });
     });
 });
@@ -183,9 +201,10 @@ interface Span {
 }
 
 /**
- * The groups that hide each other's names, worked out here on their own,
- * each with the width of its level's slot, in % of the lane: the width every
- * card of its cluster has, the group taking one level as one card.
+ * The groups of longer cards that hide each other's names, worked out here
+ * on their own by time, each with the width of its level's slot, in % of the
+ * lane: the width every card of its cluster has, the group taking one level
+ * as one card. Cards with no band overlap only by time.
  */
 function slotsSplitByLevel(items: Span[], pxPerMinute: number): { members: Span[]; slotPercent: number }[] {
     const sorted = items.slice().sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
@@ -352,35 +371,37 @@ describe('TaskLayout side by side', () => {
         expect(r.y.rank).toBeGreaterThan(r.long.rank);
     });
 
-    it('never groups two cards that do not overlap in time, though the later starts on the name', () => {
-        // Inside long, short and next follow each other, next 5px below the
-        // top of short's 22px band; next and beside start 1px apart.
+    it('never groups two cards that do not overlap in time where the later moves its content down from under the band it starts on', () => {
+        // short and next follow each other, next 5px below the top of
+        // short's 22px band, which cannot go up at the lane's top; next has
+        // room to move its content down under it. next and beside start 1px apart.
         const r = slots(
             [
-                card('long', '10:00', '11:00'),
-                card('short', '10:40', '10:45'),
-                card('next', '10:45', '11:00'),
-                card('beside', '10:46', '11:00'),
+                card('short', '00:00', '00:05'),
+                card('next', '00:05', '01:30'),
+                card('beside', '00:06', '01:30'),
             ],
             sideBySide(1, WIDE),
         );
-        expect(place(r.short)).toEqual([15, 85]);
-        expect(place(r.next)).toEqual([15, 42.125]);
-        expect(place(r.beside)).toEqual([57.875, 42.125]);
+        expect(r.short.band).toBe('down');
+        expect(place(r.short)).toEqual([0, 100]);
+        expect(place(r.next)).toEqual([0, 49.625]);
+        expect(place(r.beside)).toEqual([50.375, 49.625]);
     });
 
     it('takes the gap to a name band from the places the cards end up in side by side', () => {
-        // s spans the lane, its band from 220px to 400px. Shifted, a spans 0
-        // to 340px under the band and b, a level up, stands in front of s.
-        // Side by side, a spans 0 to 198.5px, clear of the band, and b, from
-        // 201.5px, shares s's level and stands behind it.
-        const tasks = () => [card('s', '09:55', '10:00'), card('a', '10:00', '11:00'), card('b', '10:05', '11:00')];
+        // s spans the lane, its band going down from the lane's top and
+        // from 220px to 400px across. Shifted, a spans 0 to 340px under the
+        // band. Side by side, a spans 0 to 198.5px, clear of the band. b,
+        // from 60px shifted and from 201.5px side by side, is under it
+        // either way, and s stands in front of it, its band lying over it.
+        const tasks = () => [card('s', '00:00', '00:05'), card('a', '00:05', '01:05'), card('b', '00:10', '01:05')];
         const gap = (narrowestPx: number | null) => {
             const lane = laneOf({ widthPx: WIDE, bandInsetPx: 220, narrowestSideBySidePx: narrowestPx });
             const layout = TaskLayout.calculateTaskLayout(tasks(), START_HOUR, lane);
             return { a: layout.get('a')!.bandGap, b: layout.get('b')!.bandGap };
         };
-        expect(gap(null)).toEqual({ a: 5, b: undefined });
+        expect(gap(null)).toEqual({ a: 5, b: 10 });
         expect(gap(120)).toEqual({ a: undefined, b: 10 });
     });
 
@@ -511,7 +532,7 @@ describe('TaskLayout side by side', () => {
             expect(place(r.e)).toEqual([30, 70]);
         });
 
-        it('never ends two cards overlapping in time at one place, nor makes a column narrower than its level\'s slot split', () => {
+        it('never ends two cards overlapping in time at one place, nor makes a column of longer cards narrower than its level\'s slot split', () => {
             let seed = 20261121;
             const random = () => {
                 seed = (seed + 0x6d2b79f5) | 0;
@@ -541,6 +562,9 @@ describe('TaskLayout side by side', () => {
                         expect(Math.abs(rightA - rightB), scene).toBeGreaterThan(0.01);
                     }
                 }
+                // The groups are worked out here by time alone, which holds
+                // only where no card shows its name in a band.
+                if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
                 for (const { members, slotPercent } of slotsSplitByLevel(items, pxPerMinute)) {
                     const { columnCount } = assignFirstFreeColumns(members, m => m.start, m => m.end);
                     const split = (slotPercent / 100 * lanePx - (columnCount - 1) * SIDE_BY_SIDE_GAP_PX) / columnCount;
@@ -588,12 +612,14 @@ describe('TaskLayout side by side', () => {
             [card('s', '23:26', '23:35'), card('n', '23:36', '23:59')],
             [card('p', '09:00', '09:00'), card('l', '09:00', '10:00'), card('m', '09:00', '09:30')],
         ];
+        // The zoom decides which cards show a band and which way it goes,
+        // so each lane is compared with one of no width at its own zoom.
         for (const tasks of days) {
-            const plain = slots(tasks);
-            for (const input of [sideBySide(1, WIDE, null), sideBySide(4, 1992, null)]) {
-                expect(slots(tasks, input)).toEqual(plain);
+            for (const [pxPerMinute, widthPx] of [[1, WIDE], [4, 1992]]) {
+                const plain = slots(tasks, laneOf({ pxPerMinute }));
+                expect(slots(tasks, sideBySide(pxPerMinute, widthPx, null))).toEqual(plain);
+                for (const slot of Object.values(plain)) expect(slot.liesOver).toBe(slot.left > 0);
             }
-            for (const slot of Object.values(plain)) expect(slot.liesOver).toBe(slot.left > 0);
         }
     });
 
@@ -601,6 +627,168 @@ describe('TaskLayout side by side', () => {
         const r = slots(pair(), sideBySide(1, 0, 0));
         expect(place(r.b)).toEqual([15, 85]);
         expect(r.b.liesOver).toBe(true);
+    });
+});
+
+describe('TaskLayout with name bands going up or down', () => {
+    // A lane of 322px for its cards (a column of 330px), 1px a minute, the
+    // narrowest a card put side by side may be 120px, and a band's halo
+    // starting 20px in from a card's left.
+    const LANE = laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 120 });
+
+    /** A day's cards from `id hh:mm-hh:mm` entries. */
+    function day(entries: string): DisplayTask[] {
+        return entries.split(',').map(entry => {
+            const [id, span] = entry.trim().split(/\s+/);
+            const [start, end] = span.split('-');
+            return card(id, start, end);
+        });
+    }
+
+    /** Each card's left and width in px of the lane, and its band's way, `-` for a card with no band. */
+    function laid(entries: string, lane: TimelineLane = LANE): Record<string, [number, number, string]> {
+        const layout = TaskLayout.calculateTaskLayout(day(entries), START_HOUR, lane);
+        return Object.fromEntries([...layout].map(([id, slot]) => [id, [
+            Number((slot.left * lane.widthPx / 100).toFixed(1)),
+            Number((slot.width * lane.widthPx / 100).toFixed(1)),
+            slot.band ?? '-',
+        ]]));
+    }
+
+    /** The cards from the front to the back. */
+    function front(entries: string, lane: TimelineLane = LANE): string[] {
+        const layout = TaskLayout.calculateTaskLayout(day(entries), START_HOUR, lane);
+        return [...layout].sort(([, a], [, b]) => b.rank - a.rank).map(([id]) => id);
+    }
+
+    function gapsOf(entries: string, lane: TimelineLane = LANE): Record<string, number | undefined> {
+        const layout = TaskLayout.calculateTaskLayout(day(entries), START_HOUR, lane);
+        return Object.fromEntries([...layout].map(([id, slot]) => [id, slot.bandGap]));
+    }
+
+    describe('places', () => {
+        it('puts a short card up beside a long one it starts within, side by side, and the next down shifted', () => {
+            expect(laid('C 10:00-15:00, g1 10:30-10:35, g2 10:40-10:45')).toEqual({
+                C: [0, 159.5, '-'], g1: [162.5, 159.5, 'up'], g2: [48.3, 273.7, 'down'],
+            });
+        });
+
+        it('puts the first of two short cards 10 minutes apart up and both across the lane', () => {
+            expect(laid('g1 10:30-10:35, g2 10:40-10:45')).toEqual({
+                g1: [0, 322, 'up'], g2: [0, 322, 'down'],
+            });
+        });
+
+        it('puts four short cards in a row side by side two by two, the bands of each pair meeting', () => {
+            expect(laid('k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50, T 10:50-12:00')).toEqual({
+                k1: [0, 159.5, 'up'], k2: [162.5, 159.5, 'up'],
+                k3: [0, 159.5, 'down'], k4: [162.5, 159.5, 'down'],
+                T: [0, 322, '-'],
+            });
+        });
+
+        it('lays a short card whose band goes up clear of the name after it across the lane', () => {
+            expect(laid('g 10:30-10:35, v 10:40-12:00')).toEqual({ g: [0, 322, 'up'], v: [0, 322, '-'] });
+        });
+
+        it('lays a short card right after a long one across the lane, its band down', () => {
+            expect(laid('P 09:00-10:30, g 10:30-10:35')).toEqual({ P: [0, 322, '-'], g: [0, 322, 'down'] });
+        });
+
+        it('lays a short card between two long ones across the lane, its band up over the earlier\'s body', () => {
+            expect(laid('P 09:00-10:30, g 10:30-10:35, v 10:35-12:00')).toEqual({
+                P: [0, 322, '-'], g: [0, 322, 'up'], v: [0, 322, '-'],
+            });
+        });
+
+        it('puts two short cards at one time side by side, their bands down', () => {
+            expect(laid('a 11:00-11:05, b 11:00-11:05')).toEqual({
+                a: [0, 159.5, 'down'], b: [162.5, 159.5, 'down'],
+            });
+        });
+
+        it('lays short cards whose bands go each its own way clear of each other across the lane', () => {
+            expect(laid('c 09:15-09:20, d 09:40-09:40, b 09:55-10:10, L 10:20-12:00')).toEqual({
+                c: [0, 322, 'up'], d: [0, 322, 'up'], b: [0, 322, 'down'], L: [0, 322, '-'],
+            });
+        });
+
+        it('puts side by side two short cards at the lane\'s top whose bands going down meet, though their times do not', () => {
+            // Neither band can go up, so h's band hides g's; in one column
+            // the two would hide each other's names.
+            expect(laid('g 00:00-00:05, h 00:05-00:10, L 00:15-02:00')).toEqual({
+                g: [0, 159.5, 'down'], h: [162.5, 159.5, 'down'], L: [0, 322, '-'],
+            });
+        });
+
+        it('shifts right a short card at the lane\'s top whose band going down meets the one before, though their times do not, where cards are not put side by side', () => {
+            const cascade = laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: null });
+            expect(laid('g 00:00-00:05, h 00:05-00:10, L 00:15-02:00', cascade)).toEqual({
+                g: [0, 273.7, 'down'], h: [48.3, 273.7, 'down'], L: [0, 322, '-'],
+            });
+        });
+
+        it('puts side by side two longer cards whose names lie at one height, and not two whose names do not', () => {
+            // At 2px a minute b starts 30px below a's top, on its 34.8px
+            // name row; c starts 40px below it.
+            const at2 = laneOf({ pxPerMinute: 2, widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 120 });
+            expect(laid('a 10:00-12:00, b 10:15-12:00', at2)).toEqual({ a: [0, 159.5, '-'], b: [162.5, 159.5, '-'] });
+            expect(laid('a 10:00-12:00, c 10:20-12:00', at2)).toEqual({ a: [0, 273.7, '-'], c: [48.3, 273.7, '-'] });
+        });
+    });
+
+    describe('order', () => {
+        it('puts a short card whose band goes up in front of the card before it, over whose body the band lies', () => {
+            expect(front('P 09:00-10:30, g 10:30-10:35, v 10:35-12:00')).toEqual(['g', 'P', 'v']);
+        });
+
+        it('keeps a card shifted right in front of the card it overlaps in time', () => {
+            expect(front('C 10:00-15:00, g1 10:30-10:35, g2 10:40-10:45')).toEqual(['g1', 'g2', 'C']);
+        });
+
+        it('takes two short cards side by side whose bands meet down the lane, neither lying over the other across, in start order', () => {
+            // At the lane's top g and h's bands go down and meet, and each
+            // lies beside the other card, so neither must stand in front of
+            // the other; nor need they go behind the cards after them.
+            expect(front('g 00:00-00:05, h 00:05-00:10, M 01:00-02:00, N 01:40-02:30')).toEqual(['g', 'h', 'N', 'M']);
+        });
+
+        it('for now, puts the higher level in front where the cards that must stand in front of each other go round', () => {
+            // k1 shares C's level, side by side; k2 to k4 are shifted a level
+            // each, their bands lying over each other and over k1's.
+            const lane = laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 100 });
+            expect(laid('C 10:00-15:00, k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50', lane)).toEqual({
+                C: [0, 111.2, '-'], k1: [114.2, 111.2, 'up'],
+                k2: [48.3, 177.1, 'down'], k3: [96.6, 177.1, 'down'], k4: [144.9, 177.1, 'down'],
+            });
+            expect(front('C 10:00-15:00, k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50', lane))
+                .toEqual(['k1', 'k4', 'k3', 'k2', 'C']);
+        });
+    });
+
+    describe('the gap to the band over a card\'s top', () => {
+        it('takes it from the nearest of the bands going down above a card', () => {
+            // k3 and k4 both end by T's start; k4 starts last.
+            expect(gapsOf('k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50, T 10:50-12:00').T).toBe(5);
+        });
+
+        it('takes it from a band going down that ends above the card, as far as its halo reaches', () => {
+            // b's band ends 3px above L's top, where its halo reaches, so
+            // CSS moves nothing of L's content down.
+            expect(gapsOf('c 09:15-09:20, d 09:40-09:40, b 09:55-10:10, L 10:20-12:00')).toEqual({
+                c: undefined, d: undefined, b: undefined, L: 25,
+            });
+        });
+
+        it('takes none from a band going up', () => {
+            expect(gapsOf('g 10:30-10:35, v 10:40-12:00').v).toBeUndefined();
+            expect(gapsOf('P 09:00-10:30, g 10:30-10:35, v 10:35-12:00').v).toBeUndefined();
+        });
+
+        it('takes none from a longer card, which has no band', () => {
+            // P is 23px high, the lowest that shows its name inside.
+            expect(gapsOf('P 10:00-10:26, n 10:26-11:00').n).toBeUndefined();
+        });
     });
 });
 

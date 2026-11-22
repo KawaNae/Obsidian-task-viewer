@@ -100,13 +100,14 @@ function draw(r: TimelineSectionRenderer, cols: Lane[], tasks: () => DisplayTask
     }
 }
 
-// A is shifted right, B is the first of four that overlap. In a lane 40px
-// wide A's band starts right of B's right edge, so B takes the gap from L;
-// in one 400px wide the band lies over B.
+// A is shifted right, its band going down from near the lane's top, where
+// it cannot go up; B is the first of four that overlap. In a lane 40px wide
+// A's band starts right of B's right edge, so no band hangs over B; in one
+// 400px wide the band lies over B.
 const bandTasks = () => [
-    card('L', '10:00', '11:05'), card('A', '11:00', '11:05'),
-    card('B', '11:05', '12:00'), card('X', '11:10', '12:00'),
-    card('Y', '11:15', '12:00'), card('Z', '11:20', '12:00'),
+    card('L', '00:00', '00:25'), card('A', '00:15', '00:20'),
+    card('B', '00:25', '02:00'), card('X', '00:30', '02:00'),
+    card('Y', '00:35', '02:00'), card('Z', '00:40', '02:00'),
 ];
 const B = bandTasks().findIndex(t => t.id === 'B');
 
@@ -127,15 +128,15 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         const col = column(48);
         draw(r, [col], bandTasks);
         const b = col.children[B];
-        expect(b.style.getPropertyValue('--band-gap-minutes')).toBe('65');
+        expect(b.style.props.has('--band-gap-minutes')).toBe(false);
 
         col.clientWidth = 408;
         notify!([{ target: col }]);
-        expect(b.style.getPropertyValue('--band-gap-minutes')).toBe('5');
+        expect(b.style.getPropertyValue('--band-gap-minutes')).toBe('10');
 
         col.clientWidth = 48;
         notify!([{ target: col }]);
-        expect(b.style.getPropertyValue('--band-gap-minutes')).toBe('65');
+        expect(b.style.props.has('--band-gap-minutes')).toBe(false);
     });
 
     it('places every column again from one notice, every column being as wide', () => {
@@ -145,7 +146,7 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
 
         for (const col of cols) col.clientWidth = 408;
         notify!([{ target: cols[0] }]);
-        expect(cols.map(col => col.children[B].style.getPropertyValue('--band-gap-minutes'))).toEqual(['5', '5']);
+        expect(cols.map(col => col.children[B].style.getPropertyValue('--band-gap-minutes'))).toEqual(['10', '10']);
     });
 
     it('watches only the first column of a draw, and the last draw\'s no more', () => {
