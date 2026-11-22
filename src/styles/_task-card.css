@@ -107,11 +107,13 @@
      - A card with a name band (shorter than the band, section 8) lies over
        the card after it with the band hanging below its end: `::after`
        around the band, past its left and bottom edges and not past the
-       right one, which is the card's own. The card's own body left of the
-       band gets none, so the card after it keeps its top edge there. It is
-       declared under the band's own height
-       query, so a zoom that grows the card past the band drops the halo
-       with it, with no redraw.
+       right one, which is the card's own. A band rising above the card
+       (`data-band="up"`) lies over the card before it instead, and its
+       halo turns over with it: past the band's left and top edges. The
+       card's own body left of the band gets none, so the card it lies
+       over keeps its edge there. It is declared under the band's own
+       height query, so a zoom that grows the card past the band drops the
+       halo with it, with no redraw.
 
    On a split's cut edge (sawtooth) the cascade halo is suppressed, or a
    strip of background would run along the teeth's tips:
@@ -863,7 +865,10 @@
    A short card's name band (the overflow extension below) hangs from its
    top over the card after it, with its halo below it. The card under it
    moves its content (the time row and the name) down by as much of its top
-   as the band and halo cover, so that they show below the band.
+   as the band and halo cover, so that they show below the band. A band
+   rising above its card (`data-band="up"`) lies over the bottom of the card
+   before it, away from where that card's content starts, and moves
+   nothing: TaskLayout gives no gap from it.
 
    How much is covered: the band and halo reach floor-height + halo-block
    below the top of the card in front, and this card starts
@@ -943,6 +948,13 @@
    hangs below it with a rectangular notch cut out of the lower left. The
    body showing left of the box keeps the task's length readable over it.
 
+   A card the lane marks `data-band="up"` (TaskLayout decides which way each
+   band goes) has the same box standing on its bottom
+   instead, rising above it: the whole shape is the hanging one turned upside
+   down, notch in the upper left. Each rule below for the hanging box has an
+   `[data-band='up']` rule after it that turns it over, and the hanging one
+   stays the default.
+
    Today the only trigger is a timeline timed card too short to fit one
    line, so the rules live in this view section and key off the card's own
    height. If a second view ever needs it, promote the extension to a real
@@ -995,6 +1007,22 @@
             );
         margin-top: 0;
         overflow: hidden;
+    }
+    /* Standing on the card's bottom, the corners turn over with the box: the
+       bottom-left is the one inside the body and is squared off, the top-left
+       is the free end of the notch, capped at how far the box rises above the
+       card. */
+    .task-card[data-band='up'] .task-card__content {
+        top: auto;
+        bottom: 0;
+        border-radius:
+            min(
+                var(--task-card-border-radius),
+                calc(var(--task-card-floor-height) - var(--task-card-real-height))
+            )
+            var(--task-card-border-radius)
+            var(--task-card-border-radius)
+            0;
     }
     /* The content is the band itself, hung from the card's top: it does
        not move for a band in front (Content under a name band). */
@@ -1057,6 +1085,15 @@
         z-index: -2;
         pointer-events: none;
     }
+    /* Around a band rising above the card: past its left and top edges. */
+    .timeline-view .timeline-scroll-area__day-column > .task-card[data-band='up']::after {
+        top: auto;
+        bottom: 0;
+        border-radius:
+            calc(var(--task-card-border-radius) + var(--task-card-halo-inline))
+            calc(var(--task-card-border-radius) + var(--task-card-halo-block))
+            0 0;
+    }
 
     /* Selection / hover frame follows the union outline of the two boxes.
        Each box draws its own full frame and then clips away the segments
@@ -1115,6 +1152,34 @@
             calc(var(--task-card-frame-width, 1px) + 0.5px) calc(var(--task-card-real-height) - var(--task-card-frame-width, 1px)),
             calc(var(--task-card-frame-width, 1px) + 0.5px) var(--task-card-frame-width, 1px),
             -1px var(--task-card-frame-width, 1px)
+        );
+    }
+    /* The same cuts turned upside down for a band rising above the card: the
+       host drops the part of its top edge under the extension, and the
+       extension drops the part of its left edge beside the host's body, which
+       starts real-height above the extension's bottom. The square kept at the
+       cut's upper end is where the host's top edge turns into the
+       extension's left edge, and the one kept at its lower end keeps the
+       extension's bottom edge, which runs along the host's, whole. */
+    .task-card[data-band='up']:where(:not(.task-card--in-hub-preview)):hover .task-card__shape::after,
+    .task-card[data-band='up'].is-selected .task-card__shape::after {
+        clip-path: polygon(
+            -1px calc(100% + 1px), calc(100% + 1px) calc(100% + 1px),
+            calc(100% + 1px) var(--task-card-frame-width, 1px),
+            calc(var(--task-card-overflow-ext-offset) + var(--task-card-frame-width, 1px)) var(--task-card-frame-width, 1px),
+            calc(var(--task-card-overflow-ext-offset) + var(--task-card-frame-width, 1px)) -1px,
+            -1px -1px
+        );
+    }
+    .task-card[data-band='up']:where(:not(.task-card--in-hub-preview)):hover .task-card__content::after,
+    .task-card[data-band='up'].is-selected .task-card__content::after {
+        clip-path: polygon(
+            -1px calc(100% + 1px), calc(100% + 1px) calc(100% + 1px),
+            calc(100% + 1px) -1px, -1px -1px,
+            -1px calc(100% - var(--task-card-real-height) + var(--task-card-frame-width, 1px)),
+            calc(var(--task-card-frame-width, 1px) + 0.5px) calc(100% - var(--task-card-real-height) + var(--task-card-frame-width, 1px)),
+            calc(var(--task-card-frame-width, 1px) + 0.5px) calc(100% - var(--task-card-frame-width, 1px)),
+            -1px calc(100% - var(--task-card-frame-width, 1px))
         );
     }
 }
