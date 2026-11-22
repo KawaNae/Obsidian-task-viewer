@@ -166,7 +166,7 @@ export class TaskLayout {
             const { start, end } = minutesOfSpan(task.drawn!, startHour);
             return { task, start, end, range: cardRange(start, end, lane.pxPerMinute) };
         }).sort((a, b) => byStart(a, b) || (a.task.id < b.task.id ? -1 : a.task.id > b.task.id ? 1 : 0));
-        const directions = chooseBandDirections(prepared.map(p => p.range), halo);
+        const directions = chooseBandDirections(prepared.map(p => p.range), halo, 24 * 60 * lane.pxPerMinute);
         const items: Item[] = prepared.map(p => ({ ...p, band: directions.get(p.range) ?? 'down' }));
         const overlap = (a: Item, b: Item): boolean => overlaps(a.range, a.band, b.range, b.band, halo);
 
