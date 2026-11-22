@@ -764,6 +764,16 @@ describe('TaskLayout with name bands going up or down', () => {
             expect(front('C 10:00-15:00, k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50', lane))
                 .toEqual(['k1', 'k4', 'k3', 'k2', 'C']);
         });
+
+        it('keeps a card on no round behind the cards of a round whose bands lie over it, though its level is higher', () => {
+            // At the lane's top g and h's bands go down, each over the other's
+            // band, and both over M's top. M, shifted right of both, is on
+            // the third level; nothing of M lies over g or h.
+            expect(laid('g 00:00-00:05, h 00:05-00:10, M 00:10-00:40')).toEqual({
+                g: [0, 225.4, 'down'], h: [48.3, 225.4, 'down'], M: [96.6, 225.4, '-'],
+            });
+            expect(front('g 00:00-00:05, h 00:05-00:10, M 00:10-00:40')).toEqual(['h', 'g', 'M']);
+        });
     });
 
     describe('the gap to the band over a card\'s top', () => {

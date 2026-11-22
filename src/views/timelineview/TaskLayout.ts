@@ -455,10 +455,15 @@ function placeCluster(
  *     card after it, and a band going up over the card before it. Across
  *     as well as down, or two short cards put side by side, each band
  *     beside the other's, would each have to stand in front of the other.
- * Of the cards no card left must stand in front of, the one starting
- * first goes next, then the one ending first, then the lower ID. Where the
- * relations go round and every card left must stand in front of another,
- * `nextWhereRelationsGoRound` picks the next.
+ * The relations are worked out once for each pair. Where they go round,
+ * the cards on a round cannot all keep them: such cards, each reaching
+ * every other through the relations, are taken as one set, and every
+ * relation between a set and a card outside it is kept. For now, the
+ * cards of one set keep only the first relation, which never goes round,
+ * a higher level being higher: they stand from the highest level down,
+ * then as `firstInFront`. Of the sets no card left must stand in front of,
+ * the one whose front card comes first by `firstInFront` goes next, all
+ * its cards together. A card on no round is a set of its own.
  */
 function frontToBack(
     placed: Placed[],
@@ -466,25 +471,47 @@ function frontToBack(
     bandAcross: (p: Placed) => PxRange,
 ): Placed[] {
     const meet = (a: PxRange, b: PxRange) => Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 1;
-    const down = (p: Placed): PxRange => p.item.range.short
+    // What each card shows down the lane that a band may lie over: a short
+    // card's band, or a longer card's body. Its reach across, and its band's.
+    const downOf = placed.map((p): PxRange => p.item.range.short
         ? bandRangePx(p.item.range, p.item.band)
-        : [p.item.range.topPx, p.item.range.topPx + p.item.range.heightPx];
-    const byLevel = (a: Placed, b: Placed) => timesOverlap(a.item, b.item) && a.level > b.level;
-    const byBand = (a: Placed, b: Placed) => a.item.range.short
-        && !timesOverlap(a.item, b.item)
-        && meet(bandRangePx(a.item.range, a.item.band), down(b))
-        && meet(bandAcross(a), across(b));
-    const mustFront = (a: Placed, b: Placed) => a !== b && (byLevel(a, b) || byBand(a, b));
+        : [p.item.range.topPx, p.item.range.topPx + p.item.range.heightPx]);
+    const acrossOf = placed.map(across);
+    const bandAcrossOf = placed.map(bandAcross);
 
-    const left = placed.slice();
+    // `inFrontOf[i]`: the cards card i must stand in front of.
+    const inFrontOf = placed.map((a, i) => {
+        const fronts: number[] = [];
+        placed.forEach((b, j) => {
+            if (i === j) return;
+            const inFront = timesOverlap(a.item, b.item)
+                ? a.level > b.level
+                : a.item.range.short && meet(downOf[i], downOf[j]) && meet(bandAcrossOf[i], acrossOf[j]);
+            if (inFront) fronts.push(j);
+        });
+        return fronts;
+    });
+    const sets = stronglyConnected(inFrontOf);
+    const setOf = new Array<number>(placed.length);
+    sets.forEach((set, k) => set.forEach(i => { setOf[i] = k; }));
+    const cardsOf = sets.map(set => set.map(i => placed[i]).sort((a, b) => b.level - a.level || firstInFront(a, b)));
+
+    // How many relations from cards outside each set, of cards still left.
+    const waiting = sets.map(() => 0);
+    inFrontOf.forEach((js, i) => js.forEach(j => {
+        if (setOf[j] !== setOf[i]) waiting[setOf[j]]++;
+    }));
+    let free = sets.map((_, k) => k).filter(k => waiting[k] === 0);
     const order: Placed[] = [];
-    while (left.length > 0) {
-        const free = left.filter(c => !left.some(d => mustFront(d, c)));
-        const next = free.length > 0
-            ? free.sort(firstInFront)[0]
-            : nextWhereRelationsGoRound(left, byLevel);
-        order.push(next);
-        left.splice(left.indexOf(next), 1);
+    while (free.length > 0) {
+        const next = free.reduce((a, b) => firstInFront(cardsOf[a][0], cardsOf[b][0]) <= 0 ? a : b);
+        free = free.filter(k => k !== next);
+        order.push(...cardsOf[next]);
+        for (const i of sets[next]) {
+            for (const j of inFrontOf[i]) {
+                if (setOf[j] !== next && --waiting[setOf[j]] === 0) free.push(setOf[j]);
+            }
+        }
     }
     return order;
 }
@@ -499,13 +526,55 @@ function firstInFront(a: Placed, b: Placed): number {
 }
 
 /**
- * For now, the next card where the relations of `frontToBack` go round:
- * that step keeps only the levels of cards whose times overlap, and puts
- * the highest level next, as cards shifted right are, then as
- * `firstInFront`. Two cards whose times overlap never go round, a higher
- * level being higher, so some card is always free of them.
+ * The nodes `0` to `next.length - 1` split into the sets whose nodes each
+ * reach every other through the edges `next[i]` (i to each of them), by
+ * Tarjan's algorithm, walked without recursion: each node and edge once.
  */
-function nextWhereRelationsGoRound(left: Placed[], byLevel: (a: Placed, b: Placed) => boolean): Placed {
-    const free = left.filter(c => !left.some(d => d !== c && byLevel(d, c)));
-    return free.sort((a, b) => b.level - a.level || firstInFront(a, b))[0];
+function stronglyConnected(next: number[][]): number[][] {
+    const index = next.map(() => -1);
+    const low = next.map(() => 0);
+    const onStack = next.map(() => false);
+    const stack: number[] = [];
+    const sets: number[][] = [];
+    let count = 0;
+    const visit = (v: number) => {
+        index[v] = low[v] = count++;
+        stack.push(v);
+        onStack[v] = true;
+    };
+    for (let root = 0; root < next.length; root++) {
+        if (index[root] !== -1) continue;
+        visit(root);
+        // The walk's path, each node with the next of its edges to follow.
+        const path: [number, number][] = [[root, 0]];
+        while (path.length > 0) {
+            const top = path[path.length - 1];
+            const v = top[0];
+            if (top[1] < next[v].length) {
+                const w = next[v][top[1]++];
+                if (index[w] === -1) {
+                    visit(w);
+                    path.push([w, 0]);
+                } else if (onStack[w]) {
+                    low[v] = Math.min(low[v], index[w]);
+                }
+                continue;
+            }
+            path.pop();
+            if (path.length > 0) {
+                const u = path[path.length - 1][0];
+                low[u] = Math.min(low[u], low[v]);
+            }
+            if (low[v] !== index[v]) continue;
+            const set: number[] = [];
+            let w: number;
+            do {
+                w = stack.pop()!;
+                onStack[w] = false;
+                set.push(w);
+            } while (w !== v);
+            sets.push(set);
+        }
+    }
+    return sets;
 }
