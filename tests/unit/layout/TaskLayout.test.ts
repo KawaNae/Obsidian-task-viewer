@@ -11,14 +11,15 @@ const START_HOUR = 0;
 
 /**
  * A lane not laid out yet: no width, so no cards are put side by side. The
- * halo is the stylesheet's, reaching 3px below a band and 4px left and
- * right of a card, which cards put side by side stand apart.
+ * halo is the stylesheet's, reaching 3px past the top or bottom of a card
+ * or its band and 4px left and right of a card, which cards put side by
+ * side stand apart.
  */
 const UNLAID: TimelineLane = {
     pxPerMinute: 1,
     widthPx: 0,
     bandInsetPx: 0,
-    bandHaloBlockPx: 3,
+    haloBlockPx: 3,
     haloInlinePx: 4,
     narrowestSideBySidePx: null,
 };
@@ -653,7 +654,6 @@ describe('TaskLayout side by side', () => {
             for (const [pxPerMinute, widthPx] of [[1, WIDE], [4, 1992]]) {
                 const plain = slots(tasks, laneOf({ pxPerMinute }));
                 expect(slots(tasks, sideBySide(pxPerMinute, widthPx, null))).toEqual(plain);
-                for (const slot of Object.values(plain)) expect(slot.liesOver).toBe(slot.left > 0);
             }
         }
     });
@@ -913,6 +913,70 @@ describe('TaskLayout right edges over a card behind', () => {
             return card(id, start, end);
         });
     }
+});
+
+describe('TaskLayout halo past the left, top and bottom of a card over a card behind', () => {
+    // At 1px a minute a card is drawn 3px shorter than its time, as far as
+    // the halo reaches up and down; cards side by side stand 4px apart, as
+    // far as it reaches left.
+    const LANE = laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 120 });
+    const CASCADE = laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: null });
+
+    function day(entries: string, lane: TimelineLane = LANE): Record<string, LaneSlot> {
+        return slots(entries.split(',').map(entry => {
+            const [id, span] = entry.trim().split(/\s+/);
+            const [start, end] = span.split('-');
+            return card(id, start, end);
+        }), lane);
+    }
+
+    it('gives none to a card shifted right by bands alone with no card behind it', () => {
+        // g's band and h's clash, and h's and M's, so M is shifted two
+        // levels right; it overlaps no card in time and stands at the back.
+        const r = day('g 00:00-00:05, h 00:05-00:10, M 00:10-00:40');
+        expect(r.M.left).toBeGreaterThan(r.h.left);
+        expect(r.M.rank).toBe(1);
+        expect(r.M.liesOver).toBe(false);
+        // h's body, 5 to 7px down and from 48.3px across, lies over g's band
+        // going down, 0 to 22px from 20px.
+        expect(r.h.rank).toBeGreaterThan(r.g.rank);
+        expect(r.h.liesOver).toBe(true);
+        expect(r.g.liesOver).toBe(false);
+    });
+
+    it('gives it to cards side by side over a long card behind, and not without one', () => {
+        // A spans 48.3 to 183.2px and B, the right column, 187.2 to 322px,
+        // both over P's body, 0 to 273.7px.
+        const over = day('P 06:45-21:45, A 09:00-12:00, B 09:30-10:30');
+        expect([over.P, over.A, over.B].map(s => s.liesOver)).toEqual([false, true, true]);
+        // Alone, A spans 0 to 159px and B 163 to 322px: 4px apart, B's halo
+        // reaches A's edge and shares nothing with it.
+        const alone = day('A 09:00-12:00, B 09:30-10:30');
+        expect(alone.B.left - (alone.A.left + alone.A.width)).toBeCloseTo(4 / 322 * 100);
+        expect([alone.A, alone.B].map(s => s.liesOver)).toEqual([false, false]);
+    });
+
+    it('gives it to a card of no length over a long card behind', () => {
+        // Z's body, 620 to 622px, lies over L's, 600 to 657px.
+        const r = day('L 10:00-11:00, Z 10:20-10:20', CASCADE);
+        expect(r.Z.rank).toBeGreaterThan(r.L.rank);
+        expect(r.Z.liesOver).toBe(true);
+        expect(r.L.liesOver).toBe(false);
+    });
+
+    it('gives it to a card whose time overlaps the one behind, though their bodies do not meet', () => {
+        // A's body ends at 627px and B's starts at 628px: B's halo, from
+        // 625px, comes 2px into A.
+        const r = day('A 10:00-10:30, B 10:28-11:00', CASCADE);
+        expect(r.B.rank).toBeGreaterThan(r.A.rank);
+        expect(r.B.liesOver).toBe(true);
+    });
+
+    it('gives none to two cards one after the other, the halo reaching the next card\'s edge', () => {
+        // A's body ends at 627px, B's starts at 630px.
+        const r = day('A 10:00-10:30, B 10:30-11:00', CASCADE);
+        expect([r.A, r.B].map(s => s.liesOver)).toEqual([false, false]);
+    });
 });
 
 describe('narrowestSideBySidePx', () => {

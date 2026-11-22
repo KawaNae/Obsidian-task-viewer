@@ -99,15 +99,21 @@
    stand --task-card-halo-inline apart, so the halo of one reaches the edge
    of the card beside it and not over it. Two parts of a card lie over
    another, and each draws its own box:
-     - The body, `::before`. A card shifted right (`data-cascade-offset`,
-       set by TimelineSectionRenderer when TaskLayout says it lies over a
-       card it overlaps in time; a card put side by side right of another
-       does not) reaches past its left, top and bottom edges. Its right
-       edge is part of the outline only where it lies over a card behind
+     - The body, `::before`. A card with a card behind it within the
+       halo's reach of its left, top or bottom edge (`data-cascade-offset`,
+       set by TimelineSectionRenderer from TaskLayout) reaches past those
+       edges. A card is drawn 3px shorter than its time, as far as
+       --task-card-halo-block, so cards one after the other stand that far
+       apart, and cards side by side stand --task-card-halo-inline apart: a
+       card behind is within the reach only where it lies nearer than
+       that, under the card or closer than a card it does not overlap. A
+       card with nothing there, such as one put side by side with only the
+       card beside it, has no halo whatever its level. Its right edge is
+       part of the outline only where it lies over a card behind
        (`data-halo-right`, from TaskLayout), and the box reaches past it
        there alone: right of an edge with nothing behind it, the halo
-       would hide the hour lines. A card marked for its right edge and not
-       shifted right traces that edge alone.
+       would hide the hour lines. A card marked for its right edge alone
+       traces that edge alone.
      - A card with a name band (shorter than the band, section 8): `::after`
        around the band. A band hanging below the card's top lies over the
        card after it, past its left and bottom edges; a band rising above

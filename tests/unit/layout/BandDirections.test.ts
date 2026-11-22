@@ -113,7 +113,7 @@ describe('chooseBandDirections', () => {
             drawn: { startMs: at(start), endMs: at(end) },
         });
         const band = (zoom: number, start: string, end: string) => TaskLayout.calculateTaskLayout([card('g', start, end)], 0, {
-            pxPerMinute: zoom, widthPx: 0, bandInsetPx: 0, bandHaloBlockPx: HALO, haloInlinePx: 4, narrowestSideBySidePx: null,
+            pxPerMinute: zoom, widthPx: 0, bandInsetPx: 0, haloBlockPx: HALO, haloInlinePx: 4, narrowestSideBySidePx: null,
         }).get('g')!.band;
         // At half a pixel a minute, 23:50 is 715px down a lane 720px tall;
         // at 2px a minute, 12:00 is halfway down.

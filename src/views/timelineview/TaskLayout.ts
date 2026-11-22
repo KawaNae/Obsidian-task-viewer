@@ -20,9 +20,21 @@ import { laneHeightPx } from './TimedCardGeometry';
  * Where a timed card sits in its day's lane: its width and left offset, in
  * percent of the lane, its rank, the place it stands in front of the day's
  * other cards (1 is the back, the number of cards the front), whether it
- * lies over another card it overlaps in time, which it then traces in the
- * background colour, and, for a card too low to show its name inside, the
- * way its name band hangs (`band`, absent for a card with no band).
+ * lies over a card behind it, which it then traces in the background
+ * colour, and, for a card too low to show its name inside, the way its
+ * name band hangs (`band`, absent for a card with no band).
+ *
+ * `liesOver` is whether a card behind comes into the room the halo takes
+ * round the card's body: the body widened left by the halo's reach across
+ * and up and down by its reach down the lane shares 1px or more with the
+ * body or the band of a card behind, down the lane and across. A card's
+ * body is drawn 3px shorter than its time, as far as the halo reaches down
+ * the lane, so two cards one after the other stand that far apart, and
+ * two put side by side stand as far apart as it reaches across. A card
+ * behind comes into the room only where it lies nearer than that: where
+ * their times overlap, where a card drawn at its least height reaches
+ * past its end, or where a band lies there. A card with nothing behind it
+ * there gets no halo, whatever its level.
  *
  * `rightLiesOver` is whether the right edge of the card's body lies over a
  * card behind it, and `bandRightLiesOver` the same for its band's right
@@ -67,8 +79,8 @@ export interface LaneSlot {
  * - `bandInsetPx`: how far in from a card's left edge its name band's halo
  *   starts; the band reaches the card's right edge. A band covers only the
  *   cards it lies over right of that, not those under its notch.
- * - `bandHaloBlockPx`: how far the halo traced round a name band reaches
- *   past the band's foot.
+ * - `haloBlockPx`: how far the halo traced round a card in front, or round
+ *   its name band, reaches past its top or bottom edge.
  * - `haloInlinePx`: how far the halo traced round a card in front reaches
  *   past its left or right edge. Cards put side by side stand this far
  *   apart, so the halo of one reaches the edge of the card beside it and
@@ -83,7 +95,7 @@ export interface TimelineLane {
     pxPerMinute: number;
     widthPx: number;
     bandInsetPx: number;
-    bandHaloBlockPx: number;
+    haloBlockPx: number;
     haloInlinePx: number;
     narrowestSideBySidePx: number | null;
 }
@@ -155,7 +167,7 @@ export class TaskLayout {
         const layout = new Map<string, LaneSlot>();
         if (tasks.length === 0) return layout;
 
-        const halo = lane.bandHaloBlockPx;
+        const halo = lane.haloBlockPx;
         // What each task is drawn over, in minutes of its visual day. In
         // start order, the ID settling cards of one start and one length,
         // so the layout does not follow the order the cards come in.
@@ -190,9 +202,11 @@ export class TaskLayout {
         }
 
         // A band's reach across the lane, and a card's, in px; in a lane of
-        // no width the percentages are taken as px and the band has no notch.
+        // no width the percentages are taken as px, and the band has no
+        // notch and the halo no reach across.
         const scale = usablePx > 0 ? usablePx / 100 : 1;
         const bandInset = usablePx > 0 ? lane.bandInsetPx : 0;
+        const haloAcross = usablePx > 0 ? lane.haloInlinePx : 0;
         const across = (p: Placed): PxRange => [p.left * scale, (p.left + p.width) * scale];
         const bandAcross = (p: Placed): PxRange => [p.left * scale + bandInset, (p.left + p.width) * scale];
 
@@ -200,16 +214,24 @@ export class TaskLayout {
         const bodyOf = (p: Placed): Box => ({ across: across(p), down: bodyRangePx(p.item.range) });
         const bandOf = (p: Placed): Box => ({ across: bandAcross(p), down: bandRangePx(p.item.range, p.item.band) });
         const boxesOf = (p: Placed): Box[] => p.item.range.short ? [bodyOf(p), bandOf(p)] : [bodyOf(p)];
+        // The body with the room its halo takes: past its left edge, its top
+        // and its bottom, not its right, which is traced only where it lies
+        // over a card behind.
+        const haloRoomOf = (body: Box): Box => ({
+            across: [body.across[0] - haloAcross, body.across[1]],
+            down: [body.down[0] - halo, body.down[1] + halo],
+        });
 
         const front = frontToBack(placed, across, bandAcross);
         front.forEach((p, i) => {
             const behind = front.slice(i + 1).flatMap(boxesOf);
+            const body = bodyOf(p);
             layout.set(p.item.task.id, {
                 width: p.width,
                 left: p.left,
                 rank: front.length - i,
-                liesOver: p.level > 1,
-                rightLiesOver: rightEdgeOver(bodyOf(p), behind),
+                liesOver: boxesMet(haloRoomOf(body), behind).length > 0,
+                rightLiesOver: rightEdgeOver(body, behind),
                 ...(p.item.range.short ? { band: p.item.band, bandRightLiesOver: rightEdgeOver(bandOf(p), behind) } : {}),
             });
         });
@@ -248,15 +270,17 @@ interface Box {
     down: PxRange;
 }
 
+/** The boxes of `behind` that `box` shares 1px or more with, down the lane and across. */
+function boxesMet(box: Box, behind: Box[]): Box[] {
+    return behind.filter(b => meetByPx(box.down, b.down) && meetByPx(box.across, b.across));
+}
+
 /**
- * Whether the right edge of `box` lies over one of `behind`: shares 1px or
- * more with it down the lane and across, and it reaches 1px or more right
- * of the edge.
+ * Whether the right edge of `box` lies over one of `behind`: of the boxes
+ * it meets (`boxesMet`), one reaches 1px or more right of the edge.
  */
 function rightEdgeOver(box: Box, behind: Box[]): boolean {
-    return behind.some(b => meetByPx(box.down, b.down)
-        && meetByPx(box.across, b.across)
-        && b.across[1] - box.across[1] >= 1);
+    return boxesMet(box, behind).some(b => b.across[1] - box.across[1] >= 1);
 }
 
 /**

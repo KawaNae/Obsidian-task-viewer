@@ -20,9 +20,9 @@ import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
 /** The lengths of the lane `measureLane` reads off a column and its stylesheet. */
-type LaneLengths = Pick<TimelineLane, 'widthPx' | 'bandInsetPx' | 'bandHaloBlockPx' | 'haloInlinePx'>;
+type LaneLengths = Pick<TimelineLane, 'widthPx' | 'bandInsetPx' | 'haloBlockPx' | 'haloInlinePx'>;
 
-const UNMEASURED: LaneLengths = { widthPx: 0, bandInsetPx: 0, bandHaloBlockPx: 0, haloInlinePx: 0 };
+const UNMEASURED: LaneLengths = { widthPx: 0, bandInsetPx: 0, haloBlockPx: 0, haloInlinePx: 0 };
 
 /**
  * What a day column was drawn with, kept so that its cards can be placed
@@ -115,9 +115,10 @@ export class TimelineSectionRenderer {
      * put side by side are: the width the cards' percentages are of (0
      * while the column has no width, not laid out), where a band's halo
      * starts in from a card's left (the band's notch less the halo's
-     * reach), how far the halo reaches below the band, and how far it
-     * reaches left and right of a card, which the cards put side by side
-     * stand apart; the last three read from the CSS that draws them.
+     * reach), how far the halo reaches past the top or bottom of a card or
+     * its band, and how far it reaches left and right of a card, which the
+     * cards put side by side stand apart; the last three read from the CSS
+     * that draws them.
      */
     private measureLane(col: HTMLElement): LaneLengths {
         const style = getComputedStyle(col);
@@ -126,7 +127,7 @@ export class TimelineSectionRenderer {
         return {
             widthPx: Math.max(0, col.clientWidth - LANE_INSET_PX),
             bandInsetPx: px('--task-card-overflow-ext-offset') - haloInlinePx,
-            bandHaloBlockPx: px('--task-card-halo-block'),
+            haloBlockPx: px('--task-card-halo-block'),
             haloInlinePx,
         };
     }
@@ -247,9 +248,10 @@ export class TimelineSectionRenderer {
             el.style.removeProperty('--band-gap-minutes');
         }
 
-        // A card lying over another it overlaps in time traces its outline
-        // over it in the background colour (the cascade halo). A card put
-        // side by side to the right of another lies over none.
+        // A card with a card behind it in the room its halo takes traces
+        // its outline past its left, top and bottom edges in the background
+        // colour (TaskLayout). Which cards lie behind follows the zoom and
+        // the lane's width, as for the right edge below.
         if (slot.liesOver) {
             el.dataset.cascadeOffset = '1';
         } else {
