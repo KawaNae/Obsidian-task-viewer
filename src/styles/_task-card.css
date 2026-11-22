@@ -89,65 +89,78 @@
    the other in the timeline's background colour (--tv-bg-primary), so the
    card behind reads as cut away along the front card's shape rather than as
    one surface with it. Which card is in front is its rank in the day
-   (`--lane-z`, from TaskLayout): the card shifted right of one it overlaps
-   in time, and of two that do not overlap, the earlier. The halo is a box
-   behind the card's own surfaces (z-index -2, inside the stacking context
-   the card's z-index makes), so only its rim outside the card shows, and it
-   lets presses through to the card behind (`pointer-events: none`).
+   (`--lane-z`, from TaskLayout). The halo is a box behind the card's own
+   surfaces (z-index -2, inside the stacking context the card's z-index
+   makes), so only its rim outside the card shows, and it lets presses
+   through to the card behind (`pointer-events: none`).
 
    The halo reaches --task-card-halo-inline past a left or right edge and
-   --task-card-halo-block past a top or bottom one. Two parts of a card lie
-   over another, and each draws its own box:
-     - A card shifted right (`data-cascade-offset`, set by
-       TimelineSectionRenderer when TaskLayout says it lies over a card it
-       overlaps in time; a card put side by side right of another does not)
-       lies over the card it overlaps along its left, top and bottom:
-       `::before`, past those three edges and not past the right one (that
-       edge is under the card itself).
-     - A card with a name band (shorter than the band, section 8) lies over
-       the card after it with the band hanging below its end: `::after`
-       around the band, past its left and bottom edges and not past the
-       right one, which is the card's own. A band rising above the card
-       (`data-band="up"`) lies over the card before it instead, and its
-       halo turns over with it: past the band's left and top edges. The
-       card's own body left of the band gets none, so the card it lies
+   --task-card-halo-block past a top or bottom one. Cards put side by side
+   stand --task-card-halo-inline apart, so the halo of one reaches the edge
+   of the card beside it and not over it. Two parts of a card lie over
+   another, and each draws its own box:
+     - The body, `::before`. A card shifted right (`data-cascade-offset`,
+       set by TimelineSectionRenderer when TaskLayout says it lies over a
+       card it overlaps in time; a card put side by side right of another
+       does not) reaches past its left, top and bottom edges. Its right
+       edge is part of the outline only where it lies over a card behind
+       (`data-halo-right`, from TaskLayout), and the box reaches past it
+       there alone: right of an edge with nothing behind it, the halo
+       would hide the hour lines. A card marked for its right edge and not
+       shifted right traces that edge alone.
+     - A card with a name band (shorter than the band, section 8): `::after`
+       around the band. A band hanging below the card's top lies over the
+       card after it, past its left and bottom edges; a band rising above
+       the card (`data-band="up"`) lies over the card before it, past its
+       left and top edges. Past the band's right edge only where it lies
+       over a card behind (`data-band-halo-right`), whichever way it goes.
+       The card's own body left of the band gets none, so the card it lies
        over keeps its edge there. It is declared under the band's own
        height query, so a zoom that grows the card past the band drops the
        halo with it, with no redraw.
 
-   On a split's cut edge (sawtooth) the cascade halo is suppressed, or a
+   On a split's cut edge (sawtooth) the body's halo is suppressed, or a
    strip of background would run along the teeth's tips:
      continues-after → bottom halo off (bottom: 0)
      continues-before → top halo off (top: 0)
      both → top and bottom off */
-.timeline-view .task-card[data-cascade-offset]::before {
+.timeline-view .task-card:is([data-cascade-offset], [data-halo-right])::before {
     content: '';
     position: absolute;
+    inset: 0;
+    background: var(--tv-bg-primary);
+    border-radius: var(--task-card-border-radius);
+    z-index: -2;
+    pointer-events: none;
+}
+.timeline-view .task-card[data-cascade-offset]::before {
     inset:
         calc(-1 * var(--task-card-halo-block))
         0
         calc(-1 * var(--task-card-halo-block))
         calc(-1 * var(--task-card-halo-inline));
-    background: var(--tv-bg-primary);
     border-radius:
         calc(var(--task-card-border-radius) + var(--task-card-halo-inline))
         calc(var(--task-card-border-radius) + var(--task-card-halo-block))
         calc(var(--task-card-border-radius) + var(--task-card-halo-block))
         calc(var(--task-card-border-radius) + var(--task-card-halo-inline));
-    z-index: -2;
-    pointer-events: none;
 }
-.timeline-view .task-card[data-cascade-offset].task-card--split-continues-after::before {
+.timeline-view .task-card[data-halo-right]::before {
+    right: calc(-1 * var(--task-card-halo-inline));
+    border-top-right-radius: calc(var(--task-card-border-radius) + var(--task-card-halo-inline));
+    border-bottom-right-radius: calc(var(--task-card-border-radius) + var(--task-card-halo-inline));
+}
+.timeline-view .task-card:is([data-cascade-offset], [data-halo-right]).task-card--split-continues-after::before {
     bottom: 0;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
-.timeline-view .task-card[data-cascade-offset].task-card--split-continues-before::before {
+.timeline-view .task-card:is([data-cascade-offset], [data-halo-right]).task-card--split-continues-before::before {
     top: 0;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
 }
-.timeline-view .task-card[data-cascade-offset].task-card--split-continues-before.task-card--split-continues-after::before {
+.timeline-view .task-card:is([data-cascade-offset], [data-halo-right]).task-card--split-continues-before.task-card--split-continues-after::before {
     top: 0;
     bottom: 0;
     border-radius: 0;
@@ -1093,6 +1106,12 @@
             calc(var(--task-card-border-radius) + var(--task-card-halo-inline))
             calc(var(--task-card-border-radius) + var(--task-card-halo-block))
             0 0;
+    }
+    /* Past the band's right edge too, where it lies over a card behind. */
+    .timeline-view .timeline-scroll-area__day-column > .task-card[data-band-halo-right]::after {
+        right: calc(-1 * var(--task-card-halo-inline));
+        border-top-right-radius: calc(var(--task-card-border-radius) + var(--task-card-halo-inline));
+        border-bottom-right-radius: calc(var(--task-card-border-radius) + var(--task-card-halo-inline));
     }
 
     /* Selection / hover frame follows the union outline of the two boxes.

@@ -51,7 +51,7 @@ export function cardRange(start: number, end: number, pxPerMinute: number): Card
 }
 
 /** Whether two ranges share 1px or more. */
-function meetByPx(a: PxRange, b: PxRange): boolean {
+export function meetByPx(a: PxRange, b: PxRange): boolean {
     return Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 1;
 }
 

@@ -221,7 +221,7 @@ export class TimelineSectionRenderer {
 
         el.style.setProperty('--start-minutes', String(relativeStart));
         el.style.setProperty('--duration-minutes', String(duration));
-        this.placeInLane(el, layout.get(task.id) ?? { width: 100, left: 0, rank: 1, liesOver: false });
+        this.placeInLane(el, layout.get(task.id) ?? { width: 100, left: 0, rank: 1, liesOver: false, rightLiesOver: false });
     }
 
     /** The card's place across its lane and in front of the others, and its band's way, from TaskLayout. */
@@ -251,6 +251,20 @@ export class TimelineSectionRenderer {
             el.dataset.cascadeOffset = '1';
         } else {
             delete el.dataset.cascadeOffset;
+        }
+        // The right edge of the card's body, and of its band, is traced too
+        // where it lies over a card behind (TaskLayout). Which cards lie
+        // behind follows the zoom and the lane's width, so a placing again
+        // marks it or no more as a draw does.
+        if (slot.rightLiesOver) {
+            el.dataset.haloRight = '1';
+        } else {
+            delete el.dataset.haloRight;
+        }
+        if (slot.bandRightLiesOver) {
+            el.dataset.bandHaloRight = '1';
+        } else {
+            delete el.dataset.bandHaloRight;
         }
 
         // The way a short card's name band hangs (TaskLayout), which follows

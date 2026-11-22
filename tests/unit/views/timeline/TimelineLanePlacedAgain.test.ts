@@ -200,6 +200,50 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         expect(v.dataset.band).toBeUndefined();
     });
 
+    it('marks a right edge over a card behind, and marks it again or no more when placed again', () => {
+        // Side by side, A's right edge lies over P; shifted, it does not.
+        let narrowest: number | null = 120;
+        const r = renderer(() => narrowest);
+        const col = column(330);
+        draw(r, [col], () => [card('P', '06:45', '21:45'), card('A', '09:00', '12:00'), card('B', '09:30', '10:30')]);
+        const [, a, b] = col.children;
+        expect(a.dataset.haloRight).toBe('1');
+        expect(b.dataset.haloRight).toBeUndefined();
+
+        narrowest = null;
+        r.placeLanesAgain();
+        expect(a.dataset.haloRight).toBeUndefined();
+
+        narrowest = 120;
+        r.placeLanesAgain();
+        expect(a.dataset.haloRight).toBe('1');
+    });
+
+    it('marks a band\'s right edge over a card behind, and marks it again or no more when placed again at another zoom', () => {
+        // At 1px a minute k3's band hangs over T, ending left of T's right
+        // edge; at 5px a minute k3 shows its name inside and has no band.
+        let zoom = 1;
+        const r = renderer(() => 120, () => zoom);
+        const col = column(330);
+        draw(r, [col], () => [
+            card('k1', '10:30', '10:35'), card('k2', '10:35', '10:40'),
+            card('k3', '10:40', '10:45'), card('k4', '10:45', '10:50'),
+            card('T', '10:50', '12:00'),
+        ]);
+        const k3 = col.children[2];
+        const k4 = col.children[3];
+        expect(k3.dataset.bandHaloRight).toBe('1');
+        expect(k4.dataset.bandHaloRight).toBeUndefined();
+
+        zoom = 5;
+        r.placeLanesAgain();
+        expect(k3.dataset.bandHaloRight).toBeUndefined();
+
+        zoom = 1;
+        r.placeLanesAgain();
+        expect(k3.dataset.bandHaloRight).toBe('1');
+    });
+
     it('writes nothing on a notice of the width it was drawn by', () => {
         const r = renderer();
         const col = column(48);

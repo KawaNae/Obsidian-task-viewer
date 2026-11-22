@@ -4,6 +4,7 @@ import { chooseBandDirections } from './BandDirections';
 import {
     bandRangePx,
     cardRange,
+    meetByPx,
     namesMeet,
     overlaps,
     type BandDirection,
@@ -19,6 +20,14 @@ import { SIDE_BY_SIDE_GAP_PX } from './TimedCardGeometry';
  * lies over another card it overlaps in time, which it then traces in the
  * background colour, and, for a card too low to show its name inside, the
  * way its name band hangs (`band`, absent for a card with no band).
+ *
+ * `rightLiesOver` is whether the right edge of the card's body lies over a
+ * card behind it, and `bandRightLiesOver` the same for its band's right
+ * edge (absent for a card with no band): of a card behind it, the body or
+ * the band shares 1px or more with it down the lane and across, and
+ * reaches 1px or more right of its right edge. Such an edge is part of the
+ * outline traced over the card behind. An edge with nothing behind it, or
+ * one that ends where the card behind ends, gets no trace.
  *
  * `bandGap` is, in minutes, how long after the start of the nearest short
  * card whose band hangs down over this card's top this card starts: of the
@@ -36,6 +45,8 @@ export interface LaneSlot {
     left: number;
     rank: number;
     liesOver: boolean;
+    rightLiesOver: boolean;
+    bandRightLiesOver?: boolean;
     bandGap?: number;
     band?: BandDirection;
 }
@@ -188,14 +199,24 @@ export class TaskLayout {
         const across = (p: Placed): PxRange => [p.left * scale, (p.left + p.width) * scale];
         const bandAcross = (p: Placed): PxRange => [p.left * scale + bandInset, (p.left + p.width) * scale];
 
+        // A card's body, and a short card's band, as boxes in px.
+        const bodyOf = (p: Placed): Box => ({
+            across: across(p),
+            down: [p.item.range.topPx, p.item.range.topPx + p.item.range.heightPx],
+        });
+        const bandOf = (p: Placed): Box => ({ across: bandAcross(p), down: bandRangePx(p.item.range, p.item.band) });
+        const boxesOf = (p: Placed): Box[] => p.item.range.short ? [bodyOf(p), bandOf(p)] : [bodyOf(p)];
+
         const front = frontToBack(placed, across, bandAcross);
         front.forEach((p, i) => {
+            const behind = front.slice(i + 1).flatMap(boxesOf);
             layout.set(p.item.task.id, {
                 width: p.width,
                 left: p.left,
                 rank: front.length - i,
                 liesOver: p.level > 1,
-                ...(p.item.range.short ? { band: p.item.band } : {}),
+                rightLiesOver: rightEdgeOver(bodyOf(p), behind),
+                ...(p.item.range.short ? { band: p.item.band, bandRightLiesOver: rightEdgeOver(bandOf(p), behind) } : {}),
             });
         });
 
@@ -225,6 +246,23 @@ export class TaskLayout {
 
         return layout;
     }
+}
+
+/** A part of a card in px: across the lane, and down it. */
+interface Box {
+    across: PxRange;
+    down: PxRange;
+}
+
+/**
+ * Whether the right edge of `box` lies over one of `behind`: shares 1px or
+ * more with it down the lane and across, and it reaches 1px or more right
+ * of the edge.
+ */
+function rightEdgeOver(box: Box, behind: Box[]): boolean {
+    return behind.some(b => meetByPx(box.down, b.down)
+        && meetByPx(box.across, b.across)
+        && b.across[1] - box.across[1] >= 1);
 }
 
 /**
