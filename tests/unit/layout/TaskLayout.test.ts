@@ -179,7 +179,7 @@ describe('TaskLayout', () => {
     });
 });
 
-// A lane of 400px for its cards, so 3px of gap is 0.75% of it.
+// A lane of 400px for its cards, so 4px of gap is 1% of it.
 const WIDE = 400;
 
 function slots(tasks: DisplayTask[], lane: TimelineLane = UNLAID): Record<string, LaneSlot> {
@@ -255,16 +255,16 @@ describe('TaskLayout side by side', () => {
 
     it('puts two cards starting 5 minutes apart in two columns where each is wide enough', () => {
         const r = slots(pair(), sideBySide(1, WIDE));
-        // (400px - 3px) / 2 = 198.5px each, 49.625% of the lane.
-        expect(place(r.a)).toEqual([0, 49.625]);
-        expect(place(r.b)).toEqual([50.375, 49.625]);
+        // (400px - 4px) / 2 = 198px each, 49.5% of the lane.
+        expect(place(r.a)).toEqual([0, 49.5]);
+        expect(place(r.b)).toEqual([50.5, 49.5]);
         expect(r.a.liesOver).toBe(false);
         expect(r.b.liesOver).toBe(false);
         expect(r.b.rank).not.toBe(r.a.rank);
     });
 
     it('shifts the same two cards as before where a column would be too narrow', () => {
-        // 200px for the cards: (200 - 3) / 2 = 98.5px < 120px.
+        // 200px for the cards: (200 - 4) / 2 = 98px < 120px.
         const r = slots(pair(), sideBySide(1, 200));
         expect(place(r.a)).toEqual([0, 85]);
         expect(place(r.b)).toEqual([15, 85]);
@@ -272,15 +272,15 @@ describe('TaskLayout side by side', () => {
     });
 
     it('puts them side by side when a column is exactly the narrowest a card may be', () => {
-        // 243px for the cards: (243 - 3) / 2 = 120px.
-        expect(slots(pair(), sideBySide(1, 243)).b.liesOver).toBe(false);
-        expect(slots(pair(), sideBySide(1, 242)).b.liesOver).toBe(true);
+        // 244px for the cards: (244 - 4) / 2 = 120px.
+        expect(slots(pair(), sideBySide(1, 244)).b.liesOver).toBe(false);
+        expect(slots(pair(), sideBySide(1, 243)).b.liesOver).toBe(true);
     });
 
     it('puts cards 15 minutes apart side by side at a small scale and shifts them at a large one', () => {
         const tasks = () => [card('a', '10:00', '11:00'), card('b', '10:15', '11:00')];
         // 15px is above the bottom of the 34.8px name row; 60px is below it.
-        expect(place(slots(tasks(), sideBySide(1, WIDE)).b)).toEqual([50.375, 49.625]);
+        expect(place(slots(tasks(), sideBySide(1, WIDE)).b)).toEqual([50.5, 49.5]);
         expect(place(slots(tasks(), sideBySide(4, WIDE)).b)).toEqual([15, 85]);
     });
 
@@ -313,10 +313,10 @@ describe('TaskLayout side by side', () => {
 
     it('shifts all of three cards that hide each other\'s names where three columns do not fit', () => {
         const tasks = () => [card('a', '10:00', '11:00'), card('b', '10:05', '11:00'), card('c', '10:10', '11:00')];
-        // 300px: (300 - 6) / 3 = 98px < 120px. Two would fit, but none is put side by side.
+        // 300px: (300 - 8) / 3 = 97.3px < 120px. Two would fit, but none is put side by side.
         const narrow = slots(tasks(), sideBySide(1, 300));
         expect([narrow.a, narrow.b, narrow.c].map(place)).toEqual([[0, 70], [15, 70], [30, 70]]);
-        // 400px: (400 - 6) / 3 = 131.3px.
+        // 400px: (400 - 8) / 3 = 130.7px.
         const wide = slots(tasks(), sideBySide(1, WIDE));
         expect([wide.a, wide.b, wide.c].map(s => s.liesOver)).toEqual([false, false, false]);
         expect(wide.a.left).toBe(0);
@@ -326,9 +326,9 @@ describe('TaskLayout side by side', () => {
 
     it('checks a group again when another group of its cluster is not put side by side', () => {
         // With both groups side by side the levels are two, 340px wide, and
-        // long's group fits ((340 - 3) / 2 = 168.5px) where x's does not
-        // ((340 - 6) / 3 = 111.3px). Laid out one by one, x's group makes
-        // five levels, 160px wide, where long's no longer fits ((160 - 3) / 2).
+        // long's group fits ((340 - 4) / 2 = 168px) where x's does not
+        // ((340 - 8) / 3 = 110.7px). Laid out one by one, x's group makes
+        // five levels, 160px wide, where long's no longer fits ((160 - 4) / 2).
         const r = slots(
             [
                 card('long', '10:00', '13:00'),
@@ -349,9 +349,9 @@ describe('TaskLayout side by side', () => {
             [card('A', '10:00', '10:20'), card('B', '10:15', '11:00'), card('C', '10:30', '11:00')],
             sideBySide(1, WIDE),
         );
-        expect(place(r.A)).toEqual([0, 49.625]);
-        expect(place(r.B)).toEqual([50.375, 49.625]);
-        expect(place(r.C)).toEqual([0, 49.625]);
+        expect(place(r.A)).toEqual([0, 49.5]);
+        expect(place(r.B)).toEqual([50.5, 49.5]);
+        expect(place(r.C)).toEqual([0, 49.5]);
         expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
     });
 
@@ -362,9 +362,9 @@ describe('TaskLayout side by side', () => {
         );
         expect(place(r.long)).toEqual([0, 85]);
         expect(r.long.liesOver).toBe(false);
-        // (340px - 3px) / 2 = 168.5px each, 42.125% of the lane.
-        expect(place(r.x)).toEqual([15, 42.125]);
-        expect(place(r.y)).toEqual([57.875, 42.125]);
+        // (340px - 4px) / 2 = 168px each, 42% of the lane.
+        expect(place(r.x)).toEqual([15, 42]);
+        expect(place(r.y)).toEqual([58, 42]);
         expect(r.x.liesOver).toBe(true);
         expect(r.y.liesOver).toBe(true);
         expect(r.x.rank).toBeGreaterThan(r.long.rank);
@@ -385,15 +385,15 @@ describe('TaskLayout side by side', () => {
         );
         expect(r.short.band).toBe('down');
         expect(place(r.short)).toEqual([0, 100]);
-        expect(place(r.next)).toEqual([0, 49.625]);
-        expect(place(r.beside)).toEqual([50.375, 49.625]);
+        expect(place(r.next)).toEqual([0, 49.5]);
+        expect(place(r.beside)).toEqual([50.5, 49.5]);
     });
 
     it('takes the gap to a name band from the places the cards end up in side by side', () => {
         // s spans the lane, its band going down from the lane's top and
         // from 220px to 400px across. Shifted, a spans 0 to 340px under the
-        // band. Side by side, a spans 0 to 198.5px, clear of the band. b,
-        // from 60px shifted and from 201.5px side by side, is under it
+        // band. Side by side, a spans 0 to 198px, clear of the band. b,
+        // from 60px shifted and from 202px side by side, is under it
         // either way, and s stands in front of it, its band lying over it.
         const tasks = () => [card('s', '00:00', '00:05'), card('a', '00:05', '01:05'), card('b', '00:10', '01:05')];
         const gap = (narrowestPx: number | null) => {
@@ -412,8 +412,8 @@ describe('TaskLayout side by side', () => {
             [card('A', '10:00', '12:00'), card('B', '10:10', '12:00'), card('C', '10:20', '12:00')],
             sideBySide(2, WIDE),
         );
-        // (400px - 6px) / 3 = 131.3px each, 32.833% of the lane.
-        expect([r.A, r.B, r.C].map(place)).toEqual([[0, 32.833], [33.583, 32.833], [67.167, 32.833]]);
+        // (400px - 8px) / 3 = 130.7px each, 32.667% of the lane.
+        expect([r.A, r.B, r.C].map(place)).toEqual([[0, 32.667], [33.667, 32.667], [67.333, 32.667]]);
         expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
     });
 
@@ -424,9 +424,9 @@ describe('TaskLayout side by side', () => {
             [card('A', '10:00', '10:30'), card('B', '10:10', '10:40'), card('C', '10:35', '11:00')],
             sideBySide(1, WIDE),
         );
-        expect(place(r.A)).toEqual([0, 49.625]);
-        expect(place(r.B)).toEqual([50.375, 49.625]);
-        expect(place(r.C)).toEqual([0, 49.625]);
+        expect(place(r.A)).toEqual([0, 49.5]);
+        expect(place(r.B)).toEqual([50.5, 49.5]);
+        expect(place(r.C)).toEqual([0, 49.5]);
         expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
     });
 
@@ -444,31 +444,31 @@ describe('TaskLayout side by side', () => {
         it('reaches as far as its last column would as a level of its own, a card in front overlapping only its first column not stopping it', () => {
             // Three levels of 70%, a step of 15%. L and s take the first level
             // and reach where s would end as the second, 85% (273.7px);
-            // p overlaps L, not s. (273.7 - 3) / 2 = 135.35px each.
+            // p overlaps L, not s. (273.7 - 4) / 2 = 134.85px each.
             const r = slots(scene(), sideBySide(1, 322, 100));
             const [lLeft, lWidth] = px(r.L, 322);
             const [sLeft, sWidth] = px(r.s, 322);
             expect(lLeft).toBeCloseTo(0, 1);
-            expect(lWidth).toBeCloseTo(135.35, 1);
-            expect(sLeft).toBeCloseTo(138.35, 1);
-            expect(sWidth).toBeCloseTo(135.35, 1);
+            expect(lWidth).toBeCloseTo(134.85, 1);
+            expect(sLeft).toBeCloseTo(138.85, 1);
+            expect(sWidth).toBeCloseTo(134.85, 1);
             expect(place(r.p)).toEqual([15, 70]);
             expect(place(r.q)).toEqual([30, 70]);
         });
 
         it('puts a group side by side that its level\'s slot alone would leave too narrow', () => {
-            // In 277px the first level's 70% would give (193.9 - 3) / 2 =
-            // 95.45px; reaching to 85% gives (235.45 - 3) / 2 = 116.2px.
+            // In 277px the first level's 70% would give (193.9 - 4) / 2 =
+            // 94.95px; reaching to 85% gives (235.45 - 4) / 2 = 115.7px.
             const r = slots(scene(), sideBySide(1, 277, 100));
             expect(r.s.liesOver).toBe(false);
-            expect(px(r.L, 277)[1]).toBeCloseTo(116.2, 1);
-            expect(px(r.s, 277)[1]).toBeCloseTo(116.2, 1);
+            expect(px(r.L, 277)[1]).toBeCloseTo(115.7, 1);
+            expect(px(r.s, 277)[1]).toBeCloseTo(115.7, 1);
         });
 
         it('keeps pairs that each stop a step short of the pair in front where they were', () => {
             // Three pairs, each a level up and overlapping the last card of
             // the one before: each reaches a step short of the next, 70% of
-            // the lane, (225.4 - 3) / 2 = 111.2px a column.
+            // the lane, (225.4 - 4) / 2 = 110.7px a column.
             const r = slots(
                 [
                     card('a', '09:00', '09:50'), card('b', '09:00', '09:50'),
@@ -478,8 +478,8 @@ describe('TaskLayout side by side', () => {
                 sideBySide(1, 322, 100),
             );
             const lefts = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => px(r[id], 322)[0]);
-            [0, 114.2, 48.3, 162.5, 96.6, 210.8].forEach((left, i) => expect(lefts[i]).toBeCloseTo(left, 1));
-            for (const slot of Object.values(r)) expect(px(slot, 322)[1]).toBeCloseTo(111.2, 1);
+            [0, 114.7, 48.3, 163, 96.6, 211.3].forEach((left, i) => expect(lefts[i]).toBeCloseTo(left, 1));
+            for (const slot of Object.values(r)) expect(px(slot, 322)[1]).toBeCloseTo(110.7, 1);
         });
 
         it('stops at the lane\'s edge', () => {
@@ -495,8 +495,8 @@ describe('TaskLayout side by side', () => {
                 ],
                 sideBySide(2, WIDE),
             );
-            // (400px - 6px) / 3 = 131.3px each, where 85% would leave 111.3px.
-            expect([r.a, r.b, r.c].map(place)).toEqual([[0, 32.833], [33.583, 32.833], [67.167, 32.833]]);
+            // (400px - 8px) / 3 = 130.7px each, where 85% would leave 110.7px.
+            expect([r.a, r.b, r.c].map(place)).toEqual([[0, 32.667], [33.667, 32.667], [67.333, 32.667]]);
             expect(place(r.d)).toEqual([15, 85]);
         });
 
@@ -506,8 +506,8 @@ describe('TaskLayout side by side', () => {
                 [card('a', '10:00', '11:00'), card('b', '10:05', '11:00'), card('c', '10:45', '12:00')],
                 sideBySide(1, WIDE),
             );
-            expect(place(r.a)).toEqual([0, 42.125]);
-            expect(place(r.b)).toEqual([42.875, 42.125]);
+            expect(place(r.a)).toEqual([0, 42]);
+            expect(place(r.b)).toEqual([43, 42]);
             expect(place(r.c)).toEqual([15, 85]);
         });
 
@@ -526,9 +526,9 @@ describe('TaskLayout side by side', () => {
                 ],
                 sideBySide(1, WIDE, 100),
             );
-            // (340px - 3px) / 2 = 168.5px; (340px - 6px) / 3 = 111.3px.
-            expect([r.c, r.d].map(place)).toEqual([[15, 42.125], [57.875, 42.125]]);
-            expect([r.a, r.b, r.b2].map(place)).toEqual([[0, 27.833], [28.583, 27.833], [57.167, 27.833]]);
+            // (340px - 4px) / 2 = 168px; (340px - 8px) / 3 = 110.7px.
+            expect([r.c, r.d].map(place)).toEqual([[15, 42], [58, 42]]);
+            expect([r.a, r.b, r.b2].map(place)).toEqual([[0, 27.667], [28.667, 27.667], [57.333, 27.667]]);
             expect(place(r.e)).toEqual([30, 70]);
         });
 
@@ -579,19 +579,19 @@ describe('TaskLayout side by side', () => {
     describe('with a narrowest of 0', () => {
         it('puts three cards starting together side by side in a lane too narrow for 120px', () => {
             const tasks = () => [card('a', '10:00', '11:00'), card('b', '10:00', '11:00'), card('c', '10:00', '11:00')];
-            // A lane of a 7-day view, 150px: (150 - 6) / 3 = 48px each.
+            // A lane of a 7-day view, 150px: (150 - 8) / 3 = 47.3px each.
             expect(Object.values(slots(tasks(), sideBySide(1, 150))).map(s => s.liesOver).sort())
                 .toEqual([false, true, true]);
             const r = slots(tasks(), sideBySide(1, 150, 0));
             expect([r.a, r.b, r.c].map(s => s.liesOver)).toEqual([false, false, false]);
-            expect([r.a, r.b, r.c].map(s => s.width.toFixed(3))).toEqual(['32.000', '32.000', '32.000']);
+            expect([r.a, r.b, r.c].map(s => s.width.toFixed(3))).toEqual(['31.556', '31.556', '31.556']);
         });
 
         it('shifts only a group whose columns would be narrower than nothing, keeping one exactly 0 side by side', () => {
             const at = (h: number, n: number) =>
                 Array.from({ length: n }, (_, i) => card(`${h}-${i}`, `${h}:0${i}`, `${h}:30`));
-            // 9px: four columns are (9 - 9) / 4 = 0px; five are (9 - 12) / 5 < 0.
-            const r = slots([...at(10, 4), ...at(14, 5)], sideBySide(1, 9, 0));
+            // 12px: four columns are (12 - 12) / 4 = 0px; five are (12 - 16) / 5 < 0.
+            const r = slots([...at(10, 4), ...at(14, 5)], sideBySide(1, 12, 0));
             expect([0, 1, 2, 3].map(i => r[`10-${i}`].liesOver)).toEqual([false, false, false, false]);
             expect([1, 2, 3, 4].map(i => r[`14-${i}`].liesOver)).toEqual([true, true, true, true]);
         });
@@ -669,7 +669,7 @@ describe('TaskLayout with name bands going up or down', () => {
     describe('places', () => {
         it('puts a short card up beside a long one it starts within, side by side, and the next down shifted', () => {
             expect(laid('C 10:00-15:00, g1 10:30-10:35, g2 10:40-10:45')).toEqual({
-                C: [0, 159.5, '-'], g1: [162.5, 159.5, 'up'], g2: [48.3, 273.7, 'down'],
+                C: [0, 159, '-'], g1: [163, 159, 'up'], g2: [48.3, 273.7, 'down'],
             });
         });
 
@@ -681,8 +681,8 @@ describe('TaskLayout with name bands going up or down', () => {
 
         it('puts four short cards in a row side by side two by two, the bands of each pair meeting', () => {
             expect(laid('k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50, T 10:50-12:00')).toEqual({
-                k1: [0, 159.5, 'up'], k2: [162.5, 159.5, 'up'],
-                k3: [0, 159.5, 'down'], k4: [162.5, 159.5, 'down'],
+                k1: [0, 159, 'up'], k2: [163, 159, 'up'],
+                k3: [0, 159, 'down'], k4: [163, 159, 'down'],
                 T: [0, 322, '-'],
             });
         });
@@ -703,7 +703,7 @@ describe('TaskLayout with name bands going up or down', () => {
 
         it('puts two short cards at one time side by side, their bands down', () => {
             expect(laid('a 11:00-11:05, b 11:00-11:05')).toEqual({
-                a: [0, 159.5, 'down'], b: [162.5, 159.5, 'down'],
+                a: [0, 159, 'down'], b: [163, 159, 'down'],
             });
         });
 
@@ -717,7 +717,7 @@ describe('TaskLayout with name bands going up or down', () => {
             // Neither band can go up, so h's band hides g's; in one column
             // the two would hide each other's names.
             expect(laid('g 00:00-00:05, h 00:05-00:10, L 00:15-02:00')).toEqual({
-                g: [0, 159.5, 'down'], h: [162.5, 159.5, 'down'], L: [0, 322, '-'],
+                g: [0, 159, 'down'], h: [163, 159, 'down'], L: [0, 322, '-'],
             });
         });
 
@@ -732,7 +732,7 @@ describe('TaskLayout with name bands going up or down', () => {
             // At 2px a minute b starts 30px below a's top, on its 34.8px
             // name row; c starts 40px below it.
             const at2 = laneOf({ pxPerMinute: 2, widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 120 });
-            expect(laid('a 10:00-12:00, b 10:15-12:00', at2)).toEqual({ a: [0, 159.5, '-'], b: [162.5, 159.5, '-'] });
+            expect(laid('a 10:00-12:00, b 10:15-12:00', at2)).toEqual({ a: [0, 159, '-'], b: [163, 159, '-'] });
             expect(laid('a 10:00-12:00, c 10:20-12:00', at2)).toEqual({ a: [0, 273.7, '-'], c: [48.3, 273.7, '-'] });
         });
     });
@@ -758,7 +758,7 @@ describe('TaskLayout with name bands going up or down', () => {
             // each, their bands lying over each other and over k1's.
             const lane = laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 100 });
             expect(laid('C 10:00-15:00, k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50', lane)).toEqual({
-                C: [0, 111.2, '-'], k1: [114.2, 111.2, 'up'],
+                C: [0, 110.7, '-'], k1: [114.7, 110.7, 'up'],
                 k2: [48.3, 177.1, 'down'], k3: [96.6, 177.1, 'down'], k4: [144.9, 177.1, 'down'],
             });
             expect(front('C 10:00-15:00, k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50', lane))

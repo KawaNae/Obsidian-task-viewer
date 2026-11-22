@@ -22,10 +22,12 @@ const CARD_HEIGHT_INSET_PX = 3;
 const CARD_MIN_HEIGHT_PX = 2;
 
 /**
- * The gap between two cards put side by side, the same as the gap between
- * two cards in a row (`CARD_HEIGHT_INSET_PX`).
+ * The gap between two cards put side by side: `--task-card-halo-inline` in
+ * `_variables.css`, how far the halo of a card in front reaches past its
+ * left or right edge. The halo then reaches the edge of the card beside it
+ * and not over it, so a card in front cuts no strip off the card beside it.
  */
-export const SIDE_BY_SIDE_GAP_PX = CARD_HEIGHT_INSET_PX;
+export const SIDE_BY_SIDE_GAP_PX = 4;
 
 /**
  * Below this height a card shows its name in a band of its own height,
