@@ -13,11 +13,12 @@ import {
     type BandDirection,
     type CardRange,
 } from '../../../src/views/timelineview/CardRanges';
+import { laneHeightPx } from '../../../src/views/timelineview/TimedCardGeometry';
 
 // The halo traced round a band reaches 3px below it (`--task-card-halo-block`).
 const HALO = 3;
-// The day's 24 hours at a zoom of 1px a minute.
-const DAY = 24 * 60;
+// The lane of a day at a zoom of 1px a minute.
+const LANE = laneHeightPx(1);
 
 function minutes(hhmm: string): number {
     const [h, m] = hhmm.split(':').map(Number);
@@ -36,7 +37,7 @@ function day(cards: string): Map<string, CardRange> {
 /** Each short card's direction, by its ID, in the order the cards are given. */
 function directions(cards: string): Record<string, BandDirection> {
     const ranges = day(cards);
-    const chosen = chooseBandDirections([...ranges.values()], HALO, DAY);
+    const chosen = chooseBandDirections([...ranges.values()], HALO, LANE);
     const out: Record<string, BandDirection> = {};
     for (const [id, range] of ranges) {
         const dir = chosen.get(range);
@@ -112,7 +113,7 @@ describe('chooseBandDirections', () => {
             drawn: { startMs: at(start), endMs: at(end) },
         });
         const band = (zoom: number, start: string, end: string) => TaskLayout.calculateTaskLayout([card('g', start, end)], 0, {
-            pxPerMinute: zoom, widthPx: 0, bandInsetPx: 0, bandHaloBlockPx: HALO, narrowestSideBySidePx: null,
+            pxPerMinute: zoom, widthPx: 0, bandInsetPx: 0, bandHaloBlockPx: HALO, haloInlinePx: 4, narrowestSideBySidePx: null,
         }).get('g')!.band;
         // At half a pixel a minute, 23:50 is 715px down a lane 720px tall;
         // at 2px a minute, 12:00 is halfway down.
@@ -149,7 +150,7 @@ describe('chooseBandDirections', () => {
 
     it('decides a run of 14 short cards as a whole, at the least cost of every way', () => {
         const ranges = [...day(run(14)).values()];
-        expect(costOf(ranges, chooseBandDirections(ranges, HALO, DAY))).toEqual(costOf(ranges, cheapestOfAll(ranges, DAY)));
+        expect(costOf(ranges, chooseBandDirections(ranges, HALO, LANE))).toEqual(costOf(ranges, cheapestOfAll(ranges, LANE)));
     });
 
     it('gives each short card the direction the cheapest of every way gives it, the earlier cards up on a tie', () => {
@@ -167,8 +168,8 @@ describe('chooseBandDirections', () => {
                 return cardRange(start, Math.min(1440, start + lengths[Math.floor(next() * lengths.length)]), zoom);
             });
             if (ranges.filter(r => r.short).length > 8) continue;
-            const chosen = chooseBandDirections(ranges, HALO, DAY * zoom);
-            const cheapest = cheapestOfAll(ranges, DAY * zoom);
+            const chosen = chooseBandDirections(ranges, HALO, laneHeightPx(zoom));
+            const cheapest = cheapestOfAll(ranges, laneHeightPx(zoom));
             for (const r of ranges.filter(r => r.short)) expect(chosen.get(r)).toBe(cheapest.get(r));
         }
     });
@@ -209,13 +210,12 @@ function costOf(cards: CardRange[], dirs: Map<CardRange, BandDirection>): Cost {
 /**
  * The cheapest way of all, every way tried in start order with up before
  * down and the first of the cheapest kept. A card is drawn 1px below its
- * `topPx`, in a lane 2px shorter than `dayPx` for its borders; a band that
- * would leave the lane at the top goes down, and one that would leave it
- * at the bottom only, up.
+ * `topPx`, in a lane `lanePx` tall; a band that would leave the lane at
+ * the top goes down, and one that would leave it at the bottom only, up.
  */
-function cheapestOfAll(cards: CardRange[], dayPx: number): Map<CardRange, BandDirection> {
+function cheapestOfAll(cards: CardRange[], lanePx: number): Map<CardRange, BandDirection> {
     const offTop = (s: CardRange) => bandRangePx(s, 'up')[0] + 1 < 0;
-    const offBottom = (s: CardRange) => bandRangePx(s, 'down')[1] + 1 > dayPx - 2;
+    const offBottom = (s: CardRange) => bandRangePx(s, 'down')[1] + 1 > lanePx;
     const shorts = cards.filter(c => c.short)
         .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
     let best: { cost: Cost; dirs: Map<CardRange, BandDirection> } | null = null;

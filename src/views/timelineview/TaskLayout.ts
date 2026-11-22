@@ -3,15 +3,18 @@ import { minutesOfSpan } from '../../utils/DayWindow';
 import { chooseBandDirections } from './BandDirections';
 import {
     bandRangePx,
+    bodyRangePx,
+    byStart,
     cardRange,
     meetByPx,
     namesMeet,
     overlaps,
+    timesOverlap,
     type BandDirection,
     type CardRange,
     type PxRange,
 } from './CardRanges';
-import { SIDE_BY_SIDE_GAP_PX } from './TimedCardGeometry';
+import { laneHeightPx } from './TimedCardGeometry';
 
 /**
  * Where a timed card sits in its day's lane: its width and left offset, in
@@ -66,6 +69,10 @@ export interface LaneSlot {
  *   cards it lies over right of that, not those under its notch.
  * - `bandHaloBlockPx`: how far the halo traced round a name band reaches
  *   past the band's foot.
+ * - `haloInlinePx`: how far the halo traced round a card in front reaches
+ *   past its left or right edge. Cards put side by side stand this far
+ *   apart, so the halo of one reaches the edge of the card beside it and
+ *   cuts no strip off it.
  * - `narrowestSideBySidePx`: the narrowest a card put side by side may be.
  *   `null` never puts cards side by side; 0 puts them side by side whatever
  *   the lane's width, short of a column narrower than nothing; a positive
@@ -77,6 +84,7 @@ export interface TimelineLane {
     widthPx: number;
     bandInsetPx: number;
     bandHaloBlockPx: number;
+    haloInlinePx: number;
     narrowestSideBySidePx: number | null;
 }
 
@@ -117,17 +125,6 @@ interface Placed {
     level: number;
 }
 
-/** Start order, the longer first on a tie, so a shorter card sits on top. */
-function byStart(a: { start: number; end: number }, b: { start: number; end: number }): number {
-    if (a.start !== b.start) return a.start - b.start;
-    return (b.end - b.start) - (a.end - a.start);
-}
-
-/** Whether two cards' times overlap, each starting before the other ends. */
-function timesOverlap(a: Item, b: Item): boolean {
-    return a.start < b.end && b.start < a.end;
-}
-
 // Every card of a cluster has one width, f(max level), and is shifted right
 // by a step per level, so a card behind shows at least a step at its left.
 //   max level 3:  level 1 0..70,  level 2 15..85,  level 3 30..100
@@ -166,7 +163,7 @@ export class TaskLayout {
             const { start, end } = minutesOfSpan(task.drawn!, startHour);
             return { task, start, end, range: cardRange(start, end, lane.pxPerMinute) };
         }).sort((a, b) => byStart(a, b) || (a.task.id < b.task.id ? -1 : a.task.id > b.task.id ? 1 : 0));
-        const directions = chooseBandDirections(prepared.map(p => p.range), halo, 24 * 60 * lane.pxPerMinute);
+        const directions = chooseBandDirections(prepared.map(p => p.range), halo, laneHeightPx(lane.pxPerMinute));
         const items: Item[] = prepared.map(p => ({ ...p, band: directions.get(p.range) ?? 'down' }));
         const overlap = (a: Item, b: Item): boolean => overlaps(a.range, a.band, b.range, b.band, halo);
 
@@ -182,12 +179,12 @@ export class TaskLayout {
             // the others, so the groups left are checked again until all
             // fit. A group is wholly side by side or not at all.
             let groups = sideBySideOn ? nameCollisionGroups(cluster, overlap) : [];
-            let result = placeCluster(cluster, groups, usablePx, overlap);
+            let result = placeCluster(cluster, groups, usablePx, lane.haloInlinePx, overlap);
             for (;;) {
                 const fitting = groups.filter((_, i) => result.columnWidthPx[i] >= minWidthPx!);
                 if (fitting.length === groups.length) break;
                 groups = fitting;
-                result = placeCluster(cluster, groups, usablePx, overlap);
+                result = placeCluster(cluster, groups, usablePx, lane.haloInlinePx, overlap);
             }
             for (const item of cluster) placed.push({ item, ...result.slots.get(item)! });
         }
@@ -200,10 +197,7 @@ export class TaskLayout {
         const bandAcross = (p: Placed): PxRange => [p.left * scale + bandInset, (p.left + p.width) * scale];
 
         // A card's body, and a short card's band, as boxes in px.
-        const bodyOf = (p: Placed): Box => ({
-            across: across(p),
-            down: [p.item.range.topPx, p.item.range.topPx + p.item.range.heightPx],
-        });
+        const bodyOf = (p: Placed): Box => ({ across: across(p), down: bodyRangePx(p.item.range) });
         const bandOf = (p: Placed): Box => ({ across: bandAcross(p), down: bandRangePx(p.item.range, p.item.band) });
         const boxesOf = (p: Placed): Box[] => p.item.range.short ? [bodyOf(p), bandOf(p)] : [bodyOf(p)];
 
@@ -339,7 +333,8 @@ function firstFreeColumns(members: Item[], overlap: (a: Item, b: Item) => boolea
 /**
  * Lays out one cluster (in start order) with each group taking one level as
  * one card from its first start to its last end, and splits the span from
- * the left of the group's level to the group's right edge into its columns.
+ * the left of the group's level to the group's right edge into its columns,
+ * `gapPx` apart.
  * Gives each card's slot and level, and each group's column width in px (in
  * the order of `groups`).
  */
@@ -347,6 +342,7 @@ function placeCluster(
     cluster: Item[],
     groups: Item[][],
     usablePx: number,
+    gapPx: number,
     overlap: (a: Item, b: Item) => boolean,
 ): {
     slots: Map<Item, { width: number; left: number; level: number }>;
@@ -370,7 +366,7 @@ function placeCluster(
     // it that it overlaps: their spans overlap in time, or a card of one
     // overlaps a card of the other.
     const unitsOverlap = (a: Unit, b: Unit): boolean =>
-        (a.start < b.end && a.end > b.start) || a.members.some(m => b.members.some(o => overlap(m, o)));
+        timesOverlap(a, b) || a.members.some(m => b.members.some(o => overlap(m, o)));
     const levels = new Map<Unit, number>();
     for (let i = 0; i < units.length; i++) {
         let below = 0;
@@ -383,7 +379,7 @@ function placeCluster(
     const maxLevel = Math.max(1, ...levels.values());
     const width = Math.max(MIN_WIDTH, 100 - (maxLevel - 1) * CASCADE_STEP);
     const step = maxLevel > 1 ? (100 - width) / (maxLevel - 1) : 0;
-    const gap = usablePx > 0 ? SIDE_BY_SIDE_GAP_PX / usablePx * 100 : 0;
+    const gap = usablePx > 0 ? gapPx / usablePx * 100 : 0;
 
     const columnsOf = new Map<Unit, { columns: number[]; columnCount: number }>();
     for (const unit of units) {
@@ -429,7 +425,7 @@ function placeCluster(
         }
         const { columns, columnCount } = columnsOf.get(unit)!;
         const slotPx = (rightOf.get(unit)! - left) / 100 * usablePx;
-        const columnPx = (slotPx - (columnCount - 1) * SIDE_BY_SIDE_GAP_PX) / columnCount;
+        const columnPx = (slotPx - (columnCount - 1) * gapPx) / columnCount;
         const columnWidth = columnPx / usablePx * 100;
         unit.members.forEach((member, i) => {
             slots.set(member, { width: columnWidth, left: left + columns[i] * (columnWidth + gap), level });
@@ -470,12 +466,11 @@ function frontToBack(
     across: (p: Placed) => PxRange,
     bandAcross: (p: Placed) => PxRange,
 ): Placed[] {
-    const meet = (a: PxRange, b: PxRange) => Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 1;
     // What each card shows down the lane that a band may lie over: a short
     // card's band, or a longer card's body. Its reach across, and its band's.
     const downOf = placed.map((p): PxRange => p.item.range.short
         ? bandRangePx(p.item.range, p.item.band)
-        : [p.item.range.topPx, p.item.range.topPx + p.item.range.heightPx]);
+        : bodyRangePx(p.item.range));
     const acrossOf = placed.map(across);
     const bandAcrossOf = placed.map(bandAcross);
 
@@ -486,7 +481,7 @@ function frontToBack(
             if (i === j) return;
             const inFront = timesOverlap(a.item, b.item)
                 ? a.level > b.level
-                : a.item.range.short && meet(downOf[i], downOf[j]) && meet(bandAcrossOf[i], acrossOf[j]);
+                : a.item.range.short && meetByPx(downOf[i], downOf[j]) && meetByPx(bandAcrossOf[i], acrossOf[j]);
             if (inFront) fronts.push(j);
         });
         return fronts;

@@ -16,11 +16,16 @@ export type BandDirection = 'up' | 'down';
  * A timed card's place down its day's lane, in minutes of its visual day
  * and in px at one zoom. Whether two cards overlap, whose name one would
  * hide, and whose content a band moves down are all told from these
- * ranges and a short card's band direction, and from nothing else.
+ * ranges and a short card's band direction. Where a band or a name lies
+ * is told in px; whether two cards' times overlap, and whether one starts
+ * once the other has ended, in minutes. A card's body is drawn shorter
+ * than its time (`cardHeightPx`), so two cards whose times overlap by a
+ * little overlap though their bodies do not meet.
  *
  * `topPx` is the card's start minute times the zoom, so the lane's first
- * minute is at 0. CSS draws every card 1px lower than that; the shift is
- * the same for every card, so it changes no relation between two cards.
+ * minute is at 0. CSS draws every card `CARD_DRAWN_LOWER_PX`
+ * (`TimedCardGeometry`) lower than that; the shift is the same for every
+ * card, so it changes no relation between two cards.
  * `short` marks a card too low to show its name inside, which shows it in
  * a band of its own instead; `nameRowPx` is from the card's top to the
  * bottom of its name's first line, or the band's height for a short card.
@@ -50,9 +55,28 @@ export function cardRange(start: number, end: number, pxPerMinute: number): Card
     };
 }
 
+/** Start order, the longer first on a tie, so of two cards starting together the shorter is laid on top. */
+export function byStart(a: { start: number; end: number }, b: { start: number; end: number }): number {
+    if (a.start !== b.start) return a.start - b.start;
+    return (b.end - b.start) - (a.end - a.start);
+}
+
+/**
+ * Whether two times overlap, each starting before the other ends. A card
+ * of no length overlaps no card in time.
+ */
+export function timesOverlap(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+    return a.start < b.end && b.start < a.end;
+}
+
 /** Whether two ranges share 1px or more. */
 export function meetByPx(a: PxRange, b: PxRange): boolean {
     return Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 1;
+}
+
+/** A card's body, from its top to its bottom. */
+export function bodyRangePx(card: CardRange): PxRange {
+    return [card.topPx, card.topPx + card.heightPx];
 }
 
 /** A short card's band going `dir`: down from its top, or up from its bottom. */
@@ -111,9 +135,9 @@ export function bandClash(
 }
 
 /**
- * Whether two cards overlap: their times overlap, each starting before the
- * other ends, or their bands clash. A card of no length overlaps no card
- * in time, so it overlaps one starting with it only by its band.
+ * Whether two cards overlap: their times overlap (`timesOverlap`), or
+ * their bands clash. A card of no length overlaps one starting with it
+ * only by its band.
  */
 export function overlaps(
     a: CardRange,
@@ -122,7 +146,7 @@ export function overlaps(
     bDir: BandDirection,
     haloPx: number,
 ): boolean {
-    return (a.start < b.end && b.start < a.end) || bandClash(a, aDir, b, bDir, haloPx);
+    return timesOverlap(a, b) || bandClash(a, aDir, b, bDir, haloPx);
 }
 
 /**
