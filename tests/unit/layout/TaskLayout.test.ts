@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskLayout, narrowestSideBySidePx, type LaneGeometry, type LaneSlot, type SideBySideInput } from '../../../src/views/timelineview/TaskLayout';
+import { TaskLayout, narrowestSideBySidePx, type LaneSlot, type TimelineLane } from '../../../src/views/timelineview/TaskLayout';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
@@ -7,6 +7,19 @@ import { assignFirstFreeColumns } from '../../../src/views/sharedLogic/OverlapCl
 import { SIDE_BY_SIDE_GAP_PX, nameRowHeightPx } from '../../../src/views/timelineview/TimedCardGeometry';
 
 const START_HOUR = 0;
+
+/** A lane not laid out yet: no width, so no cards are put side by side. */
+const UNLAID: TimelineLane = {
+    pxPerMinute: 1,
+    widthPx: 0,
+    bandInsetPx: 0,
+    bandHaloBlockPx: 3,
+    narrowestSideBySidePx: null,
+};
+
+function laneOf(lengths: Partial<TimelineLane>): TimelineLane {
+    return { ...UNLAID, ...lengths };
+}
 
 function at(hhmm: string): number {
     const [h, m] = hhmm.split(':').map(Number);
@@ -19,7 +32,7 @@ function card(id: string, start: string, end: string): DisplayTask {
 }
 
 function ranks(tasks: DisplayTask[]): Record<string, number> {
-    const layout = TaskLayout.calculateTaskLayout(tasks, START_HOUR);
+    const layout = TaskLayout.calculateTaskLayout(tasks, START_HOUR, UNLAID);
     return Object.fromEntries([...layout].map(([id, slot]) => [id, slot.rank]));
 }
 
@@ -39,6 +52,7 @@ describe('TaskLayout', () => {
         const layout = TaskLayout.calculateTaskLayout(
             [card('long', '10:00', '12:00'), card('inner', '10:30', '11:00')],
             START_HOUR,
+            UNLAID,
         );
         const long = layout.get('long')!;
         const inner = layout.get('inner')!;
@@ -52,6 +66,7 @@ describe('TaskLayout', () => {
         const layout = TaskLayout.calculateTaskLayout(
             [card('Q', '20:00', '20:10'), card('P', '20:05', '21:00'), card('R', '20:10', '20:20')],
             START_HOUR,
+            UNLAID,
         );
         const q = layout.get('Q')!;
         const p = layout.get('P')!;
@@ -94,7 +109,7 @@ describe('TaskLayout', () => {
     });
 
     describe('the gap to the card whose name band may hang over a card', () => {
-        function gaps(tasks: DisplayTask[], lane?: LaneGeometry): Record<string, number | undefined> {
+        function gaps(tasks: DisplayTask[], lane: TimelineLane = UNLAID): Record<string, number | undefined> {
             const layout = TaskLayout.calculateTaskLayout(tasks, START_HOUR, lane);
             return Object.fromEntries([...layout].map(([id, slot]) => [id, slot.bandGap]));
         }
@@ -139,9 +154,9 @@ describe('TaskLayout', () => {
                 card('B', '11:05', '12:00'), card('X', '11:10', '12:00'),
                 card('Y', '11:15', '12:00'), card('Z', '11:20', '12:00'),
             ];
-            expect(TaskLayout.calculateTaskLayout(tasks, START_HOUR).get('B')).toMatchObject({ left: 0, width: 55 });
-            expect(gaps(tasks, { width: 40, bandInset: 20 }).B).toBe(65);
-            expect(gaps(tasks, { width: 400, bandInset: 20 }).B).toBe(5);
+            expect(TaskLayout.calculateTaskLayout(tasks, START_HOUR, UNLAID).get('B')).toMatchObject({ left: 0, width: 55 });
+            expect(gaps(tasks, laneOf({ widthPx: 40, bandInsetPx: 20 })).B).toBe(65);
+            expect(gaps(tasks, laneOf({ widthPx: 400, bandInsetPx: 20 })).B).toBe(5);
         });
     });
 });
@@ -149,20 +164,12 @@ describe('TaskLayout', () => {
 // A lane of 400px for its cards, so 3px of gap is 0.75% of it.
 const WIDE = 400;
 
-interface Input {
-    lane: LaneGeometry;
-    sideBySide: SideBySideInput;
+function slots(tasks: DisplayTask[], lane: TimelineLane = UNLAID): Record<string, LaneSlot> {
+    return Object.fromEntries(TaskLayout.calculateTaskLayout(tasks, START_HOUR, lane));
 }
 
-function slots(tasks: DisplayTask[], input?: Input): Record<string, LaneSlot> {
-    return Object.fromEntries(TaskLayout.calculateTaskLayout(tasks, START_HOUR, input?.lane, input?.sideBySide));
-}
-
-function sideBySide(pxPerMinute: number, laneWidthPx: number, minCardWidthPx: number | null = 120): Input {
-    return {
-        lane: { width: laneWidthPx, bandInset: 0 },
-        sideBySide: { pxPerMinute, minCardWidthPx },
-    };
+function sideBySide(pxPerMinute: number, laneWidthPx: number, narrowestPx: number | null = 120): TimelineLane {
+    return laneOf({ pxPerMinute, widthPx: laneWidthPx, narrowestSideBySidePx: narrowestPx });
 }
 
 function place(slot: LaneSlot): [number, number] {
@@ -368,9 +375,9 @@ describe('TaskLayout side by side', () => {
         // Side by side, a spans 0 to 198.5px, clear of the band, and b, from
         // 201.5px, shares s's level and stands behind it.
         const tasks = () => [card('s', '09:55', '10:00'), card('a', '10:00', '11:00'), card('b', '10:05', '11:00')];
-        const lane = { width: WIDE, bandInset: 220 };
-        const gap = (minCardWidthPx: number | null) => {
-            const layout = TaskLayout.calculateTaskLayout(tasks(), START_HOUR, lane, { pxPerMinute: 1, minCardWidthPx });
+        const gap = (narrowestPx: number | null) => {
+            const lane = laneOf({ widthPx: WIDE, bandInsetPx: 220, narrowestSideBySidePx: narrowestPx });
+            const layout = TaskLayout.calculateTaskLayout(tasks(), START_HOUR, lane);
             return { a: layout.get('a')!.bandGap, b: layout.get('b')!.bandGap };
         };
         expect(gap(null)).toEqual({ a: 5, b: undefined });
@@ -588,6 +595,12 @@ describe('TaskLayout side by side', () => {
             }
             for (const slot of Object.values(plain)) expect(slot.liesOver).toBe(slot.left > 0);
         }
+    });
+
+    it('puts no cards side by side in a lane of no width, though any width would do', () => {
+        const r = slots(pair(), sideBySide(1, 0, 0));
+        expect(place(r.b)).toEqual([15, 85]);
+        expect(r.b.liesOver).toBe(true);
     });
 });
 
