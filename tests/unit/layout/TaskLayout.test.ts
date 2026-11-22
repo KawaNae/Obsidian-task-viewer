@@ -4,17 +4,22 @@ import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/Dis
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
 import { assignFirstFreeColumns } from '../../../src/views/sharedLogic/OverlapClusters';
-import { SIDE_BY_SIDE_GAP_PX, nameRowHeightPx } from '../../../src/views/timelineview/TimedCardGeometry';
+import { nameRowHeightPx } from '../../../src/views/timelineview/TimedCardGeometry';
 import { cardRange } from '../../../src/views/timelineview/CardRanges';
 
 const START_HOUR = 0;
 
-/** A lane not laid out yet: no width, so no cards are put side by side. */
+/**
+ * A lane not laid out yet: no width, so no cards are put side by side. The
+ * halo is the stylesheet's, reaching 3px below a band and 4px left and
+ * right of a card, which cards put side by side stand apart.
+ */
 const UNLAID: TimelineLane = {
     pxPerMinute: 1,
     widthPx: 0,
     bandInsetPx: 0,
     bandHaloBlockPx: 3,
+    haloInlinePx: 4,
     narrowestSideBySidePx: null,
 };
 
@@ -567,7 +572,7 @@ describe('TaskLayout side by side', () => {
                 if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
                 for (const { members, slotPercent } of slotsSplitByLevel(items, pxPerMinute)) {
                     const { columnCount } = assignFirstFreeColumns(members, m => m.start, m => m.end);
-                    const split = (slotPercent / 100 * lanePx - (columnCount - 1) * SIDE_BY_SIDE_GAP_PX) / columnCount;
+                    const split = (slotPercent / 100 * lanePx - (columnCount - 1) * UNLAID.haloInlinePx) / columnCount;
                     for (const m of members) {
                         expect(r[m.id].width * lanePx / 100, scene).toBeGreaterThanOrEqual(split - 1e-6);
                     }

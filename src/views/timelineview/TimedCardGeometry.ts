@@ -22,12 +22,26 @@ const CARD_HEIGHT_INSET_PX = 3;
 const CARD_MIN_HEIGHT_PX = 2;
 
 /**
- * The gap between two cards put side by side: `--task-card-halo-inline` in
- * `_variables.css`, how far the halo of a card in front reaches past its
- * left or right edge. The halo then reaches the edge of the card beside it
- * and not over it, so a card in front cuts no strip off the card beside it.
+ * How much lower than its start minute at the lane's scale a card is drawn:
+ * `_task-card.css` places a timed card at `calc(var(--start-minutes) *
+ * var(--hour-height) / 60 + 1px)`. Between two cards the shift cancels
+ * out; at the lane's top and bottom it does not.
  */
-export const SIDE_BY_SIDE_GAP_PX = 4;
+export const CARD_DRAWN_LOWER_PX = 1;
+
+/**
+ * What the lane the cards are placed in is shorter than its day: a day
+ * column is `calc(24 * var(--hour-height))` tall with a 1px border at its
+ * top and at its bottom (`_timeline-grid.css`), the borders inside that
+ * height (`box-sizing: border-box`, `_base.css`), and its cards are placed
+ * inside the borders.
+ */
+const LANE_BORDERS_PX = 2;
+
+/** The height of a day's lane, inside the column's borders, `pxPerMinute` to a minute. */
+export function laneHeightPx(pxPerMinute: number): number {
+    return 24 * 60 * pxPerMinute - LANE_BORDERS_PX;
+}
 
 /**
  * Below this height a card shows its name in a band of its own height,

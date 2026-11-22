@@ -28,10 +28,9 @@
     /* Outline halo (see _task-card.css section 2): how far the background
        colour traced around a card in front of another reaches past its
        outline, on the left and right sides and on the top and bottom.
-       The layout puts cards side by side this far apart, so the halo of
-       one reaches the edge of the card beside it and not over it. The
-       layout holds 4px as SIDE_BY_SIDE_GAP_PX in TimedCardGeometry.ts, not
-       read from here — keep both in sync. */
+       The layout reads the left and right reach from here and puts cards
+       side by side this far apart, so the halo of one reaches the edge of
+       the card beside it and not over it. */
     --task-card-halo-inline: 4px;
     --task-card-halo-block: 3px;
 
