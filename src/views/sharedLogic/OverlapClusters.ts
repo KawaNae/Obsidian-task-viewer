@@ -58,8 +58,7 @@ export function buildOverlapClusters<T>(
  * opening a new column when none has. `sorted` must be in start order; the
  * columns come back in the same order, with how many were opened.
  *
- * Schedule lays a whole cluster out this way, and Timeline the cards it puts
- * side by side.
+ * Schedule lays a whole cluster out this way.
  */
 export function assignFirstFreeColumns<T>(
     sorted: T[],

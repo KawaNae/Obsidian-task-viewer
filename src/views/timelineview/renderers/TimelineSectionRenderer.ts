@@ -235,8 +235,9 @@ export class TimelineSectionRenderer {
         el.style.setProperty('--lane-z', String(slot.rank));
         // Minutes from the start of the card whose name band may hang over
         // this card's top (TaskLayout); CSS turns it into how far this
-        // card's content moves down. It is in minutes, so a zoom needs no
-        // rewrite. Absent, nothing moves.
+        // card's content moves down. Which band hangs there follows the
+        // zoom, so the cards are placed again once a zoom rests; in minutes,
+        // the gap keeps CSS right while a pinch goes on. Absent, nothing moves.
         if (slot.bandGap !== undefined) {
             el.style.setProperty('--band-gap-minutes', String(slot.bandGap));
         } else {
