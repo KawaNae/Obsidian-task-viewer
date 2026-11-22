@@ -77,11 +77,14 @@ function card(id: string, start: string, end: string): DisplayTask {
     return { ...task, drawn: { startMs: at(start), endMs: at(end) } };
 }
 
-function renderer(narrowest: () => number | null = () => null): TimelineSectionRenderer {
+function renderer(
+    narrowest: () => number | null = () => null,
+    zoom: () => number = () => 1,
+): TimelineSectionRenderer {
     return new TimelineSectionRenderer(
         { settings: { startHour: 0 } } as never,
         { render: () => { } } as never,
-        () => 1,
+        zoom,
         narrowest,
     );
 }
@@ -174,6 +177,27 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         narrowest = null;
         r.placeLanesAgain();
         expect(b.dataset.cascadeOffset).toBe('1');
+    });
+
+    it('marks a short card whose band goes up, and marks it again or no more when placed again at another zoom', () => {
+        // At 1px a minute g is 2px high and its band goes up, clear of v's
+        // name; at 5px a minute it is 22px high and shows its name inside.
+        let zoom = 1;
+        const r = renderer(() => null, () => zoom);
+        const col = column(330);
+        draw(r, [col], () => [card('g', '10:30', '10:35'), card('v', '10:40', '12:00')]);
+        const [g, v] = col.children;
+        expect(g.dataset.band).toBe('up');
+        expect(v.dataset.band).toBeUndefined();
+
+        zoom = 5;
+        r.placeLanesAgain();
+        expect(g.dataset.band).toBeUndefined();
+
+        zoom = 1;
+        r.placeLanesAgain();
+        expect(g.dataset.band).toBe('up');
+        expect(v.dataset.band).toBeUndefined();
     });
 
     it('writes nothing on a notice of the width it was drawn by', () => {

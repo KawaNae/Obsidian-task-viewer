@@ -224,7 +224,7 @@ export class TimelineSectionRenderer {
         this.placeInLane(el, layout.get(task.id) ?? { width: 100, left: 0, rank: 1, liesOver: false });
     }
 
-    /** The card's place across its lane and in front of the others, from TaskLayout. */
+    /** The card's place across its lane and in front of the others, and its band's way, from TaskLayout. */
     private placeInLane(el: HTMLElement, slot: LaneSlot): void {
         const inset = LANE_INSET_PX;
         el.style.width = `calc((100% - ${inset}px) * ${slot.width / 100})`;
@@ -251,6 +251,15 @@ export class TimelineSectionRenderer {
             el.dataset.cascadeOffset = '1';
         } else {
             delete el.dataset.cascadeOffset;
+        }
+
+        // The way a short card's name band hangs (TaskLayout), which follows
+        // the zoom: CSS hangs it up from the card's bottom where marked, and
+        // down from its top otherwise, as for a card with no band.
+        if (slot.band === 'up') {
+            el.dataset.band = 'up';
+        } else {
+            delete el.dataset.band;
         }
     }
 
