@@ -32,8 +32,8 @@ export const SIDE_BY_SIDE_GAP_PX = CARD_HEIGHT_INSET_PX;
  * hanging below it: `@container tv-timed-card (height < 22px)` and
  * `--task-card-floor-height` in `_task-card.css`.
  */
-const NAME_BAND_BELOW_PX = 22;
-const NAME_BAND_HEIGHT_PX = 22;
+export const NAME_BAND_BELOW_PX = 22;
+export const NAME_BAND_HEIGHT_PX = 22;
 
 /**
  * Up to this height a card shows no time row above its name:
@@ -55,6 +55,13 @@ const NAME_ROW_WITH_TIME_PX = 34.8;
  * measured 34.8px.
  */
 const NAME_ROW_WITHOUT_TIME_PX = 26;
+
+/**
+ * What a card keeps below its name's first line when a name band above it
+ * moves its content down: `--task-card-content-shift` in `_task-card.css`
+ * stops at the card's height less 2px less where that line ends.
+ */
+export const CONTENT_SHIFT_FOOT_PX = 2;
 
 /** The height a card of `durationMinutes` is drawn at, `pxPerMinute` to a minute. */
 export function cardHeightPx(durationMinutes: number, pxPerMinute: number): number {
