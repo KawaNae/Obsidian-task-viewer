@@ -236,13 +236,28 @@ interface Span {
     end: number;
 }
 
+/** A card alone or a group put side by side, with its level, its level's slot and the step between levels, in % of the lane. */
+interface LevelSlot {
+    members: Span[];
+    level: number;
+    slotLeft: number;
+    slotWidth: number;
+    step: number;
+}
+
 /**
- * The groups of longer cards that hide each other's names, worked out here
- * on their own by time, each with its level and its level's slot, in % of
- * the lane: the slot of a card shifted alone at that level, the group taking
- * one level as one card. Cards with no band overlap only by time.
+ * The levels of longer cards, worked out here on their own by time: each
+ * card alone or each group of cards that hide each other's names, with its
+ * level and its level's slot, the slot of a card shifted alone at that
+ * level. A group takes one level as one card where `putSideBySide` holds for
+ * it, and is its cards one by one where not. Cards with no band overlap
+ * only by time.
  */
-function slotsByLevel(items: Span[], pxPerMinute: number): { members: Span[]; level: number; slotLeft: number; slotWidth: number }[] {
+function slotsByLevel(
+    items: Span[],
+    pxPerMinute: number,
+    putSideBySide: (members: Span[]) => boolean = () => true,
+): LevelSlot[] {
     const sorted = items.slice().sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
     const clusters: Span[][] = [];
     let clusterEnd = -1;
@@ -255,7 +270,7 @@ function slotsByLevel(items: Span[], pxPerMinute: number): { members: Span[]; le
             clusterEnd = Math.max(clusterEnd, item.end);
         }
     }
-    const out: { members: Span[]; level: number; slotLeft: number; slotWidth: number }[] = [];
+    const out: LevelSlot[] = [];
     for (const cluster of clusters) {
         const root = cluster.map((_, i) => i);
         const find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i])));
@@ -270,6 +285,7 @@ function slotsByLevel(items: Span[], pxPerMinute: number): { members: Span[]; le
         const byRoot = new Map<number, Span[]>();
         cluster.forEach((item, i) => byRoot.set(find(i), [...(byRoot.get(find(i)) ?? []), item]));
         const units = [...byRoot.values()]
+            .flatMap(members => members.length > 1 && putSideBySide(members) ? [members] : members.map(m => [m]))
             .map(members => ({ members, start: members[0].start, end: Math.max(...members.map(m => m.end)) }))
             .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
         const levels: number[] = [];
@@ -284,10 +300,41 @@ function slotsByLevel(items: Span[], pxPerMinute: number): { members: Span[]; le
         const slotWidth = Math.max(40, 100 - (maxLevel - 1) * 15);
         const step = maxLevel > 1 ? (100 - slotWidth) / (maxLevel - 1) : 0;
         units.forEach((unit, i) => {
-            if (unit.members.length > 1) out.push({ members: unit.members, level: levels[i], slotLeft: (levels[i] - 1) * step, slotWidth });
+            out.push({ members: unit.members, level: levels[i], slotLeft: (levels[i] - 1) * step, slotWidth, step });
         });
     }
     return out;
+}
+
+/**
+ * `count` days of 2 to 6 cards starting from 09:00 to 11:55, each 5 to 240
+ * minutes long, in a lane of one of `lanes` px at 0.5, 1 or 2px a minute;
+ * the same days each run for one `seed`.
+ */
+function randomDays(seed: number, count: number, lanes: number[]): { lanePx: number; pxPerMinute: number; items: Span[] }[] {
+    const random = () => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    return Array.from({ length: count }, () => {
+        const lanePx = lanes[Math.floor(random() * lanes.length)];
+        const pxPerMinute = [0.5, 1, 2][Math.floor(random() * 3)];
+        const cards = 2 + Math.floor(random() * 5);
+        const items = Array.from({ length: cards }, (_, i) => {
+            const start = 9 * 60 + Math.floor(random() * 36) * 5;
+            const end = start + 5 + Math.floor(random() * 48) * 5;
+            return { id: `c${i}`, start, end };
+        });
+        return { lanePx, pxPerMinute, items };
+    });
+}
+
+function cardsOf(items: Span[]): DisplayTask[] {
+    const hhmm = (minutes: number) =>
+        `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+    return items.map(it => card(it.id, hhmm(it.start), hhmm(it.end)));
 }
 
 describe('TaskLayout side by side', () => {
@@ -581,26 +628,8 @@ describe('TaskLayout side by side', () => {
         });
 
         it('never ends two cards overlapping in time at one place, nor a group of longer cards left of its level\'s slot, nor one on the first level narrower than its slot split', () => {
-            let seed = 20261121;
-            const random = () => {
-                seed = (seed + 0x6d2b79f5) | 0;
-                let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-                t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-            };
-            const hhmm = (minutes: number) =>
-                `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-            for (let n = 0; n < 2000; n++) {
-                const lanePx = [277, 322, 400][Math.floor(random() * 3)];
-                const pxPerMinute = [0.5, 1, 2][Math.floor(random() * 3)];
-                const count = 2 + Math.floor(random() * 5);
-                const items = Array.from({ length: count }, (_, i) => {
-                    const start = 9 * 60 + Math.floor(random() * 36) * 5;
-                    const end = start + 5 + Math.floor(random() * 48) * 5;
-                    return { id: `c${i}`, start, end };
-                });
-                const tasks = items.map(it => card(it.id, hhmm(it.start), hhmm(it.end)));
-                const r = slots(tasks, sideBySide(pxPerMinute, lanePx, 0));
+            for (const { lanePx, pxPerMinute, items } of randomDays(20261121, 2000, [277, 322, 400])) {
+                const r = slots(cardsOf(items), sideBySide(pxPerMinute, lanePx, 0));
                 const scene = JSON.stringify({ lanePx, pxPerMinute, items });
                 for (const a of items) {
                     for (const b of items) {
@@ -613,7 +642,7 @@ describe('TaskLayout side by side', () => {
                 // The groups are worked out here by time alone, which holds
                 // only where no card shows its name in a band.
                 if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
-                for (const { members, level, slotLeft, slotWidth } of slotsByLevel(items, pxPerMinute)) {
+                for (const { members, level, slotLeft, slotWidth } of slotsByLevel(items, pxPerMinute).filter(u => u.members.length > 1)) {
                     // A group reaches right as far as its slot at least.
                     const right = Math.max(...members.map(m => r[m.id].left + r[m.id].width));
                     expect(right, scene).toBeGreaterThanOrEqual(slotLeft + slotWidth - 1e-6);
@@ -625,6 +654,212 @@ describe('TaskLayout side by side', () => {
                     for (const m of members) {
                         expect(r[m.id].width * lanePx / 100, scene).toBeGreaterThanOrEqual(split - 1e-6);
                     }
+                }
+            }
+        });
+    });
+
+    describe('the left edge of a card in front of cards behind it', () => {
+        it('starts a card in front of the right column of a group a step right of it, ending at the lane\'s edge', () => {
+            // At 0.67px a minute B and C hide each other's names; D overlaps
+            // A and C. Three levels of 70%, a step of 15%: B and C reach to a
+            // step short of D, 85%, (70% - 4px) / 2 each, and D starts a step
+            // right of C, the width of a column, to its level's slot at 100%.
+            const tasks = () => [
+                card('A', '06:15', '14:30'),
+                card('B', '09:30', '11:15'),
+                card('C', '10:15', '16:30'),
+                card('D', '13:15', '16:30'),
+            ];
+            const r = slots(tasks(), sideBySide(0.67, 361));
+            expect([r.A, r.B, r.C, r.D].map(place)).toEqual([[0, 70], [15, 34.446], [50.554, 34.446], [65.554, 34.446]]);
+            expect(r.D.left).toBeCloseTo(r.C.left + 15, 9);
+            expect(r.D.left + r.D.width).toBeCloseTo(100, 9);
+            // D is as wide as a column, so the group fits as it did with D
+            // at its level's step: (70% of 350px - 4px) / 2 = 120.5px, and
+            // of 348px, 119.8px, where the four are shifted.
+            const at350 = slots(tasks(), sideBySide(0.67, 350));
+            expect(at350.C.left).toBeGreaterThan(at350.B.left + at350.B.width);
+            expect(at350.D.width * 3.5).toBeCloseTo(120.5, 1);
+            const at348 = slots(tasks(), sideBySide(0.67, 348));
+            expect([at348.A, at348.B, at348.C, at348.D].map(place)).toEqual([[0, 55], [15, 55], [30, 55], [45, 55]]);
+        });
+
+        it('starts each of two cards in a row a step right of the one behind it', () => {
+            // Four levels of 55%. B and C stop a step short of D at 70%, D a
+            // step right of C and E of D, each to its level's slot.
+            const r = slots(
+                [
+                    card('A', '06:15', '14:30'),
+                    card('B', '09:30', '11:15'),
+                    card('C', '10:15', '16:30'),
+                    card('D', '13:15', '16:30'),
+                    card('E', '15:00', '16:15'),
+                ],
+                sideBySide(0.67, 600),
+            );
+            // (55% of 600px - 4px) / 2 = 163px, 27.167% of the lane.
+            expect([r.A, r.B, r.C, r.D, r.E].map(place))
+                .toEqual([[0, 55], [15, 27.167], [42.833, 27.167], [57.833, 27.167], [72.833, 27.167]]);
+        });
+
+        it('lets a card in front cover the left of one behind that shows a step or more right of it', () => {
+            // c and d, then b and a, hide each other's names; b and a overlap
+            // both c and d. Two levels of 85%: b and a reach to 100%, and c
+            // and d to a step short of it. d ends at 85%, more than a step
+            // right of b, so b keeps its level's step over d's left; a
+            // starts a step right of d, which its column already does.
+            const r = slots(
+                [
+                    card('a', '11:10', '11:40'),
+                    card('b', '11:10', '20:10'),
+                    card('c', '10:25', '12:25'),
+                    card('d', '10:30', '12:00'),
+                ],
+                sideBySide(1, 361),
+            );
+            // (85% of 361px - 4px) / 2 = 151.4px, 41.946% of the lane.
+            expect([r.c, r.d, r.b, r.a].map(place)).toEqual([[0, 41.946], [43.054, 41.946], [15, 41.946], [58.054, 41.946]]);
+            expect(r.a.left).toBeCloseTo(r.d.left + 15, 9);
+        });
+
+        it('lets a card in front cover the left of one behind that shows exactly a step right of it', () => {
+            // In a lane of 80px, any width allowed, cards 5% apart: c and d,
+            // then b and a, hide each other's names, X and Y are a level
+            // each. Four levels of 55%: X stops b and a at 70%, and they stop
+            // c and d at 55%. b ends at 15% + (70% - 15% + 5%) / 2 - 5% =
+            // 40%, d at 55%, a step right of it, so b keeps its level's step
+            // over d's left. a starts at 45%, a step right of d; X a step
+            // right of a, and Y of X.
+            const r = slots(
+                [
+                    card('c', '09:00', '12:00'),
+                    card('d', '09:05', '12:00'),
+                    card('b', '10:00', '12:00'),
+                    card('a', '10:05', '12:00'),
+                    card('X', '10:45', '12:00'),
+                    card('Y', '11:25', '12:00'),
+                ],
+                sideBySide(1, 80, 0),
+            );
+            expect([r.c, r.d, r.b, r.a, r.X, r.Y].map(place))
+                .toEqual([[0, 25], [30, 25], [15, 25], [45, 25], [60, 25], [75, 25]]);
+        });
+
+        it('lays out one by one only the group that moved a card too narrow, keeping the group it moved and another side by side', () => {
+            // z runs under all. a, b and c hide each other's names; e and d
+            // do too, e overlapping b, and q and r later on. Three levels of
+            // 70%, 0.8% apart: a, b and c split 15% to 100%, 27.8% each,
+            // and e would start a step right of b, at 58.6%, leaving e and d
+            // (100% - 58.6% - 0.8%) / 2 = 20.3%, 101.5px. Laid out one by
+            // one, a, b and c make four levels of 55%: e and d start at
+            // their level's step, b ending less than a step right of e but
+            // starting a step left of it.
+            const r = slots(
+                [
+                    card('z', '09:00', '15:00'),
+                    card('a', '09:40', '10:25'),
+                    card('b', '09:50', '12:50'),
+                    card('c', '09:55', '10:50'),
+                    card('e', '10:55', '11:55'),
+                    card('d', '11:25', '12:20'),
+                    card('q', '13:30', '14:30'),
+                    card('r', '13:35', '14:30'),
+                ],
+                sideBySide(1, 500),
+            );
+            expect([r.z, r.a, r.b, r.c].map(place)).toEqual([[0, 55], [15, 55], [30, 55], [45, 55]]);
+            // (55% - 0.8%) / 2 = 27.1%, 135.5px; (70% - 0.8%) / 2 = 34.6%, 173px.
+            expect([r.e, r.d].map(place)).toEqual([[45, 27.1], [72.9, 27.1]]);
+            expect([r.q, r.r].map(place)).toEqual([[15, 34.6], [50.4, 34.6]]);
+        });
+
+        it('follows the cards behind a card too narrow back to the group that moved them', () => {
+            // At 2px a minute d and a hide each other's names, and c and e.
+            // Three levels of 70%, 1% apart: d and a split 0 to 70%, a step
+            // short of b; b starts a step right of a, at 50.5%, and c a step
+            // right of b, at 65.5%, leaving c and e (100% - 65.5% - 1%) / 2
+            // = 16.75%, 67px. b, a card alone, moved c; a moved b. d and a
+            // are laid out one by one, and then c and e, at the fourth of
+            // four levels of 55%, would be (55% - 1%) / 2 = 27%, 108px.
+            const r = slots(
+                [
+                    card('d', '09:05', '14:05'),
+                    card('a', '09:15', '11:15'),
+                    card('b', '10:20', '11:20'),
+                    card('c', '10:40', '11:00'),
+                    card('e', '10:55', '11:40'),
+                ],
+                sideBySide(2, WIDE),
+            );
+            expect([r.d, r.a, r.b, r.c, r.e].map(place)).toEqual([[0, 40], [15, 40], [30, 40], [45, 40], [60, 40]]);
+        });
+
+        // Levels of longer cards laid out as `slots` gives them: a group
+        // whose cards lie clear of each other across is side by side.
+        const levelsOf = (items: Span[], pxPerMinute: number, r: Record<string, LaneSlot>) => {
+            const apart = (a: Span, b: Span) =>
+                r[a.id].left + r[a.id].width <= r[b.id].left + 1e-9 || r[b.id].left + r[b.id].width <= r[a.id].left + 1e-9;
+            const units = slotsByLevel(items, pxPerMinute, members =>
+                members.every(a => members.every(b => a === b || !(a.start < b.end && b.start < a.end) || apart(a, b))));
+            return new Map(units.flatMap(unit => unit.members.map(m => [m.id, unit] as const)));
+        };
+
+        it('never covers a card behind from side to side: a step of it shows left or right of the card in front', () => {
+            for (const narrowestPx of [120, 0]) {
+                for (const { lanePx, pxPerMinute, items } of randomDays(20261122, 2000, [277, 322, 400, 600])) {
+                    if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
+                    const r = slots(cardsOf(items), sideBySide(pxPerMinute, lanePx, narrowestPx));
+                    const levels = levelsOf(items, pxPerMinute, r);
+                    const scene = JSON.stringify({ lanePx, pxPerMinute, narrowestPx, items });
+                    for (const front of items) {
+                        for (const behind of items) {
+                            if (!(front.start < behind.end && behind.start < front.end)) continue;
+                            if (levels.get(front.id)!.level <= levels.get(behind.id)!.level) continue;
+                            const f = r[front.id];
+                            const b = r[behind.id];
+                            const shows = Math.max(f.left - b.left, (b.left + b.width) - (f.left + f.width));
+                            expect(shows, scene).toBeGreaterThanOrEqual(levels.get(front.id)!.step - 1e-9);
+                        }
+                    }
+                }
+            }
+        });
+
+        it('starts every card at its level\'s step and fills its level\'s slot where no group is put side by side', () => {
+            for (const narrowestPx of [null, 120, 0]) {
+                for (const { lanePx, pxPerMinute, items } of randomDays(20261123, 2000, [277, 322, 400, 600])) {
+                    if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
+                    const units = slotsByLevel(items, pxPerMinute);
+                    if (narrowestPx !== null && units.some(u => u.members.length > 1)) continue;
+                    const r = slots(cardsOf(items), sideBySide(pxPerMinute, lanePx, narrowestPx));
+                    const scene = JSON.stringify({ lanePx, pxPerMinute, narrowestPx, items });
+                    for (const unit of narrowestPx === null ? slotsByLevel(items, pxPerMinute, () => false) : units) {
+                        for (const m of unit.members) {
+                            expect(r[m.id].left, scene).toBeCloseTo(unit.slotLeft, 9);
+                            expect(r[m.id].width, scene).toBeCloseTo(unit.slotWidth, 9);
+                        }
+                    }
+                }
+            }
+        });
+
+        it('lays a day out the same whatever order its cards come in', () => {
+            let seed = 7;
+            const random = () => {
+                seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+                return seed / 0x80000000;
+            };
+            for (const narrowestPx of [null, 120, 0]) {
+                for (const { lanePx, pxPerMinute, items } of randomDays(20261124, 1000, [277, 361, 600])) {
+                    const lane = sideBySide(pxPerMinute, lanePx, narrowestPx);
+                    const shuffled = items.slice();
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(random() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    expect(slots(cardsOf(shuffled), lane), JSON.stringify({ lanePx, pxPerMinute, narrowestPx, items }))
+                        .toEqual(slots(cardsOf(items), lane));
                 }
             }
         });
