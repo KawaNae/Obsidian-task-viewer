@@ -5,7 +5,7 @@ import type { TimerHost } from '../../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { TaskLayout, type LaneGeometry, type LaneSlot, type SideBySideInput } from '../TaskLayout';
+import { TaskLayout, type LaneSlot, type TimelineLane } from '../TaskLayout';
 import { LANE_INSET_PX } from '../TimedCardGeometry';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
@@ -18,6 +18,11 @@ import {
 } from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
+
+/** The lengths of the lane `measureLane` reads off a column and its stylesheet. */
+type LaneLengths = Pick<TimelineLane, 'widthPx' | 'bandInsetPx' | 'bandHaloBlockPx'>;
+
+const UNMEASURED: LaneLengths = { widthPx: 0, bandInsetPx: 0, bandHaloBlockPx: 0 };
 
 /**
  * What a day column was drawn with, kept so that its cards can be placed
@@ -39,7 +44,7 @@ export class TimelineSectionRenderer {
     /** The columns of the last draw. */
     private readonly lanes = new Map<HTMLElement, DrawnLane>();
     /** The lane every column of the last draw is laid out in (`measureLane`). */
-    private geometry: LaneGeometry | undefined;
+    private lengths: LaneLengths = UNMEASURED;
     /**
      * The column whose width is watched. Every day's column is as wide
      * (one grid track each), so the first stands for all.
@@ -63,7 +68,7 @@ export class TimelineSectionRenderer {
         this.lanes.clear();
         if (this.watched) this.laneResize.unobserve(this.watched);
         this.watched = cols[0] ?? null;
-        this.geometry = this.watched ? this.measureLane(this.watched) : undefined;
+        this.lengths = this.watched ? this.measureLane(this.watched) : UNMEASURED;
         if (this.watched) this.laneResize.observe(this.watched);
     }
 
@@ -79,7 +84,7 @@ export class TimelineSectionRenderer {
         this.lanes.set(container, lane);
 
         // Calculate layout for overlapping tasks
-        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour, this.geometry, this.sideBySideInput());
+        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour, this.lane());
 
         timedTasks.forEach(task => {
             if (!task.drawn) return;
@@ -105,21 +110,21 @@ export class TimelineSectionRenderer {
     }
 
     /**
-     * The lane of a day's column as laid out now, for TaskLayout to tell
+     * The lengths of a day's column as laid out now, for TaskLayout to tell
      * which cards a short card's name band lies over and how wide the cards
-     * put side by side are: the width the cards' percentages are of, and
-     * where a band's halo starts in from a card's left (the band's notch
-     * less the halo's reach, read from the CSS that draws them). Undefined
-     * while the column has no width (not laid out).
+     * put side by side are: the width the cards' percentages are of (0
+     * while the column has no width, not laid out), where a band's halo
+     * starts in from a card's left (the band's notch less the halo's
+     * reach), and how far the halo reaches below the band, the last two
+     * read from the CSS that draws them.
      */
-    private measureLane(col: HTMLElement): LaneGeometry | undefined {
-        const width = col.clientWidth - LANE_INSET_PX;
-        if (width <= 0) return undefined;
+    private measureLane(col: HTMLElement): LaneLengths {
         const style = getComputedStyle(col);
         const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
         return {
-            width,
-            bandInset: px('--task-card-overflow-ext-offset') - px('--task-card-halo-inline'),
+            widthPx: Math.max(0, col.clientWidth - LANE_INSET_PX),
+            bandInsetPx: px('--task-card-overflow-ext-offset') - px('--task-card-halo-inline'),
+            bandHaloBlockPx: px('--task-card-halo-block'),
         };
     }
 
@@ -153,20 +158,15 @@ export class TimelineSectionRenderer {
      */
     private laneResized(): void {
         if (!this.watched) return;
-        const geometry = this.measureLane(this.watched);
-        if (geometry?.width === this.geometry?.width) return;
-        this.geometry = geometry;
+        const lengths = this.measureLane(this.watched);
+        if (lengths.widthPx === this.lengths.widthPx) return;
+        this.lengths = lengths;
         this.placeLanesAgain();
     }
 
     /** Lay a column's cards out again and rewrite their places. */
     private placeLane(col: HTMLElement, lane: DrawnLane): void {
-        const layout = TaskLayout.calculateTaskLayout(
-            lane.tasks,
-            this.plugin.settings.startHour,
-            this.geometry,
-            this.sideBySideInput(),
-        );
+        const layout = TaskLayout.calculateTaskLayout(lane.tasks, this.plugin.settings.startHour, this.lane());
         for (const [id, el] of lane.cards) {
             const slot = layout.get(id);
             // A card the reconciler has since moved to another column is that column's.
@@ -175,13 +175,18 @@ export class TimelineSectionRenderer {
     }
 
     /**
-     * What TaskLayout needs, besides the lane, to put cards side by side,
-     * read when the cards are placed so it follows the zoom and the view's
-     * choice as they are then.
+     * The lane TaskLayout lays a column's cards out in, made here alone for
+     * a draw and for a placing again: the lengths measured last, and the
+     * zoom and the view's choice read as the cards are placed, so it
+     * follows them as they are then.
      */
-    private sideBySideInput(): SideBySideInput {
-        // --hour-height is 60px a zoom step, so a minute is the zoom in px.
-        return { pxPerMinute: this.getZoomLevel(), minCardWidthPx: this.getNarrowestSideBySide() };
+    private lane(): TimelineLane {
+        return {
+            ...this.lengths,
+            // --hour-height is 60px a zoom step, so a minute is the zoom in px.
+            pxPerMinute: this.getZoomLevel(),
+            narrowestSideBySidePx: this.getNarrowestSideBySide(),
+        };
     }
 
     /**

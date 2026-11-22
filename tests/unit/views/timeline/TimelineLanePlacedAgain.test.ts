@@ -59,10 +59,12 @@ class FakeResizeObserver {
     disconnect(): void { observing = []; }
 }
 
-// What the stylesheet gives a band: a notch of 24px, a 4px halo.
+// What the stylesheet gives a band: a notch of 24px, a halo reaching 4px
+// left of the notch and 3px below the band.
 const CSS_LENGTHS: Record<string, string> = {
     '--task-card-overflow-ext-offset': '24px',
     '--task-card-halo-inline': '4px',
+    '--task-card-halo-block': '3px',
 };
 
 function at(hhmm: string): number {

@@ -27,33 +27,37 @@ export interface LaneSlot {
 }
 
 /**
- * The lane the cards are laid out in, in px: `width` is what the cards'
- * percentages are of, and `bandInset` how far in from a card's left edge
- * its name band's halo starts; the band reaches the card's right edge. A
- * band covers only the cards it lies over right of that, not those under
- * its notch.
+ * The lane the cards are laid out in, read once a draw or once a placing
+ * again, so the layout follows the zoom, the lane's width and the view's
+ * way of laying out as they are then.
+ *
+ * - `pxPerMinute`: the lane's scale, which decides each card's height and
+ *   so whether it shows its name in a band.
+ * - `widthPx`: what the cards' percentages are of; 0 while the lane has no
+ *   width (not laid out), when a band is taken to lie over the card's whole
+ *   width and no cards are put side by side.
+ * - `bandInsetPx`: how far in from a card's left edge its name band's halo
+ *   starts; the band reaches the card's right edge. A band covers only the
+ *   cards it lies over right of that, not those under its notch.
+ * - `bandHaloBlockPx`: how far the halo traced round a name band reaches
+ *   past the band's foot.
+ * - `narrowestSideBySidePx`: the narrowest a card put side by side may be.
+ *   `null` never puts cards side by side; 0 puts them side by side whatever
+ *   the lane's width, short of a column narrower than nothing; a positive
+ *   number puts a group side by side only where each of its columns is at
+ *   least that wide.
  */
-export interface LaneGeometry {
-    width: number;
-    bandInset: number;
-}
-
-/**
- * What the layout needs, besides the lane's width, to put cards side by
- * side where one would hide the name of another: the lane's scale in px a
- * minute, and the narrowest a card may become. `null` never puts cards
- * side by side; 0 puts them side by side whatever the lane's width, short
- * of a column narrower than nothing; a positive number puts a group side
- * by side only where each of its columns is at least that wide.
- */
-export interface SideBySideInput {
+export interface TimelineLane {
     pxPerMinute: number;
-    minCardWidthPx: number | null;
+    widthPx: number;
+    bandInsetPx: number;
+    bandHaloBlockPx: number;
+    narrowestSideBySidePx: number | null;
 }
 
 /**
  * The narrowest a card put side by side may be, for a way of laying out
- * cards that would hide each other's names (`SideBySideInput.minCardWidthPx`):
+ * cards that would hide each other's names (`TimelineLane.narrowestSideBySidePx`):
  * never for `cascade`, `thresholdPx` for `auto`, any width for `sideBySide`.
  */
 export function narrowestSideBySidePx(mode: TimelineOverlapMode, thresholdPx: number): number | null {
@@ -92,17 +96,11 @@ const CASCADE_STEP = 15;
 const MIN_WIDTH = 40;
 
 export class TaskLayout {
-    /**
-     * `lane` is the lane as drawn. Without it (a lane not laid out yet) a
-     * band is taken to lie over the card's whole width, and no cards are
-     * put side by side. `sideBySide` puts side by side, in a lane of
-     * `lane.width`, the cards where one would hide the name of another.
-     */
+    /** Lays out a day's timed cards in `lane` (`TimelineLane`). */
     static calculateTaskLayout(
         tasks: DisplayTask[],
         startHour: number,
-        lane?: LaneGeometry,
-        sideBySide?: SideBySideInput,
+        lane: TimelineLane,
     ): Map<string, LaneSlot> {
         const layout = new Map<string, LaneSlot>();
         if (tasks.length === 0) return layout;
@@ -118,9 +116,9 @@ export class TaskLayout {
         // Each card's level and span, gathered across clusters for the ranks.
         const placed: { id: string; level: number; start: number; end: number }[] = [];
 
-        const usablePx = lane?.width ?? 0;
-        const minWidthPx = sideBySide?.minCardWidthPx ?? null;
-        const sideBySideOn = sideBySide !== undefined && minWidthPx !== null && usablePx > 0;
+        const usablePx = lane.widthPx;
+        const minWidthPx = lane.narrowestSideBySidePx;
+        const sideBySideOn = minWidthPx !== null && usablePx > 0;
 
         for (const unsorted of clusters) {
             const cluster = unsorted.slice().sort(byStart);
@@ -130,7 +128,7 @@ export class TaskLayout {
             // out as its cards one by one, which can narrow the columns of
             // the others, so the groups left are checked again until all
             // fit. A group is wholly side by side or not at all.
-            let groups = sideBySideOn ? nameCollisionGroups(cluster, sideBySide!.pxPerMinute) : [];
+            let groups = sideBySideOn ? nameCollisionGroups(cluster, lane.pxPerMinute) : [];
             let result = placeCluster(cluster, groups, usablePx);
             for (;;) {
                 const fitting = groups.filter((_, i) => result.columnWidthPx[i] >= minWidthPx!);
@@ -187,8 +185,8 @@ export class TaskLayout {
         // level is not enough to find it: a card shifted right in one cluster
         // lies over the first card of the next, and a card of no length
         // stands in front of a longer one starting with it.
-        const scale = lane ? lane.width / 100 : 1;
-        const bandInset = lane ? lane.bandInset : 0;
+        const scale = usablePx > 0 ? usablePx / 100 : 1;
+        const bandInset = usablePx > 0 ? lane.bandInsetPx : 0;
         for (const n of placed) {
             const below = layout.get(n.id)!;
             const belowLeft = below.left * scale;
