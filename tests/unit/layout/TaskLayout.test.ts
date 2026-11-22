@@ -792,6 +792,78 @@ describe('TaskLayout with name bands going up or down', () => {
     });
 });
 
+describe('TaskLayout right edges over a card behind', () => {
+    const LANE = laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 120 });
+
+    /** Whether each card's right edge, and its band's (`-` for a card with no band), lies over a card behind. */
+    function marks(tasks: DisplayTask[], lane: TimelineLane = LANE): Record<string, [boolean, boolean | '-']> {
+        const layout = TaskLayout.calculateTaskLayout(tasks, START_HOUR, lane);
+        return Object.fromEntries([...layout].map(([id, slot]) => [id, [slot.rightLiesOver, slot.bandRightLiesOver ?? '-']]));
+    }
+
+    it('marks the left of two cards side by side over a long card, its right edge over the long card, and not the right one, reaching the lane\'s edge', () => {
+        // P spans 0 to 273.7px; A spans 48.3 to 183.2px and B 187.2 to 322px, both in front of P.
+        const tasks = () => [card('P', '06:45', '21:45'), card('A', '09:00', '12:00'), card('B', '09:30', '10:30')];
+        expect(marks(tasks())).toEqual({ P: [false, '-'], A: [true, '-'], B: [false, '-'] });
+        // Shifted instead, A ends right of P and B, in front of A, reaches the lane's edge.
+        expect(marks(tasks(), laneOf({ widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: null })))
+            .toEqual({ P: [false, '-'], A: [false, '-'], B: [false, '-'] });
+    });
+
+    it('marks the band going down of the left of two short cards side by side, over the card after them, and not its body above that card', () => {
+        // k3 and k4 hang their bands over T's top, k3's ending at 159px of T's 322px.
+        expect(marks(day('k1 10:30-10:35, k2 10:35-10:40, k3 10:40-10:45, k4 10:45-10:50, T 10:50-12:00'))).toEqual({
+            k1: [false, false], k2: [false, false],
+            k3: [false, true], k4: [false, false],
+            T: [false, '-'],
+        });
+    });
+
+    it('marks no edge that ends where the card behind it ends', () => {
+        // g's band rises over P's body, both spanning the lane.
+        expect(marks(day('P 09:00-10:30, g 10:30-10:35, v 10:35-12:00')).g).toEqual([false, false]);
+        // c2 spans the lane in front of c3, the last of three columns,
+        // whose right edge comes to the lane's edge less a rounding.
+        const zero = laneOf({ pxPerMinute: 2, widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 0 });
+        expect(marks(day('c0 09:10-10:45, c1 09:15-10:25, c2 09:10-09:10, c3 09:20-10:25'), zero).c2).toEqual([false, false]);
+    });
+
+    it('marks a right edge over the band of a card behind, not its body', () => {
+        // In a lane of 150px, c4 spans 45 to 105px from 09:25. The bands of
+        // c2 (0 to 127.5px) and c5 (22.5 to 150px), both from 09:05, reach
+        // 2px down its top, their bodies 2px high above it. The bodies
+        // of c0 and c6 lie by its top too, past its right edge.
+        const lane = laneOf({ widthPx: 150, bandInsetPx: 20, narrowestSideBySidePx: null });
+        const layout = TaskLayout.calculateTaskLayout(
+            day('c0 09:35-09:40, c1 09:05-10:10, c2 09:05-09:05, c3 09:10-10:25, c4 09:25-10:10, c5 09:05-09:05, c6 09:30-09:35'),
+            START_HOUR,
+            lane,
+        );
+        const c4 = layout.get('c4')!;
+        const behind = (ids: string[]) => ids.some(id => layout.get(id)!.rank < c4.rank);
+        expect(['c2', 'c5'].map(id => layout.get(id)!.band)).toEqual(['down', 'down']);
+        expect(c4.rightLiesOver).toBe(behind(['c2', 'c5']) || behind(['c0', 'c6']));
+    });
+
+    it('marks no edge over the notch left of the band of a card behind', () => {
+        // In a lane of 150px at 0.67px a minute, c1 spans 0 to 60px, its
+        // band rising beside the band of c0, which spans 45 to 105px and
+        // rises from 65px, right of c1's edge.
+        const lane = laneOf({ pxPerMinute: 0.67, widthPx: 150, bandInsetPx: 20, narrowestSideBySidePx: 120 });
+        const r = marks(day('c0 09:25-09:35, c1 09:00-09:05, c2 09:10-11:05, c3 09:15-10:55, c4 09:30-09:35, c5 09:35-09:35'), lane);
+        expect(r.c1).toEqual([false, false]);
+    });
+
+    /** A day's cards from `id hh:mm-hh:mm` entries. */
+    function day(entries: string): DisplayTask[] {
+        return entries.split(',').map(entry => {
+            const [id, span] = entry.trim().split(/\s+/);
+            const [start, end] = span.split('-');
+            return card(id, start, end);
+        });
+    }
+});
+
 describe('narrowestSideBySidePx', () => {
     it('never puts cards side by side to cascade, at the threshold for auto, and at any width side by side', () => {
         expect(narrowestSideBySidePx('cascade', 120)).toBeNull();
