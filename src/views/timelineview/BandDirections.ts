@@ -14,6 +14,23 @@ import {
  */
 export const MAX_OPEN_CARDS_IN_REACH = 12;
 
+/**
+ * How much lower than its `topPx` a card is drawn: the stylesheet places
+ * a timed card at `calc(var(--start-minutes) * var(--hour-height) / 60 +
+ * 1px)` (`_task-card.css`). Between two cards the shift cancels out; at the
+ * lane's edges it does not.
+ */
+const CARD_DRAWN_LOWER_PX = 1;
+
+/**
+ * What the lane the cards are placed in is shorter than its day: a day
+ * column is `calc(24 * var(--hour-height))` tall with a 1px border at its
+ * top and at its bottom (`_timeline-grid.css`), the borders inside that
+ * height (`box-sizing: border-box`, `_base.css`), and its cards are placed
+ * inside the borders.
+ */
+const LANE_BORDERS_PX = 2;
+
 /** 0 up, 1 down: the bit a short card's direction is written as. */
 const DIRECTIONS: readonly BandDirection[] = ['up', 'down'];
 const UP = 0;
@@ -96,17 +113,24 @@ interface Step {
  * height or so of it, and the work at each card grows with how many of
  * them there are, not with the day's cards.
  *
- * A band going up that would rise above the lane's first minute (`topPx`
- * 0) is not tried: above the lane is the all-day row or the day's header,
- * which the band would lie over. Where more than `MAX_OPEN_CARDS_IN_REACH`
+ * A band is kept in the lane where it is drawn, its `dayHeightPx` being
+ * the day's 24 hours at the lane's scale. A band going up that would rise
+ * above the lane's top is not tried: above the lane is the all-day row or
+ * the day's header, which the band would lie over. A band going down that
+ * would hang below the lane's bottom is not tried either, unless the band
+ * going up would rise above the top too, when it goes down. Where more than `MAX_OPEN_CARDS_IN_REACH`
  * short cards whose direction is open would be in reach of the cards after
  * them, the card that would make one more, in start order, keeps its band
  * down, as two cards at one time do whose bands meet whichever way they go.
  * Which card that is follows from the cards' places alone.
  */
-export function chooseBandDirections(cards: readonly CardRange[], haloPx: number): Map<CardRange, BandDirection> {
+export function chooseBandDirections(
+    cards: readonly CardRange[],
+    haloPx: number,
+    dayHeightPx: number,
+): Map<CardRange, BandDirection> {
     const shorts = cards.filter(card => card.short).sort(byStart);
-    const steps = stepsOf(shorts, cards.filter(card => !card.short), haloPx);
+    const steps = stepsOf(shorts, cards.filter(card => !card.short), haloPx, dayHeightPx);
     const n = shorts.length;
 
     // From the last card back: `after[k]` is, for each way of `steps[k].open`,
@@ -175,7 +199,7 @@ function costOfStep(step: Step, m: number, d: number, rest: Costs, out: Cost): C
  * together: a card whose span ends 1px or less below the top of every
  * later card's span meets none of them.
  */
-function stepsOf(shorts: CardRange[], longs: CardRange[], haloPx: number): Step[] {
+function stepsOf(shorts: CardRange[], longs: CardRange[], haloPx: number, dayHeightPx: number): Step[] {
     const n = shorts.length;
     const spans = shorts.map(s => {
         const up = bandRangePx(s, 'up');
@@ -197,7 +221,7 @@ function stepsOf(shorts: CardRange[], longs: CardRange[], haloPx: number): Step[
         const s = shorts[k];
         fixed = fixed.filter(i => reaches(i, k));
         const step: Step = {
-            choice: bandRangePx(s, 'up')[0] >= 0 ? 'open' : 'down',
+            choice: choiceInLane(s, dayHeightPx - LANE_BORDERS_PX),
             open,
             dropped: 0,
             fixed: [[...ownCosts[k][UP]] as Cost, [...ownCosts[k][DOWN]] as Cost],
@@ -237,6 +261,13 @@ function stepsOf(shorts: CardRange[], longs: CardRange[], haloPx: number): Step[
         steps.push(step);
     }
     return steps;
+}
+
+/** Which ways a short card's band can go and stay in a lane `lanePx` tall, where it is drawn. */
+function choiceInLane(s: CardRange, lanePx: number): Choice {
+    if (bandRangePx(s, 'up')[0] + CARD_DRAWN_LOWER_PX < 0) return 'down';
+    if (bandRangePx(s, 'down')[1] + CARD_DRAWN_LOWER_PX > lanePx) return 'up';
+    return 'open';
 }
 
 /**

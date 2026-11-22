@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { TaskLayout } from '../../../src/views/timelineview/TaskLayout';
+import { NO_TASK_LOOKUP, toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
+import { makeTask } from '../helpers/makeTask';
 import { MAX_OPEN_CARDS_IN_REACH, chooseBandDirections } from '../../../src/views/timelineview/BandDirections';
 import {
     bandClash,
@@ -13,6 +16,8 @@ import {
 
 // The halo traced round a band reaches 3px below it (`--task-card-halo-block`).
 const HALO = 3;
+// The day's 24 hours at a zoom of 1px a minute.
+const DAY = 24 * 60;
 
 function minutes(hhmm: string): number {
     const [h, m] = hhmm.split(':').map(Number);
@@ -31,7 +36,7 @@ function day(cards: string): Map<string, CardRange> {
 /** Each short card's direction, by its ID, in the order the cards are given. */
 function directions(cards: string): Record<string, BandDirection> {
     const ranges = day(cards);
-    const chosen = chooseBandDirections([...ranges.values()], HALO);
+    const chosen = chooseBandDirections([...ranges.values()], HALO, DAY);
     const out: Record<string, BandDirection> = {};
     for (const [id, range] of ranges) {
         const dir = chosen.get(range);
@@ -87,6 +92,50 @@ describe('chooseBandDirections', () => {
         expect(directions('g 00:00-00:05, h 00:05-00:10, L 00:15-02:00')).toEqual({ g: 'down', h: 'down' });
     });
 
+    it('puts up a short card whose band going up rises to the lane\'s top as drawn, 1px below its range, and no higher', () => {
+        // Going down, a's band would make b move its content down.
+        expect(directions('a 00:19-00:24, b 00:30-01:30')).toEqual({ a: 'up' });
+        expect(directions('a 00:18-00:23, b 00:29-01:29')).toEqual({ a: 'down' });
+    });
+
+    it('puts up a short card whose band going down would hang below the lane\'s bottom as drawn, inside its border', () => {
+        // Drawn from 1416px, the band going down ends at the lane's 1438px.
+        expect(directions('g 23:35-23:40')).toEqual({ g: 'down' });
+        expect(directions('g 23:36-23:41')).toEqual({ g: 'up' });
+        expect(directions('g 23:55-24:00')).toEqual({ g: 'up' });
+    });
+
+    it('takes the lane\'s bottom at the day\'s end at the lane\'s scale, as TaskLayout lays the cards out', () => {
+        const at = (hhmm: string) => new Date(2026, 2, 11, ...hhmm.split(':').map(Number) as [number, number]).getTime();
+        const card = (id: string, start: string, end: string) => ({
+            ...toDisplayTask(makeTask({ id, content: id, startDate: '2026-03-11' }), 0, NO_TASK_LOOKUP),
+            drawn: { startMs: at(start), endMs: at(end) },
+        });
+        const band = (zoom: number, start: string, end: string) => TaskLayout.calculateTaskLayout([card('g', start, end)], 0, {
+            pxPerMinute: zoom, widthPx: 0, bandInsetPx: 0, bandHaloBlockPx: HALO, narrowestSideBySidePx: null,
+        }).get('g')!.band;
+        // At half a pixel a minute, 23:50 is 715px down a lane 720px tall;
+        // at 2px a minute, 12:00 is halfway down.
+        expect(band(0.5, '23:50', '23:55')).toBe('up');
+        expect(band(2, '12:00', '12:05')).not.toBe('up');
+    });
+
+    it('keeps down a short card held up at the lane\'s bottom by the card before it, where going up would clash with it all the same', () => {
+        // Apart from the bottom, h goes up and g down, as two cards 10
+        // minutes apart do; with g up, h's band meets g's either way.
+        expect(directions('h 10:30-10:35, g 10:40-10:45')).toEqual({ h: 'up', g: 'down' });
+        expect(directions('h 23:30-23:35, g 23:40-23:45')).toEqual({ h: 'down', g: 'up' });
+    });
+
+    it('keeps down a short card whose band would leave the lane going up and going down', () => {
+        // In a lane 50px tall, a card 30 minutes down leaves it going down
+        // only; in one 20px tall, a card at the top leaves it either way.
+        const low = cardRange(30, 35, 1);
+        const top = cardRange(0, 5, 1);
+        expect(chooseBandDirections([low], HALO, 50).get(low)).toBe('up');
+        expect(chooseBandDirections([top], HALO, 20).get(top)).toBe('down');
+    });
+
     it('puts the earlier card up where either card going up costs the same', () => {
         // a up and b down, or a down and b up: one band hides a name, no
         // card moves its content down, one band goes up.
@@ -100,7 +149,7 @@ describe('chooseBandDirections', () => {
 
     it('decides a run of 14 short cards as a whole, at the least cost of every way', () => {
         const ranges = [...day(run(14)).values()];
-        expect(costOf(ranges, chooseBandDirections(ranges, HALO))).toEqual(costOf(ranges, cheapestOfAll(ranges)));
+        expect(costOf(ranges, chooseBandDirections(ranges, HALO, DAY))).toEqual(costOf(ranges, cheapestOfAll(ranges, DAY)));
     });
 
     it('gives each short card the direction the cheapest of every way gives it, the earlier cards up on a tie', () => {
@@ -118,8 +167,8 @@ describe('chooseBandDirections', () => {
                 return cardRange(start, Math.min(1440, start + lengths[Math.floor(next() * lengths.length)]), zoom);
             });
             if (ranges.filter(r => r.short).length > 8) continue;
-            const chosen = chooseBandDirections(ranges, HALO);
-            const cheapest = cheapestOfAll(ranges);
+            const chosen = chooseBandDirections(ranges, HALO, DAY * zoom);
+            const cheapest = cheapestOfAll(ranges, DAY * zoom);
             for (const r of ranges.filter(r => r.short)) expect(chosen.get(r)).toBe(cheapest.get(r));
         }
     });
@@ -157,15 +206,24 @@ function costOf(cards: CardRange[], dirs: Map<CardRange, BandDirection>): Cost {
     return cost;
 }
 
-/** The cheapest way of all, every way tried in start order with up before down and the first of the cheapest kept. */
-function cheapestOfAll(cards: CardRange[]): Map<CardRange, BandDirection> {
+/**
+ * The cheapest way of all, every way tried in start order with up before
+ * down and the first of the cheapest kept. A card is drawn 1px below its
+ * `topPx`, in a lane 2px shorter than `dayPx` for its borders; a band that
+ * would leave the lane at the top goes down, and one that would leave it
+ * at the bottom only, up.
+ */
+function cheapestOfAll(cards: CardRange[], dayPx: number): Map<CardRange, BandDirection> {
+    const offTop = (s: CardRange) => bandRangePx(s, 'up')[0] + 1 < 0;
+    const offBottom = (s: CardRange) => bandRangePx(s, 'down')[1] + 1 > dayPx - 2;
     const shorts = cards.filter(c => c.short)
         .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
     let best: { cost: Cost; dirs: Map<CardRange, BandDirection> } | null = null;
     for (let v = 0; v < 1 << shorts.length; v++) {
         const dirs = new Map(shorts.map((s, p): [CardRange, BandDirection] =>
             [s, (v >> (shorts.length - 1 - p)) & 1 ? 'down' : 'up']));
-        if (shorts.some(s => dirs.get(s) === 'up' && bandRangePx(s, 'up')[0] < 0)) continue;
+        if (shorts.some(s => dirs.get(s) === 'up' && offTop(s))) continue;
+        if (shorts.some(s => dirs.get(s) === 'down' && offBottom(s) && !offTop(s))) continue;
         const cost = costOf(cards, dirs);
         const cheaper = !best || cost[0] - best.cost[0] || cost[1] - best.cost[1] || cost[2] - best.cost[2];
         if (!best || (cheaper as number) < 0) best = { cost, dirs };
