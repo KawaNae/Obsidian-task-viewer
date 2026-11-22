@@ -178,7 +178,7 @@ function costOfStep(step: Step, m: number, d: number, rest: Costs, out: Cost): C
 /**
  * Each short card's `Step`, `shorts` in start order. Whether two bands
  * can meet is told first by the span both directions of a band cover
- * together: a card whose span ends 1px or less below the top of every
+ * together: a card whose span ends less than 1px below the top of every
  * later card's span meets none of them.
  */
 function stepsOf(shorts: CardRange[], longs: CardRange[], haloPx: number, laneHeightPx: number): Step[] {

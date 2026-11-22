@@ -192,6 +192,12 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         narrowest = null;
         r.placeLanesAgain();
         expect(b.dataset.cascadeOffset).toBe('1');
+
+        // Side by side again, b stands 4px right of a with no card behind
+        // it, and its halo goes.
+        narrowest = 120;
+        r.placeLanesAgain();
+        expect(b.dataset.cascadeOffset).toBeUndefined();
     });
 
     it('marks a short card whose band goes up, and marks it again or no more when placed again at another zoom', () => {
