@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { MAX_CARDS_DECIDED_TOGETHER, chooseBandDirections } from '../../../src/views/timelineview/BandDirections';
+import { MAX_OPEN_CARDS_IN_REACH, chooseBandDirections } from '../../../src/views/timelineview/BandDirections';
 import {
     bandClash,
+    bandRangePx,
     cardRange,
     coversTop,
     namesMeet,
@@ -97,20 +98,80 @@ describe('chooseBandDirections', () => {
             .toEqual(['up', 'up', 'up', 'up', 'down', 'down', 'down', 'down']);
     });
 
-    it('for now, chooses a set too large to try every way of in lots, each counted against the lots before it', () => {
-        // The first lot goes as that many cards alone would. The second,
-        // alone, would go the same way; counted against the first lot's
-        // bands, it goes another.
-        const n = MAX_CARDS_DECIDED_TOGETHER;
-        const lot = Object.values(directions(run(n)));
-        const both = Object.values(directions(run(2 * n)));
-        expect(n).toBe(12);
-        expect(lot).toEqual(['up', 'up', 'up', 'down', 'down', 'down', 'up', 'up', 'down', 'down', 'down', 'down']);
-        expect(both.slice(0, n)).toEqual(lot);
-        expect(both.slice(n))
-            .toEqual(['up', 'up', 'up', 'down', 'down', 'down', 'down', 'up', 'up', 'down', 'down', 'down']);
+    it('decides a run of 14 short cards as a whole, at the least cost of every way', () => {
+        const ranges = [...day(run(14)).values()];
+        expect(costOf(ranges, chooseBandDirections(ranges, HALO))).toEqual(costOf(ranges, cheapestOfAll(ranges)));
+    });
+
+    it('gives each short card the direction the cheapest of every way gives it, the earlier cards up on a tie', () => {
+        let seed = 7;
+        const next = () => {
+            seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+            return seed / 0x7fffffff;
+        };
+        const lengths = [0, 0, 5, 5, 10, 15, 30, 45, 60, 120];
+        for (let scene = 0; scene < 1500; scene++) {
+            const zoom = [0.5, 1, 2][scene % 3];
+            const from = [0, 600, 1300][Math.floor(next() * 3)];
+            const ranges = Array.from({ length: 2 + Math.floor(next() * 9) }, () => {
+                const start = Math.min(1440, from + Math.floor(next() * 140));
+                return cardRange(start, Math.min(1440, start + lengths[Math.floor(next() * lengths.length)]), zoom);
+            });
+            if (ranges.filter(r => r.short).length > 8) continue;
+            const chosen = chooseBandDirections(ranges, HALO);
+            const cheapest = cheapestOfAll(ranges);
+            for (const r of ranges.filter(r => r.short)) expect(chosen.get(r)).toBe(cheapest.get(r));
+        }
+    });
+
+    it('keeps down the short card that would make more open cards in reach of one another than are weighed together', () => {
+        // Cards of no length at one time hide each other's bands whichever
+        // way they go, and a band going down makes the long card move its
+        // content down, so all go up but the one past the limit. The last
+        // card has no card after it to be weighed against, so it is open.
+        const n = MAX_OPEN_CARDS_IN_REACH;
+        const points = (count: number) => Array.from({ length: count }, (_, i) => `p${i} 10:00-10:00`).join(', ');
+        expect(Object.values(directions(`${points(n + 1)}, L 10:05-12:00`))).toEqual(Array(n + 1).fill('up'));
+        expect(Object.values(directions(`${points(n + 2)}, L 10:05-12:00`)))
+            .toEqual([...Array(n).fill('up'), 'down', 'up']);
     });
 });
+
+type Cost = [number, number, number];
+
+/** What a way of the bands costs: bands hiding a name, longer cards moving their content down, bands going up. */
+function costOf(cards: CardRange[], dirs: Map<CardRange, BandDirection>): Cost {
+    const shorts = cards.filter(c => c.short);
+    const cost: Cost = [0, 0, 0];
+    for (const s of shorts) {
+        const d = dirs.get(s)!;
+        if (d === 'up') cost[2]++;
+        for (const x of cards.filter(c => !c.short)) {
+            if (coversTop(s, d, x, HALO)) cost[1]++;
+            else if (bandClash(s, d, x, 'down', HALO)) cost[0]++;
+        }
+    }
+    shorts.forEach((a, i) => shorts.slice(i + 1).forEach(b => {
+        if (bandClash(a, dirs.get(a)!, b, dirs.get(b)!, HALO)) cost[0]++;
+    }));
+    return cost;
+}
+
+/** The cheapest way of all, every way tried in start order with up before down and the first of the cheapest kept. */
+function cheapestOfAll(cards: CardRange[]): Map<CardRange, BandDirection> {
+    const shorts = cards.filter(c => c.short)
+        .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+    let best: { cost: Cost; dirs: Map<CardRange, BandDirection> } | null = null;
+    for (let v = 0; v < 1 << shorts.length; v++) {
+        const dirs = new Map(shorts.map((s, p): [CardRange, BandDirection] =>
+            [s, (v >> (shorts.length - 1 - p)) & 1 ? 'down' : 'up']));
+        if (shorts.some(s => dirs.get(s) === 'up' && bandRangePx(s, 'up')[0] < 0)) continue;
+        const cost = costOf(cards, dirs);
+        const cheaper = !best || cost[0] - best.cost[0] || cost[1] - best.cost[1] || cost[2] - best.cost[2];
+        if (!best || (cheaper as number) < 0) best = { cost, dirs };
+    }
+    return best!.dirs;
+}
 
 describe('CardRanges', () => {
     // A short card at the lane's top whose band reaches 22px, and a long
