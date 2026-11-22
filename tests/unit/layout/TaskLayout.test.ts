@@ -897,21 +897,44 @@ describe('TaskLayout side by side', () => {
             return new Map(units.flatMap(unit => unit.members.map(m => [m.id, unit] as const)));
         };
 
-        it('never covers a card behind from side to side: a step of it shows left or right of the card in front', () => {
-            for (const narrowestPx of [120, 0]) {
-                for (const { lanePx, pxPerMinute, items } of randomDays(20261122, 2000, [277, 322, 400, 600])) {
-                    if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
-                    const r = slots(cardsOf(items), sideBySide(pxPerMinute, lanePx, narrowestPx));
-                    const levels = levelsOf(items, pxPerMinute, r);
-                    const scene = JSON.stringify({ lanePx, pxPerMinute, narrowestPx, items });
-                    for (const front of items) {
-                        for (const behind of items) {
-                            if (!(front.start < behind.end && behind.start < front.end)) continue;
-                            if (levels.get(front.id)!.level <= levels.get(behind.id)!.level) continue;
-                            const f = r[front.id];
-                            const b = r[behind.id];
-                            const shows = Math.max(f.left - b.left, (b.left + b.width) - (f.left + f.width));
-                            expect(shows, scene).toBeGreaterThanOrEqual(levels.get(front.id)!.step - 1e-9);
+        it('never covers a card behind from side to side where a card has a narrowest: a step of it shows left or right of the card in front', () => {
+            for (const { lanePx, pxPerMinute, items } of randomDays(20261122, 2000, [277, 322, 400, 600])) {
+                if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
+                const r = slots(cardsOf(items), sideBySide(pxPerMinute, lanePx));
+                const levels = levelsOf(items, pxPerMinute, r);
+                const scene = JSON.stringify({ lanePx, pxPerMinute, items });
+                for (const front of items) {
+                    for (const behind of items) {
+                        if (!(front.start < behind.end && behind.start < front.end)) continue;
+                        if (levels.get(front.id)!.level <= levels.get(behind.id)!.level) continue;
+                        const f = r[front.id];
+                        const b = r[behind.id];
+                        const shows = Math.max(f.left - b.left, (b.left + b.width) - (f.left + f.width));
+                        expect(shows, scene).toBeGreaterThanOrEqual(levels.get(front.id)!.step - 1e-9);
+                    }
+                }
+            }
+        });
+
+        it('keeps every group side by side with any width allowed, no card narrower than a step or than its share of its slot', () => {
+            for (const { lanePx, pxPerMinute, items } of randomDays(20261122, 2000, [100, 150, 200, 277, 361, 600])) {
+                if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
+                const r = slots(cardsOf(items), sideBySide(pxPerMinute, lanePx, 0));
+                const scene = JSON.stringify({ lanePx, pxPerMinute, items });
+                const gap = UNLAID.haloInlinePx / lanePx * 100;
+                for (const { members, slotWidth, step } of slotsByLevel(items, pxPerMinute)) {
+                    const { columnCount } = assignFirstFreeColumns(members, m => m.start, m => m.end);
+                    const share = (slotWidth - (columnCount - 1) * gap) / columnCount;
+                    for (const a of members) {
+                        expect(r[a.id].width, scene).toBeGreaterThan(0);
+                        expect(r[a.id].width, scene).toBeGreaterThanOrEqual(Math.min(step, share) - 1e-9);
+                        // A group is side by side: no two of its cards
+                        // overlapping in time overlap across the lane.
+                        for (const b of members) {
+                            if (a === b || !(a.start < b.end && b.start < a.end)) continue;
+                            const apart = r[a.id].left + r[a.id].width <= r[b.id].left + 1e-9
+                                || r[b.id].left + r[b.id].width <= r[a.id].left + 1e-9;
+                            expect(apart, scene).toBe(true);
                         }
                     }
                 }
@@ -990,6 +1013,64 @@ describe('TaskLayout side by side', () => {
             const r = slots([...at(10, 4), ...at(14, 5)], sideBySide(1, 12, 0));
             expect([0, 1, 2, 3].map(i => r[`10-${i}`].liesOver)).toEqual([false, false, false, false]);
             expect([1, 2, 3, 4].map(i => r[`14-${i}`].liesOver)).toEqual([true, true, true, true]);
+        });
+
+        it('stops a group in front where its columns are a step wide, and the card in front of it a step right of it', () => {
+            // In 400px, 4px of gap 1%: three levels of 70%, a step of 15%.
+            // a, b and b2 stop a step short of c at 85%, 27.667% each. c
+            // and d would start a step right of b2, at 72.333%, but stop
+            // where their columns are 15%: 15% + 85% - 1% - 2 x 15% = 69%.
+            // e starts a step right of c, at 84%, short of where it would
+            // be 15% wide.
+            const r = slots(
+                [
+                    card('a', '10:00', '11:00'),
+                    card('b', '10:05', '11:00'),
+                    card('b2', '10:10', '11:00'),
+                    card('c', '10:50', '12:00'),
+                    card('d', '10:55', '11:10'),
+                    card('e', '11:30', '12:30'),
+                ],
+                sideBySide(1, WIDE, 0),
+            );
+            expect([r.a, r.b, r.b2].map(place)).toEqual([[0, 27.667], [28.667, 27.667], [57.333, 27.667]]);
+            expect([r.c, r.d, r.e].map(place)).toEqual([[69, 15], [85, 15], [84, 16]]);
+        });
+
+        it('keeps both groups side by side where the one in front would be moved right past a step wide', () => {
+            // In 600px, 4px of gap 0.667%: d, e, f and i hide each other's
+            // names, and c, g and h; j follows. Three levels of 70%. The
+            // first group stops a step short of j and of the second at 85%,
+            // (85% - 3 x 0.667%) / 4 = 20.75% each. The second would start
+            // a step right of i, at 79.25% or further, but stops where its columns are
+            // 15%: 15% + 85% - 2 x 0.667% - 3 x 15% = 53.667%. j starts a
+            // step right of g, at 84.333%, to 100%.
+            const r = slots(
+                [
+                    card('c', '10:15', '12:15'),
+                    card('d', '09:15', '10:45'),
+                    card('e', '09:20', '12:20'),
+                    card('f', '09:20', '12:20'),
+                    card('g', '10:20', '15:20'),
+                    card('h', '10:20', '11:20'),
+                    card('i', '09:30', '12:30'),
+                    card('j', '11:25', '13:25'),
+                ],
+                sideBySide(1, 600, 0),
+            );
+            expect([r.d, r.e, r.f, r.i].map(place)).toEqual([[0, 20.75], [21.417, 20.75], [42.833, 20.75], [64.25, 20.75]]);
+            expect([r.c, r.g, r.h].map(place)).toEqual([[53.667, 15], [69.333, 15], [85, 15]]);
+            expect(place(r.j)).toEqual([84.333, 15.667]);
+        });
+
+        it('lays a day out as with a narrowest where every card in front can go as far right as the cards behind say', () => {
+            const tasks = () => [
+                card('A', '06:15', '14:30'),
+                card('B', '09:30', '11:15'),
+                card('C', '10:15', '16:30'),
+                card('D', '13:15', '16:30'),
+            ];
+            expect(slots(tasks(), sideBySide(0.67, 361, 0))).toEqual(slots(tasks(), sideBySide(0.67, 361)));
         });
 
         it('shifts a card starting below the name row of the card it overlaps', () => {

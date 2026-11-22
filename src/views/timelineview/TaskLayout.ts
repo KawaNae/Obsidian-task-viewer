@@ -88,8 +88,11 @@ export interface LaneSlot {
  * - `narrowestSideBySidePx`: the narrowest a card put side by side may be,
  *   or a card in front moved right of one. `null` never puts cards side by
  *   side; 0 puts them side by side whatever the lane's width, short of a
- *   card narrower than nothing; a positive number puts a group side by side
- *   only where each of its columns is at least that wide, and no card it
+ *   group narrower than nothing at its level's step, and moves a card in
+ *   front right only as far as leaves each of its columns a step wide, so
+ *   it may cover one behind but never thins away; a positive number puts a
+ *   group side by side only where each of its columns is at least that
+ *   wide, and no card it
  *   moves right is narrower: of the groups behind such a card, those
  *   nearest it are laid out as their cards one by one, then those further
  *   back while the card is still too narrow.
@@ -372,7 +375,10 @@ function firstFreeColumns(members: Item[], overlap: (a: Item, b: Item) => boolea
  * right of every card of a lower level it overlaps, so a card in front
  * never covers one behind from side to side. A card behind that reaches a
  * step or more right of the card's right edge shows there, and lets the
- * card cover its left. No card starts left of its level's step. In a
+ * card cover its left. No card starts left of its level's step. With any
+ * width allowed (`minWidthPx` 0) a card goes right only as far as leaves
+ * each column of its unit a step wide, and covers a card behind where
+ * that is not far enough. In a
  * cluster with no group side by side, every card behind a card starts at
  * its own level's step, so each card starts at its level's step and fills
  * its level's slot.
@@ -381,7 +387,8 @@ function firstFreeColumns(members: Item[], overlap: (a: Item, b: Item) => boolea
  * cards one by one: a group whose columns are narrower than `minWidthPx`
  * starting at its level's step, and, for a card left narrower than that by
  * moving right, the first group met on each way back through the cards
- * behind that moved it.
+ * behind that moved it. With any width allowed, no card moved right is
+ * left narrower than nothing, so only the first kind is given.
  */
 function placeCluster(
     cluster: Item[],
@@ -476,6 +483,19 @@ function placeCluster(
         return (reach(unit) - (left - floorOf(unit)) - (n - 1) * gap) / n;
     };
 
+    // How far right the cards behind may move a unit. With a narrowest a
+    // card may be, as far as they say: a card left narrower than that has a
+    // group behind it laid out one by one instead (below). With any width
+    // allowed no group is, and a unit stops where each of its columns is a
+    // step wide, or stays at its level's step if they are narrower there,
+    // so a card in front covers one behind rather than thinning away.
+    const farthestLeft = (unit: Unit): number => {
+        const floor = floorOf(unit);
+        if (minWidthPx !== 0) return Infinity;
+        const { columnCount: n } = columnsOf.get(unit)!;
+        return Math.max(floor, floor + reach(unit) - (n - 1) * gap - n * step);
+    };
+
     // A card of a lower level holds a card back where the two overlap and
     // it does not reach a step or more right of the card's right edge. A
     // unit's columns split the span from its left edge to its right edge,
@@ -486,8 +506,9 @@ function placeCluster(
     // A card alone is column 0 of 1, and its left edge the card's. Moving a
     // group right moves the right edges of all its columns but the last
     // right too, so a card behind that reached a step past one may hold it
-    // back then. The least left is sought again until it holds; it only
-    // grows, a card held back staying held back.
+    // back then. The least left is sought again until it holds, or the unit
+    // can go no further right; it only grows, a card held back staying held
+    // back, so a unit stopped short is still held back by the same cards.
     const EPS = 1e-9;
     const slots = new Map<Item, { width: number; left: number; level: number }>();
     const unitOf = new Map<Item, Unit>();
@@ -500,6 +521,7 @@ function placeCluster(
         const floor = floorOf(unit);
         const right = rightEdge(unit);
         const { columns, columnCount: n } = columnsOf.get(unit)!;
+        const farthest = farthestLeft(unit);
         let left = floor;
         let by = new Set<Item>();
         for (;;) {
@@ -527,8 +549,9 @@ function placeCluster(
                 }
             });
             by = leastBy;
-            if (least <= left + EPS) break;
-            left = least;
+            const next = Math.min(least, farthest);
+            if (next <= left + EPS) break;
+            left = next;
         }
         const w = columnWidth(unit, left);
         unit.members.forEach((member, i) => {
