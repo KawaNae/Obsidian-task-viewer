@@ -238,11 +238,11 @@ interface Span {
 
 /**
  * The groups of longer cards that hide each other's names, worked out here
- * on their own by time, each with the width of its level's slot, in % of the
- * lane: the width every card of its cluster has, the group taking one level
- * as one card. Cards with no band overlap only by time.
+ * on their own by time, each with its level and its level's slot, in % of
+ * the lane: the slot of a card shifted alone at that level, the group taking
+ * one level as one card. Cards with no band overlap only by time.
  */
-function slotsSplitByLevel(items: Span[], pxPerMinute: number): { members: Span[]; slotPercent: number }[] {
+function slotsByLevel(items: Span[], pxPerMinute: number): { members: Span[]; level: number; slotLeft: number; slotWidth: number }[] {
     const sorted = items.slice().sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
     const clusters: Span[][] = [];
     let clusterEnd = -1;
@@ -255,7 +255,7 @@ function slotsSplitByLevel(items: Span[], pxPerMinute: number): { members: Span[
             clusterEnd = Math.max(clusterEnd, item.end);
         }
     }
-    const out: { members: Span[]; slotPercent: number }[] = [];
+    const out: { members: Span[]; level: number; slotLeft: number; slotWidth: number }[] = [];
     for (const cluster of clusters) {
         const root = cluster.map((_, i) => i);
         const find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i])));
@@ -280,8 +280,12 @@ function slotsSplitByLevel(items: Span[], pxPerMinute: number): { members: Span[
             }
             levels.push(below + 1);
         });
-        const slotPercent = Math.max(40, 100 - (Math.max(...levels) - 1) * 15);
-        for (const unit of units) if (unit.members.length > 1) out.push({ members: unit.members, slotPercent });
+        const maxLevel = Math.max(...levels);
+        const slotWidth = Math.max(40, 100 - (maxLevel - 1) * 15);
+        const step = maxLevel > 1 ? (100 - slotWidth) / (maxLevel - 1) : 0;
+        units.forEach((unit, i) => {
+            if (unit.members.length > 1) out.push({ members: unit.members, level: levels[i], slotLeft: (levels[i] - 1) * step, slotWidth });
+        });
     }
     return out;
 }
@@ -533,7 +537,9 @@ describe('TaskLayout side by side', () => {
             );
             // (400px - 8px) / 3 = 130.7px each, where 85% would leave 110.7px.
             expect([r.a, r.b, r.c].map(place)).toEqual([[0, 32.667], [33.667, 32.667], [67.333, 32.667]]);
-            expect(place(r.d)).toEqual([15, 85]);
+            // d starts a step right of b, the right of the two it overlaps,
+            // and ends at its level's slot, the lane's edge.
+            expect(place(r.d)).toEqual([48.667, 51.333]);
         });
 
         it('stops a step short of a card in front overlapping its last column', () => {
@@ -544,13 +550,15 @@ describe('TaskLayout side by side', () => {
             );
             expect(place(r.a)).toEqual([0, 42]);
             expect(place(r.b)).toEqual([43, 42]);
-            expect(place(r.c)).toEqual([15, 85]);
+            // c starts a step right of b and ends at its level's slot, 100%.
+            expect(place(r.c)).toEqual([58, 42]);
         });
 
         it('stops a step short of the right edge a group in front reaches to', () => {
             // Three levels of 70%. c and d reach to 100%, e overlapping only
             // c; a, b and b2 stop a step short of it, at 85%, where c and
-            // d's slot alone would stop them at 70%.
+            // d's slot alone would stop them at 70%. With any width allowed,
+            // both groups stay side by side however narrow c and d become.
             const r = slots(
                 [
                     card('a', '10:00', '11:00'),
@@ -560,15 +568,19 @@ describe('TaskLayout side by side', () => {
                     card('d', '10:55', '11:10'),
                     card('e', '11:30', '12:30'),
                 ],
-                sideBySide(1, WIDE, 100),
+                sideBySide(1, WIDE, 0),
             );
-            // (340px - 4px) / 2 = 168px; (340px - 8px) / 3 = 110.7px.
-            expect([r.c, r.d].map(place)).toEqual([[15, 42], [58, 42]]);
+            // (340px - 8px) / 3 = 110.7px.
             expect([r.a, r.b, r.b2].map(place)).toEqual([[0, 27.667], [28.667, 27.667], [57.333, 27.667]]);
-            expect(place(r.e)).toEqual([30, 70]);
+            // c overlaps b2, whose right edge, at 85%, is less than a step
+            // right of c's, so c starts a step right of b2: c and d split
+            // 72.333% to 100%, (110.7px - 4px) / 2 = 53.3px each.
+            expect([r.c, r.d].map(place)).toEqual([[72.333, 13.333], [86.667, 13.333]]);
+            // e starts a step right of c and ends at its level's slot.
+            expect(place(r.e)).toEqual([87.333, 12.667]);
         });
 
-        it('never ends two cards overlapping in time at one place, nor makes a column of longer cards narrower than its level\'s slot split', () => {
+        it('never ends two cards overlapping in time at one place, nor a group of longer cards left of its level\'s slot, nor one on the first level narrower than its slot split', () => {
             let seed = 20261121;
             const random = () => {
                 seed = (seed + 0x6d2b79f5) | 0;
@@ -601,9 +613,15 @@ describe('TaskLayout side by side', () => {
                 // The groups are worked out here by time alone, which holds
                 // only where no card shows its name in a band.
                 if (items.some(it => cardRange(it.start, it.end, pxPerMinute).short)) continue;
-                for (const { members, slotPercent } of slotsSplitByLevel(items, pxPerMinute)) {
+                for (const { members, level, slotLeft, slotWidth } of slotsByLevel(items, pxPerMinute)) {
+                    // A group reaches right as far as its slot at least.
+                    const right = Math.max(...members.map(m => r[m.id].left + r[m.id].width));
+                    expect(right, scene).toBeGreaterThanOrEqual(slotLeft + slotWidth - 1e-6);
+                    // Only a card behind moves a group right of its level's
+                    // step, and the first level has none.
+                    if (level > 1) continue;
                     const { columnCount } = assignFirstFreeColumns(members, m => m.start, m => m.end);
-                    const split = (slotPercent / 100 * lanePx - (columnCount - 1) * UNLAID.haloInlinePx) / columnCount;
+                    const split = (slotWidth / 100 * lanePx - (columnCount - 1) * UNLAID.haloInlinePx) / columnCount;
                     for (const m of members) {
                         expect(r[m.id].width * lanePx / 100, scene).toBeGreaterThanOrEqual(split - 1e-6);
                     }
