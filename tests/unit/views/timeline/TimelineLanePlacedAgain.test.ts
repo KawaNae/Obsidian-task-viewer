@@ -166,6 +166,21 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         expect(observing).toEqual([]);
     });
 
+    it('lays the cards out by the halo the stylesheet traces, its reach below a band and left and right of a card', () => {
+        // In a column of 330px, g's band, going down from the lane's top,
+        // and its halo cover 22 + 3 - 10 = 15px of L's top, more than the
+        // 13.2px L can move its content down, so the band would hide L's
+        // name and the two are put side by side, 4px apart: 159px each.
+        const r = renderer(() => 120);
+        const col = column(330);
+        draw(r, [col], () => [card('g', '00:00', '00:05'), card('L', '00:10', '01:03')]);
+        const [g, l] = col.children;
+        const lanePx = (value: string) => Number(/\* ([\d.e-]+)\)$/.exec(value)![1]) * 322;
+        expect([lanePx(g.style.left), lanePx(g.style.width)].map(px => Number(px.toFixed(1)))).toEqual([0, 159]);
+        expect([lanePx(l.style.left), lanePx(l.style.width)].map(px => Number(px.toFixed(1)))).toEqual([163, 159]);
+        expect(l.style.props.has('--band-gap-minutes')).toBe(false);
+    });
+
     it('places the cards by the narrowest as it is when asked, not as it was drawn', () => {
         let narrowest: number | null = 120;
         const r = renderer(() => narrowest);

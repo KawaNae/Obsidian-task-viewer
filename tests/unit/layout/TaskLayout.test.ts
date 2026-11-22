@@ -151,20 +151,36 @@ describe('TaskLayout', () => {
             expect(g).toEqual({ A: undefined, B: undefined, C: 5 });
         });
 
+        it('takes it from a short card in front of a short card after it', () => {
+            // In a lane 40px wide C overlaps both and B is shifted right of
+            // C: A spans 0 to 28px, B 12 to 40px. A's band, from 20px, lies
+            // over B's band; B's band, from 32px, lies beside A, so A alone
+            // stands in front, and B starts 10 minutes after it.
+            const lane = laneOf({ widthPx: 40, bandInsetPx: 20 });
+            const tasks = [card('A', '00:10', '00:15'), card('B', '00:20', '00:25'), card('C', '00:20', '00:50')];
+            const layout = TaskLayout.calculateTaskLayout(tasks, START_HOUR, lane);
+            expect(layout.get('A')!.rank).toBeGreaterThan(layout.get('B')!.rank);
+            expect(gaps(tasks, lane)).toMatchObject({ A: undefined, B: 10 });
+        });
+
         it('takes none from a card behind', () => {
-            // Shifted, A and B lie over each other's bands, so each band
-            // would stand in front of the other card and either may; B takes
-            // the gap to A's band only where A stands in front of it.
+            // Shifted, A and B lie over each other's bands, so each would
+            // stand in front of the other; the two go round, and B, a level
+            // higher, stands in front. M, after both, takes the gap to the
+            // nearer of the two bands over its top, B's.
             const layout = TaskLayout.calculateTaskLayout(
-                [card('A', '00:00', '00:05'), card('B', '00:05', '00:10')],
+                [card('A', '00:00', '00:05'), card('B', '00:05', '00:10'), card('M', '00:20', '02:00')],
                 START_HOUR,
                 UNLAID,
             );
             const a = layout.get('A')!;
             const b = layout.get('B')!;
+            const m = layout.get('M')!;
             expect([a.band, b.band]).toEqual(['down', 'down']);
-            expect(b.bandGap).toBe(a.rank > b.rank ? 5 : undefined);
+            expect([b.rank, a.rank, m.rank]).toEqual([3, 2, 1]);
+            expect(b.bandGap).toBeUndefined();
             expect(a.bandGap).toBeUndefined();
+            expect(m.bandGap).toBe(15);
         });
 
         it('takes none from a card whose band lies over it only under the band\'s notch', () => {
@@ -180,6 +196,20 @@ describe('TaskLayout', () => {
             expect(TaskLayout.calculateTaskLayout(tasks, START_HOUR, UNLAID).get('B')).toMatchObject({ left: 0, width: 55 });
             expect(gaps(tasks, laneOf({ widthPx: 40, bandInsetPx: 20 })).B).toBeUndefined();
             expect(gaps(tasks, laneOf({ widthPx: 400, bandInsetPx: 20 })).B).toBe(10);
+        });
+
+        it('takes it from a band further up where the nearest lies over the card only under its notch', () => {
+            // D and E start with C and overlap it, so C spans 0 to 55% and
+            // B, shifted right of A, 15% to 70%. In a lane 40px wide B's band
+            // starts at 6 + 20 = 26px, right of C's end at 22px, and A's at
+            // 20px; in one 400px wide B's band starts at 80px.
+            const tasks = [
+                card('A', '00:09', '00:14'), card('B', '00:14', '00:19'), card('C', '00:24', '01:54'),
+                card('D', '00:24', '00:29'), card('E', '00:24', '00:29'),
+            ];
+            expect(TaskLayout.calculateTaskLayout(tasks, START_HOUR, UNLAID).get('C')).toMatchObject({ left: 0, width: 55 });
+            expect(gaps(tasks, laneOf({ widthPx: 40, bandInsetPx: 20 })).C).toBe(15);
+            expect(gaps(tasks, laneOf({ widthPx: 400, bandInsetPx: 20 })).C).toBe(10);
         });
     });
 });
@@ -758,6 +788,11 @@ describe('TaskLayout with name bands going up or down', () => {
             expect(front('g 00:00-00:05, h 00:05-00:10, M 01:00-02:00, N 01:40-02:30')).toEqual(['g', 'h', 'N', 'M']);
         });
 
+        it('takes two cards side by side starting together by their ends, the one ending first in front', () => {
+            expect(laid('a 11:00-11:05, b 11:00-11:10')).toEqual({ a: [163, 159, 'down'], b: [0, 159, 'down'] });
+            expect(front('a 11:00-11:05, b 11:00-11:10')).toEqual(['a', 'b']);
+        });
+
         it('for now, puts the higher level in front where the cards that must stand in front of each other go round', () => {
             // k1 shares C's level, side by side; k2 to k4 are shifted a level
             // each, their bands lying over each other and over k1's.
@@ -843,11 +878,12 @@ describe('TaskLayout right edges over a card behind', () => {
         expect(marks(day('c0 09:10-10:45, c1 09:15-10:25, c2 09:10-09:10, c3 09:20-10:25'), zero).c2).toEqual([false, false]);
     });
 
-    it('marks a right edge over the band of a card behind, not its body', () => {
+    it('marks no right edge under the bands of cards in front, which lie over its top', () => {
         // In a lane of 150px, c4 spans 45 to 105px from 09:25. The bands of
         // c2 (0 to 127.5px) and c5 (22.5 to 150px), both from 09:05, reach
-        // 2px down its top, their bodies 2px high above it. The bodies
-        // of c0 and c6 lie by its top too, past its right edge.
+        // 2px down its top, so both stand in front of it; c0 and c6, which
+        // overlap it in time, are shifted further right and stand in front
+        // too. c1 and c3, behind it, end left of its right edge.
         const lane = laneOf({ widthPx: 150, bandInsetPx: 20, narrowestSideBySidePx: null });
         const layout = TaskLayout.calculateTaskLayout(
             day('c0 09:35-09:40, c1 09:05-10:10, c2 09:05-09:05, c3 09:10-10:25, c4 09:25-10:10, c5 09:05-09:05, c6 09:30-09:35'),
@@ -855,9 +891,9 @@ describe('TaskLayout right edges over a card behind', () => {
             lane,
         );
         const c4 = layout.get('c4')!;
-        const behind = (ids: string[]) => ids.some(id => layout.get(id)!.rank < c4.rank);
         expect(['c2', 'c5'].map(id => layout.get(id)!.band)).toEqual(['down', 'down']);
-        expect(c4.rightLiesOver).toBe(behind(['c2', 'c5']) || behind(['c0', 'c6']));
+        expect(['c0', 'c2', 'c5', 'c6'].every(id => layout.get(id)!.rank > c4.rank)).toBe(true);
+        expect(c4.rightLiesOver).toBe(false);
     });
 
     it('marks no edge over the notch left of the band of a card behind', () => {
