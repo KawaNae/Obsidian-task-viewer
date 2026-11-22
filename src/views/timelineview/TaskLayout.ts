@@ -90,7 +90,9 @@ export interface LaneSlot {
  *   side; 0 puts them side by side whatever the lane's width, short of a
  *   card narrower than nothing; a positive number puts a group side by side
  *   only where each of its columns is at least that wide, and no card it
- *   moves right is narrower.
+ *   moves right is narrower: of the groups behind such a card, those
+ *   nearest it are laid out as their cards one by one, then those further
+ *   back while the card is still too narrow.
  */
 export interface TimelineLane {
     pxPerMinute: number;
@@ -189,11 +191,14 @@ export class TaskLayout {
         const sideBySideOn = minWidthPx !== null && usablePx > 0;
 
         for (const cluster of clustersOf(items, overlap)) {
-            // A group that leaves a card too narrow is laid out as its cards
-            // one by one (`placeCluster`), which changes the levels and the
-            // places of the others, so the groups left are laid out again
-            // until none does. A group is wholly side by side or not at all,
-            // and each round takes one group or more away.
+            // A group too narrow at its level's step, and the group nearest
+            // behind a card moved right too narrow, are laid out as their
+            // cards one by one (`placeCluster`). That changes the levels and
+            // the places of the others, so the groups left are laid out
+            // again until no card is too narrow, a group further behind
+            // being taken in a later round only if the card still is. A group
+            // is wholly side by side or not at all, and each round takes one
+            // group or more away.
             let groups = sideBySideOn ? nameCollisionGroups(cluster, overlap) : [];
             let result = placeCluster(cluster, groups, usablePx, lane.haloInlinePx, minWidthPx, overlap);
             while (result.oneByOne.size > 0) {
@@ -374,9 +379,9 @@ function firstFreeColumns(members: Item[], overlap: (a: Item, b: Item) => boolea
  *
  * Gives each card's slot and level, and the groups to lay out as their
  * cards one by one: a group whose columns are narrower than `minWidthPx`
- * starting at its level's step, and each group that a card left narrower
- * than that by moving right is moved by, through the cards behind that
- * moved it.
+ * starting at its level's step, and, for a card left narrower than that by
+ * moving right, the first group met on each way back through the cards
+ * behind that moved it.
  */
 function placeCluster(
     cluster: Item[],
@@ -430,6 +435,13 @@ function placeCluster(
             : { columns: [0], columnCount: 1 });
     }
 
+    // A unit's right edge is held as its reach right of its level's step, a
+    // card alone reaching as far as its level's slot is wide.
+    const floorOf = (unit: Unit): number => (levels.get(unit)! - 1) * step;
+    const reachOf = new Map<Unit, number>();
+    const reach = (unit: Unit): number => reachOf.get(unit) ?? width;
+    const rightEdge = (unit: Unit): number => floorOf(unit) + reach(unit);
+
     // A group reaches right of its level's slot, as far as its columns
     // would reach were each shifted a level on from the one before, and no
     // further than the lane's edge. A unit of a higher level that overlaps
@@ -440,9 +452,6 @@ function placeCluster(
     // step at least, so the group never ends left of its slot. A group's
     // right edge depends on those of the groups above it, so the highest
     // level goes first.
-    const rightOf = new Map<Unit, number>();
-    const rightEdge = (unit: Unit): number =>
-        rightOf.get(unit) ?? (levels.get(unit)! - 1) * step + width;
     const groupUnits = units.filter(unit => unit.members.length > 1)
         .sort((a, b) => levels.get(b)! - levels.get(a)!);
     for (const unit of groupUnits) {
@@ -455,8 +464,17 @@ function placeCluster(
             if (!lastColumn.some(m => other.members.some(o => overlap(m, o)))) continue;
             right = Math.min(right, rightEdge(other) - step);
         }
-        rightOf.set(unit, right);
+        reachOf.set(unit, right - floorOf(unit));
     }
+
+    // The width of each column of a unit starting at `left`: its columns
+    // split the span from there to its right edge, `gap` apart. Taken from
+    // the unit's reach, so a card alone at its level's step is its level's
+    // slot's width to the last digit.
+    const columnWidth = (unit: Unit, left: number): number => {
+        const { columnCount: n } = columnsOf.get(unit)!;
+        return (reach(unit) - (left - floorOf(unit)) - (n - 1) * gap) / n;
+    };
 
     // A card of a lower level holds a card back where the two overlap and
     // it does not reach a step or more right of the card's right edge. A
@@ -479,21 +497,24 @@ function placeCluster(
     const byLevel = units.slice().sort((a, b) => levels.get(a)! - levels.get(b)!);
     for (const unit of byLevel) {
         const level = levels.get(unit)!;
-        const floor = (level - 1) * step;
+        const floor = floorOf(unit);
         const right = rightEdge(unit);
         const { columns, columnCount: n } = columnsOf.get(unit)!;
-        // A column's width with the gap after it, for the unit's left edge.
-        const pitch = (left: number) => (right - left + gap) / n;
         let left = floor;
         let by = new Set<Item>();
         for (;;) {
+            const w = columnWidth(unit, left);
             let least = floor;
             let leastBy = new Set<Item>();
             unit.members.forEach((member, i) => {
                 const k = columns[i];
-                const memberRight = left + (k + 1) * pitch(left) - gap;
+                const memberRight = left + k * (w + gap) + w;
+                // Of the cards laid out so far, only those of a lower level
+                // can overlap the member: a unit takes a level above every
+                // unit before it that it overlaps, so units of one level
+                // never overlap.
                 for (const [card, slot] of slots) {
-                    if (slot.level >= level || !overlap(member, card)) continue;
+                    if (!overlap(member, card)) continue;
                     if (slot.left + slot.width >= memberRight + step - EPS) continue;
                     const l = (n * (slot.left + step) - k * (right + gap)) / (n - k);
                     if (l <= floor + EPS) continue;
@@ -509,8 +530,9 @@ function placeCluster(
             if (least <= left + EPS) break;
             left = least;
         }
+        const w = columnWidth(unit, left);
         unit.members.forEach((member, i) => {
-            slots.set(member, { width: pitch(left) - gap, left: left + columns[i] * pitch(left), level });
+            slots.set(member, { width: w, left: left + columns[i] * (w + gap), level });
             unitOf.set(member, unit);
             if (by.size > 0) movedBy.set(member, [...by]);
         });
@@ -521,7 +543,10 @@ function placeCluster(
     const px = (percent: number) => percent / 100 * usablePx;
     // A card is moved right only by a card behind that starts right of its
     // own level's step, itself moved or in a group, so following the cards
-    // that moved it comes to a group.
+    // that moved it comes to a group on each way back. Only the first group
+    // met on a way is taken: laid out one by one, it may leave the card wide
+    // enough, and a group further back that still moves the card too far is
+    // met first on that way when the cluster is laid out again.
     const traced = new Set<Item>();
     const takeGroupsMoving = (card: Item): void => {
         for (const behind of movedBy.get(card) ?? []) {
@@ -529,18 +554,13 @@ function placeCluster(
             traced.add(behind);
             const unit = unitOf.get(behind)!;
             if (unit.members.length > 1) oneByOne.add(unit.members);
-            takeGroupsMoving(behind);
+            else takeGroupsMoving(behind);
         }
     };
     for (const unit of units) {
-        if (unit.members.length > 1) {
-            const { columnCount: n } = columnsOf.get(unit)!;
-            const floor = (levels.get(unit)! - 1) * step;
-            const atStepPx = (px(rightEdge(unit) - floor) - (n - 1) * gapPx) / n;
-            if (atStepPx < minWidthPx) {
-                oneByOne.add(unit.members);
-                continue;
-            }
+        if (unit.members.length > 1 && px(columnWidth(unit, floorOf(unit))) < minWidthPx) {
+            oneByOne.add(unit.members);
+            continue;
         }
         for (const member of unit.members) {
             if (px(slots.get(member)!.width) < minWidthPx) takeGroupsMoving(member);
