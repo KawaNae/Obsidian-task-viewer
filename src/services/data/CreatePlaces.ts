@@ -7,21 +7,34 @@ import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { NoteSections } from '../parsing/tree/NoteSections';
 import { NoteTasks } from '../parsing/tree/NoteTasks';
 import type { ResolvedSources, SectionNode } from '../parsing/tree/Sections';
-import { Outline } from '../parsing/utils/Outline';
-import { Destination, type Section } from '../persistence/Destination';
+import { Destination } from '../persistence/Destination';
 import { draftOver, splitLines } from '../persistence/FileLines';
-import { periodicNoteSeed, putBlock } from '../persistence/Notes';
-import { Block, Placement, type HeadingLookup } from '../persistence/utils/Placement';
+import { putBlock, seedOf, type NoteSeed, type NoteSpot } from '../persistence/Notes';
+import { Block, type HeadingLookup } from '../persistence/utils/Placement';
 import type { Operations } from '../operations/Operations';
 import type { WriteAnswer, WriteTelling } from '../operations/WriteAnswer';
+import { spotIn } from './NotePlaces';
 
 /**
- * Where a new line goes: the daily note of a day, under the settings'
- * section (a view's empty space, "Create task"), or the head of a row's
- * children (a card's menu, "Add child task").
+ * The note a place to create in is in, by what it is: the daily note of
+ * `date` (`YYYY-MM-DD`), made of the day's template when it is not there;
+ * or the note at `path`, made empty when it is not there. The note's path
+ * and what it is made of are both read off this one value
+ * (`CreatePlaces.noteOf`, `CreatePlaces.create`), so they cannot name
+ * different days.
+ */
+export type PlaceNote =
+    | { kind: 'daily'; date: string }
+    | { kind: 'path'; path: string };
+
+/**
+ * Where a new line goes: in a note, where `spot` says (a section, or the
+ * end of the note) — a view's empty space, "Create task", puts it under the
+ * settings' section of the day's daily note ({@link CreatePlaces.dailyNote});
+ * or the head of a row's children (a card's menu, "Add child task").
  */
 export type CreatePlace =
-    | { kind: 'dailyNote'; date: string }
+    | { kind: 'note'; note: PlaceNote; spot: NoteSpot }
     | { kind: 'childOf'; taskId: string };
 
 /** What a line put in a place inherits there: the values its section resolves to, as a row's `cascadeContext` holds them. */
@@ -46,21 +59,24 @@ export interface Inheritance {
  * A daily note's day is not one of them: the reading gives a line no date of
  * the note's name.
  *
- * - `dailyNote`: the note of the day (`path`), there (`existing`) or made of
- *   its template (`new`), and the heading of the settings' section in it as
- *   the note stands now (`heading`: one, none — the write makes it — or more
- *   than one, where the write puts the line nowhere). `ignored`: a note the
- *   index does not read (`tv-ignore`), where the line is not seen.
+ * - `note`: the note at `path`, there (`existing`) or made of `seed` when
+ *   it is not (`new`: empty, or the daily note's template), and where in it
+ *   the line goes (`spot`): in a section, whose heading is as the note
+ *   stands now (`heading`: one, none — the write makes it — or more than
+ *   one, where the write puts the line nowhere); or at the end of the note
+ *   (`heading` null). `ignored`: a note the index does not read
+ *   (`tv-ignore`), where the line is not seen.
  * - `childOf`: the row the line goes under, by its text.
  * - `gone`: the row is no longer in the index.
  */
 export type PlaceFacts =
     | {
-        kind: 'dailyNote';
+        kind: 'note';
         path: string;
-        section: Section;
+        spot: NoteSpot;
         note: 'existing' | 'new';
-        heading: HeadingLookup;
+        seed: NoteSeed['kind'];
+        heading: HeadingLookup | null;
         ignored: boolean;
     } & Inheritance
     | { kind: 'childOf'; parent: string } & Inheritance
@@ -71,10 +87,11 @@ const PROBE = '- [ ] _';
 
 /**
  * The places a new task line is made in, as the hub on a task not written
- * yet asks of them: what a place is and what a line there inherits ({@link facts}), the
- * note a line put there is in ({@link noteOf}), and the write of the line
- * there ({@link create}). Beside `NoteOps`, which answers
- * the same of a send's destination.
+ * yet asks of them: the daily note's place ({@link dailyNote}), what a place
+ * is and what a line there inherits ({@link facts}), the note a line put
+ * there is in ({@link noteOf}), and the write of the line there
+ * ({@link create}). Beside `NoteOps`, which answers the same of a send's
+ * destination.
  */
 export class CreatePlaces {
     constructor(
@@ -84,14 +101,19 @@ export class CreatePlaces {
         private readonly getTask: (taskId: string) => Task | undefined,
     ) { }
 
+    /** The place a view's "Create task" on `date` puts a line in: the settings' section of the day's daily note. */
+    dailyNote(date: string): CreatePlace {
+        return { kind: 'note', note: { kind: 'daily', date }, spot: Destination.taskSection(this.getSettings()) };
+    }
+
     /**
-     * The path of the note a line put in `place` is in: the day's note,
-     * there or not yet; the note of the row it goes under. Null when the row
-     * is no longer in the index.
+     * The path of the note a line put in `place` is in: the day's note or
+     * the note at the path, there or not yet; the note of the row it goes
+     * under. Null when the row is no longer in the index.
      */
     noteOf(place: CreatePlace): string | null {
         if (place.kind === 'childOf') return this.getTask(place.taskId)?.file ?? null;
-        return notePath(dailyNotes(this.app), place.date);
+        return this.pathOf(place.note);
     }
 
     /**
@@ -100,10 +122,10 @@ export class CreatePlaces {
      * answer (`FileParsePipeline.resolveSections`, the reading the index
      * makes) for the section the line lands in:
      *
-     * - in a daily note, where the write puts it — the note's lines, or its
-     *   template's as expanded for the day when it is not there, with the
-     *   line put in the settings' section (`putBlock`, the heading made when
-     *   there is none, as the write makes it);
+     * - in a note, where the write puts it — the note's lines, or the lines
+     *   a note not there is made of (`Notes.seedOf`, as the write makes it),
+     *   with the line put where the spot says (`putBlock`, the heading made
+     *   when there is none, as the write makes it);
      * - under a row, the row's section, which its children stand in.
      */
     async facts(place: CreatePlace): Promise<PlaceFacts> {
@@ -115,41 +137,43 @@ export class CreatePlaces {
             return { kind: 'childOf', parent: parent.content, ...inheritanceAt(lines ?? [], parent.line, settings) };
         }
 
-        const desc = dailyNotes(this.app);
-        const path = notePath(desc, place.date);
+        const { spot } = place;
+        const path = this.pathOf(place.note);
+        const seed = seedFor(place.note);
         const there = await this.linesOf(path);
-        const lines = there ?? splitLines(await periodicNoteSeed(this.app, desc, place.date)).lines;
-        const section = Destination.taskSection(settings);
-        const heading = Placement.heading(Outline.read(lines), section.heading);
-        const facts = { kind: 'dailyNote' as const, path, section, note: there ? 'existing' as const : 'new' as const, heading };
-        if (heading.kind === 'many') return { ...facts, ignored: false, inherits: {} };
+        const lines = there ?? splitLines(await seedOf(this.app, seed)).lines;
+        const { heading, ignored } = spotIn(lines, spot, settings);
+        const facts = { kind: 'note' as const, path, spot, note: there ? 'existing' as const : 'new' as const, seed: seed.kind, heading, ignored };
+        if (heading?.kind === 'many' || ignored) return { ...facts, inherits: {} };
 
         const working = [...lines];
         let at: number;
         try {
-            const placed = putBlock(draftOver(working).draft, section, Block.line(PROBE));
-            if (typeof placed !== 'number') return { ...facts, ignored: false, inherits: {} };
+            const placed = putBlock(draftOver(working).draft, spot, Block.line(PROBE));
+            if (typeof placed !== 'number') return { ...facts, inherits: {} };
             at = placed;
         } catch (e) {
             logWarn(`[CreatePlaces] where a line goes in ${path} could not be read: ${String(e)}`);
-            return { ...facts, ignored: false, inherits: {} };
+            return { ...facts, inherits: {} };
         }
-        const read = FileParsePipeline.resolveSections(working, settings);
-        if (!read) return { ...facts, ignored: true, inherits: {} };
-        return { ...facts, ignored: false, ...inheritanceOf(NoteSections.at(read.root, at)) };
+        return { ...facts, ...inheritanceAt(working, at, settings) };
     }
 
     /**
-     * Write `row`, with its property lines, in `place`: under the daily
-     * note's section, the note made of its template when it is not there
-     * (`putInDailyNote`), or at the head of the row's children
+     * Write `row`, with its property lines, in `place`: where the spot says
+     * in the note, the note made of what its place says when it is not there
+     * (`Operations.putInNote`), or at the head of the row's children
      * (`insertLine`). Whether it was written, and why not, as the write
      * answers (`WriteAnswer`), told as `opts` says.
      */
     create(place: CreatePlace, row: NewRow, opts: WriteTelling = {}): Promise<WriteAnswer> {
-        return place.kind === 'dailyNote'
-            ? this.operations.putInDailyNote(place.date, row, opts)
-            : this.operations.insertLine(place.taskId, row, 'firstChild', undefined, opts);
+        if (place.kind === 'childOf') return this.operations.insertLine(place.taskId, row, 'firstChild', undefined, opts);
+        return this.operations.putInNote(this.pathOf(place.note), place.spot, row, { ...opts, seed: seedFor(place.note) });
+    }
+
+    /** The path of `note`: the day's note as the daily notes' settings name it, or the path itself. */
+    private pathOf(note: PlaceNote): string {
+        return note.kind === 'daily' ? notePath(dailyNotes(this.app), note.date) : note.path;
     }
 
     /** The lines of the note at `path` as the vault holds them; null when there is none. */
@@ -158,6 +182,11 @@ export class CreatePlaces {
         if (!(file instanceof TFile)) return null;
         return splitLines(await this.app.vault.read(file)).lines;
     }
+}
+
+/** What the note `note` names is made of when it is not there: the day's template, or nothing. */
+function seedFor(note: PlaceNote): NoteSeed {
+    return note.kind === 'daily' ? { kind: 'daily', date: note.date } : { kind: 'empty' };
 }
 
 /** What a line standing at `row` of `lines` inherits: its section's resolved values; none in a note the index does not read. */

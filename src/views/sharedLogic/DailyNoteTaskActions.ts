@@ -31,7 +31,7 @@ export function startDailyNoteTimer(
 /**
  * Open the hub on a task not written yet in the daily note of `date`: the
  * line it makes goes under the task section of that day's note
- * (`CreatePlace` `dailyNote`).
+ * (`CreatePlaces.dailyNote`).
  *
  * `date` is the file's day (the visual column). A click on the timed lane
  * knows the time under the cursor, `minutes` after that day's midnight (the
@@ -41,7 +41,7 @@ export function startDailyNoteTimer(
  * on the day alone.
  */
 export function openDraftHubForDailyNote(plugin: PluginContext, date: string, minutes?: number): void {
-    plugin.openDraftHub({ kind: 'dailyNote', date }, minutes === undefined ? { startDate: date } : timedSeed(date, minutes));
+    plugin.openDraftHub(plugin.getCreatePlaces().dailyNote(date), minutes === undefined ? { startDate: date } : timedSeed(date, minutes));
 }
 
 function timedSeed(date: string, minutes: number): DraftSeed {

@@ -37,15 +37,15 @@ async function places(files: Record<string, string>, template = '', settings: Pa
 describe('a daily note as a place', () => {
     it('there, with its heading: the line goes under it, and inherits nothing of the note\'s name', async () => {
         const { places: p } = await places({ [NOTE]: '# day\n## Tasks\n- [ ] 既存\n' });
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
-        expect(facts).toMatchObject({ kind: 'dailyNote', path: NOTE, note: 'existing', heading: { kind: 'one' }, ignored: false, inherits: {} });
+        const facts = await p.facts(p.dailyNote(DAY));
+        expect(facts).toMatchObject({ kind: 'note', path: NOTE, note: 'existing', heading: { kind: 'one' }, ignored: false, inherits: {} });
     });
 
     it('inherits what the frontmatter and the section give a line put there', async () => {
         const { places: p } = await places({
             [NOTE]: ['---', 'tv-start: "2031-01-15"', '---', '## Tasks', '- tv-start:: 10:00', '- tv-color:: ff0000', '- [ ] 既存', ''].join('\n'),
         });
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
+        const facts = await p.facts(p.dailyNote(DAY));
         expect(facts.inherits).toMatchObject({ startDate: '2031-01-15', startTime: '10:00', color: 'ff0000' });
     });
 
@@ -53,12 +53,12 @@ describe('a daily note as a place', () => {
         const { session, places: p } = await places({
             [NOTE]: ['---', 'tags: [ft]', 'tv-start: "2031-01-15"', '---', '## Tasks', '- tv-color:: ff0000', '- area:: lab', '- [ ] 既存', ''].join('\n'),
         });
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
+        const facts = await p.facts(p.dailyNote(DAY));
         expect(facts.inheritedFrom?.fields.startDate).toMatchObject({ kind: 'frontmatter' });
         expect(facts.inheritedFrom?.fields.color).toMatchObject({ kind: 'section' });
         expect(Object.keys(facts.inheritedFrom?.properties ?? {})).toEqual(['area']);
 
-        await p.create({ kind: 'dailyNote', date: DAY }, { line: '- [ ] 新しい' }, { tellRefusal: false });
+        await p.create(p.dailyNote(DAY), { line: '- [ ] 新しい' }, { tellRefusal: false });
         const written = session.index.getTasks().find(task => task.content === '新しい')!;
         expect(facts.inheritedFrom).toEqual(written.inheritedFrom);
         expect(facts.inherits).toEqual(written.cascadeContext);
@@ -66,7 +66,7 @@ describe('a daily note as a place', () => {
 
     it('there without the heading: the write makes it at the end, where the line inherits the frontmatter', async () => {
         const { places: p } = await places({ [NOTE]: ['---', 'tv-due: "2031-01-20"', '---', '# day', ''].join('\n') });
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
+        const facts = await p.facts(p.dailyNote(DAY));
         expect(facts).toMatchObject({ note: 'existing', heading: { kind: 'none' }, inherits: { due: '2031-01-20' } });
     });
 
@@ -74,8 +74,8 @@ describe('a daily note as a place', () => {
         const { places: p } = await places({
             [NOTE]: ['---', 'tv-color: ff0000', '体重[kg]:', 'owner: me', '---', 'Inherit properties:', '- 時給:: 1450', '- tv-color:: 00ff00', '', '## Tasks', '- [ ] 既存', ''].join('\n'),
         });
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
-        if (facts.kind !== 'dailyNote') throw new Error(facts.kind);
+        const facts = await p.facts(p.dailyNote(DAY));
+        if (facts.kind !== 'note') throw new Error(facts.kind);
         expect(facts.inherits.color).toBe('00ff00');
         expect(Object.keys(facts.inherits.properties ?? {})).toEqual(['時給']);
         expect(facts.inherits.properties?.['時給']?.value).toMatchObject({ type: 'number', number: 1450 });
@@ -83,7 +83,7 @@ describe('a daily note as a place', () => {
 
     it('with the heading twice: no one place, and nothing inherited', async () => {
         const { places: p } = await places({ [NOTE]: '## Tasks\n## Tasks\n' });
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
+        const facts = await p.facts(p.dailyNote(DAY));
         expect(facts).toMatchObject({ heading: { kind: 'many', count: 2 }, inherits: {} });
         expect(facts.inheritedFrom).toBeUndefined();
     });
@@ -92,22 +92,23 @@ describe('a daily note as a place', () => {
         const { places: p } = await places({
             [TEMPLATE]: ['# {{title}}', '## Tasks', '- tv-start:: 09:00', ''].join('\n'),
         }, 'Templates/Daily');
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
-        expect(facts).toMatchObject({ kind: 'dailyNote', path: NOTE, note: 'new', heading: { kind: 'one' }, inherits: { startTime: '09:00' } });
+        const facts = await p.facts(p.dailyNote(DAY));
+        expect(facts).toMatchObject({ kind: 'note', path: NOTE, note: 'new', heading: { kind: 'one' }, inherits: { startTime: '09:00' } });
     });
 
     it('a note the views do not read (tv-ignore): said as such', async () => {
         const { places: p } = await places({ [NOTE]: ['---', 'tv-ignore: true', '---', '## Tasks', ''].join('\n') });
-        const facts = await p.facts({ kind: 'dailyNote', date: DAY });
+        const facts = await p.facts(p.dailyNote(DAY));
         expect(facts).toMatchObject({ ignored: true, inherits: {} });
     });
 
     it('the write puts the line under the heading, the note made when it is not there', async () => {
         const { contents, places: p } = await places({});
-        const answer = await p.create({ kind: 'dailyNote', date: DAY }, { line: '- [ ] 新しい @10:00' }, { tellRefusal: false });
+        const answer = await p.create(p.dailyNote(DAY), { line: '- [ ] 新しい @10:00' }, { tellRefusal: false });
         expect(answer.written).toBe(true);
         expect(contents.get(NOTE)).toBe('## Tasks\n- [ ] 新しい @10:00\n');
     });
+
 });
 
 describe('the head of a row\'s children as a place', () => {

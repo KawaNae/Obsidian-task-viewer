@@ -117,12 +117,12 @@ function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: tr
 const places = {
     noteOf: () => '2031-01-15.md',
     facts: async (): Promise<PlaceFacts> => ({
-        kind: 'dailyNote', path: '2031-01-15.md', section: { heading: 'Tasks', level: 2, side: 'head' },
-        note: 'existing', heading: { kind: 'none' }, ignored: false, inherits: {},
+        kind: 'note', path: '2031-01-15.md', spot: { heading: 'Tasks', level: 2, side: 'head' },
+        note: 'existing', seed: 'daily', heading: { kind: 'none' }, ignored: false, inherits: {},
     }),
     create: async (): Promise<WriteAnswer> => ({ written: true }),
 } as unknown as CreatePlaces;
-const PLACE: CreatePlace = { kind: 'dailyNote', date: '2031-01-15' };
+const PLACE: CreatePlace = { kind: 'note', note: { kind: 'daily', date: '2031-01-15' }, spot: { heading: 'Tasks', level: 2, side: 'head' } };
 
 /** What each draw of the card was given: its content, and whether it is one nothing is done on. */
 const draws = (deps: TaskHubDeps) => (deps.taskRenderer.render as ReturnType<typeof vi.fn>).mock.calls
