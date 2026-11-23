@@ -104,15 +104,16 @@ export interface TimelineLane {
  * The narrowest a column of a cluster put side by side may be, for a way of
  * laying out cards (`TimelineLane.narrowestSideBySidePx`): never side by
  * side for `cascade`, any width for `sideBySide`, and for `auto` the
- * narrowest a card shows its start and end time whole (`fullTimePx`), so a
- * card put side by side never has its times cut. Under `auto` a width of 0
+ * narrowest a card shows its start and end time whole and has a box for its
+ * name as wide as those times (`legibleCardPx`), so a card put side by side
+ * never has its times cut nor its name wrapped narrower than them. Under `auto` a width of 0
  * or less, which was not measured, puts no cluster side by side: as 0 it
  * would put every cluster side by side however narrow, as `sideBySide`.
  */
-export function narrowestSideBySidePx(mode: TimelineOverlapMode, fullTimePx: number): number | null {
+export function narrowestSideBySidePx(mode: TimelineOverlapMode, legibleCardPx: number): number | null {
     switch (mode) {
         case 'cascade': return null;
-        case 'auto': return fullTimePx > 0 ? fullTimePx : null;
+        case 'auto': return legibleCardPx > 0 ? legibleCardPx : null;
         case 'sideBySide': return 0;
     }
 }

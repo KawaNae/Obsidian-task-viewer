@@ -23,14 +23,15 @@ import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 /**
  * The lengths of the lane `measureLane` reads off a column and its
  * stylesheet, and the narrowest a card there shows its start and end time
- * whole (`fullTimePx`), which TaskLayout is given as the narrowest a column
- * put side by side may be under `auto`.
+ * whole and has a box for its name as wide as those times
+ * (`legibleCardPx`), which TaskLayout is given as the narrowest a column put
+ * side by side may be under `auto`.
  */
 type LaneLengths = Pick<TimelineLane, 'widthPx' | 'bandInsetPx' | 'haloBlockPx' | 'haloInlinePx'> & {
-    fullTimePx: number;
+    legibleCardPx: number;
 };
 
-const UNMEASURED: LaneLengths = { widthPx: 0, bandInsetPx: 0, haloBlockPx: 0, haloInlinePx: 0, fullTimePx: 0 };
+const UNMEASURED: LaneLengths = { widthPx: 0, bandInsetPx: 0, haloBlockPx: 0, haloInlinePx: 0, legibleCardPx: 0 };
 
 /**
  * What a day column was drawn with, kept so that its cards can be placed
@@ -63,15 +64,16 @@ export class TimelineSectionRenderer {
     /**
      * @param getOverlapMode the view's way of laying out overlapping cards,
      *   read as the cards are placed
-     * @param measureFullTime the narrowest a card in a column shows its start
-     *   and end time whole (`measureFullTimePx`); 0 where it cannot tell
+     * @param measureLegibleCard the narrowest a card in a column shows its
+     *   start and end time whole and has a box for its name as wide as those
+     *   times (`measureLegibleCardPx`); 0 where it cannot tell
      */
     constructor(
         private plugin: PluginContext & TimerHost,
         private taskRenderer: TaskCardRenderer,
         private getZoomLevel: () => number,
         private getOverlapMode: () => TimelineOverlapMode,
-        private measureFullTime: (col: HTMLElement) => number,
+        private measureLegibleCard: (col: HTMLElement) => number,
     ) { }
 
     /**
@@ -89,8 +91,8 @@ export class TimelineSectionRenderer {
 
     /**
      * The stylesheet changed (a font, its size, a theme): measure every
-     * length of the lane again, the width a card shows its times in with
-     * them, and place every column's cards again if one differs. Such a
+     * length of the lane again, the narrowest legible card with them, and
+     * place every column's cards again if one differs. Such a
      * change leaves the column's width as it is, so no resize tells of it.
      */
     public measureLanesAgain(): void {
@@ -103,7 +105,7 @@ export class TimelineSectionRenderer {
     }
 
     private measureAll(col: HTMLElement): LaneLengths {
-        return { ...this.measureLane(col), fullTimePx: this.measureFullTime(col) };
+        return { ...this.measureLane(col), legibleCardPx: this.measureLegibleCard(col) };
     }
 
     public render(
@@ -155,15 +157,15 @@ export class TimelineSectionRenderer {
      * cards put side by side stand apart; the last three read from the CSS
      * that draws them.
      */
-    private measureLane(col: HTMLElement): Omit<LaneLengths, 'fullTimePx'> {
+    private measureLane(col: HTMLElement): Omit<LaneLengths, 'legibleCardPx'> {
         const style = getComputedStyle(col);
         const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
         const haloInlinePx = px('--task-card-halo-inline');
         // The cards are placed absolutely in the column (`position:
         // relative`), so their 100% is the column's padding box, as wide as
         // laid out, a fraction of a px included. clientWidth rounds it to a
-        // whole px, and a column put side by side at the narrowest its times
-        // show whole in could then be drawn up to half a px narrower than
+        // whole px, and a column put side by side at the narrowest legible
+        // card could then be drawn up to half a px narrower than
         // laid out here. The computed width is the box's laid-out width,
         // which no transform scales; it is the border box or the content box
         // by `box-sizing`, and 0 for a column not laid out (`auto`).
@@ -207,8 +209,9 @@ export class TimelineSectionRenderer {
      * again. A lane of the width the draw measured writes nothing: the width
      * is read off the column as laid out, so one layout reads one width,
      * fractions and all, and placing the cards leaves the column as wide.
-     * The width a card shows its times in is kept once measured: a column's width does
-     * not change the font its cards are drawn in, and this runs again and
+     * The narrowest legible card is kept once measured: a column's width
+     * does not change the font or the stylesheet its cards are drawn in,
+     * and this runs again and
      * again while a pane's edge is dragged. A column drawn before it was laid
      * out measured none, so it is measured as the column first has a width.
      */
@@ -216,10 +219,10 @@ export class TimelineSectionRenderer {
         if (!this.watched) return;
         const lengths = this.measureLane(this.watched);
         if (lengths.widthPx === this.lengths.widthPx) return;
-        const fullTimePx = this.lengths.fullTimePx > 0 || lengths.widthPx === 0
-            ? this.lengths.fullTimePx
-            : this.measureFullTime(this.watched);
-        this.lengths = { ...lengths, fullTimePx };
+        const legibleCardPx = this.lengths.legibleCardPx > 0 || lengths.widthPx === 0
+            ? this.lengths.legibleCardPx
+            : this.measureLegibleCard(this.watched);
+        this.lengths = { ...lengths, legibleCardPx };
         this.placeLanesAgain();
     }
 
@@ -238,15 +241,16 @@ export class TimelineSectionRenderer {
      * a draw and for a placing again: the lengths measured last, and the
      * zoom and the view's way of laying out read as the cards are placed, so
      * it follows them as they are then. Under `auto` a cluster goes side by
-     * side where each column shows its cards' start and end times whole.
+     * side where each column shows its cards' start and end times whole
+     * and has a box for their names as wide as those times.
      */
     private lane(): TimelineLane {
-        const { fullTimePx, ...lengths } = this.lengths;
+        const { legibleCardPx, ...lengths } = this.lengths;
         return {
             ...lengths,
             // --hour-height is 60px a zoom step, so a minute is the zoom in px.
             pxPerMinute: this.getZoomLevel(),
-            narrowestSideBySidePx: narrowestSideBySidePx(this.getOverlapMode(), fullTimePx),
+            narrowestSideBySidePx: narrowestSideBySidePx(this.getOverlapMode(), legibleCardPx),
         };
     }
 

@@ -872,15 +872,15 @@ describe('TaskLayout halo past the left, top and bottom of a card over a card be
 });
 
 describe('narrowestSideBySidePx', () => {
-    it('never puts cards side by side to cascade, where their times show whole for auto, and at any width side by side', () => {
+    it('never puts cards side by side to cascade, where a card is legible for auto, and at any width side by side', () => {
         expect(narrowestSideBySidePx('cascade', 120)).toBeNull();
         expect(narrowestSideBySidePx('auto', 120)).toBe(120);
-        expect(narrowestSideBySidePx('auto', 79.03125)).toBe(79.03125);
+        expect(narrowestSideBySidePx('auto', 107.03125)).toBe(107.03125);
         expect(narrowestSideBySidePx('sideBySide', 120)).toBe(0);
     });
 
     // As 0 the width would put every cluster side by side however narrow.
-    it('puts no cluster side by side for auto where the width the times show whole in is 0 or less', () => {
+    it('puts no cluster side by side for auto where the narrowest legible card is 0 or less', () => {
         expect(narrowestSideBySidePx('auto', 0)).toBeNull();
         expect(narrowestSideBySidePx('auto', -1)).toBeNull();
         expect(narrowestSideBySidePx('auto', Number.NaN)).toBeNull();

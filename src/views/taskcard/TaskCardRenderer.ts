@@ -416,6 +416,8 @@ export class TaskCardRenderer extends Component {
             });
         }
 
+        // Timeline reads where a name is laid out off a frame of this body
+        // (`measureLegibleCardPx`), which builds the body as this does.
         const contentContainer = container.createDiv('task-card__content');
         const parentMarkdown = this.buildParentMarkdown(task, settings);
 
