@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
+import { t } from '../../../src/i18n';
 import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
 
 /**
@@ -184,6 +185,25 @@ describe('the hub\'s name', () => {
 
         s.host.setSourceOpen(false);
         expect(s.name.disabled).toBe(false);
+    });
+
+    it('withdraws the question a close put once the form is shut, the name typed kept, and puts it again at a close once the form opens', () => {
+        const s = setUp();
+        const ask = () => s.root.find('tv-form__ask')!;
+        s.name.focus();
+        s.name.type('新しい名前 @2026-01-01');
+        expect(s.form.beforeClose()).toBe('stay');
+        expect([ask().style.display, ask().text]).toEqual(['', t('modal.hub.unsavedAsk', { fields: t('modal.taskName') })]);
+
+        s.host.setSourceOpen(true);
+        expect(ask().style.display).toBe('none');
+        s.host.setSourceOpen(false);
+        expect(ask().style.display).toBe('none');
+        expect(s.name.value).toBe('新しい名前 @2026-01-01');
+
+        expect(s.form.beforeClose()).toBe('stay');
+        expect(ask().style.display).toBe('');
+        expect(s.updateTask).not.toHaveBeenCalled();
     });
 
     it('lets a close go at once while the form is shut, saving nothing and not waiting for a write under way', () => {

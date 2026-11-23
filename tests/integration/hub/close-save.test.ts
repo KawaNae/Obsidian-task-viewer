@@ -2,7 +2,8 @@
  * The hub's close, in the running E2E vault: every way the user
  * closes it saves what is typed with no blur waited for, a value that cannot
  * be saved keeps it open and asks (the focus on fix), a write refused keeps
- * it open with why at the form's end and no notice, and the source mode asks
+ * it open with why at the form's end and no notice, the source mode opened
+ * withdraws that question until the next close, and the source mode asks
  * nothing over a draft that writes nothing.
  *
  * The fields are typed in as a person types (the text, then its `input`
@@ -185,6 +186,41 @@ describe('closing the hub', () => {
         expect(steps.again).toEqual({ open: true, onFix: true });
         expect(steps.fixing).toEqual({ ask: null, onDate: true });
         expect(steps.discarded).toEqual({ open: false, disk: NOTE.replace('- [ ] 親 @2026-10-01', '- [ ] 親2 @2026-10-01') });
+    });
+
+    it('withdraws the question once the source opens, the source\'s row alone below, and asks again at a close once back on the form, the date kept', async () => {
+        openHub('親');
+        const steps = run<Record<string, unknown>>(`
+            const out = {};
+            const start = () => dateInput(${JSON.stringify(START())}, 'date');
+            const toggle = which => document.querySelectorAll('.task-hub__mode-toggle button')[which].click();
+            const sourceShown = () => getComputedStyle(hub().querySelector('.task-hub__source-pane')).display !== 'none';
+            type(start(), '2026-02-30');
+            escape();
+            await sleep(300);
+            out.asked = { ask: formEnd().ask, foot: footShows(hub()) };
+
+            toggle(1);
+            await until(() => sourceShown() && hub().querySelector('.tv-source-editor__children .cm-content'));
+            await sleep(100);
+            out.inSource = { ask: formEnd().ask, foot: footShows(hub()) };
+
+            toggle(0);
+            await until(() => !sourceShown());
+            await sleep(100);
+            out.back = { ask: formEnd().ask, foot: footShows(hub()), date: start().value };
+
+            closeButton();
+            await sleep(300);
+            out.again = { open: !!hub(), ask: formEnd().ask, foot: footShows(hub()) };
+            return JSON.stringify(out);
+        `);
+        const ask = tr('modal.hub.unsavedAsk', { fields: tr('modal.hub.dateField', { group: START(), part: tr('modal.date') }) });
+        expect(steps.asked).toEqual({ ask, foot: ['tv-form__buttons'] });
+        expect(steps.inSource).toEqual({ ask: null, foot: ['task-hub__source-actions'] });
+        expect(steps.back).toEqual({ ask: null, foot: [], date: '2026-02-30' });
+        expect(steps.again).toEqual({ open: true, ask, foot: ['tv-form__buttons'] });
+        expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 
     it('keeps it open over a write refused, with why at the form\'s end and no notice, the name kept; Enter again writes it', async () => {

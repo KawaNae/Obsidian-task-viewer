@@ -447,11 +447,18 @@ export class TaskHubForm implements HubForm {
         return this.host.shut() !== null;
     }
 
-    /** The fields enabled or not, and the notice of why not, as the host says. */
+    /**
+     * The fields enabled or not, and the notice of why not, as the host says.
+     * Shut, the form loses nothing to a close (`loss`), so a question a close
+     * put is withdrawn: it would ask of fields that take no answer, beside
+     * the row of what shut them (the source mode's). The values typed stay,
+     * and a close once the form opens again asks of them anew.
+     */
     showShut(): void {
         const notice = this.host.shut();
         this.setEnabled(notice === null);
         this.issues.set('shut', notice ? [{ at: 'form', tone: 'warning', text: notice }] : []);
+        if (notice !== null) this.guard.withdraw();
     }
 
     private setEnabled(enabled: boolean): void {
