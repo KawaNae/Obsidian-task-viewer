@@ -190,6 +190,13 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         expect(observing).toEqual([]);
     });
 
+    it('watches no column once disposed', () => {
+        const r = renderer();
+        draw(r, [column(48), column(48)], bandTasks);
+        r.dispose();
+        expect(observing).toEqual([]);
+    });
+
     it('lays the cards out by the halo the stylesheet traces, its reach below a band and left and right of a card', () => {
         // In a column of 330px, g's band, going down from the lane's top,
         // and its halo cover 22 + 3 - 10 = 15px of L's top, more than the
@@ -397,6 +404,19 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
             for (const child of col.children) child.style.writes = 0;
 
             r.measureLanesAgain();
+            expect(col.children.map(child => child.style.writes)).toEqual([0, 0]);
+        });
+
+        it('measures nothing again when the stylesheet changes after a draw with no column', () => {
+            const legibleCard = vi.fn(() => 80);
+            const r = renderer(() => 'auto', () => 1, legibleCard);
+            const col = column(172);
+            draw(r, [col], pair);
+            r.beginLanes([]);
+            for (const child of col.children) child.style.writes = 0;
+
+            r.measureLanesAgain();
+            expect(legibleCard).toHaveBeenCalledTimes(1);
             expect(col.children.map(child => child.style.writes)).toEqual([0, 0]);
         });
 
