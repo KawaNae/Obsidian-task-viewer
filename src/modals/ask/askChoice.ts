@@ -30,13 +30,13 @@ export function askChoice<C extends string>(app: App, spec: ChoiceSpec<C>): Prom
     return ask<C>(new OverlayShell(), {
         keymap: app.keymap,
         panelClass: spec.panelClass,
-        draw: (bodyEl, hands) => {
+        draw: (bodyEl, frame, hands) => {
             bodyEl.addClass('tv-form');
-            bodyEl.createEl('h2', { text: spec.title, cls: 'tv-form__title' });
+            frame.head.createEl('h2', { text: spec.title, cls: 'tv-form__title' });
             const text = bodyEl.createDiv({ cls: 'tv-ask__body' });
             if (typeof spec.body === 'function') spec.body(text);
             else for (const paragraph of spec.body) text.createEl('p', { text: paragraph });
-            const actions = new FormActions(bodyEl, {
+            const actions = new FormActions(frame.foot, {
                 cancel: { run: hands.cancel },
                 actions: spec.choices.map(one => ({ label: one.label, tone: one.tone, run: () => hands.answer(one.value) })),
             });

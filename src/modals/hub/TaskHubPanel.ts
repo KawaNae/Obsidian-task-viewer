@@ -36,6 +36,8 @@ export interface SourceSlots {
     card: HTMLElement;
     /** Where the source goes, in the card's place. */
     pane: HTMLElement;
+    /** Where its row of controls goes: the overlay's foot, below the body. */
+    foot: HTMLElement;
     /** Close the hub, asking nothing more. */
     close(): void;
 }
@@ -159,8 +161,8 @@ export class TaskHubPanel {
             { app, plugin: deps.plugin, index: deps.index, operations: deps.operations },
             (row) => source?.follow(row),
         );
-        const makeSource: SourceMaker = ({ bar, card, pane, close }) => {
-            const view = new TaskHubSourceView(app, bar, card, pane, {
+        const makeSource: SourceMaker = ({ bar, card, pane, foot, close }) => {
+            const view = new TaskHubSourceView(app, bar, card, pane, foot, {
                 enter: () => { void source?.enter(); },
                 apply: () => { void source?.apply(); },
                 cancel: () => source?.cancel(),
@@ -273,7 +275,7 @@ export class TaskHubPanel {
         }
 
         if (makeSource && bar && pane) {
-            this.source = makeSource({ bar, card, pane, close: () => this.close() });
+            this.source = makeSource({ bar, card, pane, foot: frame.foot, close: () => this.close() });
         }
     }
 

@@ -60,7 +60,7 @@
 /* --- Source (the row and its subtree as text) ---
  * Asked whether to throw the draft away, the editors read as
  * tv-source-drafts--asking (_source-editor.css) says, and the row of cancel
- * and apply asks as tv-form__buttons (_form.css) does. */
+ * and apply, in the overlay's foot, asks as tv-form__buttons (_form.css) does. */
 .task-hub__source-pane {
     display: flex;
     flex-direction: column;

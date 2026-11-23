@@ -1,4 +1,4 @@
-import type { CloseAnswer, FieldFocus, OverlayOpenOpts } from '../../views/sharedUI/OverlayShell';
+import type { CloseAnswer, FieldFocus, OverlayFrame, OverlayOpenOpts } from '../../views/sharedUI/OverlayShell';
 
 /**
  * What a question asks of the overlay it stands in (`OverlayShell`): to
@@ -36,7 +36,8 @@ export interface AskSpec<A> {
     keymap: OverlayOpenOpts['keymap'];
     /** A class of the panel besides the dialog's, for what only this question has. */
     panelClass?: string;
-    draw(bodyEl: HTMLElement, hands: AskHands<A>): AskBody;
+    /** Draw the question in the body, its title and its buttons in `frame`, which stay in sight around it. */
+    draw(bodyEl: HTMLElement, frame: OverlayFrame, hands: AskHands<A>): AskBody;
 }
 
 /**
@@ -52,8 +53,8 @@ export function ask<A>(shell: AskShell, spec: AskSpec<A>): Promise<A | 'cancel'>
             mode: 'centered',
             panelClass: spec.panelClass ? `tv-overlay__panel--dialog tv-ask ${spec.panelClass}` : 'tv-overlay__panel--dialog tv-ask',
             keymap: spec.keymap,
-            build: (bodyEl) => {
-                body = spec.draw(bodyEl, {
+            build: (bodyEl, frame) => {
+                body = spec.draw(bodyEl, frame, {
                     answer: (a) => {
                         if (given) return;
                         given = { a };

@@ -162,14 +162,6 @@
     display: none;
 }
 
-/* 本文の中で節の後に置くボタン行（文字を問うダイアログ）は、最後の節から 24px
-   空ける。節の下の padding 12px にこの 12px を足す。ハブのソースのボタン行は編集欄と
-   同じ面の中にあり、節の後ではないので当たらない。殻の下の場所に置くボタン行は
-   本文の外にあり、当たらない */
-.tv-form .tv-form__group ~ .tv-form__buttons {
-    margin-top: 12px;
-}
-
 .tv-form__discard {
     margin-inline-end: auto;
 }

@@ -47,9 +47,9 @@ export interface TextSpec<T> {
 export async function askText<T>(app: App, spec: TextSpec<T>): Promise<void> {
     await ask<'done'>(new OverlayShell(), {
         keymap: app.keymap,
-        draw: (bodyEl, hands) => {
+        draw: (bodyEl, frame, hands) => {
             bodyEl.addClass('tv-form');
-            bodyEl.createEl('h2', { text: spec.title, cls: 'tv-form__title' });
+            frame.head.createEl('h2', { text: spec.title, cls: 'tv-form__title' });
 
             const group = bodyEl.createDiv({ cls: 'tv-form__group' });
             const { row, says } = createFormRow(group, spec.label);
@@ -85,7 +85,7 @@ export async function askText<T>(app: App, spec: TextSpec<T>): Promise<void> {
             };
 
             onFormEnter(input, () => { void submit(); });
-            const actions = new FormActions(bodyEl, {
+            const actions = new FormActions(frame.foot, {
                 cancel: { run: hands.cancel },
                 actions: [{ label: spec.submitLabel, tone: 'cta', run: () => { void submit(); } }],
             });
