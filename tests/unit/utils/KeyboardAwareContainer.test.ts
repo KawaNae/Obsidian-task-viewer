@@ -328,6 +328,16 @@ describe('KeyboardAwareContainer', () => {
             expect(kac.keyboardOverlap()).toBe(0);
         });
 
+        it('takes the overlap off on a show of height 0, the window no longer over the keyboard', () => {
+            const { win, container, kac } = setup({ withVisualViewport: false });
+            kac.attach();
+
+            win.dispatch('keyboardDidShow', { keyboardHeight: 340 });
+            win.dispatch('keyboardDidShow', { keyboardHeight: 0 });
+
+            expect(container.overlap()).toBeUndefined();
+        });
+
         it('sets nothing while no keyboard covers the window', () => {
             const { win, container, kac } = setup({ vvHeight: 800 });
             kac.attach();
