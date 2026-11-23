@@ -558,7 +558,11 @@
       "headings": "{{note}} has {{count}} headings named {{heading}}, so there is no one place to put the task.",
       "ignored": "{{note}} is a note the views do not show: the task will not appear in them",
       "toChild": "Puts the task first among the children of {{parent}}",
-      "gone": "The parent task is no longer there."
+      "gone": "The parent task is no longer there.",
+      "hideLine": "Hide where the task goes",
+      "showLine": "Show where the task goes",
+      "showLineError": "Show where the task goes (it has an error)",
+      "showLineWarning": "Show where the task goes (it has a warning)"
     },
     "draft": {
       "discardAsk": "Discard the draft?",

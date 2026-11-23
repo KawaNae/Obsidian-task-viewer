@@ -31,7 +31,7 @@ export interface DraftHostDeps {
  *   changes, what it was given stays. A create is not offered until the
  *   place has answered, nor where the task cannot go.
  * - A create waits for the write: written, the hub closes; refused, why is
- *   said at the form's end once, with no notice, and the place is asked
+ *   said above the create once, with no notice, and the place is asked
  *   again. The fields are shut meanwhile: what was typed after the write was
  *   made would not be written, and would be lost as the hub closes. A close
  *   asked for meanwhile waits for the write. A refusal that comes after the
@@ -146,7 +146,7 @@ export class DraftHost implements PanelHost, HubDraft {
         void this.lookUp();
     }
 
-    /** A create under way is waited for: written, the hub closes; refused, it stays open with why at the form's end. */
+    /** A create under way is waited for: written, the hub closes; refused, it stays open with why above the create. */
     closing(): CloseAnswer {
         if (!this.making) return 'close';
         return this.making.then(answer => (answer.written ? 'close' : 'stay'));

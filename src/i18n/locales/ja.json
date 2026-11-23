@@ -558,7 +558,11 @@
       "headings": "{{note}} に見出し {{heading}} が {{count}} つあるため、置く場所が決まりません。",
       "ignored": "{{note}} はビューに出ないノートです。作ったタスクはビューに出ません",
       "toChild": "{{parent}} の子の先頭に置きます",
-      "gone": "親のタスクが見つかりません。"
+      "gone": "親のタスクが見つかりません。",
+      "hideLine": "書く場所の説明を隠す",
+      "showLine": "書く場所の説明を表示",
+      "showLineError": "書く場所の説明を表示（エラーがあります）",
+      "showLineWarning": "書く場所の説明を表示（警告があります）"
     },
     "draft": {
       "discardAsk": "下書きを捨てますか",
