@@ -1,6 +1,6 @@
 import type { App } from 'obsidian';
 import { t } from '../../i18n';
-import { OverlayShell } from '../../views/sharedUI/OverlayShell';
+import { OverlayShell, type OverlayFrame } from '../../views/sharedUI/OverlayShell';
 import { FormActions } from '../form/FormActions';
 import { IssueBoard } from '../form/FormIssue';
 import { SectionDialog, readSectionNote, type SectionAsk, type SectionDialogField, type SectionSurface, type SectionViewState } from './SectionDialog';
@@ -53,7 +53,7 @@ export class SectionModal implements SectionSurface {
             initialFocus: () => (this.field
                 ? { to: this.field.input(this.opts.initial.note.picked === null ? 'note' : 'heading'), selection: 'all' }
                 : null),
-            build: (bodyEl) => this.build(bodyEl),
+            build: (bodyEl, frame) => this.build(bodyEl, frame),
             onClose: () => {
                 this.dialog?.dispose();
                 this.dialog = null;
@@ -67,10 +67,10 @@ export class SectionModal implements SectionSurface {
         this.overlay.close();
     }
 
-    private build(bodyEl: HTMLElement): void {
+    private build(bodyEl: HTMLElement, frame: OverlayFrame): void {
         const adding = this.opts.purpose === 'add';
         bodyEl.addClass('tv-form');
-        bodyEl.createEl('h2', { text: t(adding ? 'modal.section.addTitle' : 'modal.section.relinkTitle'), cls: 'tv-form__title' });
+        frame.head.createEl('h2', { text: t(adding ? 'modal.section.addTitle' : 'modal.section.relinkTitle'), cls: 'tv-form__title' });
 
         const group = bodyEl.createDiv({ cls: 'tv-form__group' });
         this.field = new SectionField(this.app, group, {
@@ -86,7 +86,7 @@ export class SectionModal implements SectionSurface {
             form: formSays,
         });
 
-        this.actions = new FormActions(bodyEl, {
+        this.actions = new FormActions(frame.foot, {
             cancel: { run: () => { void this.overlay.requestClose(); } },
             actions: [{ label: t(adding ? 'modal.section.add' : 'modal.section.relink'), tone: 'cta', run: () => this.dialog?.choose() }],
         });

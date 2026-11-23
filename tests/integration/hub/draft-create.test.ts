@@ -44,6 +44,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const DAY = '2031-01-15';
 const DAILY = `${DAY}.md`;
@@ -103,12 +104,13 @@ const MAKE_NOTE = [
 const PRELUDE = `
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
+${DIALOG_ROWS}
 const R = (window.__tvDraftE2E ??= { leaves: {} });
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
 const overlays = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing)')];
 /** The hub on a task not written yet: the hub that offers a create. */
 const draft = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')]
-    .find(p => p.querySelector('.task-hub__form > .tv-form__buttons > .mod-cta')) ?? null;
+    .find(p => formRow(p)?.querySelector(':scope > .mod-cta')) ?? null;
 const nameInput = () => draft()?.querySelector('.tv-form__name-section input') ?? null;
 const rowOf = label => [...draft().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const dateInput = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
@@ -130,11 +132,11 @@ const view = () => {
         start: { date: field(${JSON.stringify(tr('modal.start'))}, 'date'), time: field(${JSON.stringify(tr('modal.start'))}, 'time') },
         due: { date: field(${JSON.stringify(tr('modal.due'))}, 'date'), time: field(${JSON.stringify(tr('modal.due'))}, 'time') },
         form: formSays(),
-        buttons: [...p.querySelectorAll('.tv-form__buttons button')].filter(shown).map(b => b.textContent),
+        buttons: [...formRow(p).querySelectorAll('button')].filter(shown).map(b => b.textContent),
         titles: p.querySelectorAll('h2').length,
     };
 };
-const createButton = () => draft().querySelector('.task-hub__form > .tv-form__buttons > .mod-cta');
+const createButton = () => formRow(draft()).querySelector(':scope > .mod-cta');
 const create = () => createButton().click();
 const card = () => draft()?.querySelector('.task-hub__preview .task-card') ?? null;
 const notices = () => document.querySelectorAll('.notice').length;

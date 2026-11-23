@@ -28,6 +28,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-draft-close.md';
 
@@ -42,11 +43,12 @@ const PRELUDE = `
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 const FILE = ${JSON.stringify(TEST_FILE)};
 ${UNTIL}
+${DIALOG_ROWS}
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
 const overlays = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing)')];
 const hubs = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')];
 /** The hub on a task not written yet: the hub that offers a create. */
-const isDraft = p => !!p.querySelector('.task-hub__form > .tv-form__buttons > .mod-cta');
+const isDraft = p => !!formRow(p)?.querySelector(':scope > .mod-cta');
 const draft = () => hubs().find(isDraft) ?? null;
 const rowHub = () => hubs().find(p => !isDraft(p)) ?? null;
 const nameInput = () => draft()?.querySelector('.tv-form__name-section input') ?? null;
@@ -54,9 +56,9 @@ const rowOf = label => [...draft().querySelectorAll('.tv-form__row')].find(r => 
 const startDate = () => rowOf(${JSON.stringify(tr('modal.start'))}).querySelector('.tv-form__field--date input.tv-ctrl__text-input');
 const typeIn = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 const type = (input, text) => { typeIn(input, text); input.dispatchEvent(new FocusEvent('blur')); };
-const ask = () => { const el = draft()?.querySelector('.tv-form__ask'); return shown(el) ? el.textContent : null; };
-const buttons = () => [...draft().querySelectorAll('.tv-form__buttons button')].filter(shown).map(b => b.textContent);
-const button = text => [...draft().querySelectorAll('.tv-form__buttons button')].filter(shown).find(b => b.textContent === text);
+const ask = () => { const el = formRow(draft())?.querySelector('.tv-form__ask'); return shown(el) ? el.textContent : null; };
+const buttons = () => [...formRow(draft()).querySelectorAll('button')].filter(shown).map(b => b.textContent);
+const button = text => [...formRow(draft()).querySelectorAll('button')].filter(shown).find(b => b.textContent === text);
 const key = (name, code) => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: name, code: name, keyCode: code, bubbles: true, cancelable: true }));
 /** The ways the user closes the hub on a task not written yet. */
 const ways = {
@@ -213,7 +215,7 @@ describe('the hub on a task not written yet, over the hub on a row', () => {
             const order = overlays().map(o => o.querySelector('.task-hub') ? (isDraft(o.querySelector('.task-hub')) ? 'draft' : 'row') : 'other');
             const out = { opened: { row: !!rowHub(), draft: !!draft(), order } };
             type(nameInput(), '重ね');
-            draft().querySelector('.task-hub__form > .tv-form__buttons > .mod-cta').click();
+            formRow(draft()).querySelector(':scope > .mod-cta').click();
             await until(() => !draft());
             await until(() => rowHub()?.querySelector('.task-hub__preview')?.textContent.includes('重ね'));
             out.made = { row: !!rowHub(), draft: !!draft(), inRowCard: rowHub().querySelector('.task-hub__preview').textContent.includes('重ね') };

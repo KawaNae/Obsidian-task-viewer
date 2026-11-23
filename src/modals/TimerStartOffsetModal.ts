@@ -3,7 +3,7 @@ import { t } from '../i18n';
 import { agoLabel, OFFSET_FIELDS, offsetStart, startLabel, type OffsetInput, type OffsetInputKind } from '../timer/TimerStartOffset';
 import { hostWindow } from '../utils/HostWindow';
 import type { Read } from '../utils/values/Read';
-import { OverlayShell } from '../views/sharedUI/OverlayShell';
+import { OverlayShell, type OverlayFrame } from '../views/sharedUI/OverlayShell';
 import { refusalText, type WriteAnswer } from '../services/operations/WriteAnswer';
 import { FormActions } from './form/FormActions';
 import { onFormEnter } from './form/formEnter';
@@ -60,7 +60,7 @@ export class TimerStartOffsetModal {
             keymap: this.app.keymap,
             // A number of minutes or a time: a value typed over whole.
             initialFocus: () => ({ to: this.input(), selection: 'all' }),
-            build: (bodyEl) => this.build(bodyEl),
+            build: (bodyEl, frame) => this.build(bodyEl, frame),
             onClose: () => this.stopTick?.(),
         });
         // The window the overlay stands in (popout aware).
@@ -69,9 +69,9 @@ export class TimerStartOffsetModal {
         this.stopTick = () => win.clearInterval(tick);
     }
 
-    private build(bodyEl: HTMLElement): void {
+    private build(bodyEl: HTMLElement, frame: OverlayFrame): void {
         bodyEl.addClass('tv-form');
-        bodyEl.createEl('h2', { text: t('timer.offsetStart'), cls: 'tv-form__title' });
+        frame.head.createEl('h2', { text: t('timer.offsetStart'), cls: 'tv-form__title' });
 
         const segments = bodyEl.createDiv({ cls: 'tv-ctrl__segments' });
         for (const [kind, label] of [['minutes', t('timer.offsetByMinutes')], ['time', t('timer.offsetByTime')]] as const) {
@@ -106,7 +106,7 @@ export class TimerStartOffsetModal {
             field: (kind) => ({ input: kind === 'minutes' ? this.minutesInput : this.timeField.input, message: this.rows[kind].says }),
             form: formSays,
         });
-        this.actions = new FormActions(bodyEl, {
+        this.actions = new FormActions(frame.foot, {
             cancel: { run: () => { void this.overlay.requestClose(); } },
             actions: [{ label: t('timer.offsetApply'), tone: 'cta', run: () => { void this.submit(); } }],
         });

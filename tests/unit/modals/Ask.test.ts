@@ -24,7 +24,7 @@ class StandInShell implements AskShell {
     open(opts: OverlayOpenOpts): void {
         this.opts = opts;
         this.gate.reset();
-        opts.build({} as HTMLElement);
+        opts.build({} as HTMLElement, { head: {} as HTMLElement, foot: {} as HTMLElement });
     }
 
     close(): void {

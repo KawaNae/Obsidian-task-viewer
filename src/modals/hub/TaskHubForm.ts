@@ -54,6 +54,11 @@ export interface TaskHubFormDeps {
     index: IndexReads;
     /** Ask the hub to close, as the user would (`OverlayShell.requestClose`): what a close the user said to go on with does. */
     requestClose?: () => void;
+    /**
+     * Where the row of buttons goes: the overlay's foot (`OverlayFrame`),
+     * which stays in sight below the fields as they scroll.
+     */
+    foot: HTMLElement;
 }
 
 /**
@@ -209,9 +214,10 @@ export class TaskHubForm implements HubForm {
         const propsGroup = c.createDiv({ cls: 'tv-form__group' });
         this.propsField = new PropertiesFieldGroup(propsGroup, this.fieldCtx);
 
-        // What is of the form as a whole is said at its end, and the question a close puts under it.
+        // What is of the form as a whole is said at its end; the row of
+        // buttons, and the question a close puts in it, in the foot.
         c.appendChild(this.formSays);
-        this.actions = new FormActions(c, {
+        this.actions = new FormActions(this.deps.foot, {
             actions: this.host.draft
                 ? [{ label: t('modal.create'), busyLabel: t('modal.newTask.creating'), tone: 'cta', run: () => this.create() }]
                 : [],
@@ -385,7 +391,7 @@ export class TaskHubForm implements HubForm {
     }
 
     /**
-     * The buttons at the form's end: the question a close puts, its answer
+     * The buttons in the overlay's foot: the question a close puts, its answer
      * that keeps reading as what it keeps (the value to fix, the task to
      * go on with), and the create as the host's draft says.
      */

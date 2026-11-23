@@ -21,21 +21,21 @@ import { FocusDoc, type FocusEl } from '../helpers/focusDom';
  */
 
 const { shells, forms, sources, views } = vi.hoisted(() => ({
-    shells: [] as { opts: { build(body: unknown): void; onClose?: () => void; beforeClose?: () => unknown } | null; close(): void }[],
+    shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown } | null; close(): void }[],
     forms: [] as { host: unknown; beforeClose: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { bar: unknown; card: unknown; pane: unknown }[],
 }));
-const body = { current: null as FocusEl | null };
+const body = { current: null as FocusEl | null, head: null as FocusEl | null, foot: null as FocusEl | null };
 
 vi.mock('../../../src/views/sharedUI/OverlayShell', () => ({
     OverlayShell: class {
-        opts: { build(body: unknown): void; onClose?: () => void } | null = null;
+        opts: { build(body: unknown, frame: unknown): void; onClose?: () => void } | null = null;
         constructor() { shells.push(this); }
         isOpen() { return this.opts !== null; }
-        open(opts: { build(body: unknown): void; onClose?: () => void }) {
+        open(opts: { build(body: unknown, frame: unknown): void; onClose?: () => void }) {
             this.opts = opts;
-            opts.build(body.current);
+            opts.build(body.current, { head: body.head, foot: body.foot });
         }
         async requestClose() { this.close(); return true; }
         close() {
@@ -81,6 +81,8 @@ afterEach(() => {
 function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: true })) {
     const doc = new FocusDoc();
     body.current = doc.root();
+    body.head = doc.root();
+    body.foot = doc.root();
     const drawn: string[] = [];
     let copy: Task | undefined = makeTask({ id: 'task-1', content: '元の名前' });
     const listeners: ((taskId?: string) => void)[] = [];

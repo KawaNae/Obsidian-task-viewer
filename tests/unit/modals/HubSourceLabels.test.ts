@@ -57,7 +57,7 @@ function formOn(openSource: HubHost['openSource']) {
     const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
     const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } } as never;
     const index = { getTasks: () => [], getTask: () => ROW, onChange: () => () => { } } as never;
-    new TaskHubForm(asEl(root), host, { app, plugin, index });
+    new TaskHubForm(asEl(root), host, { app, plugin, index, foot: asEl(root) });
     const labels = root.findAll('task-hub__source').filter(el => el.text !== '');
     return {
         root,

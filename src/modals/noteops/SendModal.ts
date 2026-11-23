@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import type { NoteOps, SendPreview, SendResult } from '../../services/data/NoteOps';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import { indentUnit } from '../../utils/ObsidianConfig';
-import { OverlayShell } from '../../views/sharedUI/OverlayShell';
+import { OverlayShell, type OverlayFrame } from '../../views/sharedUI/OverlayShell';
 import { createFormRow } from '../form/formRow';
 import { IssueBoard } from '../form/FormIssue';
 import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/SourceEditor';
@@ -27,7 +27,9 @@ import { SendDialog, initialAsk, type CandidateView, type SendField, type SendSu
  * (`createFormRow`) with their icons, the values offered stand under a
  * section label as the hub's properties do (one for the frontmatter's
  * keys, one for the lines above the first heading), and the row of buttons is the
- * one the hub's source mode asks in (`tv-form__buttons`).
+ * one the hub's source mode asks in (`tv-form__buttons`). The title stands
+ * in the overlay's head and the row in its foot (`OverlayFrame`): both stay
+ * in sight as the rows and the fields scroll.
  *
  * It stands on an overlay (`OverlayShell`, centered), which keeps
  * Obsidian's hotkeys off the note behind while the focus is in it, and asks
@@ -72,7 +74,7 @@ export class SendModal implements SendSurface {
                 const editor = this.dialog?.firstEditor();
                 return editor ? { to: editor } : { to: this.field.input('note'), selection: 'all' };
             },
-            build: (bodyEl) => this.build(bodyEl),
+            build: (bodyEl, frame) => this.build(bodyEl, frame),
             onClose: () => {
                 this.dialog?.dispose();
                 this.dialog = null;
@@ -83,9 +85,9 @@ export class SendModal implements SendSurface {
         });
     }
 
-    private build(bodyEl: HTMLElement): void {
+    private build(bodyEl: HTMLElement, frame: OverlayFrame): void {
         bodyEl.addClass('tv-form');
-        bodyEl.createEl('h2', { text: t('modal.send.title'), cls: 'tv-form__title' });
+        frame.head.createEl('h2', { text: t('modal.send.title'), cls: 'tv-form__title' });
 
         const rows = bodyEl.createDiv({ cls: 'tv-form__group' });
         this.rowsEl = rows.createDiv({ cls: 'tv-send__rows' });
@@ -115,7 +117,7 @@ export class SendModal implements SendSurface {
             form: this.formSays,
         });
 
-        this.actions = new FormActions(bodyEl, {
+        this.actions = new FormActions(frame.foot, {
             cancel: { run: () => { void this.overlay.requestClose(); } },
             actions: [{ label: t('modal.send.send'), busyLabel: t('modal.send.sending'), tone: 'cta', run: () => { void this.dialog?.send(); } }],
             ask: { discardLabel: t('modal.draft.discard'), keepLabel: t('modal.draft.keep'), discard: () => this.dialog?.discard(), keep: () => this.dialog?.keep() },

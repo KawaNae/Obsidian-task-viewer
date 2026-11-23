@@ -35,7 +35,7 @@ function setUp() {
     const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } } as never;
     const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
     const host = new RowHost(task, { app, plugin, index, operations: { updateTask: vi.fn(async () => ({ written: true })) } as never }, () => { });
-    const form = new TaskHubForm(asEl(root), host, { app, plugin, index });
+    const form = new TaskHubForm(asEl(root), host, { app, plugin, index, foot: asEl(root) });
     host.attach({ redrawPreview: () => { }, close: () => { } });
     /** The field's element, given a text so that what of it is selected shows. */
     const field = (name: TaskHubFocusField): FocusEl => {

@@ -25,6 +25,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { overrideSettings, tr, type HeldSettings } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const DAY = '2031-01-21';
 const DAILY = `${DAY}.md`;
@@ -39,11 +40,12 @@ const NOTE = [
 const PRELUDE = `
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
+${DIALOG_ROWS}
 const R = (window.__tvDraftEntriesE2E ??= {});
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
 const overlays = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing)')];
 const draft = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')]
-    .find(p => p.querySelector('.task-hub__form > .tv-form__buttons > .mod-cta')) ?? null;
+    .find(p => formRow(p)?.querySelector(':scope > .mod-cta')) ?? null;
 const nameInput = () => draft()?.querySelector('.tv-form__name-section input') ?? null;
 const rowOf = label => [...draft().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const start = which => rowOf(${JSON.stringify(tr('modal.start'))}).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input').value;
