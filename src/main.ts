@@ -45,6 +45,7 @@ import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
 import { Operations } from './services/operations/Operations';
 import { NoteOps } from './services/data/NoteOps';
+import { NotePlaces } from './services/data/NotePlaces';
 import { CreatePlaces, type CreatePlace } from './services/data/CreatePlaces';
 import type { DraftSeed } from './services/data/TaskDraft';
 import { initI18n, t } from './i18n';
@@ -76,6 +77,7 @@ export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private readService: TaskReadService;
     private operations: Operations;
+    private notePlaces: NotePlaces;
     private noteOps: NoteOps;
     private createPlaces: CreatePlaces;
     private timerWidget: TimerWidget;
@@ -165,7 +167,9 @@ export default class TaskViewerPlugin extends Plugin {
         this.readService = new TaskReadService(this.taskIndex, () => this.settings);
         this.operations = new Operations(this.app, this.taskIndex);
         // The timer widget is made below; a send asks for it as it is made.
+        this.notePlaces = new NotePlaces(this.app, () => this.settings);
         this.noteOps = new NoteOps(this.app, this.operations, () => this.settings, {
+            places: this.notePlaces,
             getTask: (id) => this.taskIndex.getTask(id),
             timers: () => this.timerWidget ?? null,
         });
@@ -360,6 +364,10 @@ export default class TaskViewerPlugin extends Plugin {
 
     getOperations(): Operations {
         return this.operations;
+    }
+
+    getNotePlaces(): NotePlaces {
+        return this.notePlaces;
     }
 
     getNoteOps(): NoteOps {

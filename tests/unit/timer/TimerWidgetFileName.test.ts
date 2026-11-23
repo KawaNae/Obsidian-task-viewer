@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { openLiveVault, makeFile, type VaultSession } from '../helpers/vaultSession';
+import { NotePlaces } from '../../../src/services/data/NotePlaces';
 import { NoteOps } from '../../../src/services/data/NoteOps';
 import { TimerWidget } from '../../../src/timer/TimerWidget';
 import type { TimerState } from '../../../src/timer/TimerState';
@@ -77,7 +78,9 @@ async function open(files: Record<string, string[]>) {
     widget.render = () => { };
     widget.ensureContainer = () => container as unknown as HTMLElement;
     widget.activate();
-    const ops = new NoteOps(session.app, session.ops, () => ({ ...DEFAULT_SETTINGS }), {
+    const getSettings = () => ({ ...DEFAULT_SETTINGS });
+    const ops = new NoteOps(session.app, session.ops, getSettings, {
+        places: new NotePlaces(session.app, getSettings),
         getTask: (id) => session.index.getTask(id),
         timers: () => widget,
     });

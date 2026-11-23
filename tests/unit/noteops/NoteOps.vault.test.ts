@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 import { t } from '../../../src/i18n';
 import { refusalClause, refusalNotice } from '../../../src/services/core/RefusalClause';
 import type { DestinationFacts } from '../../../src/services/data/NoteOps';
-import type { DestinationAsk, NoteDestination } from '../../../src/services/data/NotePlaces';
+import { NotePlaces, type DestinationAsk, type NoteDestination } from '../../../src/services/data/NotePlaces';
 
 /**
  * The send operation as the UI asks for it (`NoteOps`): what its dialog
@@ -21,7 +21,9 @@ afterEach(() => { live?.dispose(); live = undefined; });
 
 async function open(lines: string[], others: Record<string, string[]> = {}) {
     const { contents, session } = await openLiveVault({ [FILE]: lines, ...others }, s => { live = s; });
-    const ops = new NoteOps(session.app, session.ops, () => ({ ...DEFAULT_SETTINGS }), {
+    const getSettings = () => ({ ...DEFAULT_SETTINGS });
+    const ops = new NoteOps(session.app, session.ops, getSettings, {
+        places: new NotePlaces(session.app, getSettings),
         getTask: (id) => session.index.getTask(id),
         timers: () => null,
     });
@@ -261,7 +263,9 @@ describe('destinationFacts', () => {
     it('no heading typed: the note\'s end, under no heading; one typed, at the settings\' level and side', async () => {
         const note = await open(['- [ ] A', ''], { 'Plan.md': ['# p', '### Log', '- [ ] x', ''] });
         const settings = { ...DEFAULT_SETTINGS, taskHeading: 'Log', taskHeadingLevel: 3, sectionSide: 'end' as const };
-        const ops = new NoteOps(note.session.app, note.session.ops, () => ({ ...settings }), {
+        const getSettings = () => ({ ...settings });
+        const ops = new NoteOps(note.session.app, note.session.ops, getSettings, {
+            places: new NotePlaces(note.session.app, getSettings),
             getTask: (id) => note.session.index.getTask(id),
             timers: () => null,
         });

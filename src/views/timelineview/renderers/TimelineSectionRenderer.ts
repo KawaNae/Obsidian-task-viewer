@@ -12,11 +12,7 @@ import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
 import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
-import {
-    appendEmptySpaceMenuItems,
-    openDraftHubForDailyNote,
-    startDailyNoteTimer,
-} from '../../sharedLogic/DailyNoteTaskActions';
+import { appendEmptySpaceMenuItems } from '../../sharedLogic/EmptySpaceActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
@@ -360,24 +356,19 @@ export class TimelineSectionRenderer {
         });
     }
 
-    private handleCreateTaskTrigger(offsetY: number, date: string) {
-        // Calculate time from offsetY
-        const zoomLevel = this.getZoomLevel();
-        const startHour = this.plugin.settings.startHour;
-
-        // offsetY is in pixels. 1 hour = 60 * zoomLevel pixels
-        const minutesFromStart = offsetY / zoomLevel;
-
-        openDraftHubForDailyNote(this.plugin, date, (startHour * 60) + minutesFromStart);
+    /**
+     * The time at `offsetY` pixels down a day's column, in minutes after its
+     * midnight: an hour is 60 * zoom pixels, the column starting at the start
+     * hour.
+     */
+    private minutesAt(offsetY: number): number {
+        return (this.plugin.settings.startHour * 60) + offsetY / this.getZoomLevel();
     }
 
     /** Show context menu for empty space click */
     private showEmptySpaceMenu(x: number, y: number, offsetY: number, date: string) {
         this.plugin.menuPresenter.present((menu) => {
-            appendEmptySpaceMenuItems(menu, {
-                onCreate: () => this.handleCreateTaskTrigger(offsetY, date),
-                onTimer: (kind) => startDailyNoteTimer(this.plugin, date, kind),
-            });
+            appendEmptySpaceMenuItems(menu, this.plugin, date, this.minutesAt(offsetY));
         }, { kind: 'position', x, y });
     }
 }

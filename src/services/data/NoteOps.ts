@@ -19,7 +19,7 @@ import { logWarn } from '../../log/log';
 import { inheritedAt, type InheritedValue } from './InheritedValues';
 import type { Operations } from '../operations/Operations';
 import { NoteName, type NoteAsk } from './NoteName';
-import { NotePlaces, type DestinationAsk, type NoteDestination, type NotePlace, type NoteRead } from './NotePlaces';
+import type { NotePlaces, DestinationAsk, NoteDestination, NotePlace, NoteRead } from './NotePlaces';
 import { anchorsIn, linksTo, type AnchorLink, type LineSpan } from './NoteRefs';
 
 export type { SendRow } from '../operations/Operations';
@@ -154,6 +154,8 @@ export interface SendTimers {
 
 /** What a send asks of the rest of the plugin besides the writes: the index's copy of a row, and the open timers (none while there are none to ask). */
 export interface NoteOpsDeps {
+    /** What a destination is, read off the vault alone, before what the rows meet there. */
+    places: NotePlaces;
     getTask(taskId: string): Task | undefined;
     timers(): SendTimers | null;
 }
@@ -202,17 +204,12 @@ export type SendResult =
  * closes.
  */
 export class NoteOps {
-    /** What a destination is, read off the vault alone, before what the rows meet there. */
-    private readonly places: NotePlaces;
-
     constructor(
         private app: App,
         private operations: Operations,
         private getSettings: () => TaskViewerSettings,
         private deps: NoteOpsDeps,
-    ) {
-        this.places = new NotePlaces(app, getSettings);
-    }
+    ) { }
 
     /**
      * What a send of `taskIds` opens on, read as the disk holds each row
@@ -252,7 +249,7 @@ export class NoteOps {
     async destinationFacts(preview: SendPreview, ask: DestinationAsk): Promise<DestinationFacts> {
         const rows = preview.rows;
         const settings = this.getSettings();
-        const read = await this.places.readFields(ask, NoteName.defaultFolder(this.app, rows[0].task.file));
+        const read = await this.deps.places.readFields(ask, NoteName.defaultFolder(this.app, rows[0].task.file));
         if (read.kind === 'unnamed' || read.kind === 'ambiguous') return read;
         const sentTasks = byNote(rows).flatMap(({ rows: ofNote }) => withDescendants(ofNote, settings));
 

@@ -13,7 +13,7 @@ import { putBlock, seedOf, type NoteSeed, type NoteSpot } from '../persistence/N
 import { Block, type HeadingLookup } from '../persistence/utils/Placement';
 import type { Operations } from '../operations/Operations';
 import type { WriteAnswer, WriteTelling } from '../operations/WriteAnswer';
-import { spotIn } from './NotePlaces';
+import { spotIn, type NoteDestination } from './NotePlaces';
 
 /**
  * The note a place to create in is in, by what it is: the daily note of
@@ -29,8 +29,9 @@ export type PlaceNote =
 
 /**
  * Where a new line goes: in a note, where `spot` says (a section, or the
- * end of the note) — a view's empty space, "Create task", puts it under the
- * settings' section of the day's daily note ({@link CreatePlaces.dailyNote});
+ * end of the note) — a view's empty space puts it under the settings'
+ * section of the day's daily note ({@link CreatePlaces.dailyNote}), or where
+ * the user chooses ({@link CreatePlaces.fromDestination});
  * or the head of a row's children (a card's menu, "Add child task").
  */
 export type CreatePlace =
@@ -87,7 +88,8 @@ const PROBE = '- [ ] _';
 
 /**
  * The places a new task line is made in, as the hub on a task not written
- * yet asks of them: the daily note's place ({@link dailyNote}), what a place
+ * yet asks of them: the daily note's place ({@link dailyNote}), the place
+ * a note and a spot chosen name ({@link fromDestination}), what a place
  * is and what a line there inherits ({@link facts}), the note a line put
  * there is in ({@link noteOf}), and the write of the line there
  * ({@link create}). Beside `NoteOps`, which answers the same of a send's
@@ -101,9 +103,21 @@ export class CreatePlaces {
         private readonly getTask: (taskId: string) => Task | undefined,
     ) { }
 
-    /** The place a view's "Create task" on `date` puts a line in: the settings' section of the day's daily note. */
+    /** The place a view's "Create task for daily note" on `date` puts a line in: the settings' section of the day's daily note. */
     dailyNote(date: string): CreatePlace {
         return { kind: 'note', note: { kind: 'daily', date }, spot: Destination.taskSection(this.getSettings()) };
+    }
+
+    /**
+     * The place the place dialog's answer `to` names (`PlaceModal`): its note
+     * by its path, made empty when it is not there, and where in it. A place
+     * `current` already in the same note stays the note it is — a daily
+     * note is still made of its day's template — and takes the answer's
+     * spot alone.
+     */
+    fromDestination(to: NoteDestination, current?: CreatePlace): CreatePlace {
+        if (current?.kind === 'note' && this.pathOf(current.note) === to.note.path) return { ...current, spot: to.spot };
+        return { kind: 'note', note: { kind: 'path', path: to.note.path }, spot: to.spot };
     }
 
     /**

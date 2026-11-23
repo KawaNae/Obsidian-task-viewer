@@ -3,11 +3,7 @@ import type { TimerHost } from '../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinder';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { DisplayTask } from '../../types';
-import {
-    appendEmptySpaceMenuItems,
-    openDraftHubForDailyNote,
-    startDailyNoteTimer,
-} from '../sharedLogic/DailyNoteTaskActions';
+import { appendEmptySpaceMenuItems } from '../sharedLogic/EmptySpaceActions';
 import { drawDateGridLane } from './DateGridLane';
 import type { CardReconciler } from './CardReconciler';
 
@@ -54,10 +50,7 @@ export class AllDaySectionRenderer {
     /** Show context menu for empty space click */
     private showEmptySpaceMenu(x: number, y: number, date: string) {
         this.plugin.menuPresenter.present((menu) => {
-            appendEmptySpaceMenuItems(menu, {
-                onCreate: () => openDraftHubForDailyNote(this.plugin, date),
-                onTimer: (kind) => startDailyNoteTimer(this.plugin, date, kind),
-            });
+            appendEmptySpaceMenuItems(menu, this.plugin, date);
         }, { kind: 'position', x, y });
     }
 }

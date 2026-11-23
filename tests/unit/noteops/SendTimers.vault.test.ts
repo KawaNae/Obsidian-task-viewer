@@ -3,7 +3,7 @@ import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { widgetOver } from '../helpers/timerRig';
 import { NoteOps } from '../../../src/services/data/NoteOps';
-import type { NoteDestination } from '../../../src/services/data/NotePlaces';
+import { NotePlaces, type NoteDestination } from '../../../src/services/data/NotePlaces';
 import { TimerPersistence } from '../../../src/timer/TimerPersistence';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
 import { DEFAULT_SETTINGS } from '../../../src/types';
@@ -44,7 +44,9 @@ async function open(files: Record<string, string[]>) {
     vi.setSystemTime(at(9, 0));
     const { contents, session } = await openLiveVault(files, s => { live = s; });
     const widget = widgetOver(session);
-    const ops = new NoteOps(session.app, session.ops, () => ({ ...DEFAULT_SETTINGS }), {
+    const getSettings = () => ({ ...DEFAULT_SETTINGS });
+    const ops = new NoteOps(session.app, session.ops, getSettings, {
+        places: new NotePlaces(session.app, getSettings),
         getTask: (id) => session.index.getTask(id),
         timers: () => widget,
     });
