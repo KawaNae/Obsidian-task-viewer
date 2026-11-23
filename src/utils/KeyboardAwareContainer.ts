@@ -11,21 +11,29 @@ export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
  * While the keyboard covers the window, the container is told how much of
  * it the keyboard covers, as the CSS variable `--tv-keyboard-overlap` on it
  * (`max(0, innerHeight - keyboardTop)`). The container still covers the
- * whole window; the stylesheet ends the room its panel lays out its
- * contents in that far above the window's bottom: the box is centred above
- * the keyboard, and the sheet, its surface running on under the keyboard,
- * has its contents stand on it, so the panel's last row (its buttons) sits
- * right over the keyboard. The panel's contents shrink with that room, and
- * its body scrolls inside. With no keyboard, nothing is set and the
- * container lays out as ever.
+ * whole window. The stylesheet has the sheet's contents stand on the
+ * keyboard, its surface running on under it, so the panel's last row (its
+ * buttons) sits right over the keyboard and the body shrinks and scrolls
+ * inside; the box keeps its size and is centred above the keyboard, as far
+ * up as the stylesheet lets it, the keyboard covering the lower part of a
+ * box taller than that room. With no keyboard, nothing is
+ * set and the container lays out as ever.
  *
  * What is typed at is kept in sight in the body: when it stands below the
- * body's visible bottom (or the keyboard's top, if higher), the body is
- * scrolled by what it lacks. The body is above the keyboard and holds the
- * field, so its own scroll room is enough: nothing is padded, and its
- * height is not locked. When the keyboard closes, the body's scrollTop is
- * put back where it stood as the keyboard opened, whoever scrolled it
- * meanwhile (this, or the browser revealing a field focused by script).
+ * body's visible bottom, or the keyboard's top where that is higher, the
+ * body is scrolled by what it lacks. Where the body ends above the keyboard
+ * (the sheet), its own scroll room is enough. Where the keyboard covers the
+ * body's lower part (a tall box), the body's height is locked at its current
+ * value and its bottom is padded by what it lacks of the scroll room, so
+ * the padding neither grows nor moves the box. The lock is a max-height as well as a
+ * height: a flex item whose basis falls back to its content (`flex: 1` in a
+ * column of no set height) takes no height, and would grow by the padding,
+ * while a max-height bounds it however it is laid out. Which of the two it is is read from
+ * where the body ends, not from the layout. When the keyboard closes, the
+ * focus leaves the fields, or the container detaches, the height and the
+ * padding are put back, and the body's scrollTop goes back where it stood
+ * as the keyboard opened, whoever scrolled it meanwhile (this, or the
+ * browser revealing a field focused by script).
  *
  * A field is an input, a textarea, or an editable element
  * (contenteditable: a CodeMirror editor's content). What is typed at is
@@ -69,6 +77,12 @@ export class KeyboardAwareContainer {
     private selectionFrame: number | null = null;
     /** The body's scrollTop as the keyboard opened, or as it was first scrolled for it. */
     private savedScrollTop: number | null = null;
+    /** The body's inline height, max-height and padding before it was locked and padded, while it is. */
+    private savedStyle: { height: string; maxHeight: string; paddingBottom: string } | null = null;
+    /** The body's padding-bottom from the stylesheet as it was locked (px). */
+    private basePad = 0;
+    /** The scroll room added to the body's bottom while it is locked (px). */
+    private extraPad = 0;
     /** The overlap last given to the container (px), 0 while none is set. */
     private overlap = 0;
     private keyboardOpen = false;
@@ -236,32 +250,65 @@ export class KeyboardAwareContainer {
     /**
      * When what is typed at (an input's or a textarea's bottom, an editable
      * element's caret) stands below the body's visible bottom, or below the
-     * keyboard's top where that is higher (a panel the stylesheet does not
-     * lift: an anchored popover, placed by script), scroll the body by what
-     * it lacks. Nothing when it is in sight.
+     * keyboard's top where that is higher, scroll the body by what it lacks.
+     * Nothing when it is in sight. Where the keyboard covers the body's
+     * bottom, the body's height is locked first, and its bottom padded by
+     * what it lacks of the scroll room, so the padding adds scroll room only.
      */
     private ensureAboveKeyboard(target: HTMLElement): void {
         const panel = this.scrollTarget;
         if (!panel) return;
 
         const kbTop = keyboardTop(this.win);
-        const limit = Math.min(kbTop, panel.getBoundingClientRect().bottom);
+        const panelRect = panel.getBoundingClientRect();
+        const limit = Math.min(kbTop, panelRect.bottom);
         const bottom = target.isContentEditable
             ? (caretRect(target)?.bottom ?? target.getBoundingClientRect().bottom)
             : target.getBoundingClientRect().bottom;
         const overshoot = bottom - limit + 10;
         if (overshoot <= 0) return;
-        logDebug(`[kb] scroll overshoot=${Math.round(overshoot)} limit=${Math.round(limit)} kbTop=${Math.round(kbTop)}`);
+        const covered = kbTop < panelRect.bottom;
+        logDebug(
+            `[kb] scroll overshoot=${Math.round(overshoot)} limit=${Math.round(limit)}` +
+            ` kbTop=${Math.round(kbTop)} covered=${covered}`);
 
         if (this.savedScrollTop === null) this.savedScrollTop = panel.scrollTop;
+        if (covered) {
+            if (!this.savedStyle) {
+                this.savedStyle = {
+                    height: panel.style.height,
+                    maxHeight: panel.style.maxHeight,
+                    paddingBottom: panel.style.paddingBottom,
+                };
+                this.basePad = parseFloat(this.win.getComputedStyle(panel).paddingBottom) || 0;
+                this.extraPad = 0;
+                const locked = `${panelRect.height}px`;
+                panel.style.height = locked;
+                panel.style.maxHeight = locked;
+            }
+            const room = Math.max(0, (panel.scrollHeight - panel.clientHeight - panel.scrollTop) || 0);
+            if (overshoot > room) {
+                this.extraPad += overshoot - room;
+                panel.style.paddingBottom = `${this.basePad + this.extraPad}px`;
+            }
+        }
         panel.scrollBy({ top: overshoot, behavior: 'instant' });
     }
 
-    /** Put the body's scroll back where it was before the keyboard moved it. */
+    /** Put the body's height, padding and scroll back where they were before the keyboard moved them. */
     private restore(): void {
-        if (this.savedScrollTop === null || !this.scrollTarget) return;
+        const panel = this.scrollTarget;
+        if (!panel) return;
+        if (this.savedStyle) {
+            panel.style.height = this.savedStyle.height;
+            panel.style.maxHeight = this.savedStyle.maxHeight;
+            panel.style.paddingBottom = this.savedStyle.paddingBottom;
+            this.savedStyle = null;
+            this.extraPad = 0;
+        }
+        if (this.savedScrollTop === null) return;
         logDebug('[kb] restore');
-        this.scrollTarget.scrollTo({ top: this.savedScrollTop, behavior: 'instant' });
+        panel.scrollTo({ top: this.savedScrollTop, behavior: 'instant' });
         this.savedScrollTop = null;
     }
 
