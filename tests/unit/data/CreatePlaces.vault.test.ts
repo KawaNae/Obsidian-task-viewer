@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import realMoment from 'moment';
-import { CreatePlaces } from '../../../src/services/data/CreatePlaces';
+import { CreatePlaces, type CreatePlace } from '../../../src/services/data/CreatePlaces';
+import type { NoteSpot } from '../../../src/services/persistence/Notes';
 import { DEFAULT_SETTINGS, type TaskViewerSettings } from '../../../src/types';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 
@@ -109,6 +110,92 @@ describe('a daily note as a place', () => {
         expect(contents.get(NOTE)).toBe('## Tasks\n- [ ] 新しい @10:00\n');
     });
 
+    it('not there, at its end: made of its template for the day, the line put after it', async () => {
+        const { contents, places: p } = await places({
+            [TEMPLATE]: ['# {{title}}', '## Log', '- tv-color:: ff0000', ''].join('\n'),
+        }, 'Templates/Daily');
+        const place = { ...p.dailyNote(DAY), spot: 'end' as const };
+        const facts = await p.facts(place);
+        expect(facts).toMatchObject({ kind: 'note', path: NOTE, spot: 'end', note: 'new', seed: 'daily', heading: null, inherits: { color: 'ff0000' } });
+        expect((await p.create(place, { line: '- [ ] 末尾' }, { tellRefusal: false })).written).toBe(true);
+        expect(contents.get(NOTE)).toBe(['# 2031-01-15', '## Log', '- tv-color:: ff0000', '- [ ] 末尾', ''].join('\n'));
+    });
+
+    it('is the day\'s note by the daily notes\' settings, its path and its template read off the one day', async () => {
+        const { places: p } = await places({});
+        expect(p.dailyNote(DAY)).toEqual({ kind: 'note', note: { kind: 'daily', date: DAY }, spot: { heading: 'Tasks', level: 2, side: 'head' } });
+        expect(p.noteOf(p.dailyNote(DAY))).toBe(NOTE);
+    });
+});
+
+describe('a note at a path as a place', () => {
+    const TASKS = { heading: 'Tasks', level: 2, side: 'head' } as const;
+    const at = (path: string, spot: NoteSpot): CreatePlace => ({ kind: 'note', note: { kind: 'path', path }, spot });
+
+    /** The facts of `place`, and what the index reads of the line once the write puts it there. */
+    async function factsAndWritten(files: Record<string, string>, place: CreatePlace) {
+        const { contents, session, places: p } = await places(files);
+        const facts = await p.facts(place);
+        expect((await p.create(place, { line: '- [ ] 新しい' }, { tellRefusal: false })).written).toBe(true);
+        const written = session.index.getTasks().find(task => task.content === '新しい')!;
+        return { contents, facts, written };
+    }
+
+    it('there, with the heading: the line goes at its head, or its end as the section says', async () => {
+        const { places: p } = await places({ 'n.md': '# n\n## Tasks\n- [ ] 既存\n' });
+        expect(await p.facts(at('n.md', TASKS))).toMatchObject({ kind: 'note', path: 'n.md', spot: TASKS, note: 'existing', seed: 'empty', heading: { kind: 'one' }, ignored: false });
+        expect(await p.facts(at('n.md', { ...TASKS, side: 'end' }))).toMatchObject({ spot: { side: 'end' }, heading: { kind: 'one' } });
+    });
+
+    it('there without the heading, or with it twice: made by the write, or no one place', async () => {
+        const { places: p } = await places({ 'n.md': '# n\n', 'twice.md': '## Tasks\n## Tasks\n' });
+        expect(await p.facts(at('n.md', TASKS))).toMatchObject({ note: 'existing', heading: { kind: 'none' } });
+        expect(await p.facts(at('twice.md', TASKS))).toMatchObject({ heading: { kind: 'many', count: 2 }, inherits: {} });
+    });
+
+    it('there, at its end: inherits what the last section gives, as the index reads the line once written', async () => {
+        const { contents, facts, written } = await factsAndWritten(
+            { 'n.md': ['---', 'tv-due: "2031-01-20"', '---', '## Work', '- tv-color:: ff0000', '- [ ] 既存', ''].join('\n') },
+            at('n.md', 'end'),
+        );
+        expect(facts).toMatchObject({ spot: 'end', note: 'existing', heading: null, inherits: { due: '2031-01-20', color: 'ff0000' } });
+        expect(facts.inherits).toEqual(written.cascadeContext);
+        expect(facts.inheritedFrom).toEqual(written.inheritedFrom);
+        expect(contents.get('n.md')).toMatch(/- \[ \] 既存\n- \[ \] 新しい\n$/);
+    });
+
+    it('not there, under a heading: an empty note made with the heading, as the index reads the line once written', async () => {
+        const { contents, facts, written } = await factsAndWritten({}, at('new.md', TASKS));
+        expect(facts).toMatchObject({ kind: 'note', path: 'new.md', note: 'new', seed: 'empty', heading: { kind: 'none' }, ignored: false, inherits: {} });
+        expect(facts.inherits).toEqual(written.cascadeContext ?? {});
+        expect(contents.get('new.md')).toBe('## Tasks\n- [ ] 新しい\n');
+    });
+
+    it('not there, at its end: an empty note made with the line alone', async () => {
+        const { contents, facts, written } = await factsAndWritten({}, at('new.md', 'end'));
+        expect(facts).toMatchObject({ note: 'new', seed: 'empty', heading: null, inherits: {} });
+        expect(facts.inherits).toEqual(written.cascadeContext ?? {});
+        expect(contents.get('new.md')).toBe('- [ ] 新しい\n');
+    });
+
+    it('not there, in folders not there: the note made at its path, the folders with it', async () => {
+        const { contents } = await factsAndWritten({}, at('a/b/new.md', 'end'));
+        expect(contents.get('a/b/new.md')).toBe('- [ ] 新しい\n');
+    });
+
+    it('a note the views do not read (tv-ignore): said as such', async () => {
+        const { places: p } = await places({ 'n.md': ['---', 'tv-ignore: true', '---', '## Tasks', ''].join('\n') });
+        expect(await p.facts(at('n.md', 'end'))).toMatchObject({ ignored: true, inherits: {} });
+    });
+
+    it('a path that is the day\'s note is still a note made empty, not of the template', async () => {
+        const { contents, places: p } = await places({
+            [TEMPLATE]: ['# {{title}}', ''].join('\n'),
+        }, 'Templates/Daily');
+        expect(await p.facts(at(NOTE, 'end'))).toMatchObject({ note: 'new', seed: 'empty' });
+        await p.create(at(NOTE, 'end'), { line: '- [ ] 空' }, { tellRefusal: false });
+        expect(contents.get(NOTE)).toBe('- [ ] 空\n');
+    });
 });
 
 describe('the head of a row\'s children as a place', () => {

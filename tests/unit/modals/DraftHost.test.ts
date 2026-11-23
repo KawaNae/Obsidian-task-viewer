@@ -282,6 +282,18 @@ describe('placeText', () => {
         expect(placeText(daily({ note: 'new', heading: { kind: 'one', heading: {} as never } }))).toEqual({ text: t('modal.newTask.toNew', vars), tone: 'info' });
         expect(placeText(daily({ heading: { kind: 'one', heading: {} as never } }))).toEqual({ text: t('modal.newTask.toHead', vars), tone: 'info' });
         expect(placeText(daily({ heading: { kind: 'one', heading: {} as never }, spot: { ...SECTION, side: 'end' } }))).toEqual({ text: t('modal.newTask.toEnd', vars), tone: 'info' });
+        expect(placeText(daily())).toEqual({ text: t('modal.newTask.toMade', vars), tone: 'info' });
+        expect(placeText(daily({ heading: { kind: 'many', count: 2 } }))).toEqual({ text: t('modal.newTask.headings', { ...vars, count: '2' }), tone: 'error' });
         expect(placeText({ kind: 'childOf', parent: '親', inherits: {} })).toEqual({ text: t('modal.newTask.toChild', { parent: '親' }), tone: 'info' });
+        expect(placeText({ kind: 'gone', inherits: {} })).toEqual({ text: t('modal.newTask.gone'), tone: 'error' });
+    });
+
+    it('says the end of a note, and a note made for the line, empty or as the day\'s daily note', () => {
+        const note = { note: 'n.md' };
+        const at = (over: Partial<Extract<PlaceFacts, { kind: 'note' }>>) => placeText(daily({ path: 'n.md', seed: 'empty', ...over }));
+        expect(at({ spot: 'end', heading: null })).toEqual({ text: t('modal.newTask.toNoteEnd', note), tone: 'info' });
+        expect(at({ spot: 'end', heading: null, note: 'new' })).toEqual({ text: t('modal.newTask.toNewNoteEnd', note), tone: 'info' });
+        expect(at({ spot: 'end', heading: null, note: 'new', seed: 'daily' })).toEqual({ text: t('modal.newTask.toNewEnd', note), tone: 'info' });
+        expect(at({ note: 'new' })).toEqual({ text: t('modal.newTask.toNewNote', { ...note, heading: 'Tasks' }), tone: 'info' });
     });
 });
