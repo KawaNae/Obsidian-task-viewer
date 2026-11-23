@@ -37,7 +37,7 @@ export interface TimelineConfig {
     showAllDay?: boolean;
     /** Per-view override of timeline section visibility. undefined = follow global. */
     showTimeline?: boolean;
-    /** Per-view override of how cards that would hide each other's names are laid out. undefined = follow global. */
+    /** Per-view override of how overlapping cards (`TimelineOverlapMode`) are laid out. undefined = follow global. */
     overlapMode?: TimelineOverlapMode;
 }
 
@@ -95,7 +95,7 @@ export function effectiveZoom(state: Readonly<TimelineState>, settings: { zoomLe
     return state.zoomLevel ?? settings.zoomLevel;
 }
 
-/** How the view lays out cards that would hide each other's names: its own, or the global setting. */
+/** How the view lays out overlapping cards (`TimelineOverlapMode`): its own, or the global setting. */
 export function effectiveOverlapMode(
     state: Readonly<TimelineState>,
     settings: { overlapMode: TimelineOverlapMode },

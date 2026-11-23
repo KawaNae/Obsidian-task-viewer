@@ -116,7 +116,7 @@
       "showTimeline": "Show timeline",
       "showTimelineDesc": "Default visibility of the hourly timeline section. Can be overridden per view.",
       "overlapMode": "Overlapping cards",
-      "overlapModeDesc": "How Timeline lays out a card that would hide the name of an earlier card. A card starting below the name is shifted right over the earlier one, whichever you choose.",
+      "overlapModeDesc": "How Timeline lays out cards whose times overlap, or where a short card's name would hide another card's name. Shift right shifts each later card right over the earlier one, and Side by side splits the width between them. Switch automatically puts them side by side where each is wide enough to read its times and name, and shifts them right where not.",
       "overlapModeCascade": "Shift right",
       "overlapModeAuto": "Switch automatically",
       "overlapModeSideBySide": "Side by side",

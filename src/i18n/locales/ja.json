@@ -116,7 +116,7 @@
       "showTimeline": "タイムラインを表示",
       "showTimelineDesc": "時間軸セクションの既定の表示状態。ビューごとに上書き可能。",
       "overlapMode": "重なるカードの並べ方",
-      "overlapModeDesc": "Timeline で、後のカードが前のカードの名前を隠すときの並べ方。名前より下で始まるカードは、どれを選んでも右へずらして重ねる",
+      "overlapModeDesc": "Timeline で、時間が重なるカードや、短いカードの名前が別のカードの名前を隠すときの並べ方。ずらして配置は後のカードを右へずらして重ね、横並びは幅を等分して並べる。自動で切り替えは、時刻と名前が読める幅があれば横に並べ、無ければずらす",
       "overlapModeCascade": "ずらして配置",
       "overlapModeAuto": "自動で切り替え",
       "overlapModeSideBySide": "横並び",
