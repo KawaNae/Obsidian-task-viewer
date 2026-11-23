@@ -280,9 +280,11 @@ function shiftedByTime(items: Span[]): ShiftedCluster[] {
 }
 
 /**
- * `count` days of 2 to 6 cards starting from 09:00 to 11:55, each 5 to 240
- * minutes long, in a lane of one of `lanes` px at 0.5, 1 or 2px a minute;
- * the same days each run for one `seed`.
+ * `count` days of 2 to 6 cards starting from 09:00 to 11:55, one card in
+ * ten of no length and the others 5 to 240 minutes long, in a lane of one
+ * of `lanes` px at 0.5, 1 or 2px a minute; the same days each run for one
+ * `seed`. A card of no length overlaps no card in time, so it may share a
+ * column with a card starting with it, ahead of a card overlapping that one.
  */
 function randomDays(seed: number, count: number, lanes: number[]): { lanePx: number; pxPerMinute: number; items: Span[] }[] {
     const random = () => {
@@ -297,7 +299,7 @@ function randomDays(seed: number, count: number, lanes: number[]): { lanePx: num
         const cards = 2 + Math.floor(random() * 5);
         const items = Array.from({ length: cards }, (_, i) => {
             const start = 9 * 60 + Math.floor(random() * 36) * 5;
-            const end = start + 5 + Math.floor(random() * 48) * 5;
+            const end = random() < 0.1 ? start : start + 5 + Math.floor(random() * 48) * 5;
             return { id: `c${i}`, start, end };
         });
         return { lanePx, pxPerMinute, items };
@@ -417,6 +419,23 @@ describe('TaskLayout side by side', () => {
         expect(place(r.B)).toEqual([50.5, 49.5]);
         expect(place(r.C)).toEqual([0, 49.5]);
         expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
+    });
+
+    it('keeps a card out of a column where any card, not only the last, overlaps it', () => {
+        // At 4px a minute X and L overlap in time and take two columns. Z,
+        // of no length, overlaps X alone, through its band, and takes L's
+        // column after L. M overlaps X and L, not Z, the last card of L's
+        // column, so it opens a third column.
+        const r = slots(
+            [
+                card('X', '09:00', '10:30'), card('Z', '09:05', '09:05'),
+                card('L', '09:05', '09:35'), card('M', '09:20', '09:35'),
+            ],
+            sideBySide(4, WIDE),
+        );
+        const px = (slot: LaneSlot) => [slot.left * 4, slot.width * 4].map(v => Number(v.toFixed(1)));
+        expect(['X', 'L', 'M'].map(id => px(r[id]))).toEqual([[0, 130.7], [134.7, 130.7], [269.3, 130.7]]);
+        expect(px(r.Z)).toEqual([134.7, 265.3]);
     });
 
     it('reaches a card right over the columns after its own up to the first holding a card it overlaps', () => {
@@ -715,9 +734,13 @@ describe('TaskLayout with name bands going up or down', () => {
             expect(front('g 00:00-00:05, h 00:05-00:10, M 01:00-02:00, N 01:40-02:30')).toEqual(['g', 'h', 'N', 'M']);
         });
 
-        it('takes two cards side by side starting together by their ends, the one ending first in front', () => {
-            expect(laid('a 11:00-11:05, b 11:00-11:10')).toEqual({ a: [163, 159, 'down'], b: [0, 159, 'down'] });
-            expect(front('a 11:00-11:05, b 11:00-11:10')).toEqual(['a', 'b']);
+        it('takes two cards side by side starting together, neither bound to stand in front, by their ends, the one ending first in front', () => {
+            // At 4px a minute p, of no length, overlaps a in no time, and
+            // its band, from 183px, lies beside a, which has no band; so
+            // neither must stand in front of the other.
+            const lane = laneOf({ pxPerMinute: 4, widthPx: 322, bandInsetPx: 20, narrowestSideBySidePx: 120 });
+            expect(laid('a 11:00-11:10, p 11:00-11:00', lane)).toEqual({ a: [0, 159, '-'], p: [163, 159, 'down'] });
+            expect(front('a 11:00-11:10, p 11:00-11:00', lane)).toEqual(['p', 'a']);
         });
 
         it('for now, puts the higher level in front where the cards that must stand in front of each other go round', () => {
