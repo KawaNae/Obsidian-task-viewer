@@ -345,6 +345,31 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
             expect(fullTime).toHaveBeenCalledTimes(2);
         });
 
+        it('measures it again when the stylesheet changes, and places the cards by the new width', () => {
+            // A larger font: the times need 100px, wider than a column of 80px.
+            let needs = 80;
+            const fullTime = vi.fn(() => needs);
+            const r = renderer(() => 'auto', () => 1, fullTime);
+            const col = column(172);
+            draw(r, [col], pair);
+            expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
+
+            needs = 100;
+            r.measureLanesAgain();
+            expect(fullTime).toHaveBeenCalledTimes(2);
+            expect(bLeftPx(col)).toBeCloseTo(SHIFTED(col), 6);
+        });
+
+        it('writes nothing when the stylesheet changes nothing the lane is measured by', () => {
+            const r = renderer(() => 'auto', () => 1, () => 80);
+            const col = column(172);
+            draw(r, [col], pair);
+            for (const child of col.children) child.style.writes = 0;
+
+            r.measureLanesAgain();
+            expect(col.children.map(child => child.style.writes)).toEqual([0, 0]);
+        });
+
         it('puts no cards side by side under auto where it measures 0 in a column with a width, and side by side still under side by side', () => {
             const auto = renderer(() => 'auto', () => 1, () => 0);
             const col = column(400);
