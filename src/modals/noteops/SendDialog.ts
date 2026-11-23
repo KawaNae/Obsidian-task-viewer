@@ -18,7 +18,8 @@ import type { FormIssue, Tone } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
 
 /**
- * The send dialog: rows and their subtrees sent to a section of a note.
+ * The send dialog: rows and their subtrees sent to a section of a note, or
+ * to its end.
  * This is its logic, apart from the DOM: what it
  * opens on, what it says of the destination the fields name, which values
  * it offers to write into the note, whether a send may be asked, what
@@ -431,12 +432,14 @@ export class SendDialog {
 }
 
 /**
- * The fields as a dialog on `preview` opens: the note field as the preview
- * says (`SendPreview.defaults`), and the heading field empty, which stands
- * for the settings' heading.
+ * The fields as a dialog on `preview` opens, both as the preview says
+ * (`SendPreview.defaults`): the note field, and the heading field holding
+ * the settings' heading. Left untouched, the rows go where a task goes
+ * when nothing names its heading; the heading field emptied sends them to
+ * the note's end.
  */
 export function initialAsk(preview: SendPreview): DestinationAsk {
-    return { note: { ...preview.defaults.note }, heading: '' };
+    return { note: { ...preview.defaults.note }, heading: preview.defaults.section.heading };
 }
 
 /** The facts of the one note the fields name; null while they name none, or more than one. */
@@ -465,15 +468,23 @@ export function noteText(facts: NoteFacts): { text: string; tone: Tone }[] {
 }
 
 /**
- * Where in the note a send to `facts` puts the rows, in one sentence, by
- * where they go in the section (its side). The fields name a section
- * always (`NoteOps.destinationFacts`), so a send to the note's end has no
- * sentence here.
+ * Where in the note a send to `facts` puts the rows, in one sentence: at
+ * the note's end, under no heading, or in the section, by where they go in
+ * it (its side). A note there is but the rows' own is written into, a
+ * warning, as under the note field. None while more than one heading goes
+ * by the name: why is said instead.
  */
 export function headingText(facts: NoteFacts): { text: string; tone: Tone } | null {
     const section = facts.to.spot;
+    if (section === 'end') {
+        switch (facts.kind) {
+            case 'new': return { text: t('modal.send.toNewEnd'), tone: 'info' };
+            case 'existing': return { text: t('modal.send.toNoteEnd'), tone: 'warning' };
+            case 'same': return { text: t('modal.send.withinNoteEnd'), tone: 'info' };
+        }
+    }
     const found = facts.heading;
-    if (section === 'end' || found === null) return null;
+    if (found === null) return null;
     const vars = { heading: section.heading };
     const end = section.side === 'end';
     switch (facts.kind) {
