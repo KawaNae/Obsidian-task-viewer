@@ -759,6 +759,7 @@
     "moveDown": "Move down",
     "remove": "Remove",
     "createTaskForDailyNote": "Create Task for Daily Note",
+    "createTaskInNote": "Create Task in a Note",
     "startCountupForDailyNote": "⏱️ Start Countup for Daily Note",
     "startPomodoroForDailyNote": "🍅 Start Pomodoro for Daily Note"
   },

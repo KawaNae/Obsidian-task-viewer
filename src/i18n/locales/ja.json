@@ -759,6 +759,7 @@
     "moveDown": "下に移動",
     "remove": "削除",
     "createTaskForDailyNote": "デイリーノートにタスクを作成",
+    "createTaskInNote": "ノートを選んでタスクを作成",
     "startCountupForDailyNote": "⏱️ デイリーノートのカウントアップを開始",
     "startPomodoroForDailyNote": "🍅 デイリーノートのポモドーロを開始"
   },

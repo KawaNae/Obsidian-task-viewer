@@ -4,6 +4,7 @@ import type { IndexReads } from './services/core/TaskIndex';
 import type { TaskReadService } from './services/data/TaskReadService';
 import type { Operations } from './services/operations/Operations';
 import type { NoteOps } from './services/data/NoteOps';
+import type { NotePlaces } from './services/data/NotePlaces';
 import type { CreatePlace, CreatePlaces } from './services/data/CreatePlaces';
 import type { DraftSeed } from './services/data/TaskDraft';
 import type { TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
@@ -70,6 +71,8 @@ export interface PluginContext {
     getTaskReadService(): TaskReadService;
     /** The operations on the notes: the one way to write (`Operations`). */
     getOperations(): Operations;
+    /** What the note and heading a destination's fields name are, read off the vault alone (`NotePlaces`): a send's and a task's to create. */
+    getNotePlaces(): NotePlaces;
     /** The operations on notes: sending rows to a note (`NoteOps`). */
     getNoteOps(): NoteOps;
     /** The places a new task line is made in: what one is, and the write there (`CreatePlaces`). */
