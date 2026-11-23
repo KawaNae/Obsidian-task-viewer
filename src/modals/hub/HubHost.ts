@@ -13,9 +13,12 @@ export interface HubForm {
     refresh(): void;
     /** Enable the fields or not, and say why not at the form's end, as `HubHost.shut` says now. */
     showShut(): void;
-    /** Say at the form's end why a write was refused; null takes back what was said. */
+    /**
+     * Say why a write was refused, at the form's end; on a task not written
+     * yet, above the create, as what the create did. Null takes back what was said.
+     */
     sayWrite(refusal: string | null): void;
-    /** Say at the form's end where the task goes, and what of that place to heed; none takes back what was said. */
+    /** Say above the create where the task goes, and what of that place to heed; none takes back what was said. */
     sayPlace(issues: readonly FormIssue<never>[]): void;
     /** Draw the create again as `HubHost.draft` says now: whether it may be asked, and whether one is under way. */
     showDraft(): void;

@@ -13,6 +13,7 @@ import type { DateTimeFields } from '../TaskDateValidator';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import { DraftGuard, type Loss } from '../form/DraftGuard';
 import { FormActions } from '../form/FormActions';
+import { CreateLine } from './CreateLine';
 import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './fields/FieldGroupContext';
 import { NameField } from './fields/NameField';
 import { StatusField } from './fields/StatusField';
@@ -79,9 +80,14 @@ export interface TaskHubFormDeps {
  * 欄の行の下とフォームの末尾である。行が日付の規則を破っていれば（規則4
  * など）、開いたときから破れた欄の下に出す。
  *
- * 書き込みの拒否はホストが言う: 拒まれた理由はフォームの末尾に出す
- * （`HubForm.sayWrite`）。拒まれた欄は打った値のまま残り（`bindField`）、
+ * 書き込みの拒否はホストが言う（`HubForm.sayWrite`）。行のハブでは拒まれた
+ * 理由をフォームの末尾に出す。拒まれた欄は打った値のまま残り（`bindField`）、
  * もう一度確定すれば新しい版へ書く。
+ *
+ * まだ書いていないタスクでは、[作成] を押すと何が起きるか（書く先と、その
+ * 先について気をつけること）と、作成が拒まれた理由を、foot の [作成] の行の
+ * 上に出す（`CreateLine`）。押せない理由が、押せない [作成] の隣に見える。
+ * 作っている間に欄が閉じている理由は、欄についての文なのでフォームの末尾に出す。
  *
  * 閉じる手順（{@link beforeClose}）: ×、Escape、
  * 外側、下へ払う、戻るのどれも、blur を待たずに打ちかけの欄を明示して保存する。
@@ -114,6 +120,8 @@ export class TaskHubForm implements HubForm {
     /** The user said to throw away what the close would lose: the close that goes on asks nothing more. */
     private thrownAway = false;
     private actions!: FormActions;
+    /** On a task not written yet, the line above the create: where it goes, and why a create was refused. */
+    private createLine: CreateLine | null = null;
     private fieldCtx: FieldGroupContext;
     private readonly issues: IssueBoard<HubField>;
     /** Where the form says what is of it as a whole: at its end. */
@@ -216,9 +224,13 @@ export class TaskHubForm implements HubForm {
         this.propsField = new PropertiesFieldGroup(propsGroup, this.fieldCtx);
 
         // What is of the form as a whole is said at its end; the row of
-        // buttons, and the question a close puts in it, in the foot.
+        // buttons, and the question a close puts in it, in the foot, and on
+        // a task not written yet the line of what the create does above it.
         c.appendChild(this.formSays);
+        const createLine = this.host.draft ? new CreateLine(this.deps.foot) : null;
+        this.createLine = createLine;
         this.actions = new FormActions(this.deps.foot, {
+            ...(createLine && { lead: (row: HTMLElement) => createLine.drawToggle(row) }),
             // A task not written yet is cancelled as × cancels it: the close
             // the user asks for, which asks whether to throw away what was given.
             ...(this.host.draft && { cancel: { run: () => this.deps.requestClose?.() } }),
@@ -431,11 +443,13 @@ export class TaskHubForm implements HubForm {
     }
 
     sayWrite(refusal: string | null): void {
-        this.issues.set('write', refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }]);
+        const issues: FormIssue<never>[] = refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }];
+        if (this.createLine) this.createLine.say('write', issues);
+        else this.issues.set('write', issues);
     }
 
     sayPlace(issues: readonly FormIssue<never>[]): void {
-        this.issues.set('place', issues);
+        this.createLine?.say('place', issues);
     }
 
     showDraft(): void {

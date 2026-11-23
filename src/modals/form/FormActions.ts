@@ -33,11 +33,16 @@ export interface FormAsk {
  * hand goes to, so a slip of the hand keeps it; the act stays offered, since
  * acting withdraws the question. A row with no cancel of its own (the hub
  * on a row, which saves as it goes) shows only while it asks.
+ *
+ * A form may put a control of its own at the row's start (`lead`), apart
+ * from the buttons at its end. It steps aside while the row asks: the
+ * question takes the start, and a line to itself on the phone.
  */
 export class FormActions {
     /** Cancel, or back while asking: what the focus goes to as a question is put. */
     readonly cancelButton: HTMLButtonElement;
     private readonly row: HTMLElement;
+    private readonly leadEl: HTMLElement | null;
     private readonly askEl: HTMLElement | null;
     private readonly discardButton: HTMLButtonElement | null;
     private readonly buttons: readonly { el: HTMLButtonElement; spec: FormAction }[];
@@ -50,8 +55,12 @@ export class FormActions {
         cancel?: { label?: string; run(): void };
         actions: readonly FormAction[];
         ask?: FormAsk;
+        /** Put the control at the row's start in the row given, and hand it back. */
+        lead?: (row: HTMLElement) => HTMLElement;
     }) {
         this.row = container.createDiv({ cls: 'tv-form__buttons' });
+        this.leadEl = spec.lead?.(this.row) ?? null;
+        this.leadEl?.addClass('tv-form__lead');
         const ask = spec.ask;
         this.askEl = ask ? this.row.createSpan({ cls: 'tv-form__ask' }) : null;
         this.discardButton = ask ? button(this.row, ask.discardLabel, 'warning', () => ask.discard()) : null;
@@ -78,6 +87,7 @@ export class FormActions {
         this.readsBack = question !== null;
         this.keepLabel = state.keep ?? null;
         this.askEl?.setText(question ?? '');
+        this.leadEl?.toggle(!this.readsBack);
         this.askEl?.toggle(this.readsBack);
         this.discardButton?.toggle(this.readsBack);
         this.cancelButton.setText(this.cancelLabel());

@@ -288,3 +288,42 @@
 .task-hub__prop-remove.is-hidden {
     display: none;
 }
+
+/* --- The line above the create (CreateLine): what the create does, why it
+ * cannot, why it was refused. It stands in the overlay's foot over the row of
+ * buttons, in the sheet and in the box alike, its sentences 4px apart and
+ * 8px above the row. The button that shows or hides it is the row's start
+ * (tv-form__lead): a square as tall and as round as cancel beside it, its
+ * icon quiet, or in the tone of the worst it hides. --- */
+.task-hub__create-line {
+    margin-bottom: 8px;
+}
+
+.task-hub__create-line[hidden] {
+    display: none;
+}
+
+.task-hub__create-says > :first-child {
+    margin-top: 0;
+}
+
+.tv-form__buttons .task-hub__create-toggle {
+    width: var(--input-height);
+    height: var(--input-height);
+    border-color: var(--tv-border);
+    border-radius: var(--button-radius);
+    margin-inline-end: auto;
+}
+
+.task-hub__create-toggle .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.tv-form__buttons .task-hub__create-toggle.is-error {
+    color: var(--tv-text-danger);
+}
+
+.tv-form__buttons .task-hub__create-toggle.is-warning {
+    color: var(--tv-text-warning);
+}
