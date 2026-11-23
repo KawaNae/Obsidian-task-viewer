@@ -5,7 +5,8 @@ import { Notice } from '../mocks/obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
-import { DEFAULT_SETTINGS } from '../../../src/types';
+import { DEFAULT_SETTINGS, type TaskViewerSettings } from '../../../src/types';
+import { Destination } from '../../../src/services/persistence/Destination';
 import { byKey } from '../helpers/properties';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
@@ -62,6 +63,11 @@ function parents(session: VaultSession): Array<[string, string | null]> {
 
 function lines(contents: Map<string, string>): string[] {
     return contents.get(FILE)!.split('\n');
+}
+
+/** The section of the heading named `heading`, as the API names one under the settings. */
+function under(heading: string, settings: TaskViewerSettings = DEFAULT_SETTINGS) {
+    return Destination.sectionNamed(heading, settings);
 }
 
 describe('the editor\'s duplicate (one line by the `copies` op, copyOf)', () => {
@@ -128,11 +134,11 @@ describe('the in-place duplicate (`copies` below, copyOf)', () => {
     });
 });
 
-describe('a task created under a heading (insertUnderHeading)', () => {
+describe('a task created under a heading (putInNote in a section)', () => {
     it('goes past the paragraph under the heading, which would otherwise go on the new task', async () => {
         const { contents, session } = await open(['## H', 'some words', '- [ ] A', '']);
 
-        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
+        expect((await session.ops.putInNote(FILE, under('H'), { line: '- [ ] N' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['## H', 'some words', '- [ ] N', '- [ ] A', '']);
@@ -148,7 +154,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open([...note, '']);
         const before = contents.get(FILE)!;
 
-        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).toBeNull();
+        expect((await session.ops.putInNote(FILE, under('H'), { line: '- [ ] N' })).written).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -158,10 +164,10 @@ describe('a task created under a heading (insertUnderHeading)', () => {
 
     it('goes where the settings say: the heading at any level, its section\'s end, a heading made at their level', async () => {
         const { contents, session } = await open(['### h', '- [ ] A', '#### Sub', '- [ ] S', '']);
-        session.index.updateSettings({ ...DEFAULT_SETTINGS, sectionSide: 'end', taskHeadingLevel: 4 });
+        const settings = { ...DEFAULT_SETTINGS, sectionSide: 'end' as const, taskHeadingLevel: 4 };
 
-        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
-        expect(await session.ops.createTask(FILE, { line: '- [ ] M' }, 'Made')).not.toBeNull();
+        expect((await session.ops.putInNote(FILE, under('H', settings), { line: '- [ ] N' })).written).toBe(true);
+        expect((await session.ops.putInNote(FILE, under('Made', settings), { line: '- [ ] M' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['### h', '- [ ] A', '- [ ] N', '#### Sub', '- [ ] S', '', '#### Made', '- [ ] M', '']);
@@ -171,7 +177,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         const { contents, session } = await open(['## H', '- [ ] A', '### h', '']);
         const before = contents.get(FILE)!;
 
-        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).toBeNull();
+        expect((await session.ops.putInNote(FILE, under('H'), { line: '- [ ] N' })).written).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
@@ -183,7 +189,7 @@ describe('a task created under a heading (insertUnderHeading)', () => {
             live?.dispose();
             const { contents, session } = await open(note);
 
-            expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
+            expect((await session.ops.putInNote(FILE, under('H'), { line: '- [ ] N' })).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents).slice(-3)).toEqual(['## H', '- [ ] N', '']);
@@ -331,7 +337,7 @@ describe('text past a blank line that a line put above would take in', () => {
     it('puts a line under a heading past the code below a blank line', async () => {
         const { contents, session } = await open(['## H', '', '    code', '- [ ] A', '']);
 
-        expect(await session.ops.createTask(FILE, { line: '- [ ] N' }, 'H')).not.toBeNull();
+        expect((await session.ops.putInNote(FILE, under('H'), { line: '- [ ] N' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['## H', '', '    code', '- [ ] N', '- [ ] A', '']);
@@ -372,13 +378,13 @@ describe('a first child (insertLine, firstChild)', () => {
     });
 });
 
-describe('an append (createTask without a heading, at the end)', () => {
+describe('an append (putInNote at the end)', () => {
     it('goes past the frontmatter of a note that is only frontmatter, and into an empty note', async () => {
         for (const note of [['---', 'a: 1', '---', ''], ['']]) {
             live?.dispose();
             const { contents, session } = await open(note);
 
-            expect(await session.ops.createTask(FILE, { line: '- [ ] N' })).not.toBeNull();
+            expect((await session.ops.putInNote(FILE, 'end', { line: '- [ ] N' })).written).toBe(true);
             await session.settle(FILE);
 
             expect(lines(contents).slice(-2)).toEqual(['- [ ] N', '']);
@@ -390,7 +396,7 @@ describe('an append (createTask without a heading, at the end)', () => {
         const { contents, session } = await open(['- [ ] A', '```', 'code', '']);
         const before = contents.get(FILE);
 
-        expect(await session.ops.createTask(FILE, { line: '- [ ] N' })).toBeNull();
+        expect((await session.ops.putInNote(FILE, 'end', { line: '- [ ] N' })).written).toBe(false);
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);

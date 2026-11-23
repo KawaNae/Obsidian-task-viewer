@@ -34,7 +34,7 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
         deleteTask: vi.fn().mockResolvedValue(lands),
         duplicateTask: vi.fn().mockResolvedValue(lands),
         insertLine: vi.fn().mockResolvedValue({ written: lands, refused: null }),
-        createTask: vi.fn().mockResolvedValue(lands ? 0 : null),
+        putInNote: vi.fn().mockResolvedValue(lands ? { written: true, line: 0 } : { written: false, refused: null }),
     };
     const mockPlugin = {
         app: { vault: { getAbstractFileByPath: vi.fn() } },

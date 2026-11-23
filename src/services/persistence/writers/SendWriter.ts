@@ -10,7 +10,7 @@ import {
     editLines, fileGone, readInLine, splitLines, takeBack, withRefused,
     type LineDraft, type MarkedLine, type Refusal, type RowRef, type RowTarget, type TakeBack, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
-import { createNote, sectionSpot } from '../Notes';
+import { createNote, noteSpot } from '../Notes';
 import { replaceSubtree } from '../ReplaceSubtree';
 import { firingTrials, type CompletionFire, type FiringOutcome } from '../FiringTrials';
 import type { SubtreeReplacement } from '../TaskOps';
@@ -387,12 +387,12 @@ export class SendWriter {
             }
             let spot: Spot;
             if (k === 0) {
-                const inSection = sectionSpot(draft, to.section, head);
-                if ('kind' in inSection) {
-                    session.refuse({ kind: 'headings', name: to.section.heading, count: inSection.count });
+                const first = noteSpot(draft, to.section, head);
+                if ('kind' in first) {
+                    session.refuse(first);
                     return null;
                 }
-                spot = inSection;
+                spot = first;
             } else {
                 const before = session.row(heads[k - 1]);
                 if (before === null) return null;

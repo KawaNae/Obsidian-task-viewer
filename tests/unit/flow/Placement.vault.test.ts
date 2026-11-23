@@ -4,6 +4,7 @@ import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import { Destination } from '../../../src/services/persistence/Destination';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
@@ -263,7 +264,7 @@ describe('a line put past a fence in a list item that never closes', () => {
     });
 
     it('reads a task appended to the note as a task', async () => {
-        const { lines, tasks } = await written(session => session.ops.createTask(FILE, { line: '- [ ] new' }));
+        const { lines, tasks } = await written(session => session.ops.putInNote(FILE, 'end', { line: '- [ ] new' }));
         expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '- [ ] new', '']);
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'new']]);
     });
@@ -289,7 +290,7 @@ describe('a line put past a fence in a list item that never closes', () => {
     });
 
     it('reads a task written under a heading made at the end as a task', async () => {
-        const { lines, tasks } = await written(session => session.ops.createTask(FILE, { line: '- [ ] new' }, 'H'));
+        const { lines, tasks } = await written(session => session.ops.putInNote(FILE, Destination.sectionNamed('H', DEFAULT_SETTINGS), { line: '- [ ] new' }));
         expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '', '## H', '- [ ] new', '']);
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [7, 'new']]);
     });

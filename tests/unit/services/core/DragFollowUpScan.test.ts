@@ -149,7 +149,7 @@ describe('writes after dispose', () => {
         expect((await proto.updateTask.call(host(), 'id', {})).written).toBe(false);
         expect(await proto.deleteTask.call(host(), 'id')).toBe(false);
         expect(await proto.duplicateTask.call(host(), 'id')).toBe(false);
-        expect(await proto.createTask.call(host(), FILE, { line: '- [ ] x' })).toBe(null);
+        expect((await proto.putInNote.call(host(), FILE, 'end', { line: '- [ ] x' })).written).toBe(false);
         expect((await proto.insertLine.call(host(), 'id', { line: '- [ ] x' }, 'afterSubtree')).written).toBe(false);
         expect(await proto.updateByAnchor.call(host(), FILE, 'a', {})).toEqual({ kind: 'not-written', refused: null });
     });

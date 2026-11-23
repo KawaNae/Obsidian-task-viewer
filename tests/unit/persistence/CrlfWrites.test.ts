@@ -157,10 +157,10 @@ describe('the writes that always landed, but landed in LF', () => {
             ['# crlf heading', '', '## 予定', '- [ ] 既存 @2026-09-21', ''].join('\r\n')
         );
 
-        const line = await session.ops.createTask(FILE, { line: '- [ ] 追加 @2026-09-21' }, '予定');
+        const put = await session.ops.putInNote(FILE, { heading: '予定', level: 2, side: 'head' }, { line: '- [ ] 追加 @2026-09-21' });
         await session.settle(FILE);
 
-        expect(line).toBe(3);
+        expect(put).toEqual({ written: true, line: 3 });
         expect(taskLines(contents)[0]).toBe('- [ ] 追加 @2026-09-21');
         expect(terminators(contents.get(FILE)!).lf).toBe(0);
     });

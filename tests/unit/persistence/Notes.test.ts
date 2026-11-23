@@ -162,7 +162,7 @@ describe('Notes: a line put in a section', () => {
         it('puts nothing when two headings go by the name, whatever their levels and case', () => {
             for (const content of ['## Tasks\n- [ ] first\n## Tasks\nsecond', '## Tasks\n### TASKS']) {
                 const { draft } = draftOver(content.split('\n'));
-                expect(putBlock(draft, section('Tasks'), Block.line('inserted'))).toEqual({ kind: 'many', count: 2 });
+                expect(putBlock(draft, section('Tasks'), Block.line('inserted'))).toEqual({ kind: 'headings', name: 'Tasks', count: 2 });
                 expect(draft.lines.join('\n')).toBe(content);
             }
         });

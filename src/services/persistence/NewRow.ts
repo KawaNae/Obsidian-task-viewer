@@ -7,7 +7,7 @@ import { Block, type PlacedLine } from './utils/Placement';
 /**
  * A row a write puts in a note: its line, and the property lines that go
  * under it as its first children. What every write that adds a row is
- * handed (`Operations.createTask`, `insertLine`, `putInDailyNote`, the
+ * handed (`Operations.putInNote`, `insertLine`, `putInDailyNote`, the
  * `insert` op); a row with no `properties` is its line alone.
  */
 export interface NewRow {
