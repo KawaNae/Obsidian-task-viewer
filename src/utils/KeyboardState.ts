@@ -6,7 +6,10 @@
  *   リスナー不要
  * - Capacitor Keyboard events — Obsidian mobile (Android/iOS)。イベントが
  *   来た瞬間の高さを保持する必要があるため、window ごとに常駐リスナーを
- *   trackKeyboard() で一度だけ張る
+ *   trackKeyboard() で一度だけ張る。主のウィンドウはプラグインの読み込みの
+ *   ときから張る（高さは show でしか届かず、後から張ると、既に出ている
+ *   キーボードを知らない）。ポップアウトのウィンドウは、読む側が初めて
+ *   使うときに張る
  *
  * KeyboardAwareContainer（タスクハブの入力退避）と PopoverShell（suggest の
  * 上下反転）が同じキーボード上端を見るための単一情報源。
