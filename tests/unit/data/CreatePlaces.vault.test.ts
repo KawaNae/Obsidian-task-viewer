@@ -198,6 +198,48 @@ describe('a note at a path as a place', () => {
     });
 });
 
+describe('the place a note and a spot chosen name', () => {
+    const TASKS = { heading: 'Tasks', level: 2, side: 'head' } as const;
+
+    it('a note there, under its heading: the line written there', async () => {
+        const { contents, places: p } = await places({ 'n.md': '# n\n## Tasks\n- [ ] 既存\n' });
+        const place = p.fromDestination({ note: { kind: 'existing', path: 'n.md' }, spot: TASKS });
+        expect(place).toEqual({ kind: 'note', note: { kind: 'path', path: 'n.md' }, spot: TASKS });
+        await p.create(place, { line: '- [ ] 新しい' }, { tellRefusal: false });
+        expect(contents.get('n.md')).toBe('# n\n## Tasks\n- [ ] 新しい\n- [ ] 既存\n');
+    });
+
+    it('a note there, at its end: the line written after its last', async () => {
+        const { contents, places: p } = await places({ 'n.md': '## Tasks\n- [ ] 既存\n## Other\n' });
+        const place = p.fromDestination({ note: { kind: 'existing', path: 'n.md' }, spot: 'end' });
+        await p.create(place, { line: '- [ ] 新しい' }, { tellRefusal: false });
+        expect(contents.get('n.md')).toBe('## Tasks\n- [ ] 既存\n## Other\n- [ ] 新しい\n');
+    });
+
+    it('a note not there: made empty with the heading, even at the path of a daily note not there', async () => {
+        const { contents, places: p } = await places({ [TEMPLATE]: '# {{title}}\n' }, 'Templates/Daily');
+        const place = p.fromDestination({ note: { kind: 'new', path: NOTE }, spot: TASKS });
+        expect(await p.facts(place)).toMatchObject({ note: 'new', seed: 'empty', heading: { kind: 'none' } });
+        await p.create(place, { line: '- [ ] 新しい' }, { tellRefusal: false });
+        expect(contents.get(NOTE)).toBe('## Tasks\n- [ ] 新しい\n');
+    });
+
+    it('in the note a place is in already: that place, its spot alone the answer\'s, a daily note still made of its template', async () => {
+        const { contents, places: p } = await places({ [TEMPLATE]: '# {{title}}\n' }, 'Templates/Daily');
+        const daily = p.dailyNote(DAY);
+        const place = p.fromDestination({ note: { kind: 'new', path: NOTE }, spot: 'end' }, daily);
+        expect(place).toEqual({ kind: 'note', note: { kind: 'daily', date: DAY }, spot: 'end' });
+        await p.create(place, { line: '- [ ] 新しい' }, { tellRefusal: false });
+        expect(contents.get(NOTE)).toBe('# 2031-01-15\n- [ ] 新しい\n');
+    });
+
+    it('in another note than a place is in: the note chosen, by its path', async () => {
+        const { places: p } = await places({});
+        expect(p.fromDestination({ note: { kind: 'new', path: 'other.md' }, spot: 'end' }, p.dailyNote(DAY)))
+            .toEqual({ kind: 'note', note: { kind: 'path', path: 'other.md' }, spot: 'end' });
+    });
+});
+
 describe('the head of a row\'s children as a place', () => {
     const LINES = ['## Work', '- tv-start:: 2031-02-01', '- [ ] 親', '    - [ ] 子', ''].join('\n');
 
