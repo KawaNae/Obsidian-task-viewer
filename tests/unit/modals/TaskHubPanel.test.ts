@@ -203,11 +203,11 @@ describe('the hub on a task not written yet', () => {
 });
 
 describe('the hub on a row', () => {
-    it('has no title: its card names the task', async () => {
+    it('is titled as editing the properties, above the body', async () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
 
-        expect(body.head!.children).toHaveLength(0);
+        expect(body.head!.children.map(child => child.text)).toEqual([t('modal.hub.title')]);
     });
 
     it('builds the source mode on the row, in the panel\'s slots', async () => {
