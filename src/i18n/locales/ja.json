@@ -120,8 +120,6 @@
       "overlapModeCascade": "ずらして配置",
       "overlapModeAuto": "自動で切り替え",
       "overlapModeSideBySide": "横並び",
-      "sideBySideMinWidth": "横に並べる最小の幅 (px)",
-      "sideBySideMinWidthDesc": "「自動で切り替え」のとき、1枚の幅がこの値以上なら横に並べ、足りなければずらして重ねる",
       "showWeekRow": "週番号行を表示",
       "showWeekRowDesc": "タイムライン・スケジュールの日付ヘッダー上部に週番号行を表示します。",
       "mobileTopOffset": "モバイル上部オフセット (px)",

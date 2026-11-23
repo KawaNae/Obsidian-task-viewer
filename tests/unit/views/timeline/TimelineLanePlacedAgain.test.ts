@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NO_TASK_LOOKUP, toDisplayTask } from '../../../../src/services/display/DisplayTaskConverter';
 import { TimelineSectionRenderer } from '../../../../src/views/timelineview/renderers/TimelineSectionRenderer';
 import { makeTask } from '../../helpers/makeTask';
-import type { DisplayTask } from '../../../../src/types';
+import type { DisplayTask, TimelineOverlapMode } from '../../../../src/types';
 
 /**
  * A day column's cards are placed again, without a draw, when the column's
  * width changes or the view asks: the layout is taken again by the lane,
- * the zoom and the narrowest a card put side by side may be as they are
- * then, and the cards' places rewritten. This suite runs without a DOM, so
- * the column, its cards, the observer and the stylesheet's lengths are
- * stand-ins.
+ * the zoom and the view's way of laying out as they are then, and the
+ * cards' places rewritten. This suite runs without a DOM, so the column,
+ * its cards, the observer, the stylesheet's lengths and the width a card
+ * shows its times in are stand-ins.
  */
 
 /** Counts what is written to it, so a pass that writes nothing shows. */
@@ -77,15 +77,22 @@ function card(id: string, start: string, end: string): DisplayTask {
     return { ...task, drawn: { startMs: at(start), endMs: at(end) } };
 }
 
+/**
+ * A renderer of the view's way of laying out (`mode`), its zoom, and the
+ * width a card shows its start and end time whole in (`fullTime`), which
+ * the stylesheet and the font decide and a DOM would measure.
+ */
 function renderer(
-    narrowest: () => number | null = () => null,
+    mode: () => TimelineOverlapMode = () => 'cascade',
     zoom: () => number = () => 1,
+    fullTime: (col: HTMLElement) => number = () => 120,
 ): TimelineSectionRenderer {
     return new TimelineSectionRenderer(
         { settings: { startHour: 0 } } as never,
         { render: () => { } } as never,
         zoom,
-        narrowest,
+        mode,
+        fullTime,
     );
 }
 
@@ -171,7 +178,7 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         // and its halo cover 22 + 3 - 10 = 15px of L's top, more than the
         // 13.2px L can move its content down, so the band would hide L's
         // name and the two are put side by side, 4px apart: 159px each.
-        const r = renderer(() => 120);
+        const r = renderer(() => 'auto');
         const col = column(330);
         draw(r, [col], () => [card('g', '00:00', '00:05'), card('L', '00:10', '01:03')]);
         const [g, l] = col.children;
@@ -181,21 +188,21 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         expect(l.style.props.has('--band-gap-minutes')).toBe(false);
     });
 
-    it('places the cards by the narrowest as it is when asked, not as it was drawn', () => {
-        let narrowest: number | null = 120;
-        const r = renderer(() => narrowest);
+    it('places the cards by the way of laying out as it is when asked, not as it was drawn', () => {
+        let mode: TimelineOverlapMode = 'auto';
+        const r = renderer(() => mode);
         const col = column(408);
         draw(r, [col], () => [card('a', '10:00', '11:00'), card('b', '10:05', '11:00')]);
         const b = col.children[1];
         expect(b.dataset.cascadeOffset).toBeUndefined();
 
-        narrowest = null;
+        mode = 'cascade';
         r.placeLanesAgain();
         expect(b.dataset.cascadeOffset).toBe('1');
 
         // Side by side again, b stands 4px right of a with no card behind
         // it, and its halo goes.
-        narrowest = 120;
+        mode = 'auto';
         r.placeLanesAgain();
         expect(b.dataset.cascadeOffset).toBeUndefined();
     });
@@ -204,7 +211,7 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         // At 1px a minute g is 2px high and its band goes up, clear of v's
         // name; at 5px a minute it is 22px high and shows its name inside.
         let zoom = 1;
-        const r = renderer(() => null, () => zoom);
+        const r = renderer(() => 'cascade', () => zoom);
         const col = column(330);
         draw(r, [col], () => [card('g', '10:30', '10:35'), card('v', '10:40', '12:00')]);
         const [g, v] = col.children;
@@ -226,8 +233,8 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         // does, in front of B, which stands a level further right: D's
         // right edge lies over B. Side by side, D reaches the lane's right
         // edge and no right edge lies over a card.
-        let narrowest: number | null = null;
-        const r = renderer(() => narrowest);
+        let mode: TimelineOverlapMode = 'cascade';
+        const r = renderer(() => mode);
         const col = column(330);
         draw(r, [col], () => [
             card('A', '09:10', '09:45'), card('B', '09:25', '11:45'),
@@ -236,11 +243,11 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         const d = col.children[3];
         expect(col.children.map(c => c.dataset.haloRight)).toEqual([undefined, undefined, undefined, '1']);
 
-        narrowest = 0;
+        mode = 'sideBySide';
         r.placeLanesAgain();
         expect(col.children.map(c => c.dataset.haloRight)).toEqual([undefined, undefined, undefined, undefined]);
 
-        narrowest = null;
+        mode = 'cascade';
         r.placeLanesAgain();
         expect(d.dataset.haloRight).toBe('1');
     });
@@ -249,7 +256,7 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         // At 1px a minute k3's band hangs over T, ending left of T's right
         // edge; at 5px a minute k3 shows its name inside and has no band.
         let zoom = 1;
-        const r = renderer(() => 120, () => zoom);
+        const r = renderer(() => 'auto', () => zoom);
         const col = column(330);
         draw(r, [col], () => [
             card('k1', '10:30', '10:35'), card('k2', '10:35', '10:40'),
@@ -278,5 +285,76 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
 
         notify!([{ target: col }]);
         expect(col.children.map(child => child.style.writes)).toEqual(col.children.map(() => 0));
+    });
+
+    describe('by the width a card shows its start and end time whole in', () => {
+        // Two cards whose times overlap. Side by side, 4px apart, b starts
+        // at its column's left; shifted right, it starts 15% of the lane in.
+        const pair = () => [card('a', '10:00', '11:00'), card('b', '10:05', '11:00')];
+        /** Where b starts, in px of the lane (the column less 8px). */
+        const bLeftPx = (col: Lane) =>
+            Number(/\* ([\d.e-]+)\)$/.exec(col.children[1].style.left)![1]) * (col.clientWidth - 8);
+        const SIDE_BY_SIDE = (col: Lane) => (col.clientWidth - 8 - 4) / 2 + 4;
+        const SHIFTED = (col: Lane) => 0.15 * (col.clientWidth - 8);
+
+        it('puts two cards side by side under auto where each column is as wide as that, and shifts them where narrower', () => {
+            // A lane of 164px makes two columns of 80px; one of 163px, 79.5px.
+            const at = renderer(() => 'auto', () => 1, () => 80);
+            const wide = column(172);
+            draw(at, [wide], pair);
+            expect(bLeftPx(wide)).toBeCloseTo(SIDE_BY_SIDE(wide), 6);
+
+            const below = renderer(() => 'auto', () => 1, () => 80);
+            const narrow = column(171);
+            draw(below, [narrow], pair);
+            expect(bLeftPx(narrow)).toBeCloseTo(SHIFTED(narrow), 6);
+        });
+
+        it('measures it once a draw, not again when only the column\'s width changes', () => {
+            const fullTime = vi.fn(() => 80);
+            const r = renderer(() => 'auto', () => 1, fullTime);
+            const col = column(172);
+            draw(r, [col], pair);
+            expect(fullTime).toHaveBeenCalledTimes(1);
+            expect(fullTime).toHaveBeenCalledWith(col);
+
+            // Placed again by the new width and the width measured at the draw.
+            col.clientWidth = 171;
+            notify!([{ target: col }]);
+            expect(bLeftPx(col)).toBeCloseTo(SHIFTED(col), 6);
+            col.clientWidth = 400;
+            notify!([{ target: col }]);
+            expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
+            expect(fullTime).toHaveBeenCalledTimes(1);
+        });
+
+        it('measures it as a column drawn before it was laid out first has a width, and keeps it from then on', () => {
+            // A column with no width shows no time row, so it measures 0.
+            const fullTime = vi.fn((col: HTMLElement) => ((col as unknown as Lane).clientWidth > 0 ? 80 : 0));
+            const r = renderer(() => 'auto', () => 1, fullTime);
+            const col = column(0);
+            draw(r, [col], pair);
+
+            col.clientWidth = 172;
+            notify!([{ target: col }]);
+            expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
+            expect(fullTime).toHaveBeenCalledTimes(2);
+
+            col.clientWidth = 400;
+            notify!([{ target: col }]);
+            expect(fullTime).toHaveBeenCalledTimes(2);
+        });
+
+        it('puts no cards side by side under auto where it measures 0 in a column with a width, and side by side still under side by side', () => {
+            const auto = renderer(() => 'auto', () => 1, () => 0);
+            const col = column(400);
+            draw(auto, [col], pair);
+            expect(bLeftPx(col)).toBeCloseTo(SHIFTED(col), 6);
+
+            const sideBySide = renderer(() => 'sideBySide', () => 1, () => 0);
+            const other = column(400);
+            draw(sideBySide, [other], pair);
+            expect(bLeftPx(other)).toBeCloseTo(SIDE_BY_SIDE(other), 6);
+        });
     });
 });
