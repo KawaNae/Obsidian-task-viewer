@@ -65,7 +65,7 @@ describe('the keyboard as the plugin loads', () => {
         win.fire('keyboardDidShow', { keyboardHeight: 336 }); // typing in a note
 
         const root = new Root();
-        const body = { scrollTop: 0, scrollTo() {} };
+        const body = Object.assign(new Target(), { scrollTop: 0, scrollTo() {} });
         const kac = new KeyboardAwareContainer(root as never, win as never, body as never);
         kac.attach();
 

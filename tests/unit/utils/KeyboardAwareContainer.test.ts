@@ -683,6 +683,100 @@ describe('KeyboardAwareContainer', () => {
         });
     });
 
+    describe('the user scrolling the body while the keyboard is open', () => {
+        beforeEach(() => vi.useFakeTimers());
+
+        /** The box: the keyboard opened over a focused field, the body locked, padded and scrolled 260 for it from 5. */
+        function openedOverField() {
+            const env = setup({ vvHeight: 800 });
+            const input = new MockInput(750);
+            env.container.ownerDocument.activeElement = input;
+            env.container.adopt(input);
+            env.panel.style.paddingBottom = '8px';
+            env.panel.scrollTop = 5;
+            env.kac.attach();
+            env.win.visualViewport!.height = 500;
+            env.win.visualViewport!.dispatch('resize');
+            expect(env.panel.scrollTop).toBe(265);
+            const closeKeyboard = () => {
+                env.win.visualViewport!.height = 800;
+                env.win.visualViewport!.dispatch('resize');
+            };
+            return { ...env, input, closeKeyboard };
+        }
+
+        for (const gesture of ['wheel', 'touchmove']) {
+            it(`leaves the body where the user took it by a ${gesture} on it, the height and the padding put back`, () => {
+                const { panel, closeKeyboard } = openedOverField();
+
+                panel.dispatch(gesture);
+                panel.scrollTop = 120;
+                closeKeyboard();
+
+                expect(panel.lastScrollTo).toBeNull();
+                expect(panel.scrollTop).toBe(120);
+                expect(panel.style.height).toBe('');
+                expect(panel.style.maxHeight).toBe('');
+                expect(panel.style.paddingBottom).toBe('8px');
+            });
+        }
+
+        it('leaves the body where the user took it when the focus leaves the fields', () => {
+            const { container, panel } = openedOverField();
+
+            panel.dispatch('touchmove');
+            panel.scrollTop = 120;
+            container.ownerDocument.activeElement = null;
+            container.dispatch('focusout');
+            vi.advanceTimersByTime(200);
+
+            expect(panel.lastScrollTo).toBeNull();
+            expect(panel.style.height).toBe('');
+            expect(panel.style.paddingBottom).toBe('8px');
+        });
+
+        it('leaves the body where the user took it when the container detaches', () => {
+            const { panel, kac } = openedOverField();
+
+            panel.dispatch('wheel');
+            panel.scrollTop = 120;
+            kac.detach();
+
+            expect(panel.lastScrollTo).toBeNull();
+            expect(panel.style.height).toBe('');
+            expect(panel.style.paddingBottom).toBe('8px');
+        });
+
+        it('goes back to where the user took the body when it is scrolled for a field afterwards', () => {
+            const { container, panel, closeKeyboard } = openedOverField();
+
+            panel.dispatch('wheel');
+            panel.scrollTop = 120;
+            const below = new MockInput(700); // 210 below the keyboard's top
+            container.adopt(below);
+            container.ownerDocument.activeElement = below;
+            container.dispatch('focusin', { target: below });
+            vi.advanceTimersByTime(50);
+            expect(panel.scrollTop).toBe(330);
+
+            closeKeyboard();
+
+            expect(panel.lastScrollTo).toEqual({ top: 120, behavior: 'instant' });
+        });
+
+        it('stops listening to the gestures once detached', () => {
+            const { panel, kac } = setup({ vvHeight: 800 });
+            kac.attach();
+            expect(panel.listenerCount('wheel')).toBe(1);
+            expect(panel.listenerCount('touchmove')).toBe(1);
+
+            kac.detach();
+
+            expect(panel.listenerCount('wheel')).toBe(0);
+            expect(panel.listenerCount('touchmove')).toBe(0);
+        });
+    });
+
     describe('measuring once the container has settled', () => {
         it('puts the box\'s body back as it stood when the keyboard opened, the browser having scrolled it to the field before the measure', async () => {
             const pop = new MockAnimation(250); // the overlap moving over the keyboard's slide

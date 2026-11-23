@@ -33,8 +33,12 @@ export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
  * focus leaves the fields, or the container detaches, the height and the
  * padding are put back, and the body's scrollTop goes back where it stood
  * as the keyboard opened (or as the container attached over an open
- * keyboard), whoever scrolled it meanwhile (this, or the browser revealing
- * a field focused by script).
+ * keyboard): what this, or the browser revealing a field focused by
+ * script, scrolled it by for the keyboard is given back. Once the user
+ * scrolls the body (a wheel, a finger moving on it) that position is
+ * dropped, and the body stays where the user took it; a later scroll for
+ * a field goes back to where it stood just before. A `scroll` event cannot
+ * tell the user's scroll from these, so the gestures are listened to.
  *
  * A field is an input, a textarea, or an editable element
  * (contenteditable: a CodeMirror editor's content). What is typed at is
@@ -76,6 +80,7 @@ export class KeyboardAwareContainer {
     private focusTimer: ReturnType<typeof setTimeout> | null = null;
     private selectionHandler: (() => void) | null = null;
     private selectionFrame: number | null = null;
+    private userScrollHandler: (() => void) | null = null;
     /** The body's scrollTop as the keyboard opened, or as it was first scrolled for it. */
     private savedScrollTop: number | null = null;
     /** The body's inline height, max-height and padding before it was locked and padded, while it is. */
@@ -159,6 +164,12 @@ export class KeyboardAwareContainer {
             }
         };
         this.container.ownerDocument.addEventListener('selectionchange', this.selectionHandler);
+
+        // The user scrolling the body: where it stood for the keyboard is
+        // no longer where it goes back to.
+        this.userScrollHandler = () => { this.savedScrollTop = null; };
+        this.scrollTarget.addEventListener('wheel', this.userScrollHandler, { passive: true });
+        this.scrollTarget.addEventListener('touchmove', this.userScrollHandler, { passive: true });
 
         // A keyboard already open as the container attaches (a dialog opened
         // from another while typing) is laid out above at once.
@@ -339,6 +350,10 @@ export class KeyboardAwareContainer {
             this.container.ownerDocument.removeEventListener('selectionchange', this.selectionHandler);
         }
         if (this.selectionFrame !== null) this.win.cancelAnimationFrame(this.selectionFrame);
+        if (this.userScrollHandler) {
+            this.scrollTarget.removeEventListener('wheel', this.userScrollHandler);
+            this.scrollTarget.removeEventListener('touchmove', this.userScrollHandler);
+        }
         // The overlap given to the container is left on it: a container
         // closing over the open keyboard leaves where it stands.
         this.restore();
@@ -350,6 +365,7 @@ export class KeyboardAwareContainer {
         this.focusTimer = null;
         this.selectionHandler = null;
         this.selectionFrame = null;
+        this.userScrollHandler = null;
         this.keyboardOpen = false;
         this.settling = false;
         this.attachment++;
