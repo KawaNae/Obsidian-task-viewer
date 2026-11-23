@@ -23,9 +23,14 @@ const tracked = new Map<Window, TrackedHandlers>();
 /** Capacitor keyboard イベントの購読を開始（window ごとに一度だけ・常駐） */
 export function trackKeyboard(win: Window): void {
     if (tracked.has(win)) return;
+    // The height a show event carries is how much of the window the keyboard
+    // covers, 0 where it covers none (on iPad, a window ending above the
+    // keyboard, or moved above it while it is up): kept as no keyboard, so a
+    // height told before does not outlive it. A show with no height keeps
+    // what was told.
     const show = (e: Event) => {
         const h = (e as Event & { keyboardHeight?: number }).keyboardHeight;
-        if (typeof h === 'number' && h > 0) nativeHeights.set(win, h);
+        if (typeof h === 'number' && h >= 0) nativeHeights.set(win, h);
     };
     const hide = () => {
         nativeHeights.set(win, 0);
