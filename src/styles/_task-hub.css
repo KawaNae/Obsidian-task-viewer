@@ -26,12 +26,30 @@
     filter: none;
 }
 
-/* --- Preview / source switch (TaskHubSourceView) --- */
+/* --- Preview / source switch (TaskHubSourceView) ---
+ * The switch stands at the bar's end, why the source cannot open at its
+ * start. The bar is under the panel's top padding, which holds the
+ * desktop's ×, so the two do not meet. */
 .task-hub__mode-bar {
     display: flex;
     align-items: center;
     gap: 8px;
     padding-top: 4px;
+}
+
+.task-hub__mode-toggle {
+    margin-inline-start: auto;
+}
+
+.tv-ctrl .task-hub__mode-toggle > .task-hub__mode-button {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+}
+
+.task-hub__mode-button .svg-icon {
+    width: 16px;
+    height: 16px;
 }
 
 .task-hub__mode-shut {
