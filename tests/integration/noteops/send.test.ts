@@ -5,7 +5,7 @@
  * new note is written, which takes the new note away again. Then the send
  * dialog, opened from a card's menu: the note and the heading picked
  * from their lists with the pointer while the rows' editor holds a draft,
- * and a subtree it cannot open in the editor, shown as it stands. The
+ * the heading field left on the settings' heading and emptied, and a subtree it cannot open in the editor, shown as it stands. The
  * notes' bytes are read back from the disk.
  *
  * Prerequisites:
@@ -328,6 +328,50 @@ describe('the send dialog', () => {
         `);
         expect(sent).toEqual({ open: false, notices: 0 });
         expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす', '    - [ ] 子2', '- [x] 済み', ''].join('\n'));
+    });
+
+    describe('the heading field', () => {
+        const DST_LINES = ['## Tasks', '- [ ] ある', '## Other', '本文', ''];
+        /** The row written anew, the note it goes to, and the dialog opened on the row with that note typed. */
+        const openToDst = async () => {
+            await writeIndexedTestFile(DST, DST_LINES.join('\n'));
+            await writeIndexedTestFile(SRC, ['- [ ] 送る行', ''].join('\n'));
+            expect(openDialog('送る行').open).toBe(true);
+            return onDialog<DialogState & { placeholder: string | null }>(`
+                typeIn(inputs()[0], ${JSON.stringify(DST.slice(0, -3))});
+                document.activeElement?.blur();
+                await until(() => state().noteSays === ${JSON.stringify(tr('modal.send.noteExisting', { note: DST }))} && state().canSend);
+                return JSON.stringify({ ...state(), placeholder: inputs()[1].placeholder });
+            `);
+        };
+        const pressSend = () => onDialog<DialogState>(`
+            panel().querySelector('.tv-form__buttons .mod-cta').click();
+            await until(() => !panel());
+            await sleep(300);
+            return JSON.stringify(state());
+        `);
+
+        it('opens on the settings\' heading, and untouched sends the row there', async () => {
+            const s = await openToDst();
+            expect(s).toMatchObject({ heading: 'Tasks', placeholder: tr('modal.send.headingEmpty'), says: tr('modal.send.toHead', { heading: 'Tasks' }) });
+
+            expect(pressSend().open).toBe(false);
+            expect(readTestFile(DST)).toBe(['## Tasks', '- [ ] 送る行', '- [ ] ある', '## Other', '本文', ''].join('\n'));
+        });
+
+        it('emptied, sends the row to the end of the note, under no heading', async () => {
+            await openToDst();
+            const s = onDialog<DialogState>(`
+                typeIn(inputs()[1], '');
+                document.activeElement?.blur();
+                await until(() => state().says === ${JSON.stringify(tr('modal.send.toNoteEnd'))} && state().canSend);
+                return JSON.stringify(state());
+            `);
+            expect(s).toMatchObject({ heading: '', canSend: true });
+
+            expect(pressSend().open).toBe(false);
+            expect(readTestFile(DST)).toBe(['## Tasks', '- [ ] ある', '## Other', '本文', '- [ ] 送る行', ''].join('\n'));
+        });
     });
 
     it('lists the values the row inherits under where they are written, the frontmatter\'s before those above the first heading, and writes them there', async () => {

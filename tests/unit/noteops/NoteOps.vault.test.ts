@@ -62,7 +62,7 @@ describe('previewSend: the note field by default', () => {
         const note = await open([row, ''], others);
         newNotesIn(note, 'Inbox');
         const preview = (await note.ops.previewSend([note.session.index.getTasks()[0].id]))!;
-        const facts = await note.ops.destinationFacts(preview, { note: preview.defaults.note, heading: '' });
+        const facts = await note.ops.destinationFacts(preview, { note: preview.defaults.note, heading: preview.defaults.section.heading });
         return { ask: preview.defaults.note, points: facts.kind === 'unnamed' ? 'unnamed' : facts.kind === 'ambiguous' ? facts.files.map(f => f.path) : facts.path };
     };
 
@@ -135,7 +135,7 @@ describe('destinationFacts', () => {
     const facts = async (lines: string[], ask: Partial<DestinationAsk>, others: Record<string, string[]> = {}, sent = ['A']) => {
         const note = await open(lines, others);
         const preview = (await note.ops.previewSend(sent.map(note.idOf)))!;
-        return note.ops.destinationFacts(preview, { note: { text: 'X', picked: null }, heading: '', ...ask });
+        return note.ops.destinationFacts(preview, { note: { text: 'X', picked: null }, heading: 'Tasks', ...ask });
     };
 
     it('a name or a path no note can be made at: why', async () => {
@@ -148,7 +148,7 @@ describe('destinationFacts', () => {
         expect(await facts(['- [ ] A', ''], { note: typed('C# 入門') }, { 'Books/C# 入門.md': [''] })).toMatchObject({ kind: 'existing', path: 'Books/C# 入門.md' });
     });
 
-    it('a new note by a path: to make, the first folder it makes, its heading made, the settings\' when none is typed', async () => {
+    it('a new note by a path: to make, the first folder it makes, the heading typed made', async () => {
         const found = await facts(['- [ ] A', ''], { note: typed('projects/web/設計') }, { 'Projects/old.md': [''] });
 
         expect(found).toMatchObject({
@@ -250,7 +250,15 @@ describe('destinationFacts', () => {
         expect(unresolved(await facts(lines, { note: typed('Plan'), heading: 'Done' }, { 'Plan.md': ['# p', ''] }))).toEqual([['d', 'Tasks', 'none']]);
     });
 
-    it('no heading typed: the section the settings name, at their level and side; one typed, at their level and side too', async () => {
+    it('the note\'s end: the commands read against the note as it is, no heading made', async () => {
+        const lines = ['- [ ] A', '    - [ ] c @2026-09-28 ==> move([[#Done]])', '    - [ ] d @2026-09-28 ==> move([[#Tasks]])', ''];
+        const unresolved = (found: DestinationFacts) => found.kind === 'unnamed' || found.kind === 'ambiguous' ? null : found.unresolved.map(one => one.kind === 'heading' && [one.task.content, one.name, one.found]);
+
+        expect(unresolved(await facts(lines, { note: typed('Plan'), heading: '' }, { 'Plan.md': ['# p', ''] }))).toEqual([['c', 'Done', 'none'], ['d', 'Tasks', 'none']]);
+        expect(unresolved(await facts(lines, { note: typed('X'), heading: '' }))).toEqual([['c', 'Done', 'none'], ['d', 'Tasks', 'none']]);
+    });
+
+    it('no heading typed: the note\'s end, under no heading; one typed, at the settings\' level and side', async () => {
         const note = await open(['- [ ] A', ''], { 'Plan.md': ['# p', '### Log', '- [ ] x', ''] });
         const settings = { ...DEFAULT_SETTINGS, taskHeading: 'Log', taskHeadingLevel: 3, sectionSide: 'end' as const };
         const ops = new NoteOps(note.session.app, note.session.ops, () => ({ ...settings }), {
@@ -259,8 +267,10 @@ describe('destinationFacts', () => {
         });
         const preview = (await ops.previewSend([note.idOf('A')]))!;
 
-        const blank = await ops.destinationFacts(preview, { note: typed('Plan'), heading: '' });
-        expect(blank).toMatchObject({ kind: 'existing', to: { spot: { heading: 'Log', level: 3, side: 'end' } }, heading: { kind: 'one' } });
+        const blank = await ops.destinationFacts(preview, { note: typed('Plan'), heading: '  ' });
+        expect(blank).toMatchObject({ kind: 'existing', to: { note: { kind: 'existing', path: 'Plan.md' }, spot: 'end' }, heading: null });
+        const opened = await ops.destinationFacts(preview, { note: typed('Plan'), heading: preview.defaults.section.heading });
+        expect(opened).toMatchObject({ to: { spot: { heading: 'Log', level: 3, side: 'end' } }, heading: { kind: 'one' } });
         const named = await ops.destinationFacts(preview, { note: typed('Plan'), heading: 'Done' });
         expect(named).toMatchObject({ to: { spot: { heading: 'Done', level: 3, side: 'end' } }, heading: { kind: 'none' } });
     });
@@ -270,7 +280,7 @@ describe('send', () => {
     it('sends to a section of the rows\' own note', async () => {
         const note = await open(['- [ ] A', '    - [ ] a', '## Tasks', '']);
         const preview = (await note.ops.previewSend([note.idOf('A')]))!;
-        const facts = await note.ops.destinationFacts(preview, { note: typed('note'), heading: '' });
+        const facts = await note.ops.destinationFacts(preview, { note: typed('note'), heading: 'Tasks' });
         if (facts.kind === 'unnamed' || facts.kind === 'ambiguous') throw new Error('one note');
 
         const sent = await note.ops.send({
@@ -281,6 +291,31 @@ describe('send', () => {
 
         expect(sent.kind === 'done' && sent.note.path).toBe(FILE);
         expect(note.lines()).toEqual(['## Tasks', '- [ ] A', '    - [ ] a', '']);
+    });
+
+    /** Send the row `content` with the heading field emptied, to the note `text` names. */
+    const toEnd = async (note: Awaited<ReturnType<typeof open>>, content: string, text: string) => {
+        const preview = (await note.ops.previewSend([note.idOf(content)]))!;
+        const facts = await note.ops.destinationFacts(preview, { note: typed(text), heading: '' });
+        if (facts.kind === 'unnamed' || facts.kind === 'ambiguous') throw new Error('one note');
+        return note.ops.send({ rows: [note.row(content)], to: facts.to, values: [] });
+    };
+
+    it('the heading field emptied: to the end of another note, under no heading', async () => {
+        const note = await open(['- [ ] A', ''], { 'Plan.md': ['## Tasks', '- [ ] x', '', 'text', ''] });
+
+        expect((await toEnd(note, 'A', 'Plan')).kind).toBe('done');
+        expect(note.contents.get('Plan.md')!.split('\n')).toEqual(['## Tasks', '- [ ] x', '', 'text', '- [ ] A', '']);
+    });
+
+    it('the heading field emptied: to the end of the rows\' own note; a row there already stays as it stands', async () => {
+        const moved = await open(['- [ ] A', '    - [ ] a', '## Tasks', '- [ ] B', '']);
+        expect((await toEnd(moved, 'A', 'note')).kind).toBe('done');
+        expect(moved.lines()).toEqual(['## Tasks', '- [ ] B', '- [ ] A', '    - [ ] a', '']);
+
+        const stays = await open(['## Tasks', '- [ ] B', '- [ ] A', '    - [ ] a', '']);
+        expect((await toEnd(stays, 'A', 'note')).kind).toBe('done');
+        expect(stays.lines()).toEqual(['## Tasks', '- [ ] B', '- [ ] A', '    - [ ] a', '']);
     });
 
     it('within the rows\' own note: not told', async () => {
