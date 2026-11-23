@@ -4,6 +4,7 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { byKey, valuesOf } from '../helpers/properties';
 import { CreatePlaces, type CreatePlace } from '../../../src/services/data/CreatePlaces';
 import { draftTask, newRowOf, type DraftSeed } from '../../../src/services/data/TaskDraft';
+import type { NoteSpot } from '../../../src/services/persistence/Notes';
 import { DEFAULT_SCOPE_KEYS, DEFAULT_SETTINGS, type PropertyScalar, type Task } from '../../../src/types';
 
 vi.mock('obsidian', async () => {
@@ -16,8 +17,8 @@ vi.mock('obsidian', async () => {
  * row put there (`newRowOf`, `CreatePlaces.create`), and the task the index
  * reads back from the note: each value the draft shows is the one the row
  * reads as once written, its own and what it inherits and from where. In a
- * daily note under the settings' section, and at the head of a row's
- * children.
+ * daily note under the settings' section, at the end of a note, in a note
+ * made for it, and at the head of a row's children.
  */
 
 const DAY = '2031-01-15';
@@ -104,6 +105,11 @@ function shown(task: Task) {
     };
 }
 
+/** The place at `spot` in the note at `path`, made empty when it is not there. */
+function atPath(path: string, spot: NoteSpot): CreatePlace {
+    return { kind: 'note', note: { kind: 'path', path }, spot };
+}
+
 /** The draft of `seed` at `place`, put there; the draft and the task the index reads of the row written. */
 async function putDraft(s: Awaited<ReturnType<typeof open>>, place: CreatePlace, seed: DraftSeed, file: string) {
     const facts = await s.places.facts(place);
@@ -124,6 +130,20 @@ describe('a draft put and read back', () => {
             const { draft, read } = await putDraft(s, s.places.dailyNote(DAY), seed, DAILY);
             expect(shown(read)).toEqual(shown(draft));
         });
+
+        it(`at the end of a note: ${name}`, async () => {
+            const s = await open({ [FILE]: DAILY_NOTE });
+            const { draft, read } = await putDraft(s, atPath(FILE, 'end'), seed, FILE);
+            expect(shown(read)).toEqual(shown(draft));
+        });
+
+        for (const [where, spot] of [['under a heading', { heading: 'Tasks', level: 2, side: 'head' }], ['at its end', 'end']] as [string, NoteSpot][]) {
+            it(`in a note not there yet, ${where}: ${name}`, async () => {
+                const s = await open({});
+                const { draft, read } = await putDraft(s, atPath(FILE, spot), seed, FILE);
+                expect(shown(read)).toEqual(shown(draft));
+            });
+        }
 
         it(`under a row: ${name}`, async () => {
             const s = await open({ [FILE]: PARENT_NOTE });
