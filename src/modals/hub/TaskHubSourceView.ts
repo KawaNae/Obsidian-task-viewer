@@ -1,4 +1,4 @@
-import { Notice, type App } from 'obsidian';
+import { Notice, setIcon, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/SourceEditor';
@@ -18,11 +18,17 @@ export interface SourceViewActions {
 }
 
 /**
- * The hub's source mode as it looks: the switch between the card and the
- * source above them, and, in the source, the editor with one row of controls
+ * The hub's source mode as it looks: the switch between the form and the
+ * source at the end of the bar above them, and, in the source, the editor with one row of controls
  * under it, why the last apply wrote nothing, and what is left once the row
  * is lost. It draws what the mode's state says (`SourceViewState`) and does
  * nothing of its own.
+ *
+ * The switch is two icon buttons, the one shown marked active: the form by
+ * the pencil and the source by the code icon, the icons Obsidian's status bar
+ * tells Live Preview and the source mode by. Their names are their labels
+ * and tooltips (`aria-label`). It stands at the bar's end, below the
+ * dialog's ×, and why the source cannot open is said at the bar's start.
  *
  * The row of controls is cancel and apply at its end (`FormActions`), which
  * asks whether to throw the draft away as every form's row does.
@@ -54,10 +60,10 @@ export class TaskHubSourceView implements SourceSurface {
         actions: SourceViewActions,
     ) {
         bar.addClass('task-hub__mode-bar');
-        const toggle = bar.createDiv({ cls: 'task-hub__mode-toggle tv-ctrl__segments' });
-        this.viewBtn = toggle.createEl('button', { text: t('modal.hub.source.view'), attr: { type: 'button' } });
-        this.sourceBtn = toggle.createEl('button', { text: t('modal.hub.source.source'), attr: { type: 'button' } });
         this.shutEl = bar.createSpan({ cls: 'task-hub__mode-shut' });
+        const toggle = bar.createDiv({ cls: 'task-hub__mode-toggle tv-ctrl__segments' });
+        this.viewBtn = modeButton(toggle, 'edit-3', t('modal.hub.source.view'));
+        this.sourceBtn = modeButton(toggle, 'code-2', t('modal.hub.source.source'));
         this.viewBtn.addEventListener('click', () => actions.cancel());
         this.sourceBtn.addEventListener('click', () => actions.enter());
 
@@ -126,4 +132,11 @@ export class TaskHubSourceView implements SourceSurface {
     asked(): void {
         this.actions.focusKeep();
     }
+}
+
+/** A button of the switch: its icon, and its label as its name and tooltip. */
+function modeButton(toggle: HTMLElement, icon: string, label: string): HTMLButtonElement {
+    const btn = toggle.createEl('button', { cls: 'task-hub__mode-button', attr: { type: 'button', 'aria-label': label } });
+    setIcon(btn, icon);
+    return btn;
 }
