@@ -9,10 +9,10 @@ import { NoteField } from './NoteField';
 
 /** What a {@link DestinationField} opens with, and whom it tells. */
 export interface DestinationFieldOptions {
-    /** The fields as they open: the note, and the heading ('' for the default one). */
+    /** The fields as they open: the note, and the heading. */
     initial: DestinationAsk;
-    /** The heading the rows go under when the field is left empty, shown in its place. */
-    defaultHeading: string;
+    /** Where the lines go while the heading field is empty, said in its place. */
+    emptyHeading: string;
     /** A field was typed in, or a note or a heading was picked. */
     onChange: () => void;
     /** Enter in a field, when it is not picking from a list. */
@@ -22,8 +22,8 @@ export interface DestinationFieldOptions {
 /**
  * Where lines go: a note (`NoteField`), and a heading in it, the note's
  * headings suggested: two form rows, each with its icon, as the hub's rows
- * are. Left empty, the heading field stands for the default one, which it
- * shows in its place.
+ * are. What the heading field left empty stands for is the form's to say;
+ * the field shows it in its place.
  *
  * It holds what the user typed and nothing of the operation it is for:
  * what the note is, which headings it has and whether a field is wrong are
@@ -50,7 +50,7 @@ export class DestinationField {
         this.headingInput = row.createEl('input', {
             type: 'text',
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
-            placeholder: opts.defaultHeading,
+            placeholder: opts.emptyHeading,
         });
         this.headingInput.value = opts.initial.heading;
         this.headingInput.addEventListener('input', () => opts.onChange());

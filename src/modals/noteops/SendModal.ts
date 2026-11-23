@@ -96,7 +96,7 @@ export class SendModal implements SendSurface {
         const initial = initialAsk(this.preview);
         this.field = new DestinationField(this.app, destination, {
             initial,
-            defaultHeading: this.preview.defaults.section.heading,
+            emptyHeading: t('modal.send.headingEmpty'),
             onChange: () => this.dialog?.fieldsChanged(this.field.ask()),
             onEnter: () => { void this.dialog?.send(); },
         });
