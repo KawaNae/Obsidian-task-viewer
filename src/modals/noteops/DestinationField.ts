@@ -1,6 +1,6 @@
 import type { App } from 'obsidian';
 import { t } from '../../i18n';
-import type { DestinationAsk } from '../../services/data/NoteOps';
+import type { DestinationAsk } from '../../services/data/NotePlaces';
 import { ShownSuggest } from '../../suggest/ShownSuggest';
 import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
@@ -11,8 +11,6 @@ import { NoteField } from './NoteField';
 export interface DestinationFieldOptions {
     /** The fields as they open: the note, and the heading. */
     initial: DestinationAsk;
-    /** Where the lines go while the heading field is empty, said in its place. */
-    emptyHeading: string;
     /** A field was typed in, or a note or a heading was picked. */
     onChange: () => void;
     /** Enter in a field, when it is not picking from a list. */
@@ -22,8 +20,10 @@ export interface DestinationFieldOptions {
 /**
  * Where lines go: a note (`NoteField`), and a heading in it, the note's
  * headings suggested: two form rows, each with its icon, as the hub's rows
- * are. What the heading field left empty stands for is the form's to say;
- * the field shows it in its place.
+ * are. The send dialog and the dialog that places a task to make hold it.
+ * The heading field left empty stands for the note's end, under no
+ * heading, for every form (`NotePlaces.readFields` reads it so); the field
+ * says so in its place.
  *
  * It holds what the user typed and nothing of the operation it is for:
  * what the note is, which headings it has and whether a field is wrong are
@@ -50,7 +50,7 @@ export class DestinationField {
         this.headingInput = row.createEl('input', {
             type: 'text',
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
-            placeholder: opts.emptyHeading,
+            placeholder: t('modal.destination.headingEmpty'),
         });
         this.headingInput.value = opts.initial.heading;
         this.headingInput.addEventListener('input', () => opts.onChange());

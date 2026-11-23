@@ -1,7 +1,7 @@
 import { Notice, TFile, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task, TaskViewerSettings } from '../../types';
-import { headingLine, type NoteSpot } from '../persistence/Notes';
+import { headingLine } from '../persistence/Notes';
 import { openFile } from '../../utils/NavigationUtils';
 import type { RowSnapshot, SendRow, SendWrite } from '../operations/Operations';
 import { refusalClause, refusalNotice } from '../core/RefusalClause';
@@ -19,7 +19,7 @@ import { logWarn } from '../../log/log';
 import { inheritedAt, type InheritedValue } from './InheritedValues';
 import type { Operations } from '../operations/Operations';
 import { NoteName, type NoteAsk } from './NoteName';
-import { NotePlaces, type NoteDestination, type NotePlace, type NoteRead } from './NotePlaces';
+import { NotePlaces, type DestinationAsk, type NoteDestination, type NotePlace, type NoteRead } from './NotePlaces';
 import { anchorsIn, linksTo, type AnchorLink, type LineSpan } from './NoteRefs';
 
 export type { SendRow } from '../operations/Operations';
@@ -73,13 +73,6 @@ export interface SendPreview {
      * own note.
      */
     links: readonly AnchorLink[];
-}
-
-/** What the send dialog's fields say of the destination (`NoteOps.destinationFacts`), as typed. */
-export interface DestinationAsk {
-    note: NoteAsk;
-    /** The heading to go under; empty for the note's end, under no heading. */
-    heading: string;
 }
 
 /**
@@ -252,17 +245,14 @@ export class NoteOps {
 
     /**
      * What the destination the dialog's fields name is (see
-     * {@link NoteFacts}): what it is (`NotePlaces.read`, a new note's name
-     * reckoned from the first row's note), and what the rows meet there. A
-     * heading typed names its section, at the settings' level and side
-     * (`Destination.sectionNamed`); none typed names the note's end.
+     * {@link NoteFacts}): what it is (`NotePlaces.readFields`, a new note's
+     * name reckoned from the first row's note), and what the rows meet
+     * there.
      */
     async destinationFacts(preview: SendPreview, ask: DestinationAsk): Promise<DestinationFacts> {
         const rows = preview.rows;
         const settings = this.getSettings();
-        const heading = ask.heading.trim();
-        const spot: NoteSpot = heading === '' ? 'end' : Destination.sectionNamed(heading, settings);
-        const read = await this.places.read({ note: ask.note, spot }, NoteName.defaultFolder(this.app, rows[0].task.file));
+        const read = await this.places.readFields(ask, NoteName.defaultFolder(this.app, rows[0].task.file));
         if (read.kind === 'unnamed' || read.kind === 'ambiguous') return read;
         const sentTasks = byNote(rows).flatMap(({ rows: ofNote }) => withDescendants(ofNote, settings));
 
