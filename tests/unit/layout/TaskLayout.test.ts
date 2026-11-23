@@ -520,12 +520,14 @@ describe('TaskLayout side by side', () => {
             expect([r.a, r.b, r.c].map(s => s.width.toFixed(3))).toEqual(['31.556', '31.556', '31.556']);
         });
 
-        it('shifts only a group whose columns would be narrower than nothing, keeping one exactly 0 side by side', () => {
+        it('shifts a cluster whose columns the gaps leave no width, exactly 0 as well as less', () => {
             const at = (h: number, n: number) =>
                 Array.from({ length: n }, (_, i) => card(`${h}-${i}`, `${h}:0${i}`, `${h}:30`));
             // 12px: four columns are (12 - 12) / 4 = 0px; five are (12 - 16) / 5 < 0.
             const r = slots([...at(10, 4), ...at(14, 5)], sideBySide(1, 12, 0));
-            expect([0, 1, 2, 3].map(i => r[`10-${i}`].liesOver)).toEqual([false, false, false, false]);
+            expect([0, 1, 2, 3].map(i => place(r[`10-${i}`]))).toEqual([[0, 55], [15, 55], [30, 55], [45, 55]]);
+            expect([1, 2, 3].map(i => r[`10-${i}`].liesOver)).toEqual([true, true, true]);
+            expect([0, 1, 2, 3, 4].map(i => place(r[`14-${i}`]))).toEqual([[0, 40], [15, 40], [30, 40], [45, 40], [60, 40]]);
             expect([1, 2, 3, 4].map(i => r[`14-${i}`].liesOver)).toEqual([true, true, true, true]);
         });
     });

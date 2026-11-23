@@ -85,10 +85,11 @@ export interface LaneSlot {
  *   apart, so the halo of one reaches the edge of the card beside it and
  *   cuts no strip off it.
  * - `narrowestSideBySidePx`: the narrowest a column of a cluster put side
- *   by side may be. `null` never puts a cluster side by side; 0 puts every
- *   cluster of two cards or more side by side, whatever the lane's width;
- *   a positive number puts a cluster side by side only where each of its
- *   columns is at least that wide, and shifts the others right level by
+ *   by side may be. `null` never puts a cluster side by side; 0 puts a
+ *   cluster of two cards or more side by side wherever its columns keep
+ *   more than no width, the gaps between them taken from the lane; a
+ *   positive number puts a cluster side by side only where each of its
+ *   columns is at least that wide. The others are shifted right level by
  *   level.
  */
 export interface TimelineLane {
@@ -352,7 +353,11 @@ function firstFreeColumns(cluster: Item[], overlap: (a: Item, b: Item) => boolea
  * shifted right; the two lie over none of each other, so this only orders
  * them.
  *
- * Gives null where a column would be narrower than `minWidthPx`.
+ * Gives null where a column would be narrower than `minWidthPx`, or where
+ * the gaps between the columns leave them no width, which no
+ * `minWidthPx` lets side by side: the lane less the gaps, in px, is 0 or
+ * less. Taken in px, as the lane is, a lane the gaps fill exactly is 0;
+ * the same in percent of the lane comes out a hair above 0.
  */
 function sideBySide(
     cluster: Item[],
@@ -363,6 +368,7 @@ function sideBySide(
 ): Map<Item, Slot> | null {
     const { columns, held } = firstFreeColumns(cluster, overlap);
     const n = held.length;
+    if (usablePx - (n - 1) * gapPx <= 0) return null;
     const gap = gapPx / usablePx * 100;
     const columnWidth = (100 - (n - 1) * gap) / n;
     if (columnWidth / 100 * usablePx < minWidthPx) return null;
