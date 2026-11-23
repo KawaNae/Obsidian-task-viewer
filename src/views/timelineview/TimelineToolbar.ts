@@ -181,8 +181,8 @@ export class TimelineToolbar extends ViewToolbarBase {
     }
 
     /**
-     * The view's own way of laying out cards that would hide each other's
-     * names, or the global setting's (no value of its own).
+     * The view's own way of laying out overlapping cards
+     * (`TimelineOverlapMode`), or the global setting's (no value of its own).
      */
     private appendOverlapMode(menu: Menu): void {
         const current = this.store.get().overlapMode;

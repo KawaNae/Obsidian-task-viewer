@@ -7,12 +7,14 @@ export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
 export type DoubleTapAction = 'detail' | 'open' | 'menu';
 
 /**
- * How Timeline lays out timed cards where a later card would hide the name
- * of an earlier one it overlaps in time: shifted right over it (`cascade`),
- * side by side when each card would be wide enough to show its start and
- * end time whole and lay its name out in a box as wide as those times
- * (`auto`), or side by side whatever the width (`sideBySide`). A card that
- * starts below the earlier's name is shifted right in every mode.
+ * How Timeline lays out timed cards that overlap, in time or where a short
+ * card's name band would hide another's name. Cards joined by such overlaps
+ * form a cluster, and each cluster is shifted right level by level
+ * (`cascade`), side by side when each of its columns would be wide enough
+ * to show a card's start and end time whole and lay its name out in a box
+ * as wide as those times, else shifted right (`auto`), or side by side
+ * whatever the width (`sideBySide`). A cluster is laid out one way, never
+ * both.
  */
 export const TIMELINE_OVERLAP_MODES = ['cascade', 'auto', 'sideBySide'] as const;
 export type TimelineOverlapMode = typeof TIMELINE_OVERLAP_MODES[number];
@@ -77,7 +79,7 @@ export interface TaskViewerSettings {
     fixMobileGradientWidth: boolean;
     showAllDay: boolean;
     showTimeline: boolean;
-    /** How Timeline lays out cards that would hide each other's names, where a view sets none. */
+    /** How Timeline lays out overlapping cards (`TimelineOverlapMode`), where a view sets none. */
     overlapMode: TimelineOverlapMode;
     showWeekRow: boolean;
     // External parser support (read-only).
