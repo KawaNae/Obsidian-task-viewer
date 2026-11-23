@@ -164,11 +164,11 @@ function noteSays(state: SendViewState): { text: string; tone: string }[] {
 }
 
 describe('opening', () => {
-    it('opens the row in the editor, asks the default note with the heading field empty, and offers no send until answered', async () => {
+    it('opens the row in the editor, asks the default note under the settings\' heading, and offers no send until answered', async () => {
         const h = setUp();
 
         expect(h.editor().draft()).toEqual({ parent: '- [ ] A', children: [{ text: '- [ ] a', was: 1 }] });
-        expect(h.asks.map(one => one.ask)).toEqual([{ note: typed('A'), heading: '' }]);
+        expect(h.asks.map(one => one.ask)).toEqual([{ note: typed('A'), heading: 'Tasks' }]);
         expect(h.state().canSend).toBe(false);
         expect(destination(h.state())).toBeNull();
 
@@ -186,9 +186,16 @@ describe('opening', () => {
         expect(h.editor().hooks.linkSource()).toBe('note.md');
     });
 
-    it('opens the note field as the preview says, a note picked kept picked', () => {
-        const preview = previewOf({ defaults: { note: { text: 'Plan', picked: 'Projects/Plan.md' }, section: SECTION } });
-        expect(initialAsk(preview)).toEqual({ note: { text: 'Plan', picked: 'Projects/Plan.md' }, heading: '' });
+    it('opens the note field as the preview says, a note picked kept picked, and the heading field on the settings\' heading', () => {
+        const preview = previewOf({ defaults: { note: { text: 'Plan', picked: 'Projects/Plan.md' }, section: { ...SECTION, heading: 'Log' } } });
+        expect(initialAsk(preview)).toEqual({ note: { text: 'Plan', picked: 'Projects/Plan.md' }, heading: 'Log' });
+    });
+
+    it('asks the destination with the heading field as it holds it: the settings\' heading untouched, nothing once emptied', async () => {
+        const h = setUp();
+        h.dialog.fieldsChanged({ note: typed('A'), heading: '' });
+
+        expect(h.asks.map(one => one.ask.heading)).toEqual(['Tasks', '']);
     });
 
     it('shows a subtree it cannot open as it stands, from the first column, and sends it so', async () => {
@@ -248,6 +255,24 @@ describe('where in the note the send puts the rows, said under the heading', () 
         const same = facts({ kind: 'same', path: 'note.md' });
         expect(await says(same)).toEqual({ text: t('modal.send.withinHead', vars), tone: 'info' });
         expect(await says({ ...same, heading: { kind: 'none' } })).toEqual({ text: t('modal.send.withinMade', vars), tone: 'info' });
+    });
+
+    it('the note\'s end, under no heading: in a new note, a note there is, or the rows\' own note', async () => {
+        const toEnd = (f: NoteFacts): NoteFacts => ({ ...f, to: { ...f.to, spot: 'end' }, heading: null });
+
+        expect(await says(toEnd(facts()))).toEqual({ text: t('modal.send.toNewEnd'), tone: 'info' });
+        expect(await says(toEnd(facts({ kind: 'existing', path: 'Plan.md' })))).toEqual({ text: t('modal.send.toNoteEnd'), tone: 'warning' });
+        expect(await says(toEnd(facts({ kind: 'same', path: 'note.md' })))).toEqual({ text: t('modal.send.withinNoteEnd'), tone: 'info' });
+    });
+
+    it('the note\'s end: a send asked there, with nothing said of a heading', async () => {
+        const f: NoteFacts = { ...facts({ kind: 'existing', path: 'Plan.md' }), heading: null };
+        const h = await answered({ ...f, to: { ...f.to, spot: 'end' } });
+
+        expect(errors(h.state())).toEqual([]);
+        expect(h.state().canSend).toBe(true);
+        await h.dialog.send();
+        expect(h.send.mock.calls[0][0].to).toEqual({ note: { kind: 'existing', path: 'Plan.md' }, spot: 'end' });
     });
 
     it('follows the fields: asked again as they change', async () => {
