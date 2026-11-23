@@ -201,18 +201,29 @@ body:not(.theme-dark) .tv-overlay {
 }
 
 .tv-overlay__panel--dialog .tv-overlay__foot {
-    padding: 12px 24px 0;
+    padding: 12px 24px;
     border-top: 1px solid var(--tv-border);
+}
+
+/* The foot ends the panel while it shows, in the box as in the sheet: the
+   room under the body goes under the row instead, and the body keeps as much
+   above the line as the row has on either side of it */
+.tv-overlay__panel--dialog:has(> .tv-overlay__foot > :not([hidden])) {
+    padding-bottom: 0;
+}
+
+.tv-overlay__panel--dialog:has(> .tv-overlay__foot > :not([hidden])) .tv-overlay__body {
+    padding-bottom: 12px;
 }
 
 .is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__head {
     padding: 4px 24px 0;
 }
 
-/* On the phone the foot ends the sheet: the room under the body and the
-   home indicator's inset go under the row instead */
+/* On the phone the home indicator's inset goes under the row too. The
+   sheet's body has a padding of its own, outweighing the box's */
 .is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__foot {
-    padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
 .is-phone .tv-overlay .tv-overlay__panel--dialog:has(> .tv-overlay__foot > :not([hidden])) .tv-overlay__body {
