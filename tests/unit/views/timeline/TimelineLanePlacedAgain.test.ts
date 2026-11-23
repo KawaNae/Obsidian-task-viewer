@@ -33,7 +33,8 @@ class Lane {
     readonly dataset: Record<string, string> = {};
     readonly children: Lane[] = [];
     parentElement: Lane | null = null;
-    clientWidth = 0;
+    /** The width its cards' 100% is of, as laid out, a fraction of a px included. */
+    paddingBoxWidth = 0;
     addClass(): void { }
     removeClass(): void { }
     createDiv(): Lane {
@@ -67,6 +68,21 @@ const CSS_LENGTHS: Record<string, string> = {
     '--task-card-halo-block': '3px',
 };
 
+/**
+ * What the stylesheet gives a column: its lengths for a band and a halo,
+ * and, as a day column is drawn, its border box (`box-sizing: border-box`)
+ * with a border of 1px on its right.
+ */
+function computedStyleOf(el: Lane): { getPropertyValue(name: string): string } {
+    const box: Record<string, string> = {
+        'box-sizing': 'border-box',
+        'width': `${el.paddingBoxWidth + 1}px`,
+        'border-left-width': '0px',
+        'border-right-width': '1px',
+    };
+    return { getPropertyValue: (name: string) => CSS_LENGTHS[name] ?? box[name] ?? '' };
+}
+
 function at(hhmm: string): number {
     const [h, m] = hhmm.split(':').map(Number);
     return new Date(2026, 2, 11, h, m).getTime();
@@ -98,7 +114,7 @@ function renderer(
 
 function column(width: number): Lane {
     const col = new Lane();
-    col.clientWidth = width;
+    col.paddingBoxWidth = width;
     return col;
 }
 
@@ -124,7 +140,7 @@ const B = bandTasks().findIndex(t => t.id === 'B');
 describe('TimelineSectionRenderer placing a column again without a draw', () => {
     beforeEach(() => {
         vi.stubGlobal('ResizeObserver', FakeResizeObserver);
-        vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: (name: string) => CSS_LENGTHS[name] ?? '' }));
+        vi.stubGlobal('getComputedStyle', computedStyleOf);
     });
 
     afterEach(() => {
@@ -140,11 +156,11 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         const b = col.children[B];
         expect(b.style.props.has('--band-gap-minutes')).toBe(false);
 
-        col.clientWidth = 408;
+        col.paddingBoxWidth = 408;
         notify!([{ target: col }]);
         expect(b.style.getPropertyValue('--band-gap-minutes')).toBe('10');
 
-        col.clientWidth = 48;
+        col.paddingBoxWidth = 48;
         notify!([{ target: col }]);
         expect(b.style.props.has('--band-gap-minutes')).toBe(false);
     });
@@ -154,7 +170,7 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         const cols = [column(48), column(48)];
         draw(r, cols, bandTasks);
 
-        for (const col of cols) col.clientWidth = 408;
+        for (const col of cols) col.paddingBoxWidth = 408;
         notify!([{ target: cols[0] }]);
         expect(cols.map(col => col.children[B].style.getPropertyValue('--band-gap-minutes'))).toEqual(['10', '10']);
     });
@@ -293,9 +309,9 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         const pair = () => [card('a', '10:00', '11:00'), card('b', '10:05', '11:00')];
         /** Where b starts, in px of the lane (the column less 8px). */
         const bLeftPx = (col: Lane) =>
-            Number(/\* ([\d.e-]+)\)$/.exec(col.children[1].style.left)![1]) * (col.clientWidth - 8);
-        const SIDE_BY_SIDE = (col: Lane) => (col.clientWidth - 8 - 4) / 2 + 4;
-        const SHIFTED = (col: Lane) => 0.15 * (col.clientWidth - 8);
+            Number(/\* ([\d.e-]+)\)$/.exec(col.children[1].style.left)![1]) * (col.paddingBoxWidth - 8);
+        const SIDE_BY_SIDE = (col: Lane) => (col.paddingBoxWidth - 8 - 4) / 2 + 4;
+        const SHIFTED = (col: Lane) => 0.15 * (col.paddingBoxWidth - 8);
 
         it('puts two cards side by side under auto where each column is as wide as that, and shifts them where narrower', () => {
             // A lane of 164px makes two columns of 80px; one of 163px, 79.5px.
@@ -310,6 +326,19 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
             expect(bLeftPx(narrow)).toBeCloseTo(SHIFTED(narrow), 6);
         });
 
+        it('takes a column of a fractional width as wide as laid out, not rounded to a whole px', () => {
+            // 171.6px makes two columns of 79.8px, narrower than the times
+            // need, though rounded to 172px it would make two of 80px;
+            // 172.25px makes two of 80.125px.
+            const narrow = column(171.6);
+            draw(renderer(() => 'auto', () => 1, () => 80), [narrow], pair);
+            expect(bLeftPx(narrow)).toBeCloseTo(SHIFTED(narrow), 6);
+
+            const wide = column(172.25);
+            draw(renderer(() => 'auto', () => 1, () => 80), [wide], pair);
+            expect(bLeftPx(wide)).toBeCloseTo(SIDE_BY_SIDE(wide), 6);
+        });
+
         it('measures it once a draw, not again when only the column\'s width changes', () => {
             const fullTime = vi.fn(() => 80);
             const r = renderer(() => 'auto', () => 1, fullTime);
@@ -319,10 +348,10 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
             expect(fullTime).toHaveBeenCalledWith(col);
 
             // Placed again by the new width and the width measured at the draw.
-            col.clientWidth = 171;
+            col.paddingBoxWidth = 171;
             notify!([{ target: col }]);
             expect(bLeftPx(col)).toBeCloseTo(SHIFTED(col), 6);
-            col.clientWidth = 400;
+            col.paddingBoxWidth = 400;
             notify!([{ target: col }]);
             expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
             expect(fullTime).toHaveBeenCalledTimes(1);
@@ -330,17 +359,17 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
 
         it('measures it as a column drawn before it was laid out first has a width, and keeps it from then on', () => {
             // A column with no width shows no time row, so it measures 0.
-            const fullTime = vi.fn((col: HTMLElement) => ((col as unknown as Lane).clientWidth > 0 ? 80 : 0));
+            const fullTime = vi.fn((col: HTMLElement) => ((col as unknown as Lane).paddingBoxWidth > 0 ? 80 : 0));
             const r = renderer(() => 'auto', () => 1, fullTime);
             const col = column(0);
             draw(r, [col], pair);
 
-            col.clientWidth = 172;
+            col.paddingBoxWidth = 172;
             notify!([{ target: col }]);
             expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
             expect(fullTime).toHaveBeenCalledTimes(2);
 
-            col.clientWidth = 400;
+            col.paddingBoxWidth = 400;
             notify!([{ target: col }]);
             expect(fullTime).toHaveBeenCalledTimes(2);
         });
