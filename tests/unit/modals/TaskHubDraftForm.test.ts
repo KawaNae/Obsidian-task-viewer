@@ -282,6 +282,23 @@ describe('the create of a hub on a task not written yet', () => {
 describe('a close of a hub on a task not written yet', () => {
     const asked = (s: Awaited<ReturnType<typeof setUp>>) => s.root.find('tv-form__ask')?.text ?? '';
 
+    it('offers cancel before the create, which closes as × does: at once with nothing given, else asking', async () => {
+        const plain = await setUp({ startDate: '2031-01-15' });
+        const cancel = plain.root.find('tv-form__cancel')!;
+        expect([cancel.text, cancel.style.display]).toEqual([t('modal.cancel'), '']);
+        const row = plain.root.find('tv-form__buttons')!;
+        expect(row.children.indexOf(cancel)).toBeLessThan(row.children.indexOf(plain.create()));
+        plain.press(cancel);
+        expect(plain.closes).toEqual(['close']);
+
+        const given = await setUp();
+        given.el('name').focus();
+        given.el('name').type('電話');
+        given.press(given.root.find('tv-form__cancel')!);
+        expect(given.closes).toEqual(['stay']);
+        expect(asked(given)).toBe(t('modal.newTask.discardAsk'));
+    });
+
     it('asks nothing when nothing was given', async () => {
         const s = await setUp({ startDate: '2031-01-15' });
         expect(s.form.beforeClose()).toBe('close');

@@ -97,7 +97,8 @@ export interface TaskHubFormDeps {
  * 最後に、閉じてよいかをホストに聞く（`HubHost.closing`）。欄が止まって
  * いる間は、何も保存せず、問わずにホストに聞く。
  *
- * まだ書いていないタスクには [作成] を出す（{@link create}）。押すと、読めない
+ * まだ書いていないタスクには [キャンセル] と [作成] を出す。[キャンセル] は ×
+ * と同じ閉じる手順を通る（`requestClose`）。[作成]（{@link create}）は、読めない
  * 打ちかけの欄があれば作らずにその欄へフォーカスを置き、無ければ打ちかけの
  * 欄を保存してから作る。欄の Enter は欄を確定するだけで、作らない。
  *
@@ -218,6 +219,9 @@ export class TaskHubForm implements HubForm {
         // buttons, and the question a close puts in it, in the foot.
         c.appendChild(this.formSays);
         this.actions = new FormActions(this.deps.foot, {
+            // A task not written yet is cancelled as × cancels it: the close
+            // the user asks for, which asks whether to throw away what was given.
+            ...(this.host.draft && { cancel: { run: () => this.deps.requestClose?.() } }),
             actions: this.host.draft
                 ? [{ label: t('modal.create'), busyLabel: t('modal.newTask.creating'), tone: 'cta', run: () => this.create() }]
                 : [],

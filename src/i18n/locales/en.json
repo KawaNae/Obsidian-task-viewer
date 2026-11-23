@@ -546,6 +546,7 @@
       }
     },
     "newTask": {
+      "title": "Create new task",
       "creating": "Creating…",
       "formShut": "Creating the task. The fields cannot be edited until it is done.",
       "discardAsk": "The task is not created yet. Discard it?",

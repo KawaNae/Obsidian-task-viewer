@@ -504,7 +504,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 - `put`：変更を渡す。書けたかを答え、拒まれた理由はホストが言う
 - `shut`：欄が受けない理由の文。受けるなら null
 - `openSource`：出所の行を開き、ハブを閉じる。開ける行が無いホストでは null で、部品は出所を押せない形で描く（「ハブの欄の部品」）
-- `draft`：まだ書いていないタスクと、その作成（`HubDraft`）。作成を頼めるか（`canCreate`）、作成が途中か（`creating`）、作る（`create`）、閉じると失うものがあるか（`changed`）。`RowHost` では null で、フォームは [作成] を出さない
+- `draft`：まだ書いていないタスクと、その作成（`HubDraft`）。作成を頼めるか（`canCreate`）、作成が途中か（`creating`）、作る（`create`）、閉じると失うものがあるか（`changed`）。`RowHost` では null で、フォームは [キャンセル] も [作成] も出さない
 - `closing`：フォームが欄を保存した後に、閉じてよいかを答える。欄が止まっている間は、フォームは何も保存せずにすぐ聞く
 - `bind`：フォームが自分を渡す。ホストは `HubForm` の口（`refresh`、`showShut`、`sayWrite`、`sayPlace`、`showDraft`）でフォームに伝える。`sayPlace` は行の行き先を、`showDraft` は [作成] を押せるかと作成が途中かを出させる
 
@@ -514,7 +514,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 パネルの constructor は private で、パネルを作るのは2つの入口だけである。入口は、ホストと、ハブの形（`HubShape`）を渡す。ハブの形は、ソースモードを作る関数、カードを何もできない形で描くか（`RenderOptions.inert`）、同時に1つだけ開くハブの組（`OneAtATime`）である。
 - `openRowHub` のハブは組に入る。開いているハブを利用者が閉じるのと同じ手順で閉じてから開き、そのハブが問いで残れば、後からも開かない。閉じるのを待つ間に別のハブを求めれば、後のほうが開く
-- `openDraftHub` のハブは組に入らず、開いているハブの上に重なって開く。閉じると下のハブがそのまま残る。ソースモードを作らず、カードを何もできない形で描く
+- `openDraftHub` のハブは組に入らず、開いているハブの上に重なって開く。閉じると下のハブがそのまま残る。ソースモードを作らず、カードを何もできない形で描く。殻の上の場所に題「新しいタスクを作成」を出し、下の場所に [キャンセル] と [作成] を出す。[キャンセル] は × と同じ閉じる手順を通る
 - 閉じるのを待つハブが無ければ、開く呼び出しが返る時点でハブは開き、カードを描き終えている
 
 ソースモードは入口が組む。パネルは、ソースモードを作る関数（`SourceMaker`）を受け取り、切り替えの bar、カードの枠、ソースの置き場、閉じる口（`SourceSlots`）を渡して1回呼ぶ。関数を渡されなければ、bar もソースの置き場も作らない。パネルがソースモードに頼むのは、閉じる前の問い（`beforeClose`）、Escape と戻るを譲るか（`yieldsEscape`、`takesBack`）、片付け（`dispose`）だけである（`HubSource`）。
