@@ -28,8 +28,8 @@
 
 /* --- Preview / source switch (TaskHubSourceView) ---
  * The switch stands at the bar's end, why the source cannot open at its
- * start. The bar is under the panel's top padding, which holds the
- * desktop's ×, so the two do not meet. */
+ * start. The bar is the body's first row, under the head whose title shares
+ * its line with the desktop's ×, so the switch meets neither. */
 .task-hub__mode-bar {
     display: flex;
     align-items: center;

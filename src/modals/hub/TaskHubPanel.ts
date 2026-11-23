@@ -246,9 +246,12 @@ export class TaskHubPanel {
     }
 
     private buildContent(bodyEl: HTMLElement, frame: OverlayFrame): void {
-        // A task not written yet is named for what the hub does with it; a
-        // row's hub has its card for a title.
-        if (this.host.draft) frame.head.createEl('h2', { text: t('modal.newTask.title'), cls: 'tv-form__title' });
+        // The hub is named for what it does: creating a task not written
+        // yet, or editing the properties of a row.
+        frame.head.createEl('h2', {
+            text: t(this.host.draft ? 'modal.newTask.title' : 'modal.hub.title'),
+            cls: 'tv-form__title',
+        });
 
         const makeSource = this.shape.source;
         const bar = makeSource ? bodyEl.createDiv() : null;
