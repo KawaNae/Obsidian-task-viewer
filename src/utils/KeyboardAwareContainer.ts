@@ -2,21 +2,32 @@ import { logDebug } from '../log/log';
 import { trackKeyboard, nativeKeyboardHeight, keyboardTop } from './KeyboardState';
 import { runningAnimations, whenStopped } from './Animations';
 
+/** The CSS variable on the container: how much of the window the keyboard covers (px). */
+export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
+
 /**
  * Mobile virtual keyboard awareness for fixed-position containers.
  *
- * Never moves the container or the panel itself. When the keyboard
- * covers the focused field, the panel's height is locked at its
- * current value, bottom padding is injected where the panel lacks the
- * scroll room, and the contents are scrolled so what is typed at sits
- * at the keyboard's top edge. Everything (height / padding / scrollTop)
- * is restored when the keyboard closes.
+ * While the keyboard covers the window, the container is told how much of
+ * it the keyboard covers, as the CSS variable `--tv-keyboard-overlap` on it
+ * (`max(0, innerHeight - keyboardTop)`), and the stylesheet ends the area
+ * the container lays out in that far above the window's bottom: the sheet
+ * stands on the keyboard, the box is centred above it, and the panel's
+ * last row (its buttons) sits right over the keyboard. The panel shrinks
+ * with that area, and its body scrolls inside. With no keyboard, nothing
+ * is set and the container lays out as ever.
+ *
+ * What is typed at is kept in sight in the body: when it stands below the
+ * body's visible bottom (or the keyboard's top, if higher), the body is
+ * scrolled by what it lacks. The body is above the keyboard and holds the
+ * field, so its own scroll room is enough: nothing is padded, and its
+ * height is not locked. Its scrollTop is put back when the keyboard closes.
  *
  * A field is an input, a textarea, or an editable element
  * (contenteditable: a CodeMirror editor's content). What is typed at is
  * the field's bottom for an input or a textarea, and the caret for an
- * editable element, whose lines may run below the keyboard however tall
- * it grows: the caret is followed as it moves (`selectionchange`, which
+ * editable element, whose lines may run below the visible bottom however
+ * tall it grows: the caret is followed as it moves (`selectionchange`, which
  * the DOM fires for any editable element, CodeMirror's own selection
  * among them), so no editor has to tell of its caret.
  *
@@ -25,7 +36,8 @@ import { runningAnimations, whenStopped } from './Animations';
  * up, the box popping in) moves the field it holds, and a position read
  * midway is not where the field comes to rest (on iPad the sheet's 150 ms
  * slide was read with the field still below the window, and the panel
- * scrolled 565 px where 67 would do). Every measure (the keyboard opening
+ * scrolled 565 px where 67 would do), and the area shrinking above the
+ * keyboard moves its bottom over a transition. Every measure (the keyboard opening
  * or moving, a field focused, the caret moving) goes through
  * `measureWhenSettled`, which waits for those animations to end, then
  * measures the field focused at that moment, if the keyboard is still open
@@ -51,12 +63,10 @@ export class KeyboardAwareContainer {
     private focusTimer: ReturnType<typeof setTimeout> | null = null;
     private selectionHandler: (() => void) | null = null;
     private selectionFrame: number | null = null;
-    /** panel inline styles + scrollTop as they were before we touched them */
-    private saved: { height: string; paddingBottom: string; scrollTop: number } | null = null;
-    /** CSS-computed padding-bottom (px) captured before inline override */
-    private basePad = 0;
-    /** cumulative injected scroll room (px) */
-    private extraPad = 0;
+    /** The body's scrollTop as it was before it was first scrolled for the keyboard. */
+    private savedScrollTop: number | null = null;
+    /** The overlap last given to the container (px), 0 while none is set. */
+    private overlap = 0;
     private keyboardOpen = false;
     /** A measure waits for the container's animations to end (`measureWhenSettled`). */
     private settling = false;
@@ -125,6 +135,10 @@ export class KeyboardAwareContainer {
             }
         };
         this.container.ownerDocument.addEventListener('selectionchange', this.selectionHandler);
+
+        // A keyboard already open as the container attaches (a dialog opened
+        // from another while typing) is laid out above at once.
+        this.syncState();
     }
 
     /** 両検知源から開閉状態を再計算し、必要な補正/復元を行う */
@@ -142,11 +156,33 @@ export class KeyboardAwareContainer {
                 ` ih=${this.win.innerHeight}`);
         }
 
+        this.setOverlap(this.keyboardOpen
+            ? Math.max(0, this.win.innerHeight - keyboardTop(this.win))
+            : 0);
+
         if (this.keyboardOpen) {
             this.measureWhenSettled();
         } else if (wasOpen) {
             this.restore();
         }
+    }
+
+    /** Tell the container how much of the window the keyboard covers; none at 0. */
+    private setOverlap(px: number): void {
+        const rounded = Math.round(px);
+        if (rounded === this.overlap) return;
+        this.overlap = rounded;
+        const style = this.container.style;
+        if (rounded > 0) {
+            style.setProperty(KEYBOARD_OVERLAP_VAR, `${rounded}px`);
+        } else {
+            style.removeProperty(KEYBOARD_OVERLAP_VAR);
+        }
+    }
+
+    /** How much of the window the keyboard covers, as last given to the container (px). */
+    keyboardOverlap(): number {
+        return this.overlap;
     }
 
     /**
@@ -187,53 +223,35 @@ export class KeyboardAwareContainer {
     }
 
     /**
-     * 打つ位置（input/textarea は欄の下端、編集可能な要素は字句）がキーボード
-     * 上端より下にある場合のみ、不足分ちょうどをパネル内スクロールで解消する。
-     * パネルの高さは lock するので、padding 注入でパネル自体が成長・移動する
-     * ことはない。padding はスクロールの余地が足りない分だけ足す。
+     * When what is typed at (an input's or a textarea's bottom, an editable
+     * element's caret) stands below the body's visible bottom, or below the
+     * keyboard's top where that is higher (a panel the stylesheet does not
+     * lift: an anchored popover, placed by script), scroll the body by what
+     * it lacks. Nothing when it is in sight.
      */
     private ensureAboveKeyboard(target: HTMLElement): void {
         const panel = this.scrollTarget;
         if (!panel) return;
 
         const kbTop = keyboardTop(this.win);
+        const limit = Math.min(kbTop, panel.getBoundingClientRect().bottom);
         const bottom = target.isContentEditable
             ? (caretRect(target)?.bottom ?? target.getBoundingClientRect().bottom)
             : target.getBoundingClientRect().bottom;
-        const overshoot = bottom - kbTop + 10;
-        if (overshoot <= 0) return; // 被っていない → 何もしない
-        logDebug(`[kb] scroll overshoot=${Math.round(overshoot)} kbTop=${Math.round(kbTop)}`);
+        const overshoot = bottom - limit + 10;
+        if (overshoot <= 0) return;
+        logDebug(`[kb] scroll overshoot=${Math.round(overshoot)} limit=${Math.round(limit)} kbTop=${Math.round(kbTop)}`);
 
-        if (!this.saved) {
-            this.saved = {
-                height: panel.style.height,
-                paddingBottom: panel.style.paddingBottom,
-                scrollTop: panel.scrollTop,
-            };
-            this.basePad = parseFloat(
-                this.win.getComputedStyle(panel).paddingBottom) || 0;
-            this.extraPad = 0;
-            // 高さを現在値で固定 — 以降の padding はスクロール余地にだけ効く
-            panel.style.height = `${panel.getBoundingClientRect().height}px`;
-        }
-
-        const room = Math.max(0, (panel.scrollHeight - panel.clientHeight - panel.scrollTop) || 0);
-        if (overshoot > room) {
-            this.extraPad += overshoot - room;
-            panel.style.paddingBottom = `${this.basePad + this.extraPad}px`;
-        }
+        if (this.savedScrollTop === null) this.savedScrollTop = panel.scrollTop;
         panel.scrollBy({ top: overshoot, behavior: 'instant' });
     }
 
+    /** Put the body's scroll back where it was before the keyboard moved it. */
     private restore(): void {
-        if (!this.saved || !this.scrollTarget) return;
+        if (this.savedScrollTop === null || !this.scrollTarget) return;
         logDebug('[kb] restore');
-        const panel = this.scrollTarget;
-        panel.style.height = this.saved.height;
-        panel.style.paddingBottom = this.saved.paddingBottom;
-        panel.scrollTo({ top: this.saved.scrollTop, behavior: 'instant' });
-        this.saved = null;
-        this.extraPad = 0;
+        this.scrollTarget.scrollTo({ top: this.savedScrollTop, behavior: 'instant' });
+        this.savedScrollTop = null;
     }
 
     detach(): void {
@@ -260,6 +278,8 @@ export class KeyboardAwareContainer {
             this.container.ownerDocument.removeEventListener('selectionchange', this.selectionHandler);
         }
         if (this.selectionFrame !== null) this.win.cancelAnimationFrame(this.selectionFrame);
+        // The overlap given to the container is left on it: a container
+        // closing over the open keyboard leaves where it stands.
         this.restore();
         this.vvHandler = null;
         this.kbHandler = null;

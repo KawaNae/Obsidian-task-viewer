@@ -281,6 +281,23 @@ body:not(.theme-dark) .tv-overlay {
 
 
 /* ═══════════════════════════════════════════════════════════════
+   On-screen keyboard
+   While the keyboard covers the window, the area the overlay lays out in
+   ends above it (--tv-keyboard-overlap, set on the root by
+   KeyboardAwareContainer): the sheet stands on the keyboard, the box is
+   centred above it, and the max-heights above, taken of this area, shrink
+   the panel with it. The bottom moves over about the keyboard's own slide.
+   The anchored popover is placed by script, above the keyboard, instead.
+   ═══════════════════════════════════════════════════════════════ */
+
+.tv-overlay--centered,
+.is-phone .tv-overlay {
+    bottom: var(--tv-keyboard-overlap, 0px);
+    transition: bottom 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
    Close animation
    ═══════════════════════════════════════════════════════════════ */
 
