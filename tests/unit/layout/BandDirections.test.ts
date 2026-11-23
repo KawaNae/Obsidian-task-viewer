@@ -260,6 +260,32 @@ describe('CardRanges', () => {
         }
     });
 
+    it('takes two short cards whose bands meet by less than 2px as not overlapping, and by 2px as overlapping', () => {
+        // At 0.67px a minute, cards 30 minutes apart are 20.1px apart and
+        // their 22px bands meet by 1.9px; at 1px a minute, cards 20 minutes
+        // apart have their bands meet by 2px.
+        const of = (start: string, end: string, zoom: number) => cardRange(minutes(start), minutes(end), zoom);
+        const [a, b] = [of('12:20', '12:25', 0.67), of('12:50', '12:55', 0.67)];
+        const [c, d] = [of('10:00', '10:05', 1), of('10:20', '10:25', 1)];
+        expect(bandRangePx(a, 'down')[1] - bandRangePx(b, 'down')[0]).toBeCloseTo(1.9, 9);
+        expect(bandRangePx(c, 'down')[1] - bandRangePx(d, 'down')[0]).toBe(2);
+        for (const dir of ['up', 'down'] as const) {
+            expect(overlaps(a, dir, b, dir, HALO)).toBe(false);
+            expect(overlaps(c, dir, d, dir, HALO)).toBe(true);
+        }
+    });
+
+    it('takes a short card\'s band over a long card\'s name by 1px as hiding it', () => {
+        // The long card's name runs to 35px down. A short card after it
+        // ending 56px down sends its band up from there to 34px, over the
+        // name by 1px; ending 56.1px down, by 0.9px.
+        const long: CardRange = { start: 0, end: 60, topPx: 0, heightPx: 57, short: false, nameRowPx: 35 };
+        const endingAt = (bottomPx: number): CardRange =>
+            ({ start: 60, end: 65, topPx: bottomPx - 2, heightPx: 2, short: true, nameRowPx: 22 });
+        expect(bandClash(endingAt(56), 'up', long, 'down', HALO)).toBe(true);
+        expect(bandClash(endingAt(56.1), 'up', long, 'down', HALO)).toBe(false);
+    });
+
     it('takes two long cards as overlapping only in time, and their names as meeting by any share', () => {
         const cards = day('a 10:00-11:00, b 10:34-11:00, c 11:00-12:00');
         const [a, b, c] = ['a', 'b', 'c'].map(id => cards.get(id)!);
@@ -268,5 +294,32 @@ describe('CardRanges', () => {
         // a's name runs to 34.8px, b starts 34px down.
         expect(namesMeet(a, 'down', b, 'down')).toBe(true);
         expect(namesMeet(a, 'down', cards.get('c')!, 'down')).toBe(false);
+    });
+});
+
+describe('TaskLayout with two short cards whose bands just meet', () => {
+    it('lays two short cards whose bands meet by less than 2px each the lane\'s whole width, and by more side by side', () => {
+        const at = (hhmm: string) => new Date(2026, 2, 11, ...hhmm.split(':').map(Number) as [number, number]).getTime();
+        const card = (id: string, start: string, end: string) => ({
+            ...toDisplayTask(makeTask({ id, content: id, startDate: '2026-03-11' }), 0, NO_TASK_LOOKUP),
+            drawn: { startMs: at(start), endMs: at(end) },
+        });
+        const lane = {
+            pxPerMinute: 0.67, widthPx: 322, bandInsetPx: 20, haloBlockPx: HALO, haloInlinePx: 4, narrowestSideBySidePx: 120,
+        };
+        /** Each card's left and width in px of the lane. */
+        const laid = (q5Start: string, q5End: string) => {
+            const tasks = [card('k', '11:00', '12:15'), card('q3', '12:20', '12:25'), card('q5', q5Start, q5End)];
+            const layout = TaskLayout.calculateTaskLayout(tasks, 0, lane);
+            return Object.fromEntries([...layout].map(([id, slot]) => [id, [
+                Number((slot.left * lane.widthPx / 100).toFixed(1)),
+                Number((slot.width * lane.widthPx / 100).toFixed(1)),
+            ]]));
+        };
+        // Both bands go down, below the long card k. At 12:50 the bands meet
+        // by 1.9px; at 12:45 by 5.25px, and the two are put side by side,
+        // 4px apart.
+        expect(laid('12:50', '12:55')).toEqual({ k: [0, 322], q3: [0, 322], q5: [0, 322] });
+        expect(laid('12:45', '12:50')).toEqual({ k: [0, 322], q3: [0, 159], q5: [163, 159] });
     });
 });

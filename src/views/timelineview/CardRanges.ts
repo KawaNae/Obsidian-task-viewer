@@ -89,11 +89,29 @@ export function bandRangePx(card: CardRange, dir: BandDirection): PxRange {
 }
 
 /**
- * Where a card shows its name: a short card's band going `dir`, or from a
- * longer card's top to the bottom of its name's first line, whatever `dir`.
+ * How far into a short card's band the band of another short card in
+ * front may reach and leave its name legible. The name's line lies 3px
+ * inside the band's top and bottom edges, and the band in front traces a
+ * halo 3px past its own edge, so the halo covers as much of the line as
+ * the two bands meet by. The glyphs' ink lies 1.3px to 1.7px inside the
+ * line, so bands meeting by 1px cut no glyph, and by just under 2px cut
+ * no more than half a pixel off one.
+ */
+const BAND_EDGE_CLEAR_OF_GLYPHS_PX = 1;
+
+/**
+ * Where a card's name can be hidden: a short card's band going `dir`, but
+ * for `BAND_EDGE_CLEAR_OF_GLYPHS_PX` at its top and its bottom, or from a
+ * longer card's top to the bottom of its name's first line, whatever
+ * `dir`. A longer card's line keeps its edges: where its glyphs lie
+ * against the halo of a band over it is not known here, so a band over it
+ * by 1px or more hides it.
  */
 export function nameRangePx(card: CardRange, dir: BandDirection): PxRange {
-    if (card.short) return bandRangePx(card, dir);
+    if (card.short) {
+        const [top, bottom] = bandRangePx(card, dir);
+        return [top + BAND_EDGE_CLEAR_OF_GLYPHS_PX, bottom - BAND_EDGE_CLEAR_OF_GLYPHS_PX];
+    }
     return [card.topPx, card.topPx + card.nameRowPx];
 }
 
@@ -112,7 +130,11 @@ export function coversTop(s: CardRange, sDir: BandDirection, x: CardRange, haloP
     return coverPx <= x.heightPx - CONTENT_SHIFT_FOOT_PX - x.nameRowPx;
 }
 
-/** Whether short card `s`'s band hides `x`'s name: it lies over it by 1px or more, `x` not moving out from under it. */
+/**
+ * Whether short card `s`'s band hides `x`'s name: it lies over where the
+ * name can be hidden (`nameRangePx`) by 1px or more, so over a short
+ * card's band by 2px or more, `x` not moving out from under it.
+ */
 function bandHides(s: CardRange, sDir: BandDirection, x: CardRange, xDir: BandDirection, haloPx: number): boolean {
     return s.short
         && meetByPx(bandRangePx(s, sDir), nameRangePx(x, xDir))
