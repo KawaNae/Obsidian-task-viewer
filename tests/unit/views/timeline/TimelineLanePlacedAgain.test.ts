@@ -222,22 +222,27 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
     });
 
     it('marks a right edge over a card behind, and marks it again or no more when placed again', () => {
-        // Side by side, A's right edge lies over P; shifted, it does not.
-        let narrowest: number | null = 120;
+        // Shifted right, D, of no length, stands a level right of A as C
+        // does, in front of B, which stands a level further right: D's
+        // right edge lies over B. Side by side, D reaches the lane's right
+        // edge and no right edge lies over a card.
+        let narrowest: number | null = null;
         const r = renderer(() => narrowest);
         const col = column(330);
-        draw(r, [col], () => [card('P', '06:45', '21:45'), card('A', '09:00', '12:00'), card('B', '09:30', '10:30')]);
-        const [, a, b] = col.children;
-        expect(a.dataset.haloRight).toBe('1');
-        expect(b.dataset.haloRight).toBeUndefined();
+        draw(r, [col], () => [
+            card('A', '09:10', '09:45'), card('B', '09:25', '11:45'),
+            card('C', '09:25', '12:25'), card('D', '09:25', '09:25'),
+        ]);
+        const d = col.children[3];
+        expect(col.children.map(c => c.dataset.haloRight)).toEqual([undefined, undefined, undefined, '1']);
+
+        narrowest = 0;
+        r.placeLanesAgain();
+        expect(col.children.map(c => c.dataset.haloRight)).toEqual([undefined, undefined, undefined, undefined]);
 
         narrowest = null;
         r.placeLanesAgain();
-        expect(a.dataset.haloRight).toBeUndefined();
-
-        narrowest = 120;
-        r.placeLanesAgain();
-        expect(a.dataset.haloRight).toBe('1');
+        expect(d.dataset.haloRight).toBe('1');
     });
 
     it('marks a band\'s right edge over a card behind, and marks it again or no more when placed again at another zoom', () => {
