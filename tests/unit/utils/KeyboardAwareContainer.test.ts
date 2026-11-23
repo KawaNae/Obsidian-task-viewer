@@ -486,6 +486,29 @@ describe('KeyboardAwareContainer', () => {
             expect(panel.lastScrollBy).toEqual({ top: 260, behavior: 'instant' });
         });
 
+        it('puts the body back where it was as the keyboard opened, when focusing a field scrolled it first', () => {
+            const { win, container, panel, kac } = setup({ withVisualViewport: false });
+            panel.rectBottom = 460; // the body, shrunk above the keyboard
+            panel.scrollHeight = 600;
+            const input = new MockInput(800);
+            container.adopt(input);
+            kac.attach();
+
+            win.dispatch('keyboardWillShow', { keyboardHeight: 336 }); // nothing focused yet
+
+            // focus() scrolls the body itself to show the field at its bottom edge
+            container.ownerDocument.activeElement = input;
+            panel.scrollTop = 32;
+            input.bottom = 460;
+            container.dispatch('focusin', { target: input });
+            vi.advanceTimersByTime(50);
+            expect(panel.lastScrollBy).toEqual({ top: 10, behavior: 'instant' });
+
+            win.dispatch('keyboardWillHide');
+
+            expect(panel.lastScrollTo).toEqual({ top: 0, behavior: 'instant' });
+        });
+
         it('restores 200ms after focus leaves the container with no input focused', () => {
             const { win, container, panel, kac } = setup({ vvHeight: 800 });
             panel.scrollTop = 7;
@@ -523,6 +546,26 @@ describe('KeyboardAwareContainer', () => {
     });
 
     describe('measuring once the container has settled', () => {
+        it('puts the body back where it was as the keyboard opened on the field focused at open, the browser having scrolled it as the box shrank', async () => {
+            const slide = new MockAnimation(250); // the room shrinking above the keyboard
+            const { win, panel, scrolls, input } = setupAnimated(300, slide);
+            panel.scrollHeight = 900;
+
+            win.dispatch('keyboardDidShow', { keyboardHeight: 428 }); // innerHeight 800: kbTop 372
+            // the box shrinks over the transition; the browser keeps the focused field in sight
+            panel.scrollTop = 150;
+            input.bottom = 380;
+            panel.rectBottom = 360;
+            expect(scrolls).toEqual([]); // not while the room still shrinks
+            slide.end();
+            await flush();
+            expect(scrolls.length).toBe(1); // measured, by the body's visible bottom
+
+            win.dispatch('keyboardDidHide');
+
+            expect(panel.lastScrollTo).toEqual({ top: 0, behavior: 'instant' });
+        });
+
         it('does not measure while the sheet slides up, and measures where the field comes to rest once it ends', async () => {
             const slide = new MockAnimation();
             const { container, panel, input, openKeyboard } = setupAnimated(871, slide);
