@@ -249,6 +249,21 @@ describe('destinationFacts', () => {
         expect(unresolved(await facts(lines, { note: typed('Plan') }, { 'Plan.md': ['## Done', ''] }))).toEqual([]);
         expect(unresolved(await facts(lines, { note: typed('Plan'), heading: 'Done' }, { 'Plan.md': ['# p', ''] }))).toEqual([['d', 'Tasks', 'none']]);
     });
+
+    it('no heading typed: the section the settings name, at their level and side; one typed, at their level and side too', async () => {
+        const note = await open(['- [ ] A', ''], { 'Plan.md': ['# p', '### Log', '- [ ] x', ''] });
+        const settings = { ...DEFAULT_SETTINGS, taskHeading: 'Log', taskHeadingLevel: 3, sectionSide: 'end' as const };
+        const ops = new NoteOps(note.session.app, note.session.ops, () => ({ ...settings }), {
+            getTask: (id) => note.session.index.getTask(id),
+            timers: () => null,
+        });
+        const preview = (await ops.previewSend([note.idOf('A')]))!;
+
+        const blank = await ops.destinationFacts(preview, { note: typed('Plan'), heading: '' });
+        expect(blank).toMatchObject({ kind: 'existing', to: { spot: { heading: 'Log', level: 3, side: 'end' } }, heading: { kind: 'one' } });
+        const named = await ops.destinationFacts(preview, { note: typed('Plan'), heading: 'Done' });
+        expect(named).toMatchObject({ to: { spot: { heading: 'Done', level: 3, side: 'end' } }, heading: { kind: 'none' } });
+    });
 });
 
 describe('send', () => {

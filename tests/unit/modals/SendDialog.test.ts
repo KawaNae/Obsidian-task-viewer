@@ -400,6 +400,16 @@ describe('what keeps a send from being asked', () => {
         expect(destination(h.state())).toBeNull();
     });
 
+    it('two headings of a name not the settings\': the error names the heading the send goes to', async () => {
+        const h = await answered(facts({
+            kind: 'existing', path: 'Plan.md',
+            to: { note: { kind: 'existing', path: 'Plan.md' }, spot: { ...SECTION, heading: 'Done' } },
+            heading: { kind: 'many', count: 3 },
+        }));
+
+        expect(h.state().issues.filter(one => one.tone === 'error')).toEqual([{ at: 'heading', tone: 'error', text: t('modal.send.headings', { note: 'Plan.md', heading: 'Done', count: '3' }) }]);
+    });
+
     it('a draft that cannot be written: said as it is edited', async () => {
         const h = await answered();
         h.editor().type('- [ ] A\nB');

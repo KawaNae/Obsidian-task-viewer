@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskApiError } from '../../../src/api/TaskApiTypes';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
-import { DEFAULT_SETTINGS } from '../../../src/types';
+import { DEFAULT_SETTINGS, type TaskViewerSettings } from '../../../src/types';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
@@ -17,12 +17,12 @@ const FILE = 'note.md';
 let live: VaultSession | undefined;
 afterEach(() => { live?.dispose(); live = undefined; });
 
-async function open(files: string[] | Record<string, string>) {
+async function open(files: string[] | Record<string, string>, settings: Partial<TaskViewerSettings> = {}) {
     const { contents, session } = await openVault(files);
     live = session;
     const plugin = {
         app: session.app,
-        settings: { ...DEFAULT_SETTINGS, startHour: 0 },
+        settings: { ...DEFAULT_SETTINGS, startHour: 0, ...settings },
         getTaskReadService: () => new TaskReadService(session.index, () => ({ startHour: 0, weekStartDay: 1 })),
         getIndex: () => session.index,
         getOperations: () => session.ops,
@@ -49,6 +49,15 @@ describe('the API\'s create', () => {
         await api.create({ file: FILE, content: '新', heading: 'Later' });
 
         expect(lines(contents)).toEqual(['# n', 'text', '', '## Later', '- [ ] 新', '']);
+    });
+
+    it('goes where the settings say: the heading at any level, its section\'s end, a heading made at their level', async () => {
+        const { contents, api } = await open(['### h', '- [ ] A', '#### Sub', '- [ ] S', ''], { sectionSide: 'end', taskHeadingLevel: 4 });
+
+        await api.create({ file: FILE, content: 'N', heading: 'H' });
+        await api.create({ file: FILE, content: 'M', heading: 'Made' });
+
+        expect(lines(contents)).toEqual(['### h', '- [ ] A', '- [ ] N', '#### Sub', '- [ ] S', '', '#### Made', '- [ ] M', '']);
     });
 
     it('puts the task at the end of the note when it names no heading', async () => {
