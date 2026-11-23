@@ -21,7 +21,9 @@ export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
  * body's visible bottom (or the keyboard's top, if higher), the body is
  * scrolled by what it lacks. The body is above the keyboard and holds the
  * field, so its own scroll room is enough: nothing is padded, and its
- * height is not locked. Its scrollTop is put back when the keyboard closes.
+ * height is not locked. When the keyboard closes, the body's scrollTop is
+ * put back where it stood as the keyboard opened, whoever scrolled it
+ * meanwhile (this, or the browser revealing a field focused by script).
  *
  * A field is an input, a textarea, or an editable element
  * (contenteditable: a CodeMirror editor's content). What is typed at is
@@ -63,7 +65,7 @@ export class KeyboardAwareContainer {
     private focusTimer: ReturnType<typeof setTimeout> | null = null;
     private selectionHandler: (() => void) | null = null;
     private selectionFrame: number | null = null;
-    /** The body's scrollTop as it was before it was first scrolled for the keyboard. */
+    /** The body's scrollTop as the keyboard opened, or as it was first scrolled for it. */
     private savedScrollTop: number | null = null;
     /** The overlap last given to the container (px), 0 while none is set. */
     private overlap = 0;
@@ -154,6 +156,13 @@ export class KeyboardAwareContainer {
                 `[kb] ${this.keyboardOpen ? 'open' : 'close'}` +
                 ` vvKb=${Math.round(vvKb)} native=${nativeKb}` +
                 ` ih=${this.win.innerHeight}`);
+        }
+
+        // Where the body stood as the keyboard opened is where it goes back
+        // to: a field focused afterwards may have the browser scroll the
+        // body to it before it is measured, the body having shrunk.
+        if (this.keyboardOpen && !wasOpen && this.savedScrollTop === null && this.scrollTarget) {
+            this.savedScrollTop = this.scrollTarget.scrollTop;
         }
 
         this.setOverlap(this.keyboardOpen
