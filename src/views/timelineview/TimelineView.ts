@@ -36,7 +36,7 @@ import {
     TimelineCodec, daysToShowOf, effectiveOverlapMode, effectiveZoom,
     type TimelineConfig, type TimelineTransient,
 } from './TimelineSchema';
-import { narrowestSideBySidePx } from './TaskLayout';
+import { measureFullTimePx } from './TimeRowWidth';
 import { TimelineDays, windowDates, windowEnd, type DayWindow } from './TimelineDays';
 
 /** How long a wheel zoom waits for its next step before its cards are placed again. */
@@ -226,10 +226,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             this.plugin,
             this.taskRenderer,
             () => this.zoom(),
-            () => narrowestSideBySidePx(
-                effectiveOverlapMode(this.state, this.plugin.settings),
-                this.plugin.settings.sideBySideMinWidth,
-            ),
+            () => effectiveOverlapMode(this.state, this.plugin.settings),
+            (col) => measureFullTimePx(col, this.plugin.settings),
         );
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,

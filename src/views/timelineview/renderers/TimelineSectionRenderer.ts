@@ -5,7 +5,8 @@ import type { TimerHost } from '../../../timer/TimerWidget';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { minutesOfSpan } from '../../../utils/DayWindow';
 import { TaskStyling } from '../../sharedUI/TaskStyling';
-import { TaskLayout, type LaneSlot, type TimelineLane } from '../TaskLayout';
+import type { TimelineOverlapMode } from '../../../types';
+import { TaskLayout, narrowestSideBySidePx, type LaneSlot, type TimelineLane } from '../TaskLayout';
 import { LANE_INSET_PX } from '../TimedCardGeometry';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
 import { TIME_TOP_RIGHT } from '../../taskcard/TopRightFieldResolver';
@@ -19,10 +20,17 @@ import {
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
-/** The lengths of the lane `measureLane` reads off a column and its stylesheet. */
-type LaneLengths = Pick<TimelineLane, 'widthPx' | 'bandInsetPx' | 'haloBlockPx' | 'haloInlinePx'>;
+/**
+ * The lengths of the lane `measureLane` reads off a column and its
+ * stylesheet, and the narrowest a card there shows its start and end time
+ * whole (`fullTimePx`), which TaskLayout is given as the narrowest a column
+ * put side by side may be under `auto`.
+ */
+type LaneLengths = Pick<TimelineLane, 'widthPx' | 'bandInsetPx' | 'haloBlockPx' | 'haloInlinePx'> & {
+    fullTimePx: number;
+};
 
-const UNMEASURED: LaneLengths = { widthPx: 0, bandInsetPx: 0, haloBlockPx: 0, haloInlinePx: 0 };
+const UNMEASURED: LaneLengths = { widthPx: 0, bandInsetPx: 0, haloBlockPx: 0, haloInlinePx: 0, fullTimePx: 0 };
 
 /**
  * What a day column was drawn with, kept so that its cards can be placed
@@ -52,11 +60,18 @@ export class TimelineSectionRenderer {
     private watched: HTMLElement | null = null;
     private readonly laneResize = this.createLaneObserver();
 
+    /**
+     * @param getOverlapMode the view's way of laying out overlapping cards,
+     *   read as the cards are placed
+     * @param measureFullTime the narrowest a card in a column shows its start
+     *   and end time whole (`measureFullTimePx`); 0 where it cannot tell
+     */
     constructor(
         private plugin: PluginContext & TimerHost,
         private taskRenderer: TaskCardRenderer,
         private getZoomLevel: () => number,
-        private getNarrowestSideBySide: () => number | null,
+        private getOverlapMode: () => TimelineOverlapMode,
+        private measureFullTime: (col: HTMLElement) => number,
     ) { }
 
     /**
@@ -68,7 +83,9 @@ export class TimelineSectionRenderer {
         this.lanes.clear();
         if (this.watched) this.laneResize.unobserve(this.watched);
         this.watched = cols[0] ?? null;
-        this.lengths = this.watched ? this.measureLane(this.watched) : UNMEASURED;
+        this.lengths = this.watched
+            ? { ...this.measureLane(this.watched), fullTimePx: this.measureFullTime(this.watched) }
+            : UNMEASURED;
         if (this.watched) this.laneResize.observe(this.watched);
     }
 
@@ -120,7 +137,7 @@ export class TimelineSectionRenderer {
      * cards put side by side stand apart; the last three read from the CSS
      * that draws them.
      */
-    private measureLane(col: HTMLElement): LaneLengths {
+    private measureLane(col: HTMLElement): Omit<LaneLengths, 'fullTimePx'> {
         const style = getComputedStyle(col);
         const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
         const haloInlinePx = px('--task-card-halo-inline');
@@ -158,13 +175,20 @@ export class TimelineSectionRenderer {
     /**
      * The watched column's width changed, or it was first laid out: measure
      * it again and, if the lane is another width, place every column's cards
-     * again. A lane of the width the draw measured writes nothing.
+     * again. A lane of the width the draw measured writes nothing. The width
+     * a card shows its times in is kept once measured: a column's width does
+     * not change the font its cards are drawn in, and this runs again and
+     * again while a pane's edge is dragged. A column drawn before it was laid
+     * out measured none, so it is measured as the column first has a width.
      */
     private laneResized(): void {
         if (!this.watched) return;
         const lengths = this.measureLane(this.watched);
         if (lengths.widthPx === this.lengths.widthPx) return;
-        this.lengths = lengths;
+        const fullTimePx = this.lengths.fullTimePx > 0 || lengths.widthPx === 0
+            ? this.lengths.fullTimePx
+            : this.measureFullTime(this.watched);
+        this.lengths = { ...lengths, fullTimePx };
         this.placeLanesAgain();
     }
 
@@ -181,15 +205,17 @@ export class TimelineSectionRenderer {
     /**
      * The lane TaskLayout lays a column's cards out in, made here alone for
      * a draw and for a placing again: the lengths measured last, and the
-     * zoom and the view's choice read as the cards are placed, so it
-     * follows them as they are then.
+     * zoom and the view's way of laying out read as the cards are placed, so
+     * it follows them as they are then. Under `auto` a cluster goes side by
+     * side where each column shows its cards' start and end times whole.
      */
     private lane(): TimelineLane {
+        const { fullTimePx, ...lengths } = this.lengths;
         return {
-            ...this.lengths,
+            ...lengths,
             // --hour-height is 60px a zoom step, so a minute is the zoom in px.
             pxPerMinute: this.getZoomLevel(),
-            narrowestSideBySidePx: this.getNarrowestSideBySide(),
+            narrowestSideBySidePx: narrowestSideBySidePx(this.getOverlapMode(), fullTimePx),
         };
     }
 

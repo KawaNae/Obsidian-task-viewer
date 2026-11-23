@@ -185,7 +185,6 @@ export const SETTINGS_SCHEMA = {
     showAllDay: bool,
     showTimeline: bool,
     overlapMode: oneOf(TIMELINE_OVERLAP_MODES),
-    sideBySideMinWidth: int({ min: 80, max: 160 }),
     showWeekRow: bool,
     enableTasksPlugin: bool,
     enableDayPlanner: bool,

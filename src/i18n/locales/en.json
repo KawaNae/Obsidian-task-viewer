@@ -120,8 +120,6 @@
       "overlapModeCascade": "Shift right",
       "overlapModeAuto": "Switch automatically",
       "overlapModeSideBySide": "Side by side",
-      "sideBySideMinWidth": "Narrowest side-by-side card (px)",
-      "sideBySideMinWidthDesc": "With \"Switch automatically\", cards are put side by side when each is at least this wide, and shifted right otherwise.",
       "showWeekRow": "Show week row",
       "showWeekRowDesc": "Show a week-number row above the date header in Timeline and Schedule views.",
       "mobileTopOffset": "Mobile top offset (px)",

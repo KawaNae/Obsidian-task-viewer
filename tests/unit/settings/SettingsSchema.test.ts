@@ -59,26 +59,20 @@ describe('readSettings', () => {
         ]);
     });
 
-    it('takes each way of laying out Timeline\'s overlapping cards, and a narrowest from 80px to 160px', () => {
+    it('takes each way of laying out Timeline\'s overlapping cards', () => {
         for (const overlapMode of ['cascade', 'auto', 'sideBySide'] as const) {
-            for (const sideBySideMinWidth of [80, 160]) {
-                const { settings, fixes } = readSettings({ overlapMode, sideBySideMinWidth });
-                expect([settings.overlapMode, settings.sideBySideMinWidth]).toEqual([overlapMode, sideBySideMinWidth]);
-                expect(fixes).toEqual([]);
-            }
+            const { settings, fixes } = readSettings({ overlapMode });
+            expect(settings.overlapMode).toBe(overlapMode);
+            expect(fixes).toEqual([]);
         }
     });
 
-    it('gives the defaults for a way of laying out it does not know and a narrowest out of range', () => {
-        for (const sideBySideMinWidth of [79, 161]) {
-            const { settings, fixes } = readSettings({ overlapMode: 'side', sideBySideMinWidth });
-            expect(settings.overlapMode).toBe(DEFAULT_SETTINGS.overlapMode);
-            expect(settings.sideBySideMinWidth).toBe(DEFAULT_SETTINGS.sideBySideMinWidth);
-            expect(fixes).toEqual([
-                { path: 'overlapMode', issue: { code: 'oneOf', allowed: ['cascade', 'auto', 'sideBySide'] } },
-                { path: 'sideBySideMinWidth', issue: { code: 'range', min: 80, max: 160 } },
-            ]);
-        }
+    it('gives the default for a way of laying out it does not know', () => {
+        const { settings, fixes } = readSettings({ overlapMode: 'side' });
+        expect(settings.overlapMode).toBe(DEFAULT_SETTINGS.overlapMode);
+        expect(fixes).toEqual([
+            { path: 'overlapMode', issue: { code: 'oneOf', allowed: ['cascade', 'auto', 'sideBySide'] } },
+        ]);
     });
 
     // No upper bound on the work and the break.

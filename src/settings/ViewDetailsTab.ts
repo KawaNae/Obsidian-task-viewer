@@ -6,7 +6,7 @@ import { SETTINGS_SCHEMA } from './SettingsSchema';
 import type { SettingFields } from './SettingFields';
 import { OVERLAP_MODE_LABEL } from './TimelineOverlapModeLabel';
 
-type CountKey = 'pastDaysToShow' | 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes' | 'pinnedListPageSize' | 'sideBySideMinWidth';
+type CountKey = 'pastDaysToShow' | 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes' | 'pinnedListPageSize';
 
 export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFields): void {
     /** A whole number of the settings, read by its range in the settings' table. */
@@ -79,12 +79,6 @@ export function render(el: HTMLElement, plugin: PluginContext, fields: SettingFi
                     await plugin.saveSettings();
                 });
         });
-
-    // Shown whatever the global choice, since a view that chooses auto for
-    // itself is put side by side at this width too.
-    count(new Setting(el)
-        .setName(t('settings.views.sideBySideMinWidth'))
-        .setDesc(t('settings.views.sideBySideMinWidthDesc')), 'sideBySideMinWidth', '120');
 
     new Setting(el)
         .setName(t('settings.views.showWeekRow'))
