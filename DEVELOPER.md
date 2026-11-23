@@ -499,6 +499,13 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 ハブのフォームは、値の読み書きをホスト（`HubHost`、`modals/hub/HubHost.ts`）に頼む。ホストは2つある。今あるタスクのホストは `RowHost`（`modals/hub/RowHost.ts`）で、ハブを開く入口 `TaskHubPanel.openRowHub` が作る。分割したタスクの区間から開いたときは、区間の行を名前で引いて値にする。まだ書いていないタスクのホストは `DraftHost`（`modals/hub/DraftHost.ts`）で、入口 `TaskHubPanel.openDraftHub` が、行を置く場所（`CreatePlace`）と初めの値（`DraftSeed`）から作る。
 
+行を置く場所（`CreatePlace`、`services/data/CreatePlaces.ts`）は2種類ある。ノートの位置（`note`）と、タスクの子の先頭（`childOf`）である。
+- ノートの位置は、どのノートか（`PlaceNote`）と、ノートの中のどこか（`NoteSpot`：見出しの節か、ノートの末尾）で決まる。ノートは、ある日のデイリーノート（`daily`、日付）か、パスのノート（`path`）のどちらかである
+    - ノートのパスと、ノートが無いときに何から作るか（`NoteSeed`）は、どちらもこの1つの値から読む。デイリーノートはその日のテンプレートから、パスのノートは空のノートとして作る。パスと作る元を組で持たないので、パスの日とテンプレートの日が食い違う組は作れない
+    - ビューの「デイリーノートにタスクを作成」の場所は、その日のデイリーノートの設定の見出しの節である（`CreatePlaces.dailyNote`）
+- 場所の様子（`CreatePlaces.facts`）は、ノートの行を読み、ノートが無ければ書き込みと同じ作る元（`Notes.seedOf`）の行を読む。見出しとビューが読まないノートかは、送る先の読みと同じ関数（`NotePlaces.spotIn`）で読む。受け継ぐ値は、行を書き込みと同じ所（`putBlock`）に置いてから、索引と同じ読み（`FileParsePipeline.resolveSections`）で読む
+- 書き込み（`CreatePlaces.create`）は、ノートの位置なら `Operations.putInNote` に、パス、位置、作る元を渡す。子の先頭なら `insertLine` である
+
 フォームから見たホストの口：
 - `task`：今の値。欄が出す値で、渡した変更を重ねてある
 - `put`：変更を渡す。書けたかを答え、拒まれた理由はホストが言う
@@ -534,7 +541,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 `DraftHost` が持つもの：
 - 書き込み：渡された変更を下書きの値にすぐ重ね（`applyToDraft`、`services/data/TaskDraft.ts`）、ノートには書かない。カードとフォームは、変更を渡した欄の処理が済んでから描き直す。作成が途中の間は変更を受けない
-- 置き場の問い：ハブが開いた後（`attach`）と作成が拒まれた後に、置き場が何で、そこに置いた行が何を受け継ぐかを聞く（`CreatePlaces.facts`）。最後に聞いた答えだけを取り、下書きをその置き場に置き直す（`withPlace`）。受け継ぐ値は変わり、与えた値は残る。行の行き先と、ビューが読まないノートの警告は [作成] の上の文の行に出す（`placeIssues`、`placeText`）
+- 置き場の問い：ハブが開いた後（`attach`）と作成が拒まれた後に、置き場が何で、そこに置いた行が何を受け継ぐかを聞く（`CreatePlaces.facts`）。最後に聞いた答えだけを取り、下書きをその置き場に置き直す（`withPlace`）。受け継ぐ値は変わり、与えた値は残る。行の行き先と、ビューが読まないノートの警告は [作成] の上の文の行に出す（`placeIssues`、`placeText`）。行き先の文は、見出しの節の先頭か末尾、見出しを作る、ノートの末尾、ノートを作る（デイリーノートか新しいノートか）を言い分け、同じ名前の見出しが複数あれば誤りとして言う
 - 作成：置き場が答え、行がそこへ置けるときだけ頼める（`canCreate`）。下書きから行とプロパティ行を作り（`TaskDraft.newRowOf`）、1回の書き込みで置く（`CreatePlaces.create`）。書けたらハブを閉じる。拒まれたら、通知を出さずに理由を [作成] の上の文の行に出し、置き場を聞き直す。作っている間は欄を止める。書き込みを作った後に打った値は書かれず、ハブが閉じると失うためである
 - 閉じるときの待ち：作成が途中なら答えを待ち、書けたら閉じ、拒まれたら開いたままにする。ハブが閉じた後に届いた拒否は通知で言う
 - 与えた値：閉じると失うものがあるか（`changed`）は、今書けば開いたときと違う行を書くかで決める。与えてから取り消した値は数えない
@@ -1550,7 +1557,7 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is never written on a task's behalf. It is written in three places, each touching only the key's lines (`FrontmatterLineEditor`): `setFrontmatterKeys` (`FrontmatterWriter.setKeys`; the scope keys from the Properties view's suggests and color picker), a send (`SendWriter.placeInNote` adds the built-in keys the destination does not say, within the send's write, and the custom values as lines above its first heading), and the editor's `FrontmatterValueSuggest` (a picked value replaces the value on the key's line through `editor.replaceRange`, the editor's change, not a vault write).
 
 - Every task has a real body line. A new line (the API's `create` and `insertChildTask`, the hub on a task not written yet, the timer's records) is written from its fields with `formatTaskLine`, never through a temporary Task. `createTempTask` is only the base of the hub's draft (`TaskDraft.draftTask`), whose line `TaskDraft.newRowOf` writes with `formatTaskLine`.
-- Every write that adds a row takes a new row (`NewRow`, `services/persistence/NewRow.ts`): its line, and the property lines that go under it (`properties`, a `PropertyEdit`). `Operations.putInNote` (in a section or at the end of the note, the note made of its seed when not there: the API's create), `insertLine` (the `insert` op), `putInDailyNote` (over `putInNote`), `Notes.putInNote` and `CreatePlaces.create` all take one; a row with no properties is its line alone. There is no second port for a row with property lines.
+- Every write that adds a row takes a new row (`NewRow`, `services/persistence/NewRow.ts`): its line, and the property lines that go under it (`properties`, a `PropertyEdit`). `Operations.putInNote` (in a section or at the end of the note, the note made of its seed when not there: the API's create, a hub's create in a note), `insertLine` (the `insert` op), `putInDailyNote` (over `putInNote`), `Notes.putInNote` and `CreatePlaces.create` all take one; a row with no properties is its line alone. There is no second port for a row with property lines.
     - `rowBlock` composes the row and its property lines into one block, by applying `ChildPropertyLineEditor.applyOps` to a draft that holds the row's line alone: the property lines are spelled and indented as a write to a row already there writes them, a level of `indentUnit` under the row, a list's items a level under their line. The block goes at the spot's indentation (`Block.at`), so the row and its property lines land in one write and nothing in between is ever in the note.
     - Put in one block, each property line reads as the row's child. Put as a block of its own below a row put in the same write, it would be a line the row takes in from past its block, which `checkWrite` refuses as `disturbs`.
     - When the properties cannot be written (`applyOps` answers a finding), the write is refused as `property`, its line the note's line the block would have put it on, and nothing is written.

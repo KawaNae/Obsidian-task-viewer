@@ -210,7 +210,7 @@ describe('a new row with its properties, put where each write puts a row', () =>
         const places = new CreatePlaces(session.app, session.ops, () => DEFAULT_SETTINGS, (id) => session.index.getTask(id));
 
         expect((await places.create({ kind: 'childOf', taskId: idOf(session, 'P') }, row('- [ ] 子'))).written).toBe(true);
-        expect((await places.create({ kind: 'dailyNote', date: DAY }, row('- [ ] 日'))).written).toBe(true);
+        expect((await places.create(places.dailyNote(DAY), row('- [ ] 日'))).written).toBe(true);
         await session.settle(FILE);
         await session.settle(DAILY);
 

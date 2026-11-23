@@ -205,7 +205,7 @@ function sameRow(a: NewRow, b: NewRow): boolean {
  */
 export function placeIssues(facts: PlaceFacts): FormIssue<never>[] {
     const issues: FormIssue<never>[] = [{ at: 'form', ...placeText(facts) }];
-    if (facts.kind === 'dailyNote' && facts.ignored) {
+    if (facts.kind === 'note' && facts.ignored) {
         issues.push({ at: 'form', tone: 'warning', text: t('modal.newTask.ignored', { note: facts.path }) });
     }
     return issues;
@@ -222,14 +222,29 @@ export function placeText(facts: PlaceFacts): { text: string; tone: Tone } {
             return { text: t('modal.newTask.gone'), tone: 'error' };
         case 'childOf':
             return { text: t('modal.newTask.toChild', { parent: facts.parent }), tone: 'info' };
-        case 'dailyNote': {
-            const vars = { note: facts.path, heading: facts.section.heading };
-            if (facts.heading.kind === 'many') {
-                return { text: t('modal.newTask.headings', { ...vars, count: String(facts.heading.count) }), tone: 'error' };
-            }
-            if (facts.note === 'new') return { text: t('modal.newTask.toNew', vars), tone: 'info' };
-            if (facts.heading.kind === 'none') return { text: t('modal.newTask.toMade', vars), tone: 'info' };
-            return { text: t(facts.section.side === 'end' ? 'modal.newTask.toEnd' : 'modal.newTask.toHead', vars), tone: 'info' };
-        }
+        case 'note':
+            return { text: noteText(facts), tone: facts.heading?.kind === 'many' ? 'error' : 'info' };
     }
+}
+
+/**
+ * Where a line put in a note goes: at the end of the note, or in a section
+ * of it — at its head or its end, under a heading made, or nowhere when
+ * more than one heading goes by the name. A note made for the line is said
+ * so, as a daily note when it is made of the day's template.
+ */
+function noteText(facts: Extract<PlaceFacts, { kind: 'note' }>): string {
+    const made = facts.note === 'new' ? facts.seed : null;
+    if (facts.spot === 'end') {
+        const note = { note: facts.path };
+        if (made === 'daily') return t('modal.newTask.toNewEnd', note);
+        if (made === 'empty') return t('modal.newTask.toNewNoteEnd', note);
+        return t('modal.newTask.toNoteEnd', note);
+    }
+    const vars = { note: facts.path, heading: facts.spot.heading };
+    if (facts.heading?.kind === 'many') return t('modal.newTask.headings', { ...vars, count: String(facts.heading.count) });
+    if (made === 'daily') return t('modal.newTask.toNew', vars);
+    if (made === 'empty') return t('modal.newTask.toNewNote', vars);
+    if (facts.heading?.kind === 'none') return t('modal.newTask.toMade', vars);
+    return t(facts.spot.side === 'end' ? 'modal.newTask.toEnd' : 'modal.newTask.toHead', vars);
 }

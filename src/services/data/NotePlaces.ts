@@ -110,15 +110,30 @@ export class NotePlaces {
 
         const path = at.file.path;
         const { lines } = splitLines(await this.app.vault.read(at.file));
-        const outline = Outline.read(lines);
         return {
             kind: 'existing',
             lines,
             path,
             to: { note: { kind: 'existing', path }, spot: ask.spot },
-            heading: section ? Placement.heading(outline, section.heading) : null,
-            headings: outline.headings.map(h => h.text),
-            ignored: FileParsePipeline.resolveSections(lines, this.getSettings()) === null,
+            ...spotIn(lines, ask.spot, this.getSettings()),
         };
     }
+}
+
+/** What a note is where lines go in it, as {@link NotePlace} has it: the heading `spot` names, the note's headings, and whether the index reads the note. */
+export type SpotRead = Pick<NotePlace, 'heading' | 'headings' | 'ignored'>;
+
+/**
+ * What the note whose lines are `lines` is where `spot` says lines go
+ * (see {@link SpotRead}): a note there, or the lines a note not there yet is
+ * made of. The one reading of a note's lines a destination and a place to
+ * create in both make (`CreatePlaces.facts`).
+ */
+export function spotIn(lines: readonly string[], spot: NoteSpot, settings: TaskViewerSettings): SpotRead {
+    const outline = Outline.read(lines);
+    return {
+        heading: spot === 'end' ? null : Placement.heading(outline, spot.heading),
+        headings: outline.headings.map(h => h.text),
+        ignored: FileParsePipeline.resolveSections(lines, settings) === null,
+    };
 }

@@ -57,7 +57,7 @@ const FACTS: PlaceFacts = { kind: 'childOf', parent: '親', inherits: SIBLING.ca
 
 const GONE: PlaceFacts = { kind: 'gone', inherits: {} };
 const IGNORED: PlaceFacts = {
-    kind: 'dailyNote', path: '2031-01-15.md', section: { heading: 'Tasks', level: 2, side: 'head' }, note: 'existing',
+    kind: 'note', path: '2031-01-15.md', spot: { heading: 'Tasks', level: 2, side: 'head' }, note: 'existing', seed: 'daily',
     heading: { kind: 'none' }, ignored: true, inherits: {},
 };
 

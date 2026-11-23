@@ -121,7 +121,7 @@ describe('a draft put and read back', () => {
     for (const [name, seed] of SEEDS) {
         it(`in a daily note: ${name}`, async () => {
             const s = await open({ [DAILY]: DAILY_NOTE });
-            const { draft, read } = await putDraft(s, { kind: 'dailyNote', date: DAY }, seed, DAILY);
+            const { draft, read } = await putDraft(s, s.places.dailyNote(DAY), seed, DAILY);
             expect(shown(read)).toEqual(shown(draft));
         });
 
@@ -136,14 +136,14 @@ describe('a draft put and read back', () => {
 
     it('with no date: the draft has no start date, and the row reads back an empty one', async () => {
         const s = await open({ [DAILY]: DAILY_NOTE });
-        const { draft, read } = await putDraft(s, { kind: 'dailyNote', date: DAY }, { content: '日付なし' }, DAILY);
+        const { draft, read } = await putDraft(s, s.places.dailyNote(DAY), { content: '日付なし' }, DAILY);
         expect(draft.startDate).toBeUndefined();
         expect(read.startDate).toBe('');
     });
 
     it('in a daily note not there yet', async () => {
         const s = await open({});
-        const { draft, read } = await putDraft(s, { kind: 'dailyNote', date: DAY }, SEEDS[1][1], DAILY);
+        const { draft, read } = await putDraft(s, s.places.dailyNote(DAY), SEEDS[1][1], DAILY);
         expect(shown(read)).toEqual(shown(draft));
     });
 });

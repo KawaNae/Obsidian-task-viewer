@@ -851,7 +851,8 @@ export class Operations {
      * the note has none by the name, or at the end of the note. A note not
      * there is made of `opts.seed` (`Notes.seedOf`) with the row in it, in one write; without
      * a seed, the write is refused as `gone`. The one write of a new row
-     * into a note: a task the API makes, a task made in the daily note
+     * into a note: a task the API makes, a task a hub on a task not written
+     * yet makes in a note (`CreatePlaces.create`), a timer's first record
      * ({@link putInDailyNote}).
      *
      * @returns whether the row was written, with the line it went to when it
@@ -877,7 +878,7 @@ export class Operations {
      * Put `row` under the task section (`Destination.taskSection`) of the
      * daily note of `date` (`YYYY-MM-DD`), the note made of its template with
      * the row in it when it is not there, in one write ({@link putInNote}):
-     * a task a hub on a task not written yet makes, a timer's first record.
+     * a timer's first record.
      *
      * @returns whether the row was written, with the path of the note when
      * it was; when not, why not, told as {@link updateTask} tells it.

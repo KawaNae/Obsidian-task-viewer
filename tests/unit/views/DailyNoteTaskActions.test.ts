@@ -7,7 +7,10 @@ import {
 } from '../../../src/views/sharedLogic/DailyNoteTaskActions';
 import { t } from '../../../src/i18n';
 import type TaskViewerPlugin from '../../../src/main';
-import type { Menu } from 'obsidian';
+import type { App, Menu } from 'obsidian';
+import { CreatePlaces } from '../../../src/services/data/CreatePlaces';
+import type { Operations } from '../../../src/services/operations/Operations';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 
 function makePlugin() {
     const started: unknown[][] = [];
@@ -36,23 +39,27 @@ describe('startDailyNoteTimer', () => {
 });
 
 describe('openDraftHubForDailyNote', () => {
+    /** The settings' section of the day's daily note. */
+    const DAILY = { kind: 'note', note: { kind: 'daily', date: '2026-08-22' }, spot: { heading: 'Tasks', level: 2, side: 'head' } };
+
     function opened(date: string, minutes?: number) {
         const calls: unknown[][] = [];
-        const plugin = { openDraftHub: (...args: unknown[]) => { calls.push(args); } } as unknown as TaskViewerPlugin;
+        const places = new CreatePlaces({} as App, {} as Operations, () => DEFAULT_SETTINGS, () => undefined);
+        const plugin = { openDraftHub: (...args: unknown[]) => { calls.push(args); }, getCreatePlaces: () => places } as unknown as TaskViewerPlugin;
         openDraftHubForDailyNote(plugin, date, minutes);
         return calls;
     }
 
     it('opens the hub on a task not written yet in the day\'s daily note, starting at the time clicked to the nearest 5 minutes', () => {
-        expect(opened('2026-08-22', 10 * 60 + 13)).toEqual([[{ kind: 'dailyNote', date: '2026-08-22' }, { startDate: '2026-08-22', startTime: '10:15' }]]);
+        expect(opened('2026-08-22', 10 * 60 + 13)).toEqual([[DAILY, { startDate: '2026-08-22', startTime: '10:15' }]]);
     });
 
     it('starts the task on the next day past midnight, still in the column\'s note', () => {
-        expect(opened('2026-08-22', 24 * 60 + 2 * 60 + 30)).toEqual([[{ kind: 'dailyNote', date: '2026-08-22' }, { startDate: '2026-08-23', startTime: '02:30' }]]);
+        expect(opened('2026-08-22', 24 * 60 + 2 * 60 + 30)).toEqual([[DAILY, { startDate: '2026-08-23', startTime: '02:30' }]]);
     });
 
     it('starts the task on the day alone from the all-day lane, which knows no time', () => {
-        expect(opened('2026-08-22')).toEqual([[{ kind: 'dailyNote', date: '2026-08-22' }, { startDate: '2026-08-22' }]]);
+        expect(opened('2026-08-22')).toEqual([[DAILY, { startDate: '2026-08-22' }]]);
     });
 });
 

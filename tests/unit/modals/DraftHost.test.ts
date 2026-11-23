@@ -24,11 +24,11 @@ import { t } from '../../../src/i18n';
  * is told by a notice.
  */
 
-const PLACE: CreatePlace = { kind: 'dailyNote', date: '2031-01-15' };
+const PLACE: CreatePlace = { kind: 'note', note: { kind: 'daily', date: '2031-01-15' }, spot: { heading: 'Tasks', level: 2, side: 'head' } };
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
 
-function daily(over: Partial<Extract<PlaceFacts, { kind: 'dailyNote' }>> = {}): PlaceFacts {
-    return { kind: 'dailyNote', path: '2031-01-15.md', section: SECTION, note: 'existing', heading: { kind: 'none' }, ignored: false, inherits: {}, ...over };
+function daily(over: Partial<Extract<PlaceFacts, { kind: 'note' }>> = {}): PlaceFacts {
+    return { kind: 'note', path: '2031-01-15.md', spot: SECTION, note: 'existing', seed: 'daily', heading: { kind: 'none' }, ignored: false, inherits: {}, ...over };
 }
 
 const REFUSED: IndexRefusal = { file: '2031-01-15.md', reason: { kind: 'changed' }, subject: '2031-01-15.md' };
@@ -281,7 +281,7 @@ describe('placeText', () => {
         const vars = { note: '2031-01-15.md', heading: 'Tasks' };
         expect(placeText(daily({ note: 'new', heading: { kind: 'one', heading: {} as never } }))).toEqual({ text: t('modal.newTask.toNew', vars), tone: 'info' });
         expect(placeText(daily({ heading: { kind: 'one', heading: {} as never } }))).toEqual({ text: t('modal.newTask.toHead', vars), tone: 'info' });
-        expect(placeText(daily({ heading: { kind: 'one', heading: {} as never }, section: { ...SECTION, side: 'end' } }))).toEqual({ text: t('modal.newTask.toEnd', vars), tone: 'info' });
+        expect(placeText(daily({ heading: { kind: 'one', heading: {} as never }, spot: { ...SECTION, side: 'end' } }))).toEqual({ text: t('modal.newTask.toEnd', vars), tone: 'info' });
         expect(placeText({ kind: 'childOf', parent: '親', inherits: {} })).toEqual({ text: t('modal.newTask.toChild', { parent: '親' }), tone: 'info' });
     });
 });

@@ -314,7 +314,7 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
         await writeIndexedTestFile(TWICE_DAILY, TWICE_NOTE);
         const steps = run<Record<string, unknown>>(`
             const open = async day => {
-                plugin.openDraftHub({ kind: 'dailyNote', date: day }, { startDate: day });
+                plugin.openDraftHub(plugin.getCreatePlaces().dailyNote(day), { startDate: day });
                 await until(() => nameInput() && lineSays().length > 0);
             };
             const close = async () => {
@@ -350,7 +350,7 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
         await writeIndexedTestFile(MAKE_FILE, MAKE_NOTE);
         const base = MAKE_FILE.replace(/\.md$/, '');
         const steps = run<Record<string, unknown>>(`
-            plugin.openDraftHub({ kind: 'dailyNote', date: ${JSON.stringify(NEW_DAY)} }, { startDate: ${JSON.stringify(NEW_DAY)} });
+            plugin.openDraftHub(plugin.getCreatePlaces().dailyNote(${JSON.stringify(NEW_DAY)}), { startDate: ${JSON.stringify(NEW_DAY)} });
             await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
             const line = lineSays();
             const input = nameInput();
