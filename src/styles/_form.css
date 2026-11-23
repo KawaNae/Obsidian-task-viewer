@@ -8,6 +8,10 @@
 /* OverlayShell の上のフォームダイアログ（SendModal など）の見出し。殻の上の場所に置く */
 .tv-form__title {
     margin: 0 0 12px;
+    /* Obsidian's large UI size (20px on the desktop, 1.2 of the text size on
+       mobile): smaller than a heading's, larger than a modal's own title */
+    font-size: var(--font-ui-large);
+    line-height: 1.2;
 }
 
 /* --- 行文法: 始まり側の固定幅ラベル列 + コントロール領域 --- */
