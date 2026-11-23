@@ -296,7 +296,7 @@ describe('KeyboardAwareContainer', () => {
 
     });
 
-    describe('the area above the keyboard', () => {
+    describe('the room above the keyboard', () => {
         it('gives the container how much of the window the keyboard covers while it is open', () => {
             const { win, container, kac } = setup({ vvHeight: 800 });
             kac.attach();

@@ -10,12 +10,14 @@ export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
  *
  * While the keyboard covers the window, the container is told how much of
  * it the keyboard covers, as the CSS variable `--tv-keyboard-overlap` on it
- * (`max(0, innerHeight - keyboardTop)`), and the stylesheet ends the area
- * the container lays out in that far above the window's bottom: the sheet
- * stands on the keyboard, the box is centred above it, and the panel's
- * last row (its buttons) sits right over the keyboard. The panel shrinks
- * with that area, and its body scrolls inside. With no keyboard, nothing
- * is set and the container lays out as ever.
+ * (`max(0, innerHeight - keyboardTop)`). The container still covers the
+ * whole window; the stylesheet ends the room its panel lays out its
+ * contents in that far above the window's bottom: the box is centred above
+ * the keyboard, and the sheet, its surface running on under the keyboard,
+ * has its contents stand on it, so the panel's last row (its buttons) sits
+ * right over the keyboard. The panel's contents shrink with that room, and
+ * its body scrolls inside. With no keyboard, nothing is set and the
+ * container lays out as ever.
  *
  * What is typed at is kept in sight in the body: when it stands below the
  * body's visible bottom (or the keyboard's top, if higher), the body is
@@ -38,7 +40,7 @@ export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
  * up, the box popping in) moves the field it holds, and a position read
  * midway is not where the field comes to rest (on iPad the sheet's 150 ms
  * slide was read with the field still below the window, and the panel
- * scrolled 565 px where 67 would do), and the area shrinking above the
+ * scrolled 565 px where 67 would do), and the room shrinking above the
  * keyboard moves its bottom over a transition. Every measure (the keyboard opening
  * or moving, a field focused, the caret moving) goes through
  * `measureWhenSettled`, which waits for those animations to end, then

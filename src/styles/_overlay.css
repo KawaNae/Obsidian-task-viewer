@@ -291,20 +291,43 @@ body:not(.theme-dark) .tv-overlay {
 
 /* ═══════════════════════════════════════════════════════════════
    On-screen keyboard
-   While the keyboard covers the window, the area the overlay lays out in
-   ends above it (--tv-keyboard-overlap, set on the root by
-   KeyboardAwareContainer): the sheet stands on the keyboard, the box is
-   centred above it, and the max-heights above, taken of this area, shrink
-   the panel with it. The bottom moves over about the keyboard's own slide.
-   The anchored popover is placed by script, above the keyboard, instead.
+   The overlay still covers the whole window while the keyboard covers part
+   of it; only the room the panel lays out its contents in ends at the
+   keyboard's top (--tv-keyboard-overlap, set on the root by
+   KeyboardAwareContainer). The box is centred in the root less a padding
+   of that overlap, its max-height taken of what is left. The sheet keeps its
+   bottom at the window's and takes the overlap as a padding of its own, so
+   its contents and its row of buttons stand right over the keyboard while
+   its surface runs on under it, behind the keyboard's rounded corners; its
+   max-height, of the border box, keeps the same room for its contents. The
+   anchored popover is placed by script, above the keyboard, instead.
+
+   The overlap is registered as a length so that it moves over about the
+   keyboard's own slide, and everything laid out by it moves with it.
    ═══════════════════════════════════════════════════════════════ */
 
-.tv-overlay--centered,
-.is-phone .tv-overlay {
-    bottom: var(--tv-keyboard-overlap, 0px);
-    transition: bottom 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+@property --tv-keyboard-overlap {
+    syntax: '<length>';
+    inherits: true;
+    initial-value: 0px;
 }
 
+.tv-overlay {
+    transition: --tv-keyboard-overlap 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.tv-overlay--centered {
+    padding-bottom: var(--tv-keyboard-overlap, 0px);
+}
+
+.is-phone .tv-overlay {
+    padding-bottom: 0;
+}
+
+/* Last of the sheet's panel paddings, so it holds over the dialog's */
+.is-phone .tv-overlay .tv-overlay__panel {
+    padding-bottom: var(--tv-keyboard-overlap, 0px);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    Close animation
