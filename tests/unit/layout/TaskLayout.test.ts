@@ -419,6 +419,47 @@ describe('TaskLayout side by side', () => {
         expect([r.A, r.B, r.C].every(s => !s.liesOver)).toBe(true);
     });
 
+    it('reaches a card right over the columns after its own up to the first holding a card it overlaps', () => {
+        // In 800px four columns of 197px, 4px apart: L, then a, b and c.
+        // x takes a's column and stops at b's, where n overlaps it; n takes
+        // b's and reaches over c's; y, overlapping only L, takes a's and
+        // reaches over both.
+        const r = slots(
+            [
+                card('L', '08:00', '17:00'),
+                card('a', '09:00', '10:00'), card('b', '09:00', '10:00'), card('c', '09:00', '10:00'),
+                card('x', '10:30', '11:30'), card('n', '11:00', '12:00'), card('y', '12:30', '13:00'),
+            ],
+            sideBySide(1, 800),
+        );
+        const px = (slot: LaneSlot) => [slot.left * 8, (slot.left + slot.width) * 8].map(v => Number(v.toFixed(1)));
+        expect(['L', 'a', 'b', 'c'].map(id => px(r[id]))).toEqual([[0, 197], [201, 398], [402, 599], [603, 800]]);
+        expect(['x', 'n', 'y'].map(id => px(r[id]))).toEqual([[201, 398], [402, 800], [201, 800]]);
+    });
+
+    it('decides side by side or shifted right cluster by cluster, a day holding both', () => {
+        // In 300px two columns are (300 - 4) / 2 = 148px, three
+        // (300 - 8) / 3 = 97.3px, narrower than 120px.
+        const r = slots(
+            [
+                card('a', '10:00', '11:00'), card('b', '10:05', '11:00'),
+                card('p', '14:00', '15:00'), card('q', '14:05', '15:00'), card('r', '14:10', '15:00'),
+            ],
+            sideBySide(1, 300),
+        );
+        const px = (slot: LaneSlot) => [slot.left * 3, slot.width * 3].map(v => Number(v.toFixed(1)));
+        expect([r.a, r.b].map(px)).toEqual([[0, 148], [152, 148]]);
+        expect([r.p, r.q, r.r].map(px)).toEqual([[0, 210], [45, 210], [90, 210]]);
+    });
+
+    it('shifts each level right by an even step, keeping every card at the narrowest a card shifted right may be', () => {
+        // Six levels would leave 100 - 5 x 15 = 25%; each card keeps 40%,
+        // and the step shrinks to (100 - 40) / 5 = 12%.
+        const r = slots(['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) => card(id, `10:${String(i * 5).padStart(2, '0')}`, '11:00')));
+        expect(['a', 'b', 'c', 'd', 'e', 'f'].map(id => place(r[id])))
+            .toEqual([[0, 40], [12, 40], [24, 40], [36, 40], [48, 40], [60, 40]]);
+    });
+
     describe('over random days', () => {
         // Whether two cards' times overlap, and whether two cards lie clear
         // of each other across the lane.
