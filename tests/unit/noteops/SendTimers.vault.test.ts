@@ -28,7 +28,7 @@ const store = new Map<string, string>();
 };
 const at = (h: number, m: number) => new Date(2026, 8, 30, h, m, 0);
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
-const NEW = (name: string): SendDestination => ({ note: { kind: 'new', path: `${name}.md` }, section: SECTION });
+const NEW = (name: string): SendDestination => ({ note: { kind: 'new', path: `${name}.md` }, spot: SECTION });
 
 let live: VaultSession | undefined;
 afterEach(() => {
@@ -194,7 +194,7 @@ describe('a timer the send would leave without its lines', () => {
         const timer = await note.start('器', 'child');
         note.contents.set('X.md', `- 写し ^${timer.tail}\n`);
 
-        const sent = await note.ops.send({ rows: [note.row('器')], to: { note: { kind: 'existing', path: 'X.md' }, section: SECTION }, values: [] }, { tellRefusal: false });
+        const sent = await note.ops.send({ rows: [note.row('器')], to: { note: { kind: 'existing', path: 'X.md' }, spot: SECTION }, values: [] }, { tellRefusal: false });
 
         expect(sent).toEqual({
             kind: 'not-done',

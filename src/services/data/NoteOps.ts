@@ -1,7 +1,7 @@
 import { Notice, TFile, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task, TaskViewerSettings } from '../../types';
-import { headingLine } from '../persistence/Notes';
+import { headingLine, type NoteSpot } from '../persistence/Notes';
 import { openFile } from '../../utils/NavigationUtils';
 import type { RowSnapshot, SendRow, SendWrite } from '../operations/Operations';
 import { refusalClause, refusalNotice } from '../core/RefusalClause';
@@ -31,10 +31,10 @@ export type SendNote =
     | { kind: 'new'; path: string }
     | { kind: 'existing'; path: string };
 
-/** Where a send goes: a note, and the section of it (`Section`). */
+/** Where a send goes: a note, and where in it (`NoteSpot`): a section, or the end. */
 export interface SendDestination {
     note: SendNote;
-    section: Section;
+    spot: NoteSpot;
 }
 
 /** A send, as its dialog asks for it (`NoteOps.send`). */
@@ -130,7 +130,7 @@ type NoteFactsOf<K> = K & {
     path: string;
     /** Where the send goes, as `SendRequest.to` takes it. */
     to: SendDestination;
-    /** The heading of `to.section` in the note: one, none (the send makes it), or more than one (the send is refused). */
+    /** The heading of the section `to.spot` names in the note: one, none (the send makes it), or more than one (the send is refused). */
     heading: HeadingLookup;
     /** The names of the note's headings, in the order they stand: those the heading field offers. */
     headings: readonly string[];
@@ -233,7 +233,7 @@ export type SendResult =
 
 /**
  * The operations on notes the UI asks for: sending rows and their subtrees
- * to a section of a note. Each takes
+ * to a section of a note or its end. Each takes
  * what the dialog holds as its arguments; what is told the user, the
  * operation tells, and the dialog only decides from the result whether it
  * closes.
@@ -301,7 +301,7 @@ export class NoteOps {
                 folderMade: at.folderMade,
                 namesakes: at.namesakes,
                 path: at.path,
-                to: { note: { kind: 'new', path: at.path }, section },
+                to: { note: { kind: 'new', path: at.path }, spot: section },
                 heading: { kind: 'none' },
                 headings: [],
                 present: [],
@@ -320,7 +320,7 @@ export class NoteOps {
         return {
             kind: rows.every(row => row.task.file === path) ? 'same' : 'existing',
             path,
-            to: { note: { kind: 'existing', path }, section },
+            to: { note: { kind: 'existing', path }, spot: section },
             heading: found,
             headings: outline.headings.map(h => h.text),
             present: preview.candidates.filter(saidIn(lines)).map(one => one.key),
@@ -382,7 +382,7 @@ export class NoteOps {
      */
     async send(req: SendRequest, opts: { tellRefusal?: boolean } = {}): Promise<SendResult> {
         const wrongly: SendResult = { kind: 'not-done', why: t('notice.notSent') };
-        const { note, section } = req.to;
+        const { note, spot } = req.to;
         let path: string;
         let create = false;
         if (note.kind === 'new') {
@@ -412,7 +412,7 @@ export class NoteOps {
         }
         const went = new Map(sending.from.map(note => [note.path, [...TaskLineClassifier.blockIdCounts(note.sent).keys()]]));
         const landed = (from: string) => this.deps.timers()?.follow(from, path, went.get(from) ?? []);
-        const written = await this.operations.send(req.rows, { path, create, section, values: req.values }, { ...opts, landed });
+        const written = await this.operations.send(req.rows, { path, create, spot, values: req.values }, { ...opts, landed });
         if (written.kind === 'not-done') return written.refused ? { kind: 'not-done', why: refusalNotice(written.refused) } : wrongly;
         return this.tell(written, req.rows.length, opts.tellRefusal !== false);
     }

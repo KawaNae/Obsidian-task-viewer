@@ -42,7 +42,7 @@ async function open(lines: string[]) {
             };
         },
         send: async (rows: SendRow[], heading = 'Tasks', side: 'head' | 'end' = 'head') => {
-            const answer = await session.ops.send(rows, { path: FILE, create: false, section: { heading, level: 2, side }, values: [] });
+            const answer = await session.ops.send(rows, { path: FILE, create: false, spot: { heading, level: 2, side }, values: [] });
             await session.flowSettled(FILE);
             return answer;
         },
@@ -105,6 +105,20 @@ describe('the rows sent', () => {
         await note.send([note.row('c')]);
 
         expect(note.lines()).toEqual(['- [ ] P', '\t- [ ] d', '## Tasks', '- [ ] c', '\t- [ ] g', '']);
+    });
+
+    it('go to the end of the note, in the order they stood, names and all, in one write, a heading by the settings\' name or not', async () => {
+        const note = await open(['# note', '- [ ] A ^a', '    - [ ] a1', '- [ ] B', '## Tasks', '- [ ] other', '## Last', 'text', '']);
+        const a = note.task('A').id;
+
+        const sent = await note.session.ops.send([note.row('B'), note.row('A')], { path: FILE, create: false, spot: 'end', values: [] });
+        await note.session.flowSettled(FILE);
+
+        expect(sent).toMatchObject({ kind: 'done', landed: [FILE], refused: [] });
+        expect(note.writes()).toBe(1);
+        expect(note.lines()).toEqual(['# note', '## Tasks', '- [ ] other', '## Last', 'text', '- [ ] A ^a', '    - [ ] a1', '- [ ] B', '']);
+        expect(note.session.index.getTask(a)?.content).toBe('A');
+        expect(note.session.index.getTaskByAnchor(FILE, 'a')?.content).toBe('A');
     });
 
     it('make the section\'s heading at the end of the note when it has none', async () => {

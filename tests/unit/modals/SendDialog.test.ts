@@ -79,7 +79,7 @@ function facts(overrides: Partial<CommonFacts> & (
     const path = overrides.path ?? 'Inbox/A.md';
     const common: CommonFacts = {
         path,
-        to: { note: { kind: kind === 'new' ? 'new' : 'existing', path }, section: SECTION },
+        to: { note: { kind: kind === 'new' ? 'new' : 'existing', path }, spot: SECTION },
         heading: kind === 'new' ? { kind: 'none' } : { kind: 'one', heading: { level: 2, text: 'Tasks', line: 0 } as never },
         headings: [],
         present: [],
@@ -239,7 +239,7 @@ describe('where in the note the send puts the rows, said under the heading', () 
     it('a note there is: to the top or the end of its heading, or under one it makes', async () => {
         const existing = facts({ kind: 'existing', path: 'Plan.md' });
         expect(await says(existing)).toEqual({ text: t('modal.send.toHead', vars), tone: 'warning' });
-        expect(await says({ ...existing, to: { ...existing.to, section: { ...SECTION, side: 'end' } } }))
+        expect(await says({ ...existing, to: { ...existing.to, spot: { ...SECTION, side: 'end' } } }))
             .toEqual({ text: t('modal.send.toEnd', vars), tone: 'warning' });
         expect(await says({ ...existing, heading: { kind: 'none' } })).toEqual({ text: t('modal.send.toMade', vars), tone: 'warning' });
     });

@@ -433,7 +433,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 出所のプロパティ行を写す。1行目は `- key:: value` に綴り直し（記号を `-` にする）、値は綴りのまま写す。リストの項目は、1行目からの字下げの差を保って写す（`Outline.shiftIndent`）。送り先でも同じ型に読まれ、値なしは `- key::` になる
     - 行の下のリストの項目でない行は値の一部でないので、写さない
 - 送り先が既に言うキーの値は書かない（`SendWriter.saidIn`。ダイアログには `NoteFacts.present` で出す）。`root` の値は、送り先の根の行にそのキーがあれば書かない。`frontmatter` の値は、送り先の frontmatter か根の行にあれば書かない。根の値は frontmatter に勝つので、根にあるキーを frontmatter に書いても効かないためである
-- 書き込み（`SendWriter.placeInNote`）は1回で、frontmatter のキーを足し、根の行を根の頭（`Placement.rootHead`）に置いてから、行をセクションに置く。新しいノートでは frontmatter の直後に根の行が来て、見出しはその後ろに作られる
+- 書き込み（`SendWriter.placeInNote`）は1回で、frontmatter のキーを足し、根の行を根の頭（`Placement.rootHead`）に置いてから、行をセクションかノートの末尾（`SendTo.spot`、`Notes.noteSpot`）に置く。新しいノートでは frontmatter の直後に根の行が来て、見出しはその後ろに作られる
 - ダイアログ（`SendModal`）は候補を書く先ごとに見出しで分け、「frontmatter に書く値」の下に組み込みのキーを、「ノートの先頭に書く値」の下にカスタムの値を置く。どの候補も既定でチェックする。行の `- aliases:: x` は Obsidian の別名でなくカスタムプロパティなので、ほかの値と同じく扱う
 
 ### プロパティの値

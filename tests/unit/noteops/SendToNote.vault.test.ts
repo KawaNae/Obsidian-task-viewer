@@ -57,11 +57,12 @@ async function open(files: Record<string, string | string[]>) {
                 ...(draft ? { draft: { text: draft.text, children: draft.children.map(([text, was]): SubtreeLine => ({ text, was })) } } : {}),
             };
         },
-        send: async (rows: SendRow[], to: { path: string; create?: boolean; values?: NoteValue[]; heading?: string; side?: 'head' | 'end' }) => {
+        /** A send to the section of `heading` (`Tasks` unless said), at `side`; to the note's end with `end`. */
+        send: async (rows: SendRow[], to: { path: string; create?: boolean; values?: NoteValue[]; heading?: string; side?: 'head' | 'end'; end?: true }) => {
             const answer = await session.ops.send(rows, {
                 path: to.path,
                 create: to.create ?? false,
-                section: { heading: to.heading ?? 'Tasks', level: 2, side: to.side ?? 'head' },
+                spot: to.end ? 'end' : { heading: to.heading ?? 'Tasks', level: 2, side: to.side ?? 'head' },
                 values: to.values ?? [],
             });
             await session.flowSettled(...contents.keys());
@@ -133,6 +134,37 @@ describe('to a new note', () => {
         expect(note.text('src.md')).toBe('- [ ] A\n');
         expect(note.text('a.md')).toBe('x\n');
         expect(Notice.messages).toHaveLength(1);
+    });
+});
+
+describe('to the end of a note', () => {
+    it('there: the rows in the order they stood, past its last line, the values above, a link in each row\'s place', async () => {
+        const note = await open({
+            'src.md': ['# s', '- [ ] A ^a', '    - [ ] a1', '- [ ] B', ''],
+            'Plan.md': ['# Plan', '## Tasks', '- [ ] 既存', '', '## Notes', 'text', ''],
+        });
+
+        const sent = await note.send([note.row('B'), note.row('A')], {
+            path: 'Plan.md', end: true,
+            values: [{ key: 'tv-color', to: 'frontmatter', lines: ['tv-color: "red"'] }, { key: 'owner', to: 'root', lines: ['- owner:: me'] }],
+        });
+
+        expect(sent).toMatchObject({ kind: 'done', landed: ['src.md'], refused: [], takenBack: true });
+        expect(note.lines('Plan.md')).toEqual([
+            '---', 'tv-color: "red"', '---', '- owner:: me', '# Plan', '## Tasks', '- [ ] 既存', '', '## Notes', 'text', '- [ ] A ^a', '    - [ ] a1', '- [ ] B', '',
+        ]);
+        expect(note.lines('src.md')).toEqual(['# s', '- [[Plan]]', '- [[Plan]]', '']);
+        expect(note.writes).toEqual(['Plan.md', 'src.md']);
+        expect(note.session.index.getTaskByAnchor('Plan.md', 'a')?.content).toBe('A');
+    });
+
+    it('new: made of the values and the row, with no heading', async () => {
+        const note = await open({ 'src.md': ['- [ ] A', '    - [ ] a1', ''] });
+
+        await note.send([note.row('A')], { path: 'A.md', create: true, end: true, values: [{ key: 'tags', to: 'frontmatter', lines: ['tags:', '  - work'] }] });
+
+        expect(note.lines('A.md')).toEqual(['---', 'tags:', '  - work', '---', '- [ ] A', '    - [ ] a1', '']);
+        expect(note.text('src.md')).toBe('- [[A]]\n');
     });
 });
 
