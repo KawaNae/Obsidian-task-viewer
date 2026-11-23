@@ -15,7 +15,7 @@ import { FrontmatterValueSuggest } from './suggest/FrontmatterValueSuggest';
 import { COLOR_VALUES, LINE_STYLE_VALUES } from './suggest/ScopeValues';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
-import { untrackAllKeyboards } from './utils/KeyboardState';
+import { trackKeyboard, untrackAllKeyboards } from './utils/KeyboardState';
 import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
@@ -107,6 +107,12 @@ export default class TaskViewerPlugin extends Plugin {
     private taskHub: TaskHubOpenerHandle;
 
     async onload() {
+        // Capacitor tells the keyboard's height only on a show, so the main
+        // window is listened to from the start: an overlay first opened while
+        // the keyboard is already up (typing in a note) knows how much of the
+        // window it covers. A popout window is listened to as it is first
+        // used (no popout on mobile).
+        trackKeyboard(window);
 
         // Initialize i18n
         initI18n();
