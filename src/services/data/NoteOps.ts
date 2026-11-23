@@ -1,7 +1,7 @@
 import { Notice, TFile, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task, TaskViewerSettings } from '../../types';
-import { headingLine, type NoteSpot } from '../persistence/Notes';
+import { headingLine } from '../persistence/Notes';
 import { openFile } from '../../utils/NavigationUtils';
 import type { RowSnapshot, SendRow, SendWrite } from '../operations/Operations';
 import { refusalClause, refusalNotice } from '../core/RefusalClause';
@@ -9,39 +9,27 @@ import { outermostRows } from '../persistence/writers/SendRows';
 import { unresolvedAt, type UnresolvedReference } from '../flow/FlowReferences';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../core/RowNames';
-import { Outline } from '../parsing/utils/Outline';
 import { PropertyKey } from '../parsing/utils/PropertyKey';
 import { Destination, type Section } from '../persistence/Destination';
 import { splitLines } from '../persistence/FileLines';
 import { saidIn } from '../persistence/writers/SendWriter';
-import { Placement, type HeadingLookup } from '../persistence/utils/Placement';
 import type { SubtreeReplacement } from '../persistence/TaskOps';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logWarn } from '../../log/log';
 import { inheritedAt, type InheritedValue } from './InheritedValues';
 import type { Operations } from '../operations/Operations';
-import { NoteName, type NameCheck, type NoteAsk } from './NoteName';
+import { NoteName, type NoteAsk } from './NoteName';
+import { NotePlaces, type NoteDestination, type NotePlace, type NoteRead } from './NotePlaces';
 import { anchorsIn, linksTo, type AnchorLink, type LineSpan } from './NoteRefs';
 
 export type { SendRow } from '../operations/Operations';
 export type { NoteAsk } from './NoteName';
 
-/** The note a send goes to: one to make at its path, or one there is, by its path. */
-export type SendNote =
-    | { kind: 'new'; path: string }
-    | { kind: 'existing'; path: string };
-
-/** Where a send goes: a note, and where in it (`NoteSpot`): a section, or the end. */
-export interface SendDestination {
-    note: SendNote;
-    spot: NoteSpot;
-}
-
 /** A send, as its dialog asks for it (`NoteOps.send`). */
 export interface SendRequest {
     /** The rows, as the dialog was opened on them, each with its draft if the user wrote one. */
     rows: readonly SendRow[];
-    to: SendDestination;
+    to: NoteDestination;
     /**
      * The values to write into the note, those the user chose of the values
      * the rows inherit (`InheritedValues`), each where it says: a key of the
@@ -96,48 +84,30 @@ export interface DestinationAsk {
 
 /**
  * What the destination the fields name is, for the dialog to say before the
- * send (`NoteOps.destinationFacts`): a new note a name or a path cannot
- * make, and why (`NoteName.check`); more than one note the note field
- * points at, which a send does not choose between (`NoteName.find`); or a
- * note, and what a send there meets.
+ * send (`NoteOps.destinationFacts`): what the destination alone says
+ * (`NoteRead`: a name no note can have, more than one note, which a send
+ * does not choose between, or a note), and of a note, what a send there
+ * meets.
  */
 export type DestinationFacts =
-    | { kind: 'unnamed'; why: Extract<NameCheck, { ok: false }> }
-    | { kind: 'ambiguous'; name: string; files: readonly TFile[] }
+    | Extract<NoteRead, { kind: 'unnamed' | 'ambiguous' }>
     | NoteFacts;
 
 /**
- * A note the fields name, as it stands now. Asked again whenever a field
- * changes; the note may change between the asking and the send, which reads
- * it again.
- *
- * `new`: no note is at the path, and the send makes one; `by` says whether
- * a name alone was typed (the note goes to the folder for new notes) or a
- * path, `folderMade` the first folder on its path the send makes with it,
- * and `namesakes` the vault's other notes by its name, which a link to it
- * has to tell it from (`NoteAt`). `existing`: one of the vault's, the rows'
- * own note or not. `same`: the note every row stands in, where the rows are
- * carried and no value is written into the note.
+ * A note the fields name, as it stands now (`NotePlace`, its lines aside),
+ * and what the rows meet there. `new` and `existing` as the read says;
+ * `same`: the note every row stands in, where the rows are carried and no
+ * value is written into the note.
  */
-export type NoteFacts = NoteFactsOf<
-    | { kind: 'new'; by: 'name' | 'path'; folderMade: string | null; namesakes: readonly TFile[] }
-    | { kind: 'existing' | 'same' }
->;
+export type NoteFacts = (
+    | Extract<NotePlace, { kind: 'new' }>
+    | (Omit<Extract<NotePlace, { kind: 'existing' }>, 'kind' | 'lines'> & { kind: 'existing' | 'same' })
+) & SendFacts;
 
-/** What every note the fields name has, beside what its kind has. */
-type NoteFactsOf<K> = K & {
-    /** The note's path, spelt as the vault spells it when it has the note. */
-    path: string;
-    /** Where the send goes, as `SendRequest.to` takes it. */
-    to: SendDestination;
-    /** The heading of the section `to.spot` names in the note: one, none (the send makes it), or more than one (the send is refused). */
-    heading: HeadingLookup;
-    /** The names of the note's headings, in the order they stand: those the heading field offers. */
-    headings: readonly string[];
+/** What the rows sent meet in a note, beside what the note is. */
+interface SendFacts {
     /** The keys of `SendPreview.candidates` the note says already (`saidIn`): a send does not write them. */
     present: readonly string[];
-    /** The note is one the index does not read (`tv-ignore`): the rows are not seen there. */
-    ignored: boolean;
     /**
      * The `^id`s of rows from other notes that the note carries already: once
      * sent, neither line is the anchor. None for rows of the note itself.
@@ -151,7 +121,7 @@ type NoteFactsOf<K> = K & {
     unresolved: readonly UnresolvedReference[];
     /** How many lines of the note carry each `^id` (`TaskLineClassifier.blockIdCounts`); none for a note to make. */
     anchors: ReadonlyMap<string, number>;
-};
+}
 
 /**
  * A note rows are sent from, as the timers are asked about a send
@@ -239,12 +209,17 @@ export type SendResult =
  * closes.
  */
 export class NoteOps {
+    /** What a destination is, read off the vault alone, before what the rows meet there. */
+    private readonly places: NotePlaces;
+
     constructor(
         private app: App,
         private operations: Operations,
         private getSettings: () => TaskViewerSettings,
         private deps: NoteOpsDeps,
-    ) { }
+    ) {
+        this.places = new NotePlaces(app, getSettings);
+    }
 
     /**
      * What a send of `taskIds` opens on, read as the disk holds each row
@@ -277,57 +252,40 @@ export class NoteOps {
 
     /**
      * What the destination the dialog's fields name is (see
-     * {@link NoteFacts}), the note read as the vault holds it now. The
+     * {@link NoteFacts}): what it is (`NotePlaces.read`, a new note's name
+     * reckoned from the first row's note), and what the rows meet there. The
      * section is the heading typed, or the settings' when none is, at the
      * settings' level and side (`Destination.sectionNamed`).
      */
     async destinationFacts(preview: SendPreview, ask: DestinationAsk): Promise<DestinationFacts> {
         const rows = preview.rows;
-        const at = NoteName.find(this.app.vault, ask.note, NoteName.defaultFolder(this.app, rows[0].task.file));
-        if (at.kind === 'ambiguous') return at;
-        if (at.kind === 'new') {
-            const name = NoteName.check(at.path);
-            if (!name.ok) return { kind: 'unnamed', why: name };
-        }
         const settings = this.getSettings();
         const heading = ask.heading.trim();
-        const section = Destination.sectionNamed(heading === '' ? settings.taskHeading : heading, settings);
+        const spot = Destination.sectionNamed(heading === '' ? settings.taskHeading : heading, settings);
+        const read = await this.places.read({ note: ask.note, spot }, NoteName.defaultFolder(this.app, rows[0].task.file));
+        if (read.kind === 'unnamed' || read.kind === 'ambiguous') return read;
         const sentTasks = byNote(rows).flatMap(({ rows: ofNote }) => withDescendants(ofNote, settings));
 
-        if (at.kind === 'new') {
+        if (read.kind === 'new') {
             return {
-                kind: 'new',
-                by: at.by,
-                folderMade: at.folderMade,
-                namesakes: at.namesakes,
-                path: at.path,
-                to: { note: { kind: 'new', path: at.path }, spot: section },
-                heading: { kind: 'none' },
-                headings: [],
+                ...read,
                 present: [],
-                ignored: false,
                 shared: [],
-                unresolved: unresolvedAt(sentTasks, [headingLine(section)]),
+                unresolved: unresolvedAt(sentTasks, headingMade(read)),
                 anchors: new Map(),
             };
         }
 
-        const path = at.file.path;
-        const { lines } = splitLines(await this.app.vault.read(at.file));
-        const outline = Outline.read(lines);
-        const found = Placement.heading(outline, section.heading);
+        const { lines, ...place } = read;
+        const path = place.path;
         const inNote = new Set(anchorsIn(lines));
         return {
+            ...place,
             kind: rows.every(row => row.task.file === path) ? 'same' : 'existing',
-            path,
-            to: { note: { kind: 'existing', path }, spot: section },
-            heading: found,
-            headings: outline.headings.map(h => h.text),
             present: preview.candidates.filter(saidIn(lines)).map(one => one.key),
-            ignored: FileParsePipeline.resolveSections(lines, settings) === null,
             shared: anchorsIn(rows.filter(row => row.task.file !== path).flatMap(row => row.task.subtreeLines ?? []))
                 .filter(id => inNote.has(id)),
-            unresolved: unresolvedAt(sentTasks, found.kind === 'none' ? [...lines, headingLine(section)] : lines),
+            unresolved: unresolvedAt(sentTasks, [...lines, ...headingMade(read)]),
             anchors: TaskLineClassifier.blockIdCounts(lines),
         };
     }
@@ -487,6 +445,12 @@ export class NoteOps {
         });
         el.appendText(text.slice(at + note.path.length));
     }
+}
+
+/** The line of the heading a send to `place` makes at the note's end (`Notes.headingLine`): one for a section the note has no heading of, none otherwise. */
+function headingMade(place: NotePlace): string[] {
+    const { spot } = place.to;
+    return spot !== 'end' && place.heading?.kind === 'none' ? [headingLine(spot)] : [];
 }
 
 /** The rows grouped by the note they stand in, the notes in the order their first row stands. */

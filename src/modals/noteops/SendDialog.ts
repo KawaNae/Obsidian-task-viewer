@@ -202,8 +202,9 @@ export class SendDialog {
             error('note', nameError(facts.why));
         } else if (facts?.kind === 'ambiguous') {
             error('note', t('modal.noteAmbiguous', { name: facts.name, count: String(facts.files.length), notes: facts.files.map(file => file.path).join(', ') }));
-        } else if (note && note.to.spot !== 'end' && note.heading.kind === 'many') {
-            error('heading', t('modal.send.headings', { note: note.path, heading: note.to.spot.heading, count: String(note.heading.count) }));
+        } else if (note && note.to.spot !== 'end' && note.heading?.kind === 'many') {
+            const { heading } = note.to.spot;
+            error('heading', t('modal.send.headings', { note: note.path, heading, count: String(note.heading.count) }));
         }
         this.drafts().forEach(({ check }, i) => {
             if (check?.kind === 'refused') error(`row:${i}`, draftError(check.reason));
@@ -471,19 +472,20 @@ export function noteText(facts: NoteFacts): { text: string; tone: Tone }[] {
  */
 export function headingText(facts: NoteFacts): { text: string; tone: Tone } | null {
     const section = facts.to.spot;
-    if (section === 'end') return null;
+    const found = facts.heading;
+    if (section === 'end' || found === null) return null;
     const vars = { heading: section.heading };
     const end = section.side === 'end';
     switch (facts.kind) {
         case 'new':
             return { text: t('modal.send.toNew', vars), tone: 'info' };
         case 'existing':
-            if (facts.heading.kind === 'many') return null;
-            if (facts.heading.kind === 'none') return { text: t('modal.send.toMade', vars), tone: 'warning' };
+            if (found.kind === 'many') return null;
+            if (found.kind === 'none') return { text: t('modal.send.toMade', vars), tone: 'warning' };
             return { text: t(end ? 'modal.send.toEnd' : 'modal.send.toHead', vars), tone: 'warning' };
         case 'same':
-            if (facts.heading.kind === 'many') return null;
-            if (facts.heading.kind === 'none') return { text: t('modal.send.withinMade', vars), tone: 'info' };
+            if (found.kind === 'many') return null;
+            if (found.kind === 'none') return { text: t('modal.send.withinMade', vars), tone: 'info' };
             return { text: t(end ? 'modal.send.withinEnd' : 'modal.send.withinHead', vars), tone: 'info' };
     }
 }

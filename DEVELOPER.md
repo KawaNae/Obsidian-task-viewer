@@ -117,7 +117,7 @@ src/
 ├── cli/                       # CLI handlers (CliRegistrar: registers Reference's CLI_COMMANDS; CliParamValidator, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
 │   ├── core/                  # The index (TaskIndex, IndexReads, TaskStore, TaskScanner, NotifyCoalescer, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
-│   ├── data/                  # The display side of the read (TaskReadService), children in order, effective properties, NoteOps, CreatePlaces
+│   ├── data/                  # The display side of the read (TaskReadService), children in order, effective properties, NoteOps, NotePlaces (what a destination is, read off the vault alone, before what a send meets there), CreatePlaces
 │   ├── operations/            # The one write port (Operations), DuplicateShift
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, SegmentIds, TaskDateCategorizer, TaskContent)
 │   ├── parsing/               # Parser layer (TaskParser: lineParsers; TaskLineFormat: formatTaskLine, formatRow; FileParsePipeline)
