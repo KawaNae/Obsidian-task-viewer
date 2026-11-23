@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TFolder } from 'obsidian';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
-import { writeBench, FILE } from '../helpers/writeBench';
+import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
 import { putInNote } from '../../../src/services/persistence/Notes';
@@ -80,8 +80,8 @@ describe('creating a note', () => {
     const NEW = 'new.md';
     const CONTENT = '- [ ] 新しいタスク';
     /** A task created with no heading (the API's): at the end, the note made empty when it is not there. */
-    const append = (b: { repo: { putInNote: (...args: any[]) => Promise<any> } }, path: string, text: string) =>
-        b.repo.putInNote(path, 'end', { line: text }, { create: () => '' });
+    const append = (b: WriteBench, path: string, text: string) =>
+        putInNote(b.app, path, b.channel(path), { where: 'end', row: { line: text }, create: () => '' });
 
     /** A bench whose `vault.create` throws, having first left `left` at the path (or nothing). */
     async function benchCreateThrows(left: string | null) {
@@ -175,8 +175,8 @@ describe('creating a note', () => {
         const b = await writeBench({ [FILE]: SEED });
         const create = vi.spyOn(b.app.vault, 'create');
 
-        const appended = await b.repo.putInNote(FILE, 'end', { line: CONTENT });
-        const made = await b.repo.putInNote(NEW, 'end', { line: CONTENT }, { create: () => SEED });
+        const appended = await putInNote(b.app, FILE, b.channel(FILE), { where: 'end', row: { line: CONTENT } });
+        const made = await putInNote(b.app, NEW, b.channel(NEW), { where: 'end', row: { line: CONTENT }, create: () => SEED });
 
         expect(appended.refused?.reason).toEqual({ kind: 'unplaceable', fence: 0 });
         expect(made.refused).toEqual({ file: NEW, reason: { kind: 'unplaceable', fence: 0 }, subject: CONTENT });

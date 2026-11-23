@@ -24,6 +24,8 @@ const DAY = '2031-01-15';
 const DAILY = `${DAY}.md`;
 const TEMPLATE = 'Templates/Daily.md';
 const LS = String.fromCharCode(0x2028);
+const TASKS = { heading: 'Tasks', level: 2, side: 'head' } as const;
+const MADE = { heading: 'Made', level: 2, side: 'head' } as const;
 
 /** One of each kind of property a row's own lines write. */
 const OPS: PropertyOp[] = [
@@ -110,8 +112,8 @@ describe('a new row with its properties, put where each write puts a row', () =>
     it('at the head of a section', async () => {
         const { contents, session } = await open(['# n', '## Tasks', '- [ ] 既存', '']);
 
-        const out = await session.repository.putInNote(FILE, { heading: 'Tasks', level: 2, side: 'head' }, row('- [ ] 新'));
-        expect(out.written).toBe(true);
+        const out = await session.ops.putInNote(FILE, { heading: 'Tasks', level: 2, side: 'head' }, row('- [ ] 新'));
+        expect(out).toEqual({ written: true, line: 2 });
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual(['# n', '## Tasks', '- [ ] 新', ...propertyLines('\t'), '- [ ] 既存', '']);
@@ -121,7 +123,7 @@ describe('a new row with its properties, put where each write puts a row', () =>
     it('at the end of a section, past a subtree, in a note indented with spaces', async () => {
         const { contents, session } = await open(['# n', '## Tasks', '- [ ] 既存', '    - [ ] c', '## Other', ''], SPACES);
 
-        const out = await session.repository.putInNote(FILE, { heading: 'Tasks', level: 2, side: 'end' }, row('- [ ] 新'));
+        const out = await session.ops.putInNote(FILE, { heading: 'Tasks', level: 2, side: 'end' }, row('- [ ] 新'));
         expect(out.written).toBe(true);
         await session.settle(FILE);
 
@@ -129,12 +131,12 @@ describe('a new row with its properties, put where each write puts a row', () =>
         readBack(session, FILE, '新');
     });
 
-    it('at the end of a note with no heading, and under a heading the write makes (`createTask`)', async () => {
+    it('at the end of a note with no heading, and under a heading the write makes (`putInNote`)', async () => {
         const { contents, session } = await open(['text', '- [ ] 既存', '']);
 
-        expect(await session.ops.createTask(FILE, row('- [ ] 新'))).toBe(2);
+        expect(await session.ops.putInNote(FILE, 'end', row('- [ ] 新'))).toEqual({ written: true, line: 2 });
         await session.settle(FILE);
-        expect(await session.ops.createTask(FILE, row('- [ ] 二'), 'Made')).not.toBeNull();
+        expect((await session.ops.putInNote(FILE, MADE, row('- [ ] 二'))).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([
@@ -142,6 +144,39 @@ describe('a new row with its properties, put where each write puts a row', () =>
         ]);
         readBack(session, FILE, '新');
         readBack(session, FILE, '二');
+    });
+
+    it('in a note not there yet, made empty in the same write: under a heading it makes, and at its end (`putInNote`)', async () => {
+        const { contents, session } = await open(['# n', '']);
+
+        expect(await session.ops.putInNote('Under.md', MADE, row('- [ ] 見出し'), { seed: { kind: 'empty' } })).toEqual({ written: true, line: 1 });
+        expect(await session.ops.putInNote('End.md', 'end', row('- [ ] 末尾'), { seed: { kind: 'empty' } })).toEqual({ written: true, line: 0 });
+        await session.settle('Under.md');
+        await session.settle('End.md');
+
+        expect(contents.get('Under.md')!.split('\n')).toEqual(['## Made', '- [ ] 見出し', ...propertyLines('\t'), '']);
+        expect(contents.get('End.md')!.split('\n')).toEqual(['- [ ] 末尾', ...propertyLines('\t'), '']);
+        readBack(session, 'Under.md', '見出し');
+        readBack(session, 'End.md', '末尾');
+    });
+
+    it('in a note not there yet, made of the daily note\'s template in the same write, at its end (`putInNote`)', async () => {
+        const { contents, session } = await open({ [TEMPLATE]: '# {{date}}\n## Tasks\n- [ ] 雛形\n' });
+
+        expect((await session.ops.putInNote('Other.md', 'end', row('- [ ] 新'), { seed: { kind: 'daily', date: DAY } })).written).toBe(true);
+        await session.settle('Other.md');
+
+        expect(contents.get('Other.md')!.split('\n')).toEqual([`# ${DAY}`, '## Tasks', '- [ ] 雛形', '- [ ] 新', ...propertyLines('\t'), '']);
+        readBack(session, 'Other.md', '新');
+    });
+
+    it('in a note not there, with no seed to make it of, is refused as gone and makes nothing', async () => {
+        const { contents, session } = await open(['# n', '']);
+
+        const put = await session.ops.putInNote('Missing.md', 'end', row('- [ ] 新'));
+
+        expect(put.written ? null : put.refused?.reason).toEqual({ kind: 'gone' });
+        expect(contents.has('Missing.md')).toBe(false);
     });
 
     it('in a daily note not there yet, made of its template in the same write (`putInDailyNote`)', async () => {
@@ -188,7 +223,7 @@ describe('a new row with its properties, put where each write puts a row', () =>
     it('in a note with CRLF, under a heading and as a child, every line ending with CRLF', async () => {
         const { contents, session } = await open({ [FILE]: ['# n', '## Tasks', '- [ ] P', ''].join('\r\n') });
 
-        expect(await session.ops.createTask(FILE, row('- [ ] 新'), 'Tasks')).toBe(2);
+        expect(await session.ops.putInNote(FILE, TASKS, row('- [ ] 新'))).toEqual({ written: true, line: 2 });
         await session.settle(FILE);
         expect((await session.ops.insertLine(idOf(session, 'P'), row('- [ ] 子'), 'firstChild')).written).toBe(true);
         await session.settle(FILE);
@@ -211,12 +246,12 @@ describe('a new row with its properties, put where each write puts a row', () =>
         readBack(session, FILE, task.content);
     });
 
-    it('is written with no indentation of its own, under a heading and at the end of a note alike (`createTask`)', async () => {
+    it('is written with no indentation of its own, under a heading and at the end of a note alike (`putInNote`)', async () => {
         const { contents, session } = await open(['# n', '## Tasks', '- [ ] 既存', '', '## Last', 'text', '']);
 
-        expect(await session.ops.createTask(FILE, { line: '\t- [ ] 見出し' }, 'Tasks')).toBe(2);
+        expect(await session.ops.putInNote(FILE, TASKS, { line: '\t- [ ] 見出し' })).toEqual({ written: true, line: 2 });
         await session.settle(FILE);
-        expect(await session.ops.createTask(FILE, { line: '    - [ ] 末尾' })).not.toBeNull();
+        expect((await session.ops.putInNote(FILE, 'end', { line: '    - [ ] 末尾' })).written).toBe(true);
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual(['# n', '## Tasks', '- [ ] 見出し', '- [ ] 既存', '', '## Last', 'text', '- [ ] 末尾', '']);
@@ -225,7 +260,7 @@ describe('a new row with its properties, put where each write puts a row', () =>
     it('is told by its text, the spaces around it aside, when it is refused', async () => {
         const { session } = await open(['## Tasks', '- [ ] a', '## Tasks', '']);
 
-        const put = await session.repository.putInNote(FILE, { heading: 'Tasks', level: 2, side: 'head' }, { line: ' \t- [ ] 新  ' });
+        const put = await session.ops.putInNote(FILE, TASKS, { line: ' \t- [ ] 新  ' });
 
         expect(put.written ? null : put.refused).toEqual({ file: FILE, reason: { kind: 'headings', name: 'Tasks', count: 2 }, subject: '- [ ] 新' });
     });
@@ -239,10 +274,10 @@ describe('a new row with its properties, put where each write puts a row', () =>
         ];
         const bad = { line: '- [ ] 新', properties: { ops, keys: DEFAULT_SCOPE_KEYS } };
 
-        const put = await session.repository.putInNote(FILE, { heading: 'Tasks', level: 2, side: 'head' }, bad);
+        const put = await session.ops.putInNote(FILE, TASKS, bad);
         const child = await session.ops.insertLine(idOf(session, 'P'), bad, 'firstChild');
 
-        expect(put.written ? null : put.refused.reason).toEqual({ kind: 'property', key: 'tv-linestyle', line: 3 });
+        expect(put.written ? null : put.refused?.reason).toEqual({ kind: 'property', key: 'tv-linestyle', line: 3 });
         expect(child.written ? null : child.refused?.reason).toEqual({ kind: 'property', key: 'tv-linestyle', line: 4 });
         expect(contents.get(FILE)).toBe(before);
     });

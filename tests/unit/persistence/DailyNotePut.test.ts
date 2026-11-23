@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import realMoment from 'moment';
 import { TFolder } from 'obsidian';
-import { openPeriodicNote, putInPeriodicNote } from '../../../src/services/persistence/Notes';
-import { dailyNotes, periodicNotes } from '../../../src/utils/PeriodicNotes';
+import { openPeriodicNote, putInNote, seedOf } from '../../../src/services/persistence/Notes';
+import { dailyNotes, notePath, periodicNotes } from '../../../src/utils/PeriodicNotes';
 import { registerWeekStartLocales } from '../../../src/utils/momentWeekLocale';
 import { writeBench, FILE } from '../helpers/writeBench';
 
@@ -31,9 +31,11 @@ async function dailyBench(options: Record<string, string>, template?: string) {
     return b;
 }
 
-const put = (b: Awaited<ReturnType<typeof dailyBench>>, line: string) =>
-    putInPeriodicNote(b.app, dailyNotes(b.app), DAY, { line }, LOG, (path) => b.channel(path))
+const put = (b: Awaited<ReturnType<typeof dailyBench>>, line: string) => {
+    const path = notePath(dailyNotes(b.app), DAY);
+    return putInNote(b.app, path, b.channel(path), { where: LOG, row: { line }, create: () => seedOf(b.app, { kind: 'daily', date: DAY }) })
         .then(outcome => (outcome.written ? outcome.file.path : null));
+};
 
 /** `vault.create` answering a turn later and, as Obsidian's does, throwing for a path taken. */
 function createLikeObsidian(b: Awaited<ReturnType<typeof dailyBench>>): void {

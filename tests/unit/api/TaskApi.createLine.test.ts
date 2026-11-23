@@ -40,7 +40,7 @@ function createMockApiForCreate(opts: {
         tasksInWindow: vi.fn().mockReturnValue([]),
     };
     const operations = {
-        createTask: vi.fn().mockResolvedValue(opts.insertedLine),
+        putInNote: vi.fn().mockResolvedValue({ written: true, line: opts.insertedLine }),
         updateTask: vi.fn(),
         deleteTask: vi.fn(),
         duplicateTask: vi.fn(),
@@ -83,10 +83,11 @@ describe('create の行番号ベース再特定', () => {
             content: 'same content',
             heading: 'Tasks',
         });
-        expect(operations.createTask).toHaveBeenCalledWith(
+        expect(operations.putInNote).toHaveBeenCalledWith(
             'test.md',
+            expect.objectContaining({ heading: 'Tasks' }),
             { line: expect.stringContaining('- [ ] same content') },
-            'Tasks',
+            {},
         );
         expect(readService.getTaskByFileLine).toHaveBeenCalledWith('test.md', 3);
         expect(result.task.id).toBe('new-1');
@@ -146,7 +147,7 @@ describe('the line create and insertChildTask write', () => {
             createdTask: makeFullTask({ line: 5 }),
         });
         await api.create({ file: 'test.md', content: 'task ', start: '2026-07-18' });
-        expect(operations.createTask).toHaveBeenCalledWith('test.md', { line: '- [ ] task @2026-07-18' }, undefined);
+        expect(operations.putInNote).toHaveBeenCalledWith('test.md', 'end', { line: '- [ ] task @2026-07-18' }, { seed: { kind: 'empty' } });
     });
 
     it('insertChildTask writes the content with its end trimmed', async () => {
@@ -168,7 +169,7 @@ describe('the date block create writes', () => {
             createdTask: makeFullTask({ line: 5 }),
         });
         await api.create({ file: 'test.md', content: 't', ...params });
-        return operations.createTask.mock.calls[0][1].line;
+        return operations.putInNote.mock.calls[0][2].line;
     };
 
     it.each([

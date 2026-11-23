@@ -4,6 +4,7 @@ import type { Task, DisplayTask } from '../types';
 import type { TaskReadService } from '../services/data/TaskReadService';
 import type { IndexReads } from '../services/core/TaskIndex';
 import type { Operations } from '../services/operations/Operations';
+import { Destination } from '../services/persistence/Destination';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { splitTasks } from '../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
@@ -285,10 +286,18 @@ export class TaskApi {
             due: DateUtils.joinDateTime(due?.date, due?.time),
         });
 
-        const insertedLine = await this.operations.createTask(params.file, { line }, params.heading);
-        if (insertedLine === null) throw new TaskApiError(`Task could not be written to: ${params.file}`);
+        // Under the heading named, or at the end with none named. The note
+        // was there just above; one gone before the write refuses a row for
+        // a heading, and is made empty for a row at the end.
+        const put = await this.operations.putInNote(
+            params.file,
+            params.heading ? Destination.sectionNamed(params.heading, this.plugin.settings) : 'end',
+            { line },
+            params.heading ? {} : { seed: { kind: 'empty' } },
+        );
+        if (!put.written || put.line === undefined) throw new TaskApiError(`Task could not be written to: ${params.file}`);
 
-        const created = this.index.getTaskByFileLine(params.file, insertedLine);
+        const created = this.index.getTaskByFileLine(params.file, put.line);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
 
         return { task: this.out(toDisplayTask(created, this.plugin.settings.startHour, this.lookup)) };

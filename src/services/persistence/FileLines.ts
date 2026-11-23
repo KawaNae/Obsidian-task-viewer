@@ -605,7 +605,7 @@ export type WriteOutcome = WriteMade | WriteRefused;
 
 /**
  * A write that adds one row, and where it put it: the line a caller looks the
- * new row up by once the scan has read it (`TaskApi.createTask`).
+ * new row up by once the scan has read it (`TaskApi.create`).
  */
 export type WriteAt = WriteRefused | (WriteMade & { line: number });
 

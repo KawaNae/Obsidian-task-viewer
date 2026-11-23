@@ -24,9 +24,9 @@ import type { NewRow } from '../persistence/NewRow';
 import type { SendTo } from '../persistence/writers/SendWriter';
 import type { OnDisk } from '../core/ReadingCheck';
 import { outermostRows } from '../persistence/writers/SendRows';
-import { openPeriodicNote, putInPeriodicNote } from '../persistence/Notes';
+import { openPeriodicNote, putInNote, seedOf, type NoteSeed, type NoteSpot } from '../persistence/Notes';
 import { saveTemplateNote } from '../template/TemplateNote';
-import { dailyNotes, type PeriodicNote } from '../../utils/PeriodicNotes';
+import { dailyNotes, notePath, type PeriodicNote } from '../../utils/PeriodicNotes';
 import { notWritten, WRITTEN, type WriteAnswer, type WriteTelling } from './WriteAnswer';
 
 /**
@@ -726,27 +726,6 @@ export class Operations {
     }
 
     /**
-     * Put `row`, with its property lines, in the note at `filePath`: under
-     * `heading` (`Destination.sectionNamed`), or at the end of the note.
-     *
-     * @returns the line the task was written on, or null when it was not — a
-     * write that was not has told the user why.
-     */
-    async createTask(filePath: string, row: NewRow, heading?: string): Promise<number | null> {
-        if (this.refuseAfterDispose('createTask')) return null;
-        logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
-
-        // Under a heading, in a note that is there; at the end, in a note
-        // made empty when it is not.
-        const outcome = heading
-            ? await this.repository.putInNote(filePath, Destination.sectionNamed(heading, this.settings), row)
-            : await this.repository.putInNote(filePath, 'end', row, { create: () => '' });
-        // What the write left is in the index once it landed (`landed`):
-        // the caller finds the row on its line without waiting for a scan.
-        return outcome.written ? outcome.line : null;
-    }
-
-    /**
      * A new row put in beside the row with its property lines, where
      * `place` says (`TaskOp` `insert`):
      * a child at the head of the row's children, added from a card's menu,
@@ -867,18 +846,46 @@ export class Operations {
     // ===== ノートの書き込み =====
 
     /**
+     * Put `row`, with its property lines, in the note at `path`, where
+     * `where` says (`Notes.putInNote`): in a section, its heading made when
+     * the note has none by the name, or at the end of the note. A note not
+     * there is made of `opts.seed` (`Notes.seedOf`) with the row in it, in one write; without
+     * a seed, the write is refused as `gone`. The one write of a new row
+     * into a note: a task the API makes, a task made in the daily note
+     * ({@link putInDailyNote}).
+     *
+     * @returns whether the row was written, with the line it went to when it
+     * was — what the write left is in the index once it landed (`landed`),
+     * so the caller finds the row on its line without waiting for a scan;
+     * when not, why not, told as {@link updateTask} tells it.
+     */
+    async putInNote(
+        path: string,
+        where: NoteSpot,
+        row: NewRow,
+        opts: WriteTelling & { seed?: NoteSeed } = {},
+    ): Promise<WriteAnswer & { line?: number }> {
+        if (this.refuseAfterDispose('putInNote')) return notWritten();
+        logInfo(`[putInNote] path=${path} where=${where === 'end' ? '(end)' : where.heading}${opts.seed ? ` seed=${opts.seed.kind}` : ''}`);
+        const { seed } = opts;
+        const create = seed ? () => seedOf(this.app, seed) : undefined;
+        const outcome = await putInNote(this.app, path, this.channelsTelling(opts)(path), { where, row, create });
+        return outcome.written ? { written: true, line: outcome.line } : notWritten(outcome.refused);
+    }
+
+    /**
      * Put `row` under the task section (`Destination.taskSection`) of the
      * daily note of `date` (`YYYY-MM-DD`), the note made of its template with
-     * the row in it when it is not there, in one write (`putInPeriodicNote`):
+     * the row in it when it is not there, in one write ({@link putInNote}):
      * a task a hub on a task not written yet makes, a timer's first record.
      *
      * @returns whether the row was written, with the path of the note when
      * it was; when not, why not, told as {@link updateTask} tells it.
      */
     async putInDailyNote(date: string, row: NewRow, opts: WriteTelling = {}): Promise<WriteAnswer & { path?: string }> {
-        if (this.refuseAfterDispose('putInDailyNote')) return notWritten();
-        const outcome = await putInPeriodicNote(this.app, dailyNotes(this.app), date, row, Destination.taskSection(this.settings), this.channelsTelling(opts));
-        return outcome.written ? { written: true, path: outcome.file.path } : notWritten(outcome.refused);
+        const path = notePath(dailyNotes(this.app), date);
+        const answer = await this.putInNote(path, Destination.taskSection(this.settings), row, { ...opts, seed: { kind: 'daily', date } });
+        return answer.written ? { written: true, path } : answer;
     }
 
     /**

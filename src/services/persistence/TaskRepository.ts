@@ -5,8 +5,6 @@ import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import type { LineDraft, Refusal, RowRef, RowTarget, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { CompletionFire, FiringOutcome } from './FiringTrials';
 import type { SubtreeReplacement, TaskOp } from './TaskOps';
-import { putInNote, type NotePut, type NoteSpot } from './Notes';
-import type { NewRow } from './NewRow';
 
 /**
  * The write layer as the index holds it: the writers, built over the one
@@ -84,17 +82,7 @@ export class TaskRepository {
         return this.inlineWriter.applyOps(draft, session, target, ops);
     }
 
-    // --- Notes and frontmatter ---
-
-    /** A row put in a section of a note, or at its end, the note made of `create` when it is not there (see Notes.putInNote). */
-    async putInNote(
-        path: string,
-        where: NoteSpot,
-        row: NewRow,
-        opts: { create?: () => string | Promise<string> } = {},
-    ): Promise<NotePut> {
-        return putInNote(this.app, path, this.channelOf(path), { where, row, create: opts.create });
-    }
+    // --- Frontmatter ---
 
     /**
      * Task を介さない frontmatter 書き込みの入口。プロパティ欄のサジェストが
