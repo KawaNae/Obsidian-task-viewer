@@ -54,7 +54,7 @@ function setUp(beforeClose?: () => CloseAnswer) {
     const answers: string[] = [];
     const answered = ask<'yes' | 'no'>(shell, {
         keymap: {} as OverlayOpenOpts['keymap'],
-        draw: (_el, given) => {
+        draw: (_el, _frame, given) => {
             hands = given;
             return { focus: null, beforeClose };
         },

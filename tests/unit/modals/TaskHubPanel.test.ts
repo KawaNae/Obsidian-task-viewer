@@ -25,7 +25,7 @@ const { shells, forms, sources, views } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown } | null; close(): void }[],
     forms: [] as { host: unknown; beforeClose: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
-    views: [] as { bar: unknown; card: unknown; pane: unknown }[],
+    views: [] as { bar: unknown; card: unknown; pane: unknown; foot: unknown }[],
 }));
 const body = { current: null as FocusEl | null, head: null as FocusEl | null, foot: null as FocusEl | null };
 
@@ -66,7 +66,7 @@ vi.mock('../../../src/modals/hub/TaskHubSource', () => ({
 }));
 vi.mock('../../../src/modals/hub/TaskHubSourceView', () => ({
     TaskHubSourceView: class {
-        constructor(_app: unknown, readonly bar: unknown, readonly card: unknown, readonly pane: unknown) { views.push(this); }
+        constructor(_app: unknown, readonly bar: unknown, readonly card: unknown, readonly pane: unknown, readonly foot: unknown) { views.push(this); }
     },
 }));
 
@@ -217,7 +217,7 @@ describe('the hub on a row', () => {
         expect(sources).toHaveLength(1);
         expect(sources[0].task).toMatchObject({ id: 'task-1', content: '元の名前' });
         const [bar, card, pane] = r.body.children;
-        expect(views[0]).toMatchObject({ bar, card, pane });
+        expect(views[0]).toMatchObject({ bar, card, pane, foot: body.foot });
     });
 
     it('closes when the source mode asks it to', async () => {
