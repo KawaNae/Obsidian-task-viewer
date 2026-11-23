@@ -13,8 +13,9 @@ export type DoubleTapAction = 'detail' | 'open' | 'menu';
  * (`cascade`), side by side when each of its columns would be wide enough
  * to show a card's start and end time whole and lay its name out in a box
  * as wide as those times, else shifted right (`auto`), or side by side
- * whatever the width (`sideBySide`). A cluster is laid out one way, never
- * both.
+ * however narrow its columns, so long as the gaps between them leave the
+ * columns some width, else shifted right (`sideBySide`). A cluster is laid
+ * out one way, never both.
  */
 export const TIMELINE_OVERLAP_MODES = ['cascade', 'auto', 'sideBySide'] as const;
 export type TimelineOverlapMode = typeof TIMELINE_OVERLAP_MODES[number];
