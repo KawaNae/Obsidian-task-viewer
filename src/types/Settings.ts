@@ -10,8 +10,8 @@ export type DoubleTapAction = 'detail' | 'open' | 'menu';
  * How Timeline lays out timed cards where a later card would hide the name
  * of an earlier one it overlaps in time: shifted right over it (`cascade`),
  * side by side when each card would be wide enough to show its start and
- * end time whole (`auto`), or side by side whatever the width
- * (`sideBySide`). A card that
+ * end time whole and lay its name out in a box as wide as those times
+ * (`auto`), or side by side whatever the width (`sideBySide`). A card that
  * starts below the earlier's name is shifted right in every mode.
  */
 export const TIMELINE_OVERLAP_MODES = ['cascade', 'auto', 'sideBySide'] as const;

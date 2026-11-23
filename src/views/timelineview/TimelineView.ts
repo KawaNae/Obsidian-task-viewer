@@ -36,7 +36,7 @@ import {
     TimelineCodec, daysToShowOf, effectiveOverlapMode, effectiveZoom,
     type TimelineConfig, type TimelineTransient,
 } from './TimelineSchema';
-import { measureFullTimePx } from './TimeRowWidth';
+import { measureLegibleCardPx } from './LegibleCardWidth';
 import { TimelineDays, windowDates, windowEnd, type DayWindow } from './TimelineDays';
 
 /** How long a wheel zoom waits for its next step before its cards are placed again. */
@@ -227,7 +227,7 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
             this.taskRenderer,
             () => this.zoom(),
             () => effectiveOverlapMode(this.state, this.plugin.settings),
-            (col) => measureFullTimePx(col, this.plugin.settings),
+            (col) => measureLegibleCardPx(col, this.plugin.settings),
         );
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
@@ -275,8 +275,8 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
 
         // A font, its size or a theme changing leaves the columns as wide, so
-        // no resize tells the lane; it measures its lengths again, the width a
-        // card shows its times in with them, and places the cards again.
+        // no resize tells the lane; it measures its lengths again, the narrowest
+        // legible card with them, and places the cards again.
         this.registerEvent(this.app.workspace.on('css-change', () => {
             this.timelineRenderer.measureLanesAgain();
         }));

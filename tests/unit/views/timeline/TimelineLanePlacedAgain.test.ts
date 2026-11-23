@@ -9,8 +9,8 @@ import type { DisplayTask, TimelineOverlapMode } from '../../../../src/types';
  * width changes or the view asks: the layout is taken again by the lane,
  * the zoom and the view's way of laying out as they are then, and the
  * cards' places rewritten. This suite runs without a DOM, so the column,
- * its cards, the observer, the stylesheet's lengths and the width a card
- * shows its times in are stand-ins.
+ * its cards, the observer, the stylesheet's lengths and the narrowest
+ * legible card are stand-ins.
  */
 
 /** Counts what is written to it, so a pass that writes nothing shows. */
@@ -95,20 +95,21 @@ function card(id: string, start: string, end: string): DisplayTask {
 
 /**
  * A renderer of the view's way of laying out (`mode`), its zoom, and the
- * width a card shows its start and end time whole in (`fullTime`), which
- * the stylesheet and the font decide and a DOM would measure.
+ * narrowest a card shows its start and end time whole and has a box for its
+ * name as wide as those times (`legibleCard`), which the stylesheet and the
+ * font decide and a DOM would measure.
  */
 function renderer(
     mode: () => TimelineOverlapMode = () => 'cascade',
     zoom: () => number = () => 1,
-    fullTime: (col: HTMLElement) => number = () => 120,
+    legibleCard: (col: HTMLElement) => number = () => 120,
 ): TimelineSectionRenderer {
     return new TimelineSectionRenderer(
         { settings: { startHour: 0 } } as never,
         { render: () => { } } as never,
         zoom,
         mode,
-        fullTime,
+        legibleCard,
     );
 }
 
@@ -303,7 +304,7 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         expect(col.children.map(child => child.style.writes)).toEqual(col.children.map(() => 0));
     });
 
-    describe('by the width a card shows its start and end time whole in', () => {
+    describe('by the narrowest a card shows its start and end time whole and has a box for its name as wide', () => {
         // Two cards whose times overlap. Side by side, 4px apart, b starts
         // at its column's left; shifted right, it starts 15% of the lane in.
         const pair = () => [card('a', '10:00', '11:00'), card('b', '10:05', '11:00')];
@@ -327,7 +328,7 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         });
 
         it('takes a column of a fractional width as wide as laid out, not rounded to a whole px', () => {
-            // 171.6px makes two columns of 79.8px, narrower than the times
+            // 171.6px makes two columns of 79.8px, narrower than the card
             // need, though rounded to 172px it would make two of 80px;
             // 172.25px makes two of 80.125px.
             const narrow = column(171.6);
@@ -340,12 +341,12 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
         });
 
         it('measures it once a draw, not again when only the column\'s width changes', () => {
-            const fullTime = vi.fn(() => 80);
-            const r = renderer(() => 'auto', () => 1, fullTime);
+            const legibleCard = vi.fn(() => 80);
+            const r = renderer(() => 'auto', () => 1, legibleCard);
             const col = column(172);
             draw(r, [col], pair);
-            expect(fullTime).toHaveBeenCalledTimes(1);
-            expect(fullTime).toHaveBeenCalledWith(col);
+            expect(legibleCard).toHaveBeenCalledTimes(1);
+            expect(legibleCard).toHaveBeenCalledWith(col);
 
             // Placed again by the new width and the width measured at the draw.
             col.paddingBoxWidth = 171;
@@ -354,38 +355,38 @@ describe('TimelineSectionRenderer placing a column again without a draw', () => 
             col.paddingBoxWidth = 400;
             notify!([{ target: col }]);
             expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
-            expect(fullTime).toHaveBeenCalledTimes(1);
+            expect(legibleCard).toHaveBeenCalledTimes(1);
         });
 
         it('measures it as a column drawn before it was laid out first has a width, and keeps it from then on', () => {
-            // A column with no width shows no time row, so it measures 0.
-            const fullTime = vi.fn((col: HTMLElement) => ((col as unknown as Lane).paddingBoxWidth > 0 ? 80 : 0));
-            const r = renderer(() => 'auto', () => 1, fullTime);
+            // A column with no width lays out no card, so it measures 0.
+            const legibleCard = vi.fn((col: HTMLElement) => ((col as unknown as Lane).paddingBoxWidth > 0 ? 80 : 0));
+            const r = renderer(() => 'auto', () => 1, legibleCard);
             const col = column(0);
             draw(r, [col], pair);
 
             col.paddingBoxWidth = 172;
             notify!([{ target: col }]);
             expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
-            expect(fullTime).toHaveBeenCalledTimes(2);
+            expect(legibleCard).toHaveBeenCalledTimes(2);
 
             col.paddingBoxWidth = 400;
             notify!([{ target: col }]);
-            expect(fullTime).toHaveBeenCalledTimes(2);
+            expect(legibleCard).toHaveBeenCalledTimes(2);
         });
 
         it('measures it again when the stylesheet changes, and places the cards by the new width', () => {
-            // A larger font: the times need 100px, wider than a column of 80px.
+            // A larger font: the card needs 100px, wider than a column of 80px.
             let needs = 80;
-            const fullTime = vi.fn(() => needs);
-            const r = renderer(() => 'auto', () => 1, fullTime);
+            const legibleCard = vi.fn(() => needs);
+            const r = renderer(() => 'auto', () => 1, legibleCard);
             const col = column(172);
             draw(r, [col], pair);
             expect(bLeftPx(col)).toBeCloseTo(SIDE_BY_SIDE(col), 6);
 
             needs = 100;
             r.measureLanesAgain();
-            expect(fullTime).toHaveBeenCalledTimes(2);
+            expect(legibleCard).toHaveBeenCalledTimes(2);
             expect(bLeftPx(col)).toBeCloseTo(SHIFTED(col), 6);
         });
 

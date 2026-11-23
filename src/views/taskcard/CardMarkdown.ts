@@ -45,6 +45,27 @@ export function renderCardMarkdown(
     });
 }
 
+/**
+ * Put into `el` the frame of what `renderCardMarkdown` gets from Obsidian
+ * for a task's line, `- [ ] `, and return its list item, the box the task's
+ * name is laid out in: the list, the item and the item's checkbox, of the
+ * elements and the classes Obsidian gives them, with no text and nothing a
+ * post-processor adds.
+ *
+ * For what is read off a card's body without drawing markdown into it
+ * (`measureLegibleCardPx`), which is drawn and read within one call: the
+ * stylesheet lays the frame out as it lays out a drawn line, the list's
+ * indent for the checkbox included. It stands for Obsidian's draw here,
+ * next to the one call that makes it, so that a change in what Obsidian
+ * draws for a task's line, or in how a card asks for it, is made to both.
+ */
+export function drawTaskLineFrame(el: HTMLElement): HTMLElement {
+    const item = el.createEl('ul', { cls: 'contains-task-list' })
+        .createEl('li', { cls: 'task-list-item', attr: { 'data-task': ' ' } });
+    item.createEl('input', { cls: 'task-list-item-checkbox', type: 'checkbox' });
+    return item;
+}
+
 /** Where Obsidian puts the text of a list item's line, when not in the item itself. */
 const LINE_HOSTS = [
     ':scope > .task-list-item-description',
