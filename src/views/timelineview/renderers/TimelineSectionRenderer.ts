@@ -83,10 +83,27 @@ export class TimelineSectionRenderer {
         this.lanes.clear();
         if (this.watched) this.laneResize.unobserve(this.watched);
         this.watched = cols[0] ?? null;
-        this.lengths = this.watched
-            ? { ...this.measureLane(this.watched), fullTimePx: this.measureFullTime(this.watched) }
-            : UNMEASURED;
+        this.lengths = this.watched ? this.measureAll(this.watched) : UNMEASURED;
         if (this.watched) this.laneResize.observe(this.watched);
+    }
+
+    /**
+     * The stylesheet changed (a font, its size, a theme): measure every
+     * length of the lane again, the width a card shows its times in with
+     * them, and place every column's cards again if one differs. Such a
+     * change leaves the column's width as it is, so no resize tells of it.
+     */
+    public measureLanesAgain(): void {
+        if (!this.watched) return;
+        const lengths = this.measureAll(this.watched);
+        const keys = Object.keys(lengths) as (keyof LaneLengths)[];
+        if (keys.every(key => lengths[key] === this.lengths[key])) return;
+        this.lengths = lengths;
+        this.placeLanesAgain();
+    }
+
+    private measureAll(col: HTMLElement): LaneLengths {
+        return { ...this.measureLane(col), fullTimePx: this.measureFullTime(col) };
     }
 
     public render(

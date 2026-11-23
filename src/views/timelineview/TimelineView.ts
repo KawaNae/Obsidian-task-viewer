@@ -274,6 +274,13 @@ export class TimelineView extends TaskViewerView<TimelineConfig, TimelineTransie
         this.selectionController.attachBackgroundClick(this.container);
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
 
+        // A font, its size or a theme changing leaves the columns as wide, so
+        // no resize tells the lane; it measures its lengths again, the width a
+        // card shows its times in with them, and places the cards again.
+        this.registerEvent(this.app.workspace.on('css-change', () => {
+            this.timelineRenderer.measureLanesAgain();
+        }));
+
         // Ctrl+wheel zoom. The gesture shows the zoom itself (the hour height
         // and the scroll); the state takes it without a draw.
         this.registerDomEvent(this.container, 'wheel', (e: WheelEvent) => {
