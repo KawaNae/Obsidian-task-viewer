@@ -46,8 +46,10 @@ interface DrawnLane {
 /**
  * Draws a day column's timed cards, and places them again, without a draw,
  * where what decides their places changes while what they show does not:
- * the column's width (the pane resized), and the zoom once a wheel or a
- * pinch has finished changing it, which is not drawn while it changes.
+ * the column's width (the pane resized), the zoom once a wheel or a pinch
+ * has finished changing it, which is not drawn while it changes, and the
+ * stylesheet (a font, its size, a theme), after which the lane is measured
+ * again and the cards placed again where one of its lengths differs.
  */
 export class TimelineSectionRenderer {
     /** The columns of the last draw. */
