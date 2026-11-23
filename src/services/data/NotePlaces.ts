@@ -3,6 +3,7 @@ import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { Outline } from '../parsing/utils/Outline';
 import { splitLines } from '../persistence/FileLines';
+import { Destination } from '../persistence/Destination';
 import type { NoteSpot } from '../persistence/Notes';
 import { Placement, type HeadingLookup } from '../persistence/utils/Placement';
 import { NoteName, type NameCheck, type NoteAsk } from './NoteName';
@@ -22,6 +23,17 @@ export interface NoteDestination {
 export interface PlaceAsk {
     note: NoteAsk;
     spot: NoteSpot;
+}
+
+/**
+ * A destination as its fields hold it (`DestinationField`), read by
+ * {@link NotePlaces.readFields}: the note field as typed, and the heading
+ * field's text.
+ */
+export interface DestinationAsk {
+    note: NoteAsk;
+    /** The heading to go under; empty for the note's end, under no heading. */
+    heading: string;
 }
 
 /**
@@ -81,6 +93,19 @@ export class NotePlaces {
         private readonly app: App,
         private readonly getSettings: () => TaskViewerSettings,
     ) { }
+
+    /**
+     * What the destination fields name (see {@link NoteRead}), as
+     * {@link read} reads it. The heading field is read here, for every form
+     * that holds the fields: a heading typed names its section, at the
+     * settings' level and side (`Destination.sectionNamed`); none typed
+     * names the note's end.
+     */
+    async readFields(ask: DestinationAsk, newFolder: string): Promise<NoteRead> {
+        const heading = ask.heading.trim();
+        const spot: NoteSpot = heading === '' ? 'end' : Destination.sectionNamed(heading, this.getSettings());
+        return this.read({ note: ask.note, spot }, newFolder);
+    }
 
     /**
      * What `ask` names (see {@link NoteRead}), the note read as the vault

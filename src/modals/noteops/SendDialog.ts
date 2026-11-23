@@ -3,8 +3,9 @@ import { t } from '../../i18n';
 import { logWarn } from '../../log/log';
 import type { InheritedValue } from '../../services/data/InheritedValues';
 import type {
-    DestinationAsk, DestinationFacts, NoteFacts, SendingLines, SendPreview, SendRequest, SendResult, SendRow,
+    DestinationFacts, NoteFacts, SendingLines, SendPreview, SendRequest, SendResult, SendRow,
 } from '../../services/data/NoteOps';
+import type { DestinationAsk } from '../../services/data/NotePlaces';
 import { sendingOf } from '../../services/data/NoteOps';
 import type { AnchorLink } from '../../services/data/NoteRefs';
 import type { UnresolvedReference } from '../../services/flow/FlowReferences';
@@ -16,6 +17,8 @@ import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/
 import type { DraftEditor, EditorOnHooks } from '../form/source/SourceEditor';
 import type { FormIssue, Tone } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
+import { LastAnswer } from '../form/LastAnswer';
+import { DestinationText } from './DestinationText';
 
 /**
  * The send dialog: rows and their subtrees sent to a section of a note, or
@@ -142,9 +145,8 @@ export class SendDialog {
     private readonly rows: OpenedRow[] = [];
     private phase: SendPhase = 'open';
     private ask: DestinationAsk;
-    /** How many times the destination was asked: an answer is taken only to the last. */
-    private asked = 0;
-    private answer: { seq: number; facts: DestinationFacts } | null = null;
+    /** What the destination is, as last answered: an answer is taken only to the last asking. */
+    private readonly answer = new LastAnswer<DestinationFacts>();
     /** The checks the user changed, by key. */
     private readonly checks = new Map<string, boolean>();
     private message: string | null = null;
@@ -194,15 +196,15 @@ export class SendDialog {
     }
 
     state(): SendViewState {
-        const facts = this.answer?.facts ?? null;
+        const facts = this.answer.value;
         const note = oneNote(facts);
         const held: FormIssue<SendField>[] = [];
         const error = (at: SendField | 'form', text: string) => held.push({ at, tone: 'error', text });
 
         if (facts?.kind === 'unnamed') {
-            error('note', nameError(facts.why));
+            error('note', DestinationText.unnamed(facts));
         } else if (facts?.kind === 'ambiguous') {
-            error('note', t('modal.noteAmbiguous', { name: facts.name, count: String(facts.files.length), notes: facts.files.map(file => file.path).join(', ') }));
+            error('note', DestinationText.ambiguous(facts));
         } else if (note && note.to.spot !== 'end' && note.heading?.kind === 'many') {
             const { heading } = note.to.spot;
             error('heading', t('modal.send.headings', { note: note.path, heading, count: String(note.heading.count) }));
@@ -218,7 +220,7 @@ export class SendDialog {
             if (says) held.push({ at: 'heading', ...says });
             held.push(...this.warningsOf(note));
         }
-        const canSend = this.phase === 'open' && this.caughtUp() && !held.some(issue => issue.tone === 'error');
+        const canSend = this.phase === 'open' && this.answer.caughtUp && !held.some(issue => issue.tone === 'error');
 
         return {
             phase: this.phase,
@@ -264,7 +266,7 @@ export class SendDialog {
      * or a draft cannot be written.
      */
     request(): SendRequest | null {
-        const facts = oneNote(this.answer?.facts ?? null);
+        const facts = oneNote(this.answer.value);
         if (!facts) return null;
         const rows: SendRow[] = [];
         for (const { row, check } of this.drafts()) {
@@ -323,23 +325,16 @@ export class SendDialog {
 
     /** Ask what the destination the fields name is; the answer is taken only if no asking came after. */
     private async lookUp(): Promise<void> {
-        const seq = ++this.asked;
+        const ask = { ...this.ask };
+        const taking = this.answer.ask(() => this.host.facts(ask));
         this.render();
-        let facts: DestinationFacts;
         try {
-            facts = await this.host.facts({ ...this.ask });
+            if (!(await taking)) return;
         } catch (e) {
             logWarn(`[SendDialog] the destination could not be read: ${String(e)}`);
             return;
         }
-        if (this.disposed || seq !== this.asked) return;
-        this.answer = { seq, facts };
         this.render();
-    }
-
-    /** Whether the destination answered is the one the fields name now. */
-    private caughtUp(): boolean {
-        return this.answer !== null && this.answer.seq === this.asked;
     }
 
     /**
@@ -348,7 +343,7 @@ export class SendDialog {
      * the row is in (`rowFile`).
      */
     private linkSource(rowFile: string): string {
-        return oneNote(this.answer?.facts ?? null)?.path ?? rowFile;
+        return oneNote(this.answer.value)?.path ?? rowFile;
     }
 
     /** A draft's text changed: what it says is drawn again, and, asked whether to throw it away, the question is withdrawn. */
@@ -419,9 +414,8 @@ export class SendDialog {
         }
         for (const anchor of facts.shared) warn('form', t('modal.send.shared', { anchor, note: facts.path }));
         if (facts.ignored) warn('form', t('modal.send.ignored', { note: facts.path }));
-        if (facts.kind === 'new' && facts.by === 'path' && facts.namesakes.length > 0) {
-            warn('note', t('modal.send.namesakes', { notes: facts.namesakes.map(file => file.path).join(', ') }));
-        }
+        const namesakes = facts.kind === 'new' ? DestinationText.namesakes(facts) : null;
+        if (namesakes !== null) warn('note', namesakes);
         return out;
     }
 
@@ -454,16 +448,13 @@ function oneNote(facts: DestinationFacts | null): NoteFacts | null {
  * with is not sent to a new note unseen — and the folder it makes with it.
  */
 export function noteText(facts: NoteFacts): { text: string; tone: Tone }[] {
-    const vars = { note: facts.path };
     switch (facts.kind) {
         case 'existing':
-            return [{ text: t('modal.send.noteExisting', vars), tone: 'warning' }];
+            return [{ text: DestinationText.existing(facts.path), tone: 'warning' }];
         case 'same':
-            return [{ text: t('modal.send.noteSame', vars), tone: 'info' }];
-        case 'new': {
-            const made = { text: t(facts.by === 'name' ? 'modal.send.noteNewByName' : 'modal.send.noteNew', vars), tone: 'warning' as const };
-            return facts.folderMade === null ? [made] : [made, { text: t('modal.send.noteFolderMade', { folder: facts.folderMade }), tone: 'warning' }];
-        }
+            return [{ text: t('modal.send.noteSame', { note: facts.path }), tone: 'info' }];
+        case 'new':
+            return DestinationText.made(facts);
     }
 }
 
@@ -498,14 +489,6 @@ export function headingText(facts: NoteFacts): { text: string; tone: Tone } | nu
             if (found.kind === 'many') return null;
             if (found.kind === 'none') return { text: t('modal.send.withinMade', vars), tone: 'info' };
             return { text: t(end ? 'modal.send.withinEnd' : 'modal.send.withinHead', vars), tone: 'info' };
-    }
-}
-
-function nameError(why: Extract<DestinationFacts, { kind: 'unnamed' }>['why']): string {
-    switch (why.why) {
-        case 'empty': return t('modal.send.nameEmpty');
-        case 'chars': return t(why.at === 'name' ? 'modal.send.nameChars' : 'modal.send.folderChars', { chars: why.chars });
-        case 'dot': return t(why.at === 'name' ? 'modal.send.nameDot' : 'modal.send.folderDot');
     }
 }
 
