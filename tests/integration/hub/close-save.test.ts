@@ -20,6 +20,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-hub-close.md';
 
@@ -36,21 +37,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 const FILE = ${JSON.stringify(TEST_FILE)};
 ${UNTIL}
+${DIALOG_ROWS}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const dateInput = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const says = input => [...input.closest('.tv-form__row').nextElementSibling.children].map(c => c.className + ': ' + c.textContent);
-/** The form's end: what is said of the form, and the question a close puts (null while none is). */
+/** The form's end and its row: what is said of the form, and the question a close puts (null while none is). */
 const formEnd = () => {
     const form = hub().querySelector('.task-hub__form');
-    const ask = form.querySelector('.tv-form__ask');
+    const row = formRow(hub());
+    const ask = row.querySelector('.tv-form__ask');
     const shown = el => !!el && getComputedStyle(el).display !== 'none';
     return {
         says: [...form.querySelector('.tv-form__says--form').children].map(c => c.className + ': ' + c.textContent),
         ask: shown(ask) ? ask.textContent : null,
-        buttons: [...form.querySelectorAll('.tv-form__buttons button')].filter(shown).map(b => b.textContent),
-        onFix: document.activeElement === form.querySelector('.tv-form__cancel'),
+        buttons: [...row.querySelectorAll('button')].filter(shown).map(b => b.textContent),
+        onFix: document.activeElement === row.querySelector('.tv-form__cancel'),
     };
 };
 const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
@@ -154,14 +157,14 @@ describe('closing the hub', () => {
             out.again = { open: !!hub(), onFix: formEnd().onFix };
 
             // Fix: the question goes, and the date takes the focus.
-            hub().querySelector('.task-hub__form .tv-form__cancel').click();
+            formRow(hub()).querySelector('.tv-form__cancel').click();
             await sleep(100);
             out.fixing = { ask: formEnd().ask, onDate: document.activeElement === start() };
 
             // Closed again without fixing it: discard and close keeps the date as it was, and saves the name.
             closeButton();
             await sleep(200);
-            hub().querySelector('.task-hub__form .tv-form__discard').click();
+            formRow(hub()).querySelector('.tv-form__discard').click();
             await until(() => !hub());
             out.discarded = { open: !!hub(), disk: await disk() };
             return JSON.stringify(out);

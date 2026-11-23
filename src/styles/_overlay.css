@@ -78,6 +78,20 @@ body:not(.theme-dark) .tv-overlay {
     overflow-y: auto;
 }
 
+/* --- Head and foot: the places above and below the body that do not scroll
+   (OverlayFrame). A place shows only while it holds a child without the
+   hidden attribute, so a dialog that puts nothing there, or hides its row
+   for now, has neither its height nor its line --- */
+.tv-overlay__head,
+.tv-overlay__foot {
+    flex: none;
+}
+
+.tv-overlay__head:not(:has(> :not([hidden]))),
+.tv-overlay__foot:not(:has(> :not([hidden]))) {
+    display: none;
+}
+
 /* --- Handle (hidden by default, shown on phone) --- */
 .tv-overlay__handle {
     display: none;
@@ -177,6 +191,32 @@ body:not(.theme-dark) .tv-overlay {
 .is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__body {
     margin: 0;
     padding: 4px 24px calc(34px + env(safe-area-inset-bottom, 0px));
+}
+
+/* The dialog's title and its row of buttons stand on the body's sides, at
+   its inline padding. The row stands under a line, the body scrolling
+   above it */
+.tv-overlay__panel--dialog .tv-overlay__head {
+    padding: 0 24px;
+}
+
+.tv-overlay__panel--dialog .tv-overlay__foot {
+    padding: 12px 24px 0;
+    border-top: 1px solid var(--tv-border);
+}
+
+.is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__head {
+    padding: 4px 24px 0;
+}
+
+/* On the phone the foot ends the sheet: the room under the body and the
+   home indicator's inset go under the row instead */
+.is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__foot {
+    padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.is-phone .tv-overlay .tv-overlay__panel--dialog:has(> .tv-overlay__foot > :not([hidden])) .tv-overlay__body {
+    padding-bottom: 12px;
 }
 
 

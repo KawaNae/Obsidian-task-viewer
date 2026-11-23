@@ -85,7 +85,7 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
     const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
     const host = new DraftHost(PLACE, seed, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
     const closes: CloseAnswer[] = [];
-    const form: TaskHubForm = new TaskHubForm(asEl(root), host, { app, plugin, index, requestClose: () => { closes.push(form.beforeClose()); } });
+    const form: TaskHubForm = new TaskHubForm(asEl(root), host, { app, plugin, index, foot: asEl(root), requestClose: () => { closes.push(form.beforeClose()); } });
     const panel = { redrawPreview: vi.fn(), close: vi.fn() };
     host.attach(panel);
     await settle();

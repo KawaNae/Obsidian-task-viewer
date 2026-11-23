@@ -86,7 +86,8 @@ export class FormActions {
             el.disabled = state.busy || (spec.tone === 'cta' && state.ctaEnabled === false);
             el.setText(state.busy && spec.busyLabel ? spec.busyLabel : spec.label);
         }
-        this.row.toggle(this.readsBack || this.spec.cancel !== undefined || this.buttons.length > 0);
+        // Hidden by its attribute, which the overlay's foot reads to show or not (`OverlayFrame`).
+        this.row.hidden = !(this.readsBack || this.spec.cancel !== undefined || this.buttons.length > 0);
     }
 
     /** The question was put, first or again: the answer that keeps takes the focus. */

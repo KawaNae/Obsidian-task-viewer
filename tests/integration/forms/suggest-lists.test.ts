@@ -21,6 +21,7 @@ import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-suggest-lists.md';
 const NOTE_A = 'test-int-suggest-props-a.md';
@@ -38,6 +39,7 @@ const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
+${DIALOG_ROWS}
 const R = (window.__tvSuggestE2E ??= {});
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
@@ -97,7 +99,7 @@ function cleanUp(): void {
         document.querySelectorAll('.suggestion-container').forEach(el => el.remove());
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
         await sleep(100);
-        hub()?.querySelector('.task-hub__form .tv-form__discard')?.click();
+        formRow(hub())?.querySelector('.tv-form__discard')?.click();
         await until(() => !hub());
         for (const name of Object.keys(R)) { R[name]?.detach(); delete R[name]; }
         plugin.menuPresenter.dismiss();

@@ -20,6 +20,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-shell-enter.md';
 
@@ -34,6 +35,7 @@ const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
+${DIALOG_ROWS}
 const R = (window.__tvShellE2E ??= {});
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
@@ -41,10 +43,10 @@ const rowOf = name => {
     return task;
 };
 /** The hub on a task not written yet: the hub that offers a create. */
-const isDraft = p => !!p.querySelector('.task-hub__form > .tv-form__buttons > .mod-cta');
+const isDraft = p => !!formRow(p)?.querySelector(':scope > .mod-cta');
 const createPanel = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')].find(isDraft) ?? null;
 const nameInput = () => createPanel()?.querySelector('.tv-form__name-section input') ?? null;
-const createButton = () => createPanel().querySelector('.task-hub__form > .tv-form__buttons > .mod-cta');
+const createButton = () => formRow(createPanel()).querySelector(':scope > .mod-cta');
 /** The hub on a row. */
 const hubPanel = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')].find(p => !isDraft(p)) ?? null;
 const key = (el, init) => el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
@@ -141,7 +143,7 @@ function cleanUp(): void {
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
         await sleep(100);
         document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub__source-actions .tv-form__discard').forEach(b => b.click());
-        document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub__form > .tv-form__buttons > .tv-form__discard').forEach(b => b.click());
+        document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub').forEach(p => formRow(p)?.querySelector(':scope > .tv-form__discard')?.click());
         for (const name of Object.keys(R)) { R[name]?.detach(); delete R[name]; }
         plugin.menuPresenter.dismiss();
         await sleep(250);

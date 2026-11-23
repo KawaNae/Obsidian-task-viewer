@@ -5,7 +5,7 @@
    _controls.css（tv-ctrl__*）。
    ====================================================== */
 
-/* OverlayShell の上のフォームダイアログ（SendModal など）の見出し */
+/* OverlayShell の上のフォームダイアログ（SendModal など）の見出し。殻の上の場所に置く */
 .tv-form__title {
     margin: 0 0 12px;
 }
@@ -156,9 +156,16 @@
     font-size: var(--font-ui-small);
 }
 
-/* 節の後に置くボタン行（送るダイアログ）は、最後の節から 24px 空ける。
-   節の下の padding 12px にこの 12px を足す。ハブのソースのボタン行は編集欄と同じ
-   面の中にあり、節の後ではないので当たらない */
+/* 行を隠すのは hidden 属性で行う。殻の下の場所（_overlay.css）はこの属性を見て、
+   行が隠れている間は自分も高さと線を持たない */
+.tv-form__buttons[hidden] {
+    display: none;
+}
+
+/* 本文の中で節の後に置くボタン行（文字を問うダイアログ）は、最後の節から 24px
+   空ける。節の下の padding 12px にこの 12px を足す。ハブのソースのボタン行は編集欄と
+   同じ面の中にあり、節の後ではないので当たらない。殻の下の場所に置くボタン行は
+   本文の外にあり、当たらない */
 .tv-form .tv-form__group ~ .tv-form__buttons {
     margin-top: 12px;
 }

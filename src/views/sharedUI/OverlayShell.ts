@@ -1,8 +1,9 @@
 /**
  * Unified overlay shell for all root-level overlay UIs.
  *
- * Provides a standard DOM skeleton (root > backdrop > panel > handle + close + body),
- * shared lifecycle (open/close with animation), and mode-based presentation:
+ * Provides a standard DOM skeleton (root > backdrop > panel > handle + close
+ * + head + body + foot), shared lifecycle (open/close with animation), and
+ * mode-based presentation:
  *
  *   - 'anchored': desktop = JS-positioned popover, phone = bottom-sheet
  *   - 'centered': desktop = CSS-centered dialog, phone = bottom-sheet
@@ -10,6 +11,13 @@
  * Phone detection is CSS-driven via Obsidian's `.is-phone` class on body.
  * The same DOM serves both presentations; CSS switches layout, and JS
  * skips positioning when the handle is visible (phone indicator).
+ *
+ * The body alone scrolls. Above it and below it the panel has a place that
+ * does not (`OverlayFrame`): a dialog puts its title in the head and its row
+ * of buttons in the foot, so both stay in sight however long the body is,
+ * in the sheet and in the box alike. A place shows only while it holds a
+ * child without the `hidden` attribute: a dialog that puts nothing there,
+ * or whose row is hidden for now, has no head or foot to see, nor its line.
  *
  * Child popovers (dropdowns, suggests) continue to use PopoverShell via
  * PopoverStack. OverlayShell coordinates with an optional childStack for
@@ -62,11 +70,20 @@ export type { CloseAnswer };
 
 export type { Focusable, FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 
+/** The places of the panel around its body that do not scroll with it. */
+export interface OverlayFrame {
+    /** Above the body: the dialog's title. */
+    head: HTMLElement;
+    /** Below the body: the dialog's row of buttons. */
+    foot: HTMLElement;
+}
+
 export interface OverlayOpenOpts {
     mode: OverlayMode;
     anchor?: PopoverAnchor;
     panelClass?: string;
-    build: (bodyEl: HTMLElement) => void;
+    /** Build the body, and what stays in sight around it in `frame`. */
+    build: (bodyEl: HTMLElement, frame: OverlayFrame) => void;
     /**
      * Obsidian's keymap (`app.keymap`): its hotkeys are kept out while the
      * focus is in the overlay, its child popovers among it (`HotkeyShield`),
@@ -297,9 +314,11 @@ export class OverlayShell implements ClosableOverlay {
         closeBtn.setAttribute('aria-label', t('modal.cancel'));
         closeBtn.addEventListener('click', () => { void this.requestClose(); });
 
+        const head = panel.createDiv({ cls: 'tv-overlay__head' });
         const body = panel.createDiv({ cls: 'tv-overlay__body' });
+        const foot = panel.createDiv({ cls: 'tv-overlay__foot' });
 
-        opts.build(body);
+        opts.build(body, { head, foot });
 
         // Keyboard awareness (mobile)
         this.kbAware = new KeyboardAwareContainer(root, hostWin);

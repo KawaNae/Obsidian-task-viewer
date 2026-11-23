@@ -19,6 +19,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-hub-property-hide.md';
 
@@ -43,6 +44,7 @@ const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
+${DIALOG_ROWS}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent.trim() === label);
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
@@ -73,7 +75,7 @@ function closeHub(): void {
     run(`
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
         await sleep(100);
-        hub()?.querySelector('.task-hub__form .tv-form__discard')?.click();
+        formRow(hub())?.querySelector('.tv-form__discard')?.click();
         await until(() => !hub());
         return 'ok';
     `);

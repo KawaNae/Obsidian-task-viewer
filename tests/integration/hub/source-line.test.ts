@@ -18,6 +18,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-hub-source-line.md';
 
@@ -43,6 +44,7 @@ const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
+${DIALOG_ROWS}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');
@@ -77,7 +79,7 @@ function closeAll(): void {
     run(`
         document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__close').forEach(b => b.click());
         await sleep(100);
-        hub()?.querySelector('.task-hub__form .tv-form__discard')?.click();
+        formRow(hub())?.querySelector('.tv-form__discard')?.click();
         await until(() => !hub());
         app.workspace.getLeavesOfType('markdown').filter(l => l.view.file?.path === ${JSON.stringify(TEST_FILE)}).forEach(l => l.detach());
         return 'ok';

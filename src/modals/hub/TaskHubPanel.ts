@@ -6,7 +6,7 @@ import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
-import { OverlayShell } from '../../views/sharedUI/OverlayShell';
+import { OverlayShell, type OverlayFrame } from '../../views/sharedUI/OverlayShell';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
@@ -227,7 +227,7 @@ export class TaskHubPanel {
             panelClass: 'tv-overlay__panel--dialog task-hub',
             keymap: this.app.keymap,
             initialFocus: () => (focusField ? this.form?.focusOf(focusField) ?? null : null),
-            build: (bodyEl) => this.buildContent(bodyEl),
+            build: (bodyEl, frame) => this.buildContent(bodyEl, frame),
             onClose: () => this.teardown(),
             // The source's draft first: while the source is open the form is shut.
             beforeClose: () => ((this.source?.beforeClose() ?? true) ? this.form?.beforeClose() ?? 'close' : 'stay'),
@@ -241,7 +241,7 @@ export class TaskHubPanel {
         });
     }
 
-    private buildContent(bodyEl: HTMLElement): void {
+    private buildContent(bodyEl: HTMLElement, frame: OverlayFrame): void {
         const makeSource = this.shape.source;
         const bar = makeSource ? bodyEl.createDiv() : null;
         const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
@@ -262,6 +262,7 @@ export class TaskHubPanel {
                 plugin: this.deps.plugin,
                 index: this.deps.index,
                 requestClose: () => { void this.overlay.requestClose(); },
+                foot: frame.foot,
             });
         }
 
