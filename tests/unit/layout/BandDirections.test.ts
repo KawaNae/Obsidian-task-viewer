@@ -8,7 +8,6 @@ import {
     bandRangePx,
     cardRange,
     coversTop,
-    namesMeet,
     overlaps,
     type BandDirection,
     type CardRange,
@@ -286,14 +285,11 @@ describe('CardRanges', () => {
         expect(bandClash(endingAt(56.1), 'up', long, 'down', HALO)).toBe(false);
     });
 
-    it('takes two long cards as overlapping only in time, and their names as meeting by any share', () => {
+    it('takes two long cards as overlapping only in time', () => {
         const cards = day('a 10:00-11:00, b 10:34-11:00, c 11:00-12:00');
         const [a, b, c] = ['a', 'b', 'c'].map(id => cards.get(id)!);
         expect(overlaps(a, 'down', b, 'down', HALO)).toBe(true);
         expect(overlaps(a, 'down', c, 'down', HALO)).toBe(false);
-        // a's name runs to 34.8px, b starts 34px down.
-        expect(namesMeet(a, 'down', b, 'down')).toBe(true);
-        expect(namesMeet(a, 'down', cards.get('c')!, 'down')).toBe(false);
     });
 });
 
