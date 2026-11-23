@@ -6,10 +6,15 @@
  *
  * - `formRow(panel)`: the row of the dialog's form; in the hub, the form's
  *   (the create of a task not written yet, the question a close puts)
+ * - `footShows(panel)`: the classes of what the foot shows, in its order (the
+ *   hub's form's row, `tv-form__buttons`; its source mode's,
+ *   `task-hub__source-actions`)
  *
- * It takes the panel (`.tv-overlay__panel`, the hub's `.task-hub`) and
- * answers null when there is none.
+ * Each takes the panel (`.tv-overlay__panel`, the hub's `.task-hub`);
+ * `formRow` answers null when there is none.
  */
 export const DIALOG_ROWS = `
 const formRow = panel => panel?.querySelector(':scope > .tv-overlay__foot > .tv-form__buttons') ?? null;
+const footShows = panel => [...(panel?.querySelector(':scope > .tv-overlay__foot')?.children ?? [])]
+    .filter(el => !el.hidden && getComputedStyle(el).display !== 'none').map(el => el.className);
 `;
