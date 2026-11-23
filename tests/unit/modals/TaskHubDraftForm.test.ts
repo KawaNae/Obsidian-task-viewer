@@ -10,15 +10,25 @@ import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import type { DraftSeed } from '../../../src/services/data/TaskDraft';
 import { t } from '../../../src/i18n';
+import { refusalText } from '../../../src/services/operations/WriteAnswer';
 import { valuesOf } from '../helpers/properties';
 import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
+import type { HubHost } from '../../../src/modals/hub/HubHost';
+
+// The icon a button shows, read back from its element.
+vi.mock('obsidian', async (importOriginal) => ({
+    ...await importOriginal<typeof import('obsidian')>(),
+    setIcon: (el: FocusEl, icon: string) => { el.setAttribute('data-icon', icon); },
+}));
 
 /**
  * The hub's form on a task not written yet (`DraftHost`), in a stand-in DOM
  * (`focusDom`). Each field hands its change on to the draft and the card is
  * drawn again, and nothing is written; the create writes once, the fields
  * put in first; a close asks whether to throw away a task that was given
- * anything, and once only.
+ * anything, and once only. What the create does, and why a create was
+ * refused, is said on a line above it in the foot, which a button at the
+ * row's start shows or hides.
  */
 
 beforeAll(() => {
@@ -45,6 +55,12 @@ const SIBLING = FileParsePipeline.parse('n.md', [
 const PLACE: CreatePlace = { kind: 'childOf', taskId: 'parent' };
 const FACTS: PlaceFacts = { kind: 'childOf', parent: '親', inherits: SIBLING.cascadeContext!, inheritedFrom: SIBLING.inheritedFrom };
 
+const GONE: PlaceFacts = { kind: 'gone', inherits: {} };
+const IGNORED: PlaceFacts = {
+    kind: 'dailyNote', path: '2031-01-15.md', section: { heading: 'Tasks', level: 2, side: 'head' }, note: 'existing',
+    heading: { kind: 'none' }, ignored: true, inherits: {},
+};
+
 const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); };
 
 interface MenuItem { pick: () => void }
@@ -53,7 +69,10 @@ interface MenuItem { pick: () => void }
 async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts } = {}) {
     const doc = new FocusDoc();
     Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
+    // The panel: the form in its body, the row of buttons in its foot.
     const root = doc.root();
+    const body = root.createDiv({ cls: 'tv-overlay__body' });
+    const foot = root.createDiv({ cls: 'tv-overlay__foot' });
     const rows: NewRow[] = [];
     let answer = () => { };
     const writes: ((answer: WriteAnswer) => void)[] = [];
@@ -85,14 +104,14 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
     const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
     const host = new DraftHost(PLACE, seed, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
     const closes: CloseAnswer[] = [];
-    const form: TaskHubForm = new TaskHubForm(asEl(root), host, { app, plugin, index, foot: asEl(root), requestClose: () => { closes.push(form.beforeClose()); } });
+    const form: TaskHubForm = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot), requestClose: () => { closes.push(form.beforeClose()); } });
     const panel = { redrawPreview: vi.fn(), close: vi.fn() };
     host.attach(panel);
     await settle();
     const el = (field: Parameters<TaskHubForm['fieldElement']>[0]) => form.fieldElement(field) as unknown as FocusEl;
     const create = () => root.findAll('mod-cta')[0];
     return {
-        root, host, form, panel, places, rows, closes, menus, el, create,
+        root, body, foot, host, form, panel, places, rows, closes, menus, el, create,
         write: async (written: WriteAnswer) => { writes.at(-1)!(written); await settle(); },
         answer: async () => { answer(); await settle(); },
         press: (target: FocusEl) => target.dispatchEvent(new Event('click')),
@@ -388,5 +407,152 @@ describe('a close of a hub on a task not written yet', () => {
         await s.write({ written: true });
         expect(await answer).toBe('close');
         expect(s.panel.close).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('the line above the create of a hub on a task not written yet', () => {
+    type S = Awaited<ReturnType<typeof setUp>>;
+    const line = (s: S) => s.foot.find('task-hub__create-line')!;
+    const said = (s: S) => line(s).find('task-hub__create-says')!.children.map(c => [[...c.classes].join(' '), c.text]);
+    const toggle = (s: S) => s.foot.find('task-hub__create-toggle')!;
+    const shown = (s: S) => !(line(s) as unknown as { hidden?: boolean }).hidden;
+
+    it('says where the task goes in the foot, above the row of buttons, and nothing of it in the body', async () => {
+        const s = await setUp();
+        expect(said(s)).toEqual([['tv-form__info', t('modal.newTask.toChild', { parent: '親' })]]);
+        expect(shown(s)).toBe(true);
+        const row = s.foot.find('tv-form__buttons')!;
+        expect(s.foot.children.indexOf(line(s))).toBeLessThan(s.foot.children.indexOf(row));
+        expect(s.body.find('tv-form__says--form')!.children).toEqual([]);
+    });
+
+    it('has its button first in the row, before cancel, shown open with a chevron down', async () => {
+        const s = await setUp();
+        const row = s.foot.find('tv-form__buttons')!;
+        expect(row.children[0]).toBe(toggle(s));
+        expect(toggle(s).attrs.get('data-icon')).toBe('chevron-down');
+        expect(toggle(s).attrs.get('aria-expanded')).toBe('true');
+        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.hideLine'));
+    });
+
+    it('is hidden whole by its button, which then reads as what it would show, and shown again by it', async () => {
+        const s = await setUp();
+        s.press(toggle(s));
+        expect(shown(s)).toBe(false);
+        expect(toggle(s).attrs.get('data-icon')).toBe('chevron-up');
+        expect(toggle(s).attrs.get('aria-expanded')).toBe('false');
+        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.showLine'));
+
+        s.press(toggle(s));
+        expect(shown(s)).toBe(true);
+        expect(toggle(s).attrs.get('data-icon')).toBe('chevron-down');
+    });
+
+    it('hides an error too, its button marked in the error\'s tone while hidden only', async () => {
+        const s = await setUp({}, { facts: GONE });
+        expect(said(s)).toEqual([['tv-form__error', t('modal.newTask.gone')]]);
+        expect(toggle(s).attrs.get('data-icon')).toBe('chevron-down');
+        expect(toggle(s).classes.has('is-error')).toBe(false);
+
+        s.press(toggle(s));
+        expect(shown(s)).toBe(false);
+        expect(toggle(s).attrs.get('data-icon')).toBe('alert-triangle');
+        expect(toggle(s).classes.has('is-error')).toBe(true);
+        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.showLineError'));
+    });
+
+    it('hides a warning too, its button marked in the warning\'s tone while hidden', async () => {
+        const s = await setUp({}, { facts: IGNORED });
+        expect(said(s).map(([cls]) => cls)).toEqual(['tv-form__info', 'tv-form__warning']);
+
+        s.press(toggle(s));
+        expect(shown(s)).toBe(false);
+        expect(toggle(s).attrs.get('data-icon')).toBe('alert-triangle');
+        expect(toggle(s).classes.has('is-warning')).toBe(true);
+        expect(toggle(s).classes.has('is-error')).toBe(false);
+        expect(toggle(s).attrs.get('aria-label')).toBe(t('modal.newTask.showLineWarning'));
+    });
+
+    it('stays hidden when the place says the same again, and shows again when what it says changes', async () => {
+        const s = await setUp();
+        s.press(toggle(s));
+        s.form.sayPlace([{ at: 'form', tone: 'info', text: t('modal.newTask.toChild', { parent: '親' }) }]);
+        expect(shown(s)).toBe(false);
+
+        s.form.sayPlace([{ at: 'form', tone: 'error', text: t('modal.newTask.gone') }]);
+        expect(shown(s)).toBe(true);
+        expect(toggle(s).attrs.get('data-icon')).toBe('chevron-down');
+    });
+
+    it('says why a create was refused, shown again when it was hidden, and the place is asked again', async () => {
+        const s = await setUp();
+        s.press(s.create());
+        s.press(toggle(s));
+        await s.write({ written: false, refused: null });
+
+        expect(shown(s)).toBe(true);
+        expect(said(s)).toEqual([
+            ['tv-form__info', t('modal.newTask.toChild', { parent: '親' })],
+            ['tv-form__error', refusalText(null)],
+        ]);
+        expect(s.body.find('tv-form__says--form')!.children).toEqual([]);
+        expect(s.places.facts).toHaveBeenCalledTimes(2);
+    });
+
+    it('leaves the notice that the fields are shut while creating at the form\'s end', async () => {
+        const s = await setUp();
+        s.press(s.create());
+        expect(s.body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual([t('modal.newTask.formShut')]);
+        expect(said(s).map(([, text]) => text)).not.toContain(t('modal.newTask.formShut'));
+    });
+
+    it('has its button stand aside while a close asks, and the line stays as it is', async () => {
+        const s = await setUp();
+        s.el('name').focus();
+        s.el('name').type('電話');
+        expect(s.form.beforeClose()).toBe('stay');
+        expect(toggle(s).style.display).toBe('none');
+        expect(shown(s)).toBe(true);
+
+        s.press(s.root.find('tv-form__cancel')!);
+        expect(toggle(s).style.display).toBe('');
+    });
+
+    it('opens shown each time the hub opens', async () => {
+        const first = await setUp();
+        first.press(toggle(first));
+        expect(shown(first)).toBe(false);
+
+        const again = await setUp();
+        expect(shown(again)).toBe(true);
+        expect(toggle(again).attrs.get('data-icon')).toBe('chevron-down');
+    });
+});
+
+describe('the hub on a row', () => {
+    it('has no line above its row of buttons, nor a button to show one', () => {
+        const doc = new FocusDoc();
+        Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
+        const root = doc.root();
+        const body = root.createDiv();
+        const foot = root.createDiv();
+        const host: HubHost = {
+            task: () => SIBLING,
+            put: async () => true,
+            shut: () => null,
+            openSource: null,
+            draft: null,
+            closing: () => 'close',
+            bind: () => { },
+        };
+        const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
+        const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } } as never;
+        const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
+        const form = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot) });
+
+        expect(foot.find('task-hub__create-line')).toBeNull();
+        expect(foot.find('task-hub__create-toggle')).toBeNull();
+        form.sayWrite('refused');
+        expect(body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual(['refused']);
     });
 });

@@ -5,10 +5,11 @@
  * - On a daily note, opened as a user opens it from a Timeline's all-day
  *   empty space ("Create task", on the daily note of that day): the day is
  *   the start's date, its placeholders show what a line there inherits, it
- *   says where the line goes at the form's end, it is titled as the task it
- *   creates, and its buttons are cancel and the create. A time with no date is said to want a date where the place gives
- *   none, and a write refused keeps it open with why at the form's end and
- *   no notice. It warns of a note the views do not read, and offers no
+ *   says where the line goes on the line above the create, in the foot, it
+ *   is titled as the task it creates, and its buttons are cancel and the
+ *   create. A time with no date is said to want a date where the place gives
+ *   none, and a write refused keeps it open with why on that line and no
+ *   notice. It warns of a note the views do not read, and offers no
  *   create where the note's heading is written twice.
  * - Under a row, opened from a card's menu ("Add child task"): it says
  *   whose child the task is, shows what the parent's section gives (the
@@ -25,6 +26,8 @@
  * - Its card is one nothing is done on: a press on it, its checkbox or its
  *   link opens no menu, changes no status and opens no note.
  * - The name's list offers the vault's notes on a daily note not made yet.
+ * - The line above the create is hidden by the button at the row's start,
+ *   the foot then as tall as the row alone, and shown again by it.
  *
  * A check that something did not happen reads the state in the CLI call
  * after the one that pressed, so what the press would have set going has
@@ -123,7 +126,8 @@ const says = input => [...input.closest('.tv-form__row').nextElementSibling.chil
 const typeIn = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 /** Typed and left: the field commits. */
 const type = (input, text) => { typeIn(input, text); input.dispatchEvent(new FocusEvent('blur')); };
-const formSays = () => [...draft().querySelector('.tv-form__says--form').children].map(c => c.className + ': ' + c.textContent);
+/** What the line above the create says: where the task goes, and why a create was refused. */
+const lineSays = () => [...draft().querySelector(':scope > .tv-overlay__foot > .task-hub__create-line .task-hub__create-says').children].map(c => c.className + ': ' + c.textContent);
 const view = () => {
     const p = draft();
     if (!p) return null;
@@ -131,8 +135,8 @@ const view = () => {
     return {
         start: { date: field(${JSON.stringify(tr('modal.start'))}, 'date'), time: field(${JSON.stringify(tr('modal.start'))}, 'time') },
         due: { date: field(${JSON.stringify(tr('modal.due'))}, 'date'), time: field(${JSON.stringify(tr('modal.due'))}, 'time') },
-        form: formSays(),
-        buttons: [...formRow(p).querySelectorAll('button')].filter(shown).map(b => b.textContent),
+        line: lineSays(),
+        buttons: [...formRow(p).querySelectorAll(':scope > button:not(.tv-form__lead)')].filter(shown).map(b => b.textContent),
         titles: [...p.querySelectorAll('h2')].map(h => h.textContent),
     };
 };
@@ -158,7 +162,7 @@ const rowTask = (file, name) => {
 const openChild = async (file, name) => {
     plugin.openDraftHub({ kind: 'childOf', taskId: rowTask(file, name).id }, {});
     await until(() => nameInput() && document.activeElement === nameInput());
-    await until(() => formSays().length > 0);
+    await until(() => lineSays().length > 0);
 };
 /**
  * Record each write to the note at \`path\`: what each \`vault.process\` made of
@@ -192,7 +196,7 @@ function run<T>(body: string): T {
 interface DialogView {
     start: { date: { value: string; placeholder: string }; time: { value: string; placeholder: string } };
     due: { date: { value: string; placeholder: string }; time: { value: string; placeholder: string } };
-    form: string[];
+    line: string[];
     buttons: string[];
     titles: string[];
 }
@@ -249,7 +253,7 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
         cell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
         await pick(${JSON.stringify(tr('menu.createTaskForDailyNote'))});
         await until(() => nameInput() && document.activeElement === nameInput());
-        await until(() => formSays().length > 0);
+        await until(() => lineSays().length > 0);
     `;
 
     it('shows what a line there inherits, wants a date for a time where none is given, and says a refused write inside', async () => {
@@ -274,7 +278,7 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
             app.vault.process = async function () { app.vault.process = real; throw new Error('e2e: the disk refused'); };
             try {
                 create();
-                await until(() => formSays().some(s => s.startsWith(${JSON.stringify(ERROR)})) && !createButton().disabled);
+                await until(() => lineSays().some(s => s.startsWith(${JSON.stringify(ERROR)})) && !createButton().disabled);
                 out.refused = { open: !!draft(), name: nameInput()?.value, view: view(), notices: notices() - before, disk: await disk(${JSON.stringify(DAILY)}) };
                 create();
                 await until(() => !draft());
@@ -290,14 +294,14 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
         expect(steps.opened).toEqual({
             start: { date: { value: DAY, placeholder: 'YYYY-MM-DD' }, time: { value: '', placeholder: '09:00' } },
             due: { date: { value: '', placeholder: '2031-01-20' }, time: { value: '', placeholder: 'HH:mm' } },
-            form: [placed],
+            line: [placed],
             buttons: [tr('modal.cancel'), tr('modal.create')],
             titles: [tr('modal.newTask.title')],
         });
         expect(steps.timeOnly).toEqual({ open: true, says: [`${ERROR}: ${tr('validation.startRequiresDate')}`], focused: true, disk: DAILY_NOTE });
         const refused = steps.refused as { open: boolean; name: string; view: DialogView; notices: number; disk: string };
         expect(refused).toMatchObject({ open: true, name: '電話', notices: 0, disk: DAILY_NOTE });
-        expect(refused.view.form).toEqual([placed, `${ERROR}: ${tr('notice.notWritten', { reason: tr('notice.refusedFailed'), subject: `- [ ] 電話 @${DAY}T10:00` })}`]);
+        expect(refused.view.line).toEqual([placed, `${ERROR}: ${tr('notice.notWritten', { reason: tr('notice.refusedFailed'), subject: `- [ ] 電話 @${DAY}T10:00` })}`]);
         expect(steps.written).toEqual({
             open: false,
             notices: 0,
@@ -311,7 +315,7 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
         const steps = run<Record<string, unknown>>(`
             const open = async day => {
                 plugin.openDraftHub({ kind: 'dailyNote', date: day }, { startDate: day });
-                await until(() => nameInput() && formSays().length > 0);
+                await until(() => nameInput() && lineSays().length > 0);
             };
             const close = async () => {
                 const p = draft();
@@ -320,23 +324,23 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
             };
             await until(() => app.vault.getAbstractFileByPath(${JSON.stringify(IGNORED_DAILY)}));
             await open(${JSON.stringify(IGNORED_DAILY.replace(/\.md$/, ''))});
-            const ignored = { form: formSays(), offered: !createButton().disabled };
+            const ignored = { line: lineSays(), offered: !createButton().disabled };
             await close();
             await open(${JSON.stringify(TWICE_DAILY.replace(/\.md$/, ''))});
             type(nameInput(), '三');
             create();
-            return JSON.stringify({ ignored, twice: { form: formSays(), offered: !createButton().disabled } });
+            return JSON.stringify({ ignored, twice: { line: lineSays(), offered: !createButton().disabled } });
         `);
         const later = run<Record<string, unknown>>(`return JSON.stringify({ open: !!draft(), disk: await disk(${JSON.stringify(TWICE_DAILY)}) });`);
         expect(steps.ignored).toEqual({
-            form: [
+            line: [
                 `${INFO}: ${tr('modal.newTask.toHead', { note: IGNORED_DAILY, heading: 'Tasks' })}`,
                 `${WARNING}: ${tr('modal.newTask.ignored', { note: IGNORED_DAILY })}`,
             ],
             offered: true,
         });
         expect(steps.twice).toEqual({
-            form: [`${ERROR}: ${tr('modal.newTask.headings', { note: TWICE_DAILY, heading: 'Tasks', count: '2' })}`],
+            line: [`${ERROR}: ${tr('modal.newTask.headings', { note: TWICE_DAILY, heading: 'Tasks', count: '2' })}`],
             offered: false,
         });
         expect(later).toEqual({ open: true, disk: TWICE_NOTE });
@@ -347,18 +351,18 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
         const base = MAKE_FILE.replace(/\.md$/, '');
         const steps = run<Record<string, unknown>>(`
             plugin.openDraftHub({ kind: 'dailyNote', date: ${JSON.stringify(NEW_DAY)} }, { startDate: ${JSON.stringify(NEW_DAY)} });
-            await until(() => nameInput() && document.activeElement === nameInput() && formSays().length > 0);
-            const form = formSays();
+            await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
+            const line = lineSays();
             const input = nameInput();
             typeIn(input, '見る [[' + ${JSON.stringify(base.slice(0, -3))});
             input.setSelectionRange(input.value.length, input.value.length);
             input.dispatchEvent(new Event('input', { bubbles: true }));
             await until(() => [...document.querySelectorAll('.suggestion-container .suggestion-item')].some(el => el.textContent.includes(${JSON.stringify(base)})));
             const offered = [...document.querySelectorAll('.suggestion-container .suggestion-item')].some(el => el.textContent.includes(${JSON.stringify(base)}));
-            return JSON.stringify({ form, offered });
+            return JSON.stringify({ line, offered });
         `);
         expect(steps).toEqual({
-            form: [`${INFO}: ${tr('modal.newTask.toNew', { note: `${NEW_DAY}.md`, heading: 'Tasks' })}`],
+            line: [`${INFO}: ${tr('modal.newTask.toNew', { note: `${NEW_DAY}.md`, heading: 'Tasks' })}`],
             offered: true,
         });
         cleanUp();
@@ -382,7 +386,7 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
             await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
             await pick(${JSON.stringify(tr('menu.addChildTask'))});
             await until(() => nameInput() && document.activeElement === nameInput());
-            await until(() => formSays().length > 0);
+            await until(() => lineSays().length > 0);
             const propRow = rowOf('area');
             const chip = draft().querySelector('.task-hub__tag-chip--cascade');
             const out = {
@@ -415,7 +419,7 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
         const section = tr('modal.hub.inheritedFromSection');
         expect(steps.opened).toMatchObject({
             start: { date: { value: '', placeholder: '2031-02-01' } },
-            form: [`${INFO}: ${tr('modal.newTask.toChild', { parent: '親' })}`],
+            line: [`${INFO}: ${tr('modal.newTask.toChild', { parent: '親' })}`],
             buttons: [tr('modal.cancel'), tr('modal.create')],
             titles: [tr('modal.newTask.title')],
         });
@@ -426,6 +430,49 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
         expect(pressed).toMatchObject({ open: true, leaves: 0, activeFile: true });
         // Indented as Obsidian's settings say (a tab, Obsidian's default).
         expect(pressed.disk).toMatch(/^## Work\n- tv-start:: 2031-02-01\n- tv-color:: red\n- tags:: #sec\n- area:: lab\n- \[ \] 親\n(\t| {4})- \[ \] 子 @10:00\n$/);
+    });
+});
+
+describe('the line above the create', () => {
+    it('is hidden by the button at the row\'s start, the foot then the row alone, and shown again with what it says', async () => {
+        await writeIndexedTestFile(MAKE_FILE, MAKE_NOTE);
+        const steps = run<Record<string, Record<string, unknown>>>(`
+            await openChild(${JSON.stringify(MAKE_FILE)}, '親');
+            const p = draft();
+            const foot = p.querySelector(':scope > .tv-overlay__foot');
+            const row = formRow(p);
+            const toggle = row.querySelector(':scope > .task-hub__create-toggle');
+            const cancel = row.querySelector(':scope > .tv-form__cancel');
+            const line = foot.querySelector(':scope > .task-hub__create-line');
+            const size = () => {
+                const style = getComputedStyle(foot);
+                const around = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth);
+                return { line: shown(line), foot: foot.getBoundingClientRect().height, row: row.getBoundingClientRect().height + around };
+            };
+            const box = el => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height, radius: getComputedStyle(el).borderTopLeftRadius }; };
+            const out = {
+                opened: { ...size(), first: row.firstElementChild === toggle, toggle: box(toggle), cancel: box(cancel), label: toggle.getAttribute('aria-label') },
+            };
+            toggle.click();
+            out.hidden = { ...size(), label: toggle.getAttribute('aria-label') };
+            toggle.click();
+            out.shown = { ...size(), says: lineSays() };
+            return JSON.stringify(out);
+        `);
+        const { opened, hidden, shown } = steps;
+        expect(opened).toMatchObject({ line: true, first: true, label: tr('modal.newTask.hideLine') });
+        const toggle = opened.toggle as { width: number; height: number; radius: string };
+        const cancel = opened.cancel as { width: number; height: number; radius: string };
+        expect(toggle.height).toBeCloseTo(cancel.height, 0);
+        expect(toggle.width).toBeCloseTo(toggle.height, 0);
+        expect(toggle.radius).toBe(cancel.radius);
+        expect(opened.foot as number).toBeGreaterThan(opened.row as number + 1);
+
+        expect(hidden).toMatchObject({ line: false, label: tr('modal.newTask.showLine') });
+        expect(hidden.foot as number).toBeCloseTo(hidden.row as number, 0);
+
+        expect(shown).toMatchObject({ line: true, says: [`${INFO}: ${tr('modal.newTask.toChild', { parent: '親' })}`] });
+        expect(shown.foot as number).toBeCloseTo(opened.foot as number, 0);
     });
 });
 

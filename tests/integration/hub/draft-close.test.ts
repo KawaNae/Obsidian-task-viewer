@@ -78,7 +78,7 @@ const rowTask = name => {
 const openChild = async name => {
     plugin.openDraftHub({ kind: 'childOf', taskId: rowTask(name).id }, {});
     await until(() => nameInput() && document.activeElement === nameInput());
-    await until(() => draft().querySelector('.tv-form__says--form').children.length > 0);
+    await until(() => draft().querySelector('.task-hub__create-says').children.length > 0);
 };
 /**
  * Open the hub on the row named, then, from its card's menu, Add child task:

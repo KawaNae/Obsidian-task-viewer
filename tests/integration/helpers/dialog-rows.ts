@@ -6,9 +6,10 @@
  *
  * - `formRow(panel)`: the row of the dialog's form; in the hub, the form's
  *   (the create of a task not written yet, the question a close puts)
- * - `footShows(panel)`: the classes of what the foot shows, in its order (the
- *   hub's form's row, `tv-form__buttons`; its source mode's,
- *   `task-hub__source-actions`)
+ * - `footShows(panel)`: the classes of what the foot shows, in its order (on
+ *   a task not written yet, the line above the create,
+ *   `task-hub__create-line`; the hub's form's row, `tv-form__buttons`; its
+ *   source mode's, `task-hub__source-actions`)
  *
  * Each takes the panel (`.tv-overlay__panel`, the hub's `.task-hub`);
  * `formRow` answers null when there is none.

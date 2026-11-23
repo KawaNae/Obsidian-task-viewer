@@ -49,7 +49,8 @@ const draft = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) 
 const nameInput = () => draft()?.querySelector('.tv-form__name-section input') ?? null;
 const rowOf = label => [...draft().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const start = which => rowOf(${JSON.stringify(tr('modal.start'))}).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input').value;
-const formSays = () => [...draft().querySelector('.tv-form__says--form').children].map(c => c.className + ': ' + c.textContent);
+/** What the line above the create says: where the task goes, and why a create was refused. */
+const lineSays = () => [...draft().querySelector(':scope > .tv-overlay__foot > .task-hub__create-line .task-hub__create-says').children].map(c => c.className + ': ' + c.textContent);
 const menuTitles = () => (plugin.menuPresenter.currentMenu?.items ?? []).map(i => i.titleEl?.textContent ?? '').filter(Boolean);
 /** Pick the item titled so in the menu open now (on macOS the menu may be the native one, outside the DOM). */
 const pick = async title => {
@@ -61,8 +62,8 @@ const pick = async title => {
 /** Wait for the hub opened, its focus on the name and its place said; what it holds. */
 const opened = async () => {
     await until(() => nameInput() && document.activeElement === nameInput());
-    await until(() => formSays().length > 0);
-    return { start: { date: start('date'), time: start('time') }, form: formSays() };
+    await until(() => lineSays().length > 0);
+    return { start: { date: start('date'), time: start('time') }, line: lineSays() };
 };
 /** A Timeline on DAY, its leaf kept to be closed after. */
 const timeline = async () => {
@@ -88,7 +89,7 @@ function run<T>(body: string): T {
 
 interface Opened {
     start: { date: string; time: string };
-    form: string[];
+    line: string[];
 }
 
 /**
@@ -151,7 +152,7 @@ describe('the hub on a task not written yet opens from', () => {
         `);
         expect(steps.opened).toEqual({
             start: { date: DAY, time: steps.expected },
-            form: [`tv-form__info: ${tr('modal.newTask.toNew', { note: DAILY, heading: 'Tasks' })}`],
+            line: [`tv-form__info: ${tr('modal.newTask.toNew', { note: DAILY, heading: 'Tasks' })}`],
         });
     });
 
@@ -166,7 +167,7 @@ describe('the hub on a task not written yet opens from', () => {
         `);
         expect(steps).toEqual({
             start: { date: DAY, time: '' },
-            form: [`tv-form__info: ${tr('modal.newTask.toNew', { note: DAILY, heading: 'Tasks' })}`],
+            line: [`tv-form__info: ${tr('modal.newTask.toNew', { note: DAILY, heading: 'Tasks' })}`],
         });
     });
 
@@ -180,7 +181,7 @@ describe('the hub on a task not written yet opens from', () => {
             await pick(${JSON.stringify(tr('menu.addChildTask'))});
             return JSON.stringify(await opened());
         `);
-        expect(steps.form).toEqual([`tv-form__info: ${tr('modal.newTask.toChild', { parent: '親' })}`]);
+        expect(steps.line).toEqual([`tv-form__info: ${tr('modal.newTask.toChild', { parent: '親' })}`]);
         expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 
@@ -197,7 +198,7 @@ describe('the hub on a task not written yet opens from', () => {
             await pick(${JSON.stringify(tr('menu.addChildTask'))});
             return JSON.stringify(await opened());
         `);
-        expect(steps.form).toEqual([`tv-form__info: ${tr('modal.newTask.toChild', { parent: '親' })}`]);
+        expect(steps.line).toEqual([`tv-form__info: ${tr('modal.newTask.toChild', { parent: '親' })}`]);
         expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 });

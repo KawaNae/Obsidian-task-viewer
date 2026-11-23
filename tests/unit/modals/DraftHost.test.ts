@@ -19,7 +19,7 @@ import { t } from '../../../src/i18n';
  * the last answer is taken. A create is offered once the place has answered
  * and the task can go there; it writes the draft's row once, with no notice,
  * shuts the fields while it is under way, closes the hub once written, and
- * says why at the form's end and asks the place again once refused. A close
+ * says why above the create and asks the place again once refused. A close
  * asked for meanwhile waits for it; a refusal after the hub closed otherwise
  * is told by a notice.
  */
