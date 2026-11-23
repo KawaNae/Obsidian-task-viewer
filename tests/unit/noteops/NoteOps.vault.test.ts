@@ -6,7 +6,8 @@ import { NoteOps } from '../../../src/services/data/NoteOps';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { t } from '../../../src/i18n';
 import { refusalClause, refusalNotice } from '../../../src/services/core/RefusalClause';
-import type { DestinationAsk, DestinationFacts, SendDestination } from '../../../src/services/data/NoteOps';
+import type { DestinationAsk, DestinationFacts } from '../../../src/services/data/NoteOps';
+import type { NoteDestination } from '../../../src/services/data/NotePlaces';
 
 /**
  * The send operation as the UI asks for it (`NoteOps`): what its dialog
@@ -429,7 +430,7 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
 
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
 
-function NEW(path: string): SendDestination {
+function NEW(path: string): NoteDestination {
     return { note: { kind: 'new', path }, spot: SECTION };
 }
 

@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from '../mocks/obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { widgetOver } from '../helpers/timerRig';
-import { NoteOps, type SendDestination } from '../../../src/services/data/NoteOps';
+import { NoteOps } from '../../../src/services/data/NoteOps';
+import type { NoteDestination } from '../../../src/services/data/NotePlaces';
 import { TimerPersistence } from '../../../src/timer/TimerPersistence';
 import type { RecordMode, TimerState } from '../../../src/timer/TimerState';
 import { DEFAULT_SETTINGS } from '../../../src/types';
@@ -28,7 +29,7 @@ const store = new Map<string, string>();
 };
 const at = (h: number, m: number) => new Date(2026, 8, 30, h, m, 0);
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
-const NEW = (name: string): SendDestination => ({ note: { kind: 'new', path: `${name}.md` }, spot: SECTION });
+const NEW = (name: string): NoteDestination => ({ note: { kind: 'new', path: `${name}.md` }, spot: SECTION });
 
 let live: VaultSession | undefined;
 afterEach(() => {
