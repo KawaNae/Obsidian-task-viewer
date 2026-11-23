@@ -107,7 +107,7 @@ const BAND_EDGE_CLEAR_OF_GLYPHS_PX = 1;
  * against the halo of a band over it is not known here, so a band over it
  * by 1px or more hides it.
  */
-export function nameRangePx(card: CardRange, dir: BandDirection): PxRange {
+function nameRangePx(card: CardRange, dir: BandDirection): PxRange {
     if (card.short) {
         const [top, bottom] = bandRangePx(card, dir);
         return [top + BAND_EDGE_CLEAR_OF_GLYPHS_PX, bottom - BAND_EDGE_CLEAR_OF_GLYPHS_PX];
@@ -169,15 +169,4 @@ export function overlaps(
     haloPx: number,
 ): boolean {
     return timesOverlap(a, b) || bandClash(a, aDir, b, bDir, haloPx);
-}
-
-/**
- * Whether two cards' names lie at one height: by any share between two
- * longer cards, and by 1px or more where one shows its name in a band.
- */
-export function namesMeet(a: CardRange, aDir: BandDirection, b: CardRange, bDir: BandDirection): boolean {
-    const ra = nameRangePx(a, aDir);
-    const rb = nameRangePx(b, bDir);
-    if (!a.short && !b.short) return Math.min(ra[1], rb[1]) - Math.max(ra[0], rb[0]) > 0;
-    return meetByPx(ra, rb);
 }
