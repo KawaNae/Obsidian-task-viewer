@@ -5,6 +5,7 @@ import type { CreatePlace, CreatePlaces, PlaceFacts } from '../../../src/service
 import type { SourceHost } from '../../../src/modals/hub/TaskHubSource';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
+import { t } from '../../../src/i18n';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 import { FocusDoc, type FocusEl } from '../helpers/focusDom';
@@ -170,6 +171,13 @@ describe('the hub on a task not written yet', () => {
         expect(draws(r.deps).every(draw => draw.content === '下書き' && draw.inert === true)).toBe(true);
     });
 
+    it('is titled as the task it creates, above the body', async () => {
+        const r = rig();
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places });
+
+        expect(body.head!.children.map(child => child.text)).toEqual([t('modal.newTask.title')]);
+    });
+
     it('draws the card again as the draft is handed a change, once the field is done', async () => {
         const r = rig();
         await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places });
@@ -195,6 +203,13 @@ describe('the hub on a task not written yet', () => {
 });
 
 describe('the hub on a row', () => {
+    it('has no title: its card names the task', async () => {
+        const r = rig();
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
+
+        expect(body.head!.children).toHaveLength(0);
+    });
+
     it('builds the source mode on the row, in the panel\'s slots', async () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1', content: '元の名前' }), r.deps);

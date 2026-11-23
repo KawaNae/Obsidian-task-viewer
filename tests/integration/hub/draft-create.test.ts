@@ -5,8 +5,8 @@
  * - On a daily note, opened as a user opens it from a Timeline's all-day
  *   empty space ("Create task", on the daily note of that day): the day is
  *   the start's date, its placeholders show what a line there inherits, it
- *   says where the line goes at the form's end, and its only button is the
- *   create. A time with no date is said to want a date where the place gives
+ *   says where the line goes at the form's end, it is titled as the task it
+ *   creates, and its buttons are cancel and the create. A time with no date is said to want a date where the place gives
  *   none, and a write refused keeps it open with why at the form's end and
  *   no notice. It warns of a note the views do not read, and offers no
  *   create where the note's heading is written twice.
@@ -133,7 +133,7 @@ const view = () => {
         due: { date: field(${JSON.stringify(tr('modal.due'))}, 'date'), time: field(${JSON.stringify(tr('modal.due'))}, 'time') },
         form: formSays(),
         buttons: [...formRow(p).querySelectorAll('button')].filter(shown).map(b => b.textContent),
-        titles: p.querySelectorAll('h2').length,
+        titles: [...p.querySelectorAll('h2')].map(h => h.textContent),
     };
 };
 const createButton = () => formRow(draft()).querySelector(':scope > .mod-cta');
@@ -194,7 +194,7 @@ interface DialogView {
     due: { date: { value: string; placeholder: string }; time: { value: string; placeholder: string } };
     form: string[];
     buttons: string[];
-    titles: number;
+    titles: string[];
 }
 
 /**
@@ -291,8 +291,8 @@ describe('the hub on a task not written yet, on a daily note (a Timeline\'s all-
             start: { date: { value: DAY, placeholder: 'YYYY-MM-DD' }, time: { value: '', placeholder: '09:00' } },
             due: { date: { value: '', placeholder: '2031-01-20' }, time: { value: '', placeholder: 'HH:mm' } },
             form: [placed],
-            buttons: [tr('modal.create')],
-            titles: 0,
+            buttons: [tr('modal.cancel'), tr('modal.create')],
+            titles: [tr('modal.newTask.title')],
         });
         expect(steps.timeOnly).toEqual({ open: true, says: [`${ERROR}: ${tr('validation.startRequiresDate')}`], focused: true, disk: DAILY_NOTE });
         const refused = steps.refused as { open: boolean; name: string; view: DialogView; notices: number; disk: string };
@@ -416,7 +416,8 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
         expect(steps.opened).toMatchObject({
             start: { date: { value: '', placeholder: '2031-02-01' } },
             form: [`${INFO}: ${tr('modal.newTask.toChild', { parent: '親' })}`],
-            buttons: [tr('modal.create')],
+            buttons: [tr('modal.cancel'), tr('modal.create')],
+            titles: [tr('modal.newTask.title')],
         });
         expect(steps.color).toEqual({ placeholder: 'red', from: section });
         // The inherited value is shown in the field, as a row's inherited property is.

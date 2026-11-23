@@ -112,6 +112,8 @@ class OneAtATime {
  * プレビューのみに縮退。ソースモードを作る関数を入口が渡したときだけ、
  * プレビューの上の切り替えで、カードの代わりに行と部分木のソースを編集
  * できる（TaskHubSource）。渡さなければ切り替えの bar も作らない。
+ * まだ書いていないタスクのハブには、殻の上の場所に題「新しいタスクを作成」を
+ * 出す（子を作るときも同じ題）。今あるタスクのハブはカードを題とし、題を出さない。
  * 開く入口は2つある。今あるタスクのハブ（`openRowHub`）は、今あるタスクの
  * ハブどうしで同時に1つだけ開く（`OneAtATime`）。まだ書いていないタスクの
  * ハブ（`openDraftHub`）は、その規則に入らず、開いているハブの上に重なって
@@ -242,6 +244,10 @@ export class TaskHubPanel {
     }
 
     private buildContent(bodyEl: HTMLElement, frame: OverlayFrame): void {
+        // A task not written yet is named for what the hub does with it; a
+        // row's hub has its card for a title.
+        if (this.host.draft) frame.head.createEl('h2', { text: t('modal.newTask.title'), cls: 'tv-form__title' });
+
         const makeSource = this.shape.source;
         const bar = makeSource ? bodyEl.createDiv() : null;
         const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
