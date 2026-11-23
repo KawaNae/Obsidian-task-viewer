@@ -146,8 +146,9 @@ export class TimelineSectionRenderer {
     /**
      * The lengths of a day's column as laid out now, for TaskLayout to tell
      * which cards a short card's name band lies over and how wide the cards
-     * put side by side are: the width the cards' percentages are of (0
-     * while the column has no width, not laid out), where a band's halo
+     * put side by side are: the width the cards' percentages are of, the
+     * column's padding box less the lane's inset, unrounded (0 while the
+     * column has no width, not laid out), where a band's halo
      * starts in from a card's left (the band's notch less the halo's
      * reach), how far the halo reaches past the top or bottom of a card or
      * its band, and how far it reaches left and right of a card, which the
@@ -158,8 +159,19 @@ export class TimelineSectionRenderer {
         const style = getComputedStyle(col);
         const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
         const haloInlinePx = px('--task-card-halo-inline');
+        // The cards are placed absolutely in the column (`position:
+        // relative`), so their 100% is the column's padding box, as wide as
+        // laid out, a fraction of a px included. clientWidth rounds it to a
+        // whole px, and a column put side by side at the narrowest its times
+        // show whole in could then be drawn up to half a px narrower than
+        // laid out here. The computed width is the box's laid-out width,
+        // which no transform scales; it is the border box or the content box
+        // by `box-sizing`, and 0 for a column not laid out (`auto`).
+        const paddingBoxPx = style.getPropertyValue('box-sizing') === 'content-box'
+            ? px('width') + px('padding-left') + px('padding-right')
+            : px('width') - px('border-left-width') - px('border-right-width');
         return {
-            widthPx: Math.max(0, col.clientWidth - LANE_INSET_PX),
+            widthPx: Math.max(0, paddingBoxPx - LANE_INSET_PX),
             bandInsetPx: px('--task-card-overflow-ext-offset') - haloInlinePx,
             haloBlockPx: px('--task-card-halo-block'),
             haloInlinePx,
@@ -192,8 +204,10 @@ export class TimelineSectionRenderer {
     /**
      * The watched column's width changed, or it was first laid out: measure
      * it again and, if the lane is another width, place every column's cards
-     * again. A lane of the width the draw measured writes nothing. The width
-     * a card shows its times in is kept once measured: a column's width does
+     * again. A lane of the width the draw measured writes nothing: the width
+     * is read off the column as laid out, so one layout reads one width,
+     * fractions and all, and placing the cards leaves the column as wide.
+     * The width a card shows its times in is kept once measured: a column's width does
      * not change the font its cards are drawn in, and this runs again and
      * again while a pane's edge is dragged. A column drawn before it was laid
      * out measured none, so it is measured as the column first has a width.
