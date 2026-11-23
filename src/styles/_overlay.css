@@ -205,6 +205,18 @@ body:not(.theme-dark) .tv-overlay {
     padding: 0 24px;
 }
 
+/* In the box the title stands on the close button's row, its line centred
+   on the button (10px from the top, 28px tall), and leaves the button its
+   room at the end (10px + 28px + a gap). A dialog with no title keeps the
+   top padding that clears the button for the body */
+.tv-overlay__panel--dialog:has(> .tv-overlay__head > :not([hidden])) {
+    padding-top: 12px;
+}
+
+.tv-overlay__panel--dialog .tv-overlay__head {
+    padding-inline-end: 48px;
+}
+
 .tv-overlay__panel--dialog .tv-overlay__foot {
     padding: 12px 24px;
     border-top: 1px solid var(--tv-border);
