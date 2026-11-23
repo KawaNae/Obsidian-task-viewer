@@ -36,6 +36,11 @@
     --tv-bg-input-hover-base: var(--tv-interactive-hover);
     --tv-bg-input: var(--tv-bg-input-base);
     --tv-bg-input-hover: var(--tv-bg-input-hover-base);
+
+    /* The home indicator's inset, less what of the window's bottom the
+       on-screen keyboard covers: no room is kept for the indicator under a
+       keyboard (--tv-keyboard-overlap, KeyboardAwareContainer) */
+    --tv-safe-bottom-uncovered: max(0px, env(safe-area-inset-bottom, 0px) - var(--tv-keyboard-overlap, 0px));
 }
 
 /* Light: desktop の interactive-normal / interactive-hover は白系
@@ -190,7 +195,7 @@ body:not(.theme-dark) .tv-overlay {
 
 .is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__body {
     margin: 0;
-    padding: 4px 24px calc(34px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 24px calc(34px + var(--tv-safe-bottom-uncovered));
 }
 
 /* The dialog's title and its row of buttons stand on the body's sides, at
@@ -220,10 +225,14 @@ body:not(.theme-dark) .tv-overlay {
     padding: 4px 24px 0;
 }
 
-/* On the phone the home indicator's inset goes under the row too. The
-   sheet's body has a padding of its own, outweighing the box's */
+/* On the phone the row ends the sheet at the window's bottom, and the room
+   under it is for that bottom: as much as the row has on its right (24px),
+   or the home indicator's inset where that is more. While the keyboard
+   covers the bottom, what it covers comes off, and only the room the row has
+   above it (12px) is left. The sheet's body has a padding of its own,
+   outweighing the box's */
 .is-phone .tv-overlay .tv-overlay__panel--dialog .tv-overlay__foot {
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(12px, max(24px, env(safe-area-inset-bottom, 0px)) - var(--tv-keyboard-overlap, 0px));
 }
 
 .is-phone .tv-overlay .tv-overlay__panel--dialog:has(> .tv-overlay__foot > :not([hidden])) .tv-overlay__body {
@@ -268,7 +277,7 @@ body:not(.theme-dark) .tv-overlay {
     background: transparent;
     border-radius: 0;
     margin: 0 16px 16px;
-    padding: 4px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 0 calc(8px + var(--tv-safe-bottom-uncovered));
 }
 
 .is-phone .tv-overlay .tv-overlay__handle {
