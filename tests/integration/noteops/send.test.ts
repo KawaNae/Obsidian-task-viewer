@@ -77,7 +77,7 @@ describe('sending a row', () => {
         deleteTestFile(`${NEW}.md`);
         await writeIndexedTestFile(SRC, ['# 送り元', '- [ ] 設計 @2026-09-29 ^e2e', '    - [ ] 下書き', '    メモ', '- [ ] 残る', ''].join('\n'));
 
-        const sent = send('設計', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION },
+        const sent = send('設計', { note: { kind: 'new', path: `${NEW}.md` }, spot: SECTION },
             [{ key: 'tv-color', to: 'frontmatter', lines: ['tv-color: "blue"'], from: [] }]);
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
@@ -92,7 +92,7 @@ describe('sending a row', () => {
         await writeIndexedTestFile(DST, ['---', 'tv-color: "red"', '---', '# 送り先', '', '## Tasks', '- [ ] 前からある', ''].join('\n'));
         await writeIndexedTestFile(SRC, ['1. [ ] 手順 ^s1', '    - [ ] 子', '2. [ ] 次', ''].join('\n'));
 
-        const sent = send('手順', { note: { kind: 'existing', path: DST }, section: SECTION }, [
+        const sent = send('手順', { note: { kind: 'existing', path: DST }, spot: SECTION }, [
             { key: 'tv-color', to: 'frontmatter', lines: ['tv-color: "blue"'], from: [] },
             { key: 'tags', to: 'frontmatter', lines: ['tags:', '  - e2e'], from: [] },
         ]);
@@ -112,7 +112,7 @@ describe('sending a row', () => {
             const preview = await plugin.getNoteOps().previewSend([task.id]);
             return JSON.stringify(preview.candidates);
         })()`) as unknown[];
-        const sent = send('値', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION }, candidates);
+        const sent = send('値', { note: { kind: 'new', path: `${NEW}.md` }, spot: SECTION }, candidates);
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
         expect(readTestFile(`${NEW}.md`)).toBe(['---', 'tv-color:', '---', '- area::', "- sq:: 'abc'", '- id:: "123"', '', '## Tasks', '- [ ] 値', ''].join('\n'));
@@ -122,7 +122,7 @@ describe('sending a row', () => {
     it('to a heading of its own note: carried in one write, and not told', async () => {
         await writeIndexedTestFile(SRC, ['- [ ] 動く', '    - [ ] 子', '## Done', '- [x] 済み', ''].join('\n'));
 
-        const sent = send('動く', { note: { kind: 'existing', path: SRC }, section: { ...SECTION, heading: 'Done' } });
+        const sent = send('動く', { note: { kind: 'existing', path: SRC }, spot: { ...SECTION, heading: 'Done' } });
 
         expect(sent.result).toEqual({ kind: 'done', note: SRC });
         expect(sent.notices).toEqual([]);
@@ -135,7 +135,7 @@ describe('sending a row', () => {
 
         // The note the row came from is saved from outside at the moment
         // its write comes, after the new note is made.
-        const sent = send('取り消す', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION }, [], `
+        const sent = send('取り消す', { note: { kind: 'new', path: `${NEW}.md` }, spot: SECTION }, [], `
             const process = app.vault.process;
             app.vault.process = async function (file, fn, ...rest) {
                 if (file.path === ${JSON.stringify(SRC)}) {
@@ -235,7 +235,7 @@ describe('sending a row a timer runs on', () => {
         open = timer.id;
         expect(readTestFile(SRC)).toContain(`^${timer.tail}`);
 
-        const sent = send('計る', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION });
+        const sent = send('計る', { note: { kind: 'new', path: `${NEW}.md` }, spot: SECTION });
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
         expect(timerFile(timer.id)).toBe(`${NEW}.md`);
@@ -258,7 +258,7 @@ describe('sending a row a timer runs on', () => {
         open = timer.id;
         const before = readTestFile(SRC);
 
-        const sent = send('続き', { note: { kind: 'new', path: `${NEW}.md` }, section: SECTION });
+        const sent = send('続き', { note: { kind: 'new', path: `${NEW}.md` }, spot: SECTION });
 
         expect(sent.result.kind).toBe('not-done');
         expect(sent.notices).toHaveLength(1);

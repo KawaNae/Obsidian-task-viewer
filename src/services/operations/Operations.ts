@@ -397,7 +397,7 @@ export class Operations {
                 logWarn(`[Operations] send: a note to make holds rows already: to=${to.path}`);
                 return { kind: 'not-done', refused: null };
             }
-            logInfo(`[send] to=${to.path}#${to.section.heading}${to.create ? ' (new)' : ''} rows=${sent.map(({ task }) => task.id).join(',')}`);
+            logInfo(`[send] to=${to.path}${to.spot === 'end' ? ' (end)' : `#${to.spot.heading}`}${to.create ? ' (new)' : ''} rows=${sent.map(({ task }) => task.id).join(',')}`);
             const defs = this.settings.statusDefinitions;
             const outcome = await this.repository.send(sent.map(({ task, row }) => ({
                 file: task.file,

@@ -202,8 +202,8 @@ export class SendDialog {
             error('note', nameError(facts.why));
         } else if (facts?.kind === 'ambiguous') {
             error('note', t('modal.noteAmbiguous', { name: facts.name, count: String(facts.files.length), notes: facts.files.map(file => file.path).join(', ') }));
-        } else if (note && note.heading.kind === 'many') {
-            error('heading', t('modal.send.headings', { note: note.path, heading: note.to.section.heading, count: String(note.heading.count) }));
+        } else if (note && note.to.spot !== 'end' && note.heading.kind === 'many') {
+            error('heading', t('modal.send.headings', { note: note.path, heading: note.to.spot.heading, count: String(note.heading.count) }));
         }
         this.drafts().forEach(({ check }, i) => {
             if (check?.kind === 'refused') error(`row:${i}`, draftError(check.reason));
@@ -463,10 +463,17 @@ export function noteText(facts: NoteFacts): { text: string; tone: Tone }[] {
     }
 }
 
-/** Where in the note a send to `facts` puts the rows, in one sentence, by where they go in the section (its side). */
+/**
+ * Where in the note a send to `facts` puts the rows, in one sentence, by
+ * where they go in the section (its side). The fields name a section
+ * always (`NoteOps.destinationFacts`), so a send to the note's end has no
+ * sentence here.
+ */
 export function headingText(facts: NoteFacts): { text: string; tone: Tone } | null {
-    const vars = { heading: facts.to.section.heading };
-    const end = facts.to.section.side === 'end';
+    const section = facts.to.spot;
+    if (section === 'end') return null;
+    const vars = { heading: section.heading };
+    const end = section.side === 'end';
     switch (facts.kind) {
         case 'new':
             return { text: t('modal.send.toNew', vars), tone: 'info' };

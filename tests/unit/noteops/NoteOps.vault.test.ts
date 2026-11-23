@@ -155,7 +155,7 @@ describe('destinationFacts', () => {
             by: 'path',
             folderMade: 'Projects/web',
             path: 'Projects/web/設計.md',
-            to: { note: { kind: 'new', path: 'Projects/web/設計.md' }, section: { heading: 'Tasks', level: 2, side: 'head' } },
+            to: { note: { kind: 'new', path: 'Projects/web/設計.md' }, spot: { heading: 'Tasks', level: 2, side: 'head' } },
             heading: { kind: 'none' },
             headings: [],
             present: [],
@@ -195,7 +195,7 @@ describe('destinationFacts', () => {
         expect(one.kind === 'existing' && one.headings).toEqual(['Top', 'Tasks', 'Done', 'Done']);
 
         expect(await facts(['- [ ] A', ''], { note: typed('Plan'), heading: ' Later ' }, other))
-            .toMatchObject({ to: { section: { heading: 'Later' } }, heading: { kind: 'none' } });
+            .toMatchObject({ to: { spot: { heading: 'Later' } }, heading: { kind: 'none' } });
         expect(await facts(['- [ ] A', ''], { note: typed('Plan'), heading: 'done' }, other))
             .toMatchObject({ heading: { kind: 'many', count: 2 } });
     });
@@ -270,7 +270,7 @@ describe('send', () => {
     it('within the rows\' own note: not told', async () => {
         const note = await open(['- [ ] A', '## Tasks', '']);
 
-        await note.ops.send({ rows: [note.row('A')], to: { note: { kind: 'existing', path: FILE }, section: SECTION }, values: [] });
+        await note.ops.send({ rows: [note.row('A')], to: { note: { kind: 'existing', path: FILE }, spot: SECTION }, values: [] });
 
         expect(Notice.messages).toEqual([]);
     });
@@ -365,7 +365,7 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
 
     it('the note sent to turned away: not told, and why answered', async () => {
         const note = await open(['- [ ] A', ''], { 'Plan.md': ['## Tasks', '### tasks', ''] });
-        const to = { note: { kind: 'existing' as const, path: 'Plan.md' }, section: SECTION };
+        const to = { note: { kind: 'existing' as const, path: 'Plan.md' }, spot: SECTION };
 
         const sent = await note.ops.send({ rows: [note.row('A')], to, values: [] }, quiet);
 
@@ -430,7 +430,7 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
 
 function NEW(path: string): SendDestination {
-    return { note: { kind: 'new', path }, section: SECTION };
+    return { note: { kind: 'new', path }, spot: SECTION };
 }
 
 /** A note field holding `text`, nothing picked. */

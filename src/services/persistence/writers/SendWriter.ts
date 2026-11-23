@@ -5,12 +5,11 @@ import { Outline } from '../../parsing/utils/Outline';
 import { PropertyKey } from '../../parsing/utils/PropertyKey';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { carryTo, putNumbered, subtreeBlock } from '../Carry';
-import type { Section } from '../Destination';
 import {
     editLines, fileGone, readInLine, splitLines, takeBack, withRefused,
     type LineDraft, type MarkedLine, type Refusal, type RowRef, type RowTarget, type TakeBack, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
-import { createNote, noteSpot } from '../Notes';
+import { createNote, noteSpot, type NoteSpot } from '../Notes';
 import { replaceSubtree } from '../ReplaceSubtree';
 import { firingTrials, type CompletionFire, type FiringOutcome } from '../FiringTrials';
 import type { SubtreeReplacement } from '../TaskOps';
@@ -42,12 +41,12 @@ export interface NoteValue {
     lines: readonly string[];
 }
 
-/** Where a send goes: a note, made by the send when `create` says so, and the section of it. */
+/** Where a send goes: a note, made by the send when `create` says so, and where in it, a section or the end. */
 export interface SendTo {
     path: string;
     /** No note is at `path`, and the send makes one. */
     create: boolean;
-    section: Section;
+    spot: NoteSpot;
     /** Values to write into the note, each only where the note does not say its key already ({@link saidIn}). */
     values: readonly NoteValue[];
 }
@@ -122,8 +121,8 @@ interface Placed {
 type Rehearsed = ReadonlyArray<{ lines: readonly string[]; block: readonly PlacedLine[] }>;
 
 /**
- * The writes of a send: rows and their subtrees taken to a section of a note
- * (the order of the writes, and what is taken back: `send`).
+ * The writes of a send: rows and their subtrees taken to a section of a note,
+ * or to its end (the order of the writes, and what is taken back: `send`).
  */
 export class SendWriter {
     constructor(
@@ -133,7 +132,8 @@ export class SendWriter {
     ) { }
 
     /**
-     * Send `rows` to the section `to` names of its note: each row with the
+     * Send `rows` to where `to.spot` says in its note, a section or the
+     * end: each row with the
      * note it stands in, in the order they are to land in — the order they
      * stand in, note by note — none in another's subtree.
      *
@@ -143,10 +143,11 @@ export class SendWriter {
      * hub's source mode fires it), and what that left of the row and its
      * subtree is what is sent, `==>` lines and all, to fire at its next
      * completion where it lands. The note gets the rows in their order: the
-     * first where `Placement.into` puts lines in the section, the heading
-     * made when the note has none (`Notes.sectionSpot`), each after
+     * first where `Notes.noteSpot` puts lines — where `Placement.into` puts
+     * them in the section, the heading made when the note has none, or where
+     * `Placement.end` puts lines appended to the note — each after
      * it just past the one before, as its sibling. A note with more than one
-     * heading by the name takes none of them (`headings`).
+     * heading by the section's name takes none of them (`headings`).
      *
      * The rows of the note itself are carried within it (`carryTo`), in the
      * note's one write. When they are all there is, that write is the whole
@@ -357,7 +358,7 @@ export class SendWriter {
      * ({@link saidIn}), the frontmatter's keys and then the root's lines
      * at the root's head (`Placement.rootHead`: past the property lines
      * there, or below a label above them), and put the rows `items` makes
-     * in the section, in their order (see {@link send}). Answers what the
+     * where `to.spot` says, in their order (see {@link send}). Answers what the
      * write leaves, or null when it is refused, the reason said through
      * the session.
      */
@@ -387,7 +388,7 @@ export class SendWriter {
             }
             let spot: Spot;
             if (k === 0) {
-                const first = noteSpot(draft, to.section, head);
+                const first = noteSpot(draft, to.spot, head);
                 if ('kind' in first) {
                     session.refuse(first);
                     return null;
