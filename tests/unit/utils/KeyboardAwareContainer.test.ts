@@ -350,6 +350,39 @@ describe('KeyboardAwareContainer', () => {
             expect(panel.style.height).toBe('400px');
         });
 
+        it('locks, pads and puts back afresh on a second opening of the keyboard, from where the body stands then', () => {
+            const { win, container, panel, kac } = setup({ vvHeight: 800 });
+            const input = new MockInput(750);
+            container.ownerDocument.activeElement = input;
+            container.adopt(input);
+            panel.scrollTop = 5;
+            kac.attach();
+
+            win.visualViewport!.height = 500; // overshoot 260
+            win.visualViewport!.dispatch('resize');
+            win.visualViewport!.height = 800;
+            win.visualViewport!.dispatch('resize');
+            expect(panel.lastScrollTo).toEqual({ top: 5, behavior: 'instant' });
+
+            panel.scrollTop = 40; // scrolled with the keyboard closed
+            panel.rectHeight = 300; // the body laid out shorter meanwhile
+            panel.style.paddingBottom = '8px';
+            win.visualViewport!.height = 500;
+            win.visualViewport!.dispatch('resize');
+
+            expect(panel.style.height).toBe('300px');
+            expect(panel.style.maxHeight).toBe('300px');
+            expect(panel.style.paddingBottom).toBe('260px');
+
+            win.visualViewport!.height = 800;
+            win.visualViewport!.dispatch('resize');
+
+            expect(panel.style.height).toBe('');
+            expect(panel.style.maxHeight).toBe('');
+            expect(panel.style.paddingBottom).toBe('8px');
+            expect(panel.lastScrollTo).toEqual({ top: 40, behavior: 'instant' });
+        });
+
         it('adds to the padding across repeated measures without locking the height again', () => {
             const { win, container, panel, kac } = setup({ vvHeight: 800 });
             const input = new MockInput(750);
