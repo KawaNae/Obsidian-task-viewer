@@ -321,9 +321,8 @@ export class OverlayShell implements ClosableOverlay {
         opts.build(body, { head, foot });
 
         // Keyboard awareness (mobile)
-        this.kbAware = new KeyboardAwareContainer(root, hostWin);
+        this.kbAware = new KeyboardAwareContainer(root, hostWin, body);
         this.kbAware.attach();
-        this.kbAware.scrollTarget = body;
 
         // Anchored: position panel near anchor
         if (opts.mode === 'anchored') {

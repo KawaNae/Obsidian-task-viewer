@@ -32,8 +32,9 @@ export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
  * where the body ends, not from the layout. When the keyboard closes, the
  * focus leaves the fields, or the container detaches, the height and the
  * padding are put back, and the body's scrollTop goes back where it stood
- * as the keyboard opened, whoever scrolled it meanwhile (this, or the
- * browser revealing a field focused by script).
+ * as the keyboard opened (or as the container attached over an open
+ * keyboard), whoever scrolled it meanwhile (this, or the browser revealing
+ * a field focused by script).
  *
  * A field is an input, a textarea, or an editable element
  * (contenteditable: a CodeMirror editor's content). What is typed at is
@@ -90,11 +91,16 @@ export class KeyboardAwareContainer {
     private settling = false;
     /** Counted up on each detach, so a wait begun before it measures nothing. */
     private attachment = 0;
-    scrollTarget: HTMLElement | null = null;
 
+    /**
+     * `scrollTarget` is the body that scrolls in the container. It is given
+     * here, before `attach`, so a keyboard already open as the container
+     * attaches has the body's scrollTop kept from the start.
+     */
     constructor(
-        private container: HTMLElement,
-        private win: Window,
+        private readonly container: HTMLElement,
+        private readonly win: Window,
+        private readonly scrollTarget: HTMLElement,
     ) {}
 
     attach(): void {
@@ -174,10 +180,10 @@ export class KeyboardAwareContainer {
                 ` ih=${this.win.innerHeight}`);
         }
 
-        // Where the body stood as the keyboard opened is where it goes back
-        // to: a field focused afterwards may have the browser scroll the
+        // Where the body stood as the keyboard opened (the attach, for a
+        // keyboard already open) is where it goes back to: a field focused afterwards may have the browser scroll the
         // body to it before it is measured, the body having shrunk.
-        if (this.keyboardOpen && !wasOpen && this.savedScrollTop === null && this.scrollTarget) {
+        if (this.keyboardOpen && !wasOpen && this.savedScrollTop === null) {
             this.savedScrollTop = this.scrollTarget.scrollTop;
         }
 
@@ -257,8 +263,6 @@ export class KeyboardAwareContainer {
      */
     private ensureAboveKeyboard(target: HTMLElement): void {
         const panel = this.scrollTarget;
-        if (!panel) return;
-
         const kbTop = keyboardTop(this.win);
         const panelRect = panel.getBoundingClientRect();
         const limit = Math.min(kbTop, panelRect.bottom);
@@ -298,7 +302,6 @@ export class KeyboardAwareContainer {
     /** Put the body's height, padding and scroll back where they were before the keyboard moved them. */
     private restore(): void {
         const panel = this.scrollTarget;
-        if (!panel) return;
         if (this.savedStyle) {
             panel.style.height = this.savedStyle.height;
             panel.style.maxHeight = this.savedStyle.maxHeight;
@@ -350,7 +353,6 @@ export class KeyboardAwareContainer {
         this.keyboardOpen = false;
         this.settling = false;
         this.attachment++;
-        this.scrollTarget = null;
     }
 }
 

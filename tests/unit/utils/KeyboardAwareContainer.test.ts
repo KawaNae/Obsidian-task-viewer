@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { KeyboardAwareContainer } from '../../../src/utils/KeyboardAwareContainer';
-import { untrackAllKeyboards } from '../../../src/utils/KeyboardState';
+import { trackKeyboard, untrackAllKeyboards } from '../../../src/utils/KeyboardState';
 
 /**
  * KeyboardAwareContainer's `activeInput()`/focus handler do
@@ -171,8 +171,7 @@ function setup(opts: { withVisualViewport?: boolean; vvHeight?: number } = {}) {
     }
     const container = new MockContainer();
     const panel = new MockPanel();
-    const kac = new KeyboardAwareContainer(container as any, win as any);
-    kac.scrollTarget = panel as any;
+    const kac = new KeyboardAwareContainer(container as any, win as any, panel as any);
     return { win, container, panel, kac };
 }
 
@@ -189,8 +188,7 @@ function setupAnimated(fieldBottom: number, ...animations: MockAnimation[]) {
     const input = new MockInput(fieldBottom);
     container.adopt(input);
     container.ownerDocument.activeElement = input;
-    const kac = new KeyboardAwareContainer(container as any, win as any);
-    kac.scrollTarget = panel as any;
+    const kac = new KeyboardAwareContainer(container as any, win as any, panel as any);
     kac.attach();
     const openKeyboard = () => {
         win.visualViewport!.height = 500; // keyboardTop 500
@@ -587,6 +585,29 @@ describe('KeyboardAwareContainer', () => {
             expect(panel.lastScrollTo).toEqual({ top: 0, behavior: 'instant' });
         });
 
+        it('puts the body back where it stood as the container attached over an open keyboard, when the first focus scrolled it', () => {
+            const { win, container, panel, kac } = setup({ withVisualViewport: false });
+            trackKeyboard(win as any);
+            win.dispatch('keyboardDidShow', { keyboardHeight: 336 }); // typing elsewhere before the dialog opens
+            panel.rectBottom = 460; // the body, shrunk above the keyboard
+            panel.scrollHeight = 600;
+            const input = new MockInput(800);
+            container.adopt(input);
+            kac.attach();
+
+            // the first focus has the browser scroll the body to the field
+            container.ownerDocument.activeElement = input;
+            panel.scrollTop = 32;
+            input.bottom = 470;
+            container.dispatch('focusin', { target: input });
+            vi.advanceTimersByTime(50);
+            expect(panel.lastScrollBy).toEqual({ top: 20, behavior: 'instant' });
+
+            win.dispatch('keyboardDidHide');
+
+            expect(panel.lastScrollTo).toEqual({ top: 0, behavior: 'instant' });
+        });
+
         it('restores 200ms after focus leaves the container with no input focused', () => {
             const { win, container, panel, kac } = setup({ vvHeight: 800 });
             panel.scrollTop = 7;
@@ -786,7 +807,6 @@ describe('KeyboardAwareContainer', () => {
             expect(panel.style.height).toBe('');
             expect(panel.style.maxHeight).toBe('');
             expect(panel.style.paddingBottom).toBe('');
-            expect(kac.scrollTarget).toBeNull();
 
             // Further events must not reach the (now-detached) handlers.
             panel.lastScrollBy = null;
