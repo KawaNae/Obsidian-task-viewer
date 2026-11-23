@@ -49,6 +49,10 @@ export class FakeEl {
         this.children.push(node);
     }
     addClass(...cls: string[]): void { cls.forEach(c => this.classes.add(c)); }
+    setText(text: string): void { this.text = text; }
+    /** Shown or not, as Obsidian's `toggle` does it: by its `hidden`. */
+    hidden = false;
+    toggle(shown: boolean): void { this.hidden = !shown; }
     /** Its text and its children's, in order. */
     get textContent(): string {
         return this.text + this.children.map(c => c.textContent).join('');

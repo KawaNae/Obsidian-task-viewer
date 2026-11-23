@@ -340,7 +340,7 @@ describe('the send dialog', () => {
             return onDialog<DialogState & { placeholder: string | null }>(`
                 typeIn(inputs()[0], ${JSON.stringify(DST.slice(0, -3))});
                 document.activeElement?.blur();
-                await until(() => state().noteSays === ${JSON.stringify(tr('modal.send.noteExisting', { note: DST }))} && state().canSend);
+                await until(() => state().noteSays === ${JSON.stringify(tr('modal.destination.noteExisting', { note: DST }))} && state().canSend);
                 return JSON.stringify({ ...state(), placeholder: inputs()[1].placeholder });
             `);
         };
@@ -353,7 +353,7 @@ describe('the send dialog', () => {
 
         it('opens on the settings\' heading, and untouched sends the row there', async () => {
             const s = await openToDst();
-            expect(s).toMatchObject({ heading: 'Tasks', placeholder: tr('modal.send.headingEmpty'), says: tr('modal.send.toHead', { heading: 'Tasks' }) });
+            expect(s).toMatchObject({ heading: 'Tasks', placeholder: tr('modal.destination.headingEmpty'), says: tr('modal.send.toHead', { heading: 'Tasks' }) });
 
             expect(pressSend().open).toBe(false);
             expect(readTestFile(DST)).toBe(['## Tasks', '- [ ] 送る行', '- [ ] ある', '## Other', '本文', ''].join('\n'));
@@ -552,7 +552,7 @@ describe('the send dialog\'s note field', () => {
     it('a name one note has: that note, in whatever folder, and the row goes to it', async () => {
         await openOnRow();
         const s = typeNote('唯一');
-        expect(s).toMatchObject({ noteSays: tr('modal.send.noteExisting', { note: `${DIR}/唯一.md` }), noteErrors: null, canSend: true });
+        expect(s).toMatchObject({ noteSays: tr('modal.destination.noteExisting', { note: `${DIR}/唯一.md` }), noteErrors: null, canSend: true });
         expect(sendNow().open).toBe(false);
         expect(lines(`${DIR}/唯一.md`)).toContain(`- [ ] ${ROW}`);
     });
@@ -567,7 +567,7 @@ describe('the send dialog\'s note field', () => {
             return JSON.stringify({ ...state(), tone: line?.className ?? null });
         `);
         // The folder for new notes is the vault's choice: any path that ends in the name.
-        const [head, tail] = tr('modal.send.noteNewByName', { note: '\n' }).split('\n');
+        const [head, tail] = tr('modal.destination.noteNewByName', { note: '\n' }).split('\n');
         expect(s.noteSays!.startsWith(head) && s.noteSays!.endsWith(`test-int-send-nf-無い名前.md${tail}`)).toBe(true);
         expect(s.tone).toBe('tv-form__warning');
         expect(s.says).toBe(tr('modal.send.toNew', { heading: 'Tasks' }));
@@ -585,7 +585,7 @@ describe('the send dialog\'s note field', () => {
             await until(() => state().canSend);
             return JSON.stringify(state());
         `);
-        expect(picked).toMatchObject({ note: '同名', noteSays: tr('modal.send.noteExisting', { note: `${DIR}/b/同名.md` }), noteErrors: null, canSend: true });
+        expect(picked).toMatchObject({ note: '同名', noteSays: tr('modal.destination.noteExisting', { note: `${DIR}/b/同名.md` }), noteErrors: null, canSend: true });
         sendNow();
         expect(lines(`${DIR}/b/同名.md`)).toContain(`- [ ] ${ROW}`);
         expect(lines(`${DIR}/a/同名.md`)).not.toContain(ROW);
@@ -609,7 +609,7 @@ describe('the send dialog\'s note field', () => {
     it('a path whose folder is not there: the note and the folder made, and the row goes to it', async () => {
         await openOnRow();
         const s = typeNote(`${DIR}/新しい/作る`);
-        expect(s.noteSays).toBe(`${tr('modal.send.noteNew', { note: `${DIR}/新しい/作る.md` })} ${tr('modal.send.noteFolderMade', { folder: `${DIR}/新しい` })}`);
+        expect(s.noteSays).toBe(`${tr('modal.destination.noteNew', { note: `${DIR}/新しい/作る.md` })} ${tr('modal.destination.noteFolderMade', { folder: `${DIR}/新しい` })}`);
         expect(s.canSend).toBe(true);
         sendNow();
         expect(lines(`${DIR}/新しい/作る.md`)).toContain(`- [ ] ${ROW}`);
@@ -622,7 +622,7 @@ describe('the send dialog\'s note field', () => {
             await until(() => state().canSend);
             return JSON.stringify(state());
         `);
-        expect(s).toMatchObject({ note: '別名元', noteSays: tr('modal.send.noteExisting', { note: `${DIR}/別名元.md` }) });
+        expect(s).toMatchObject({ note: '別名元', noteSays: tr('modal.destination.noteExisting', { note: `${DIR}/別名元.md` }) });
         sendNow();
         expect(lines(`${DIR}/別名元.md`)).toContain(`- [ ] ${ROW}`);
     });
@@ -635,7 +635,7 @@ describe('the send dialog\'s note field', () => {
             return JSON.stringify(state());
         `);
         expect(s.note).toBe(UNRESOLVED);
-        expect(s.noteSays).toContain(tr('modal.send.noteNew', { note: `${UNRESOLVED}.md` }));
+        expect(s.noteSays).toContain(tr('modal.destination.noteNew', { note: `${UNRESOLVED}.md` }));
         sendNow();
         expect(lines(`${UNRESOLVED}.md`)).toContain(`- [ ] ${ROW}`);
     });

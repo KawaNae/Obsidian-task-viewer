@@ -4,7 +4,7 @@ import { DestinationField } from '../../../src/modals/noteops/DestinationField';
 import { FakeEl, asEl } from '../helpers/fakeDom';
 
 /**
- * The send dialog's destination fields (`DestinationField`): the heading
+ * The destination fields (`DestinationField`): the heading
  * field as it opens, what it says while empty, and what it holds as typed.
  */
 
@@ -13,7 +13,6 @@ function fieldOf(heading: string) {
     let changes = 0;
     const field = new DestinationField({ scope: {}, keymap: { pushScope() { }, popScope() { } } } as never, asEl(container), {
         initial: { note: { text: 'Plan', picked: null }, heading },
-        emptyHeading: t('modal.send.headingEmpty'),
         onChange: () => { changes++; },
         onEnter: () => { },
     });
@@ -26,7 +25,7 @@ describe('DestinationField', () => {
         const f = fieldOf('Tasks');
 
         expect(f.input.value).toBe('Tasks');
-        expect(f.input.attrs.get('placeholder')).toBe(t('modal.send.headingEmpty'));
+        expect(f.input.attrs.get('placeholder')).toBe(t('modal.destination.headingEmpty'));
         expect(f.field.ask()).toEqual({ note: { text: 'Plan', picked: null }, heading: 'Tasks' });
     });
 

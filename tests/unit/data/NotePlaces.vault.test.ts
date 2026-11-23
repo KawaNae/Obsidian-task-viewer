@@ -99,3 +99,16 @@ describe('a destination read off the vault', () => {
         expect(await read(typed('   '))).toMatchObject({ kind: 'unnamed' });
     });
 });
+
+describe('a destination read off its fields', () => {
+    it('a heading typed names its section at the settings\' level and side; none typed, the note\'s end', async () => {
+        const { session } = await openLiveVault({ 'Plan.md': ['## Tasks', ''] }, s => { live = s; });
+        const settings = { ...DEFAULT_SETTINGS, taskHeadingLevel: 3, sectionSide: 'end' as const };
+        const places = new NotePlaces(session.app, () => settings);
+
+        expect(await places.readFields({ note: typed('Plan'), heading: ' Log ' }, ''))
+            .toMatchObject({ to: { spot: { heading: 'Log', level: 3, side: 'end' } }, heading: { kind: 'none' } });
+        expect(await places.readFields({ note: typed('Plan'), heading: '  ' }, ''))
+            .toMatchObject({ to: { note: { kind: 'existing', path: 'Plan.md' }, spot: 'end' }, heading: null });
+    });
+});

@@ -6,8 +6,8 @@ import { NoteOps } from '../../../src/services/data/NoteOps';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { t } from '../../../src/i18n';
 import { refusalClause, refusalNotice } from '../../../src/services/core/RefusalClause';
-import type { DestinationAsk, DestinationFacts } from '../../../src/services/data/NoteOps';
-import type { NoteDestination } from '../../../src/services/data/NotePlaces';
+import type { DestinationFacts } from '../../../src/services/data/NoteOps';
+import type { DestinationAsk, NoteDestination } from '../../../src/services/data/NotePlaces';
 
 /**
  * The send operation as the UI asks for it (`NoteOps`): what its dialog
