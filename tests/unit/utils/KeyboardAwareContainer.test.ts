@@ -916,6 +916,141 @@ describe('KeyboardAwareContainer', () => {
         });
     });
 
+    describe('measuring once what started during the wait has stopped too', () => {
+        /**
+         * The low sheet of a dialog that focuses its field as it opens, in a
+         * 978px-tall window, on the native keyboard's events, as laid out
+         * midway through the overlap's transition: the body from 729 to 863
+         * (134px), the field's bottom at 789. At rest the body ends at 640,
+         * above the keyboard's top (978 - 288 = 690), the field's bottom at 566.
+         */
+        function setupLowSheet() {
+            const win = new MockWindow();
+            win.innerHeight = 978;
+            const container = new AnimatedContainer();
+            const panel = new MockPanel();
+            panel.rectBottom = 863;
+            panel.rectHeight = 134;
+            panel.scrollHeight = 134;
+            panel.clientHeight = 134;
+            const scrolls: number[] = [];
+            const scrollBy = panel.scrollBy.bind(panel);
+            panel.scrollBy = (o) => { scrolls.push(o.top); scrollBy(o); };
+            const input = new MockInput(789);
+            container.adopt(input);
+            container.ownerDocument.activeElement = input;
+            const kac = new KeyboardAwareContainer(container as any, win as any, panel as any);
+            kac.attach();
+            const settle = () => {
+                panel.rectBottom = 640;
+                input.bottom = 566;
+            };
+            return { win, container, panel, scrolls, input, kac, settle };
+        }
+
+        it('waits for the overlap\'s transition that started while it waited for the focused field\'s, the show joining that wait (the low sheet)', async () => {
+            vi.useFakeTimers();
+            const { win, container, panel, scrolls, input, settle } = setupLowSheet();
+            const focusRing = new MockAnimation(150);
+            container.animations.push(focusRing);
+
+            container.dispatch('focusin', { target: input });
+            vi.advanceTimersByTime(50); // the wait begins on the field's focus ring
+            vi.advanceTimersByTime(60);
+            const toKeyboard = new MockAnimation(250);
+            container.animations.push(toKeyboard);
+            win.dispatch('keyboardWillShow', { keyboardHeight: 288 }); // joins that wait
+            vi.advanceTimersByTime(44);
+            focusRing.end();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(scrolls).toEqual([]); // not the 109 the sheet on its way up gives
+
+            settle();
+            toKeyboard.end();
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(scrolls).toEqual([]);
+            expect(panel.style.height).toBe('');
+            expect(panel.style.maxHeight).toBe('');
+            expect(panel.style.paddingBottom).toBe('');
+        });
+
+        it('waits for the overlap\'s transition that took over from one cancelled', async () => {
+            const toFirst = new MockAnimation(250);
+            const { win, container, panel, scrolls, settle } = setupLowSheet();
+            container.animations.push(toFirst);
+
+            win.dispatch('keyboardWillShow', { keyboardHeight: 300 });
+            const toSecond = new MockAnimation(250);
+            container.animations.push(toSecond);
+            win.dispatch('keyboardDidShow', { keyboardHeight: 288 });
+            toFirst.cancel();
+            await flush();
+            expect(scrolls).toEqual([]);
+
+            settle();
+            toSecond.end();
+            await flush();
+
+            expect(scrolls).toEqual([]);
+            expect(panel.style.paddingBottom).toBe('');
+        });
+
+        it('measures where the field comes to rest in the box once the animations started meanwhile have stopped', async () => {
+            const focusRing = new MockAnimation(100);
+            const { container, input, scrolls, openKeyboard } = setupAnimated(871, focusRing);
+
+            openKeyboard();
+            const toKeyboard = new MockAnimation(250);
+            container.animations.push(toKeyboard);
+            focusRing.end();
+            await flush();
+            expect(scrolls).toEqual([]);
+
+            input.bottom = 557;
+            toKeyboard.end();
+            await flush();
+
+            expect(scrolls).toEqual([67]); // 557 - 500 + 10, not the 381 midway
+        });
+
+        it('stops waiting when the keyboard closes, and waits afresh when it opens again', async () => {
+            const first = new MockAnimation(250);
+            const { win, container, input, scrolls, openKeyboard } = setupAnimated(871, first);
+
+            openKeyboard();
+            win.visualViewport!.height = 800;
+            win.visualViewport!.dispatch('resize');
+            const second = new MockAnimation(250);
+            container.animations.push(second);
+            openKeyboard(); // a wait of its own, not joined to the one given up
+            first.end();
+            await flush();
+            expect(scrolls).toEqual([]);
+
+            input.bottom = 557;
+            second.end();
+            await flush();
+            expect(scrolls).toEqual([67]);
+        });
+
+        it('stops waiting when the container detaches, whatever starts afterwards', async () => {
+            const first = new MockAnimation(250);
+            const { container, input, scrolls, kac, openKeyboard } = setupAnimated(871, first);
+
+            openKeyboard();
+            kac.detach();
+            const closing = new MockAnimation(150);
+            container.animations.push(closing);
+            input.bottom = 557;
+            first.end();
+            closing.end();
+            await flush();
+
+            expect(scrolls).toEqual([]);
+        });
+    });
+
     describe('detach', () => {
         it('stops reacting to visualViewport/native events and restores state', () => {
             const { win, container, panel, kac } = setup({ vvHeight: 800 });

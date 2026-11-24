@@ -6,6 +6,14 @@ import { runningAnimations, whenStopped } from './Animations';
 export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
 
 /**
+ * How many times a wait for the container to come to rest lists its
+ * animations again: far past the few that run as the keyboard rises (the
+ * sheet's slide, a field's focus ring, the overlap's transition), so it is
+ * reached only where animations never stop starting.
+ */
+const SETTLE_ROUNDS = 10;
+
+/**
  * Mobile virtual keyboard awareness for fixed-position containers.
  *
  * While the keyboard covers the window, the container is told how much of
@@ -48,19 +56,28 @@ export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
  * the DOM fires for any editable element, CodeMirror's own selection
  * among them), so no editor has to tell of its caret.
  *
- * Where the field stands is read once the container has settled: an
- * animation running in it as the measure is asked for (the sheet sliding
- * up, the box popping in) moves the field it holds, and a position read
- * midway is not where the field comes to rest (on iPad the sheet's 150 ms
- * slide was read with the field still below the window, and the panel
- * scrolled 565 px where 67 would do), and the room shrinking above the
- * keyboard moves its bottom over a transition. Every measure (the keyboard opening
- * or moving, a field focused, the caret moving) goes through
- * `measureWhenSettled`, which waits for those animations to end, then
- * measures the field focused at that moment, if the keyboard is still open
- * and the container still attached. Animations that start later are not
- * waited for: a container closing detaches before its close animation.
- * Where the DOM cannot list them (`getAnimations`), it measures at once.
+ * Where the field stands is read once the container has come to rest: an
+ * animation running in it (the sheet sliding up, the box popping in, the
+ * room above the keyboard moving over the overlap's transition) moves the
+ * field it holds, and a position read midway is not where the field comes
+ * to rest (on iPad the sheet's 150 ms slide was read with the field still
+ * below the window, and the panel scrolled 565 px where 67 would do).
+ * Every measure (the keyboard opening or moving, a field focused, the
+ * caret moving) goes through `measureWhenSettled`, which waits until no
+ * animation that will end runs in the container, then measures the field
+ * focused at that moment. The animations are listed again each time those
+ * waited for have stopped, and waited for again while any runs: a measure
+ * asked for during a wait joins it, so the wait has to take in what started
+ * meanwhile. On iPad a field focused as a low sheet opened had its wait
+ * begun on the field's focus ring; the keyboard's show, coming while it ran,
+ * joined that wait, which ended with the ring before the overlap's
+ * transition, and the sheet read on its way up had its body locked, padded
+ * and scrolled for a keyboard it ends above, the field put out of sight
+ * above the body. The wait ends without a measure when the keyboard closes
+ * or the container detaches; a container closing detaches before its close
+ * animation, which is never waited for. Where the DOM cannot list the
+ * animations (`getAnimations`), it measures at once; past a bound on the
+ * times they are listed, it measures however things stand.
  *
  * Keyboard detection is dual-source (state は KeyboardState に集約):
  * - visualViewport resize — Windows / Safari 系。`innerHeight - vv.height`
@@ -92,10 +109,10 @@ export class KeyboardAwareContainer {
     /** The overlap last given to the container (px), 0 while none is set. */
     private overlap = 0;
     private keyboardOpen = false;
-    /** A measure waits for the container's animations to end (`measureWhenSettled`). */
+    /** A measure waits for the container to come to rest (`measureWhenSettled`). */
     private settling = false;
-    /** Counted up on each detach, so a wait begun before it measures nothing. */
-    private attachment = 0;
+    /** Counted up on each wait begun or given up, so a wait no longer current measures nothing. */
+    private wait = 0;
 
     /**
      * `scrollTarget` is the body that scrolls in the container. It is given
@@ -205,6 +222,7 @@ export class KeyboardAwareContainer {
         if (this.keyboardOpen) {
             this.measureWhenSettled();
         } else if (wasOpen) {
+            this.endWait();
             this.restore();
         }
     }
@@ -228,24 +246,36 @@ export class KeyboardAwareContainer {
     }
 
     /**
-     * Measure the focused field once the animations running in the container
-     * now have ended, at once when none runs. A measure asked for while one
-     * waits joins it: the wait measures what is current when it ends.
+     * Measure the focused field once the container has come to rest, at
+     * once when it is. A measure asked for while one waits joins it: the
+     * wait measures what is current when it ends.
      */
     private measureWhenSettled(): void {
         if (this.settling) return;
-        const moving = runningAnimations(this.container);
-        if (moving.length === 0) {
-            this.measure();
+        this.settling = true;
+        this.settle(++this.wait, 0);
+    }
+
+    /**
+     * One step of a wait: list the animations running in the container,
+     * and wait for them to stop, then list them again; measure once none
+     * runs.
+     */
+    private settle(wait: number, rounds: number): void {
+        if (wait !== this.wait) return;
+        const moving = rounds < SETTLE_ROUNDS ? runningAnimations(this.container) : [];
+        if (moving.length > 0) {
+            void whenStopped(moving).then(() => this.settle(wait, rounds + 1));
             return;
         }
-        this.settling = true;
-        const attachment = this.attachment;
-        void whenStopped(moving).then(() => {
-            if (attachment !== this.attachment) return;
-            this.settling = false;
-            this.measure();
-        });
+        this.settling = false;
+        this.measure();
+    }
+
+    /** Give up the wait under way, if any: it measures nothing. */
+    private endWait(): void {
+        this.settling = false;
+        this.wait++;
     }
 
     /** Keep the field focused in the container above the keyboard, while it is open. */
@@ -367,8 +397,7 @@ export class KeyboardAwareContainer {
         this.selectionFrame = null;
         this.userScrollHandler = null;
         this.keyboardOpen = false;
-        this.settling = false;
-        this.attachment++;
+        this.endWait();
     }
 }
 
