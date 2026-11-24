@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import realMoment from 'moment';
+import { Notice } from '../mocks/obsidian';
 import { CreatePlaces, type CreatePlace } from '../../../src/services/data/CreatePlaces';
 import type { NoteSpot } from '../../../src/services/persistence/Notes';
 import { DEFAULT_SETTINGS, type TaskViewerSettings } from '../../../src/types';
@@ -121,6 +122,22 @@ describe('a daily note as a place', () => {
         expect(contents.get(NOTE)).toBe(['# 2031-01-15', '## Log', '- tv-color:: ff0000', '- [ ] 末尾', ''].join('\n'));
     });
 
+    it('at the end of its section when the settings say so: the line put after the section\'s last', async () => {
+        const { contents, places: p } = await places({ [NOTE]: '## Tasks\n- [ ] 既存\n## Log\n' }, '', { sectionSide: 'end' });
+        expect(p.dailyNote(DAY)).toEqual({ kind: 'note', note: { kind: 'daily', date: DAY }, spot: { heading: 'Tasks', level: 2, side: 'end' } });
+        await p.create(p.dailyNote(DAY), { line: '- [ ] 新しい' }, { tellRefusal: false });
+        expect(contents.get(NOTE)).toBe('## Tasks\n- [ ] 既存\n- [ ] 新しい\n## Log\n');
+    });
+
+    it('a write refused is told as the caller asks: by a notice, or to the caller alone', async () => {
+        const { places: p } = await places({ [NOTE]: '## Tasks\n## Tasks\n' });
+        expect((await p.create(p.dailyNote(DAY), { line: '- [ ] 新しい' }, { tellRefusal: false })).written).toBe(false);
+        expect(Notice.messages).toEqual([]);
+
+        expect((await p.create(p.dailyNote(DAY), { line: '- [ ] 新しい' })).written).toBe(false);
+        expect(Notice.messages).toHaveLength(1);
+    });
+
     it('is the day\'s note by the daily notes\' settings, its path and its template read off the one day', async () => {
         const { places: p } = await places({});
         expect(p.dailyNote(DAY)).toEqual({ kind: 'note', note: { kind: 'daily', date: DAY }, spot: { heading: 'Tasks', level: 2, side: 'head' } });
@@ -162,6 +179,16 @@ describe('a note at a path as a place', () => {
         expect(facts.inherits).toEqual(written.cascadeContext);
         expect(facts.inheritedFrom).toEqual(written.inheritedFrom);
         expect(contents.get('n.md')).toMatch(/- \[ \] 既存\n- \[ \] 新しい\n$/);
+    });
+
+    it('there, under a heading among sections that give a line different values: what that section gives, as the index reads the line once written', async () => {
+        const { facts, written } = await factsAndWritten(
+            { 'n.md': ['## Work', '- tv-color:: ff0000', '- [ ] 既存', '## Tasks', '- tv-color:: 00ff00', '- [ ] 既存', '## Log', '- tv-color:: 0000ff', ''].join('\n') },
+            at('n.md', TASKS),
+        );
+        expect(facts.inherits.color).toBe('00ff00');
+        expect(facts.inherits).toEqual(written.cascadeContext);
+        expect(facts.inheritedFrom).toEqual(written.inheritedFrom);
     });
 
     it('not there, under a heading: an empty note made with the heading, as the index reads the line once written', async () => {
