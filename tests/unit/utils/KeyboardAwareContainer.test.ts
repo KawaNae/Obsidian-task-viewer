@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { KeyboardAwareContainer } from '../../../src/utils/KeyboardAwareContainer';
-import { trackKeyboard, untrackAllKeyboards } from '../../../src/utils/KeyboardState';
+import { trackKeyboard, untrackAllKeyboards } from '../../../src/utils/KeyboardWatch';
 
 /**
  * KeyboardAwareContainer's `activeInput()`/focus handler do
@@ -199,7 +199,7 @@ function setupAnimated(fieldBottom: number, ...animations: MockAnimation[]) {
 
 describe('KeyboardAwareContainer', () => {
     afterEach(() => {
-        untrackAllKeyboards(); // KeyboardState's tracked-window map is not GC'd between tests
+        untrackAllKeyboards(); // KeyboardWatch's map of the windows listened to is not GC'd between tests
         vi.useRealTimers();
     });
 
@@ -1077,21 +1077,20 @@ describe('KeyboardAwareContainer', () => {
             expect(panel.lastScrollBy).toBeNull();
         });
 
-        it('removes every listener it registered in attach()', () => {
+        it('removes every listener it registered in attach(), the window\'s keyboard staying listened to', () => {
             const { win, container, kac } = setup({ vvHeight: 800 });
             kac.attach();
+            // KeyboardWatch listens to the window once, for every part that follows it.
             expect(win.visualViewport!.listenerCount('resize')).toBe(1);
-            // 2, not 1: KeyboardState.trackKeyboard() (called from attach()) adds its
-            // own resident listener on the same event, independent of kbHandler.
-            expect(win.listenerCount('keyboardWillShow')).toBe(2);
+            expect(win.visualViewport!.listenerCount('scroll')).toBe(1);
+            expect(win.listenerCount('keyboardWillShow')).toBe(1);
             expect(container.listenerCount('focusin')).toBe(1);
             expect(container.listenerCount('focusout')).toBe(1);
 
             kac.detach();
 
-            expect(win.visualViewport!.listenerCount('resize')).toBe(0);
-            // detach() only removes KeyboardAwareContainer's own kbHandler — trackKeyboard's
-            // listener is process-lifetime (removed only via untrackAllKeyboards()).
+            // The window is let go only by untrackAllKeyboards (the plugin unloading).
+            expect(win.visualViewport!.listenerCount('resize')).toBe(1);
             expect(win.listenerCount('keyboardWillShow')).toBe(1);
             expect(container.listenerCount('focusin')).toBe(0);
             expect(container.listenerCount('focusout')).toBe(0);

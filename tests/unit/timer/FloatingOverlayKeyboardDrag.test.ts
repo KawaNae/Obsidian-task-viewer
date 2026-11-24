@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { FloatingOverlayHost } from '../../../src/timer/FloatingOverlayHost';
-import { untrackAllKeyboards } from '../../../src/utils/KeyboardState';
+import { untrackAllKeyboards } from '../../../src/utils/KeyboardWatch';
 
 /**
  * The widget is lifted above the on-screen keyboard by a drawn translateY.
