@@ -16,9 +16,10 @@ const SETTLE_ROUNDS = 10;
 /**
  * Mobile virtual keyboard awareness for fixed-position containers.
  *
- * While the keyboard covers the window, the container is told how much of
- * it the keyboard covers, as the CSS variable `--tv-keyboard-overlap` on it
- * (`max(0, innerHeight - keyboardTop)`). The container still covers the
+ * While the keyboard covers the window, a pixel of it or more, the container
+ * is told how much of it the keyboard covers, as the CSS variable
+ * `--tv-keyboard-overlap` on it (`keyboardOverlap`: `innerHeight -
+ * keyboardTop` in whole px). The container still covers the
  * whole window. The stylesheet has the sheet's contents stand on the
  * keyboard, its surface running on under it, so the panel's last row (its
  * buttons) sits right over the keyboard and the body shrinks and scrolls
@@ -82,8 +83,9 @@ const SETTLE_ROUNDS = 10;
  * times they are listed, it measures however things stand.
  *
  * The keyboard is told two ways, both followed through `KeyboardWatch`:
- * - the visualViewport resizing or scrolling (Windows, Safari): the window's
- *   `innerHeight - vv.height` grows
+ * - the visualViewport resizing or scrolling (Windows, Safari): its bottom
+ *   (`offsetTop + height`) stands a pixel or more above the window's
+ *   (`innerHeight`)
  * - Capacitor's events on the window (`keyboardWillShow` and the like, with
  *   a `keyboardHeight`), on Obsidian mobile (Android, iOS): the WebView is
  *   not resized and the visualViewport never changes, so they are all that
@@ -190,16 +192,15 @@ export class KeyboardAwareContainer {
 
     /** 両検知源から開閉状態を再計算し、必要な補正/復元を行う */
     private syncState(): void {
-        const vv = this.win.visualViewport;
-        const vvKb = vv ? this.win.innerHeight - vv.height : 0;
-        const nativeKb = nativeKeyboardHeight(this.win);
+        // The keyboard is up while it covers any of the window, a pixel or more.
+        const overlap = keyboardOverlap(this.win);
         const wasOpen = this.keyboardOpen;
-        this.keyboardOpen = vvKb > 50 || nativeKb > 50;
+        this.keyboardOpen = overlap > 0;
 
         if (this.keyboardOpen !== wasOpen) {
             logDebug(
                 `[kb] ${this.keyboardOpen ? 'open' : 'close'}` +
-                ` vvKb=${Math.round(vvKb)} native=${nativeKb}` +
+                ` overlap=${overlap} native=${nativeKeyboardHeight(this.win)}` +
                 ` ih=${this.win.innerHeight}`);
         }
 
@@ -210,7 +211,7 @@ export class KeyboardAwareContainer {
             this.savedScrollTop = this.scrollTarget.scrollTop;
         }
 
-        this.setOverlap(this.keyboardOpen ? keyboardOverlap(this.win) : 0);
+        this.setOverlap(overlap);
 
         if (this.keyboardOpen) {
             this.measureWhenSettled();
