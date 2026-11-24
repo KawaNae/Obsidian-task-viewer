@@ -13,7 +13,8 @@ vi.mock('obsidian', async (importOriginal) => ({
 }));
 
 import TaskViewerPlugin from '../../../src/main';
-import { KeyboardRoom, KEYBOARD_OVERLAP_VAR } from '../../../src/utils/KeyboardRoom';
+import { KeyboardRoom } from '../../../src/utils/KeyboardRoom';
+import { KEYBOARD_OVERLAP_VAR } from '../../../src/utils/RoomLayout';
 import { untrackAllKeyboards } from '../../../src/utils/KeyboardWatch';
 
 class Target {

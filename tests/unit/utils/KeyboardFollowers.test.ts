@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { KeyboardRoom, KEYBOARD_OVERLAP_VAR } from '../../../src/utils/KeyboardRoom';
+import { KeyboardRoom } from '../../../src/utils/KeyboardRoom';
+import { KEYBOARD_OVERLAP_VAR } from '../../../src/utils/RoomLayout';
 import { PopoverShell } from '../../../src/views/sharedUI/PopoverShell';
 import { OverlayShell } from '../../../src/views/sharedUI/OverlayShell';
 import { FloatingOverlayHost } from '../../../src/timer/FloatingOverlayHost';
