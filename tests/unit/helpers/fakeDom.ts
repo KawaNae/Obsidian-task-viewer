@@ -1,7 +1,8 @@
 /**
  * An element of a stand-in DOM for the form's pieces, which a unit test
  * builds in node: what `IssueBoard`, `bindField`, the candidates'
- * drawing (`candidateView`) and the send dialog's note field touch, and no more.
+ * drawing (`candidateView`), the send dialog's note field and the
+ * start-offset dialog's body touch, and no more.
  */
 type Listener = (e: Event) => void;
 
@@ -53,6 +54,7 @@ export class FakeEl {
         this.children.push(node);
     }
     addClass(...cls: string[]): void { cls.forEach(c => this.classes.add(c)); }
+    toggleClass(c: string, on: boolean): void { this.classList.toggle(c, on); }
     setText(text: string): void { this.text = text; }
     /** Shown or not, as Obsidian's `toggle` does it: by its `hidden`. */
     hidden = false;

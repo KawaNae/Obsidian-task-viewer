@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Menu } from '../mocks/obsidian';
 import { MenuPresenter, type MenuAnchor } from '../../../src/interaction/menu/MenuPresenter';
-import { forgetMenus, menusOnScreen } from '../../../src/interaction/menu/MenusOnScreen';
+import { forgetMenus, menusOnScreen, whenMenusGone, type MenusGone } from '../../../src/interaction/menu/MenusOnScreen';
 
 /**
  * The one owner of the plugin's menus: at most one open at a time, the one
@@ -128,6 +128,22 @@ describe('MenuPresenter and the menus on the screen', () => {
         shown(presenter, oneItem, AT);
         shown(presenter, oneItem, AT);
         expect(menusOnScreen()).toBe(1);
+    });
+
+    it('keeps the menu before on the screen while it closes after the next is shown: a wait goes on until it has gone', async () => {
+        vi.useFakeTimers();
+        const presenter = new MenuPresenter();
+        const first = shown(presenter, oneItem, AT)!;
+        first.closingMs = 250;
+        const next = shown(presenter, oneItem, AT)!;
+        next.close();
+
+        let how: MenusGone | undefined;
+        void whenMenusGone()?.then((h) => { how = h; });
+        await vi.advanceTimersByTimeAsync(249);
+        expect(how).toBeUndefined();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(how).toBe('gone');
     });
 
     it('tells no menu when the build added no item', () => {

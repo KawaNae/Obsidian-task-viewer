@@ -3,7 +3,7 @@ import { t } from '../../../src/i18n';
 import { SectionModal } from '../../../src/modals/section/SectionModal';
 import { TimerStartOffsetModal } from '../../../src/modals/TimerStartOffsetModal';
 import type { OverlayOpenOpts } from '../../../src/views/sharedUI/OverlayShell';
-import { FakeEl, asEl } from '../helpers/fakeDom';
+import { FakeEl, asEl, focused } from '../helpers/fakeDom';
 
 /**
  * Where the section dialog and the start-offset dialog put the focus as
@@ -14,8 +14,8 @@ import { FakeEl, asEl } from '../helpers/fakeDom';
  */
 
 const opened: OverlayOpenOpts[] = [];
-/** Whether the stand-in builds the body: the start-offset dialog's needs more of a DOM than the stand-in's, and its focus is told without it. */
-let builds = true;
+/** The body the stand-in built last. */
+let body = new FakeEl();
 
 vi.mock('../../../src/views/sharedUI/OverlayShell', () => ({
     OverlayShell: class {
@@ -24,7 +24,8 @@ vi.mock('../../../src/views/sharedUI/OverlayShell', () => ({
         open(opts: OverlayOpenOpts): void {
             this.opts = opts;
             opened.push(opts);
-            if (builds) opts.build(asEl(new FakeEl()), { head: asEl(new FakeEl()), foot: asEl(new FakeEl()) });
+            body = new FakeEl();
+            opts.build(asEl(body), { head: asEl(new FakeEl()), foot: asEl(new FakeEl()) });
         }
         /** A panel in a window whose timers do nothing: the start-offset dialog ticks there. */
         getPanel(): unknown { return { nodeType: 1, ownerDocument: { defaultView: { setInterval: () => 0, clearInterval: () => { } } } }; }
@@ -69,10 +70,22 @@ describe('the focus the section dialog opens with', () => {
 
 describe('the focus the start-offset dialog opens with', () => {
     it('selects the number of minutes whole, to be typed over', () => {
-        builds = false;
         new TimerStartOffsetModal(APP, async () => ({ kind: 'written' }) as never).open();
-        builds = true;
 
         expect(lastFocus().selection).toBe('all');
+    });
+});
+
+describe('the focus a choice of the start-offset dialog\'s kind puts', () => {
+    it('is the field of the kind chosen, shown in place of the other', () => {
+        new TimerStartOffsetModal(APP, async () => ({ kind: 'written' }) as never).open();
+        const minutes = opened[opened.length - 1].initialFocus!()!.to;
+        const [, byTime] = body.find('tv-ctrl__segments')!.children;
+
+        byTime.press();
+
+        const time = opened[opened.length - 1].initialFocus!()!.to;
+        expect(time).not.toBe(minutes);
+        expect(focused()).toBe(time);
     });
 });

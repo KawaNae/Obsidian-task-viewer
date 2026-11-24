@@ -276,6 +276,19 @@ describe('cancelling', () => {
         expect(h.editor().destroyed).toBe(true);
         expect(h.closeHub).not.toHaveBeenCalled();
     });
+
+    it('takes the focus back to the editor when the draft is kept, and puts none with no question to withdraw', async () => {
+        const h = await opened();
+        h.editor().parent = '- [ ] P2';
+        const before = h.editor().focused;
+
+        h.source.keep();
+        expect(h.editor().focused).toBe(before);
+
+        h.source.cancel();
+        h.source.keep();
+        expect(h.editor().focused).toBe(before + 1);
+    });
 });
 
 describe('closing the hub (beforeClose)', () => {
