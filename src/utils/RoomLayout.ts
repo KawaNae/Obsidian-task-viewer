@@ -193,7 +193,7 @@ function typedAt(field: HTMLElement): number {
  * the DOM lays it out, when it is in `field`. A caret between elements (an
  * empty line) has no box of its own, and stands for the element it is in.
  */
-export function caretRect(field: HTMLElement): DOMRect | null {
+function caretRect(field: HTMLElement): DOMRect | null {
     const doc = field.ownerDocument;
     const selection = doc.getSelection();
     const node = selection?.focusNode ?? null;

@@ -2,8 +2,6 @@ import { logDebug } from '../log/log';
 import { watchKeyboard, keyboardOverlap, keyboardMoving, nativeKeyboardHeight, type KeyboardChange } from './KeyboardWatch';
 import { RoomLayout, type Place } from './RoomLayout';
 
-export { KEYBOARD_OVERLAP_VAR, caretRect } from './RoomLayout';
-
 /** The room kept between what is typed at and the keyboard's top, or the body's bottom (px). */
 const ABOVE = 10;
 
@@ -75,15 +73,12 @@ export function alongLack(m: Along, lackNow: number, shown: number): number {
     return clamp01((lackNow - m.lackFrom) / span);
 }
 
-/** How far along its move the body is (0 to 1), by how far the overlap has come: the body moves from the first frame. */
+/** How far along its move the body is (0 to 1), by how far the overlap has come. */
 export function alongOverlap(m: Along, _lackNow: number, shown: number): number {
     const span = m.overlapTo - m.overlapFrom;
     if (span === 0) return 1;
     return clamp01((shown - m.overlapFrom) / span);
 }
-
-/** The one place the body's way along the keyboard is chosen (`alongLack` or `alongOverlap`). */
-const along = alongLack;
 
 /**
  * The body's scrollTop at a frame of `m`, what the field lacks and the
@@ -91,12 +86,17 @@ const along = alongLack;
  * where the move begins: a NaN given to the body would scroll it to its top.
  */
 export function scrollAlong(m: Along, lackNow: number, shown: number): number {
-    const top = m.fromTop + (m.toTop - m.fromTop) * along(m, lackNow, shown);
+    const top = m.fromTop + (m.toTop - m.fromTop) * alongLack(m, lackNow, shown);
     return Number.isNaN(top) ? m.fromTop : top;
 }
 
 function clamp01(x: number): number {
     return Math.min(1, Math.max(0, x));
+}
+
+/** A scrollTop for the log, to a tenth of a px: a browser keeping whole px shows against what it was given. */
+function tenth(px: number): string {
+    return px.toFixed(1);
 }
 
 // --- The room ---
@@ -471,7 +471,7 @@ export class KeyboardRoom {
             this.planned = end.top;
             logDebug(
                 `[kb] plan lack=${Math.round(end.lack)} covered=${covered(rest)} pad=${Math.round(end.pad)}` +
-                ` scroll=${Math.round(fromTop)}->${Math.round(end.top)} overlap=${Math.round(shown)}->${overlap}`);
+                ` scroll=${tenth(fromTop)}->${tenth(end.top)} overlap=${Math.round(shown)}->${overlap}`);
         } else {
             logDebug(`[kb] plan none overlap=${Math.round(shown)}->${overlap}`);
         }
@@ -511,8 +511,8 @@ export class KeyboardRoom {
         this.restoreWhenShown = false;
         const ref = this.returnTo;
         logDebug(
-            `[kb] back from=${Math.round(this.layout.scrollTop)} to=${ref === null ? 'none' : Math.round(ref)}` +
-            ` planned=${this.planned === null ? 'none' : Math.round(this.planned)}`);
+            `[kb] back from=${tenth(this.layout.scrollTop)} to=${ref === null ? 'none' : tenth(ref)}` +
+            ` planned=${this.planned === null ? 'none' : tenth(this.planned)}`);
         const shown = this.layout.shownOverlap();
         const field = this.activeField();
         this.subject = field;
