@@ -17,9 +17,10 @@ function fieldOf(initial = { text: '', picked: null as string | null }) {
     let changes = 0;
     const field = new NoteField({ scope: {}, keymap: { pushScope() { }, popScope() { } } } as never, asEl(container), { initial, offersUnresolved: true, onChange: () => { changes++; }, onEnter: () => { } });
     const input = field.input as unknown as FakeEl;
+    const clear = container.find('tv-form__clear-button')!;
     const pick = (candidate: NoteCandidate) => (field as unknown as { suggest: { selectSuggestion(c: NoteCandidate, e: Event): void } }).suggest
         .selectSuggestion(candidate, { type: 'click' } as Event);
-    return { field, input, pick, changes: () => changes };
+    return { field, input, clear, pick, changes: () => changes };
 }
 
 const base = { score: 0, matches: null, downranked: false };
@@ -54,6 +55,30 @@ describe('NoteField', () => {
         expect(f.field.ask()).toEqual({ text: '同名x', picked: null });
         f.input.type('同名');
         expect(f.field.ask()).toEqual({ text: '同名', picked: null });
+    });
+
+    it('its × lets go of the note picked and tells of it, as deleting the text does', () => {
+        const cleared = fieldOf({ text: 'Plan', picked: 'Projects/Plan.md' });
+        const deleted = fieldOf({ text: 'Plan', picked: 'Projects/Plan.md' });
+        cleared.clear.press();
+        deleted.input.type('');
+
+        expect(cleared.field.ask()).toEqual({ text: '', picked: null });
+        expect(cleared.field.ask()).toEqual(deleted.field.ask());
+        expect(cleared.changes()).toBe(deleted.changes());
+        expect(cleared.clear.style.display).toBe('none');
+    });
+
+    it('shows its × while it holds a name, a name picked among it', () => {
+        const f = fieldOf();
+        expect(f.clear.style.display).toBe('none');
+        f.pick({ kind: 'file', file: file('b/同名.md'), linkpath: 'b/同名', ...base });
+        expect(f.clear.style.display).toBe('');
+    });
+
+    it('is focused with the caret after its text', () => {
+        const f = fieldOf({ text: 'Plan', picked: null });
+        expect(f.field.focus()).toEqual({ to: f.field.input, selection: 'end' });
     });
 
     it('opens as it is told, a note picked held until the text changes', () => {

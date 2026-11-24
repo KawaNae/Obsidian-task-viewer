@@ -26,8 +26,12 @@ function fieldOf() {
         getSuggestions(query: string): Candidate[];
         selectSuggestion(candidate: Candidate, e: Event): void;
     } }).suggest;
+    const [, headingClear] = container.findAll('tv-form__clear-button');
+    const headingInput = field.focus('heading').to as unknown as FakeEl;
     return {
         field,
+        headingClear,
+        headingInput,
         listed: (query = '') => suggest.getSuggestions(query),
         pick: (candidate: Candidate) => suggest.selectSuggestion(candidate, { type: 'click' } as Event),
         changes: () => changes,
@@ -63,5 +67,29 @@ describe('SectionField', () => {
         f.pick(whole);
         expect(f.field.heading()).toEqual({ text: '', picked: null });
         expect(f.changes()).toBe(2);
+    });
+
+    it('empties the heading field by its ×, the heading picked let go, as deleting the text does', () => {
+        const cleared = fieldOf();
+        const deleted = fieldOf();
+        for (const f of [cleared, deleted]) {
+            f.field.offer('A.md', sectionChoices(frameHeadings(['# One'])));
+            f.pick(f.listed('One')[0]);
+        }
+        expect(cleared.headingClear.style.display).toBe('');
+        cleared.headingClear.press();
+        deleted.headingInput.type('');
+
+        expect(cleared.field.heading()).toEqual({ text: '', picked: null });
+        expect(cleared.field.heading()).toEqual(deleted.field.heading());
+        expect(cleared.changes()).toBe(deleted.changes());
+        expect(cleared.headingClear.style.display).toBe('none');
+    });
+
+    it('focuses either field with the caret after its text', () => {
+        const f = fieldOf();
+
+        expect(f.field.focus('heading')).toEqual({ to: f.headingInput, selection: 'end' });
+        expect(f.field.focus('note').selection).toBe('end');
     });
 });
