@@ -146,6 +146,18 @@ describe('KeyboardWatch: the parts following a window\'s keyboard', () => {
         expect(keyboardOverlap(win as unknown as Window)).toBe(300);
     });
 
+    it('rounds what the keyboard covers to the nearest whole px, neither up nor down alone', () => {
+        const win = makeViewportWindow();
+
+        // 299.4px covered: 299, where rounding up would give 300.
+        win.visualViewport.height = 500.6;
+        expect(keyboardOverlap(win as unknown as Window)).toBe(299);
+
+        // 299.6px covered: 300, where rounding down would give 299.
+        win.visualViewport.height = 500.4;
+        expect(keyboardOverlap(win as unknown as Window)).toBe(300);
+    });
+
     it('tells each show, however often the same height is told again', () => {
         const win = makeWindow();
         const told: string[] = [];
