@@ -67,6 +67,10 @@ class StandInOverlay implements ClosableOverlay {
     layer(): Node | null {
         return this.open ? this.layerNode as unknown as Node : null;
     }
+
+    opening(): Promise<void> | null {
+        return null;
+    }
 }
 
 /** Child popovers of an overlay: open until closed. */

@@ -24,9 +24,9 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
         why: 'focusField: the field named takes the focus, its text met as the field asks; the overlay\'s first focus and the hub menu\'s Properties items go through it',
     },
     {
-        file: 'views/sharedUI/OverlayShell.ts',
-        line: 'overlay.panel.focus({ preventScroll: true });',
-        why: 'an overlay opening while its animation runs: the panel holds the focus, which raises no keyboard, until the field takes it',
+        file: 'views/sharedUI/FocusPlacement.ts',
+        line: 'opts.hold?.focus({ preventScroll: true });',
+        why: 'placeFocus waiting for a menu to go or an overlay to open: what the caller names (an overlay\'s panel) holds the focus, which raises no keyboard, until the field takes it',
     },
     {
         file: 'views/sharedUI/OverlayShell.ts',

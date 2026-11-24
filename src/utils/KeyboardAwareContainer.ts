@@ -255,7 +255,7 @@ export class KeyboardAwareContainer {
      */
     private settle(wait: number, rounds: number): void {
         if (wait !== this.wait) return;
-        const moving = rounds < SETTLE_ROUNDS ? runningAnimations(this.container) : [];
+        const moving = rounds < SETTLE_ROUNDS ? runningAnimations(this.container, { subtree: true }) : [];
         if (moving.length > 0) {
             this.waitLog?.rounds.push(`[${moving.map(describeAnimation).join(' ')}]`);
             void whenStopped(moving).then(() => this.settle(wait, rounds + 1));

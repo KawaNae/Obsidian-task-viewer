@@ -34,10 +34,11 @@
  * the focus where the body asks (`initialFocus`), or on the panel itself
  * when the body names nothing or what it named did not take the focus. On
  * the panel the focus raises no on-screen keyboard. While the panel still
- * opens (its animation: the sheet sliding up, the box popping in), the
- * focus waits on the panel, and goes where the body asks once it has come
- * to rest (`focusOnceOpen`). Closed with the focus still in it, the overlay
- * gives the focus back to what had it before.
+ * opens (its animation: the sheet sliding up, the box popping in: the
+ * overlay's `opening`) or a menu of the plugin is still on the screen, the
+ * focus waits on the panel, and goes where the body asks once they are
+ * done (`placeFirstFocus`, `FocusPlacement`). Closed with the focus still in
+ * it, the overlay gives the focus back to what had it before.
  *
  * Escape and the user's "back" (Android's back gesture, the desktop mouse's
  * back button: `HistoryBack`) step back alike: a child popover open closes
@@ -62,7 +63,8 @@ import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { watchKeyboard } from '../../utils/KeyboardWatch';
 import { runningAnimations, whenStopped } from '../../utils/Animations';
-import { focusField, type FieldFocus } from '../../utils/FieldFocus';
+import { focusField, type FieldFocus, type Focusable } from '../../utils/FieldFocus';
+import { placeFocus } from './FocusPlacement';
 import { t } from '../../i18n';
 
 export type OverlayMode = 'anchored' | 'centered';
@@ -95,8 +97,8 @@ export interface OverlayOpenOpts {
     /**
      * What the focus goes to once the overlay has opened: a frame after it
      * opens (the frame of the window it stands in, so a popout's), or once
-     * its open animation has ended, the panel holding the focus until then
-     * (`focusOnceOpen`). The body says how a text field's text is met
+     * its open animation has ended and the plugin's menus have gone, the
+     * panel holding the focus until then (`placeFirstFocus`). The body says how a text field's text is met
      * there, all of it selected or the caret after it, as the field's kind
      * asks: the shell knows no field. Not given, or naming nothing, the
      * panel itself takes the focus.
@@ -164,10 +166,8 @@ export function takeEscape(
     step();
 }
 
-/** An overlay opening, as its first focus sees it (`focusOnceOpen`). */
+/** An overlay opening, as its first focus sees it (`placeFirstFocus`). */
 export interface OpeningOverlay {
-    /** The element on the body the overlay stands in: its panel and backdrop animate in it. */
-    root: Element;
     panel: HTMLElement;
     doc: Document;
     /** Whether the overlay is still open on this panel: not closed, nor opened again on another body. */
@@ -178,36 +178,70 @@ export interface OpeningOverlay {
     target: () => FieldFocus | null;
 }
 
+/** An overlay's opening (`watchOpening`). */
+export interface Opening {
+    /** What settles once the overlay has opened; null once it has. */
+    pending(): Promise<void> | null;
+    /** The overlay closed: its opening is over. */
+    end(): void;
+}
+
 /**
- * The first focus of an overlay, a frame after it opens (`win`'s frame).
+ * An overlay's opening: from its opening (the body built after it opens)
+ * to the frame after (`win`'s frame), then until the animations of `parts`
+ * running at that frame have stopped, ended or cancelled (the sheet dragged
+ * by its handle): the panel sliding up or popping in, the backdrop fading
+ * in. Theirs alone: what animates in the body (a field's focus ring) is no
+ * part of the overlay's coming in, nor what starts on them once they have
+ * come in (the panel following the keyboard). With nothing running then,
+ * or where the DOM cannot list what runs, it has opened at that frame.
+ *
+ * `atFrame` is called at that frame, once the opening is known to wait or
+ * not: the overlay's first focus.
+ */
+export function watchOpening(win: Window, parts: readonly Element[], atFrame: () => void): Opening {
+    let settle!: () => void;
+    let pending: Promise<void> | null = new Promise<void>((resolve) => { settle = resolve; });
+    const end = () => {
+        if (!pending) return;
+        pending = null;
+        settle();
+    };
+    win.requestAnimationFrame(() => {
+        if (pending) {
+            const moving = parts.flatMap((part) => runningAnimations(part, { subtree: false }));
+            if (moving.length === 0) end();
+            else void whenStopped(moving).then(end);
+        }
+        atFrame();
+    });
+    return { pending: () => pending, end };
+}
+
+/**
+ * The first focus of an overlay, a frame after it opens: on what the body
+ * asks (`initialFocus`), once the plugin's menus have gone and its overlays
+ * this one among them have opened (`placeFocus`).
  *
  * A field focused while the panel still moves raises the on-screen keyboard
  * with the field where it stands midway, and WebKit scrolls the body by that
  * place (on iPad the sheet sliding up from below the window had its body
- * scrolled to the end). So while an animation runs in the overlay then (the
- * sheet sliding up, the box popping in), the panel takes the focus, which
- * raises no keyboard and keeps the hotkeys out, and the field takes it once
- * every one of them has stopped, ended or cancelled (the sheet dragged by its
- * handle). The focus the user moved meanwhile to another part of the surface
- * is left there, and an overlay closed or opened again meanwhile is not
- * focused. With nothing running, or where the DOM cannot list what runs,
- * the field takes the focus at that frame.
+ * scrolled to the end); one focused while a menu's sheet still slides away
+ * has the sheet rise with the keyboard. Meanwhile the panel holds the focus,
+ * which raises no keyboard and keeps the hotkeys out. The focus the user
+ * moved meanwhile to another part of the surface is left there, and an
+ * overlay closed or opened again meanwhile is not focused.
  */
-export function focusOnceOpen(win: Window, overlay: OpeningOverlay): void {
-    win.requestAnimationFrame(() => {
-        if (!overlay.isCurrent()) return;
-        const opening = runningAnimations(overlay.root);
-        if (opening.length === 0) {
-            focusFirst(overlay);
-            return;
-        }
-        overlay.panel.focus({ preventScroll: true });
-        void whenStopped(opening).then(() => {
-            if (!overlay.isCurrent()) return;
+export function placeFirstFocus(overlay: OpeningOverlay): void {
+    if (!overlay.isCurrent()) return;
+    const first: Focusable = { focus: () => focusFirst(overlay) };
+    placeFocus({ to: first }, {
+        hold: overlay.panel,
+        stillWanted: () => {
+            if (!overlay.isCurrent()) return false;
             const active = overlay.doc.activeElement;
-            if (active !== overlay.panel && overlay.holds(active)) return;
-            focusFirst(overlay);
-        });
+            return active === overlay.panel || !overlay.holds(active);
+        },
     });
 }
 
@@ -244,6 +278,7 @@ export class OverlayShell implements ClosableOverlay {
     private kbAware: KeyboardAwareContainer | null = null;
     private hotkeys: HotkeyShield | null = null;
     private releaseBack: (() => void) | null = null;
+    private openingWatch: Opening | null = null;
 
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -356,14 +391,13 @@ export class OverlayShell implements ClosableOverlay {
         this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => this.holds(node));
 
         const initialFocus = opts.initialFocus;
-        focusOnceOpen(hostWin, {
-            root,
+        this.openingWatch = watchOpening(hostWin, [backdrop, panel], () => placeFirstFocus({
             panel,
             doc: hostDoc,
             isCurrent: () => this.panelEl === panel,
             holds: (node) => this.holds(node),
             target: () => initialFocus?.() ?? null,
-        });
+        }));
 
         // Pagehide (popout window close): nothing to keep open for, so not asked.
         this.pageHideHandler = () => this.close();
@@ -405,6 +439,8 @@ export class OverlayShell implements ClosableOverlay {
         if (!this.rootEl || this.closing) return;
         this.closing = true;
         unregisterOverlay(this);
+        this.openingWatch?.end();
+        this.openingWatch = null;
         this.giveFocusBack();
 
         // Logical teardown (immediate — overlay is inert from here)
@@ -485,6 +521,11 @@ export class OverlayShell implements ClosableOverlay {
     /** The element on the body the overlay stands in, while it is open. */
     layer(): Node | null {
         return this.isOpen() ? this.rootEl : null;
+    }
+
+    /** While it opens, what settles once it has opened (`watchOpening`). */
+    opening(): Promise<void> | null {
+        return this.isOpen() ? this.openingWatch?.pending() ?? null : null;
     }
 
     getPanel(): HTMLElement | null { return this.panelEl; }
