@@ -13,7 +13,7 @@ vi.mock('obsidian', async (importOriginal) => ({
 }));
 
 import TaskViewerPlugin from '../../../src/main';
-import { KeyboardAwareContainer, KEYBOARD_OVERLAP_VAR } from '../../../src/utils/KeyboardAwareContainer';
+import { KeyboardRoom, KEYBOARD_OVERLAP_VAR } from '../../../src/utils/KeyboardRoom';
 import { untrackAllKeyboards } from '../../../src/utils/KeyboardWatch';
 
 class Target {
@@ -35,7 +35,7 @@ class MobileWindow extends Target {
     visualViewport = undefined;
 }
 
-/** An overlay's root, as far as the container reads and writes it. */
+/** An overlay's root, as far as the keyboard room reads and writes it. */
 class Root extends Target {
     ownerDocument = new Target();
     vars = new Map<string, string>();
@@ -66,10 +66,10 @@ describe('the keyboard as the plugin loads', () => {
 
         const root = new Root();
         const body = Object.assign(new Target(), { scrollTop: 0, scrollTo() {} });
-        const kac = new KeyboardAwareContainer(root as never, win as never, body as never);
-        kac.attach();
+        const room = new KeyboardRoom(root as never, win as never, body as never);
+        room.attach();
 
         expect(root.vars.get(KEYBOARD_OVERLAP_VAR)).toBe('336px');
-        kac.detach();
+        room.detach();
     });
 });

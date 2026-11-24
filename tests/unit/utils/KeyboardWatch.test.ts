@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import {
     trackKeyboard, untrackAllKeyboards, nativeKeyboardHeight, keyboardTop, keyboardOverlap, watchKeyboard,
-    keyboardFollowerCount, type KeyboardChange,
+    keyboardFollowerCount, keyboardMoving, type KeyboardChange,
 } from '../../../src/utils/KeyboardWatch';
 import { clearLog, getLogEntries } from '../../../src/log/log';
 
@@ -261,5 +261,71 @@ describe('KeyboardWatch: the parts following a window\'s keyboard', () => {
 
         expect(told).toEqual(['new keyboardWillShow']);
         expect(nativeKeyboardHeight(win as unknown as Window)).toBe(300);
+    });
+});
+
+describe('KeyboardWatch: the keyboard sliding', () => {
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); });
+    afterEach(() => {
+        untrackAllKeyboards();
+        vi.useRealTimers();
+    });
+
+    it('takes the keyboard as moving from a will show until the did show', () => {
+        const win = makeWindow();
+        trackKeyboard(win as unknown as Window);
+        expect(keyboardMoving(win as unknown as Window)).toBe(false);
+
+        win.fire('keyboardWillShow', 300);
+        vi.advanceTimersByTime(440);
+        expect(keyboardMoving(win as unknown as Window)).toBe(true);
+
+        win.fire('keyboardDidShow', 300);
+        expect(keyboardMoving(win as unknown as Window)).toBe(false);
+    });
+
+    it('takes the keyboard as moving from a will hide until the did hide', () => {
+        const win = makeWindow();
+        trackKeyboard(win as unknown as Window);
+        win.fire('keyboardDidShow', 300);
+
+        win.fire('keyboardWillHide');
+        expect(keyboardMoving(win as unknown as Window)).toBe(true);
+
+        win.fire('keyboardDidHide');
+        expect(keyboardMoving(win as unknown as Window)).toBe(false);
+    });
+
+    it('takes the keyboard as at rest 1000ms after a will with no did', () => {
+        const win = makeWindow();
+        trackKeyboard(win as unknown as Window);
+
+        win.fire('keyboardWillShow', 300);
+        vi.advanceTimersByTime(999);
+        expect(keyboardMoving(win as unknown as Window)).toBe(true);
+        vi.advanceTimersByTime(1);
+        expect(keyboardMoving(win as unknown as Window)).toBe(false);
+    });
+
+    it('counts the 1000ms afresh from a later will', () => {
+        const win = makeWindow();
+        trackKeyboard(win as unknown as Window);
+
+        win.fire('keyboardWillShow', 314);
+        vi.advanceTimersByTime(600);
+        win.fire('keyboardWillShow', 300);
+        vi.advanceTimersByTime(600);
+
+        expect(keyboardMoving(win as unknown as Window)).toBe(true);
+    });
+
+    it('never takes the keyboard as moving where only the visualViewport tells it', () => {
+        const win = makeViewportWindow();
+        trackKeyboard(win as unknown as Window);
+
+        win.visualViewport.height = 500;
+        win.visualViewport.fire('resize');
+
+        expect(keyboardMoving(win as unknown as Window)).toBe(false);
     });
 });

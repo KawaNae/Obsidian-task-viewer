@@ -461,6 +461,53 @@ describe('the body at rest while the keyboard is up', () => {
             expect(room.scrollTop).toBe(0);
         });
 
+        // Under 300 the sheet's body runs from 72 to 440 and the box's from 92 to 572, its keyboard's top at 500.
+        for (const c of [{ name: 'the sheet', shape: SHEET, top: 92, end: 430 }, { name: 'the box', shape: BOX, top: 52, end: 490 }]) {
+            for (const at of [50, 160]) {
+                it(`${c.name}: scrolls for where the field comes to rest, focused ${at < 150 ? 'as' : 'once'} it opens over an open keyboard and laid out as it is built, the overlap moving in from none`, async () => {
+                    const room = makeRoom({ shape: c.shape, content: 1000, viewport: false });
+                    const field = room.field(450);
+                    room.native('keyboardWillShow', 300);
+                    room.native('keyboardDidShow', 300);
+                    room.mount({ laidOut: true });
+                    room.open();
+                    expect(room.overlapMoving()).toBe(true);
+
+                    await room.advance(at);
+                    room.focus(field);
+                    await room.settle();
+                    expect(room.scrollTop).toBe(c.top);
+                    expect(room.bottomOf(field)).toBe(c.end);
+
+                    room.native('keyboardWillHide');
+                    await room.settle();
+                    expect(room.scrollTop).toBe(0);
+                    expect(room.inline()).toEqual(NONE);
+                });
+            }
+        }
+
+        it('puts the body back where it was as the keyboard opened, a field in sight when it opened, when focusing a hidden one had the browser scroll it first', async () => {
+            const room = makeRoom({ shape: BOX, content: 1000 });
+            const a = room.field(200);
+            const b = room.field(500);
+            room.focus(a);
+            room.mount();
+            room.iPadShow(300);
+            await room.settle();
+            expect(room.scrollTop).toBe(0);
+
+            room.focus(b);
+            room.browserScroll(32); // the browser shows the field before it is measured
+            await room.settle();
+            expect(room.bottomOf(b)).toBe(490);
+
+            room.iPadHide();
+            await room.settle();
+
+            expect(room.scrollTop).toBe(0);
+        });
+
         it('puts the body back 200ms after the focus leaves the fields, and not before', async () => {
             const { room } = focused(BOX, 500, { scrollTop: 7 });
             viewportKeyboard(room, 300);
@@ -533,6 +580,18 @@ describe('the body at rest while the keyboard is up', () => {
             expect(room.inline()).toEqual({ height: '', maxHeight: '', paddingBottom: '8px' });
         });
 
+        it('leaves the body flinging on after the user scrolled it as the keyboard goes', async () => {
+            const { room } = await openedOverField();
+
+            room.userScroll('touchmove', 150);
+            room.viewport(800);
+            await room.advance(50);
+            room.browserScroll(200); // the fling going on after the finger has left
+            await room.settle();
+
+            expect(room.scrollTop).toBe(200);
+        });
+
         it('leaves the body where the user took it when the part detaches', async () => {
             const { room } = await openedOverField();
 
@@ -578,6 +637,141 @@ describe('the body at rest while the keyboard is up', () => {
 
             expect(room.scrollTop).toBe(180);
             expect(room.inline()).toEqual(NONE);
+        });
+    });
+
+    describe('the user scrolling the body while the keyboard rises', () => {
+        // Under 300 the box's body runs from 92 to 572 and the keyboard's top is at 500.
+        it('measures the body from where the user took it once the keyboard is up, the field hidden there', async () => {
+            const { room, field } = focused(BOX, 450);
+            room.iPadShow(300);
+            await room.advance(100);
+
+            room.userScroll('touchmove', 0); // the field at 542 at rest, 52 short
+            await room.settle();
+
+            expect(room.scrollTop).toBe(52);
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '' });
+            expect(room.bottomOf(field)).toBe(490);
+        });
+
+        for (const at of [60, 200]) {
+            it(`leaves the body unlocked where the user took it to ${at} once the keyboard is up, the field in sight there`, async () => {
+                const { room, field } = focused(BOX, 450);
+                room.iPadShow(300);
+                await room.advance(100);
+
+                room.userScroll('touchmove', at);
+                await room.settle();
+
+                expect(room.scrollTop).toBe(at);
+                expect(room.inline()).toEqual(NONE);
+                expect(room.bottomOf(field)).toBe(92 + 450 - at);
+            });
+        }
+
+        for (const at of [20, 0]) {
+            it(`pads from the scroll room the body had before the keyboard, the user having taken it to ${at}`, async () => {
+                // 40 of scroll room: the field at 92 + 500 less where the user took the body lacks 102 from 0, 62 past the room.
+                const { room, field } = focused(BOX, 500, { content: 520 });
+                room.iPadShow(300);
+                await room.advance(150);
+
+                room.userScroll('wheel', at);
+                await room.settle();
+
+                expect(room.scrollTop).toBe(102);
+                expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '62px' });
+                expect(room.bottomOf(field)).toBe(490);
+            });
+        }
+
+        it('plans from where the user took the body when the field moves after it', async () => {
+            // From 10 the field moved to 100 stands at 92 + 100 - 10 = 182, in sight.
+            const { room, field } = focused(BOX, 500, { content: 520 });
+            room.iPadShow(300);
+            await room.advance(120);
+            room.userScroll('wheel', 10);
+            await room.advance(30);
+
+            field.moveTo(100);
+            await room.settle();
+
+            expect(room.scrollTop).toBe(10);
+            expect(room.inline()).toEqual(NONE);
+        });
+
+        it('measures from as far as the body scrolled before the keyboard, the user having taken it into the padding and the field moved after', async () => {
+            // 40 of scroll room before the keyboard: from 40 the field moved to 498 stands at 550, 60 short.
+            const { room, field } = focused(BOX, 500, { content: 520 });
+            room.iPadShow(300);
+            await room.advance(120);
+            room.userScroll('wheel', 102);
+            await room.advance(30);
+
+            field.moveTo(498);
+            await room.settle();
+
+            expect(room.scrollTop).toBe(100);
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '60px' });
+            expect(room.bottomOf(field)).toBe(490);
+        });
+    });
+
+    describe('the keyboard rising again with no field focused', () => {
+        it('leaves the body as it stood before the keyboard, the focus having left as it rose and the keyboard gone and back', async () => {
+            const { room } = focused(BOX, 500, { content: 520 });
+            room.iPadShow(300);
+            await room.advance(50);
+            room.blur();
+            await room.advance(260);
+
+            room.iPadHide(); // the did show still to come at 440ms
+            await room.settle();
+
+            expect(room.writtenOverlap()).toBe('300px');
+            expect(room.scrollTop).toBe(0);
+            expect(room.inline()).toEqual(NONE);
+        });
+    });
+
+    describe('the keyboard changing height once up', () => {
+        it('keeps the padding the body has, and pads what it lacks further', async () => {
+            // Under 360 the keyboard's top is at 440: from 102 the field at 490 lacks 60, all past the scroll room.
+            const { room, field } = focused(BOX, 500, { content: 520 });
+            room.iPadShow(300);
+            await room.settle();
+            expect(room.inline().paddingBottom).toBe('62px');
+
+            room.iPadShow(360);
+            await room.settle();
+
+            expect(room.scrollTop).toBe(162);
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '122px' });
+            expect(room.bottomOf(field)).toBe(430);
+        });
+
+        it('measures a field focused once a read that threw on the keyboard\'s change has left the body at rest', async () => {
+            // Under 360 the keyboard's top is at 440: from 52 the field at 600 stands at 640, 210 short.
+            const { room, field } = focused(BOX, 450);
+            room.iPadShow(300);
+            await room.settle();
+            expect(room.scrollTop).toBe(52);
+            const below = room.field(600);
+            const read = field.getBoundingClientRect.bind(field);
+            let reads = 0;
+            field.getBoundingClientRect = () => {
+                if (++reads > 1) throw new Error('no rect');
+                return read();
+            };
+
+            try { room.native('keyboardWillShow', 360); } catch { /* the read's throw */ }
+            field.getBoundingClientRect = read;
+            room.focus(below);
+            await room.settle();
+
+            expect(room.scrollTop).toBe(262);
+            expect(room.bottomOf(below)).toBe(430);
         });
     });
 

@@ -9,7 +9,7 @@ import { untrackAllKeyboards } from '../../../src/utils/KeyboardWatch';
  * keyboard at the unlifted position and lifted again onto the keyboard's top.
  *
  * Vitest runs in `node` with no DOM, so the window, its visualViewport and the
- * container are plain-object shims (the pattern of KeyboardAwareContainer.test.ts).
+ * container are plain-object shims.
  */
 
 class MiniEventTarget {
