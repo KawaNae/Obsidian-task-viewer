@@ -74,7 +74,7 @@ describe('MenusOnScreen', () => {
         menuShown();
         await vi.advanceTimersByTimeAsync(5000);
         const seen = watch(whenMenusGone());
-        await vi.advanceTimersByTimeAsync(MENU_GONE_BOUND_MS - 1);
+        await vi.advanceTimersByTimeAsync(699);
         expect(seen.how).toBeUndefined();
         await vi.advanceTimersByTimeAsync(1);
         expect(seen.how).toBe('bound');

@@ -672,6 +672,14 @@ describe('closing', () => {
         expect(h.state().asking).toBe(false);
     });
 
+    it('a keep with no question to withdraw puts no focus on the editor', async () => {
+        const h = await answered();
+        h.editor().type('- [ ] A2');
+
+        h.dialog.keep();
+        expect(h.editor().focused).toBe(0);
+    });
+
     it('a draft edited back to the lines opened is none', async () => {
         const h = await answered();
         h.editor().type('- [ ] A2');

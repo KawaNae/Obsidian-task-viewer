@@ -149,6 +149,15 @@ describe('placeFocusWith', () => {
             expect(field.focused).toEqual([]);
         });
 
+        it('drops an ask still waiting when a later one is put at once, though the earlier one says it is still wanted', async () => {
+            const { doc, field, other } = setup();
+            placeFocusWith(waitsAt({ menuGoneAt: 435 }).waits, { to: field }, { stillWanted: () => true });
+            placeFocusWith(waitsAt({}).waits, { to: other });
+            await vi.advanceTimersByTimeAsync(435);
+            expect(doc.activeElement).toBe(other);
+            expect(field.focused).toEqual([]);
+        });
+
         it('keeps an ask of another document', async () => {
             const { field } = setup();
             const elsewhere = setup();
