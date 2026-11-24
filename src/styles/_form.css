@@ -176,19 +176,27 @@
     flex-basis: 100%;
 }
 
-.tv-form__input-with-picker {
+.tv-form__input-with-picker,
+.tv-form__clearable {
     position: relative;
 }
 
 /* 枠は中の text-input が描き、ピッカーと × のボタン、色見本はその上に重なる。
    無効の欄は全体を薄くする（_controls.css の欄の規則）ので、ここでは重なる部品を
    含む全体を薄くし、input は重ねて薄くしない */
-.tv-ctrl .tv-form__input-with-picker:has(> .tv-ctrl__text-input:disabled) {
+.tv-ctrl .tv-form__input-with-picker:has(> .tv-ctrl__text-input:disabled),
+.tv-ctrl .tv-form__clearable:has(> .tv-ctrl__text-input:disabled) {
     opacity: 0.5;
 }
 
-.tv-ctrl .tv-form__input-with-picker > .tv-ctrl__text-input:disabled {
+.tv-ctrl .tv-form__input-with-picker > .tv-ctrl__text-input:disabled,
+.tv-ctrl .tv-form__clearable > .tv-ctrl__text-input:disabled {
     opacity: 1;
+}
+
+/* × のボタン（ClearButton）が立つ欄: 文字は終わり側の × の幅を避ける */
+.tv-ctrl .tv-form__clearable > .tv-ctrl__text-input {
+    padding-inline-end: 28px;
 }
 
 .tv-ctrl .tv-form__input-with-picker .tv-ctrl__text-input {

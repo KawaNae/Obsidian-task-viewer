@@ -1,6 +1,7 @@
 import { DateUtils } from '../../utils/DateUtils';
 import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
+import { ClearButton } from './ClearButton';
 import { createNativePicker } from '../../views/sharedUI/NativePicker';
 
 export type PickerType = 'date' | 'time' | 'color';
@@ -45,7 +46,7 @@ export class PickerTextField {
     /** The native picker. Its value is kept in step with the text by whoever owns the field. */
     readonly picker: HTMLInputElement;
     private readonly pickerButton: HTMLButtonElement;
-    private readonly clearButton: HTMLButtonElement | null;
+    private readonly clear: ClearButton | null;
     /** The picker's value from the text, as the owner reads it; set by {@link createPickerTextField}. */
     syncPicker: (() => void) | null = null;
 
@@ -72,21 +73,18 @@ export class PickerTextField {
         if (opts.placeholder !== undefined) this.input.placeholder = opts.placeholder;
         this.input.value = opts.initialValue;
 
-        if (opts.clearable) {
-            // × はタブの順に入れない（テキストは選んで消せる）。欄のタブの止まり
-            // 位置は、ピッカーのボタンとテキストの2つのまま
-            const clear = this.el.createEl('button', { cls: 'tv-form__clear-button', attr: { type: 'button' } });
-            clear.tabIndex = -1;
-            clear.setAttribute('aria-label', t('modal.clear'));
-            setIcon(clear.createSpan(), 'x');
-            clear.addEventListener('click', () => {
-                this.setText('');
-                opts.onClear?.();
-            });
-            this.clearButton = clear;
-        } else {
-            this.clearButton = null;
-        }
+        // × はタブの順に入れない（テキストは選んで消せる）。欄のタブの止まり
+        // 位置は、ピッカーのボタンとテキストの2つのまま。押してもフォーカスを
+        // 欄へ移さない
+        this.clear = opts.clearable
+            ? new ClearButton(this.el, this.input, {
+                clear: () => {
+                    this.setText('');
+                    opts.onClear?.();
+                },
+                focusesField: false,
+            })
+            : null;
         this.input.addEventListener('input', () => this.syncText());
         this.syncText();
     }
@@ -99,7 +97,7 @@ export class PickerTextField {
 
     /** What follows the text: the clear button shown while it holds a value. The owner keeps the picker (`syncPicker`). */
     private syncText(): void {
-        if (this.clearButton) this.clearButton.style.display = this.input.value.trim() ? '' : 'none';
+        this.clear?.sync();
         this.syncPicker?.();
     }
 
@@ -108,7 +106,7 @@ export class PickerTextField {
         this.input.disabled = !enabled;
         this.picker.disabled = !enabled;
         this.pickerButton.disabled = !enabled;
-        if (this.clearButton) this.clearButton.disabled = !enabled;
+        this.clear?.sync();
     }
 }
 

@@ -692,7 +692,7 @@ describe.each([
             expect(texts(r.frames.renamed)).toEqual(['s05']);
         });
 
-        it('opens with the text of the field it focuses selected whole: the heading when the note is found, the note when it is not', () => {
+        it('opens with the caret after the text of the field it focuses: the heading when the note is found, the note when it is not', () => {
             const focusedSelection = (id: string) => onDialog<{ index: number; value: string; start: number | null; end: number | null }>(name, `
                 ${relinkFromMenu(id)}
                 await wait(600);
@@ -702,12 +702,12 @@ describe.each([
             const found = focusedSelection('folded');
             expect(found.index).toBe(1);
             expect(found.value).not.toBe('');
-            expect([found.start, found.end]).toEqual([0, found.value.length]);
+            expect([found.start, found.end]).toEqual([found.value.length, found.value.length]);
             closeDialog(name);
             const missing = focusedSelection('gone');
             expect(missing.index).toBe(0);
             expect(missing.value).not.toBe('');
-            expect([missing.start, missing.end]).toEqual([0, missing.value.length]);
+            expect([missing.start, missing.end]).toEqual([missing.value.length, missing.value.length]);
         });
 
         it('chooses again from its ⋯ menu the section of a folded frame not found, which stays folded', () => {

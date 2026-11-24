@@ -2,10 +2,12 @@ import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import { renderComplex } from '../../suggest/candidateView';
 import { ShownSuggest } from '../../suggest/ShownSuggest';
+import { createClearableInput, type ClearButton } from '../form/ClearButton';
 import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
 import type { IssueSlot } from '../form/FormIssue';
-import { NoteField } from '../noteops/NoteField';
+import type { FieldFocus } from '../../utils/FieldFocus';
+import { NAME_ON_FOCUS, NoteField } from '../noteops/NoteField';
 import { offeredChoices, trailOf, type HeadingAsk, type SectionAsk, type SectionChoice, type SectionDialogField } from './SectionDialog';
 
 /** What a {@link SectionField} opens with, and whom it tells. */
@@ -24,7 +26,8 @@ export interface SectionFieldOptions {
  * aliases), and a heading of it, the note's headings offered under it with
  * the whole note first: two form rows, each with its icon, as the send
  * dialog's destination is. Left empty, the heading field stands for the
- * whole note, which it shows in its place.
+ * whole note, which it shows in its place. Each field's × empties it as
+ * deleting its text does (`createClearableInput`).
  *
  * The heading field holds its text and the heading picked (`HeadingAsk`), as
  * the note field holds a note: the heading picked is let go once the text
@@ -36,6 +39,7 @@ export class SectionField {
     private readonly headingInput: HTMLInputElement;
     private readonly headingSays: HTMLElement;
     private readonly suggest: SectionChoiceSuggest;
+    private readonly headingClear: ClearButton;
     /** The heading picked, and the text the pick put in. */
     private picked: { path: string; line: number; text: string } | null;
 
@@ -50,13 +54,10 @@ export class SectionField {
 
         const { row, says } = createFormRow(container, t('modal.heading'), { icon: 'heading' });
         this.headingSays = says;
-        this.headingInput = row.createEl('input', {
-            type: 'text',
-            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
-            placeholder: t('modal.section.wholeNote'),
-        });
+        ({ input: this.headingInput, clear: this.headingClear } = createClearableInput(row, t('modal.section.wholeNote')));
         const { heading } = opts.initial;
         this.headingInput.value = heading.text;
+        this.headingClear.sync();
         this.picked = heading.picked && { ...heading.picked, text: heading.text };
         this.headingInput.addEventListener('input', () => {
             if (this.picked && this.headingInput.value !== this.picked.text) this.picked = null;
@@ -70,6 +71,7 @@ export class SectionField {
                 this.picked = { path, line: choice.heading.line, text: choice.heading.text };
                 this.headingInput.value = choice.heading.text;
             }
+            this.headingClear.sync();
             opts.headingChanged();
         });
         onFormEnter(this.headingInput, () => opts.onEnter(), { takesEnter: () => this.suggest.listShown });
@@ -98,9 +100,9 @@ export class SectionField {
             : { input: this.headingInput, message: this.headingSays };
     }
 
-    /** The input of the note field, or of the heading field. */
-    input(at: SectionDialogField): HTMLInputElement {
-        return at === 'note' ? this.note.input : this.headingInput;
+    /** The focus on the note field, or on the heading field, its text met as a name's is. */
+    focus(at: SectionDialogField): FieldFocus {
+        return at === 'note' ? this.note.focus() : { to: this.headingInput, selection: NAME_ON_FOCUS };
     }
 }
 

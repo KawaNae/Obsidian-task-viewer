@@ -13,6 +13,10 @@ export class FakeEl {
     readonly classes = new Set<string>();
     text = '';
     value = '';
+    /** The inline style, as far as a form's pieces set it (`display`). */
+    readonly style: Record<string, string> = {};
+    disabled = false;
+    tabIndex = 0;
 
     constructor(cls = '') {
         cls.split(/\s+/).filter(Boolean).forEach(c => this.classes.add(c));
@@ -66,6 +70,10 @@ export class FakeEl {
         }
         return null;
     }
+    /** Every descendant with the class `cls`, in document order. */
+    findAll(cls: string): FakeEl[] {
+        return this.children.flatMap(c => [...(c.classes.has(cls) ? [c] : []), ...c.findAll(cls)]);
+    }
     empty(): void { this.children.length = 0; }
     setAttribute(k: string, v: string): void { this.attrs.set(k, v); }
     removeAttribute(k: string): void { this.attrs.delete(k); }
@@ -87,10 +95,33 @@ export class FakeEl {
         this.value = text;
         this.dispatchEvent(Object.assign(new Event('input'), { isComposing: false }));
     }
-    blur(): void { this.dispatchEvent(new Event('blur')); }
+    /** Focus it: the document's active element, as `focused` reads it. */
+    focus(): void {
+        focusedEl = this;
+        this.dispatchEvent(new Event('focus'));
+    }
+    blur(): void {
+        if (focusedEl === this) focusedEl = null;
+        this.dispatchEvent(new Event('blur'));
+    }
+    /** Press it as a pointer does: `mousedown`, whose default a handler may prevent, then `click`; a disabled one takes neither, as a browser's does not. */
+    press(): { defaultPrevented: boolean } {
+        if (this.disabled) return { defaultPrevented: false };
+        const down = new Event('mousedown', { cancelable: true });
+        this.dispatchEvent(down);
+        this.dispatchEvent(new Event('click'));
+        return { defaultPrevented: down.defaultPrevented };
+    }
     enter(init: Partial<KeyboardEventInit> = {}): void {
         this.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Enter', keyCode: 13, isComposing: false, preventDefault() { /* taken */ }, ...init }));
     }
+}
+
+let focusedEl: FakeEl | null = null;
+
+/** The element focused last (`focus`), as a document's active element. */
+export function focused(): FakeEl | null {
+    return focusedEl;
 }
 
 export function asEl(el: FakeEl): HTMLElement & HTMLInputElement {

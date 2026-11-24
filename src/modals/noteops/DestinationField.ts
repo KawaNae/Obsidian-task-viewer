@@ -2,10 +2,12 @@ import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { DestinationAsk } from '../../services/data/NotePlaces';
 import { ShownSuggest } from '../../suggest/ShownSuggest';
+import { createClearableInput } from '../form/ClearButton';
 import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
 import type { IssueSlot } from '../form/FormIssue';
-import { NoteField } from './NoteField';
+import type { FieldFocus } from '../../utils/FieldFocus';
+import { NAME_ON_FOCUS, NoteField } from './NoteField';
 
 /** What a {@link DestinationField} opens with, and whom it tells. */
 export interface DestinationFieldOptions {
@@ -23,7 +25,8 @@ export interface DestinationFieldOptions {
  * are. The send dialog and the dialog that places a task to make hold it.
  * The heading field left empty stands for the note's end, under no
  * heading, for every form (`NotePlaces.readFields` reads it so); the field
- * says so in its place.
+ * says so in its place. Each field's × empties it as deleting its text does
+ * (`createClearableInput`).
  *
  * It holds what the user typed and nothing of the operation it is for:
  * what the note is, which headings it has and whether a field is wrong are
@@ -47,12 +50,10 @@ export class DestinationField {
 
         const { row, says } = createFormRow(container, t('modal.heading'), { icon: 'heading' });
         this.headingSays = says;
-        this.headingInput = row.createEl('input', {
-            type: 'text',
-            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
-            placeholder: t('modal.destination.headingEmpty'),
-        });
+        const heading = createClearableInput(row, t('modal.destination.headingEmpty'));
+        this.headingInput = heading.input;
         this.headingInput.value = opts.initial.heading;
+        heading.clear.sync();
         this.headingInput.addEventListener('input', () => opts.onChange());
         this.headingSuggest = new HeadingSuggest(app, this.headingInput);
         onFormEnter(this.headingInput, () => opts.onEnter(), { takesEnter: () => this.headingSuggest.listShown });
@@ -75,9 +76,9 @@ export class DestinationField {
             : { input: this.headingInput, message: this.headingSays };
     }
 
-    /** The input of the note field, or of the heading. */
-    input(at: 'note' | 'heading'): HTMLInputElement {
-        return at === 'note' ? this.note.input : this.headingInput;
+    /** The focus on the note field, or on the heading, its text met as a name's is. */
+    focus(at: 'note' | 'heading'): FieldFocus {
+        return at === 'note' ? this.note.focus() : { to: this.headingInput, selection: NAME_ON_FOCUS };
     }
 }
 

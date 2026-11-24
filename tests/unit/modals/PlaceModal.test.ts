@@ -87,11 +87,11 @@ describe('PlaceModal', () => {
         expect(h.buttons().map(b => b.text)).toEqual([t('modal.cancel'), t('modal.place.move')]);
     });
 
-    it('opens with the focus on the note field, its text selected', () => {
+    it('opens with the focus on the note field, the caret after its text', () => {
         const h = setUp();
         const focus = h.shell.opts!.initialFocus!();
 
-        expect(focus?.selection).toBe('all');
+        expect(focus?.selection).toBe('end');
         expect((focus?.to as unknown as FakeEl).attrs.get('placeholder')).toBe(t('modal.notePlaceholder'));
     });
 

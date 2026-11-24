@@ -37,8 +37,8 @@ export interface PlaceOptions {
  * It is built of the form's shared pieces (`_form.css`), as the send
  * dialog is, and stands on an overlay (`OverlayShell`, centered): the title
  * in its head, the row of buttons in its foot. It opens with the focus on
- * the note field, its text selected, a name picked from candidates being
- * typed over whole. Opened over another overlay (the hub of a task to
+ * the note field, the caret after its text, a note's name having no fixed
+ * shape and being mended as often as replaced. Opened over another overlay (the hub of a task to
  * make), it stands above it, and Escape and a press outside are its own
  * (`LayerOrder`).
  */
@@ -72,7 +72,7 @@ export class PlaceModal implements PlaceSurface {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog',
             keymap: this.app.keymap,
-            initialFocus: () => (this.field ? { to: this.field.input('note'), selection: 'all' } : null),
+            initialFocus: () => (this.field ? this.field.focus('note') : null),
             build: (bodyEl, frame) => this.build(bodyEl, frame),
             onClose: () => {
                 this.dialog?.dispose();
