@@ -12,7 +12,10 @@
  *   a tall one (the hub) are each seen under a keyboard that ends below the
  *   box (it does not move), one that would cover its lower part (it ends
  *   32px above the keyboard), and one that puts it at 32px, and back where
- *   it stood once the keyboard goes.
+ *   it stood once the keyboard goes. The box keeps its height under each.
+ *   A box holding more than the window less 64px (the hub of a row with
+ *   many properties) is that tall, at 32px from the top, under keyboards
+ *   of any height as with none.
  * - A phone's sheet stands on the keyboard: it keeps its bottom at the
  *   window's and takes the overlap as a padding of its own, its height at
  *   most the window's less the room kept above it, 120px less the overlap
@@ -122,8 +125,12 @@ interface BoxUnder {
     k: number;
     /** The box's top once the overlap had settled. */
     top: number;
+    /** The box's height once the overlap had settled. */
+    height: number;
     /** The box's top once the keyboard had gone and the overlap settled at 0. */
     back: number;
+    /** The box's height once the keyboard had gone. */
+    backHeight: number;
 }
 
 interface CenteredBox {
@@ -158,10 +165,11 @@ function underKeyboards(open: keyof typeof OPEN): CenteredBox {
         for (const [name, k] of Object.entries(heights)) {
             showKeyboard(k);
             await overlapSettled(root(), k);
-            const top = rectOf(panel()).top;
+            const { top, height } = rectOf(panel());
             hideKeyboard();
             await overlapSettled(root(), 0);
-            out[name] = { k, top, back: rectOf(panel()).top };
+            const back = rectOf(panel());
+            out[name] = { k, top, height, back: back.top, backHeight: back.height };
         }
         return JSON.stringify(out);
     `);
@@ -177,7 +185,12 @@ function expectBoxUnderKeyboards(seen: CenteredBox): void {
     for (const under of [seen.clear, seen.covering, seen.atTop]) {
         expect(under.top).toBeGreaterThanOrEqual(boxTop(seen.H, seen.h, under.k) - 1);
         expect(under.top).toBeLessThanOrEqual(boxTop(seen.H, seen.h, under.k) + 1);
+        // The box keeps its height under the keyboard, even the one putting
+        // it at 32px, whose overlap and the box together are more than the
+        // room the box leaves.
+        expect(Math.abs(under.height - seen.h)).toBeLessThanOrEqual(1);
         expect(Math.abs(under.back - seen.top)).toBeLessThanOrEqual(1);
+        expect(Math.abs(under.backHeight - seen.h)).toBeLessThanOrEqual(1);
     }
     // The keyboard that ends more than 32px below the box leaves it where it stood.
     expect(Math.abs(seen.clear.top - seen.top)).toBeLessThanOrEqual(1);
@@ -187,6 +200,43 @@ function expectBoxUnderKeyboards(seen: CenteredBox): void {
     expect(seen.covering.top).toBeGreaterThan(33);
     expect(seen.covering.top).toBeLessThan(seen.top - 1);
     expect(seen.atTop.top).toBeCloseTo(32, 0);
+}
+
+/** Where a box at its greatest height stood with no keyboard, under keyboards, and once each went. */
+interface TallBox {
+    H: number;
+    /** The box's top and height as it opened, with no keyboard. */
+    top: number;
+    h: number;
+    /** What its body holds past what it shows (px). */
+    hidden: number;
+    under: BoxUnder[];
+}
+
+/**
+ * Open the overlay `open` names as the desktop's centered box and tell it
+ * keyboards covering a little of the window, half of it, and nearly all of
+ * it, each going before the next comes.
+ */
+function tallUnderKeyboards(open: keyof typeof OPEN): TallBox {
+    return run<TallBox>(`
+        ${OPEN[open]()}
+        const H = innerHeight;
+        const first = rectOf(panel());
+        const body = panel().querySelector('.tv-overlay__body');
+        const hidden = body.scrollHeight - body.clientHeight;
+        const under = [];
+        for (const k of [40, Math.round(H / 2), H - 50]) {
+            showKeyboard(k);
+            await overlapSettled(root(), k);
+            const { top, height } = rectOf(panel());
+            hideKeyboard();
+            await overlapSettled(root(), 0);
+            const back = rectOf(panel());
+            under.push({ k, top, height, back: back.top, backHeight: back.height });
+        }
+        return JSON.stringify({ H, top: first.top, h: first.height, hidden, under });
+    `);
 }
 
 /** Where a phone's sheet stood with no keyboard, and under one. */
@@ -266,6 +316,22 @@ describe("the desktop's centered box stays in the window's middle and rises only
         // Room enough under the hub for the three keyboards to differ.
         expect(seen.H - 64 - seen.h).toBeGreaterThan(80);
         expectBoxUnderKeyboards(seen);
+    });
+
+    it('a box holding more than the window less 64px (the hub of a row with many properties) keeps that height at 32px from the top', () => {
+        const seen = tallUnderKeyboards('tallHub');
+        // With no keyboard it is as tall as the window less the 32px kept
+        // above and below it, its body scrolling what it holds past that.
+        expect(seen.hidden).toBeGreaterThan(0);
+        expect(seen.h).toBeCloseTo(seen.H - 64, 0);
+        expect(seen.top).toBeCloseTo(32, 0);
+        for (const under of seen.under) {
+            expect(under.top).toBeCloseTo(boxTop(seen.H, seen.h, under.k), 0);
+            expect(under.top).toBeCloseTo(32, 0);
+            expect(under.height).toBeCloseTo(seen.H - 64, 0);
+            expect(under.back).toBeCloseTo(32, 0);
+            expect(under.backHeight).toBeCloseTo(seen.H - 64, 0);
+        }
     });
 });
 
