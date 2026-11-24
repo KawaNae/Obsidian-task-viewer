@@ -39,7 +39,7 @@
 
     /* The home indicator's inset, less what of the window's bottom the
        on-screen keyboard covers: no room is kept for the indicator under a
-       keyboard (--tv-keyboard-overlap, KeyboardAwareContainer) */
+       keyboard (--tv-keyboard-overlap, KeyboardRoom) */
     --tv-safe-bottom-uncovered: max(0px, env(safe-area-inset-bottom, 0px) - var(--tv-keyboard-overlap, 0px));
 
     /* The room kept between the box and the window's edges (above and below
@@ -178,7 +178,7 @@ body:not(.theme-dark) .tv-overlay {
      below = max(room / 2, overlap), above = room - below (down to 0).
    The box does not shrink: a box taller than the room above the keyboard
    stands at 32px from the top, inside the root (its max-height), and the
-   keyboard covers its lower part, KeyboardAwareContainer giving its body
+   keyboard covers its lower part, KeyboardRoom giving its body
    the scroll room for that; what runs on past the root's bottom is the
    empty item below it. The box moves over the overlap's
    transition alone (On-screen keyboard below): what lays it out has no
@@ -352,7 +352,7 @@ body:not(.is-phone) .tv-overlay--centered .tv-overlay__panel {
 /* ═══════════════════════════════════════════════════════════════
    On-screen keyboard
    The overlay still covers the whole window while the keyboard covers part
-   of it (--tv-keyboard-overlap, set on the root by KeyboardAwareContainer).
+   of it (--tv-keyboard-overlap, set on the root by KeyboardRoom).
    The sheet keeps its bottom at the window's and takes the overlap as a
    padding of its own, so its contents and its row of buttons stand right
    over the keyboard while its surface runs on under it, behind the
@@ -361,7 +361,7 @@ body:not(.is-phone) .tv-overlay--centered .tv-overlay__panel {
    keyboard (Phone). The box keeps its size and its place in the window's
    middle, and rises only by what it lacks to end 32px above the keyboard,
    as far up as 32px from the window's top (Mode: centered); what of a
-   taller box the keyboard covers, KeyboardAwareContainer gives its body the
+   taller box the keyboard covers, KeyboardRoom gives its body the
    scroll room for. The anchored popover is placed by script, above the
    keyboard, instead.
 

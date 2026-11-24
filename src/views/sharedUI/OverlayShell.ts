@@ -61,7 +61,7 @@ import { inLayerAbove } from './LayerOrder';
 import { HotkeyShield } from './HotkeyShield';
 import { CloseGate, type CloseAnswer } from './CloseGate';
 import { holdHistoryBack } from './HistoryBack';
-import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
+import { KeyboardRoom } from '../../utils/KeyboardRoom';
 import { watchKeyboard } from '../../utils/KeyboardWatch';
 import { runningAnimations, whenStopped } from '../../utils/Animations';
 import { focusField, type FieldFocus, type Focusable } from '../../utils/FieldFocus';
@@ -210,7 +210,7 @@ export function watchOpening(win: Window, parts: readonly Element[], atFrame: ()
     };
     win.requestAnimationFrame(() => {
         if (pending) {
-            const moving = parts.flatMap((part) => runningAnimations(part, { subtree: false }));
+            const moving = parts.flatMap((part) => runningAnimations(part));
             if (moving.length === 0) end();
             else void whenStopped(moving).then(end);
         }
@@ -308,7 +308,7 @@ export class OverlayShell implements ClosableOverlay {
     });
     /** What had the focus when the overlay opened, given it back on close. */
     private focusBefore: Element | null = null;
-    private kbAware: KeyboardAwareContainer | null = null;
+    private keyboardRoom: KeyboardRoom | null = null;
     private hotkeys: HotkeyShield | null = null;
     private releaseBack: (() => void) | null = null;
     private openingWatch: Opening | null = null;
@@ -388,9 +388,15 @@ export class OverlayShell implements ClosableOverlay {
 
         opts.build(body, { head, foot });
 
-        // Keyboard awareness (mobile)
-        this.kbAware = new KeyboardAwareContainer(root, hostWin, body);
-        this.kbAware.attach();
+        // The body kept in sight over the on-screen keyboard (mobile). Made
+        // before the opening is watched, so it is asked of as a function.
+        // An anchored panel is placed by script on the keyboard's events,
+        // unless it is a phone's sheet (its handle shown).
+        this.keyboardRoom = new KeyboardRoom(root, hostWin, body, {
+            opening: () => this.opening(),
+            movesWithOverlap: () => this.mode !== 'anchored' || (this.handleEl?.offsetHeight ?? 0) > 0,
+        });
+        this.keyboardRoom.attach();
 
         // Anchored: position panel near anchor
         if (opts.mode === 'anchored') {
@@ -479,8 +485,8 @@ export class OverlayShell implements ClosableOverlay {
         }
 
         // Logical teardown (immediate — overlay is inert from here)
-        this.kbAware?.detach();
-        this.kbAware = null;
+        this.keyboardRoom?.detach();
+        this.keyboardRoom = null;
         this.hotkeys?.detach();
         this.hotkeys = null;
         this.releaseBack?.();
@@ -563,7 +569,7 @@ export class OverlayShell implements ClosableOverlay {
         this.resizeHandler = () => this.repositionIfAnchored();
         hostWin.addEventListener('resize', this.resizeHandler);
 
-        // Followed after the overlay's keyboard awareness, which began to as
+        // Followed after the overlay's keyboard room, which began to as
         // the overlay opened: the panel is placed once the overlay has been
         // given the keyboard's overlap. Not as the visualViewport scrolls:
         // the panel is placed by the keyboard's top, which a scroll moves,

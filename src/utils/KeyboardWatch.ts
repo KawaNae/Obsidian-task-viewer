@@ -59,8 +59,24 @@ interface Watched {
 /** Capacitor's events on the window, on Obsidian mobile. */
 const KEYBOARD_EVENTS = ['keyboardWillShow', 'keyboardDidShow', 'keyboardWillHide', 'keyboardDidHide'] as const;
 
+/**
+ * How long a keyboard is taken as moving after a will show or a will hide
+ * with no did show or did hide (ms): far past the slide itself (on iPad the
+ * did show comes about 440ms after the will show), so it is reached only
+ * where the did never comes (seen on a device that told the will show
+ * alone).
+ */
+const KEYBOARD_MOVE_LIMIT_MS = 1000;
+
 const nativeHeights = new WeakMap<Window, number>();
+/** Until when (the window's clock, ms) the keyboard is taken as moving, from its last will show or will hide. */
+const movingUntil = new WeakMap<Window, number>();
 const watched = new Map<Window, Watched>();
+
+/** The window's clock (ms). */
+function clock(win: Window): number {
+    return win.performance?.now() ?? Date.now();
+}
 
 /** Listen to `win`'s keyboard, once for the window. */
 function watch(win: Window): Watched {
@@ -97,6 +113,11 @@ function watch(win: Window): Watched {
             nativeHeights.set(win, 0);
         } else if (typeof h === 'number' && h >= 0) {
             nativeHeights.set(win, h);
+        }
+        if (cause === 'keyboardWillShow' || cause === 'keyboardWillHide') {
+            movingUntil.set(win, clock(win) + KEYBOARD_MOVE_LIMIT_MS);
+        } else {
+            movingUntil.delete(win);
         }
         tell({ cause, height: h });
     };
@@ -159,6 +180,19 @@ export function untrackAllKeyboards(): void {
 /** The keyboard's height Capacitor told last (px), 0 when closed or where it tells none. */
 export function nativeKeyboardHeight(win: Window): number {
     return nativeHeights.get(win) ?? 0;
+}
+
+/**
+ * Whether the keyboard is sliding in or out as Capacitor tells it: from a
+ * will show or a will hide until the did show or the did hide, at most
+ * 1000ms. Read when asked, so a part that begins to follow the keyboard
+ * while it slides (an overlay opened from another as the keyboard moves)
+ * knows it. Never where only the visualViewport tells the keyboard: it
+ * tells no slide.
+ */
+export function keyboardMoving(win: Window): boolean {
+    const until = movingUntil.get(win);
+    return until !== undefined && clock(win) < until;
 }
 
 /**

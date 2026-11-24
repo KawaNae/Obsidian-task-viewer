@@ -15,6 +15,10 @@
  * it move over a 250ms transition, which the root lists among its animations
  * while it runs. The model keeps the two apart: what was written last
  * (`writtenOverlap`) and what is shown at the time read (`shownOverlap`).
+ * As a browser does, the root's inline `transition: none` cancels the
+ * transition under way, the overlap shown jumping to what is written, and
+ * has what is written while it holds shown at once; a write once the
+ * transition is let run again moves from what is shown then.
  *
  * Time is one fake clock (vitest's fake timers): `setTimeout`, `Date`, the
  * window's `performance.now()` and its animation frames (every 16ms) run on
@@ -23,7 +27,7 @@
  * reads where things stand.
  */
 import { vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { KeyboardAwareContainer } from '../../../src/utils/KeyboardAwareContainer';
+import { KeyboardRoom } from '../../../src/utils/KeyboardRoom';
 import { trackKeyboard, untrackAllKeyboards, type KeyboardCause } from '../../../src/utils/KeyboardWatch';
 
 export const OVERLAP_VAR = '--tv-keyboard-overlap';
@@ -77,6 +81,10 @@ type Listener = (e: any) => void;
 
 class FakeTarget {
     private listeners = new Map<string, Listener[]>();
+    /** How many listen to `type`. */
+    listenerCount(type: string): number {
+        return this.listeners.get(type)?.length ?? 0;
+    }
     addEventListener(type: string, fn: Listener): void {
         const list = this.listeners.get(type) ?? [];
         if (!list.includes(fn)) list.push(fn);
@@ -204,10 +212,16 @@ class FakeDocument extends FakeTarget {
     }
 }
 
-/** The root's inline style: the CSS variables written on it. */
+/** The root's inline style: the CSS variables written on it, and its transition. */
 class RootStyle {
     readonly vars = new Map<string, string>();
-    constructor(private readonly onWrite: (name: string) => void) {}
+    private transitionValue = '';
+    constructor(private readonly onWrite: (name: string) => void, private readonly onTransition: () => void) {}
+    get transition(): string { return this.transitionValue; }
+    set transition(v: string) {
+        this.transitionValue = v;
+        this.onTransition();
+    }
     setProperty(name: string, value: string): void {
         this.vars.set(name, value);
         this.onWrite(name);
@@ -380,6 +394,8 @@ export interface RoomOptions {
     padding?: number;
     /** Whether the window has a visualViewport. */
     viewport?: boolean;
+    /** Whether the overlap moves over its transition: not where the browser cannot register it (`@property`). */
+    transitions?: boolean;
 }
 
 /** Where the panel and the body stand (client px). */
@@ -419,10 +435,14 @@ export class Room {
     /** The root is laid out once it is in a frame: what is written before then is shown at once, with no transition. */
     private styled = false;
     private opening: FakeAnimation | null = null;
+    private readonly transitions: boolean;
     private nativeHeight = 0;
     private mounted: Mounted | null = null;
 
     private frames: { id: number; cb: (t: number) => void }[] = [];
+    /** Told at the end of each frame, once its callbacks have run. */
+    private frameWatchers: ((frame: number) => void)[] = [];
+    private frameCount = 0;
     private nextFrameId = 1;
     private frameTimer: ReturnType<typeof setTimeout> | null = null;
     private scrollPending = false;
@@ -432,13 +452,17 @@ export class Room {
         this.shape = opts.shape;
         this.content = opts.content;
         this.basePadding = opts.padding ?? 0;
+        this.transitions = opts.transitions ?? true;
         this.t0 = Date.now();
         const clock = () => this.now();
         this.doc = new FakeDocument();
         this.win = new FakeWindow(this.H, this, clock);
         if (opts.viewport !== false) this.win.visualViewport = new FakeViewport(this.H);
         const root = new FakeNode(this.doc, 'tv-overlay') as FakeNode & { style: RootStyle };
-        root.style = new RootStyle((name) => { if (name === OVERLAP_VAR) this.overlapWritten(); });
+        root.style = new RootStyle(
+            (name) => { if (name === OVERLAP_VAR) this.overlapWritten(); },
+            () => this.transitionWritten(),
+        );
         this.root = root;
         this.panel = new FakeNode(this.doc, 'tv-overlay__panel');
         this.body = new FakeBody(this.doc, this);
@@ -479,14 +503,18 @@ export class Room {
     /**
      * Make the part and attach it: the one place it is made. The root is
      * laid out from the next frame on, so an overlap written as it attaches
-     * is shown at once.
+     * is shown at once; with `laidOut`, it was laid out before (the body
+     * built reading the layout, as the hub's does), so that overlap moves
+     * over the transition from none.
      */
-    mount(): Mounted {
-        const part = new KeyboardAwareContainer(
+    mount({ movesWithOverlap = true, laidOut = false }: { movesWithOverlap?: boolean; laidOut?: boolean } = {}): Mounted {
+        const part = new KeyboardRoom(
             this.root as unknown as HTMLElement,
             this.win as unknown as Window,
             this.body as unknown as HTMLElement,
+            { opening: () => this.opened(), movesWithOverlap: () => movesWithOverlap },
         );
+        if (laidOut) this.styled = true;
         part.attach();
         this.styled = true;
         this.mounted = { detach: () => part.detach() };
@@ -569,9 +597,21 @@ export class Room {
         this.overlapMove?.cancel();
         this.overlapMove = null;
         this.written = to;
-        if (!this.styled || from === to) return;
+        if (!this.styled || !this.transitions || this.root.style.transition === 'none' || from === to) return;
         this.overlapFrom = from;
         this.overlapMove = new FakeAnimation(() => this.now(), this.root, OVERLAP_MS, { transition: OVERLAP_VAR });
+    }
+
+    /** The root's transition held off: the one under way is cancelled, what is written shown at once. */
+    private transitionWritten(): void {
+        if (this.root.style.transition !== 'none') return;
+        this.overlapMove?.cancel();
+        this.overlapMove = null;
+    }
+
+    /** Whether the overlap moves over its transition now. */
+    overlapMoving(): boolean {
+        return this.overlapMove?.playState === 'running';
     }
 
     // --- Other things that move in the root ---
@@ -671,6 +711,20 @@ export class Room {
         this.frames = this.frames.filter((f) => f.id !== id);
     }
 
+    /** How many frame callbacks are asked for and not yet run. */
+    framesAsked(): number {
+        return this.frames.length;
+    }
+
+    /**
+     * Have `fn` told at the end of each frame that runs, once its callbacks
+     * have run, with the frame's number counted from this call.
+     */
+    watchFrames(fn: (frame: number) => void): void {
+        this.frameCount = 0;
+        this.frameWatchers.push(fn);
+    }
+
     private scheduleFrame(): void {
         if (this.frameTimer !== null) return;
         const t = this.now();
@@ -688,6 +742,8 @@ export class Room {
         this.frames = [];
         const t = this.now();
         for (const f of due) f.cb(t);
+        const n = this.frameCount++;
+        for (const fn of this.frameWatchers) fn(n);
     }
 
     // --- Time ---

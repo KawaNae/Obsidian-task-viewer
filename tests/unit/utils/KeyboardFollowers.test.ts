@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { KeyboardAwareContainer, KEYBOARD_OVERLAP_VAR } from '../../../src/utils/KeyboardAwareContainer';
+import { KeyboardRoom, KEYBOARD_OVERLAP_VAR } from '../../../src/utils/KeyboardRoom';
 import { PopoverShell } from '../../../src/views/sharedUI/PopoverShell';
 import { OverlayShell } from '../../../src/views/sharedUI/OverlayShell';
 import { FloatingOverlayHost } from '../../../src/timer/FloatingOverlayHost';
@@ -8,8 +8,7 @@ import { keyboardFollowerCount } from '../../../src/utils/KeyboardWatch';
 
 /**
  * The parts that follow the on-screen keyboard: the overlay's keyboard
- * awareness, the anchored overlay's panel, the popover and the timer
- * widget. Each is laid out again on each of the keyboard's events
+ * room, the anchored overlay's panel, the popover and the timer widget. Each is laid out again on each of the keyboard's events
  * (Capacitor's four, on Obsidian mobile) and on the visualViewport
  * resizing (Windows, Safari), reads the height the event told, and hears
  * nothing once it is closed.
@@ -157,12 +156,12 @@ function openContainer(): Opened {
     const doc = new Doc(win);
     const root = new El(doc, 'tv-overlay');
     const body = new El(doc, 'tv-overlay__body');
-    const kac = new KeyboardAwareContainer(root as never, win as never, body as never);
-    kac.attach();
+    const room = new KeyboardRoom(root as never, win as never, body as never);
+    room.attach();
     return {
         win,
         keyboard: () => parseFloat(root.style.vars.get(KEYBOARD_OVERLAP_VAR) ?? '0'),
-        close: () => kac.detach(),
+        close: () => room.detach(),
     };
 }
 
@@ -221,7 +220,7 @@ function openWidget(): Opened {
 }
 
 const PARTS: [string, () => Opened][] = [
-    ['the overlay\'s keyboard awareness (KeyboardAwareContainer)', openContainer],
+    ['the overlay\'s keyboard room (KeyboardRoom)', openContainer],
     ['the anchored overlay\'s panel (OverlayShell)', openAnchoredOverlay],
     ['the popover (PopoverShell)', openPopover],
     ['the timer widget (FloatingOverlayHost)', openWidget],
@@ -285,7 +284,7 @@ describe.each(PARTS)('%s follows the keyboard', (_name, open) => {
     });
 });
 
-describe('the overlay\'s keyboard awareness and the visualViewport scrolling', () => {
+describe('the overlay\'s keyboard room and the visualViewport scrolling', () => {
     it('is given the overlap again as the visualViewport scrolls, its top moving down', () => {
         const part = openContainer();
         part.win.visualViewport.height = 500;
