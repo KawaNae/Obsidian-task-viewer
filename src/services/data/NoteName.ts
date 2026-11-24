@@ -27,13 +27,18 @@ export type NameCheck =
     | { ok: false; why: 'dot'; at: 'name' | 'folder' };
 
 /**
- * What a note field holds (see `NoteField`, in the send dialog and the
- * section dialog): the text typed, and the note a candidate picked from its
- * list named, while the text is what the pick put in.
+ * What a note field holds (see `NoteField`, in the send dialog, the section
+ * dialog and the place dialog): the text typed, and the note it names by its
+ * path, while the text is what put it there: a candidate picked from the
+ * field's list, or the form that opened the field on a note.
  */
 export interface NoteAsk {
     text: string;
-    /** The path of the note picked; null when none was, or the text changed since. */
+    /**
+     * The path of the note picked, or of the note the field was opened on,
+     * which may not be made yet; null when there is none, or the text
+     * changed since.
+     */
     picked: string | null;
 }
 
@@ -170,7 +175,11 @@ export const NoteName = {
     /**
      * The note a note field points at, the rules taken in order:
      *
-     * 1. The note picked, while the vault has it.
+     * 1. The note the field holds as picked, whatever the text says: the
+     *    vault's note at its path, case aside; none, a new note at the path
+     *    as it is held, its folders spelt as they are. The path is one a
+     *    note was picked by, or one the form opening the field named for a
+     *    note not made yet (a daily note's), whose note it still is.
      * 2. The text, read as the text of a `[[link]]` is ({@link typed}). A
      *    name (no `/`): the vault's notes by that name, case and
      *    normalization aside. One is that note; none, a new note in
@@ -185,9 +194,11 @@ export const NoteName = {
      * field does not tell them apart, and a send is not guessed at.
      */
     find(vault: NoteVault, ask: NoteAsk, newFolder: string): NoteAt {
+        if (ask.picked !== null) {
+            const picked = NoteName.fileAt(vault, ask.picked);
+            return picked ? { kind: 'existing', file: picked } : made(vault, ask.picked, 'path');
+        }
         const notes = vault.getMarkdownFiles();
-        const picked = ask.picked === null ? undefined : notes.find(f => f.path === ask.picked);
-        if (picked) return { kind: 'existing', file: picked };
         const text = typed(ask.text);
         const cut = text.lastIndexOf('/');
         if (cut < 0) {

@@ -30,15 +30,16 @@ export interface NoteFieldOptions {
  * The field that names a note: a form row with its icon, as the hub's rows
  * are, searched by name or folder among the vault's notes and aliases, and
  * the unresolved links for a form that may make the note one names, as
- * Obsidian's `[[` lists them (`NoteSuggest`). The send dialog and the
- * sidebar's section dialog name a note with it.
+ * Obsidian's `[[` lists them (`NoteSuggest`). The send dialog, the place
+ * dialog and the sidebar's section dialog name a note with it.
  *
  * It holds the text typed and the note picked (`NoteAsk`). A note picked,
  * or an alias of one, puts the note's name in the field and is held as
- * picked, so that a name other notes share still names that note; once the
- * text is changed, what was picked is let go and the text is read on its
- * own. An unresolved link puts its text in, which names the note the form
- * makes. Its × empties it as deleting the text does, the focus left in it
+ * picked, so that a name other notes share still names that note; a note
+ * the form opens the field on is held so too, and names its path even while
+ * no note is there. Once the text is changed, what was picked is let go
+ * and the text is read on its own. An unresolved link puts its text in,
+ * which names the note the form makes. Its × empties it as deleting the text does, the focus left in it
  * (`createClearableInput`). Which note that is, and what is said of it
  * under the row ({@link says}), is the form's to find out.
  */

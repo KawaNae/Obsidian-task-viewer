@@ -92,6 +92,17 @@ describe('a destination read off the vault', () => {
         expect(await read({ text: 'Plan', picked: 'b/plan.md' })).toMatchObject({ kind: 'existing', path: 'b/plan.md' });
     });
 
+    it('a note held as picked that is not there: the new note at its path, not the one its name would make', async () => {
+        const read = await open({ 'Daily/old.md': [''], 'Inbox/2031-01-15.md': [''] });
+
+        expect(await read({ text: '2031-01-15', picked: '2031-01-15.md' })).toMatchObject({
+            kind: 'new', by: 'path', path: '2031-01-15.md', to: { note: { kind: 'new', path: '2031-01-15.md' } },
+        });
+        expect(await read({ text: '2031-01-15', picked: 'daily/2031-01-15.md' })).toMatchObject({
+            kind: 'new', path: 'daily/2031-01-15.md', to: { note: { kind: 'new', path: 'daily/2031-01-15.md' } },
+        });
+    });
+
     it('a name no note can have: why', async () => {
         const read = await open({ 'x.md': [''] });
 

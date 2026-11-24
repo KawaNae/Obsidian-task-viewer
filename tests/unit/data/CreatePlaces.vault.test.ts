@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import realMoment from 'moment';
 import { Notice } from '../mocks/obsidian';
-import { CreatePlaces, type CreatePlace } from '../../../src/services/data/CreatePlaces';
+import { CreatePlaces, samePlace, type CreatePlace, type PlaceInNote } from '../../../src/services/data/CreatePlaces';
+import { NotePlaces } from '../../../src/services/data/NotePlaces';
 import type { NoteSpot } from '../../../src/services/persistence/Notes';
 import { DEFAULT_SETTINGS, type TaskViewerSettings } from '../../../src/types';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
@@ -26,14 +27,19 @@ const TEMPLATE = 'Templates/Daily.md';
 let live: VaultSession | undefined;
 afterEach(() => { live?.dispose(); live = undefined; });
 
-async function places(files: Record<string, string>, template = '', settings: Partial<TaskViewerSettings> = {}) {
+async function places(files: Record<string, string>, template = '', settings: Partial<TaskViewerSettings> = {}, folder = '') {
     const { contents, session } = await openLiveVault(files, (s) => { live = s; });
     // The daily notes as the core plugin's options name them.
     (session.app as unknown as { internalPlugins: unknown }).internalPlugins = {
-        getPluginById: (id: string) => (id === 'daily-notes' ? { instance: { options: { format: 'YYYY-MM-DD', folder: '', template } } } : null),
+        getPluginById: (id: string) => (id === 'daily-notes' ? { instance: { options: { format: 'YYYY-MM-DD', folder, template } } } : null),
     };
     const full = { ...DEFAULT_SETTINGS, ...settings };
-    return { contents, session, places: new CreatePlaces(session.app, session.ops, () => full, (id) => session.index.getTask(id)) };
+    return {
+        contents,
+        session,
+        places: new CreatePlaces(session.app, session.ops, () => full, (id) => session.index.getTask(id)),
+        notePlaces: new NotePlaces(session.app, () => full),
+    };
 }
 
 describe('a daily note as a place', () => {
@@ -251,7 +257,7 @@ describe('the place a note and a spot chosen name', () => {
         expect(contents.get(NOTE)).toBe('## Tasks\n- [ ] 新しい\n');
     });
 
-    it('in the note a place is in already: that place, its spot alone the answer\'s, a daily note still made of its template', async () => {
+    it('in the note of the place the hub opened on: that place, its spot alone the answer\'s, a daily note still made of its template', async () => {
         const { contents, places: p } = await places({ [TEMPLATE]: '# {{title}}\n' }, 'Templates/Daily');
         const daily = p.dailyNote(DAY);
         const place = p.fromDestination({ note: { kind: 'new', path: NOTE }, spot: 'end' }, daily);
@@ -260,10 +266,92 @@ describe('the place a note and a spot chosen name', () => {
         expect(contents.get(NOTE)).toBe('# 2031-01-15\n- [ ] 新しい\n');
     });
 
-    it('in another note than a place is in: the note chosen, by its path', async () => {
+    it('in another note than the place the hub opened on: the note chosen, by its path', async () => {
         const { places: p } = await places({});
         expect(p.fromDestination({ note: { kind: 'new', path: 'other.md' }, spot: 'end' }, p.dailyNote(DAY)))
             .toEqual({ kind: 'note', note: { kind: 'path', path: 'other.md' }, spot: 'end' });
+    });
+
+    it('moved off a daily note not there and back to its name: the daily note again, made of its template', async () => {
+        const { contents, places: p, notePlaces } = await places({ 'other.md': '## Tasks\n', [TEMPLATE]: '# {{title}}\n' }, 'Templates/Daily');
+        const opened = p.dailyNote(DAY);
+        const moved = p.fromDestination({ note: { kind: 'existing', path: 'other.md' }, spot: TASKS }, opened);
+        expect(moved).toEqual({ kind: 'note', note: { kind: 'path', path: 'other.md' }, spot: TASKS });
+
+        const read = await notePlaces.readFields({ ...p.askOf(moved), note: { text: DAY, picked: null } }, '');
+        if (read.kind !== 'new') throw new Error(read.kind);
+        const back = p.fromDestination(read.to, opened);
+        expect(back).toEqual({ kind: 'note', note: { kind: 'daily', date: DAY }, spot: TASKS });
+        await p.create(back, { line: '- [ ] 新しい' }, { tellRefusal: false });
+        expect(contents.get(NOTE)).toBe('# 2031-01-15\n\n## Tasks\n- [ ] 新しい\n');
+    });
+});
+
+describe('the place dialog\'s fields as they name a place', () => {
+    const TASKS = { heading: 'Tasks', level: 2, side: 'head' } as const;
+
+    it('a note there, under a heading: its name, its path as picked, and the heading', async () => {
+        const { places: p } = await places({ 'Notes/n.md': '## Log\n' });
+        const place = p.fromDestination({ note: { kind: 'existing', path: 'Notes/n.md' }, spot: { ...TASKS, heading: 'Log' } });
+        expect(p.askOf(place)).toEqual({ note: { text: 'n', picked: 'Notes/n.md' }, heading: 'Log' });
+    });
+
+    it('a daily note not there: the day\'s name, its path as picked, and the settings\' heading', async () => {
+        const { places: p } = await places({}, '', {}, 'Daily');
+        expect(p.askOf(p.dailyNote(DAY))).toEqual({ note: { text: DAY, picked: `Daily/${NOTE}` }, heading: 'Tasks' });
+    });
+
+    it('the end of a note: no heading', async () => {
+        const { places: p } = await places({});
+        expect(p.askOf(p.fromDestination({ note: { kind: 'new', path: 'n.md' }, spot: 'end' })))
+            .toEqual({ note: { text: 'n', picked: 'n.md' }, heading: '' });
+    });
+
+    it.each([
+        ['at the root', ''],
+        ['in a folder the vault does not have, new notes going elsewhere', 'Daily'],
+        ['in a folder the vault spells otherwise', 'daily'],
+    ])('read back and answered as they are, name a daily note not there %s as the place it was', async (_, folder) => {
+        const { places: p, notePlaces } = await places({ 'Daily/old.md': '', 'Inbox/x.md': '' }, '', {}, folder);
+        const opened = p.dailyNote(DAY);
+        const read = await notePlaces.readFields(p.askOf(opened), 'Inbox');
+        if (read.kind !== 'new') throw new Error(read.kind);
+        expect(p.fromDestination(read.to, opened)).toEqual(opened);
+    });
+
+    it('read back and answered as they are, name a note there, at its end, as the place it was', async () => {
+        const { places: p, notePlaces } = await places({ 'Notes/n.md': '# n\n', 'Inbox/n.md': '' });
+        const place: PlaceInNote = { kind: 'note', note: { kind: 'path', path: 'Notes/n.md' }, spot: 'end' };
+        const read = await notePlaces.readFields(p.askOf(place), 'Inbox');
+        if (read.kind !== 'existing') throw new Error(read.kind);
+        expect(p.fromDestination(read.to)).toEqual(place);
+    });
+});
+
+describe('whether two places are the same', () => {
+    const TASKS = { heading: 'Tasks', level: 2, side: 'head' } as const;
+    const daily = (date: string, spot: NoteSpot = TASKS): CreatePlace => ({ kind: 'note', note: { kind: 'daily', date }, spot });
+    const path = (at: string, spot: NoteSpot = TASKS): CreatePlace => ({ kind: 'note', note: { kind: 'path', path: at }, spot });
+
+    it('the same note by what it is, and the same spot', () => {
+        expect(samePlace(daily(DAY), daily(DAY))).toBe(true);
+        expect(samePlace(path('n.md', 'end'), path('n.md', 'end'))).toBe(true);
+        expect(samePlace({ kind: 'childOf', taskId: 'a' }, { kind: 'childOf', taskId: 'a' })).toBe(true);
+    });
+
+    it('another day, another path, or the daily note and the note at its path, are not', () => {
+        expect(samePlace(daily(DAY), daily('2031-01-16'))).toBe(false);
+        expect(samePlace(path('n.md'), path('m.md'))).toBe(false);
+        expect(samePlace(daily(DAY), path(NOTE))).toBe(false);
+        expect(samePlace({ kind: 'childOf', taskId: 'a' }, { kind: 'childOf', taskId: 'b' })).toBe(false);
+        expect(samePlace({ kind: 'childOf', taskId: 'a' }, path('n.md'))).toBe(false);
+    });
+
+    it('a section of another heading, level or side, or the end, is another spot', () => {
+        expect(samePlace(path('n.md'), path('n.md', { ...TASKS, heading: 'Log' }))).toBe(false);
+        expect(samePlace(path('n.md'), path('n.md', { ...TASKS, level: 3 }))).toBe(false);
+        expect(samePlace(path('n.md'), path('n.md', { ...TASKS, side: 'end' }))).toBe(false);
+        expect(samePlace(path('n.md'), path('n.md', 'end'))).toBe(false);
     });
 });
 
