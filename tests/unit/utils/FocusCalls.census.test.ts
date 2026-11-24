@@ -3,11 +3,19 @@ import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
 
 /**
- * Every place in the source that calls `.focus(`, each with what the focus
- * is for. Each place puts the focus at a moment of its own: at once in a
- * click's handler, a frame after an overlay opens, once a redraw is done.
- * A place added, or one gone, fails here until it is listed with its
- * reason, so the moments the focus is put at stay known in one table.
+ * The places in the source that call `.focus(` themselves rather than ask
+ * `placeFocus` (`views/sharedUI/FocusPlacement.ts`), each with why.
+ *
+ * A focus put on a field raises the on-screen keyboard, so `placeFocus`
+ * puts it once the plugin's menus have gone from the screen and its
+ * overlays have opened: what moves meanwhile would rise with the keyboard.
+ * A place that puts a focus goes through it, unless it is one of these:
+ * the parts of putting a focus themselves, a place that only answers where
+ * the focus goes, a focus kept where it is as a part is drawn again or
+ * moved on within what is being typed (the keyboard is up already, and
+ * closing it for a wait would drop what is typed), an editor's own keys, a
+ * button, and the native picker's fallback. A place added fails here until
+ * it goes through `placeFocus`, or is listed with its reason.
  *
  * A place is named by its file and its line's code (comments cut,
  * trimmed), not by its line number: a line that moves keeps its place.
@@ -15,28 +23,23 @@ import { join, relative } from 'path';
 
 const SRC = join(__dirname, '../../../src');
 
-/** A place that calls `.focus(`, by its file and its line's code, and what the focus is for. */
+/** A place that calls `.focus(` itself, by its file and its line's code, and why it does not ask `placeFocus`. */
 const PLACES: Array<{ file: string; line: string; why: string }> = [
-    // The overlay: its opening and its closing.
+    // Putting a focus: what placeFocus and the overlay's first focus are made of.
     {
         file: 'utils/FieldFocus.ts',
         line: 'to.focus(options);',
-        why: 'focusField: the field named takes the focus, its text met as the field asks; the overlay\'s first focus and the hub menu\'s Properties items go through it',
+        why: 'focusField: the field takes the focus, its text met as the field asks; placeFocus puts every focus through it',
     },
     {
         file: 'views/sharedUI/FocusPlacement.ts',
         line: 'opts.hold?.focus({ preventScroll: true });',
-        why: 'placeFocus waiting for a menu to go or an overlay to open: what the caller names (an overlay\'s panel) holds the focus, which raises no keyboard, until the field takes it',
+        why: 'placeFocus waiting: what the caller names (an overlay\'s panel) holds the focus meanwhile, which raises no keyboard',
     },
     {
         file: 'views/sharedUI/OverlayShell.ts',
         line: 'if (!holds(doc.activeElement)) panel.focus({ preventScroll: true });',
-        why: 'an overlay\'s first focus that did not go into the surface (the field hidden or disabled, or none named): the panel takes it',
-    },
-    {
-        file: 'views/sharedUI/OverlayShell.ts',
-        line: 'before.focus({ preventScroll: true });',
-        why: 'an overlay closed: the focus goes back to what held it before the overlay opened',
+        why: 'an overlay\'s first focus, put by placeFocus, that did not go into the surface (the field hidden or disabled, or none named): the panel takes it, which raises no keyboard',
     },
 
     // Where an overlay's first focus goes: answered, not put.
@@ -66,51 +69,28 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
         why: 'the dialog\'s initialFocus: answers where the overlay puts its first focus, and puts none',
     },
 
-    // In an open dialog, after a press or a key in it.
+    // A part drawn again, or the typing going on to the next field: the keyboard is up, and a wait would close it.
     {
-        file: 'modals/form/FormActions.ts',
-        line: 'this.cancelButton.focus();',
-        why: 'the question a close puts, asked first or again: the answer that keeps takes the focus',
+        file: 'modals/hub/fields/TagsFieldGroup.ts',
+        line: 'if (restoreFocus) this.addInput?.focus();',
+        why: 'the tags drawn again on a tag added or taken out: the add field keeps the focus it held',
     },
     {
-        file: 'modals/form/ClearButton.ts',
-        line: 'if (opts.focusesField) input.focus();',
-        why: 'a field cleared by its button: the focus stays on the field',
+        file: 'modals/hub/fields/PropertiesFieldGroup.ts',
+        line: 'if (focus) this.lists.get(focus.folded)?.focusTarget(focus.focus)?.focus();',
+        why: 'a property\'s list drawn again on its item written: the focus goes on where the list says the edit goes on',
     },
     {
-        file: 'modals/TimerStartOffsetModal.ts',
-        line: 'this.input().focus();',
-        why: 'the kind of start switched in the open dialog: the field drawn for it takes the focus',
+        file: 'modals/hub/fields/PropertiesFieldGroup.ts',
+        line: 'valueInput.focus();',
+        why: 'a key picked from the key field\'s list: the typing goes on into the value field beside it',
     },
-    {
-        file: 'modals/hub/TaskHubForm.ts',
-        line: 'first.input.focus();',
-        why: 'a create pressed while a field cannot be saved: that field takes the focus',
-    },
-    {
-        file: 'modals/hub/TaskHubForm.ts',
-        line: '(first?.input ?? this.nameField.fieldElement())?.focus();',
-        why: 'keep, the answer to a close\'s question: the first field that cannot be saved, or the name, takes the focus',
-    },
-    {
-        file: 'modals/hub/TaskHubSource.ts',
-        line: 'editor.focus();',
-        why: 'the hub\'s source mode opened from its button: its editor takes the focus',
-    },
-    {
-        file: 'modals/hub/TaskHubSource.ts',
-        line: 'if (this.guard.keep()) this.opened?.editor.focus();',
-        why: 'keep, the answer to a close\'s question in the source mode: the editor takes the focus',
-    },
-    {
-        file: 'modals/noteops/SendDialog.ts',
-        line: 'if (this.guard.keep()) this.firstEditor()?.focus();',
-        why: 'keep, the answer to a close\'s question: the first draft\'s editor takes the focus',
-    },
+
+    // An editor's own keys: the caret goes on between the source editor's two editors.
     {
         file: 'modals/form/source/SourceEditor.ts',
         line: 'this.parentView.focus();',
-        why: 'SourceEditor.focus: the parent\'s line takes the focus, the caret at its end',
+        why: 'SourceEditor.focus: the Focusable placeFocus puts the focus on; the parent\'s line takes it, the caret at its end',
     },
     {
         file: 'modals/form/source/SourceEditor.ts',
@@ -127,39 +107,17 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
         line: 'parent.focus();',
         why: 'ArrowUp off the children\'s first row: the caret goes back to the parent\'s line',
     },
-    {
-        file: 'modals/hub/fields/PropertiesFieldGroup.ts',
-        line: 'valueInput.focus();',
-        why: 'a key picked from the key field\'s list: the value field beside it takes the focus',
-    },
 
-    // A part drawn again: the focus kept, or put where the edit goes on.
+    // No field: no keyboard to wait for.
     {
-        file: 'modals/hub/fields/TagsFieldGroup.ts',
-        line: 'if (restoreFocus) this.addInput?.focus();',
-        why: 'the tags drawn again on a tag added or taken out: the add field keeps the focus it held',
-    },
-    {
-        file: 'modals/hub/fields/PropertiesFieldGroup.ts',
-        line: 'if (focus) this.lists.get(focus.folded)?.focusTarget(focus.focus)?.focus();',
-        why: 'a property\'s list drawn again on its item written: the focus goes where the list says the edit goes on',
-    },
-    {
-        file: 'modals/hub/fields/StyleFieldGroup.ts',
-        line: 'this.inputs[field]?.focus();',
-        why: 'StyleFieldGroup.focus: the style field named takes the focus; nothing in the source calls it',
-    },
-
-    // In a view.
-    {
-        file: 'views/sharedUI/ListSectionRenderer.ts',
-        line: 'input.focus();',
-        why: 'a list section\'s rename, from its menu: the name field put in the name\'s place takes the focus at once',
+        file: 'modals/form/FormActions.ts',
+        line: 'this.cancelButton.focus();',
+        why: 'the question a close puts: its answer that keeps, a button, takes the focus, which raises no keyboard',
     },
     {
         file: 'views/sharedUI/NativePicker.ts',
         line: 'input.focus();',
-        why: 'the native picker refused (showPicker threw): the input is focused and clicked, the best left to open it',
+        why: 'the native picker refused (showPicker threw): the date, time or colour input is focused and clicked in the press\'s own task, the best left to open it',
     },
 ];
 
@@ -192,7 +150,7 @@ function found(): string[] {
     return at.sort();
 }
 
-describe('the places that put the focus', () => {
+describe('the places that put the focus themselves, not through placeFocus', () => {
     it('are the places listed, each as many times as listed', () => {
         const listed = PLACES.map(p => `${p.file} | ${p.line}`).sort();
         expect(found()).toEqual(listed);
@@ -204,7 +162,7 @@ describe('the places that put the focus', () => {
         expect(codeOf('input.focus(); // at once')).toBe('input.focus();');
     });
 
-    it('each say what the focus is for', () => {
+    it('each say why', () => {
         expect(PLACES.filter(p => p.why.trim() === '')).toEqual([]);
     });
 });

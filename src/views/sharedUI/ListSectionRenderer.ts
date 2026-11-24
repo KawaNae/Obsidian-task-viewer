@@ -22,6 +22,7 @@ import { setIcon } from 'obsidian';
 import { hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { hasSortRules, type SortState } from '../../services/sort/SortTypes';
 import { onFormEnter } from '../../modals/form/formEnter';
+import { placeFocus } from './FocusPlacement';
 
 /** DOM class names of a section's header row, and of the fold it works. */
 export interface SectionHeaderClasses {
@@ -197,8 +198,9 @@ export function startListSectionRename(
     input.value = currentName;
     input.className = classes.nameInput;
     nameEl.replaceWith(input);
-    input.focus();
-    input.select();
+    // The field shows at once; its focus, which raises the on-screen
+    // keyboard, waits for the menu the rename was chosen in to go.
+    placeFocus({ to: input, selection: 'all' });
 
     let committed = false;
     const commit = (newName: string) => {

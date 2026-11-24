@@ -13,7 +13,8 @@
  * Chosen in a card menu elsewhere, the item opens the hub, whose panel
  * holds the focus while the menu is there: its field takes the focus once
  * the menu has gone (`placeFirstFocus`). Chosen in the hub's own card, the
- * item focuses the form's field as it is chosen, the menu still there.
+ * item asks for the form's field, which takes the focus once the menu has
+ * gone as well (`TaskHubForm.focusField`, `placeFocus`).
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -136,18 +137,28 @@ afterAll(async () => {
 });
 
 describe('a field focused from a menu that takes time to go', () => {
-    it('in the hub\'s own card menu: the form\'s field takes the focus as the item is chosen, the menu still there', () => {
+    it('in the hub\'s own card menu: the form\'s field takes the focus once the menu has gone, not while it is there', () => {
         const seen = run<Seen>(`
             plugin.openTaskHub(row().id);
             await until(() => hub() && hub().contains(document.activeElement));
+            // The hub opens on its name field: the focus is taken to the panel
+            // first, so that the field taking it again can be seen.
+            const panel = hub().closest('.tv-overlay__panel');
+            panel.focus({ preventScroll: true });
+            if (document.activeElement !== panel) throw new Error('the panel did not take the focus');
             hub().querySelector('.task-hub__preview .task-card')
                 .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
             await until(() => menuTitles().includes(${JSON.stringify(tr('menu.properties'))}), 3000, () => menuTitles().join('|'));
             return JSON.stringify(await chooseName());
         `);
-        expect(seen.chosen).toEqual({ focused: true, menu: true });
+        expect(seen.chosen).toEqual({ focused: false, menu: true });
         expect(seen.goneAt).not.toBeNull();
         expect(seen.goneAt!).toBeGreaterThanOrEqual(CLOSING - 50);
+        expect(seen.whileMenu.focused).toBe(false);
+        expect(seen.whileMenu.panel).toBeGreaterThan(0);
+        expect(seen.focusedAt).not.toBeNull();
+        expect(seen.focusedAt!.menu).toBe(false);
+        expect(seen.focusedAt!.t).toBeGreaterThanOrEqual(seen.goneAt!);
     });
 
     it('in a card menu out of the hub: the hub it opens holds the focus on its panel while the menu is there, and focuses the field once it has gone', () => {

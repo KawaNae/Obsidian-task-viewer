@@ -38,7 +38,8 @@
  * overlay's `opening`) or a menu of the plugin is still on the screen, the
  * focus waits on the panel, and goes where the body asks once they are
  * done (`placeFirstFocus`, `FocusPlacement`). Closed with the focus still in
- * it, the overlay gives the focus back to what had it before.
+ * it, the overlay gives the focus back to what had it before, once the
+ * plugin's menus have gone as well (`giveFocusBack`).
  *
  * Escape and the user's "back" (Android's back gesture, the desktop mouse's
  * back button: `HistoryBack`) step back alike: a child popover open closes
@@ -256,6 +257,38 @@ function focusFirst({ panel, doc, holds, target }: OpeningOverlay): void {
     if (!holds(doc.activeElement)) panel.focus({ preventScroll: true });
 }
 
+/** An overlay closing, as giving the focus back sees it (`giveFocusBack`). */
+export interface ClosingOverlay {
+    doc: Document;
+    /** What had the focus when the overlay opened. */
+    before: Element | null;
+    /** Whether `node` is in the overlay's surface, still open as it closes. */
+    holds: (node: Node | null) => boolean;
+}
+
+/**
+ * Give the focus back to what had it when the overlay opened, if the focus
+ * is still the overlay's (in its surface, or lost to the body) and that
+ * element is still there. A focus that went elsewhere meanwhile (a note
+ * opened from the overlay) is left where it is.
+ *
+ * Given back at once, as the overlay closes, unless a menu of the plugin is
+ * still on the screen or another overlay opens (a menu's item closing the
+ * hub): then once they are done (`placeFocus`), as the element given back
+ * to (the editor typed in before) raises the on-screen keyboard. Meanwhile
+ * the focus leaves the closing overlay, so what is typed does not go into
+ * it; an overlay opened meanwhile, asking for its own first focus, takes
+ * the focus instead.
+ */
+export function giveFocusBack({ doc, before, holds }: ClosingOverlay): void {
+    const to = before as (Element & Partial<HTMLElement>) | null;
+    if (!to || !to.isConnected || typeof to.focus !== 'function') return;
+    const active = doc.activeElement;
+    if (active !== null && active !== doc.body && !holds(active)) return;
+    if (placeFocus({ to: to as HTMLElement }, { focusOptions: { preventScroll: true } })) return;
+    if (active !== null && active !== doc.body) (active as Partial<HTMLElement>).blur?.();
+}
+
 export class OverlayShell implements ClosableOverlay {
     private rootEl: HTMLElement | null = null;
     private panelEl: HTMLElement | null = null;
@@ -441,7 +474,9 @@ export class OverlayShell implements ClosableOverlay {
         unregisterOverlay(this);
         this.openingWatch?.end();
         this.openingWatch = null;
-        this.giveFocusBack();
+        if (this.hostDoc) {
+            giveFocusBack({ doc: this.hostDoc, before: this.focusBefore, holds: (node) => this.holds(node) });
+        }
 
         // Logical teardown (immediate — overlay is inert from here)
         this.kbAware?.detach();
@@ -497,21 +532,6 @@ export class OverlayShell implements ClosableOverlay {
         } else {
             root.remove();
         }
-    }
-
-    /**
-     * Give the focus back to what had it when the overlay opened, if the
-     * focus is still the overlay's (in its surface, or lost to the body) and
-     * that element is still there. A focus that went elsewhere meanwhile (a
-     * note opened from the overlay) is left where it is.
-     */
-    private giveFocusBack(): void {
-        const doc = this.hostDoc;
-        const before = this.focusBefore as (Element & Partial<HTMLElement>) | null;
-        if (!doc || !before || !before.isConnected || typeof before.focus !== 'function') return;
-        const active = doc.activeElement;
-        if (active !== null && active !== doc.body && !this.holds(active)) return;
-        before.focus({ preventScroll: true });
     }
 
     isOpen(): boolean {

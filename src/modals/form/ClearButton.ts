@@ -1,5 +1,6 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
+import { placeFocus } from '../../views/sharedUI/FocusPlacement';
 
 /** What a {@link ClearButton} does as it is pressed. */
 export interface ClearButtonOptions {
@@ -42,7 +43,7 @@ export class ClearButton {
         this.button.addEventListener('click', () => {
             opts.clear();
             this.sync();
-            if (opts.focusesField) input.focus();
+            if (opts.focusesField) placeFocus({ to: input });
         });
         input.addEventListener('input', () => this.sync());
         this.sync();

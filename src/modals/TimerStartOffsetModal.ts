@@ -4,6 +4,7 @@ import { agoLabel, OFFSET_FIELDS, offsetStart, startLabel, type OffsetInput, typ
 import { hostWindow } from '../utils/HostWindow';
 import type { Read } from '../utils/values/Read';
 import { OverlayShell, type OverlayFrame } from '../views/sharedUI/OverlayShell';
+import { placeFocus } from '../views/sharedUI/FocusPlacement';
 import { refusalText, type WriteAnswer } from '../services/operations/WriteAnswer';
 import { FormActions } from './form/FormActions';
 import { onFormEnter } from './form/formEnter';
@@ -118,7 +119,7 @@ export class TimerStartOffsetModal {
         if (this.kind === kind) return;
         this.kind = kind;
         this.render();
-        this.input().focus();
+        placeFocus({ to: this.input() });
     }
 
     private input(): HTMLInputElement {
