@@ -15,7 +15,7 @@ import { FrontmatterValueSuggest } from './suggest/FrontmatterValueSuggest';
 import { COLOR_VALUES, LINE_STYLE_VALUES } from './suggest/ScopeValues';
 import { PropertySuggestObserver } from './suggest/PropertySuggestObserver';
 import { DateUtils } from './utils/DateUtils';
-import { trackKeyboard, untrackAllKeyboards } from './utils/KeyboardState';
+import { trackKeyboard, untrackAllKeyboards } from './utils/KeyboardWatch';
 import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';

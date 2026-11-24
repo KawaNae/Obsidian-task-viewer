@@ -60,7 +60,7 @@ import { HotkeyShield } from './HotkeyShield';
 import { CloseGate, type CloseAnswer } from './CloseGate';
 import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
-import { trackKeyboard } from '../../utils/KeyboardState';
+import { watchKeyboard } from '../../utils/KeyboardWatch';
 import { runningAnimations, whenStopped } from '../../utils/Animations';
 import { focusField, type FieldFocus } from '../../utils/FieldFocus';
 import { t } from '../../i18n';
@@ -248,8 +248,8 @@ export class OverlayShell implements ClosableOverlay {
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
     private resizeHandler: (() => void) | null = null;
-    private vvResizeHandler: (() => void) | null = null;
-    private kbHandler: (() => void) | null = null;
+    /** Stops following the keyboard, while an anchored panel follows it. */
+    private unwatchKeyboard: (() => void) | null = null;
     private pageHideHandler: (() => void) | null = null;
 
     open(opts: OverlayOpenOpts): void {
@@ -502,18 +502,16 @@ export class OverlayShell implements ClosableOverlay {
         this.resizeHandler = () => this.repositionIfAnchored();
         hostWin.addEventListener('resize', this.resizeHandler);
 
-        const vv = hostWin.visualViewport;
-        if (vv) {
-            this.vvResizeHandler = () => this.repositionIfAnchored();
-            vv.addEventListener('resize', this.vvResizeHandler);
-        }
-
-        trackKeyboard(hostWin);
-        this.kbHandler = () => this.repositionIfAnchored();
-        hostWin.addEventListener('keyboardWillShow', this.kbHandler);
-        hostWin.addEventListener('keyboardDidShow', this.kbHandler);
-        hostWin.addEventListener('keyboardWillHide', this.kbHandler);
-        hostWin.addEventListener('keyboardDidHide', this.kbHandler);
+        // Followed after the overlay's keyboard awareness, which began to as
+        // the overlay opened: the panel is placed once the overlay has been
+        // given the keyboard's overlap. Not as the visualViewport scrolls:
+        // the panel is placed by the keyboard's top, which a scroll moves,
+        // but following it has not been tried on a device whose
+        // visualViewport scrolls under the keyboard.
+        this.unwatchKeyboard = watchKeyboard(hostWin, (change) => {
+            if (change.cause === 'viewportScroll') return;
+            this.repositionIfAnchored();
+        });
     }
 
     private teardownAnchoredTracking(): void {
@@ -522,17 +520,8 @@ export class OverlayShell implements ClosableOverlay {
             this.hostWin.removeEventListener('resize', this.resizeHandler);
             this.resizeHandler = null;
         }
-        if (this.vvResizeHandler && this.hostWin.visualViewport) {
-            this.hostWin.visualViewport.removeEventListener('resize', this.vvResizeHandler);
-            this.vvResizeHandler = null;
-        }
-        if (this.kbHandler) {
-            this.hostWin.removeEventListener('keyboardWillShow', this.kbHandler);
-            this.hostWin.removeEventListener('keyboardDidShow', this.kbHandler);
-            this.hostWin.removeEventListener('keyboardWillHide', this.kbHandler);
-            this.hostWin.removeEventListener('keyboardDidHide', this.kbHandler);
-            this.kbHandler = null;
-        }
+        this.unwatchKeyboard?.();
+        this.unwatchKeyboard = null;
     }
 
     // ── Swipe dismiss ──

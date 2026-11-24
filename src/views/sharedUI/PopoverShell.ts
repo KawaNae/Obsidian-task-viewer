@@ -12,7 +12,7 @@
  * explicitly, which prevents the popout-blindness regression where a popover
  * leaks back to the main window.
  */
-import { trackKeyboard, keyboardTop } from '../../utils/KeyboardState';
+import { watchKeyboard, keyboardTop } from '../../utils/KeyboardWatch';
 
 export type PopoverAnchor =
     | { kind: 'element'; element: HTMLElement; placement?: 'below' }
@@ -42,8 +42,8 @@ export class PopoverShell {
     private onCloseCb: (() => void) | null = null;
     private onEscapeCb: (() => void) | null = null;
     private resizeHandler: (() => void) | null = null;
-    private vvResizeHandler: (() => void) | null = null;
-    private kbHandler: (() => void) | null = null;
+    /** Stops following the keyboard, while the popover is open. */
+    private unwatchKeyboard: (() => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
     private pageHideHandler: (() => void) | null = null;
     private extraContains: HTMLElement[] = [];
@@ -68,20 +68,18 @@ export class PopoverShell {
         this.resizeHandler = () => this.reposition();
         hostWin.addEventListener('resize', this.resizeHandler);
 
-        const vv = hostWin.visualViewport;
-        if (vv) {
-            this.vvResizeHandler = () => this.reposition();
-            vv.addEventListener('resize', this.vvResizeHandler);
-        }
-
-        // Obsidian mobile: キーボード開閉は visualViewport に現れず Capacitor
-        // イベントのみ（KeyboardState 参照）。開閉に追従して上下反転し直す。
-        trackKeyboard(hostWin);
-        this.kbHandler = () => this.reposition();
-        hostWin.addEventListener('keyboardWillShow', this.kbHandler);
-        hostWin.addEventListener('keyboardDidShow', this.kbHandler);
-        hostWin.addEventListener('keyboardWillHide', this.kbHandler);
-        hostWin.addEventListener('keyboardDidHide', this.kbHandler);
+        // Placed again above the keyboard as it shows, hides or resizes the
+        // visualViewport, flipped above the anchor where there is no room
+        // below it any more (KeyboardWatch). Not as the visualViewport
+        // scrolls: the popover's bottom stands at the visualViewport's, so
+        // it moves with it, and placing it brings the focused field into
+        // view (`scrollIntoView`), which scrolls the visualViewport again.
+        // Followed, each scroll would lift the popover by what the field is
+        // hidden, hide it again by as much, and crawl it up a pixel at a time.
+        this.unwatchKeyboard = watchKeyboard(hostWin, (change) => {
+            if (change.cause === 'viewportScroll') return;
+            this.reposition();
+        });
 
         // Auto-close when the host window is being unloaded (popout closed).
         // Fires before document destruction so cleanup callbacks still run.
@@ -106,17 +104,8 @@ export class PopoverShell {
             this.hostWin.removeEventListener('resize', this.resizeHandler);
             this.resizeHandler = null;
         }
-        if (this.vvResizeHandler && this.hostWin.visualViewport) {
-            this.hostWin.visualViewport.removeEventListener('resize', this.vvResizeHandler);
-            this.vvResizeHandler = null;
-        }
-        if (this.kbHandler) {
-            this.hostWin.removeEventListener('keyboardWillShow', this.kbHandler);
-            this.hostWin.removeEventListener('keyboardDidShow', this.kbHandler);
-            this.hostWin.removeEventListener('keyboardWillHide', this.kbHandler);
-            this.hostWin.removeEventListener('keyboardDidHide', this.kbHandler);
-            this.kbHandler = null;
-        }
+        this.unwatchKeyboard?.();
+        this.unwatchKeyboard = null;
         if (this.pageHideHandler) {
             this.hostWin.removeEventListener('pagehide', this.pageHideHandler);
             this.pageHideHandler = null;
@@ -207,8 +196,8 @@ export function positionElement(el: HTMLElement, anchor: PopoverAnchor, hostWin:
     // Element must be in DOM with content to measure. Caller guarantees this
     // because positionElement is only invoked after open()/refresh().
     const winW = Math.max(0, hostWin.innerWidth);
-    // keyboardTop は visualViewport と Capacitor（Obsidian mobile）の両検知源
-    // を統合したキーボード上端。キーボードなしなら innerHeight に一致する。
+    // The keyboard's top, however it is told (the visualViewport, or
+    // Capacitor on Obsidian mobile); the window's innerHeight with none.
     const winH = Math.max(0, Math.min(hostWin.innerHeight, keyboardTop(hostWin)));
 
     // 自然高さ（CSS max-height まで）が利用可能高さを超える場合のみ inline

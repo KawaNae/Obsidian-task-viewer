@@ -4,6 +4,7 @@ import { PopoverShell } from '../../../src/views/sharedUI/PopoverShell';
 import { OverlayShell } from '../../../src/views/sharedUI/OverlayShell';
 import { FloatingOverlayHost } from '../../../src/timer/FloatingOverlayHost';
 import { closeAllOverlays } from '../../../src/views/sharedUI/OverlayRegistry';
+import { keyboardFollowerCount } from '../../../src/utils/KeyboardWatch';
 
 /**
  * The parts that follow the on-screen keyboard: the overlay's keyboard
@@ -418,5 +419,16 @@ describe('the anchored overlay on a keyboard event', () => {
         const placed = `tv-overlay__panel max-height=${HIDES.includes(how) ? WIN_H - 16 : WIN_H - 300 - 16}px`;
         expect(part.doc.log).toEqual([told, placed]);
         part.close();
+    });
+});
+
+describe.each(PARTS)('%s once closed', (_name, open) => {
+    it('leaves the window\'s keyboard followed by nothing of it', () => {
+        const part = open();
+        expect(keyboardFollowerCount(part.win as never)).toBeGreaterThan(0);
+
+        part.close();
+
+        expect(keyboardFollowerCount(part.win as never)).toBe(0);
     });
 });

@@ -1,5 +1,5 @@
 import { logDebug } from '../log/log';
-import { trackKeyboard, nativeKeyboardHeight, keyboardTop } from './KeyboardState';
+import { watchKeyboard, nativeKeyboardHeight, keyboardTop, keyboardOverlap, type KeyboardChange } from './KeyboardWatch';
 import { runningAnimations, whenStopped } from './Animations';
 
 /** The CSS variable on the container: how much of the window the keyboard covers (px). */
@@ -79,18 +79,18 @@ const SETTLE_ROUNDS = 10;
  * animations (`getAnimations`), it measures at once; past a bound on the
  * times they are listed, it measures however things stand.
  *
- * Keyboard detection is dual-source (state は KeyboardState に集約):
- * - visualViewport resize — Windows / Safari 系。`innerHeight - vv.height`
- *   が縮む環境
- * - Capacitor Keyboard events (`keyboardWillShow` 等の window イベント、
- *   `keyboardHeight` 付き) — Obsidian mobile (Android/iOS)。WebView が
- *   リサイズされず visualViewport が一切変化しないため、ネイティブ側の
- *   通知が唯一の検知源（実機観測: ih=vvH のまま、
- *   keyboardWillShow h=336 のみ発火）
+ * The keyboard is told two ways, both followed through `KeyboardWatch`:
+ * - the visualViewport resizing or scrolling (Windows, Safari): the window's
+ *   `innerHeight - vv.height` grows
+ * - Capacitor's events on the window (`keyboardWillShow` and the like, with
+ *   a `keyboardHeight`), on Obsidian mobile (Android, iOS): the WebView is
+ *   not resized and the visualViewport never changes, so they are all that
+ *   tells it (seen on a device: ih=vvH throughout, only
+ *   keyboardWillShow h=336 fired)
  */
 export class KeyboardAwareContainer {
-    private vvHandler: (() => void) | null = null;
-    private kbHandler: ((e: Event) => void) | null = null;
+    /** Stops following the keyboard, while it is followed. */
+    private unwatch: (() => void) | null = null;
     private focusHandler: ((e: FocusEvent) => void) | null = null;
     private blurHandler: (() => void) | null = null;
     private blurTimer: ReturnType<typeof setTimeout> | null = null;
@@ -128,27 +128,14 @@ export class KeyboardAwareContainer {
     ) {}
 
     attach(): void {
-        trackKeyboard(this.win);
-
-        const vv = this.win.visualViewport;
-        if (vv) {
-            this.vvHandler = () => this.syncState();
-            vv.addEventListener('resize', this.vvHandler);
-            vv.addEventListener('scroll', this.vvHandler);
-        }
-
-        // Capacitor Keyboard プラグイン（Obsidian mobile）。高さの追跡は
-        // KeyboardState が常駐で行うので、ここでは再計算のトリガーだけ受ける。
-        // 非 Capacitor 環境ではこれらのイベントは発火しない。
-        this.kbHandler = (e: Event) => {
-            const h = (e as (Event & { keyboardHeight?: number }) | undefined)?.keyboardHeight;
-            logDebug(`[kb] ${e?.type ?? 'keyboard'} h=${h ?? '-'} ih=${this.win.innerHeight}`);
+        // The keyboard's height is kept by KeyboardWatch before this is
+        // told, so it is laid out again for the height just told.
+        this.unwatch = watchKeyboard(this.win, (change: KeyboardChange) => {
+            if (change.cause !== 'viewportResize' && change.cause !== 'viewportScroll') {
+                logDebug(`[kb] ${change.cause} h=${change.height ?? '-'} ih=${this.win.innerHeight}`);
+            }
             this.syncState();
-        };
-        this.win.addEventListener('keyboardWillShow', this.kbHandler);
-        this.win.addEventListener('keyboardDidShow', this.kbHandler);
-        this.win.addEventListener('keyboardWillHide', this.kbHandler);
-        this.win.addEventListener('keyboardDidHide', this.kbHandler);
+        });
 
         // キーボード表示中のフィールド間フォーカス移動（検知イベントは
         // 再発火しない）
@@ -221,9 +208,7 @@ export class KeyboardAwareContainer {
             this.savedScrollTop = this.scrollTarget.scrollTop;
         }
 
-        this.setOverlap(this.keyboardOpen
-            ? Math.max(0, this.win.innerHeight - keyboardTop(this.win))
-            : 0);
+        this.setOverlap(this.keyboardOpen ? keyboardOverlap(this.win) : 0);
 
         if (this.keyboardOpen) {
             this.measureWhenSettled();
@@ -378,17 +363,8 @@ export class KeyboardAwareContainer {
     }
 
     detach(): void {
-        const vv = this.win.visualViewport;
-        if (vv && this.vvHandler) {
-            vv.removeEventListener('resize', this.vvHandler);
-            vv.removeEventListener('scroll', this.vvHandler);
-        }
-        if (this.kbHandler) {
-            this.win.removeEventListener('keyboardWillShow', this.kbHandler);
-            this.win.removeEventListener('keyboardDidShow', this.kbHandler);
-            this.win.removeEventListener('keyboardWillHide', this.kbHandler);
-            this.win.removeEventListener('keyboardDidHide', this.kbHandler);
-        }
+        this.unwatch?.();
+        this.unwatch = null;
         if (this.focusHandler) {
             this.container.removeEventListener('focusin', this.focusHandler);
         }
@@ -408,8 +384,6 @@ export class KeyboardAwareContainer {
         // The overlap given to the container is left on it: a container
         // closing over the open keyboard leaves where it stands.
         this.restore();
-        this.vvHandler = null;
-        this.kbHandler = null;
         this.focusHandler = null;
         this.blurHandler = null;
         this.blurTimer = null;

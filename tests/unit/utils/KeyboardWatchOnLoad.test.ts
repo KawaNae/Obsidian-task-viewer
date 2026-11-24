@@ -14,7 +14,7 @@ vi.mock('obsidian', async (importOriginal) => ({
 
 import TaskViewerPlugin from '../../../src/main';
 import { KeyboardAwareContainer, KEYBOARD_OVERLAP_VAR } from '../../../src/utils/KeyboardAwareContainer';
-import { untrackAllKeyboards } from '../../../src/utils/KeyboardState';
+import { untrackAllKeyboards } from '../../../src/utils/KeyboardWatch';
 
 class Target {
     private listeners = new Map<string, ((e: unknown) => void)[]>();

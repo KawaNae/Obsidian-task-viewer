@@ -7,7 +7,7 @@ import type { App } from 'obsidian';
 import type { SubtreeFrame } from '../../../services/persistence/utils/SubtreeFrame';
 import { t } from '../../../i18n';
 import { BRACKET_CLOSERS, BRACKET_PAIRS } from '../../../utils/BracketRules';
-import { keyboardTop, trackKeyboard } from '../../../utils/KeyboardState';
+import { keyboardTop, trackKeyboard } from '../../../utils/KeyboardWatch';
 import { lineMapOf, trackLines } from './LineMap';
 import {
     breakParent, indentMoreRestartingLists, listNumbering, moveLineDownKeepingNumbers, moveLineUpKeepingNumbers,

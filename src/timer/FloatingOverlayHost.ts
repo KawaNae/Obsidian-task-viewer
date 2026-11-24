@@ -24,7 +24,7 @@
  * new viewport in case the destination window is smaller).
  */
 
-import { trackKeyboard, keyboardTop } from '../utils/KeyboardState';
+import { watchKeyboard, keyboardTop } from '../utils/KeyboardWatch';
 
 /**
  * How far a press must move before it becomes a drag of the widget
@@ -37,8 +37,8 @@ export class FloatingOverlayHost {
     private win: Window | null = null;
     private doc: Document | null = null;
     private resizeHandler: (() => void) | null = null;
-    private vvResizeHandler: (() => void) | null = null;
-    private kbHandler: (() => void) | null = null;
+    /** Stops following the keyboard, while the widget is attached. */
+    private unwatchKeyboard: (() => void) | null = null;
     /** A press on the widget not yet released: where it began. It becomes a drag once it moves. */
     private press: { pointerId: number; x: number; y: number } | null = null;
     private dragging = false;
@@ -63,19 +63,14 @@ export class FloatingOverlayHost {
 
         // 仮想キーボード退避: 被る分だけ transform で持ち上げ、閉じたら外す
         // （avoidKeyboard）。clampToViewport（left/top の書き換え）とは独立に動く。
-        // 検知は KeyboardState と同じ二本立て（vv = Windows/Safari、
-        // Capacitor イベント = Obsidian mobile）。
-        trackKeyboard(win);
-        this.kbHandler = () => this.avoidKeyboard();
-        const vv = win.visualViewport;
-        if (vv) {
-            this.vvResizeHandler = () => this.avoidKeyboard();
-            vv.addEventListener('resize', this.vvResizeHandler);
-        }
-        win.addEventListener('keyboardWillShow', this.kbHandler);
-        win.addEventListener('keyboardDidShow', this.kbHandler);
-        win.addEventListener('keyboardWillHide', this.kbHandler);
-        win.addEventListener('keyboardDidHide', this.kbHandler);
+        // キーボードの動きは KeyboardWatch が知らせる。visualViewport の
+        // scroll では置き直さない。キーボードの上端は scroll でも動くが、
+        // visualViewport がキーボードの下でスクロールする端末で、付いて
+        // 行く動きを確かめていないため。
+        this.unwatchKeyboard = watchKeyboard(win, (change) => {
+            if (change.cause === 'viewportScroll') return;
+            this.avoidKeyboard();
+        });
         // Clamp once after attach in case the new viewport is smaller than
         // the old one and the user-position would land off-screen.
         // Defer to next frame so layout (size) is stable.
@@ -87,17 +82,8 @@ export class FloatingOverlayHost {
         if (this.win && this.resizeHandler) {
             this.win.removeEventListener('resize', this.resizeHandler);
         }
-        if (this.win?.visualViewport && this.vvResizeHandler) {
-            this.win.visualViewport.removeEventListener('resize', this.vvResizeHandler);
-        }
-        this.vvResizeHandler = null;
-        if (this.win && this.kbHandler) {
-            this.win.removeEventListener('keyboardWillShow', this.kbHandler);
-            this.win.removeEventListener('keyboardDidShow', this.kbHandler);
-            this.win.removeEventListener('keyboardWillHide', this.kbHandler);
-            this.win.removeEventListener('keyboardDidHide', this.kbHandler);
-        }
-        this.kbHandler = null;
+        this.unwatchKeyboard?.();
+        this.unwatchKeyboard = null;
         if (this.container) {
             this.container.remove();
         }
