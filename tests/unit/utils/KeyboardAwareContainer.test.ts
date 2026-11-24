@@ -447,6 +447,20 @@ describe('KeyboardAwareContainer', () => {
             expect(container.overlap()).toBeUndefined();
         });
 
+        it('takes a show told a height of 31 as no keyboard: nothing is set and nothing scrolls', () => {
+            const { win, container, panel, kac } = setup({ withVisualViewport: false });
+            const input = new MockInput(790); // under where a 31px keyboard's top would stand
+            container.ownerDocument.activeElement = input;
+            container.adopt(input);
+            kac.attach();
+
+            win.dispatch('keyboardWillShow', { keyboardHeight: 31 });
+
+            expect(container.overlap()).toBeUndefined();
+            expect(kac.keyboardOverlap()).toBe(0);
+            expect(panel.lastScrollBy).toBeNull();
+        });
+
         it('sets nothing while no keyboard covers the window', () => {
             const { win, container, kac } = setup({ vvHeight: 800 });
             kac.attach();
