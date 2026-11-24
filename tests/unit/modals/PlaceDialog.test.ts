@@ -208,6 +208,27 @@ describe('placing', () => {
         expect(h.state().issues).toEqual([]);
     });
 
+    it('on Enter in a note field typed in since the empty one was answered, says nothing of the empty one, and places nothing then or once answered', async () => {
+        const h = await answered(EMPTY);
+        h.dialog.fieldsChanged({ note: typed('Plan'), heading: 'Tasks' });
+        h.dialog.enter();
+
+        expect(h.state().issues).toEqual([]);
+        await h.answer(place());
+        expect(says(h.state(), 'note')).toEqual([{ text: t('modal.destination.noteExisting', { note: 'Plan.md' }), tone: 'info' }]);
+        expect(h.placed).not.toHaveBeenCalled();
+    });
+
+    it('on Enter in the empty note field before it is answered, says a note is wanted once it is', async () => {
+        const h = setUp();
+        h.dialog.enter();
+
+        expect(h.state().issues).toEqual([]);
+        await h.answer(EMPTY);
+        expect(h.state().issues).toEqual([{ at: 'note', tone: 'error', text: t('modal.destination.nameEmpty') }]);
+        expect(h.placed).not.toHaveBeenCalled();
+    });
+
     it('places nothing while the answer is not for what the fields hold now', async () => {
         const h = await answered(place());
         h.dialog.fieldsChanged({ note: typed('Other'), heading: 'Tasks' });
