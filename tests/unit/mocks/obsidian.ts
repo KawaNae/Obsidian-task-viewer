@@ -185,11 +185,45 @@ export class Setting {
     addSlider(_cb: any) { return this; }
 }
 
+/**
+ * Obsidian 1.15.0's order of a menu's closing: `close()` is `hide()`, and
+ * `hide()` takes the menu away, then calls the one callback `onHide` gave
+ * last, once (a later `onHide` replaces an earlier one). A `hide()` while
+ * one is still under way does nothing.
+ *
+ * When the callback comes is the presenter's: a dropdown and the OS's menu
+ * call it within `hide()`, the phone's sheet once its closing has run.
+ * `closingMs` stands in for that: null calls it within `hide()`; a number
+ * calls it that many ms later on the timers, which a test's fake timers
+ * run. A menu takes it from `Menu.closingMs` as it is made.
+ */
 export class Menu {
+    static closingMs: number | null = null;
+    closingMs: number | null = Menu.closingMs;
+    /** Where it was shown last: the event or the position given; null before it is shown. */
+    shownAt: unknown = null;
+    /** Whether a `hide()` is under way: called, its callback not come yet. */
+    hiding = false;
+    private hideCallback: (() => void) | null = null;
     addItem(_cb: any) { return this; }
     addSeparator() { return this; }
-    showAtMouseEvent(_evt: any) {}
-    close() {}
+    showAtMouseEvent(evt: any) { this.shownAt = evt; }
+    showAtPosition(position: { x: number; y: number }) { this.shownAt = position; }
+    onHide(callback: () => void) { this.hideCallback = callback; }
+    hide() {
+        if (this.hiding) return this;
+        this.hiding = true;
+        const callback = this.hideCallback;
+        this.hideCallback = null;
+        const done = () => {
+            callback?.();
+            this.hiding = false;
+        };
+        if (this.closingMs === null) done();
+        else setTimeout(done, this.closingMs);
+        return this;
+    }
+    close() { this.hide(); }
 }
 
 export class Workspace {

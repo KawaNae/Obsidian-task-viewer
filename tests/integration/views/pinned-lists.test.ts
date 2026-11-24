@@ -468,11 +468,9 @@ describe.each([
         const addList = (i: number, where: string) => `
             headerBtn(C, sec(${i}), 'more-horizontal').click();
             await wait(100);
-            const parent = menuItems().find(it => it.titleEl?.textContent === ${JSON.stringify(where)});
-            const item = parent?.submenu?.items.find(it => it.titleEl?.textContent === ${JSON.stringify(tr('pinnedList.addList'))});
-            if (!item) throw new Error('no Add List under ' + ${JSON.stringify(where)});
-            closeMenus();
-            item.callback(new MouseEvent('click'));
+            menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('pinnedList.addList'))}, {
+                within: it => it.titleEl?.textContent === ${JSON.stringify(where)},
+            });
         `;
         const keepName = (i: number) => `key(sec(${i}).querySelector('.' + C.nameInput), 'Escape');`;
 

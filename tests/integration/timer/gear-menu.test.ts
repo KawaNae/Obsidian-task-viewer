@@ -33,6 +33,7 @@ import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 
 const FILE = 'test-int-timer-gear.md';
 const NOTE = ['- [ ] 親', ''].join('\n');
@@ -43,8 +44,8 @@ const plugin = app.plugins.plugins['obsidian-task-viewer'];
 const widget = plugin.getTimerWidget();
 const FILE = ${JSON.stringify(FILE)};
 ${UNTIL}
+${MENUS}
 const item = id => document.querySelector('[data-timer-id="' + id + '"]');
-const menuItems = () => plugin.menuPresenter.currentMenu?.items ?? [];
 /** An item of the open menu as the test reads it: a separator has no title. */
 const read = i => i.titleEl
     ? {
@@ -67,14 +68,10 @@ const openGear = async id => {
  * while \`Date.now\` answers \`now\` (if given), and wait for what it writes.
  */
 const choose = async (title, now) => {
-    const items = menuItems();
-    const found = items.find(i => i.titleEl?.textContent === title);
-    if (!found) throw new Error('no item ' + title + ' among ' + items.map(i => i.titleEl?.textContent ?? '---').join('|'));
-    plugin.menuPresenter.dismiss();
     const realNow = Date.now;
     if (now !== undefined && now !== null) Date.now = () => now;
     try {
-        found.callback(new MouseEvent('click'));
+        menuItem(i => i.titleEl?.textContent === title);
     } finally {
         Date.now = realNow;
     }

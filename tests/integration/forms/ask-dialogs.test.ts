@@ -24,6 +24,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { closeViews, openView, readSettings, saveSettings, tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 
 const TEST_FILE = 'test-int-ask-dialogs.md';
 
@@ -31,6 +32,7 @@ const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
+${MENUS}
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
     if (!task) throw new Error('no row ' + name);
@@ -77,11 +79,7 @@ const fromMenu = async (name, title) => {
         await sleep(250);
     }
     await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
-    const menu = plugin.menuPresenter.currentMenu;
-    const item = menu?.items.find(one => one.titleEl?.textContent === title);
-    if (!item) throw new Error('no ' + title + ' in the menu');
-    menu.hide();
-    item.callback(new MouseEvent('click'));
+    menuItem(one => one.titleEl?.textContent === title);
     await until(() => firstFocused());
 };
 /** Wait for the question to be gone, and for what its answer wrote. */

@@ -28,6 +28,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-draft-close.md';
@@ -68,7 +69,7 @@ const ways = {
         .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })),
 };
 const disk = () => app.vault.adapter.read(FILE);
-const menuTitles = () => (plugin.menuPresenter.currentMenu?.items ?? []).map(i => i.titleEl?.textContent ?? '').filter(Boolean);
+${MENUS}
 const rowTask = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === FILE && t.content.startsWith(name));
     if (!task) throw new Error('no row ' + name);
@@ -91,9 +92,7 @@ const openOverHub = async name => {
         .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
     const title = ${JSON.stringify(tr('menu.addChildTask'))};
     await until(() => menuTitles().includes(title), 3000, () => menuTitles().join('|'));
-    const item = plugin.menuPresenter.currentMenu.items.find(i => i.titleEl?.textContent === title);
-    plugin.menuPresenter.dismiss();
-    item.callback(new MouseEvent('click'));
+    menuItem(i => i.titleEl?.textContent === title);
     await until(() => rowHub() && nameInput() && document.activeElement === nameInput());
 };
 `;

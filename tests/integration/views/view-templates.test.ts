@@ -211,10 +211,9 @@ describe('Save view...', () => {
         expect(loadTitles('vt-load')).toContain(NAME);
         const loaded = op('vt-load', `
             await gear();
-            const load = menuItems().find(i => i.titleEl?.textContent === ${JSON.stringify(tr('toolbar.loadView'))});
-            const item = load.submenu.items.find(i => i.titleEl?.textContent === ${JSON.stringify(NAME)});
-            closeMenus();
-            item.callback(new MouseEvent('click'));
+            menuItem(i => i.titleEl?.textContent === ${JSON.stringify(NAME)}, {
+                within: i => i.titleEl?.textContent === ${JSON.stringify(tr('toolbar.loadView'))},
+            });
         `);
         expect(configOf(loaded.state)).toEqual(configOf(saved.state));
         expect(loaded.cards).toBe(saved.cards);

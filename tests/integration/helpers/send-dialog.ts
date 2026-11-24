@@ -1,6 +1,7 @@
 import { obsidianEval } from './cli-helper';
 import { tr } from './view-helper';
 import { UNTIL } from './waits';
+import { MENUS } from './menus';
 
 /**
  * The send dialog driven in the running E2E vault, as a person drives it:
@@ -13,6 +14,7 @@ import { UNTIL } from './waits';
 export const DIALOG = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 ${UNTIL}
+${MENUS}
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-send');
 const inputs = () => [...(panel()?.querySelectorAll('.tv-send__destination input') ?? [])];
@@ -117,11 +119,7 @@ export function openDialog(file: string, name: string): DialogState {
             await until(() => !document.querySelector('.task-hub'));
         }
         await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
-        const menu = plugin.menuPresenter.currentMenu;
-        const item = menu?.items.find(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
-        if (!item) throw new Error('no send in the menu');
-        menu.hide();
-        item.callback(new MouseEvent('click'));
+        menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
         await until(() => panel() && (state().canSend || state().noteErrors));
         return JSON.stringify(state());
     `);
