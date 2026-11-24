@@ -133,6 +133,19 @@ describe('KeyboardWatch: the parts following a window\'s keyboard', () => {
         expect(overlaps).toEqual([300, 200]);
     });
 
+    it('reads what is less than a pixel between the window and the viewport as no overlap, and a pixel as one', () => {
+        const win = makeViewportWindow();
+
+        win.visualViewport.height = 799.4;
+        expect(keyboardOverlap(win as unknown as Window)).toBe(0);
+
+        win.visualViewport.height = 799;
+        expect(keyboardOverlap(win as unknown as Window)).toBe(1);
+
+        win.visualViewport.height = 500.4;
+        expect(keyboardOverlap(win as unknown as Window)).toBe(300);
+    });
+
     it('tells each show, however often the same height is told again', () => {
         const win = makeWindow();
         const told: string[] = [];

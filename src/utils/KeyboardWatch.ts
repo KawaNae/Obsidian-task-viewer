@@ -174,7 +174,13 @@ export function keyboardTop(win: Window): number {
     return top === Infinity ? win.innerHeight : top;
 }
 
-/** How much of the window the keyboard covers (px), from its top to the window's bottom. */
+/**
+ * How much of the window the keyboard covers (whole px), from its top to the
+ * window's bottom; 0 under 1px. The window's innerHeight is a whole number
+ * and the visualViewport's height need not be (a zoom of the app), so what
+ * is less than a pixel between them is no keyboard.
+ */
 export function keyboardOverlap(win: Window): number {
-    return Math.max(0, win.innerHeight - keyboardTop(win));
+    const covered = win.innerHeight - keyboardTop(win);
+    return covered >= 1 ? Math.round(covered) : 0;
 }

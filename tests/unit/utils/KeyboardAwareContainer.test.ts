@@ -268,29 +268,33 @@ describe('KeyboardAwareContainer', () => {
             expect(panel.style.paddingBottom).toBe('');
         });
 
-        it('does not treat a small viewport shrink (<=50px) as the keyboard opening', () => {
+        it('does not treat a viewport shrink of less than a pixel as the keyboard opening', () => {
             const { win, container, panel, kac } = setup({ vvHeight: 800 });
-            const input = new MockInput(750);
+            const input = new MockInput(795);
             container.ownerDocument.activeElement = input;
             container.adopt(input);
             kac.attach();
 
-            win.visualViewport!.height = 750; // exactly 50px shrink — boundary, not open
+            win.visualViewport!.height = 799.4; // what a zoom leaves between the two heights
             win.visualViewport!.dispatch('resize');
 
+            expect(container.overlap()).toBeUndefined();
             expect(panel.lastScrollBy).toBeNull();
         });
 
-        it('treats a >50px shrink as the keyboard opening', () => {
+        it('treats a viewport shrink of a pixel as the keyboard opening, and measures', () => {
             const { win, container, panel, kac } = setup({ vvHeight: 800 });
-            const input = new MockInput(750);
+            const input = new MockInput(795); // 4px above where the keyboard's top comes
             container.ownerDocument.activeElement = input;
             container.adopt(input);
             kac.attach();
 
-            win.visualViewport!.height = 749; // 51px shrink — just over the threshold
+            win.visualViewport!.height = 799;
             win.visualViewport!.dispatch('resize');
 
+            expect(container.overlap()).toBe('1px');
+            expect(kac.keyboardOverlap()).toBe(1);
+            // The field is kept 10px above the keyboard's top: 795 - 799 + 10.
             expect(panel.lastScrollBy).not.toBeNull();
         });
 
@@ -447,28 +451,81 @@ describe('KeyboardAwareContainer', () => {
             expect(container.overlap()).toBeUndefined();
         });
 
-        it('takes a show told a height of 31 as no keyboard: nothing is set and nothing scrolls', () => {
+        it('gives a show told a height of 31 its overlap, and takes it off on the hide', () => {
             const { win, container, panel, kac } = setup({ withVisualViewport: false });
-            const input = new MockInput(790); // under where a 31px keyboard's top would stand
+            const input = new MockInput(790); // under where a 31px keyboard's top stands
             container.ownerDocument.activeElement = input;
             container.adopt(input);
+            panel.scrollTop = 40;
             kac.attach();
 
             win.dispatch('keyboardWillShow', { keyboardHeight: 31 });
 
+            expect(container.overlap()).toBe('31px');
+            expect(kac.keyboardOverlap()).toBe(31);
+            expect(panel.lastScrollBy).not.toBeNull();
+
+            win.dispatch('keyboardWillHide');
+
             expect(container.overlap()).toBeUndefined();
             expect(kac.keyboardOverlap()).toBe(0);
-            expect(panel.lastScrollBy).toBeNull();
+            expect(panel.scrollTop).toBe(40);
         });
 
         it('sets nothing while no keyboard covers the window', () => {
             const { win, container, kac } = setup({ vvHeight: 800 });
             kac.attach();
 
-            win.visualViewport!.height = 780; // a 20px shrink is no keyboard
-            win.visualViewport!.dispatch('resize');
+            win.visualViewport!.dispatch('resize'); // the viewport as tall as the window
 
             expect(container.overlap()).toBeUndefined();
+            expect(kac.keyboardOverlap()).toBe(0);
+        });
+
+        it('takes the body back where it stood each time an overlap of 5px comes and goes', () => {
+            const { win, container, panel, kac } = setup({ vvHeight: 800 });
+            const input = new MockInput(792); // 3px under where a 5px keyboard's top stands
+            container.ownerDocument.activeElement = input;
+            container.adopt(input);
+            panel.scrollTop = 40;
+            kac.attach();
+
+            for (let i = 0; i < 2; i++) {
+                win.visualViewport!.height = 795;
+                win.visualViewport!.dispatch('resize');
+
+                expect(container.overlap()).toBe('5px');
+                expect(panel.scrollTop).not.toBe(40);
+
+                win.visualViewport!.height = 800;
+                win.visualViewport!.dispatch('resize');
+
+                expect(container.overlap()).toBeUndefined();
+                expect(panel.scrollTop).toBe(40);
+                expect(panel.style.height).toBe('');
+                expect(panel.style.paddingBottom).toBe('');
+            }
+        });
+
+        it('takes the keyboard as gone once the viewport, scrolled down, ends at the window\'s bottom', () => {
+            const { win, container, panel, kac } = setup({ vvHeight: 800 });
+            const input = new MockInput(750);
+            container.ownerDocument.activeElement = input;
+            container.adopt(input);
+            panel.scrollTop = 40;
+            kac.attach();
+
+            win.visualViewport!.height = 500;
+            win.visualViewport!.dispatch('resize');
+            expect(container.overlap()).toBe('300px');
+
+            // The viewport, no taller, scrolled down by 300px: its bottom is the window's.
+            win.visualViewport!.offsetTop = 300;
+            win.visualViewport!.dispatch('scroll');
+
+            expect(container.overlap()).toBeUndefined();
+            expect(kac.keyboardOverlap()).toBe(0);
+            expect(panel.scrollTop).toBe(40);
         });
 
         it('lays out above a keyboard already open as it attaches', () => {

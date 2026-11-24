@@ -20,8 +20,8 @@
  *   anchored to a view's toolbar) leaves max(32, 120 - K) above it; one with
  *   little in it (the delete's question) is as tall as what it holds, which
  *   stands right on the keyboard.
- * - A keyboard covering 31px of the window is taken as none: nothing is laid
- *   out by it, the sheet's contents not raised.
+ * - A keyboard covering 31px of the window is a keyboard as any other: the
+ *   sheet takes its 31px as a padding, its contents raised by that much.
  *
  * The heights of the window and of each overlay are read as the test runs,
  * and the keyboard's heights are made from them, so the cases hold for the
@@ -96,7 +96,6 @@ const openFilter = async () => {
     await opened();
 };
 const rectOf = el => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; };
-const frame = () => new Promise(r => requestAnimationFrame(r));
 `;
 
 /** What opens each overlay seen, in a snippet after the prelude. */
@@ -324,32 +323,45 @@ describe("a phone's sheet stands on the keyboard, the room above it giving way t
 });
 
 describe('a keyboard covering 31px of the window', () => {
+    interface Read {
+        panel: { top: number; height: number };
+        /** Where what the sheet holds ends: its bottom, less the padding the overlap gives it. */
+        contentsBottom: number;
+    }
+
     interface Seen {
-        before: { panel: { top: number; height: number }; bodyBottom: number };
-        after: { panel: { top: number; height: number }; bodyBottom: number };
+        before: Read;
+        after: Read;
         set: string;
         overlap: string;
         moving: boolean;
     }
 
-    it("is taken as none by the phone's sheet: no overlap is set, and its contents stay where they stood", () => {
+    it("raises the phone's sheet's contents by 31px, the overlap set", () => {
         const seen = run<Seen>(`
             phoneLayout();
             await openHub();
             const read = () => {
                 const p = rectOf(panel());
-                return { panel: { top: p.top, height: p.height }, bodyBottom: rectOf(panel().querySelector('.tv-overlay__body')).bottom };
+                return {
+                    panel: { top: p.top, height: p.height },
+                    contentsBottom: p.bottom - parseFloat(getComputedStyle(panel()).paddingBottom),
+                };
             };
             const before = read();
             showKeyboard(31);
             const set = root().style.getPropertyValue('--tv-keyboard-overlap');
-            await frame();
-            await frame();
+            await overlapSettled(root(), 31);
             return JSON.stringify({ before, after: read(), set, overlap: overlapOf(root()), moving: overlapMoving(root()) });
         `);
-        expect(seen.set).toBe('');
-        expect(seen.overlap).toBe('0px');
+        expect(seen.set).toBe('31px');
+        expect(seen.overlap).toBe('31px');
         expect(seen.moving).toBe(false);
-        expect(seen.after).toEqual(seen.before);
+        // What the sheet holds ends 31px higher, on the keyboard. The hub (a
+        // row's, with no row of buttons) is lower than the sheet's greatest
+        // height, so the sheet grows by the overlap, its bottom at the window's.
+        expect(seen.after.contentsBottom).toBeCloseTo(seen.before.contentsBottom - 31, 0);
+        expect(seen.after.panel.height).toBeCloseTo(seen.before.panel.height + 31, 0);
+        expect(seen.after.panel.top).toBeCloseTo(seen.before.panel.top - 31, 0);
     });
 });
