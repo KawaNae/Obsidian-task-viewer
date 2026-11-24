@@ -20,6 +20,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-shell-enter.md';
@@ -36,6 +37,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${DIALOG_ROWS}
+${MENUS}
 const R = (window.__tvShellE2E ??= {});
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
@@ -64,11 +66,7 @@ const openCreate = async (name) => {
         await until(() => !hubPanel());
     }
     await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
-    const menu = plugin.menuPresenter.currentMenu;
-    const item = menu?.items.find(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.addChildTask'))});
-    if (!item) throw new Error('no add child in the menu');
-    menu.hide();
-    item.callback(new MouseEvent('click'));
+    menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.addChildTask'))});
     await until(() => nameInput() && document.activeElement === nameInput());
 };
 /**
@@ -82,11 +80,7 @@ const openCreateOverHub = async (name) => {
     plugin.openTaskHub(task.id);
     await until(() => hubPanel() && hubPanel().contains(document.activeElement));
     await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
-    const menu = plugin.menuPresenter.currentMenu;
-    const item = menu?.items.find(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.addChildTask'))});
-    if (!item) throw new Error('no add child in the menu');
-    menu.hide();
-    item.callback(new MouseEvent('click'));
+    menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.addChildTask'))});
     await until(() => hubPanel() && nameInput() && document.activeElement === nameInput());
 };
 const pressEscape = () => key(document.activeElement, { key: 'Escape', code: 'Escape', keyCode: 27 });

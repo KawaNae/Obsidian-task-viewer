@@ -25,6 +25,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { overrideSettings, tr, type HeldSettings } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const DAY = '2031-01-21';
@@ -51,13 +52,11 @@ const rowOf = label => [...draft().querySelectorAll('.tv-form__row')].find(r => 
 const start = which => rowOf(${JSON.stringify(tr('modal.start'))}).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input').value;
 /** What the line above the create says: where the task goes, and why a create was refused. */
 const lineSays = () => [...draft().querySelector(':scope > .tv-overlay__foot > .task-hub__create-line .task-hub__create-says').children].map(c => c.className + ': ' + c.textContent);
-const menuTitles = () => (plugin.menuPresenter.currentMenu?.items ?? []).map(i => i.titleEl?.textContent ?? '').filter(Boolean);
+${MENUS}
 /** Pick the item titled so in the menu open now (on macOS the menu may be the native one, outside the DOM). */
 const pick = async title => {
     await until(() => menuTitles().includes(title), 3000, () => menuTitles().join('|'));
-    const item = plugin.menuPresenter.currentMenu.items.find(i => i.titleEl?.textContent === title);
-    plugin.menuPresenter.dismiss();
-    item.callback(new MouseEvent('click'));
+    menuItem(i => i.titleEl?.textContent === title);
 };
 /** Wait for the hub opened, its focus on the name and its place said; what it holds. */
 const opened = async () => {

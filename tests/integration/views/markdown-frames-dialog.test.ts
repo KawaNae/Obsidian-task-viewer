@@ -149,11 +149,7 @@ function dialogOf(name: string): string {
             if (!f) throw new Error('no frame ' + id);
             headerBtn(C, f, 'more-horizontal').click();
             await wait(100);
-            const parent = menuItems().find(it => it.titleEl?.textContent === where);
-            const item = parent?.submenu?.items.find(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.addSection'))});
-            if (!item) throw new Error('no item to add a section under ' + where);
-            closeMenus();
-            item.callback(new MouseEvent('click'));
+            menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('sidebar.addSection'))}, { within: it => it.titleEl?.textContent === where });
             await until(() => panel(), 3000, 'no section dialog');
         };
         /** Type \`text\` into the note field and click the note of the list titled \`title\`; wait until the note is answered. */

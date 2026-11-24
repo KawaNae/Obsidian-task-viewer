@@ -1,6 +1,7 @@
 import { obsidianEval, sleep } from './cli-helper';
 import { writeIndexedTestFile } from './test-file-manager';
 import { UNTIL } from './waits';
+import { MENUS } from './menus';
 import en from '../../../src/i18n/locales/en.json';
 import ja from '../../../src/i18n/locales/ja.json';
 
@@ -56,18 +57,7 @@ export const PRELUDE = `
         const b = { prev: today.previousElementSibling, today, next: today.nextElementSibling }[which];
         b.click();
     };
-    // The menu the plugin has open (MenuPresenter). On macOS it may be the
-    // native one, outside the DOM, so its items are read from the Menu and
-    // run as a click on them would.
-    const menuItems = () => P.menuPresenter.currentMenu?.items ?? [];
-    const menuItem = (pred) => {
-        const items = menuItems();
-        const item = items.find(pred);
-        if (!item) throw new Error('no such menu item among ' + items.map(i => i.titleEl?.textContent).join('|'));
-        P.menuPresenter.dismiss();
-        item.callback(new MouseEvent('click'));
-    };
-    const closeMenus = () => P.menuPresenter.dismiss();
+    ${MENUS}
     // The plugin's overlays (filter, sort, display label editors) live on the
     // body. The panel of the newest one with class cls; its body.
     const overlay = (cls) => {

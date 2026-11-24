@@ -21,6 +21,7 @@ import { execFileSync } from 'child_process';
 import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-suggest-lists.md';
@@ -40,6 +41,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${DIALOG_ROWS}
+${MENUS}
 const R = (window.__tvSuggestE2E ??= {});
 const rowOf = name => {
     const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
@@ -308,14 +310,12 @@ describe('the hub\'s status button', () => {
             hub().querySelector('.task-hub__status-pill').click();
             await sleep(200);
             // On macOS the menu may be the native one, outside the DOM: its items are read from the Menu.
-            const items = plugin.menuPresenter.currentMenu?.items ?? [];
+            const items = menuItems();
             const titles = items.map(i => i.titleEl?.textContent ?? '');
             const checked = items.filter(i => i.checked).map(i => i.titleEl?.textContent ?? '');
             const defs = plugin.settings.statusDefinitions;
             const done = defs.find(d => d.char === 'x');
-            const item = items[defs.indexOf(done)];
-            plugin.menuPresenter.dismiss();
-            item.callback(new MouseEvent('click'));
+            menuItem((_, i) => i === defs.indexOf(done));
             await sleep(800);
             return JSON.stringify({ titles, labels: defs.map(d => d.label || '\u00A0'), checked, todo: defs.find(d => d.char === ' ')?.label || '\u00A0', pill: hub().querySelector('.task-hub__status-pill').textContent, done: done.label });
         `);

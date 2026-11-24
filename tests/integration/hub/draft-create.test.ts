@@ -47,6 +47,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const DAY = '2031-01-15';
@@ -145,13 +146,11 @@ const create = () => createButton().click();
 const card = () => draft()?.querySelector('.task-hub__preview .task-card') ?? null;
 const notices = () => document.querySelectorAll('.notice').length;
 const disk = path => app.vault.adapter.read(path);
-const menuTitles = () => (plugin.menuPresenter.currentMenu?.items ?? []).map(i => i.titleEl?.textContent ?? '').filter(Boolean);
+${MENUS}
 /** Pick the item titled so in the menu open now (on macOS the menu may be the native one, outside the DOM). */
 const pick = async title => {
     await until(() => menuTitles().includes(title), 3000, () => menuTitles().join('|'));
-    const item = plugin.menuPresenter.currentMenu.items.find(i => i.titleEl?.textContent === title);
-    plugin.menuPresenter.dismiss();
-    item.callback(new MouseEvent('click'));
+    menuItem(i => i.titleEl?.textContent === title);
 };
 const rowTask = (file, name) => {
     const task = plugin.getIndex().getTasks().find(t => t.file === file && t.content === name);

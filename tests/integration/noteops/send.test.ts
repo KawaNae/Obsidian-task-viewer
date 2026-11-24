@@ -431,10 +431,7 @@ describe('the send dialog', () => {
                     await until(() => !document.querySelector('.task-hub'));
                 }
                 await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, rows[0]);
-                const menu = plugin.menuPresenter.currentMenu;
-                const item = menu?.items.find(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
-                menu.hide();
-                item.callback(new MouseEvent('click'));
+                menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
                 await until(() => panel() && panel().querySelectorAll('.tv-source-editor__parent .cm-content').length === 2);
             } finally {
                 ops.previewSend = previewSend;

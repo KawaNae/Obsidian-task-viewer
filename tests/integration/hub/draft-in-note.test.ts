@@ -28,6 +28,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const DAY = '2031-01-22';
@@ -67,13 +68,11 @@ const start = which => rowOf(${JSON.stringify(tr('modal.start'))}).querySelector
 const lineSays = () => [...draft().querySelector(':scope > .tv-overlay__foot > .task-hub__create-line .task-hub__create-says').children].map(c => c.textContent);
 /** Typed as a person types: the text, then its input event. */
 const typeIn = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
-const menuTitles = () => (plugin.menuPresenter.currentMenu?.items ?? []).map(i => i.titleEl?.textContent ?? '').filter(Boolean);
+${MENUS}
 /** Pick the item titled so in the menu open now (on macOS the menu may be the native one, outside the DOM). */
 const pick = async title => {
     await until(() => menuTitles().includes(title), 3000, () => menuTitles().join('|'));
-    const item = plugin.menuPresenter.currentMenu.items.find(i => i.titleEl?.textContent === title);
-    plugin.menuPresenter.dismiss();
-    item.callback(new MouseEvent('click'));
+    menuItem(i => i.titleEl?.textContent === title);
 };
 /** A Timeline on DAY, its leaf kept to be closed after. */
 const timeline = async () => {

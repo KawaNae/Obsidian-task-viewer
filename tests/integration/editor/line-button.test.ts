@@ -13,6 +13,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import { overrideSettings, tr, type HeldSettings } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { MENUS } from '../helpers/menus';
 
 const MENU_FILE = 'test-int-linemenu.md';
 const IGNORED_FILE = 'test-int-linemenu-ignored.md';
@@ -36,7 +37,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 const R = (window.__tvLineButtonE2E ??= {});
-const menuTitles = () => (plugin.menuPresenter.currentMenu?.items ?? []).map(i => i.titleEl?.textContent ?? '').filter(Boolean);
+${MENUS}
 `;
 
 /** Run `body` (statements, ending in a `return`) in Obsidian after the prelude. */
