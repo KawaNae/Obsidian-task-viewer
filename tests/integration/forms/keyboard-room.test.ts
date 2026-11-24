@@ -4,21 +4,22 @@
  * (`helpers/keyboard.ts`). What the stylesheet lays out by the overlap is
  * read once the overlap's transition has ended.
  *
- * - The desktop's centered box keeps 32px above and below it, the keyboard's
- *   overlap added below: it stands centred in the room from 32px under the
- *   window's top to 32px above the keyboard's, and at 32px from the top when
- *   that room is shorter than it. Its top is
- *   max(32, 32 + (H - 64 - K - h) / 2), for the window's height H, the
- *   keyboard's K and the box's h. A low box (the delete's question) and a
- *   tall one (the hub) are each seen under a keyboard that ends below the
- *   box, one that covers its lower part, and one that puts it at 32px, and
- *   back where it stood once the keyboard goes.
+ * - The desktop's centered box stands in the window's middle, 32px kept
+ *   above and below it, and rises only by what it lacks to end 32px above
+ *   the keyboard's top, as far up as 32px from the window's top. Its top is
+ *   max(32, min((H - h) / 2, H - K - 32 - h)), for the window's height H,
+ *   the keyboard's K and the box's h. A low box (the delete's question) and
+ *   a tall one (the hub) are each seen under a keyboard that ends below the
+ *   box (it does not move), one that would cover its lower part (it ends
+ *   32px above the keyboard), and one that puts it at 32px, and back where
+ *   it stood once the keyboard goes.
  * - A phone's sheet stands on the keyboard: it keeps its bottom at the
  *   window's and takes the overlap as a padding of its own, its height at
- *   most the window's less 120px. A sheet with much in it (the hub, the
- *   filter menu anchored to a view's toolbar) leaves 120px above it; one
- *   with little in it (the delete's question) is as tall as what it holds,
- *   which stands right on the keyboard.
+ *   most the window's less the room kept above it, 120px less the overlap
+ *   and 32px at least. A sheet with much in it (the hub, the filter menu
+ *   anchored to a view's toolbar) leaves max(32, 120 - K) above it; one with
+ *   little in it (the delete's question) is as tall as what it holds, which
+ *   stands right on the keyboard.
  * - A keyboard covering 31px of the window is taken as none: nothing is laid
  *   out by it, the sheet's contents not raised.
  *
@@ -45,6 +46,8 @@ const TEST_FILE = 'test-int-keyboard-room.md';
 const NOTE = [
     '# 見出し',
     '- [ ] 名前のある行 @2031-01-21',
+    '- [ ] 背の高い行 @2031-01-21',
+    ...Array.from({ length: 8 }, (_, i) => `\t- p${i + 1}:: v${i + 1}`),
     '',
 ].join('\n');
 
@@ -59,16 +62,17 @@ ${MENUS}
 ${KEYBOARD}
 const root = () => document.querySelector('.tv-overlay:not(.is-closing)');
 const panel = () => root()?.querySelector('.tv-overlay__panel') ?? null;
-const row = () => plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('名前のある行'));
+const rowNamed = name => plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(name));
+const row = () => rowNamed('名前のある行');
 /** Wait for an overlay to be open and its panel's open animation to have ended. */
 const opened = async () => {
     await until(() => panel());
     await until(() => panel().getAnimations().every(a => a.playState !== 'running'), 3000,
         () => panel().getAnimations().map(a => a.animationName ?? a.transitionProperty).join(' '));
 };
-/** The hub, opened on the note's row. */
-const openHub = async () => {
-    plugin.openTaskHub(row().id);
+/** The hub, opened on the note's row, or on the one named. */
+const openHub = async (name = '名前のある行') => {
+    plugin.openTaskHub(rowNamed(name).id);
     await opened();
 };
 /** The delete's question, chosen from the row's card menu by its title, as a user chooses it. */
@@ -98,6 +102,8 @@ const frame = () => new Promise(r => requestAnimationFrame(r));
 /** What opens each overlay seen, in a snippet after the prelude. */
 const OPEN = {
     hub: () => 'await openHub();',
+    /** The hub of a row with many properties, taller than a sheet with no keyboard holds. */
+    tallHub: () => `await openHub(${JSON.stringify('背の高い行')});`,
     question: () => `await openQuestion(${JSON.stringify(tr('menu.deleteTask'))});`,
     filter: () => 'await openFilter();',
 } as const;
@@ -128,7 +134,7 @@ interface CenteredBox {
     h: number;
     /** The box's top as it opened, with no keyboard. */
     top: number;
-    /** Under a keyboard ending below the box, one covering its lower part, and one putting it at the window's top. */
+    /** Under a keyboard ending below the box, one that would cover its lower part, and one putting it at the window's top. */
     clear: BoxUnder;
     covering: BoxUnder;
     atTop: BoxUnder;
@@ -139,7 +145,8 @@ interface CenteredBox {
  * three keyboards one after the other, each going before the next comes.
  * Their heights are made from the room the box leaves in the window (R,
  * the window's height less the 64px kept and the box's): R/2 - 20 ends
- * below the box, 3R/4 covers its lower part, and R + 100 puts it at 32px.
+ * more than 32px below the box, 3R/4 would cover its lower part, and
+ * R + 100 puts it at 32px.
  */
 function underKeyboards(open: keyof typeof OPEN): CenteredBox {
     return run<CenteredBox>(`
@@ -161,9 +168,9 @@ function underKeyboards(open: keyof typeof OPEN): CenteredBox {
     `);
 }
 
-/** The centered box's top under a keyboard `k` tall, as the stylesheet lays it out now. */
+/** The centered box's top under a keyboard `k` tall: centred, raised to end 32px above the keyboard, 32px from the top at most. */
 function boxTop(H: number, h: number, k: number): number {
-    return Math.max(32, 32 + (H - 64 - k - h) / 2);
+    return Math.max(32, Math.min((H - h) / 2, H - k - 32 - h));
 }
 
 function expectBoxUnderKeyboards(seen: CenteredBox): void {
@@ -173,10 +180,13 @@ function expectBoxUnderKeyboards(seen: CenteredBox): void {
         expect(under.top).toBeLessThanOrEqual(boxTop(seen.H, seen.h, under.k) + 1);
         expect(Math.abs(under.back - seen.top)).toBeLessThanOrEqual(1);
     }
-    // The keyboard that ends below the box raises it now, by half its height.
-    expect(seen.clear.top).toBeLessThan(seen.top - 1);
-    // The one covering its lower part leaves it above 32px; the last puts it there.
+    // The keyboard that ends more than 32px below the box leaves it where it stood.
+    expect(Math.abs(seen.clear.top - seen.top)).toBeLessThanOrEqual(1);
+    // The one that would cover its lower part raises it to end 32px above
+    // the keyboard, still below 32px from the top; the last puts it there.
+    expect(Math.abs(seen.covering.top + seen.h - (seen.H - seen.covering.k - 32))).toBeLessThanOrEqual(1);
     expect(seen.covering.top).toBeGreaterThan(33);
+    expect(seen.covering.top).toBeLessThan(seen.top - 1);
     expect(seen.atTop.top).toBeCloseTo(32, 0);
 }
 
@@ -197,11 +207,13 @@ interface SheetUnder {
 
 /**
  * Open the overlay `open` names as a phone's sheet and tell it a keyboard:
- * `full` one tall enough for the sheet to reach its greatest height (100px
- * past it), `half` one half as tall as the room the sheet leaves under its
- * greatest height, so it stays as tall as what it holds.
+ * `full` one tall enough for the sheet to reach its greatest height with
+ * 32px left above it (100px past the room it leaves under the window's
+ * height less 120px, 100px at least), `half` one half as tall as that room,
+ * so it stays as tall as what it holds, or a keyboard as tall as the number
+ * given.
  */
-function sheetUnderKeyboard(open: keyof typeof OPEN, reach: 'full' | 'half'): SheetUnder {
+function sheetUnderKeyboard(open: keyof typeof OPEN, reach: 'full' | 'half' | number): SheetUnder {
     return run<SheetUnder>(`
         phoneLayout();
         ${OPEN[open]()}
@@ -210,7 +222,8 @@ function sheetUnderKeyboard(open: keyof typeof OPEN, reach: 'full' | 'half'): Sh
         const first = rectOf(panel());
         const footFirst = footPad();
         const room = H - 120 - first.height;
-        const k = ${JSON.stringify(reach)} === 'full' ? Math.max(100, Math.round(room + 100)) : Math.round(room / 2);
+        const reach = ${JSON.stringify(reach)};
+        const k = reach === 'full' ? Math.max(100, Math.round(room + 100)) : reach === 'half' ? Math.round(room / 2) : reach;
         showKeyboard(k);
         await overlapSettled(root(), k);
         const under = rectOf(panel());
@@ -241,7 +254,7 @@ afterAll(async () => {
     await waitForFileDeindexed(TEST_FILE);
 });
 
-describe("the desktop's centered box stands centred above the keyboard, at 32px from the top at most", () => {
+describe("the desktop's centered box stays in the window's middle and rises only to end 32px above the keyboard, at 32px from the top at most", () => {
     it('a low box (the delete\'s question)', () => {
         const seen = underKeyboards('question');
         expect(seen.h).toBeLessThan(seen.H / 2);
@@ -257,11 +270,28 @@ describe("the desktop's centered box stands centred above the keyboard, at 32px 
     });
 });
 
-describe("a phone's sheet stands on the keyboard, 120px left above it at least", () => {
-    it('the hub reaching its greatest height leaves 120px above it, its contents right on the keyboard', () => {
+/** The room a sheet at its greatest height leaves above it under a keyboard `k` tall. */
+function roomAbove(k: number): number {
+    return Math.max(32, 120 - k);
+}
+
+describe("a phone's sheet stands on the keyboard, the room above it giving way to the keyboard down to 32px", () => {
+    it('the hub reaching its greatest height leaves 32px above it, its contents right on the keyboard', () => {
         const seen = sheetUnderKeyboard('hub', 'full');
         expect(seen.first.bottom).toBeCloseTo(seen.H, 0);
-        expect(seen.under.top).toBeCloseTo(120, 0);
+        expect(seen.k).toBeGreaterThanOrEqual(88);
+        expect(seen.under.top).toBeCloseTo(roomAbove(seen.k), 0);
+        expect(seen.under.top).toBeCloseTo(32, 0);
+        expect(seen.under.bottom).toBeCloseTo(seen.H, 0);
+        expect(seen.contentsBottom).toBeCloseTo(seen.H - seen.k, 0);
+    });
+
+    it('a hub taller than the window less 120px leaves 120px less the overlap above it under a low keyboard', () => {
+        const seen = sheetUnderKeyboard('tallHub', 56);
+        // With no keyboard it stands at its greatest height, 120px left above it.
+        expect(seen.first.top).toBeCloseTo(120, 0);
+        expect(seen.under.top).toBeCloseTo(roomAbove(seen.k), 0);
+        expect(seen.under.top).toBeCloseTo(64, 0);
         expect(seen.under.bottom).toBeCloseTo(seen.H, 0);
         expect(seen.contentsBottom).toBeCloseTo(seen.H - seen.k, 0);
     });
@@ -283,10 +313,11 @@ describe("a phone's sheet stands on the keyboard, 120px left above it at least",
     describe('the filter menu anchored to a view\'s toolbar, a sheet on the phone', () => {
         beforeAll(() => { openView(VIEW, 'kanban-view'); });
 
-        it('reaching its greatest height leaves 120px above it', () => {
+        it('reaching its greatest height leaves 32px above it', () => {
             const seen = sheetUnderKeyboard('filter', 'full');
             expect(seen.first.bottom).toBeCloseTo(seen.H, 0);
-            expect(seen.under.top).toBeCloseTo(120, 0);
+            expect(seen.under.top).toBeCloseTo(roomAbove(seen.k), 0);
+            expect(seen.under.top).toBeCloseTo(32, 0);
             expect(seen.contentsBottom).toBeCloseTo(seen.H - seen.k, 0);
         });
     });

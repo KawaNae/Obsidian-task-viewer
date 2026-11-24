@@ -22,10 +22,12 @@ const SETTLE_ROUNDS = 10;
  * whole window. The stylesheet has the sheet's contents stand on the
  * keyboard, its surface running on under it, so the panel's last row (its
  * buttons) sits right over the keyboard and the body shrinks and scrolls
- * inside; the box keeps its size and is centred above the keyboard, as far
- * up as the stylesheet lets it, the keyboard covering the lower part of a
- * box taller than that room. With no keyboard, nothing is
- * set and the container lays out as ever.
+ * inside, the room kept above the sheet giving way to the keyboard; the box
+ * keeps its size and its place in the window's middle, and rises only by
+ * what it lacks to end 32px above the keyboard, as far up as 32px from the
+ * window's top, the keyboard covering the lower part of a box taller than
+ * the room above it. With no keyboard, nothing is set and the container
+ * lays out as ever.
  *
  * What is typed at is kept in sight in the body: when it stands below the
  * body's visible bottom, or the keyboard's top where that is higher, the

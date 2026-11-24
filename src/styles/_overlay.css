@@ -41,6 +41,13 @@
        on-screen keyboard covers: no room is kept for the indicator under a
        keyboard (--tv-keyboard-overlap, KeyboardAwareContainer) */
     --tv-safe-bottom-uncovered: max(0px, env(safe-area-inset-bottom, 0px) - var(--tv-keyboard-overlap, 0px));
+
+    /* The room kept between the box and the window's edges (above and below
+       it), and the least room kept above the sheet while the keyboard covers
+       the window. With no keyboard the sheet keeps more above it, what is
+       behind it showing there */
+    --tv-overlay-edge: 32px;
+    --tv-sheet-room-above: 120px;
 }
 
 /* Light: desktop の interactive-normal / interactive-hover は白系
@@ -161,16 +168,39 @@ body:not(.theme-dark) .tv-overlay {
     justify-content: center;
 }
 
-/* The box is centred in the room from the window's top to the keyboard's
-   (the window's bottom with no keyboard), 32px kept above and below it. A
-   box taller than that room stands at 32px from the top, its auto margins
-   giving way, and runs on below under the keyboard */
+/* The box stands in the window's middle, 32px kept above and below it, and
+   rises only by what it lacks to end 32px above the keyboard's top, as far
+   up as 32px from the window's top:
+     top = max(32px, min(its centred top, the keyboard's top - 32px - its height))
+   Two empty items share the room the box leaves in the root (::before above
+   it, ::after below it), the one below at least as tall as the keyboard's
+   overlap, so
+     below = max(room / 2, overlap), above = room - below (down to 0).
+   The box does not shrink: a box taller than the room above the keyboard
+   stands at 32px from the top, inside the root (its max-height), and the
+   keyboard covers its lower part, KeyboardAwareContainer giving its body
+   the scroll room for that; what runs on past the root's bottom is the
+   empty item below it. The box moves over the overlap's
+   transition alone (On-screen keyboard below): what lays it out has no
+   transition of its own */
 body:not(.is-phone) .tv-overlay--centered {
-    padding: 32px 0 calc(32px + var(--tv-keyboard-overlap, 0px));
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: var(--tv-overlay-edge) 0;
+}
+
+body:not(.is-phone) .tv-overlay--centered::before,
+body:not(.is-phone) .tv-overlay--centered::after {
+    content: '';
+    flex: 1 1 0;
+}
+
+body:not(.is-phone) .tv-overlay--centered::after {
+    min-height: var(--tv-keyboard-overlap, 0px);
 }
 
 body:not(.is-phone) .tv-overlay--centered .tv-overlay__panel {
-    margin-block: auto;
+    flex: none;
 }
 
 .tv-overlay--centered .tv-overlay__backdrop {
@@ -185,12 +215,11 @@ body:not(.is-phone) .tv-overlay--centered .tv-overlay__panel {
 
 /* --- Dialog panel（centered のフォームダイアログ共通寸法: task hub /
    create task。phone ではサイズ系を .is-phone 規則が上書きする） ---
-   The box is at most the window's height less 64px, keyboard or not: of
-   the root's room, which its paddings (32px and 32px, and the keyboard's
-   overlap below) leave, the overlap given back */
+   The box is at most the window's height less 64px, keyboard or not: the
+   root's room inside its paddings, which the keyboard does not change */
 .tv-overlay__panel--dialog {
     width: min(34em, calc(100vw - 32px));
-    max-height: calc(100% + var(--tv-keyboard-overlap, 0px));
+    max-height: 100%;
     padding: 40px 0 34px;
     border-radius: var(--modal-radius, 16px);
 }
@@ -290,7 +319,11 @@ body:not(.is-phone) .tv-overlay--centered .tv-overlay__panel {
        whatever the direction: both sides, so in either direction */
     inset-inline: auto !important;
     top: auto !important;
-    max-height: calc(100% - 120px) !important;
+    /* The room kept above the sheet gives way to the keyboard by what the
+       keyboard covers, down to the edge's: in a low window the keyboard
+       would leave the sheet's body a field's height. The sheet is still as
+       tall as its contents, so a low sheet stays low */
+    max-height: calc(100% - max(var(--tv-overlay-edge), var(--tv-sheet-room-above) - var(--tv-keyboard-overlap, 0px))) !important;
     width: 100%;
     max-width: 100%;
     border: none;
@@ -324,12 +357,13 @@ body:not(.is-phone) .tv-overlay--centered .tv-overlay__panel {
    padding of its own, so its contents and its row of buttons stand right
    over the keyboard while its surface runs on under it, behind the
    keyboard's rounded corners; its max-height, of the border box, keeps the
-   same room for its contents. The box keeps its size and is centred
-   above the keyboard, its row of buttons at its bottom, as far up as 32px
-   from the window's top (Mode: centered); what of a taller box the
-   keyboard covers, KeyboardAwareContainer gives its body the scroll room
-   for. The anchored popover is placed by script, above the keyboard,
-   instead.
+   same room for its contents, the room kept above it giving way to the
+   keyboard (Phone). The box keeps its size and its place in the window's
+   middle, and rises only by what it lacks to end 32px above the keyboard,
+   as far up as 32px from the window's top (Mode: centered); what of a
+   taller box the keyboard covers, KeyboardAwareContainer gives its body the
+   scroll room for. The anchored popover is placed by script, above the
+   keyboard, instead.
 
    The overlap is registered as a length so that it moves over about the
    keyboard's own slide, and everything laid out by it moves with it.
