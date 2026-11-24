@@ -120,8 +120,19 @@ describe('NoteName.find: a note picked', () => {
         expect(pathOf(find(vault, 'anything', 'a/同名.md'))).toBe('a/同名.md');
     });
 
-    it('gone from the vault: the text is read on its own', () => {
-        expect(find(vaultOf(['a/x.md']), 'x', 'gone.md')).toMatchObject({ kind: 'existing' });
+    it('at a path that differs in case alone: the vault\'s note there', () => {
+        expect(pathOf(find(vaultOf(['A/note.md']), 'other', 'a/NOTE.md'))).toBe('A/note.md');
+    });
+
+    it('not in the vault: a new note at the path as it is held, whatever the text says', () => {
+        expect(find(vaultOf(['a/x.md']), 'x', 'gone.md')).toEqual({ kind: 'new', path: 'gone.md', by: 'path', folderMade: null, namesakes: [] });
+        const fresh = find(vaultOf(['a/2031-01-15.md']), '2031-01-15', 'Daily/2031-01-15.md');
+        expect(fresh).toMatchObject({ kind: 'new', path: 'Daily/2031-01-15.md', by: 'path', folderMade: 'Daily' });
+        expect(fresh.kind === 'new' && fresh.namesakes.map(f => f.path)).toEqual(['a/2031-01-15.md']);
+    });
+
+    it('not in the vault, its folders spelt otherwise than the vault\'s: the path spelt as it is held', () => {
+        expect(find(vaultOf(['Daily/old.md']), '2031-01-15', 'daily/2031-01-15.md')).toMatchObject({ kind: 'new', path: 'daily/2031-01-15.md' });
     });
 });
 

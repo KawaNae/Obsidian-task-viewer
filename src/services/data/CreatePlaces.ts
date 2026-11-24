@@ -13,7 +13,7 @@ import { putBlock, seedOf, type NoteSeed, type NoteSpot } from '../persistence/N
 import { Block, type HeadingLookup } from '../persistence/utils/Placement';
 import type { Operations } from '../operations/Operations';
 import type { WriteAnswer, WriteTelling } from '../operations/WriteAnswer';
-import { spotIn, type NoteDestination } from './NotePlaces';
+import { spotIn, type DestinationAsk, type NoteDestination } from './NotePlaces';
 
 /**
  * The note a place to create in is in, by what it is: the daily note of
@@ -37,6 +37,9 @@ export type PlaceNote =
 export type CreatePlace =
     | { kind: 'note'; note: PlaceNote; spot: NoteSpot }
     | { kind: 'childOf'; taskId: string };
+
+/** A place in a note: the place the place dialog chooses and is opened on. */
+export type PlaceInNote = Extract<CreatePlace, { kind: 'note' }>;
 
 /** What a line put in a place inherits there: the values its section resolves to, as a row's `cascadeContext` holds them. */
 export type Inherits = NonNullable<Task['cascadeContext']>;
@@ -89,7 +92,8 @@ const PROBE = '- [ ] _';
 /**
  * The places a new task line is made in, as the hub on a task not written
  * yet asks of them: the daily note's place ({@link dailyNote}), the place
- * a note and a spot chosen name ({@link fromDestination}), what a place
+ * a note and a spot chosen name ({@link fromDestination}) and the place
+ * dialog's fields that name a place ({@link askOf}), what a place
  * is and what a line there inherits ({@link facts}), the note a line put
  * there is in ({@link noteOf}), and the write of the line there
  * ({@link create}). Beside `NoteOps`, which answers the same of a send's
@@ -104,20 +108,38 @@ export class CreatePlaces {
     ) { }
 
     /** The place a view's "Create task for daily note" on `date` puts a line in: the settings' section of the day's daily note. */
-    dailyNote(date: string): CreatePlace {
+    dailyNote(date: string): PlaceInNote {
         return { kind: 'note', note: { kind: 'daily', date }, spot: Destination.taskSection(this.getSettings()) };
     }
 
     /**
      * The place the place dialog's answer `to` names (`PlaceModal`): its note
-     * by its path, made empty when it is not there, and where in it. A place
-     * `current` already in the same note stays the note it is — a daily
-     * note is still made of its day's template — and takes the answer's
-     * spot alone.
+     * by its path, made empty when it is not there, and where in it.
+     *
+     * `openedOn`, the place the hub on a task not written yet opened on, when
+     * the hub asks the dialog to move it: an answer in its note stays the
+     * note it is — a daily note is still made of its day's template — and
+     * takes the answer's spot alone. That is the one place a daily note
+     * comes from: the dialog answers with a path, and every place the hub
+     * moved to since is the note at a path, which the answer's path names
+     * again on its own.
      */
-    fromDestination(to: NoteDestination, current?: CreatePlace): CreatePlace {
-        if (current?.kind === 'note' && this.pathOf(current.note) === to.note.path) return { ...current, spot: to.spot };
+    fromDestination(to: NoteDestination, openedOn?: CreatePlace): PlaceInNote {
+        if (openedOn?.kind === 'note' && this.pathOf(openedOn.note) === to.note.path) return { ...openedOn, spot: to.spot };
         return { kind: 'note', note: { kind: 'path', path: to.note.path }, spot: to.spot };
+    }
+
+    /**
+     * The place dialog's fields as they name `place` (`PlaceModal`'s
+     * `initial`): the note field the note's name, holding its path as
+     * picked — the note the path names, there or not yet
+     * (`NoteName.find`) — and the heading field the section's heading, or
+     * empty for the note's end.
+     */
+    askOf(place: PlaceInNote): DestinationAsk {
+        const path = this.pathOf(place.note);
+        const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
+        return { note: { text: name, picked: path }, heading: place.spot === 'end' ? '' : place.spot.heading };
     }
 
     /**
@@ -214,4 +236,25 @@ function inheritanceOf(section: SectionNode | undefined): Inheritance {
     if (!section) return { inherits: {} };
     const inheritedFrom = NoteTasks.sourcesOf(section);
     return inheritedFrom ? { inherits: NoteTasks.inheritance(section), inheritedFrom } : { inherits: NoteTasks.inheritance(section) };
+}
+
+/**
+ * Whether `a` and `b` are the same place: the same note, by what it is (the
+ * daily note of the same day, or the note at the same path), and the same
+ * spot in it (the end, or the section of the same heading, level and side);
+ * or the head of the same row's children.
+ */
+export function samePlace(a: CreatePlace, b: CreatePlace): boolean {
+    if (a.kind === 'childOf') return b.kind === 'childOf' && a.taskId === b.taskId;
+    if (b.kind === 'childOf') return false;
+    const sameNote = a.note.kind === 'daily'
+        ? b.note.kind === 'daily' && a.note.date === b.note.date
+        : b.note.kind === 'path' && a.note.path === b.note.path;
+    return sameNote && sameSpot(a.spot, b.spot);
+}
+
+/** Whether `a` and `b` are the same spot: both the end, or the section of the same heading, level and side. */
+function sameSpot(a: NoteSpot, b: NoteSpot): boolean {
+    if (a === 'end' || b === 'end') return a === b;
+    return a.heading === b.heading && a.level === b.level && a.side === b.side;
 }
