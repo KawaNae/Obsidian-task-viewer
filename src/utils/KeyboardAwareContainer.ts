@@ -90,7 +90,7 @@ const SETTLE_ROUNDS = 10;
  */
 export class KeyboardAwareContainer {
     private vvHandler: (() => void) | null = null;
-    private kbHandler: (() => void) | null = null;
+    private kbHandler: ((e: Event) => void) | null = null;
     private focusHandler: ((e: FocusEvent) => void) | null = null;
     private blurHandler: (() => void) | null = null;
     private blurTimer: ReturnType<typeof setTimeout> | null = null;
@@ -113,6 +113,8 @@ export class KeyboardAwareContainer {
     private settling = false;
     /** Counted up on each wait begun or given up, so a wait no longer current measures nothing. */
     private wait = 0;
+    /** For the log: when the wait under way began (ms), and what each of its rounds waited for. */
+    private waitLog: { start: number; rounds: string[] } | null = null;
 
     /**
      * `scrollTarget` is the body that scrolls in the container. It is given
@@ -138,7 +140,11 @@ export class KeyboardAwareContainer {
         // Capacitor Keyboard プラグイン（Obsidian mobile）。高さの追跡は
         // KeyboardState が常駐で行うので、ここでは再計算のトリガーだけ受ける。
         // 非 Capacitor 環境ではこれらのイベントは発火しない。
-        this.kbHandler = () => this.syncState();
+        this.kbHandler = (e: Event) => {
+            const h = (e as (Event & { keyboardHeight?: number }) | undefined)?.keyboardHeight;
+            logDebug(`[kb] ${e?.type ?? 'keyboard'} h=${h ?? '-'} ih=${this.win.innerHeight}`);
+            this.syncState();
+        };
         this.win.addEventListener('keyboardWillShow', this.kbHandler);
         this.win.addEventListener('keyboardDidShow', this.kbHandler);
         this.win.addEventListener('keyboardWillHide', this.kbHandler);
@@ -253,6 +259,7 @@ export class KeyboardAwareContainer {
     private measureWhenSettled(): void {
         if (this.settling) return;
         this.settling = true;
+        this.waitLog = { start: now(this.win), rounds: [] };
         this.settle(++this.wait, 0);
     }
 
@@ -265,17 +272,30 @@ export class KeyboardAwareContainer {
         if (wait !== this.wait) return;
         const moving = rounds < SETTLE_ROUNDS ? runningAnimations(this.container) : [];
         if (moving.length > 0) {
+            this.waitLog?.rounds.push(`[${moving.map(describeAnimation).join(' ')}]`);
             void whenStopped(moving).then(() => this.settle(wait, rounds + 1));
             return;
         }
         this.settling = false;
+        this.logWait('settled');
         this.measure();
     }
 
     /** Give up the wait under way, if any: it measures nothing. */
     private endWait(): void {
+        if (this.settling) this.logWait('given up');
         this.settling = false;
         this.wait++;
+    }
+
+    /** One line for a wait that waited (a round), as it ends. */
+    private logWait(how: string): void {
+        const log = this.waitLog;
+        this.waitLog = null;
+        if (!log || log.rounds.length === 0) return;
+        logDebug(
+            `[kb] ${how} after=${Math.round(now(this.win) - log.start)}ms` +
+            ` rounds=${log.rounds.join('')}`);
     }
 
     /** Keep the field focused in the container above the keyboard, while it is open. */
@@ -315,7 +335,8 @@ export class KeyboardAwareContainer {
         const covered = kbTop < panelRect.bottom;
         logDebug(
             `[kb] scroll overshoot=${Math.round(overshoot)} limit=${Math.round(limit)}` +
-            ` kbTop=${Math.round(kbTop)} covered=${covered}`);
+            ` kbTop=${Math.round(kbTop)} covered=${covered}` +
+            ` bodyBottom=${Math.round(panelRect.bottom)} field=${Math.round(bottom)}`);
 
         if (this.savedScrollTop === null) this.savedScrollTop = panel.scrollTop;
         if (covered) {
@@ -399,6 +420,21 @@ export class KeyboardAwareContainer {
         this.keyboardOpen = false;
         this.endWait();
     }
+}
+
+/** The window's clock (ms), for the log. */
+function now(win: Window): number {
+    return win.performance?.now() ?? Date.now();
+}
+
+/** For the log: what an animation moves (a transition's property, an animation's name) and on what (its target's class). */
+function describeAnimation(a: Animation): string {
+    const what = (a as Animation & { transitionProperty?: string }).transitionProperty
+        ?? (a as Animation & { animationName?: string }).animationName
+        ?? a.constructor.name;
+    const target = (a.effect as KeyframeEffect | null)?.target;
+    const cls = target?.getAttribute?.('class')?.trim().split(/\s+/)[0] ?? '?';
+    return `${what}@${cls}`;
 }
 
 /** An input, a textarea, or an editable element (contenteditable, and what is in one). */
