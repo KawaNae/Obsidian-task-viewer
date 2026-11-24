@@ -23,7 +23,10 @@ import { DestinationText } from '../noteops/DestinationText';
  *   the name. A note not made yet, a heading not made yet, and a note the
  *   views do not show (said so) can be chosen.
  * - The empty note field is not said wrong as the dialog opens on it: only
- *   an Enter in a field says so, until a field changes.
+ *   an Enter in a field says so, until a field changes, and only once the
+ *   answer is for what the fields hold now. An answer to what they held
+ *   before is not said wrong of a field typed in since; an Enter on the
+ *   empty field before its answer is in is said once the answer is.
  * - Under the note field the dialog says which note the task goes to (the
  *   note there is; the note made, and its folder) and what keeps it from
  *   naming one; under the heading, where in the note the task goes, or why
@@ -57,7 +60,7 @@ export class PlaceDialog {
     private ask: DestinationAsk;
     /** What the destination is, as last answered: an answer is taken only to the last asking. */
     private readonly answer = new LastAnswer<NoteRead>();
-    /** An Enter was pressed on the fields as they stand: an empty note field is said wrong. */
+    /** An Enter was pressed on the fields as they stand: an empty note field is said wrong, once the answer is for them. */
     private entered = false;
     private disposed = false;
 
@@ -81,7 +84,7 @@ export class PlaceDialog {
         const read = this.answer.value;
         const issues: FormIssue<PlaceField>[] = [];
         if (read?.kind === 'unnamed') {
-            if (read.why.why !== 'empty' || this.entered) issues.push({ at: 'note', tone: 'error', text: DestinationText.unnamed(read) });
+            if (read.why.why !== 'empty' || (this.entered && this.answer.caughtUp)) issues.push({ at: 'note', tone: 'error', text: DestinationText.unnamed(read) });
         } else if (read?.kind === 'ambiguous') {
             issues.push({ at: 'note', tone: 'error', text: DestinationText.ambiguous(read) });
         } else if (read) {
