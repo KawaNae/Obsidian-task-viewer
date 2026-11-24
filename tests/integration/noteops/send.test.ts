@@ -457,14 +457,14 @@ describe('the send dialog', () => {
         const opened = openDialog('浅い');
         expect(opened).toMatchObject({ open: true, editors: 0, fixed: '- [ ] 浅い\n  続き\n    - [ ] 子' });
         expect(opened.why).toBe(tr('modal.send.shallow', { line: 1 }));
-        // No editor takes the focus, so the note field does, its name selected whole.
+        // No editor takes the focus, so the note field does, the caret after its name.
         const focused = onDialog<{ value: string; start: number | null; end: number | null }>(`
             await until(() => document.activeElement === inputs()[0], 3000, 'the note field is not focused');
             const note = inputs()[0];
             return JSON.stringify({ value: note.value, start: note.selectionStart, end: note.selectionEnd });
         `);
         expect(focused.value).not.toBe('');
-        expect([focused.start, focused.end]).toEqual([0, focused.value.length]);
+        expect([focused.start, focused.end]).toEqual([focused.value.length, focused.value.length]);
 
         const sent = onDialog<DialogState>(`
             const [note, heading] = inputs();

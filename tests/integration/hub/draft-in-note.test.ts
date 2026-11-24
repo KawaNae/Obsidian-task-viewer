@@ -56,7 +56,7 @@ const overlays = () => [...document.querySelectorAll('.tv-overlay:not(.is-closin
 /** The place dialog: the panel that is not a hub, titled as the task it creates. */
 const place = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__panel')]
     .find(p => !p.classList.contains('task-hub') && p.querySelector('h2.tv-form__title')?.textContent === ${JSON.stringify(tr('modal.newTask.title'))}) ?? null;
-const fields = () => [...place().querySelectorAll('input.tv-form__control')];
+const fields = () => [...place().querySelectorAll('.tv-form__clearable > input')];
 const next = () => formRow(place()).querySelector(':scope > .mod-cta');
 /** The hub on a task not written yet: the hub that offers a create. */
 const draft = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')]

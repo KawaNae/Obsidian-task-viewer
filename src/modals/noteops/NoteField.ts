@@ -1,9 +1,19 @@
 import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { NoteAsk } from '../../services/data/NoteName';
+import type { FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 import { NoteSuggest } from '../../suggest/NoteSuggest';
+import { createClearableInput, type ClearButton } from '../form/ClearButton';
 import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
+
+/**
+ * How the text of a field that names a note or a heading is met as the
+ * focus comes to it: the caret after it. Such a name has no fixed shape, and
+ * is mended (a part of it changed, `Tasks` to `Tasks 2`) as often as
+ * replaced; the field's × empties it in one press for a name typed anew.
+ */
+export const NAME_ON_FOCUS: SelectionOnFocus = 'end';
 
 /** What a {@link NoteField} opens with, and whom it tells. */
 export interface NoteFieldOptions {
@@ -28,26 +38,25 @@ export interface NoteFieldOptions {
  * picked, so that a name other notes share still names that note; once the
  * text is changed, what was picked is let go and the text is read on its
  * own. An unresolved link puts its text in, which names the note the form
- * makes. Which note that is, and what is said of it under the row
- * ({@link says}), is the form's to find out.
+ * makes. Its × empties it as deleting the text does, the focus left in it
+ * (`createClearableInput`). Which note that is, and what is said of it
+ * under the row ({@link says}), is the form's to find out.
  */
 export class NoteField {
     readonly input: HTMLInputElement;
     /** The line under the row, where what is said of the note goes. */
     readonly says: HTMLElement;
     private readonly suggest: NoteSuggest;
+    private readonly clear: ClearButton;
     /** The note picked, and the text the pick put in. */
     private picked: { path: string; text: string } | null;
 
     constructor(app: App, container: HTMLElement, opts: NoteFieldOptions) {
         const { row, says } = createFormRow(container, t('modal.note'), { icon: 'file-text' });
         this.says = says;
-        this.input = row.createEl('input', {
-            type: 'text',
-            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
-            placeholder: t('modal.notePlaceholder'),
-        });
+        ({ input: this.input, clear: this.clear } = createClearableInput(row, t('modal.notePlaceholder')));
         this.input.value = opts.initial.text;
+        this.clear.sync();
         this.picked = opts.initial.picked === null ? null : { path: opts.initial.picked, text: opts.initial.text };
         this.input.addEventListener('input', () => {
             if (this.picked && this.input.value !== this.picked.text) this.picked = null;
@@ -63,10 +72,16 @@ export class NoteField {
                     this.picked = { path: candidate.file.path, text: candidate.file.basename };
                     this.input.value = candidate.file.basename;
                 }
+                this.clear.sync();
                 opts.onChange();
             },
         });
         onFormEnter(this.input, () => opts.onEnter(), { takesEnter: () => this.suggest.listShown });
+    }
+
+    /** The focus on the field, its text met as a name's is ({@link NAME_ON_FOCUS}). */
+    focus(): FieldFocus {
+        return { to: this.input, selection: NAME_ON_FOCUS };
     }
 
     /** What the field holds now. */
