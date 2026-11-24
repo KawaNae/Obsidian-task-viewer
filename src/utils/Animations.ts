@@ -5,13 +5,13 @@
  */
 
 /**
- * The animations running in `el` and what is in it that will end (an
- * endless one, a spinner, would never be waited out). None where the DOM
- * cannot list them (`getAnimations`).
+ * The animations running that will end (an endless one, a spinner, would
+ * never be waited out): `el`'s own, and with `subtree` those of what is in
+ * it too. None where the DOM cannot list them (`getAnimations`).
  */
-export function runningAnimations(el: Element): Animation[] {
+export function runningAnimations(el: Element, { subtree }: { subtree: boolean }): Animation[] {
     if (typeof el.getAnimations !== 'function') return [];
-    return el.getAnimations({ subtree: true }).filter((a) =>
+    return el.getAnimations({ subtree }).filter((a) =>
         a.playState === 'running'
         && Number.isFinite(Number(a.effect?.getComputedTiming().endTime ?? Infinity)));
 }

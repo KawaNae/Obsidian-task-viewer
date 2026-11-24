@@ -5,6 +5,7 @@ import {
     closeAllOverlays,
     openOverlayCount,
     overlayAbove,
+    whenOverlaysOpened,
     type ClosableOverlay,
 } from '../../../src/views/sharedUI/OverlayRegistry';
 
@@ -20,6 +21,7 @@ function fakeOverlay(closed: string[], name: string, onClose?: () => void): Clos
             onClose?.();
         },
         layer: () => null,
+        opening: () => null,
     };
 }
 
@@ -36,7 +38,7 @@ function bodyOf(count: number): FakeNode[] {
 
 /** An open overlay standing in `layer`. */
 function standingIn(layer: FakeNode | null): ClosableOverlay {
-    return { close() {}, layer: () => layer as unknown as Node | null };
+    return { close() {}, layer: () => layer as unknown as Node | null, opening: () => null };
 }
 
 describe('OverlayRegistry', () => {
@@ -87,7 +89,7 @@ describe('OverlayRegistry', () => {
 
     it('closes the remaining overlays when one throws', () => {
         const closed: string[] = [];
-        registerOverlay({ close() { closed.push('boom'); throw new Error('teardown failed'); }, layer: () => null });
+        registerOverlay({ close() { closed.push('boom'); throw new Error('teardown failed'); }, layer: () => null, opening: () => null });
         registerOverlay(fakeOverlay(closed, 'after'));
 
         expect(() => closeAllOverlays()).not.toThrow();
@@ -154,5 +156,50 @@ describe('overlayAbove', () => {
         registerOverlay(standingIn(null));
         expect(overlayAbove(overlay)).toBe(false);
         expect(overlayAbove(standingIn(null))).toBe(false);
+    });
+});
+
+describe('whenOverlaysOpened', () => {
+    beforeEach(() => {
+        closeAllOverlays();
+    });
+
+    /** An open overlay, opening until `opened` is called. */
+    function openingOverlay(): { overlay: ClosableOverlay; opened: () => void } {
+        let pending: Promise<void> | null = null;
+        let opened = () => {};
+        pending = new Promise<void>((resolve) => { opened = () => { pending = null; resolve(); }; });
+        return { overlay: { close() {}, layer: () => null, opening: () => pending }, opened: () => opened() };
+    }
+
+    it('is null with no overlay opening, open ones among them', () => {
+        expect(whenOverlaysOpened()).toBeNull();
+        registerOverlay(fakeOverlay([], 'open'));
+        expect(whenOverlaysOpened()).toBeNull();
+    });
+
+    it('settles once every overlay opening has opened', async () => {
+        const a = openingOverlay();
+        const b = openingOverlay();
+        registerOverlay(a.overlay);
+        registerOverlay(b.overlay);
+        let done = false;
+        void whenOverlaysOpened()!.then(() => { done = true; });
+        a.opened();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(done).toBe(false);
+        b.opened();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(done).toBe(true);
+        expect(whenOverlaysOpened()).toBeNull();
+    });
+
+    it('does not count an overlay closed while it opened', () => {
+        const a = openingOverlay();
+        registerOverlay(a.overlay);
+        expect(whenOverlaysOpened()).not.toBeNull();
+        unregisterOverlay(a.overlay);
+        expect(whenOverlaysOpened()).toBeNull();
     });
 });
