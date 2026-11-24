@@ -555,7 +555,7 @@
       "toEnd": "Puts the task at the end of the heading {{heading}} in {{note}}",
       "toMade": "Makes the heading {{heading}} at the end of {{note}} and puts the task under it",
       "toNew": "Makes the daily note {{note}} and puts the task under the heading {{heading}}",
-      "toNewEnd": "Makes the daily note {{note}} and puts the task in it",
+      "toNewEnd": "Makes the daily note {{note}} and puts the task at its end",
       "toNewNote": "Makes the new note {{note}} and puts the task under the heading {{heading}}",
       "toNewNoteEnd": "Makes the new note {{note}} and puts the task in it",
       "toNoteEnd": "Puts the task at the end of {{note}}",

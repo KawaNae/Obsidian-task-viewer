@@ -555,7 +555,7 @@
       "toEnd": "{{note}} の見出し {{heading}} の末尾に置きます",
       "toMade": "{{note}} の末尾に見出し {{heading}} を作り、その下に置きます",
       "toNew": "デイリーノート {{note}} を作り、見出し {{heading}} の下に置きます",
-      "toNewEnd": "デイリーノート {{note}} を作り、そこに置きます",
+      "toNewEnd": "デイリーノート {{note}} を作り、その末尾に置きます",
       "toNewNote": "新しいノート {{note}} を作り、見出し {{heading}} の下に置きます",
       "toNewNoteEnd": "新しいノート {{note}} を作り、そこに置きます",
       "toNoteEnd": "{{note}} の末尾に置きます",
