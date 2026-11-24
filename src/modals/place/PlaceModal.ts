@@ -105,7 +105,9 @@ export class PlaceModal implements PlaceSurface {
             actions: [{ label: creating ? t('modal.place.next') : t('modal.place.move'), tone: 'cta', run: () => this.dialog?.choose() }],
         });
 
-        this.dialog = new PlaceDialog(this.opts.initial, {
+        // What the fields show as they open, not the options they were built
+        // from: the logic asks of what the user sees, by construction.
+        this.dialog = new PlaceDialog(this.field.ask(), {
             read: (ask) => this.places.readFields(ask, NoteName.defaultFolder(this.app, this.opts.folderFrom)),
             placed: (to) => {
                 this.chosen = to;
