@@ -242,10 +242,6 @@ export class StyleFieldGroup implements ClosingPart {
         }
     }
 
-    focus(field: StyleField): void {
-        this.inputs[field]?.focus();
-    }
-
     getInput(field: StyleField): HTMLInputElement {
         return this.inputs[field];
     }

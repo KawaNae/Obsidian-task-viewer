@@ -6,6 +6,7 @@ import { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor, EditorOnHooks } from '../form/source/SourceEditor';
 import type { FormIssue } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
+import { placeFocus } from '../../views/sharedUI/FocusPlacement';
 
 /**
  * The hub's source mode: the row and its subtree as text, written from a
@@ -174,7 +175,7 @@ export class TaskHubSource {
         this.phase = 'source';
         this.host.lockForm(true);
         this.render();
-        editor.focus();
+        placeFocus({ to: editor });
     }
 
     /** Write the draft: the apply button, or Mod+Enter. Asked whether to throw it away, the question is withdrawn. */
@@ -239,7 +240,8 @@ export class TaskHubSource {
 
     /** Keep the draft: the question is withdrawn, and the editor takes the focus. */
     keep(): void {
-        if (this.guard.keep()) this.opened?.editor.focus();
+        if (!this.guard.keep() || !this.opened) return;
+        placeFocus({ to: this.opened.editor });
     }
 
     /** The draft's text changed: asked whether to throw it away, the question is withdrawn. */

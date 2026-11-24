@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
 import { TaskHubForm, selectionOnFocus, type TaskHubFocusField } from '../../../src/modals/hub/TaskHubForm';
 import { RowHost } from '../../../src/modals/hub/RowHost';
 import { focusField } from '../../../src/utils/FieldFocus';
@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import { makeTask } from '../helpers/makeTask';
 import { byKey } from '../helpers/properties';
 import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
+import { forgetMenus, menuShown } from '../../../src/interaction/menu/MenusOnScreen';
 
 /**
  * How the text of each of the hub's fields is met as the focus comes to it,
@@ -115,5 +116,34 @@ describe('the text of a hub\'s field as the focus comes to it', () => {
             expect(textOf(el)).toBe(textOf(other));
             expect(first?.selection).toBe(selectionOnFocus(name));
         });
+    });
+});
+
+describe('the hub\'s menu asking for a field while it is still on the screen', () => {
+    afterEach(() => { forgetMenus(); });
+
+    /** Let the wait for the menu settle. */
+    const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    it('focuses the field once the menu has gone, not before (a sheet sliding away)', async () => {
+        const s = setUp();
+        const el = s.field('name');
+        const gone = menuShown();
+        s.form.focusField('name');
+        await flush();
+        expect(s.doc.activeElement).not.toBe(el);
+
+        gone();
+        await flush();
+        expect(s.doc.activeElement).toBe(el);
+        expect(textOf(el)).toBe('end');
+    });
+
+    it('focuses it at once with no menu on the screen (a menu gone inside its hide)', () => {
+        const s = setUp();
+        const el = s.field('start');
+        s.form.focusField('start');
+        expect(s.doc.activeElement).toBe(el);
+        expect(textOf(el)).toBe('all');
     });
 });

@@ -288,6 +288,61 @@ describe.each([
         expect(r.lists[0].name).toBe('Alpha');
     });
 
+    it('shows the name field at once from a ⋯ menu that takes time to go (a phone\'s sheet), and focuses it, its text selected, once the menu has gone', () => {
+        const CLOSING = 400;
+        const r = ev<{
+            chosen: { field: boolean; focused: boolean; menu: boolean };
+            whileMenu: { frames: number; focused: boolean };
+            focusedAt: { t: number; menu: boolean; selected: boolean } | null;
+            goneAt: number | null;
+            name: string | null;
+        }>(`(async () => {
+            ${PRELUDE}
+            const C = ${JSON.stringify(C)};
+            const el = V(${JSON.stringify(name)}).contentEl;
+            const input = () => el.querySelector('.' + C.root + ' .' + C.nameInput);
+            headerBtn(C, el.querySelector('.' + C.root), 'more-horizontal').click();
+            await wait(100);
+            const menu = tvMenus().currentMenu;
+            menuItem(it => it.titleEl?.textContent === ${JSON.stringify(tr('menu.rename'))}, { closingMs: ${CLOSING} });
+            const chosen = { field: !!input(), focused: !!input() && document.activeElement === input(), menu: tvMenus().currentMenu === menu };
+            const t0 = performance.now();
+            const frames = [];
+            for (;;) {
+                await new Promise(r => requestAnimationFrame(r));
+                const field = input();
+                const focused = !!field && document.activeElement === field;
+                frames.push({
+                    t: Math.round(performance.now() - t0),
+                    menu: tvMenus().currentMenu === menu,
+                    focused,
+                    selected: focused && field.selectionStart === 0 && field.selectionEnd === field.value.length && field.value.length > 0,
+                });
+                const last = frames[frames.length - 1];
+                if ((!last.menu && last.focused) || last.t > 3000) break;
+            }
+            const whileMenu = frames.filter(f => f.menu);
+            const focusedAt = frames.find(f => f.focused) ?? null;
+            key(input(), 'Escape');
+            await wait(${SETTLE_MS});
+            return JSON.stringify({
+                chosen,
+                whileMenu: { frames: whileMenu.length, focused: whileMenu.some(f => f.focused) },
+                focusedAt: focusedAt && { t: focusedAt.t, menu: focusedAt.menu, selected: focusedAt.selected },
+                goneAt: frames.find(f => !f.menu)?.t ?? null,
+                name: readSection(C, el.querySelector('.' + C.root)).name,
+            });
+        })()`);
+        expect(r.chosen).toEqual({ field: true, focused: false, menu: true });
+        expect(r.whileMenu.frames).toBeGreaterThan(0);
+        expect(r.whileMenu.focused).toBe(false);
+        expect(r.goneAt).not.toBeNull();
+        expect(r.goneAt!).toBeGreaterThanOrEqual(CLOSING - 50);
+        expect(r.focusedAt).toEqual({ t: expect.any(Number), menu: false, selected: true });
+        expect(r.focusedAt!.t).toBeGreaterThanOrEqual(r.goneAt!);
+        expect(r.name).toBe('Alpha');
+    });
+
     it('leaves the sidebar open, its state kept, on the Escape that keeps a list\'s old name', () => {
         const r = ev<Record<string, unknown>>(`(async () => {
             ${PRELUDE}

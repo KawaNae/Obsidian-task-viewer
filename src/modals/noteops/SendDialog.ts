@@ -19,6 +19,7 @@ import type { FormIssue, Tone } from '../form/FormIssue';
 import { DraftGuard } from '../form/DraftGuard';
 import { LastAnswer } from '../form/LastAnswer';
 import { DestinationText } from './DestinationText';
+import { placeFocus } from '../../views/sharedUI/FocusPlacement';
 
 /**
  * The send dialog: rows and their subtrees sent to a section of a note, or
@@ -300,7 +301,9 @@ export class SendDialog {
 
     /** Keep the draft: the question is withdrawn, and the first editor takes the focus. */
     keep(): void {
-        if (this.guard.keep()) this.firstEditor()?.focus();
+        if (!this.guard.keep()) return;
+        const editor = this.firstEditor();
+        if (editor) placeFocus({ to: editor });
     }
 
     /** Whether an Escape is an editor's own (a completion list to close), not the dialog's. */

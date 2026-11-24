@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     renderListSection,
     renderSectionHeader,
@@ -6,6 +6,7 @@ import {
     type ListSectionClasses,
     type ListSectionParams,
 } from '../../../src/views/sharedUI/ListSectionRenderer';
+import { forgetMenus, menuShown } from '../../../src/interaction/menu/MenusOnScreen';
 
 vi.mock('obsidian', async () => {
     const actual = await vi.importActual<Record<string, unknown>>('obsidian');
@@ -20,6 +21,12 @@ vi.mock('obsidian', async () => {
 });
 
 const iconTargets: { el: FakeEl; icon: string }[] = [];
+
+/** The document the stand-in elements are in: what has the focus. */
+const FAKE_DOC = {
+    activeElement: null as FakeEl | null,
+    createElement: (tag: string) => new FakeEl(tag),
+};
 
 /**
  * Minimal stand-in for an Obsidian-extended HTMLElement: enough of the
@@ -52,7 +59,7 @@ class FakeEl {
     }
     get childElementCount() { return this.children.length; }
     get ownerDocument() {
-        return { createElement: (tag: string) => new FakeEl(tag) };
+        return FAKE_DOC;
     }
 
     private adopt(child: FakeEl): FakeEl {
@@ -90,10 +97,14 @@ class FakeEl {
         other.parentElement = parent;
         this.parentElement = null;
     }
-    focus(): void { this.focused = true; }
+    focus(): void { this.focused = true; FAKE_DOC.activeElement = this; }
     select(): void { this.selected = true; }
     /** Enter calls blur() to commit, exactly as a real input would. */
-    blur(): void { this.focused = false; this.fire('blur'); }
+    blur(): void {
+        this.focused = false;
+        if (FAKE_DOC.activeElement === this) FAKE_DOC.activeElement = null;
+        this.fire('blur');
+    }
     querySelector(sel: string): FakeEl | null {
         const cls = sel.replace(/^\./, '');
         for (const c of this.children) {
@@ -360,5 +371,26 @@ describe('startListSectionRename', () => {
         for (const type of ['click', 'mousedown', 'pointerdown']) {
             expect(input.listeners.has(type)).toBe(true);
         }
+    });
+
+    describe('chosen from a menu still on the screen (a sheet sliding away)', () => {
+        afterEach(() => {
+            forgetMenus();
+            FAKE_DOC.activeElement = null;
+        });
+
+        it('shows the field at once, and focuses and selects it once the menu has gone', async () => {
+            const gone = menuShown();
+            const { input } = setup();
+            expect(input.tag).toBe('input');
+            expect(input.value).toBe('Today');
+            expect(input.focused).toBe(false);
+            expect(input.selected).toBe(false);
+
+            gone();
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            expect(input.focused).toBe(true);
+            expect(input.selected).toBe(true);
+        });
     });
 });

@@ -22,7 +22,8 @@ import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
 import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
 import type { HubForm, HubHost } from './HubHost';
-import { focusField, type FieldFocus, type SelectionOnFocus } from '../../utils/FieldFocus';
+import type { FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
+import { placeFocus } from '../../views/sharedUI/FocusPlacement';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
@@ -354,7 +355,7 @@ export class TaskHubForm implements HubForm {
         this.guard.withdraw();
         const first = this.unsaved()[0];
         if (first) {
-            first.input.focus();
+            placeFocus({ to: first.input });
             return;
         }
         for (const part of this.parts()) part.save();
@@ -403,7 +404,8 @@ export class TaskHubForm implements HubForm {
     private fix(): void {
         const first = this.unsaved()[0];
         this.guard.keep();
-        (first?.input ?? this.nameField.fieldElement())?.focus();
+        const to = first?.input ?? this.nameField.fieldElement();
+        if (to) placeFocus({ to });
     }
 
     /**
@@ -487,10 +489,14 @@ export class TaskHubForm implements HubForm {
 
     // ==================== focus ====================
 
-    /** Focus the field named, its text met as its kind asks (a property of the hub's menu). */
+    /**
+     * Focus the field named, its text met as its kind asks (a property of
+     * the hub's menu): once the menu the item was chosen in has gone
+     * (`placeFocus`), as a menu shown as a sheet slides away after the item.
+     */
     focusField(field: TaskHubFocusField): void {
         const to = this.focusOf(field);
-        if (to) focusField(to);
+        if (to) placeFocus(to);
     }
 
     /**
