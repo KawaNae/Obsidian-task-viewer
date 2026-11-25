@@ -4,12 +4,14 @@
  * and its place is read: where what keeps the task from being created is.
  *
  * - The place's fields read as the create waits, the heading named twice in
- *   the note: the place tab chosen, the focus on the heading's field.
+ *   the note, the details tab chosen meanwhile: the basic tab chosen again,
+ *   the focus on the heading's field.
  * - A create pressed as a note is named that two notes are, in folders of
- *   their own: the place tab, the note's field.
- * - Under a row (Add child task), the write refused and the parent's row
- *   gone before the place is asked again: the place tab chosen, the focus
- *   on its button, the place having no field.
+ *   their own: the basic tab, the note's field.
+ * - Under a row (Add child task), the details tab chosen, the write refused
+ *   and the parent's row gone before the place is asked again: the basic
+ *   tab chosen, the focus on its button, the place it shows having no
+ *   field.
  * - The write refused once, the place still there: the focus on the create,
  *   which is offered again.
  * - The same, the user putting the focus on the name while the place is
@@ -119,8 +121,8 @@ const focused = () => {
     if (at === noteInput()) return 'note';
     if (at === headingInput()) return 'heading';
     if (at === createButton()) return 'create';
-    if (at === tab('place')) return 'place tab';
-    if (at === tab('properties')) return 'properties tab';
+    if (at === tab('basic')) return 'basic tab';
+    if (at === tab('detail')) return 'detail tab';
     return draft()?.contains(at) ? 'hub: ' + at.className : 'outside: ' + at.className;
 };
 /** The task of \`file\` named \`name\`. */
@@ -166,17 +168,16 @@ afterAll(async () => {
 });
 
 describe('a create that waited for the place\'s fields, ended unwritten', () => {
-    it('by a heading named twice in the note: the place tab chosen, the focus on the heading\'s field', async () => {
+    it('by a heading named twice in the note, the details tab chosen meanwhile: the basic tab chosen, the focus on the heading\'s field', async () => {
         await writeIndexedTestFile(TWICE_FILE, TWICE_NOTE);
         const steps = run<Record<string, unknown>>(`
             await openDaily(${JSON.stringify(HEADING_DAY)});
             type(nameInput(), '見出しが二つ');
-            await choose('place');
             holdReads();
             const out = {};
             try {
                 typeIn(noteInput(), ${JSON.stringify(TWICE_NAME)});
-                await choose('properties');
+                await choose('detail');
                 press(createButton());
                 await until(() => creating() && R.held > 0, 3000, () => createButton().textContent);
                 out.waiting = { tab: tabOn(), focus: focused() };
@@ -189,17 +190,16 @@ describe('a create that waited for the place\'s fields, ended unwritten', () => 
             out.ended = { tab: tabOn(), focus: focused(), heading: headingInput().value, says: says(headingInput()).length > 0 };
             return JSON.stringify(out);
         `);
-        expect(steps.waiting).toMatchObject({ tab: 'properties' });
-        expect(steps.ended).toEqual({ tab: 'place', focus: 'heading', heading: 'Tasks', says: true });
+        expect(steps.waiting).toMatchObject({ tab: 'detail' });
+        expect(steps.ended).toEqual({ tab: 'basic', focus: 'heading', heading: 'Tasks', says: true });
         expect(readTestFile(TWICE_FILE)).toBe(TWICE_NOTE);
     });
 
-    it('by a note named that two notes are: the place tab chosen, the focus on the note\'s field', async () => {
+    it('by a note named that two notes are: the basic tab chosen, the focus on the note\'s field', async () => {
         for (const file of TWO_FILES) await writeIndexedTestFile(file, TWO_NOTE);
         const steps = run<Record<string, unknown>>(`
             await openDaily(${JSON.stringify(NOTE_DAY)});
             type(nameInput(), 'ノートが無い');
-            await choose('place');
             // Pressed as soon as the name is typed, before the note's field has said what it names:
             // the focus goes to the create as a press puts it, and the press clicks it.
             typeIn(noteInput(), ${JSON.stringify(TWO_NAME)});
@@ -212,18 +212,19 @@ describe('a create that waited for the place\'s fields, ended unwritten', () => 
             return JSON.stringify(out);
         `);
         expect(steps.offered).toBe(true);
-        expect(steps.ended).toEqual({ tab: 'place', focus: 'note', daily: false });
+        expect(steps.ended).toEqual({ tab: 'basic', focus: 'note', daily: false });
     });
 });
 
 describe('a create whose write was refused', () => {
-    it('under a row whose parent is gone before the place is asked again: the place tab chosen, the focus on its button', async () => {
+    it('under a row whose parent is gone before the place is asked again, the details tab chosen: the basic tab chosen, the focus on its button', async () => {
         await writeIndexedTestFile(CHILD_FILE, CHILD_NOTE);
         const steps = run<Record<string, unknown>>(`
             const parent = rowTask(${JSON.stringify(CHILD_FILE)}, '親');
             plugin.openDraftHub({ kind: 'childOf', taskId: parent.id }, {});
             await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
             type(nameInput(), '親が消える');
+            await choose('detail');
             // The parent's row taken out of the note, and the index without it, before the write is refused.
             refuseOnce(async real => {
                 const file = app.vault.getAbstractFileByPath(${JSON.stringify(CHILD_FILE)});
@@ -235,7 +236,8 @@ describe('a create whose write was refused', () => {
             await until(() => focused() !== 'body', 3000, () => focused());
             return JSON.stringify({ tab: tabOn(), focus: focused(), offered: !createButton().disabled, disk: await disk(${JSON.stringify(CHILD_FILE)}) });
         `);
-        expect(steps).toEqual({ tab: 'place', focus: 'place tab', offered: false, disk: CHILD_GONE });
+        // The place is all the basic tab shows of what keeps the task: its button, which raises no keyboard.
+        expect(steps).toEqual({ tab: 'basic', focus: 'basic tab', offered: false, disk: CHILD_GONE });
     });
 
     it('the place still there: the focus on the create, offered again, and a press on it writes', async () => {
@@ -252,7 +254,7 @@ describe('a create whose write was refused', () => {
             await until(() => !draft(), 5000, () => lineSays().join('|'));
             return JSON.stringify(out);
         `);
-        expect(steps).toEqual({ tab: 'properties', focus: 'create', offered: true, refused: true });
+        expect(steps).toEqual({ tab: 'basic', focus: 'create', offered: true, refused: true });
         expect(readTestFile(dailyOf(REFUSED_DAY))).toMatch(/^## Tasks\n- \[ \] 断られる.*\n- \[ \] 既存\n$/);
     });
 
@@ -289,7 +291,7 @@ describe('a create whose write was refused', () => {
             out.ended = { tab: tabOn(), focus: focused() };
             return JSON.stringify(out);
         `);
-        expect(steps.ended).toEqual({ tab: 'properties', focus: 'name' });
+        expect(steps.ended).toEqual({ tab: 'basic', focus: 'name' });
     });
 });
 

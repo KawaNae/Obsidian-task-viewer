@@ -1,17 +1,16 @@
 /**
  * JavaScript that defines, in a snippet `obsidian eval` runs, how the tests
  * find and drive the hub on a task not written yet: its card, its fields,
- * its tabs ("Properties" and "Location"), the fields of its place tab, and
- * the line above its create. It needs `UNTIL`, `DIALOG_ROWS` and `MENUS`
- * before it.
+ * its tabs ("General" and "Details"), the fields of its place, and the line
+ * above its create. It needs `UNTIL`, `DIALOG_ROWS` and `MENUS` before it.
  *
  * - `draft()`: the hub on a task not written yet (the hub that offers a
  *   create); null when none is open
- * - `tab(id)`, `tabOn()`, `paneOf(id)`: a tab's button by its id
- *   (`properties`, `place`), the id of the tab chosen, and the pane a tab
- *   chooses
+ * - `tab(id)`, `tabOn()`, `paneOf(id)`: a tab's button by its id (`basic`,
+ *   `detail`), the id of the tab chosen, and the pane a tab chooses
+ *   (`hubTab`, `hubTabOn`, `hubPane` on this hub)
  * - `placeInputs()`, `noteInput()`, `headingInput()`: the text fields of the
- *   place tab, the note's first
+ *   place, under the dates in the basic tab, the note's first
  * - `lineSays()`: what the line above the create says, each as
  *   `class: text`; `says(input)`: what is said under a field's row, the same
  * - `typeIn(input, text)`: typed as a person types, the text and then its
@@ -34,9 +33,9 @@ const draft = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) 
 const nameInput = () => draft()?.querySelector('.tv-form__name-section input') ?? null;
 const rowOf = label => [...draft().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const dateInput = (label, which) => rowOf(label).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input');
-const tab = id => draft()?.querySelector('button.tv-tabs__tab[data-tab="' + id + '"]') ?? null;
-const tabOn = () => draft()?.querySelector('button.tv-tabs__tab[aria-selected="true"]')?.dataset.tab ?? null;
-const paneOf = id => document.getElementById(tab(id).getAttribute('aria-controls'));
+const tab = id => hubTab(draft(), id);
+const tabOn = () => hubTabOn(draft());
+const paneOf = id => hubPane(draft(), id);
 const placeInputs = () => [...(draft()?.querySelectorAll('.task-hub__place input.tv-ctrl__text-input') ?? [])];
 const noteInput = () => placeInputs()[0] ?? null;
 const headingInput = () => placeInputs()[1] ?? null;

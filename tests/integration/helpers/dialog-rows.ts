@@ -11,11 +11,27 @@
  *   `task-hub__create-line`; the hub's form's row, `tv-form__buttons`; its
  *   source mode's, `task-hub__source-actions`)
  *
+ * The hub's form (on a task not written yet and on a row alike) holds its
+ * fields in two tabs, `basic` (the name, the status, the dates, the place)
+ * and `detail` (the tags, the style, the mask, the properties). A field of
+ * the tab not chosen is `inert`: it takes no focus, so a test chooses its
+ * tab before it puts the focus there.
+ *
+ * - `hubTab(panel, id)`: the button of the hub's tab `id`
+ * - `hubTabOn(panel)`: the id of the hub's tab chosen
+ * - `hubPane(panel, id)`: the pane the tab `id` chooses
+ * - `chooseHubTab(panel, id)`: the tab `id` chosen by a click on its button,
+ *   as a person chooses it; answers its pane
+ *
  * Each takes the panel (`.tv-overlay__panel`, the hub's `.task-hub`);
- * `formRow` answers null when there is none.
+ * `formRow` and `hubTab` answer null when there is none.
  */
 export const DIALOG_ROWS = `
 const formRow = panel => panel?.querySelector(':scope > .tv-overlay__foot > .tv-form__buttons') ?? null;
 const footShows = panel => [...(panel?.querySelector(':scope > .tv-overlay__foot')?.children ?? [])]
     .filter(el => !el.hidden && getComputedStyle(el).display !== 'none').map(el => el.className);
+const hubTab = (panel, id) => panel?.querySelector('.task-hub__form > .tv-tabs > button.tv-tabs__tab[data-tab="' + id + '"]') ?? null;
+const hubTabOn = panel => panel?.querySelector('.task-hub__form > .tv-tabs > button.tv-tabs__tab[aria-selected="true"]')?.dataset.tab ?? null;
+const hubPane = (panel, id) => panel.ownerDocument.getElementById(hubTab(panel, id).getAttribute('aria-controls'));
+const chooseHubTab = (panel, id) => { hubTab(panel, id).click(); return hubPane(panel, id); };
 `;
