@@ -15,6 +15,25 @@
     padding: 8px 0;
 }
 
+/* A hub with tabs: the body a column the panes shrink in, the card and
+   the row of tabs kept whole, so a pane off ends at the body's bottom and
+   the body scrolls only for the pane chosen (tv-tabs__panes--stacked). The
+   body still scrolls whole, the card and the tabs with it. */
+.tv-overlay__body.task-hub__body--tabs {
+    display: flex;
+    flex-direction: column;
+}
+
+.task-hub__body--tabs > .task-hub__preview,
+.task-hub__body--tabs > .tv-tabs {
+    flex: none;
+}
+
+.task-hub__body--tabs > .tv-tabs__panes {
+    flex: 0 1 auto;
+    min-height: 0;
+}
+
 .task-hub__preview .task-card {
     position: relative;
     margin: 0;

@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import realMoment from 'moment';
 import { Notice } from '../mocks/obsidian';
-import { DraftHost, placeIssues, placeText } from '../../../src/modals/hub/DraftHost';
+import { DraftHost, noPlaceIssues, placeIssues, placeText } from '../../../src/modals/hub/DraftHost';
 import type { HubForm } from '../../../src/modals/hub/HubHost';
-import type { CreatePlace, PlaceFacts } from '../../../src/services/data/CreatePlaces';
+import { CreatePlaces, type CreatePlace, type PlaceFacts } from '../../../src/services/data/CreatePlaces';
+import type { NoteDestination, NoteRead, PlaceAnswer } from '../../../src/services/data/NotePlaces';
+import { DestinationText } from '../../../src/modals/noteops/DestinationText';
 import type { IndexRefusal } from '../../../src/services/core/RefusalClause';
 import { refusalNotice } from '../../../src/services/core/RefusalClause';
 import type { NewRow } from '../../../src/services/persistence/NewRow';
@@ -11,8 +14,20 @@ import type { FormIssue } from '../../../src/modals/form/FormIssue';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import { t } from '../../../src/i18n';
 
+// A daily note's path is its day as the daily notes' format names it.
+vi.mock('obsidian', async () => {
+    const actual = await vi.importActual<typeof import('../mocks/obsidian')>('../mocks/obsidian');
+    return { ...actual, moment: realMoment };
+});
+
 /**
- * The host of a hub on a task not written yet. What the fields hand on is
+ * The host of a hub on a task not written yet. It opens on a place, or on
+ * none for the user to choose, and the place fields move it: each answer
+ * naming a note is a place by the place it opened on (`fromDestination`),
+ * read anew unless it is the place already; an answer naming none leaves it
+ * on no place, saying why, with no create. A create asked while the fields
+ * or the place are being read waits for the answer, and is asked of the
+ * form again once it comes. What the fields hand on is
  * put over the draft at once and written nowhere; the card and the fields
  * are drawn again once the field handing it on is done. What the place is
  * is asked once the hub has opened, again after a write refused, and only
@@ -36,21 +51,25 @@ const REFUSED: IndexRefusal = { file: '2031-01-15.md', reason: { kind: 'changed'
 /** A few microtasks: an answer handed in is taken, and what it starts has run. */
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 
-/** A host on a place whose answers the test gives, a form and a panel that record what they are told. */
-function rig(seed: Parameters<typeof makeHost>[0] = {}) {
+/** The places' own reckoning of a note's path and of an answer's place: the daily notes as their settings default. */
+const REAL = new CreatePlaces({ internalPlugins: { getPluginById: () => null } } as never, {} as never, () => DEFAULT_SETTINGS, () => undefined);
+
+/** A host on a place (none: the user chooses) whose answers the test gives, a form and a panel that record what they are told. */
+function rig(seed: Parameters<typeof makeHost>[0] = {}, place: CreatePlace | null = PLACE) {
     const answers: ((facts: PlaceFacts) => void)[] = [];
     const writes: ((answer: WriteAnswer) => void)[] = [];
     const rows: NewRow[] = [];
     const told: string[] = [];
     const places = {
-        noteOf: vi.fn(() => '2031-01-15.md'),
-        facts: vi.fn(() => new Promise<PlaceFacts>(resolve => { answers.push(resolve); })),
+        noteOf: vi.fn((at: CreatePlace) => REAL.noteOf(at)),
+        fromDestination: vi.fn((to: NoteDestination, openedOn?: CreatePlace) => REAL.fromDestination(to, openedOn)),
+        facts: vi.fn((_at: CreatePlace) => new Promise<PlaceFacts>(resolve => { answers.push(resolve); })),
         create: vi.fn((_place: CreatePlace, row: NewRow, _opts: unknown) => {
             rows.push(row);
             return new Promise<WriteAnswer>(resolve => { writes.push(resolve); });
         }),
     };
-    const host = makeHost(seed, places);
+    const host = makeHost(seed, places, place);
     const form: HubForm & { said: (string | null)[]; place: (readonly FormIssue<never>[])[] } = {
         said: [],
         place: [],
@@ -59,6 +78,8 @@ function rig(seed: Parameters<typeof makeHost>[0] = {}) {
         sayWrite(refusal) { this.said.push(refusal); },
         sayPlace(issues) { this.place.push(issues); },
         showDraft: vi.fn(() => { told.push(`draft:${host.canCreate()}:${host.creating()}`); }),
+        // The form's create, its fields all saved: it asks the host's.
+        create: vi.fn(() => { host.create(); }),
     };
     const panel = { redrawPreview: vi.fn(() => { told.push('card'); }), close: vi.fn() };
     host.bind(form);
@@ -71,9 +92,16 @@ function rig(seed: Parameters<typeof makeHost>[0] = {}) {
     };
 }
 
-function makeHost(seed: ConstructorParameters<typeof DraftHost>[1], places: ConstructorParameters<typeof DraftHost>[2]['places']) {
-    return new DraftHost(PLACE, seed, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
+function makeHost(seed: ConstructorParameters<typeof DraftHost>[1], places: ConstructorParameters<typeof DraftHost>[2]['places'], place: CreatePlace | null) {
+    return new DraftHost(place, seed, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
 }
+
+/** The place fields' answers: a note by its path and the spot, or why they name none. */
+const to = (path: string, spot: NoteDestination['spot'] = SECTION): PlaceAnswer => ({ kind: 'to', to: { note: { kind: 'existing', path }, spot } });
+const EMPTY: PlaceAnswer = { kind: 'unnamed', why: { ok: false, why: 'empty', at: 'name' } };
+const CHARS: Extract<NoteRead, { kind: 'unnamed' }> = { kind: 'unnamed', why: { ok: false, why: 'chars', chars: '?', at: 'name' } };
+const AMBIGUOUS: Extract<NoteRead, { kind: 'ambiguous' }> = { kind: 'ambiguous', name: 'n', files: [{ path: 'a/n.md' }, { path: 'b/n.md' }] as never };
+const OTHER: CreatePlace = { kind: 'note', note: { kind: 'path', path: 'other.md' }, spot: SECTION };
 
 beforeEach(() => { Notice.messages.length = 0; });
 
@@ -136,14 +164,13 @@ describe('DraftHost', () => {
         const r = rig();
         r.open();
         await r.answer();
-        // Created and refused twice before the place answers again: asked twice more.
+        // Refused, and moved before the place answers again: asked twice more.
         r.host.create();
         await r.write({ written: false, refused: REFUSED });
-        r.host.create();
-        await r.write({ written: false, refused: REFUSED });
+        r.host.answered(to('other.md'));
         expect(r.places.facts).toHaveBeenCalledTimes(3);
 
-        await r.answerAt(2, daily({ inherits: { color: 'blue' } }));
+        await r.answerAt(2, daily({ path: 'other.md', inherits: { color: 'blue' } }));
         // The second asking's answer comes late: not taken over the third's.
         await r.answerAt(1, daily({ inherits: { color: 'red' } }));
         expect(r.host.task().cascadeContext).toEqual({ color: 'blue' });
@@ -226,6 +253,18 @@ describe('DraftHost', () => {
         expect(r.form.said.at(-1)).toBeNull();
     });
 
+    it('waits a create asked while the place is asked again after a refusal for its answer', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.create();
+        await r.write({ written: false, refused: REFUSED });
+        r.host.create();
+        expect(r.places.create).toHaveBeenCalledTimes(1);
+        await r.answer();
+        expect(r.places.create).toHaveBeenCalledTimes(2);
+    });
+
     it('tells a refusal that comes after the hub closed by a notice', async () => {
         const r = rig();
         r.open();
@@ -264,6 +303,230 @@ describe('DraftHost', () => {
 
     it('has no row to open', () => {
         expect(rig().host.openSource).toBeNull();
+    });
+});
+
+describe('DraftHost moved by the place fields', () => {
+    it('opened on no place asks nothing, says to choose a note, and offers no create', async () => {
+        const r = rig({}, null);
+        r.open();
+        await settle();
+
+        expect(r.places.facts).not.toHaveBeenCalled();
+        expect(r.form.place.at(-1)).toEqual([{ at: 'form', tone: 'info', text: t('modal.newTask.noNote') }]);
+        expect(r.host.canCreate()).toBe(false);
+        expect(r.host.task().file).toBe('');
+        r.host.create();
+        expect(r.places.create).not.toHaveBeenCalled();
+    });
+
+    it('moves the draft to the note an answer names, reads it anew, and creates there', async () => {
+        const r = rig({ startTime: '10:00' });
+        r.open();
+        await r.answer();
+
+        r.host.answered(to('other.md'));
+        expect(r.places.fromDestination).toHaveBeenLastCalledWith({ note: { kind: 'existing', path: 'other.md' }, spot: SECTION }, PLACE);
+        expect(r.places.facts).toHaveBeenCalledTimes(2);
+        expect(r.places.facts).toHaveBeenLastCalledWith(OTHER);
+        await r.answer(daily({ path: 'other.md', inherits: { color: 'red' } }));
+
+        expect(r.host.task()).toMatchObject({ file: 'other.md', startTime: '10:00', cascadeContext: { color: 'red' } });
+        expect(r.form.place.at(-1)).toEqual(placeIssues(daily({ path: 'other.md' })));
+        r.host.create();
+        expect(r.places.create.mock.calls[0][0]).toEqual(OTHER);
+    });
+
+    it('takes each answer by the place it opened on: the daily note\'s path, after another note, is the daily note again', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.answered(to('other.md'));
+        await r.answer(daily({ path: 'other.md' }));
+        r.host.answered(to('2031-01-15.md', 'end'));
+
+        expect(r.places.fromDestination.mock.calls.map(([, openedOn]) => openedOn)).toEqual([PLACE, PLACE]);
+        expect(r.places.facts).toHaveBeenLastCalledWith({ ...PLACE, spot: 'end' });
+        await r.answer(daily({ spot: 'end', heading: null }));
+        r.host.create();
+        expect(r.places.create.mock.calls[0][0]).toEqual({ ...PLACE, spot: 'end' });
+    });
+
+    it('reads nothing anew for an answer naming the place it is in', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.answered(to('2031-01-15.md'));
+        expect(r.places.facts).toHaveBeenCalledTimes(1);
+
+        r.host.answered(to('other.md'));
+        r.host.answered(to('other.md'));
+        expect(r.places.facts).toHaveBeenCalledTimes(2);
+        await r.answer(daily({ path: 'other.md' }));
+        r.host.answered(to('other.md'));
+        expect(r.places.facts).toHaveBeenCalledTimes(2);
+    });
+
+    it('takes back why a create was refused once it moves', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.create();
+        await r.write({ written: false, refused: REFUSED });
+        expect(r.form.said.at(-1)).toBe(refusalText(REFUSED));
+
+        r.host.answered(to('other.md'));
+        expect(r.form.said.at(-1)).toBeNull();
+    });
+
+    it('is on no place once an answer names no note, saying why, with no create', async () => {
+        for (const [answer, issues] of [
+            [EMPTY, [{ at: 'form', tone: 'info', text: t('modal.newTask.noNote') }]],
+            [CHARS, [{ at: 'form', tone: 'error', text: DestinationText.unnamed(CHARS) }]],
+            [AMBIGUOUS, [{ at: 'form', tone: 'error', text: DestinationText.ambiguous(AMBIGUOUS) }]],
+        ] as const) {
+            const r = rig();
+            r.open();
+            await r.answer();
+            r.told.length = 0;
+            r.host.answered(answer);
+
+            expect(r.form.place.at(-1)).toEqual(issues);
+            expect(r.host.canCreate()).toBe(false);
+            expect(r.host.task().file).toBe('');
+            expect(r.places.facts).toHaveBeenCalledTimes(1);
+            expect(r.told).toEqual(['form', 'draft:false:false', 'card']);
+        }
+    });
+
+    it('takes no answer to an asking made before it moved to no place', async () => {
+        const r = rig();
+        r.open();
+        r.host.answered(EMPTY);
+        await r.answer();
+        expect(r.host.canCreate()).toBe(false);
+        expect(r.host.task().file).toBe('');
+    });
+
+    it('offers no create where the place it moved to could not be read', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.places.facts.mockImplementationOnce(() => Promise.reject(new Error('unreadable')));
+        r.host.answered(to('other.md'));
+        await settle();
+
+        expect(r.host.canCreate()).toBe(false);
+        r.host.create();
+        expect(r.places.create).not.toHaveBeenCalled();
+        // Answered again, it is read again.
+        r.host.answered(to('other.md'));
+        expect(r.places.facts).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps the create offered while the fields are read, and a create asked then waits for the answer', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        expect(r.host.canCreate()).toBe(true);
+        r.host.create();
+        expect(r.places.create).not.toHaveBeenCalled();
+
+        r.host.answered(to('other.md'));
+        expect(r.host.canCreate()).toBe(true);
+        expect(r.places.create).not.toHaveBeenCalled();
+        await r.answer(daily({ path: 'other.md' }));
+
+        expect(r.form.create).toHaveBeenCalledTimes(1);
+        expect(r.places.create).toHaveBeenCalledTimes(1);
+        expect(r.places.create.mock.calls[0][0]).toEqual(OTHER);
+    });
+
+    it('makes a create that waited once the fields answer the place it is in', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        r.host.answered(to('2031-01-15.md'));
+        expect(r.places.create).toHaveBeenCalledTimes(1);
+        expect(r.places.create.mock.calls[0][0]).toEqual(PLACE);
+    });
+
+    it('makes no create that waited where the answer says the task cannot go', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        r.host.answered(to('other.md'));
+        await r.answer(daily({ path: 'other.md', heading: { kind: 'many', count: 2 } }));
+        expect(r.places.create).not.toHaveBeenCalled();
+    });
+
+    it('drops a create that waited once an answer names no note', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        r.host.answered(EMPTY);
+        r.host.answered(to('other.md'));
+        await r.answer(daily({ path: 'other.md' }));
+        expect(r.places.create).not.toHaveBeenCalled();
+    });
+
+    it('takes no reading nor answer while a create is under way, nor once the hub has closed', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.create();
+        r.host.reading();
+        r.host.answered(to('other.md'));
+        expect(r.places.fromDestination).not.toHaveBeenCalled();
+        await r.write({ written: false, refused: REFUSED });
+        await r.answer();
+        r.host.create();
+        expect(r.places.create).toHaveBeenCalledTimes(2);
+        expect(r.places.create.mock.calls[1][0]).toEqual(PLACE);
+
+        const closed = rig();
+        closed.open();
+        await closed.answer();
+        closed.host.dispose();
+        closed.host.answered(to('other.md'));
+        expect(closed.places.fromDestination).not.toHaveBeenCalled();
+        expect(closed.places.facts).toHaveBeenCalledTimes(1);
+    });
+
+    it('says it was given something while it is moved from the place it opened on, and not once moved back', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.answered(to('other.md'));
+        expect(r.host.changed()).toBe(true);
+        r.host.answered(EMPTY);
+        expect(r.host.changed()).toBe(true);
+        r.host.answered(to('2031-01-15.md'));
+        expect(r.host.changed()).toBe(false);
+
+        const none = rig({}, null);
+        none.open();
+        none.host.answered(EMPTY);
+        expect(none.host.changed()).toBe(false);
+        none.host.answered(to('other.md'));
+        expect(none.host.changed()).toBe(true);
+        none.host.answered(CHARS);
+        expect(none.host.changed()).toBe(false);
+    });
+});
+
+describe('noPlaceIssues', () => {
+    it('asks for a note while the field is empty, and says why one cannot be named otherwise', () => {
+        expect(noPlaceIssues(EMPTY as Extract<PlaceAnswer, { kind: 'unnamed' }>)).toEqual([{ at: 'form', tone: 'info', text: t('modal.newTask.noNote') }]);
+        expect(noPlaceIssues(CHARS)).toEqual([{ at: 'form', tone: 'error', text: DestinationText.unnamed(CHARS) }]);
+        expect(noPlaceIssues(AMBIGUOUS)).toEqual([{ at: 'form', tone: 'error', text: DestinationText.ambiguous(AMBIGUOUS) }]);
     });
 });
 
