@@ -478,6 +478,21 @@ describe('a close of a hub on a task not written yet', () => {
         expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
     });
 
+    it('withdraws its question as the create is pressed, and creates nothing while a value typed does not read, the focus on it', async () => {
+        const s = await setUp();
+        s.el('start').focus();
+        s.el('start').type('not a date');
+        s.el('name').focus();
+        expect(s.form.beforeClose()).toBe('stay');
+        expect(asked(s)).toBe(t('modal.newTask.discardAsk'));
+
+        // The create stays in the row while the close asks, and can be pressed.
+        s.press(s.create());
+        expect(asked(s)).toBe('');
+        expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
+        expect(s.places.create).not.toHaveBeenCalled();
+    });
+
     it('asks whether to throw the task away when all it was given is a value that does not read', async () => {
         const s = await setUp();
         s.el('start').focus();
