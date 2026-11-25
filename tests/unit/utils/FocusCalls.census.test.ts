@@ -65,14 +65,14 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     },
     {
         file: 'modals/place/PlacePane.ts',
-        line: 'return this.field.focus(\'note\');',
-        why: 'answers where the focus goes for the place tab\'s first field (HubPane.focus) and puts none',
+        line: 'return this.field.focus(wrong ?? \'note\');',
+        why: 'answers where the focus goes in the place tab (HubPane.focus) and puts none',
     },
 
     {
         file: 'modals/hub/TaskHubForm.ts',
         line: 'return this.deps.place?.pane.focus() ?? null;',
-        why: 'answers where the focus goes for the place tab\'s first field (HubPane.focus answers a FieldFocus) and puts none',
+        why: 'answers where the focus goes in the place tab (HubPane.focus answers a FieldFocus) and puts none',
     },
 
     // A part drawn again, or the typing going on to the next field: the keyboard is up, and a wait would close it.
@@ -121,9 +121,14 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
         why: 'the question a close puts: its answer that keeps, a button, takes the focus, which raises no keyboard',
     },
     {
+        file: 'modals/form/FormActions.ts',
+        line: 'this.buttons.find(({ spec }) => spec.tone === \'cta\')?.el.focus();',
+        why: 'a create ended unwritten that can be asked again: the act, a button, takes the focus, which raises no keyboard',
+    },
+    {
         file: 'views/sharedUI/TabStrip.ts',
         line: 'this.tabs.get(id)?.button.focus();',
-        why: 'a tab gone to by the arrow keys, or chosen while the focus was in the pane it hides: its button takes the focus, which raises no keyboard',
+        why: 'a tab gone to by the arrow keys, chosen with the focus by its caller (focusTab), or chosen while the focus was in the pane it hides: its button takes the focus, which raises no keyboard',
     },
     {
         file: 'views/sharedUI/NativePicker.ts',

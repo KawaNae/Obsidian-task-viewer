@@ -25,8 +25,8 @@ vi.mock('../../../src/suggest/NoteSuggest', async (importOriginal) => {
  * The place tab's pane of a hub on a task not written yet (`PlacePane`):
  * its fields as they open, what is typed in them and an Enter reaching its
  * logic (`PlaceFields`), what the logic says drawn under them, the focus it
- * answers for its first field, and its fields shut and opened with the
- * form's. The host answers at once, as the vault does in `vault`.
+ * answers (the first field an error is said under, else the note field),
+ * and its fields shut and opened with the form's. The host answers at once, as the vault does in `vault`.
  */
 
 const app = { fileManager: { getNewFileParent: () => ({ path: '/' }) }, keymap: { pushScope: () => { }, popScope: () => { } }, scope: {} } as never;
@@ -46,16 +46,20 @@ const EMPTY: NoteRead = { kind: 'unnamed', why: { ok: false, why: 'empty', at: '
 /**
  * The vault as the fields name it: nothing in an empty note field, `Plan.md`
  * for `Plan`, at the end of it or under the heading named, its headings
- * `Tasks` and `Done`, and a note not made yet for any other name.
+ * `Tasks` and `Done` (and `Twice`, twice), no note for a name with a `?`,
+ * and a note not made yet for any other name.
  */
 function vault(ask: DestinationAsk): NoteRead {
     if (ask.note.text === '') return EMPTY;
+    if (ask.note.text.includes('?')) return { kind: 'unnamed', why: { ok: false, why: 'chars', chars: '?', at: 'name' } };
     const spot = ask.heading === '' ? 'end' as const : { heading: ask.heading, level: 2, side: 'head' as const };
     if (ask.note.text !== 'Plan') {
         const path = `${ask.note.text}.md`;
         return { kind: 'new', by: 'name', folderMade: null, namesakes: [], path, to: { note: { kind: 'new', path }, spot }, heading: spot === 'end' ? null : { kind: 'none' }, headings: [], ignored: false };
     }
-    const heading = spot === 'end' ? null : { kind: 'one' as const, heading: { level: 2, text: spot.heading, line: 0 } as never };
+    const heading = spot === 'end' ? null
+        : spot.heading === 'Twice' ? { kind: 'many' as const, count: 2 }
+        : { kind: 'one' as const, heading: { level: 2, text: spot.heading, line: 0 } as never };
     return { ...PLAN, to: { note: { kind: 'existing', path: 'Plan.md' }, spot }, heading, headings: ['Tasks', 'Done'] };
 }
 
@@ -193,6 +197,26 @@ describe('PlacePane', () => {
 
         expect(focus?.selection).toBe('end');
         expect(focus?.to as unknown).toBe(h.note());
+    });
+
+    it('answers the focus on the first field an error is said under: the note\'s, then the heading\'s', async () => {
+        const h = setUp({ note: { text: 'a?b', picked: null }, heading: 'Twice' });
+        await settle();
+        expect(h.pane.focus()?.to as unknown).toBe(h.note());
+
+        h.note().type('Plan');
+        await settle();
+        expect(h.says()[1]).toHaveLength(1);
+        const focus = h.pane.focus();
+        expect(focus?.to as unknown).toBe(h.heading());
+        expect(focus?.selection).toBe('end');
+    });
+
+    it('answers the focus on the note field where nothing said under the fields is an error', async () => {
+        const h = setUp({ note: { text: 'Idea', picked: null }, heading: 'Tasks' });
+        await settle();
+        expect(h.says()[0]).toEqual([`warning: ${t('modal.newTask.noteNew')}`]);
+        expect(h.pane.focus()?.to as unknown).toBe(h.note());
     });
 
     it('shuts its fields and their × with the form\'s, and opens them again', () => {

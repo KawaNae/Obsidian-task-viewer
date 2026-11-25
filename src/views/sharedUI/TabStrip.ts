@@ -41,7 +41,8 @@ let built = 0;
  *   ({@link carryFocus}). A focus on the row, or outside the panes, stays.
  * - {@link reveal} chooses the tab of an element its caller is about to put
  *   the focus on, which a pane off would not take; the focus is the
- *   caller's to put.
+ *   caller's to put. {@link focusTab} chooses a tab and puts the focus on
+ *   its button, as the arrows do, for a caller with no field to put it on.
  */
 export class TabStrip<K extends string> {
     private readonly tabs = new Map<K, { button: HTMLElement; pane: HTMLElement }>();
@@ -103,6 +104,12 @@ export class TabStrip<K extends string> {
         return false;
     }
 
+    /** Choose the tab `id` and put the focus on its button, which raises no on-screen keyboard: as the arrows go to it. */
+    focusTab(id: K): void {
+        this.select(id);
+        this.focusButton(id);
+    }
+
     private choose(id: K, carry: boolean): void {
         if (id === this.current) return;
         const left = this.pane(this.current);
@@ -119,7 +126,7 @@ export class TabStrip<K extends string> {
      */
     private carryFocus(left: HTMLElement, to: K): void {
         const active = left.ownerDocument.activeElement;
-        if (active && left.contains(active)) this.focusTab(to);
+        if (active && left.contains(active)) this.focusButton(to);
     }
 
     private onKey(e: KeyboardEvent, from: K): void {
@@ -132,12 +139,10 @@ export class TabStrip<K extends string> {
             : null;
         if (to === null) return;
         e.preventDefault();
-        const id = this.order[to];
-        this.select(id);
-        this.focusTab(id);
+        this.focusTab(this.order[to]);
     }
 
-    private focusTab(id: K): void {
+    private focusButton(id: K): void {
         this.tabs.get(id)?.button.focus();
     }
 

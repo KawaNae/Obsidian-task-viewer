@@ -322,9 +322,11 @@ export class TaskHubPanel {
                 index: this.deps.index,
                 requestClose: () => { void this.overlay.requestClose(); },
                 foot: frame.foot,
+                hasFocus: () => this.hasFocus(),
                 ...(this.tabs && this.placePane && {
                     place: { el: this.tabs.pane('place'), pane: this.placePane },
                     reveal: (el: HTMLElement) => { this.tabs?.reveal(el); },
+                    placeTab: () => { this.tabs?.focusTab('place'); },
                 }),
             });
         }
@@ -353,6 +355,13 @@ export class TaskHubPanel {
         this.tabs = tabs;
         this.placePane = makePlace(tabs.pane('place'));
         return tabs.pane('properties');
+    }
+
+    /** Whether the focus is on something in the hub's panel: not on the panel itself, which holds it while nothing else does. */
+    private hasFocus(): boolean {
+        const panel = this.overlay.getPanel();
+        const active = panel?.ownerDocument.activeElement ?? null;
+        return panel !== null && active !== null && active !== panel && panel.contains(active);
     }
 
     private renderPreview(): void {

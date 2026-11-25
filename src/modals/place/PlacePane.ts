@@ -6,6 +6,9 @@ import { DestinationField } from '../noteops/DestinationField';
 import type { HubPane } from '../hub/HubHost';
 import { PlaceFields, type PlaceField, type PlaceFieldsHost, type PlaceSurface, type PlaceViewState } from './PlaceFields';
 
+/** The pane's fields in the order they stand. */
+const PLACE_FIELDS: readonly PlaceField[] = ['note', 'heading'];
+
 /** What the place tab's pane opens with, and whom it tells. */
 export interface PlacePaneOptions {
     /** The fields as they open: the note, and the heading (empty for the note's end). */
@@ -23,9 +26,11 @@ export interface PlacePaneOptions {
  * (`_form.css`), as the properties' pane is; the title and the buttons are
  * the hub's.
  *
- * Its first field is the note's, the caret after its text, a note's name
- * having no fixed shape and being mended as often as replaced. Its fields
- * are shut with the form's while a create is under way.
+ * Where its focus goes is the first field an error is said under, the
+ * note's and then the heading's, else the note's: the field to mend first.
+ * The caret goes after its text, a note's name and a heading having no
+ * fixed shape and being mended as often as replaced. Its fields are shut
+ * with the form's while a create is under way.
  */
 export class PlacePane implements HubPane, PlaceSurface {
     private readonly field: DestinationField;
@@ -49,7 +54,8 @@ export class PlacePane implements HubPane, PlaceSurface {
     }
 
     focus(): FieldFocus<HTMLElement> {
-        return this.field.focus('note');
+        const wrong = PLACE_FIELDS.find(at => this.issues.has('error', at));
+        return this.field.focus(wrong ?? 'note');
     }
 
     setEnabled(enabled: boolean): void {

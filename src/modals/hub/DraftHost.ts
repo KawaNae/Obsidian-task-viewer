@@ -61,6 +61,11 @@ export interface DraftHostDeps {
  * - Written, the hub closes; refused, why is said above the create once,
  *   with no notice, and the place is asked again. A refusal that comes after
  *   the hub closed otherwise is told by a notice.
+ * - A create ended unwritten is told to the form once (`notCreated`), the
+ *   fields open and nothing being read, a refused create's place asked
+ *   again first: the form puts the focus by whether a create may be asked
+ *   then. Not where the form found a field to fix (it focused it), nor once
+ *   the hub closed.
  * - Whether anything was given is whether a write now would write other
  *   than the task as it opened (`newRowOf`), or the place is another than
  *   it opened on (`samePlace`): a value given and taken back again is nothing.
@@ -92,6 +97,13 @@ export class DraftHost implements PanelHost, HubDraft {
      * and the place while they are read, and writes once they are not.
      */
     private making: Making | null = null;
+    /**
+     * A create ended unwritten, and the form is yet to be told so
+     * (`HubForm.notCreated`): it is told once nothing is being read, so it
+     * puts the focus by the place as it is then, a refused create's place
+     * asked again first.
+     */
+    private unwritten = false;
     private form: HubForm | null = null;
     private panel: HubPanel | null = null;
     /** Whether what was handed on is yet to be drawn in the card and the fields. */
@@ -183,6 +195,8 @@ export class DraftHost implements PanelHost, HubDraft {
      */
     create(): void {
         if (!this.canCreate()) return;
+        // This create ends as it ends: the one ended before is no longer to be told.
+        this.unwritten = false;
         this.making = making();
         this.form?.sayWrite(null);
         this.form?.showShut();
@@ -204,7 +218,11 @@ export class DraftHost implements PanelHost, HubDraft {
             .then(answer => this.made(answer, making));
     }
 
-    /** The create's answer: written, the hub closes; refused, why is said, the fields open again, and the place is asked again. */
+    /**
+     * The create's answer: written, the hub closes; refused, why is said, the
+     * fields open again, and the place is asked again, the form told the
+     * create ended once it has answered.
+     */
     private made(answer: WriteAnswer, making: Making): void {
         this.making = null;
         making.end(answer.written);
@@ -216,6 +234,7 @@ export class DraftHost implements PanelHost, HubDraft {
             this.panel?.close();
             return;
         }
+        this.unwritten = true;
         this.form?.sayWrite(refusalText(answer.refused));
         this.form?.showShut();
         this.form?.showDraft();
@@ -224,25 +243,35 @@ export class DraftHost implements PanelHost, HubDraft {
     }
 
     /**
-     * The fields and the place have been read while a create waits for them:
-     * it is asked of the form again, the fields open, where the task can go
-     * there (the form asks {@link create} once it finds nothing to fix, and
-     * this create ends as that one does); it ends unwritten otherwise, or
-     * where the form finds a field to fix, why said as the answer said it.
+     * Nothing is being read any more. A create that waited for the fields
+     * and the place is asked of the form again, the fields open, where the
+     * task can go there (the form asks {@link create} once it finds nothing
+     * to fix, and this create ends as that one does); it ends unwritten
+     * otherwise, why said as the answer said it. Then a create ended
+     * unwritten is told to the form, but where the form found a field to
+     * fix: it put the focus there itself.
      */
     private readDone(): void {
+        if (this.closed || this.waiting()) return;
         const waited = this.making;
-        if (!waited || this.waiting()) return;
-        this.making = null;
-        this.form?.showShut();
-        if (this.canCreate()) this.form?.create();
-        const again = this.making as Making | null;
-        if (again) {
-            void again.done.then(waited.end);
-            return;
+        if (waited) {
+            this.making = null;
+            this.form?.showShut();
+            const offered = this.canCreate();
+            if (offered) this.form?.create();
+            const again = this.making as Making | null;
+            if (again) {
+                void again.done.then(waited.end);
+                return;
+            }
+            waited.end(false);
+            this.form?.showDraft();
+            if (offered) return;
+            this.unwritten = true;
         }
-        waited.end(false);
-        this.form?.showDraft();
+        if (!this.unwritten) return;
+        this.unwritten = false;
+        this.form?.notCreated();
     }
 
     /** End the create waiting for a read unwritten, why said above it: the read failed. */
@@ -250,6 +279,7 @@ export class DraftHost implements PanelHost, HubDraft {
         const waited = this.making;
         if (!waited) return;
         this.making = null;
+        this.unwritten = true;
         waited.end(false);
         this.form?.sayWrite(why);
         this.form?.showShut();
@@ -352,6 +382,7 @@ export class DraftHost implements PanelHost, HubDraft {
             if (same(this.read?.of ?? null, place)) {
                 // Asked again after a refusal: what was read of it stands, but not for a create that waited on this asking.
                 this.dropWaiting(t('modal.newTask.unread'));
+                this.readDone();
                 return;
             }
             // What was read of another place says nothing of this one.
