@@ -37,9 +37,13 @@ export interface NoteFieldOptions {
  * or an alias of one, puts the note's name in the field and is held as
  * picked, so that a name other notes share still names that note; a note
  * the form opens the field on is held so too, and names its path even while
- * no note is there. Once the text is changed, what was picked is let go
- * and the text is read on its own. An unresolved link puts its text in,
- * which names the note the form makes. Its × empties it as deleting the text does, the focus left in it
+ * no note is there. The note is picked while the field holds the text the
+ * pick put in: while the text differs, the text is read on its own, and
+ * once the text is typed back, emptied by the × and typed again or so, the
+ * note is picked again, since the field says what it said as the note was
+ * picked. Picking another candidate replaces it; an unresolved link picks
+ * none and puts its text in, which names the note the form makes. Its ×
+ * empties it as deleting the text does, the focus left in it
  * (`createClearableInput`). Which note that is, and what is said of it
  * under the row ({@link says}), is the form's to find out.
  */
@@ -49,7 +53,7 @@ export class NoteField {
     readonly says: HTMLElement;
     private readonly suggest: NoteSuggest;
     private readonly clear: ClearButton;
-    /** The note picked, and the text the pick put in. */
+    /** The note picked last, and the text the pick put in; picked while the field holds that text. */
     private picked: { path: string; text: string } | null;
 
     constructor(app: App, container: HTMLElement, opts: NoteFieldOptions) {
@@ -59,10 +63,7 @@ export class NoteField {
         this.input.value = opts.initial.text;
         this.clear.sync();
         this.picked = opts.initial.picked === null ? null : { path: opts.initial.picked, text: opts.initial.text };
-        this.input.addEventListener('input', () => {
-            if (this.picked && this.input.value !== this.picked.text) this.picked = null;
-            opts.onChange();
-        });
+        this.input.addEventListener('input', () => opts.onChange());
         this.suggest = new NoteSuggest(app, this.input, {
             kinds: { attachments: false, aliases: true, unresolved: opts.offersUnresolved },
             pick: (candidate) => {
@@ -87,6 +88,7 @@ export class NoteField {
 
     /** What the field holds now. */
     ask(): NoteAsk {
-        return { text: this.input.value, picked: this.picked?.path ?? null };
+        const text = this.input.value;
+        return { text, picked: this.picked?.text === text ? this.picked.path : null };
     }
 }

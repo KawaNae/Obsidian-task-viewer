@@ -29,9 +29,8 @@ export interface SectionFieldOptions {
  * whole note, which it shows in its place. Each field's × empties it as
  * deleting its text does (`createClearableInput`).
  *
- * The heading field holds its text and the heading picked (`HeadingAsk`), as
- * the note field holds a note: the heading picked is let go once the text
- * changes. What the note is, and which headings it has, is the form's to
+ * The heading field holds its text and the heading picked (`HeadingAsk`):
+ * the heading picked is let go once the text changes. What the note is, and which headings it has, is the form's to
  * find out and to hand in ({@link offer}).
  */
 export class SectionField {
