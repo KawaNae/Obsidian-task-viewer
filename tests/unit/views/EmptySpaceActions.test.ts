@@ -1,8 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { NoteDestination } from '../../../src/services/data/NotePlaces';
-
-const pick = vi.hoisted(() => vi.fn());
-vi.mock('../../../src/modals/place/PlaceModal', () => ({ PlaceModal: { pick } }));
+import { describe, it, expect } from 'vitest';
 
 import {
     appendEmptySpaceMenuItems,
@@ -21,26 +17,20 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 /** The settings' section of the day's daily note. */
 const DAILY = { kind: 'note', note: { kind: 'daily', date: '2026-08-22' }, spot: { heading: 'Tasks', level: 2, side: 'head' } };
 
-/** A plugin whose hub and timers record what they were asked; the place dialog is `pick`. */
+/** A plugin whose hub and timers record what they were asked. */
 function makePlugin() {
     const opened: unknown[][] = [];
     const started: unknown[][] = [];
-    const notePlaces = { readFields: vi.fn() };
     const app = {} as App;
     const plugin = {
         app,
         settings: { ...DEFAULT_SETTINGS, taskHeading: 'Inbox' },
         openDraftHub: (...args: unknown[]) => { opened.push(args); },
         getCreatePlaces: () => new CreatePlaces(app, {} as Operations, () => DEFAULT_SETTINGS, () => undefined),
-        getNotePlaces: () => notePlaces,
         getTimerWidget: () => ({ startTimer: (...args: unknown[]) => { started.push(args); } }),
     } as unknown as PluginContext & TimerHost;
-    return { plugin, app, notePlaces, opened, started };
+    return { plugin, app, opened, started };
 }
-
-beforeEach(() => {
-    pick.mockReset();
-});
 
 describe('startDailyNoteTimer', () => {
     it('starts a timer on the day itself, recorded as children under that day\'s heading', () => {
@@ -79,51 +69,19 @@ describe('openDraftHubForDailyNote', () => {
 });
 
 describe('openDraftHubInNote', () => {
-    const SECTION = { heading: 'Inbox', level: 2, side: 'head' } as const;
-
-    it('asks where the task goes first, the note field empty and the heading field on the settings\' heading, a new note\'s folder reckoned from no note', async () => {
+    it('opens the hub on a task not written yet in no place, for the user to choose in it, starting at the time pressed', () => {
         const r = makePlugin();
-        pick.mockResolvedValue(null);
-        await openDraftHubInNote(r.plugin, '2026-08-22');
-        expect(pick).toHaveBeenCalledTimes(1);
-        const [app, places, opts] = pick.mock.calls[0];
-        expect(app).toBe(r.app);
-        expect(places).toBe(r.notePlaces);
-        expect(opts).toEqual({
-            purpose: 'create',
-            initial: { note: { text: '', picked: null }, heading: 'Inbox' },
-            folderFrom: '',
-        });
+        openDraftHubInNote(r.plugin, '2026-08-22', 10 * 60 + 13);
+        expect(r.opened).toEqual([[null, { startDate: '2026-08-22', startTime: '10:15' }]]);
     });
 
-    it('opens nothing when the dialog is closed without a choice', async () => {
+    it('carries the next day past midnight, and the day alone from the all-day lane', () => {
         const r = makePlugin();
-        pick.mockResolvedValue(null);
-        await openDraftHubInNote(r.plugin, '2026-08-22', 10 * 60);
-        expect(r.opened).toEqual([]);
-    });
-
-    it('opens the hub on a task not written yet in the note and at the spot chosen, starting at the time pressed', async () => {
-        const r = makePlugin();
-        const to: NoteDestination = { note: { kind: 'existing', path: 'Projects/Plan.md' }, spot: SECTION };
-        pick.mockResolvedValue(to);
-        await openDraftHubInNote(r.plugin, '2026-08-22', 10 * 60 + 13);
-        expect(r.opened).toEqual([[
-            { kind: 'note', note: { kind: 'path', path: 'Projects/Plan.md' }, spot: SECTION },
-            { startDate: '2026-08-22', startTime: '10:15' },
-        ]]);
-    });
-
-    it('carries the next day past midnight, and the day alone from the all-day lane, the note staying the one chosen', async () => {
-        const r = makePlugin();
-        const to: NoteDestination = { note: { kind: 'new', path: 'Inbox.md' }, spot: 'end' };
-        pick.mockResolvedValue(to);
-        await openDraftHubInNote(r.plugin, '2026-08-22', 24 * 60 + 2 * 60 + 30);
-        await openDraftHubInNote(r.plugin, '2026-08-22');
-        const place = { kind: 'note', note: { kind: 'path', path: 'Inbox.md' }, spot: 'end' };
+        openDraftHubInNote(r.plugin, '2026-08-22', 24 * 60 + 2 * 60 + 30);
+        openDraftHubInNote(r.plugin, '2026-08-22');
         expect(r.opened).toEqual([
-            [place, { startDate: '2026-08-23', startTime: '02:30' }],
-            [place, { startDate: '2026-08-22' }],
+            [null, { startDate: '2026-08-23', startTime: '02:30' }],
+            [null, { startDate: '2026-08-22' }],
         ]);
     });
 });
@@ -187,18 +145,10 @@ describe('appendEmptySpaceMenuItems', () => {
         expect(opened).toEqual([[DAILY, { startDate: '2026-08-22', startTime: '10:15' }]]);
     });
 
-    it('asks where to create first, and creates there at the time pressed', async () => {
+    it('creates in a note the user chooses in the hub, at the time pressed', () => {
         const { menu, opened } = build(10 * 60 + 13);
-        const answered = Promise.resolve<NoteDestination>({ note: { kind: 'existing', path: 'Plan.md' }, spot: 'end' });
-        pick.mockReturnValue(answered);
         menu.items[1].click?.();
-        expect(pick).toHaveBeenCalledTimes(1);
-        await answered;
-        await Promise.resolve();
-        expect(opened).toEqual([[
-            { kind: 'note', note: { kind: 'path', path: 'Plan.md' }, spot: 'end' },
-            { startDate: '2026-08-22', startTime: '10:15' },
-        ]]);
+        expect(opened).toEqual([[null, { startDate: '2026-08-22', startTime: '10:15' }]]);
     });
 
     it('starts each timer on the day', () => {

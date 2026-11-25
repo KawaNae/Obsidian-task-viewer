@@ -551,12 +551,12 @@ describe('placeText', () => {
         expect(placeText({ kind: 'gone', inherits: {} })).toEqual({ text: t('modal.newTask.gone'), tone: 'error' });
     });
 
-    it('says the end of a note, and a note made for the line, empty or as the day\'s daily note', () => {
+    it('says the end of a note, and a note made for the line: empty as a warning, as the day\'s daily note as any place', () => {
         const note = { note: 'n.md' };
         const at = (over: Partial<Extract<PlaceFacts, { kind: 'note' }>>) => placeText(daily({ path: 'n.md', seed: 'empty', ...over }));
         expect(at({ spot: 'end', heading: null })).toEqual({ text: t('modal.newTask.toNoteEnd', note), tone: 'info' });
-        expect(at({ spot: 'end', heading: null, note: 'new' })).toEqual({ text: t('modal.newTask.toNewNoteEnd', note), tone: 'info' });
+        expect(at({ spot: 'end', heading: null, note: 'new' })).toEqual({ text: t('modal.newTask.toNewNoteEnd', note), tone: 'warning' });
         expect(at({ spot: 'end', heading: null, note: 'new', seed: 'daily' })).toEqual({ text: t('modal.newTask.toNewEnd', note), tone: 'info' });
-        expect(at({ note: 'new' })).toEqual({ text: t('modal.newTask.toNewNote', { ...note, heading: 'Tasks' }), tone: 'info' });
+        expect(at({ note: 'new' })).toEqual({ text: t('modal.newTask.toNewNote', { ...note, heading: 'Tasks' }), tone: 'warning' });
     });
 });

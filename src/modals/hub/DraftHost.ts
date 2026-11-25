@@ -345,8 +345,8 @@ export function placeIssues(facts: PlaceFacts): FormIssue<never>[] {
 
 /**
  * Where a line put in the place `facts` names goes, in one sentence: an info,
- * or an error when it cannot go there (the heading names no one section, the
- * row is gone).
+ * a warning when a note is made empty for it, or an error when it cannot go
+ * there (the heading names no one section, the row is gone).
  */
 export function placeText(facts: PlaceFacts): { text: string; tone: Tone } {
     switch (facts.kind) {
@@ -355,8 +355,20 @@ export function placeText(facts: PlaceFacts): { text: string; tone: Tone } {
         case 'childOf':
             return { text: t('modal.newTask.toChild', { parent: facts.parent }), tone: 'info' };
         case 'note':
-            return { text: noteText(facts), tone: facts.heading?.kind === 'many' ? 'error' : 'info' };
+            return { text: noteText(facts), tone: noteTone(facts) };
     }
+}
+
+/**
+ * The tone of where a line put in a note goes: an error where the heading
+ * names no one section; a warning where a note is made empty for it, so a
+ * name mistyped in the place's fields is seen from the properties' tab too;
+ * an info otherwise, a daily note made of its day's template among them.
+ */
+function noteTone(facts: Extract<PlaceFacts, { kind: 'note' }>): Tone {
+    if (facts.heading?.kind === 'many') return 'error';
+    if (facts.note === 'new' && facts.seed === 'empty') return 'warning';
+    return 'info';
 }
 
 /**

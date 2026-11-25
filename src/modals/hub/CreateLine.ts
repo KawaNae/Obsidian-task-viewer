@@ -23,8 +23,8 @@ export type CreateLineSource = 'place' | 'write';
  * the place read again into an error. What is said again unchanged leaves
  * it hidden.
  *
- * The sentences stand in a box of their own inside the line, so that the
- * line as a whole can take a press later, with a mark after the box.
+ * The sentences stand in a box of their own inside the line, where the
+ * board lays them out (`IssueBoard`); the line itself takes no press.
  */
 export class CreateLine {
     private readonly line: HTMLElement;

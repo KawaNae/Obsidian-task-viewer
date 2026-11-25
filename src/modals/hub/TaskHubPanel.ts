@@ -18,6 +18,9 @@ import type { DraftSeed } from '../../services/data/TaskDraft';
 import { indentUnit } from '../../utils/ObsidianConfig';
 import type { FieldFocus } from '../../utils/FieldFocus';
 import { TabStrip } from '../../views/sharedUI/TabStrip';
+import type { DestinationAsk, NotePlaces } from '../../services/data/NotePlaces';
+import { NoteName } from '../../services/data/NoteName';
+import { PlacePane } from '../place/PlacePane';
 
 export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
@@ -142,7 +145,7 @@ class OneAtATime {
  * 「プロパティ」と「位置」のタブ（TabStrip）を置き、フォームをプロパティの
  * 中身に、入口の作る中身を位置の中身にする。初めのタブは初めのフォーカスの
  * 欄のタブで、フォームは欄にフォーカスを置く前にそのタブを選ぶ。
- * 殻の上の場所に題を出す。まだ書いていないタスクのハブは「新しいタスクのプロパティ」
+ * 殻の上の場所に題を出す。まだ書いていないタスクのハブは「新しいタスクを作成」
  * （子を作るときも同じ題）、今あるタスクのハブは、どの入口から開いても
  * 「プロパティを編集」である。
  * 開く入口は2つある。今あるタスクのハブ（`openRowHub`）は、今あるタスクの
@@ -217,20 +220,44 @@ export class TaskHubPanel {
     }
 
     /**
-     * Open the hub on a task not written yet, to be put in `place`, holding
-     * `seed`'s values: its host puts what the fields hand on over the draft
-     * and writes nothing until the create (`DraftHost`). There is no row to
-     * edit the source of, nor to do anything on from its card. It opens over
-     * a hub open now, which stays as it was once this one closes, and it is
-     * not one of the hubs on rows that open one at a time. The focus is on the
-     * name as it opens.
+     * Open the hub on a task not written yet, to be put in `place`, or in a
+     * note the user chooses when `place` is null, holding `seed`'s values:
+     * its host puts what the fields hand on over the draft and writes nothing
+     * until the create (`DraftHost`). There is no row to edit the source of,
+     * nor to do anything on from its card. It opens over a hub open now,
+     * which stays as it was once this one closes, and it is not one of the
+     * hubs on rows that open one at a time.
+     *
+     * In a note, or in none, it has a place tab whose fields (`PlacePane`)
+     * move the draft as they are typed in: opened on the note and its
+     * heading, the hub opens on the properties with the focus on the name;
+     * on none, the note field empty and the heading the settings' task
+     * heading, it opens on the place with the focus on the note. A new
+     * note's folder is reckoned from no note. Under a row it has no tabs.
      */
-    static openDraftHub(app: App, place: CreatePlace, seed: DraftSeed, deps: TaskHubDeps & { places: CreatePlaces }): Promise<void> {
+    static openDraftHub(
+        app: App,
+        place: CreatePlace | null,
+        seed: DraftSeed,
+        deps: TaskHubDeps & { places: CreatePlaces; notePlaces: Pick<NotePlaces, 'readFields'> },
+    ): Promise<void> {
         const host = new DraftHost(place, seed, {
             places: deps.places,
             scopeKeys: () => deps.plugin.settings.scopeKeys,
         });
-        return new TaskHubPanel(app, host, deps, { focusField: 'name' }, { source: null, inert: true, turns: null, place: null }).open();
+        const initial: DestinationAsk | null = place === null
+            ? { note: { text: '', picked: null }, heading: deps.plugin.settings.taskHeading }
+            : place.kind === 'note' ? deps.places.askOf(place) : null;
+        const makePlace: PaneMaker | null = initial && ((pane) => new PlacePane(app, pane, {
+            initial,
+            host: {
+                read: (ask) => deps.notePlaces.readFields(ask, NoteName.defaultFolder(app, '')),
+                reading: () => host.reading(),
+                answered: (answer) => host.answered(answer),
+            },
+        }));
+        const options: TaskHubPanelOptions = { focusField: place === null ? 'place' : 'name' };
+        return new TaskHubPanel(app, host, deps, options, { source: null, inert: true, turns: null, place: makePlace }).open();
     }
 
     private constructor(

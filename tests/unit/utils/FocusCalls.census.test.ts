@@ -64,9 +64,9 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
         why: 'the dialog\'s initialFocus: answers where the overlay puts its first focus, and puts none',
     },
     {
-        file: 'modals/place/PlaceModal.ts',
-        line: 'initialFocus: () => (this.field ? this.field.focus(\'note\') : null),',
-        why: 'the dialog\'s initialFocus: answers where the overlay puts its first focus, and puts none',
+        file: 'modals/place/PlacePane.ts',
+        line: 'return this.field.focus(\'note\');',
+        why: 'answers where the focus goes for the place tab\'s first field (HubPane.focus) and puts none',
     },
 
     {

@@ -87,7 +87,7 @@ export function createCardRendering(deps: CardRenderingDeps): CardRendering {
 export interface TaskHubOpenerHandle {
     open: TaskHubOpener;
     /** Open the hub on a task not written yet (`TaskHubPanel.openDraftHub`), its card drawn by the same renderer. */
-    openDraft(place: CreatePlace, seed: DraftSeed): void;
+    openDraft(place: CreatePlace | null, seed: DraftSeed): void;
     /** The renderer, menu and hub, made with the first open; null before it. */
     readonly cards: CardRendering | null;
 }
@@ -129,7 +129,7 @@ export function createTaskHubOpener(deps: {
         made().openTaskHub(task, options);
     };
 
-    const openDraft = (place: CreatePlace, seed: DraftSeed): void => {
+    const openDraft = (place: CreatePlace | null, seed: DraftSeed): void => {
         const { plugin } = deps;
         void TaskHubPanel.openDraftHub(deps.app, place, seed, {
             taskRenderer: made().taskRenderer,
@@ -137,6 +137,7 @@ export function createTaskHubOpener(deps: {
             operations: plugin.getOperations(),
             plugin,
             places: plugin.getCreatePlaces(),
+            notePlaces: plugin.getNotePlaces(),
         });
     };
 
