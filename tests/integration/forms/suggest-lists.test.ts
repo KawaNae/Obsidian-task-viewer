@@ -56,7 +56,7 @@ const enter = (el, init = {}) => key(el, { key: 'Enter', code: 'Enter', keyCode:
 const escape = el => key(el, { key: 'Escape', code: 'Escape', keyCode: 27 });
 const bold = () => key(document.activeElement, { key: 'b', code: 'KeyB', keyCode: 66, metaKey: true, ctrlKey: navigator.platform.indexOf('Mac') < 0 });
 /** Type text in a field as a person does: the text, then its input event. */
-const type = (input, text) => { input.focus(); input.value = text; input.setSelectionRange(text.length, text.length); input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
+const type = (input, text) => { chooseTabOf(input).focus(); input.value = text; input.setSelectionRange(text.length, text.length); input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 /** The list Obsidian shows under a field: its items' text, and the one selected. */
 const list = () => {
     const box = document.querySelector('.suggestion-container');
@@ -286,7 +286,7 @@ describe('the hub\'s tag field: Obsidian\'s list, with Obsidian\'s keys', () => 
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`
             await openHub('次');
-            const input = tagInput();
+            const input = chooseTabOf(tagInput());
             input.focus();
             // Chromium: the composition's input events say isComposing; the last comes after compositionend in WebKit.
             input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));

@@ -44,7 +44,7 @@ const items = key => [...rowOf(key).querySelectorAll('.task-hub__list-items .tas
 const addItem = key => rowOf(key).querySelector('.task-hub__list-add');
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const says = row => [...row.nextElementSibling.children].map(c => c.className + ': ' + c.firstChild.textContent);
-const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
+const type = (input, text) => { chooseTabOf(input).focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 const enter = async input => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(600); };
 const leave = async input => { input.dispatchEvent(new FocusEvent('blur')); await sleep(600); };
 `;
@@ -166,14 +166,14 @@ describe('the hub edits a list item by item', () => {
         const entered = run<boolean>(`type(items('k')[0], ''); await enter(items('k')[0]); return document.activeElement === addItem('k');`);
         expect(entered).toBe(true);
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 7));
-        const left = run<boolean>(`type(items('k')[0], ''); nameInput().focus(); await sleep(600); return document.activeElement === nameInput();`);
+        const left = run<boolean>(`type(items('k')[0], ''); chooseTabOf(nameInput()).focus(); await sleep(600); return document.activeElement === nameInput();`);
         expect(left).toBe(true);
         expect(readTestFile(TEST_FILE)).toBe(withLines(5, 8));
     });
 
     it('follows the focus to the next item when an item typed over is written on leaving it', () => {
         openHub('親');
-        const next = run<boolean>(`type(items('k')[0], 'c'); items('k')[1].focus(); await sleep(600); return document.activeElement === items('k')[1];`);
+        const next = run<boolean>(`type(items('k')[0], 'c'); chooseTabOf(items('k')[1]).focus(); await sleep(600); return document.activeElement === items('k')[1];`);
         expect(next).toBe(true);
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 7, '\t\t- c'));
     });
@@ -181,7 +181,7 @@ describe('the hub edits a list item by item', () => {
     it('moves an item by Alt+Down, and by dragging its handle', () => {
         openHub('親');
         run(`
-            items('k')[0].focus();
+            chooseTabOf(items('k')[0]).focus();
             items('k')[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }));
             await sleep(600);
             return 'ok';

@@ -22,6 +22,9 @@
  * - `hubPane(panel, id)`: the pane the tab `id` chooses
  * - `chooseHubTab(panel, id)`: the tab `id` chosen by a click on its button,
  *   as a person chooses it; answers its pane
+ * - `chooseTabOf(el)`: the tab whose pane holds `el` chosen by a click on
+ *   its button when that pane is off, as a person taps the tab before the
+ *   field; answers `el`
  *
  * Each takes the panel (`.tv-overlay__panel`, the hub's `.task-hub`);
  * `formRow` and `hubTab` answer null when there is none.
@@ -34,4 +37,9 @@ const hubTab = (panel, id) => panel?.querySelector('.task-hub__form > .tv-tabs >
 const hubTabOn = panel => panel?.querySelector('.task-hub__form > .tv-tabs > button.tv-tabs__tab[aria-selected="true"]')?.dataset.tab ?? null;
 const hubPane = (panel, id) => panel.ownerDocument.getElementById(hubTab(panel, id).getAttribute('aria-controls'));
 const chooseHubTab = (panel, id) => { hubTab(panel, id).click(); return hubPane(panel, id); };
+const chooseTabOf = el => {
+    const pane = el.closest('.tv-tabs__pane[role="tabpanel"]');
+    if (pane?.hasAttribute('inert')) el.ownerDocument.querySelector('button.tv-tabs__tab[aria-controls="' + pane.id + '"]').click();
+    return el;
+};
 `;

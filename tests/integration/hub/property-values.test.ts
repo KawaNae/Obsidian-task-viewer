@@ -41,7 +41,7 @@ const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
-const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
+const type = (input, text) => { chooseTabOf(input).focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 const leave = async input => { input.dispatchEvent(new FocusEvent('blur')); await sleep(600); };
 `;
 
@@ -173,7 +173,7 @@ describe('the hub writes a property as its block', () => {
 
     it('writes an inherited value typed again as the row\'s own, and nothing when it is left alone', () => {
         openHub('親');
-        run(`const input = valueInput('area'); input.focus(); await leave(input); return 'ok';`);
+        run(`const input = chooseTabOf(valueInput('area')); input.focus(); await leave(input); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(BLOCK.join('\n'));
         run(`type(valueInput('area'), 'lab'); await leave(valueInput('area')); return 'ok';`);
         const lines = [...BLOCK];

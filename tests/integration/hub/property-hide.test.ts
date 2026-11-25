@@ -196,7 +196,7 @@ describe('the hub hides an inherited value', () => {
     it('writes a value typed in a style\'s inherited no value as the row\'s own', () => {
         openHub('節の下');
         run(`
-            const input = rowOf(${JSON.stringify(tr('modal.hub.mask'))}).querySelector('input');
+            const input = chooseTabOf(rowOf(${JSON.stringify(tr('modal.hub.mask'))}).querySelector('input'));
             input.focus();
             input.value = '***';
             input.dispatchEvent(new InputEvent('input', { bubbles: true }));

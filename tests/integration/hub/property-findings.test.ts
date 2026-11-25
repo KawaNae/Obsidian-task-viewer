@@ -45,7 +45,7 @@ const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.
 const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const says = row => [...row.nextElementSibling.children].map(c => c.className + ': ' + c.firstChild.textContent);
-const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
+const type = (input, text) => { chooseTabOf(input).focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 const leave = async input => { input.dispatchEvent(new FocusEvent('blur')); await sleep(600); };
 `;
 
