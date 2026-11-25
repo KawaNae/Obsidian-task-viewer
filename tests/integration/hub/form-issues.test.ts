@@ -48,7 +48,7 @@ const says = input => {
 };
 const invalid = input => input.classList.contains('tv-ctrl__text-input--invalid');
 /** Type text in a field as a person does: the text, then its input event. */
-const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
+const type = (input, text) => { chooseTabOf(input).focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 /** Leave the field: its commit, then the time a write and its echo take. */
 const leave = async input => { input.dispatchEvent(new FocusEvent('blur')); await sleep(600); };
 `;

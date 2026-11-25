@@ -16,6 +16,7 @@ import { obsidianEval, sleep } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } from '../helpers/test-file-manager';
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-source-mode.md';
 
@@ -82,6 +83,7 @@ const state = () => ({
     notices: document.querySelectorAll('.notice').length,
 });
 ${UNTIL}
+${DIALOG_ROWS}
 const KEY_CODES = { Enter: 13, Tab: 9, ArrowUp: 38, ArrowDown: 40 };
 /** A key pressed in the editor that has the focus, as a keydown CodeMirror's keymap reads. */
 const press = async (key, opts = {}) => {
@@ -545,7 +547,7 @@ describe('the hub\'s source mode', () => {
                 const inField = editor.getLine(4);
 
                 // A list open under a field (Obsidian's, on the body): the focus stays in the field.
-                document.querySelector('.task-hub__tag-add-wrap input').focus();
+                chooseTabOf(document.querySelector('.task-hub__tag-add-wrap input')).focus();
                 await until(() => document.querySelector('.suggestion-container'));
                 const inChild = { inPanel: !!document.activeElement.closest('.task-hub'), list: !!document.querySelector('.suggestion-container') };
                 pick();
@@ -573,6 +575,48 @@ describe('the hub\'s source mode', () => {
             afterEscape: { child: false, hub: true },
             inNote: '- [ ] **次**',
         });
+    });
+
+    it('keeps the form\'s tabs to be chosen while it holds the row and after, each tab\'s fields shut while it does and open again after', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const steps = run<Record<string, unknown>>(`
+            const hub = () => document.querySelector('.task-hub');
+            /** The text fields of a tab, apart from the add field of a list, and how many of them are shut. */
+            const fieldsOf = id => [...hubPane(hub(), id).querySelectorAll('input[type="text"], input:not([type]), textarea')];
+            /** The tab chosen by its button, and how it stands then: its fields shut or not, the other tab off. */
+            const choose = id => {
+                chooseHubTab(hub(), id);
+                const fields = fieldsOf(id);
+                return {
+                    tab: hubTabOn(hub()),
+                    pressable: !hubTab(hub(), id).disabled,
+                    fields: fields.length,
+                    shut: fields.filter(f => f.disabled).length,
+                    otherOff: hubPane(hub(), id === 'basic' ? 'detail' : 'basic').hasAttribute('inert'),
+                };
+            };
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+            plugin.openTaskHub(task.id);
+            await until(() => document.querySelector('.task-hub__mode-toggle'));
+            const before = { detail: choose('detail'), basic: choose('basic') };
+            document.querySelectorAll('.task-hub__mode-toggle button')[1].click();
+            await until(() => viewOf('children'));
+            const during = { detail: choose('detail'), basic: choose('basic') };
+            document.querySelectorAll('.task-hub__mode-toggle button')[0].click();
+            await until(() => !viewOf('children') && !fieldsOf('basic')[0].disabled);
+            const after = { detail: choose('detail'), basic: choose('basic') };
+            return JSON.stringify({ before, during, after });
+        `);
+        type Tab = { tab: string; pressable: boolean; fields: number; shut: number; otherOff: boolean };
+        const before = steps.before as Record<'basic' | 'detail', Tab>;
+        for (const id of ['basic', 'detail'] as const) {
+            expect(before[id]).toMatchObject({ tab: id, pressable: true, shut: 0, otherOff: true });
+            expect(before[id].fields).toBeGreaterThan(0);
+            // While the source holds the row, every field of the tab is shut, and the tab is still chosen by its button.
+            expect(steps.during).toHaveProperty(id, { ...before[id], shut: before[id].fields });
+            expect(steps.after).toHaveProperty(id, before[id]);
+        }
+        expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 
     it('keeps the draft of a row lost to a change from outside, offering to copy it and throw it away', async () => {
