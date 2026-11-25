@@ -6,6 +6,9 @@
  *   daily note): it opens on the properties, the focus on the name, the
  *   place tab's fields on the daily note's name and the settings' heading.
  *   The panel does not move nor change its size as the tab is changed.
+ * - Its body, bounded by the window: the properties scroll with the card and
+ *   the tabs, the body's bottom padding after them at the scroll's end; on
+ *   the place tab the body scrolls only as far as the place's pane reaches.
  * - The keys: the arrows go from tab to tab, round at the ends, and Tab
  *   goes from the tab chosen into its pane, never into the pane not chosen.
  * - Its place changed in the place tab: to another note, to a note not
@@ -54,7 +57,10 @@ import { DRAFT_HUB } from '../helpers/draft-hub';
 
 /** Daily notes not there: each test that makes one makes it of a day of its own. */
 const DAYS = ['2031-02-03', '2031-02-04', '2031-02-05', '2031-02-06', '2031-02-07', '2031-02-08', '2031-02-09', '2031-02-10'];
-const [OPEN_DAY, TEMPLATE_DAY, CLOSE_DAY, DATE_DAY, ESCAPE_DAY, WAIT_DAY, KEYS_DAY] = DAYS;
+const [OPEN_DAY, TEMPLATE_DAY, CLOSE_DAY, DATE_DAY, ESCAPE_DAY, WAIT_DAY, KEYS_DAY, SCROLL_DAY] = DAYS;
+
+/** The window's inner height that leaves the desktop's box less than its properties (px). */
+const LOW_WINDOW = 600;
 
 const OTHER_NAME = 'test-int-draft-tabs-other';
 const OTHER_FILE = `${OTHER_NAME}.md`;
@@ -239,6 +245,88 @@ describe('the tabs of the hub on a daily note', () => {
         const walk = steps.walk as { tab: string; first: string; place: number; properties: number; left: boolean };
         expect(walk).toMatchObject({ tab: 'properties', first: 'properties', place: 0, left: true });
         expect(walk.properties).toBeGreaterThan(1);
+    });
+
+    it.each([
+        ['the desktop\'s box, in a window too low for it', false],
+        ['a phone\'s sheet', true],
+    ])('in %s, scrolls the body for the pane chosen alone, the card and the tabs with it, the body\'s bottom padding after the pane', (_, phone) => {
+        const steps = run<Record<string, unknown>>(`
+            const win = require('electron').remote.getCurrentWindow();
+            const bounds = win.getBounds();
+            try {
+                if (${phone}) document.body.classList.add('is-phone');
+                else {
+                    const height = innerHeight;
+                    win.setBounds({ ...bounds, height: bounds.height - (innerHeight - ${LOW_WINDOW}) });
+                    await until(() => innerHeight !== height);
+                }
+                await openDaily(${JSON.stringify(SCROLL_DAY)});
+                const b = draft().querySelector('.tv-overlay__body');
+                const pad = parseFloat(getComputedStyle(b).paddingBottom);
+                /** How the body stands: its scroll, and where the pane of the tab id and its last field end, from the body's bottom. */
+                const seen = id => {
+                    const pane = paneOf(id);
+                    const field = [...pane.querySelectorAll('input, textarea')].filter(el => el.offsetParent !== null).at(-1);
+                    const bottom = b.getBoundingClientRect().bottom;
+                    return {
+                        scrollHeight: b.scrollHeight,
+                        clientHeight: b.clientHeight,
+                        scrollTop: b.scrollTop,
+                        paneToBottom: bottom - pane.getBoundingClientRect().bottom,
+                        fieldToBottom: field ? bottom - field.getBoundingClientRect().bottom : null,
+                        card: draft().querySelector('.task-hub__preview').getBoundingClientRect().top,
+                        tabs: draft().querySelector('.tv-tabs').getBoundingClientRect().top,
+                        panel: rect(draft()),
+                    };
+                };
+                const out = { pad, top: seen('properties') };
+                b.scrollTop = b.scrollHeight;
+                await nextFrame();
+                out.end = seen('properties');
+                b.scrollTop = 0;
+                await choose('place');
+                await nextFrame();
+                out.place = seen('place');
+                /** Where the place's pane ends in the body's scroll, its padding after it. */
+                out.placeEnd = paneOf('place').getBoundingClientRect().bottom - b.getBoundingClientRect().top + b.scrollTop + pad;
+                b.scrollTop = b.scrollHeight;
+                await nextFrame();
+                out.placeScrolled = b.scrollTop;
+                return JSON.stringify(out);
+            } finally {
+                await cleanUpHubs();
+                document.body.classList.remove('is-phone');
+                const height = innerHeight;
+                win.setBounds(bounds);
+                if (!${phone}) await until(() => innerHeight !== height);
+            }
+        `);
+        type Seen = { scrollHeight: number; clientHeight: number; scrollTop: number; paneToBottom: number; fieldToBottom: number | null; card: number; tabs: number; panel: { top: number; left: number; width: number; height: number } };
+        const pad = steps.pad as number;
+        const top = steps.top as Seen;
+        const end = steps.end as Seen;
+        const place = steps.place as Seen;
+        // The window bounds the body: the properties are more than it shows.
+        expect(top.scrollHeight, 'the window is too tall for the body to scroll').toBeGreaterThan(top.clientHeight + 10);
+        expect(pad).toBeGreaterThan(0);
+
+        // Scrolled to its end, the body shows its padding under the properties.
+        // Within a pixel each: the scroll is whole pixels, the layout is not.
+        expect(Math.abs(end.scrollTop - (end.scrollHeight - end.clientHeight))).toBeLessThanOrEqual(1);
+        expect(Math.abs(end.paneToBottom - pad)).toBeLessThanOrEqual(1);
+        expect(end.fieldToBottom!).toBeGreaterThanOrEqual(pad - 1);
+        // The card and the tabs went up with the scroll.
+        expect(Math.abs(top.card - end.card - end.scrollTop)).toBeLessThanOrEqual(1);
+        expect(Math.abs(top.tabs - end.tabs - end.scrollTop)).toBeLessThanOrEqual(1);
+
+        // On the place tab the panel and the body are as they were, and the
+        // body scrolls only as far as the place's pane and the padding after it reach.
+        for (const side of ['top', 'left', 'width', 'height'] as const) expect(place.panel[side]).toBeCloseTo(top.panel[side], 1);
+        expect(place.clientHeight).toBe(top.clientHeight);
+        expect(Math.abs(place.scrollHeight - Math.max(place.clientHeight, steps.placeEnd as number))).toBeLessThanOrEqual(1);
+        expect(Math.abs((steps.placeScrolled as number) - (place.scrollHeight - place.clientHeight))).toBeLessThanOrEqual(1);
+        expect(place.scrollHeight).toBeLessThan(top.scrollHeight);
     });
 });
 
