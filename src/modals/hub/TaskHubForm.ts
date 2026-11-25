@@ -456,6 +456,7 @@ export class TaskHubForm implements HubForm {
         this.styleField.refresh();
         this.tagsField.refresh();
         this.propsField.refresh();
+        this.deps.place?.pane.refresh();
         this.sayFindings();
     }
 

@@ -11,6 +11,7 @@ import { logError, logWarn } from '../../log/log';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import type { FormIssue, Tone } from '../form/FormIssue';
 import { DestinationText } from '../noteops/DestinationText';
+import type { ShownPlace } from '../place/PlaceShown';
 import type { HubDraft, HubForm, HubPanel, PanelHost } from './HubHost';
 
 export interface DraftHostDeps {
@@ -63,6 +64,9 @@ export interface DraftHostDeps {
  * - Whether anything was given is whether a write now would write other
  *   than the task as it opened (`newRowOf`), or the place is another than
  *   it opened on (`samePlace`): a value given and taken back again is nothing.
+ * - Under a row, where the place cannot be changed, the note, the heading
+ *   and the parent the place last read names are shown with no field
+ *   (`shown`), drawn again as the form is.
  * - There is no row whose lines could be opened (`openSource` null).
  */
 export class DraftHost implements PanelHost, HubDraft {
@@ -160,6 +164,11 @@ export class DraftHost implements PanelHost, HubDraft {
 
     creating(): boolean {
         return this.making !== null;
+    }
+
+    /** Where the task goes as the place last read says, for a place shown with no field; null until it is read, and for a place it does not say. */
+    shown(): ShownPlace | null {
+        return this.read && shownOf(this.read.facts);
     }
 
     changed(): boolean {
@@ -404,6 +413,11 @@ export function noPlaceIssues(read: Exclude<PlaceAnswer, { kind: 'to' }>): FormI
     if (read.kind === 'unnamed' && read.why.why === 'empty') return [{ at: 'form', tone: 'info', text: t('modal.newTask.noNote') }];
     const text = read.kind === 'unnamed' ? DestinationText.unnamed(read) : DestinationText.ambiguous(read);
     return [{ at: 'form', tone: 'error', text }];
+}
+
+/** Where a line put in the place `facts` names goes, as a place shown with no field says it: under a row only. */
+export function shownOf(facts: PlaceFacts): ShownPlace | null {
+    return facts.kind === 'childOf' ? { note: facts.path, heading: facts.under, parent: facts.parent } : null;
 }
 
 /**

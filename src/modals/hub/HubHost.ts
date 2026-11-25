@@ -117,6 +117,8 @@ export interface HubPane {
     focus(): FieldFocus<HTMLElement> | null;
     /** Its fields enabled or not, as the form's are. */
     setEnabled(enabled: boolean): void;
+    /** Draw again what it shows of the host's value, as the form takes the value into its fields again. */
+    refresh(): void;
     /** The hub closed: it takes nothing more. */
     dispose(): void;
 }

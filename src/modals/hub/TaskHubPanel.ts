@@ -20,6 +20,7 @@ import { TabStrip } from '../../views/sharedUI/TabStrip';
 import type { DestinationAsk, NotePlaces } from '../../services/data/NotePlaces';
 import { NoteName } from '../../services/data/NoteName';
 import { PlacePane } from '../place/PlacePane';
+import { PlaceShown } from '../place/PlaceShown';
 
 export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
@@ -216,7 +217,10 @@ export class TaskHubPanel {
      * heading, the hub opens on the properties with the focus on the name;
      * on none, the note field empty and the heading the settings' task
      * heading, it opens on the place with the focus on the note. A new
-     * note's folder is reckoned from no note. Under a row it has no tabs.
+     * note's folder is reckoned from no note. Under a row, where the place
+     * cannot be changed, its place tab shows the parent's note, the heading
+     * it stands under and the parent, with no field (`PlaceShown`), as the
+     * place is read; the hub opens on the properties with the focus on the name.
      */
     static openDraftHub(
         app: App,
@@ -231,14 +235,16 @@ export class TaskHubPanel {
         const initial: DestinationAsk | null = place === null
             ? { note: { text: '', picked: null }, heading: deps.plugin.settings.taskHeading }
             : place.kind === 'note' ? deps.places.askOf(place) : null;
-        const makePlace: PaneMaker | null = initial && ((pane) => new PlacePane(app, pane, {
-            initial,
-            host: {
-                read: (ask) => deps.notePlaces.readFields(ask, NoteName.defaultFolder(app, '')),
-                reading: () => host.reading(),
-                answered: (answer) => host.answered(answer),
-            },
-        }));
+        const makePlace: PaneMaker = initial
+            ? (pane) => new PlacePane(app, pane, {
+                initial,
+                host: {
+                    read: (ask) => deps.notePlaces.readFields(ask, NoteName.defaultFolder(app, '')),
+                    reading: () => host.reading(),
+                    answered: (answer) => host.answered(answer),
+                },
+            })
+            : (pane) => new PlaceShown(pane, () => host.shown());
         const options: TaskHubPanelOptions = { focusField: place === null ? 'place' : 'name' };
         return new TaskHubPanel(app, host, deps, options, { source: null, inert: true, turns: null, place: makePlace }).open();
     }

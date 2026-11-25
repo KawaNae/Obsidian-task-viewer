@@ -16,12 +16,18 @@ export function createFormRow(
     const row = container.createDiv({ cls: 'tv-form__row' });
     if (opts.alignStart) row.addClass('tv-form__row--start');
     if (opts.dates) row.addClass('tv-form__row--dates');
-    const labelEl = row.createSpan({ cls: 'tv-form__label' });
-    if (opts.icon) {
-        labelEl.addClass('tv-form__label--with-icon');
-        setIcon(labelEl.createSpan({ cls: 'tv-form__label-icon' }), opts.icon);
-    }
-    labelEl.appendText(labelText);
+    const labelEl = createFormLabel(row, labelText, opts.icon);
     const says = container.createDiv({ cls: 'tv-form__says tv-form__says--row' });
     return { row, labelEl, says };
+}
+
+/** フォーム行の左のラベル列: アイコン（あれば）と文字。値を出すだけの行も、欄の行と同じ形のラベルを持つ。 */
+export function createFormLabel(row: HTMLElement, labelText: string, icon?: string): HTMLElement {
+    const labelEl = row.createSpan({ cls: 'tv-form__label' });
+    if (icon) {
+        labelEl.addClass('tv-form__label--with-icon');
+        setIcon(labelEl.createSpan({ cls: 'tv-form__label-icon' }), icon);
+    }
+    labelEl.appendText(labelText);
+    return labelEl;
 }
