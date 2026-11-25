@@ -21,16 +21,35 @@ import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
 import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
-import type { HubForm, HubHost, HubPane } from './HubHost';
+import type { HubForm, HubHost, HubPlace, PlaceMaker } from './HubHost';
 import type { FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 import { placeFocus } from '../../views/sharedUI/FocusPlacement';
+import { TabStrip } from '../../views/sharedUI/TabStrip';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
     | 'tags' | 'color' | 'linestyle' | 'mask' | 'properties'
     | `property:${string}`
-    /** The first field of the place tab's pane (`TaskHubFormDeps.place`). */
+    /** The first field of the place's group (`TaskHubFormDeps.place`). */
     | 'place';
+
+/**
+ * The form's two tabs. The basic one holds what a task is made with: the
+ * name, the status, the dates and the place. The details hold what is
+ * mostly given by the section or the note: the tags, the colour, the line
+ * style, the mask and the properties.
+ */
+export type HubTab = 'basic' | 'detail';
+
+/** The tab the field named is in. */
+export function tabOf(field: TaskHubFocusField): HubTab {
+    switch (field) {
+        case 'name': case 'status': case 'start': case 'end': case 'due': case 'place':
+            return 'basic';
+        default:
+            return 'detail';
+    }
+}
 
 /**
  * How the text of each of the hub's fields is met as the focus comes to it,
@@ -64,16 +83,14 @@ export interface TaskHubFormDeps {
      */
     foot: HTMLElement;
     /**
-     * The place tab's pane, beside the form's on a hub with tabs: its fields
-     * are shut with the form's, focused as `'place'`, and typing in them
-     * withdraws a close's question as the form's own do. None on a hub
-     * without the tab.
+     * Builds where the task goes, as the last group of the basic tab: its
+     * fields are shut with the form's, focused as `'place'`, and typing in
+     * them withdraws a close's question as the form's own do. None on a hub
+     * that says no place.
      */
-    place?: { el: HTMLElement; pane: HubPane };
-    /** Choose the tab whose pane holds `el`, before the focus is put on it. None on a hub without tabs. */
-    reveal?: (el: HTMLElement) => void;
-    /** Choose the place tab and put the focus on its button: for a place with no field. None on a hub without tabs. */
-    placeTab?: () => void;
+    place?: PlaceMaker;
+    /** The field the hub opens on: the form is built on its tab. None: the basic tab. */
+    opensOn?: TaskHubFocusField;
     /** Whether the focus is in the hub now, on anything but its panel holding it. None: taken as not. */
     hasFocus?: () => boolean;
 }
@@ -91,19 +108,24 @@ export interface TaskHubFormDeps {
  * 打ちかけの字がある欄と IME の変換中の欄は取り込まない — 欄の字が、欄に
  * 最後に入れた値の字と違うかで見分ける。フラグや世代カウンタは持たない。
  *
+ * 欄は「基本」と「詳細」の2つのタブ（`TabStrip`）に分けて置く。どの欄が
+ * どちらのタブにあるかはフォームが知る（`tabOf`）。初めのタブは開くときの
+ * 欄のタブで、欄にフォーカスを置くときは、先にその欄のタブを選ぶ。
+ *
  * 誤りと注意は `IssueBoard` が持ち、出どころ（欄の名前、日付の規則、
  * フォームが閉じている理由、書き込みの拒否）ごとに置き換える。出す場所は
- * 欄の行の下とフォームの末尾である。行が日付の規則を破っていれば（規則4
+ * 欄の行の下と、フォーム全体の文の場所（タブの行の上）である。2つのタブの
+ * どちらを見ていても見えるためである。行が日付の規則を破っていれば（規則4
  * など）、開いたときから破れた欄の下に出す。
  *
  * 書き込みの拒否はホストが言う（`HubForm.sayWrite`）。行のハブでは拒まれた
- * 理由をフォームの末尾に出す。拒まれた欄は打った値のまま残り（`bindField`）、
+ * 理由をフォーム全体の文の場所に出す。拒まれた欄は打った値のまま残り（`bindField`）、
  * もう一度確定すれば新しい版へ書く。
  *
  * まだ書いていないタスクでは、[作成] を押すと何が起きるか（書く先と、その
  * 先について気をつけること）と、作成が拒まれた理由を、foot の [作成] の行の
  * 上に出す（`CreateLine`）。押せない理由が、押せない [作成] の隣に見える。
- * 作っている間に欄が閉じている理由は、欄についての文なのでフォームの末尾に出す。
+ * 作っている間に欄が閉じている理由は、欄についての文なのでフォーム全体の文の場所に出す。
  *
  * 閉じる手順（{@link beforeClose}）: ×、Escape、
  * 外側、下へ払う、戻るのどれも、blur を待たずに打ちかけの欄を明示して保存する。
@@ -141,8 +163,11 @@ export class TaskHubForm implements HubForm {
     private createLine: CreateLine | null = null;
     private fieldCtx: FieldGroupContext;
     private readonly issues: IssueBoard<HubField>;
-    /** Where the form says what is of it as a whole: at its end. */
+    /** Where the form says what is of it as a whole: above its tabs, in sight from either. */
     private readonly formSays: HTMLElement;
+    private tabs!: TabStrip<HubTab>;
+    /** Where the task goes, built at the end of the basic tab; null on a hub that says no place. */
+    private place: HubPlace | null = null;
     /** The row's own findings as last read (`hubFindings`), and the fields they lock. */
     private findings: readonly HubFinding[] = [];
     private locks: ReadonlySet<FindingField> = new Set();
@@ -198,12 +223,23 @@ export class TaskHubForm implements HubForm {
         const c = this.container;
         c.addClass('tv-form'); // _form.css の行文法（ラベル列幅など）の適用ルート
 
+        // What is of the form as a whole is said above the tabs (built
+        // first, `formSays`); the fields, under them, in the two tabs.
+        this.tabs = new TabStrip<HubTab>(c, [
+            { id: 'basic', label: t('modal.hub.tabBasic'), icon: 'list' },
+            { id: 'detail', label: t('modal.hub.tabDetail'), icon: 'sliders-horizontal' },
+        ], { initial: tabOf(this.deps.opensOn ?? 'name') });
+        const basic = this.tabs.pane('basic');
+        const detail = this.tabs.pane('detail');
+        basic.addClass('task-hub__pane--basic');
+        detail.addClass('task-hub__pane--detail');
+
         // --- Name ---
-        const nameGroup = c.createDiv({ cls: 'tv-form__group' });
+        const nameGroup = basic.createDiv({ cls: 'tv-form__group' });
         this.nameField = new NameField(nameGroup, this.fieldCtx);
 
         // --- Status + Start / End / Due ---
-        const scheduleGroup = c.createDiv({ cls: 'tv-form__group' });
+        const scheduleGroup = basic.createDiv({ cls: 'tv-form__group' });
         this.statusField = new StatusField(scheduleGroup, this.fieldCtx);
         this.dateGroup = new DateFieldGroup(scheduleGroup, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
@@ -227,23 +263,25 @@ export class TaskHubForm implements HubForm {
             issues: (issues) => this.issues.set('dates', issues),
         });
 
+        // --- Where the task goes: the entry's ---
+        this.place = this.deps.place?.(basic) ?? null;
+
         // --- Tags ---
-        const tagsGroup = c.createDiv({ cls: 'tv-form__group' });
+        const tagsGroup = detail.createDiv({ cls: 'tv-form__group' });
         this.tagsField = new TagsFieldGroup(tagsGroup, this.fieldCtx);
 
         // --- Color / Linestyle / Mask ---
-        const styleGroup = c.createDiv({ cls: 'tv-form__group' });
+        const styleGroup = detail.createDiv({ cls: 'tv-form__group' });
         this.styleField = new StyleFieldGroup(styleGroup, this.fieldCtx);
 
         // --- Custom properties ---
-        c.createEl('h4', { text: t('modal.hub.properties'), cls: 'tv-form__section-label' });
-        const propsGroup = c.createDiv({ cls: 'tv-form__group' });
+        detail.createEl('h4', { text: t('modal.hub.properties'), cls: 'tv-form__section-label' });
+        const propsGroup = detail.createDiv({ cls: 'tv-form__group' });
         this.propsField = new PropertiesFieldGroup(propsGroup, this.fieldCtx);
 
-        // What is of the form as a whole is said at its end; the row of
-        // buttons, and the question a close puts in it, in the foot, and on
-        // a task not written yet the line of what the create does above it.
-        c.appendChild(this.formSays);
+        // The row of buttons, and the question a close puts in it, in the
+        // foot, and on a task not written yet the line of what the create
+        // does above it.
         const createLine = this.host.draft ? new CreateLine(this.deps.foot) : null;
         this.createLine = createLine;
         this.actions = new FormActions(this.deps.foot, {
@@ -263,7 +301,7 @@ export class TaskHubForm implements HubForm {
         });
         // Typing in a field while asked is fixing it: the question is withdrawn.
         // In the place's fields too, which are of the draft as much.
-        for (const el of [c, this.deps.place?.el]) el?.addEventListener('input', () => { this.guard.withdraw(); });
+        c.addEventListener('input', () => { this.guard.withdraw(); });
         this.renderActions();
 
         // The row's dates as it opens: their placeholders, and a rule the line
@@ -290,7 +328,7 @@ export class TaskHubForm implements HubForm {
     }
 
     /**
-     * Say each finding under the field it is of (the form's at its end),
+     * Say each finding under the field it is of (the form's above its tabs),
      * with the line to open in the editor: the user fixes the block there.
      * With no row to open (`HubHost.openSource` null), nothing is offered.
      */
@@ -386,9 +424,9 @@ export class TaskHubForm implements HubForm {
      * what keeps the task from being created is, unless it is in the hub
      * already, where the user goes on. With a create that may be asked again
      * nothing is to be fixed: the create takes it. Without, it is the place:
-     * the field of the place's pane it answers, its tab chosen first, and with
-     * no field there, the place tab's button. A button raises no on-screen
-     * keyboard; a field does.
+     * the field of the place's group it answers, its tab chosen first, and
+     * with no field there, the basic tab's button, the place shown in its
+     * tab. A button raises no on-screen keyboard; a field does.
      */
     notCreated(): void {
         const draft = this.host.draft;
@@ -399,7 +437,7 @@ export class TaskHubForm implements HubForm {
         }
         const field = this.placeFocusOf();
         if (field) this.focusTo(field);
-        else this.deps.placeTab?.();
+        else this.tabs.focusTab('basic');
     }
 
     /** The parts of the form a close asks: the name, the dates, the style, the tags and the properties. */
@@ -481,7 +519,7 @@ export class TaskHubForm implements HubForm {
         this.styleField.refresh();
         this.tagsField.refresh();
         this.propsField.refresh();
-        this.deps.place?.pane.refresh();
+        this.place?.refresh();
         this.sayFindings();
     }
 
@@ -519,7 +557,7 @@ export class TaskHubForm implements HubForm {
     }
 
     private setEnabled(enabled: boolean): void {
-        this.deps.place?.pane.setEnabled(enabled);
+        this.place?.setEnabled(enabled);
         this.nameField?.setEnabled(enabled);
         this.statusField?.setEnabled(enabled);
         this.dateGroup?.setEnabled(enabled);
@@ -542,17 +580,17 @@ export class TaskHubForm implements HubForm {
     }
 
     /**
-     * Put the focus on a field of the form or of the place's pane, its tab
-     * chosen first: a field in a pane not chosen takes no focus.
+     * Put the focus on a field of the form, its tab chosen first: a field in
+     * a tab not chosen takes no focus.
      */
     private focusTo(focus: FieldFocus<HTMLElement>): void {
-        this.deps.reveal?.(focus.to);
+        this.tabs.reveal(focus.to);
         placeFocus(focus);
     }
 
     /**
      * Where the focus goes for the field named, and how its text is met
-     * there (`selectionOnFocus`; the place's first field as its pane says):
+     * there (`selectionOnFocus`; the place's first field as its group says):
      * what the hub opens on (`initialFocus`) and what the menu focuses
      * alike. Null when the form has no such field.
      */
@@ -563,7 +601,7 @@ export class TaskHubForm implements HubForm {
     }
 
     private placeFocusOf(): FieldFocus<HTMLElement> | null {
-        return this.deps.place?.pane.focus() ?? null;
+        return this.place?.focus() ?? null;
     }
 
     /** The element of the field named. */
@@ -587,6 +625,11 @@ export class TaskHubForm implements HubForm {
         }
     }
 
+    /** The hub closed: what it built of the place takes nothing more. */
+    dispose(): void {
+        this.place?.dispose();
+        this.place = null;
+    }
 }
 
 /** A row's dates as the six fields hold them, `''` for none; the due's date and time apart. */

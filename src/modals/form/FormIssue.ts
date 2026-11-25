@@ -49,7 +49,7 @@ export function readIssue<F extends string>(at: F, issue: Issue | null): FormIss
  *
  * An issue of a field is said under the field's row and, an error, marks
  * its control; one of the form is said where the form puts it (above its
- * buttons, or at its end). A field that has no slot now (a row that is
+ * buttons, above its tabs, or at its end). A field that has no slot now (a row that is
  * gone) has its issues said with the form's, so none is lost. Whether a
  * field is wrong is read from the errors held ({@link has}), not kept apart.
  */

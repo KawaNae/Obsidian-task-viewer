@@ -88,7 +88,7 @@ export interface PluginContext {
     /**
      * Open the hub on a task not written yet, to be put in `place`, holding
      * `seed`'s values: nothing is written until it is created there. Null
-     * for a note the user chooses in the hub's place tab. The one way in for
+     * for a note the user chooses in the hub's note field. The one way in for
      * every place a task is made from, a view's or the editor's.
      */
     openDraftHub(place: CreatePlace | null, seed: DraftSeed): void;

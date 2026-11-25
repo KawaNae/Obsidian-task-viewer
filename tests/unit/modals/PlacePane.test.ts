@@ -22,7 +22,8 @@ vi.mock('../../../src/suggest/NoteSuggest', async (importOriginal) => {
 });
 
 /**
- * The place tab's pane of a hub on a task not written yet (`PlacePane`):
+ * The place's fields of a hub on a task not written yet (`PlacePane`), a
+ * group of the form's basic tab:
  * its fields as they open, what is typed in them and an Enter reaching its
  * logic (`PlaceFields`), what the logic says drawn under them, the focus it
  * answers (the first field an error is said under, else the note field),
@@ -102,12 +103,11 @@ afterEach(() => {
 });
 
 describe('PlacePane', () => {
-    it('builds the note and heading fields in the pane, on the form\'s shared pieces, with no title nor buttons', () => {
+    it('builds the note and heading fields as one group at the end of what it is given, on the form\'s shared pieces, with no title nor buttons', () => {
         const h = setUp();
 
-        const form = h.el.children[0];
-        expect([...form.classes]).toEqual(['task-hub__place', 'tv-form']);
-        expect(form.children.map(child => [...child.classes].join(' '))).toEqual(['tv-form__group']);
+        expect(h.el.children.map(child => [...child.classes].join(' '))).toEqual(['tv-form__group task-hub__place']);
+        expect(h.el.children[0].findAll('tv-form__row')).toHaveLength(2);
         expect(h.el.find('tv-form__title')).toBeNull();
         expect(h.el.find('tv-form__buttons')).toBeNull();
     });

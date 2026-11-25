@@ -62,8 +62,8 @@ export class ClearButton {
  * '' and an `input` event, which whoever listens to the field (its owner,
  * its list of candidates) meets as it meets the user's typing. The focus
  * stays in the field, to type on. The note and the heading fields of the
- * send and the section dialogs, and of the place tab of the hub on a task
- * to make, are such fields.
+ * send and the section dialogs, and of the hub on a task to make, are such
+ * fields.
  */
 export function createClearableInput(row: HTMLElement, placeholder: string): { input: HTMLInputElement; clear: ClearButton } {
     const box = row.createDiv({ cls: 'tv-form__control' });

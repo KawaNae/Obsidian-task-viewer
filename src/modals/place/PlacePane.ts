@@ -3,13 +3,13 @@ import type { DestinationAsk } from '../../services/data/NotePlaces';
 import type { FieldFocus } from '../../utils/FieldFocus';
 import { IssueBoard } from '../form/FormIssue';
 import { DestinationField } from '../noteops/DestinationField';
-import type { HubPane } from '../hub/HubHost';
+import type { HubPlace } from '../hub/HubHost';
 import { PlaceFields, type PlaceField, type PlaceFieldsHost, type PlaceSurface, type PlaceViewState } from './PlaceFields';
 
-/** The pane's fields in the order they stand. */
+/** The fields in the order they stand. */
 const PLACE_FIELDS: readonly PlaceField[] = ['note', 'heading'];
 
-/** What the place tab's pane opens with, and whom it tells. */
+/** What the place's fields open with, and whom they tell. */
 export interface PlacePaneOptions {
     /** The fields as they open: the note, and the heading (empty for the note's end). */
     initial: DestinationAsk;
@@ -18,13 +18,14 @@ export interface PlacePaneOptions {
 }
 
 /**
- * The place tab's pane of a hub on a task not written yet, as it looks: the
- * note and the heading (`DestinationField`, the send dialog's fields), and
- * what is wrong of each said under it (`IssueBoard`). It draws what the
+ * The place's fields of a hub on a task not written yet, as they look: a
+ * group of the form's basic tab (`tv-form__group`, after the dates) holding
+ * the note and the heading (`DestinationField`, the send dialog's fields),
+ * and what is wrong of each said under it (`IssueBoard`). It draws what the
  * fields' logic says (`PlaceViewState`) and does nothing of its own; the
  * logic is `PlaceFields`. It is built of the form's shared pieces
- * (`_form.css`), as the properties' pane is; the title and the buttons are
- * the hub's.
+ * (`_form.css`), as the form's other groups are; the title and the buttons
+ * are the hub's.
  *
  * Where its focus goes is the first field an error is said under, the
  * note's and then the heading's, else the note's: the field to mend first.
@@ -32,14 +33,14 @@ export interface PlacePaneOptions {
  * fixed shape and being mended as often as replaced. Its fields are shut
  * with the form's while a create is under way.
  */
-export class PlacePane implements HubPane, PlaceSurface {
+export class PlacePane implements HubPlace, PlaceSurface {
     private readonly field: DestinationField;
     private readonly issues: IssueBoard<PlaceField>;
     private readonly fields: PlaceFields;
 
-    constructor(app: App, pane: HTMLElement, opts: PlacePaneOptions) {
-        const form = pane.createDiv({ cls: 'task-hub__place tv-form' });
-        const group = form.createDiv({ cls: 'tv-form__group' });
+    /** Build the group at the end of `parent`, among the form's groups. */
+    constructor(app: App, parent: HTMLElement, opts: PlacePaneOptions) {
+        const group = parent.createDiv({ cls: 'tv-form__group task-hub__place' });
         this.field = new DestinationField(app, group, {
             initial: opts.initial,
             onChange: () => this.fields.fieldsChanged(this.field.ask()),

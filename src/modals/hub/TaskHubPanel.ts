@@ -12,11 +12,10 @@ import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
 import { RowHost } from './RowHost';
 import { DraftHost } from './DraftHost';
-import type { PaneMaker, PanelHost, HubPane } from './HubHost';
+import type { PlaceMaker, PanelHost } from './HubHost';
 import type { CreatePlace, CreatePlaces } from '../../services/data/CreatePlaces';
 import type { DraftSeed } from '../../services/data/TaskDraft';
 import { indentUnit } from '../../utils/ObsidianConfig';
-import { TabStrip } from '../../views/sharedUI/TabStrip';
 import type { DestinationAsk, NotePlaces } from '../../services/data/NotePlaces';
 import { NoteName } from '../../services/data/NoteName';
 import { PlacePane } from '../place/PlacePane';
@@ -53,9 +52,6 @@ export type HubSource = Pick<TaskHubSource, 'beforeClose' | 'yieldsEscape' | 'ta
 /** Builds the source mode in the panel's slots, once, as the hub is built. */
 export type SourceMaker = (slots: SourceSlots) => HubSource;
 
-/** The tabs of a hub that has a place tab. */
-type HubTab = 'properties' | 'place';
-
 /** What an entry makes of a hub besides its host. */
 interface HubShape {
     /** Builds the source mode; null, the hub has none, nor its switch. */
@@ -64,8 +60,8 @@ interface HubShape {
     inert: boolean;
     /** The hubs this one opens one at a time with; null, it opens over whatever is open. */
     turns: OneAtATime | null;
-    /** Builds the place tab's pane; null, the hub has no tabs, the form alone under the card. */
-    place: PaneMaker | null;
+    /** Builds where the task goes, in the form's basic tab; null, the hub says no place. */
+    place: PlaceMaker | null;
 }
 
 /** A hub as the hubs it opens one at a time with see it: what closing it as the user would does. */
@@ -120,15 +116,14 @@ class OneAtATime {
  * タスクハブパネル — 「タスクを開く」の単一の目的地。
  *
  * 上部にカードプレビュー（ホストが描き直させる）、下部にプロパティ編集
- * フォーム（値の読み書きはホスト `PanelHost`）。read-only タスクは
+ * フォーム（値の読み書きはホスト `PanelHost`）。フォームは欄を「基本」と
+ * 「詳細」のタブに分けて持ち、パネルはタブを知らない。read-only タスクは
  * プレビューのみに縮退。ソースモードを作る関数を入口が渡したときだけ、
  * プレビューの上の切り替えで、カードの代わりに行と部分木のソースを編集
  * できる（TaskHubSource）。渡さなければ切り替えの bar も作らない。
- * 位置の中身を作る関数（`PaneMaker`）を入口が渡したときだけ、カードの下に
- * 「プロパティ」と「位置」のタブ（TabStrip）を置き、フォームをプロパティの
- * 中身に、入口の作る中身を位置の中身にする。初めのタブは初めのフォーカスの
- * 欄のタブで、その欄が無い（位置の中身に欄が無い）ならプロパティである。
- * フォームは欄にフォーカスを置く前にそのタブを選ぶ。
+ * 位置を作る関数（`PlaceMaker`）を入口が渡したときは、それをフォームへ
+ * 渡し、フォームが「基本」の日付の後ろで呼ぶ。初めのフォーカスの欄も
+ * フォームへ渡し、フォームはその欄のタブで開く。
  * 殻の上の場所に題を出す。まだ書いていないタスクのハブは「新しいタスクを作成」
  * （子を作るときも同じ題）、今あるタスクのハブは、どの入口から開いても
  * 「プロパティを編集」である。
@@ -163,8 +158,6 @@ export class TaskHubPanel {
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
     private source: HubSource | null = null;
-    private tabs: TabStrip<HubTab> | null = null;
-    private placePane: HubPane | null = null;
 
     /**
      * Open the hub on a row the note already has (a segment of a split task
@@ -212,15 +205,14 @@ export class TaskHubPanel {
      * which stays as it was once this one closes, and it is not one of the
      * hubs on rows that open one at a time.
      *
-     * In a note, or in none, it has a place tab whose fields (`PlacePane`)
-     * move the draft as they are typed in: opened on the note and its
-     * heading, the hub opens on the properties with the focus on the name;
-     * on none, the note field empty and the heading the settings' task
-     * heading, it opens on the place with the focus on the note. A new
-     * note's folder is reckoned from no note. Under a row, where the place
-     * cannot be changed, its place tab shows the parent's note, the heading
-     * it stands under and the parent, with no field (`PlaceShown`), as the
-     * place is read; the hub opens on the properties with the focus on the name.
+     * In a note, or in none, its basic tab has the place's fields
+     * (`PlacePane`), which move the draft as they are typed in: opened on
+     * the note and its heading, the focus is on the name; on none, the note
+     * field empty and the heading the settings' task heading, it is on the
+     * note. A new note's folder is reckoned from no note. Under a row, where
+     * the place cannot be changed, the basic tab shows the parent's note, the
+     * heading it stands under and the parent, with no field (`PlaceShown`),
+     * as the place is read; the focus is on the name.
      */
     static openDraftHub(
         app: App,
@@ -235,8 +227,8 @@ export class TaskHubPanel {
         const initial: DestinationAsk | null = place === null
             ? { note: { text: '', picked: null }, heading: deps.plugin.settings.taskHeading }
             : place.kind === 'note' ? deps.places.askOf(place) : null;
-        const makePlace: PaneMaker = initial
-            ? (pane) => new PlacePane(app, pane, {
+        const makePlace: PlaceMaker = initial
+            ? (parent) => new PlacePane(app, parent, {
                 initial,
                 host: {
                     read: (ask) => deps.notePlaces.readFields(ask, NoteName.defaultFolder(app, '')),
@@ -244,7 +236,7 @@ export class TaskHubPanel {
                     answered: (answer) => host.answered(answer),
                 },
             })
-            : (pane) => new PlaceShown(pane, () => host.shown());
+            : (parent) => new PlaceShown(parent, () => host.shown());
         const options: TaskHubPanelOptions = { focusField: place === null ? 'place' : 'name' };
         return new TaskHubPanel(app, host, deps, options, { source: null, inert: true, turns: null, place: makePlace }).open();
     }
@@ -277,7 +269,7 @@ export class TaskHubPanel {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog task-hub',
             keymap: this.app.keymap,
-            // The hub is built on this field's tab (`buildContent`).
+            // The form is built on this field's tab (`TaskHubFormDeps.opensOn`).
             initialFocus: () => (focusField ? this.form?.focusOf(focusField) ?? null : null),
             build: (bodyEl, frame) => this.buildContent(bodyEl, frame),
             onClose: () => this.teardown(),
@@ -306,7 +298,7 @@ export class TaskHubPanel {
         const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
         this.previewEl = card;
         const pane = makeSource ? bodyEl.createDiv() : null;
-        const formHost = this.buildTabs(bodyEl).createDiv({ cls: 'task-hub__form' });
+        const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
 
         this.renderPreview();
 
@@ -316,6 +308,9 @@ export class TaskHubPanel {
                 text: t('modal.hub.readOnlyNotice'),
             });
         } else {
+            // The body lays the form's tabs out with the card (`_task-hub.css`).
+            bodyEl.addClass('task-hub__body--tabs');
+            const focusField = this.options.focusField;
             this.form = new TaskHubForm(formHost, this.host, {
                 app: this.app,
                 plugin: this.deps.plugin,
@@ -323,38 +318,14 @@ export class TaskHubPanel {
                 requestClose: () => { void this.overlay.requestClose(); },
                 foot: frame.foot,
                 hasFocus: () => this.hasFocus(),
-                ...(this.tabs && this.placePane && {
-                    place: { el: this.tabs.pane('place'), pane: this.placePane },
-                    reveal: (el: HTMLElement) => { this.tabs?.reveal(el); },
-                    placeTab: () => { this.tabs?.focusTab('place'); },
-                }),
+                ...(this.shape.place && { place: this.shape.place }),
+                ...(focusField && { opensOn: focusField }),
             });
         }
-        // Opened on the tab of the field it focuses first: a field in a pane off takes no focus.
-        const first = this.options.focusField && this.form?.focusOf(this.options.focusField);
-        if (first) this.tabs?.reveal(first.to);
 
         if (makeSource && bar && pane) {
             this.source = makeSource({ bar, card, pane, foot: frame.foot, close: () => this.close() });
         }
-    }
-
-    /**
-     * The tabs under the card, the place's pane built by the entry, opened on
-     * the properties until the form is built: where the form goes, the
-     * properties' pane. With no place pane, no tabs: the form goes in `bodyEl`.
-     */
-    private buildTabs(bodyEl: HTMLElement): HTMLElement {
-        const makePlace = this.shape.place;
-        if (!makePlace) return bodyEl;
-        bodyEl.addClass('task-hub__body--tabs');
-        const tabs = new TabStrip<HubTab>(bodyEl, [
-            { id: 'properties', label: t('modal.hub.tabProperties'), icon: 'list' },
-            { id: 'place', label: t('modal.hub.tabPlace'), icon: 'map-pin' },
-        ], { initial: 'properties' });
-        this.tabs = tabs;
-        this.placePane = makePlace(tabs.pane('place'));
-        return tabs.pane('properties');
     }
 
     /** Whether the focus is on something in the hub's panel: not on the panel itself, which holds it while nothing else does. */
@@ -402,9 +373,7 @@ export class TaskHubPanel {
         this.host.dispose();
         this.source?.dispose();
         this.source = null;
-        this.placePane?.dispose();
-        this.placePane = null;
-        this.tabs = null;
+        this.form?.dispose();
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
         this.form = null;

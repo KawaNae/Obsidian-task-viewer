@@ -10,7 +10,8 @@ vi.mock('obsidian', async (importOriginal) => ({
 }));
 
 /**
- * The place tab's pane of a hub whose place cannot be changed (`PlaceShown`):
+ * The place of a hub whose place cannot be changed (`PlaceShown`), a group
+ * of the form's basic tab:
  * the note, the heading and the parent task, each a row with no field, as
  * the value it is handed says them, and why the place cannot be changed.
  * It reads the value as it is built and again when told to.
@@ -41,6 +42,13 @@ describe('PlaceShown', () => {
         ]);
         const says = r.pane.find('tv-form__says')!;
         expect(says.find('tv-form__info')!.text).toBe(t('modal.newTask.childFixed'));
+    });
+
+    it('builds them as one group at the end of what it is given, why they cannot be changed its last', () => {
+        const r = rig(UNDER);
+        expect(r.pane.children.map(child => [...child.classes].join(' '))).toEqual(['tv-form__group task-hub__place task-hub__shown']);
+        const group = r.pane.children[0];
+        expect(group.children.map(child => [...child.classes].join(' '))).toEqual(['tv-form__row', 'tv-form__row', 'tv-form__row', 'tv-form__says']);
     });
 
     it('shows a parent above the note\'s first heading as under none', () => {

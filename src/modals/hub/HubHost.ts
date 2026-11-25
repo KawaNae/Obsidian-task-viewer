@@ -12,10 +12,10 @@ import type { LineTarget } from './SourceLine';
 export interface HubForm {
     /** Take the host's value (`HubHost.task`) into every field again, and read its findings from it. */
     refresh(): void;
-    /** Enable the fields or not, and say why not at the form's end, as `HubHost.shut` says now. */
+    /** Enable the fields or not, and say why not above the form's tabs, as `HubHost.shut` says now. */
     showShut(): void;
     /**
-     * Say why a write was refused, at the form's end; on a task not written
+     * Say why a write was refused, above the form's tabs; on a task not written
      * yet, above the create, as what the create did. Null takes back what was said.
      */
     sayWrite(refusal: string | null): void;
@@ -36,7 +36,7 @@ export interface HubForm {
      * the focus goes where what keeps the task from being created is, unless
      * it is in the hub already. Where a create may be asked again
      * (`HubDraft.canCreate`), nothing is to be fixed: the create. Where it
-     * may not, what keeps it is the place: the place's pane, where it says.
+     * may not, what keeps it is the place: the place's group, where it says.
      * Not told where the form itself found a field to fix and focused it.
      */
     notCreated(): void;
@@ -116,12 +116,12 @@ export interface HubPanel {
 }
 
 /**
- * What an entry builds in the place tab's pane of a hub: fields that say
- * where the task goes, or a place shown with no field. The form shuts it
- * with its own fields and focuses it (`'place'`); the hub opens on the place
- * tab only when the pane has a field to focus there.
+ * What an entry builds of where a task goes, as a group of the form's basic
+ * tab, after the dates: fields that say where the task goes, or a place
+ * shown with no field. The form shuts it with its own fields and focuses it
+ * (`'place'`).
  */
-export interface HubPane {
+export interface HubPlace {
     /**
      * Where the focus goes in it, and how its text is met there: the first
      * field an error is said under, else its first field; null when it has
@@ -136,8 +136,8 @@ export interface HubPane {
     dispose(): void;
 }
 
-/** Builds the place tab's pane in `pane`, once, as the hub is built. */
-export type PaneMaker = (pane: HTMLElement) => HubPane;
+/** Builds the place's group at the end of `parent` (the form's basic tab), once, as the form is built. */
+export type PlaceMaker = (parent: HTMLElement) => HubPlace;
 
 /** A hub's host as its panel sees it: the form's host, told when the hub has opened and when it has closed. */
 export interface PanelHost extends HubHost {
