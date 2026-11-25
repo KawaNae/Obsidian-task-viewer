@@ -350,7 +350,6 @@ export class TaskHubPanel {
             { id: 'properties', label: t('modal.hub.tabProperties'), icon: 'list' },
             { id: 'place', label: t('modal.hub.tabPlace'), icon: 'map-pin' },
         ], { initial: 'properties' });
-        tabs.panes.addClass('tv-tabs__panes--stacked');
         this.tabs = tabs;
         this.placePane = makePlace(tabs.pane('place'));
         return tabs.pane('properties');

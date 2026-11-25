@@ -3,8 +3,8 @@
    choose between (TabStrip). The row is underlined tabs
    sharing its width, the tab chosen marked by a line of the
    accent under it. How a pane off is hidden is the place's
-   that uses the strip: here it takes no room, and
-   tv-tabs__panes--stacked keeps one height for them all.
+   that uses the strip: here it takes no room, and the
+   place's own stylesheet may lay the panes otherwise.
    ====================================================== */
 
 .tv-tabs {
@@ -73,27 +73,4 @@
 
 .tv-tabs__pane.is-hidden {
     display: none;
-}
-
-/* The panes laid over one another in one cell, as tall as the tallest, so
-   choosing a tab moves nothing around them. A pane off is not seen, and
-   as tall as the cell at most: a cell bounded by its place (a column the
-   panes shrink in) then scrolls nothing of it. */
-.tv-tabs__panes--stacked {
-    display: grid;
-    grid-template: minmax(0, auto) / minmax(0, 1fr);
-}
-
-.tv-tabs__panes--stacked > .tv-tabs__pane {
-    grid-area: 1 / 1;
-    min-width: 0;
-    align-self: start;
-}
-
-.tv-tabs__panes--stacked > .tv-tabs__pane.is-hidden {
-    display: block;
-    visibility: hidden;
-    overflow: hidden;
-    min-height: 0;
-    max-height: 100%;
 }
