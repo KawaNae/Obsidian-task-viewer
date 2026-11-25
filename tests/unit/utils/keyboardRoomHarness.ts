@@ -400,6 +400,15 @@ export interface RoomOptions {
      * much until it ends above `content`.
      */
     fills?: number;
+    /**
+     * In the box, how much of each px of padding written past the
+     * stylesheet's the content gives way to, up to 1 (all, the scroll
+     * lengthened by nothing): a part shortened by the padding with no end,
+     * `content` being its end with none written. Below 0 the part is
+     * lengthened by the padding instead (a box out of the flow that carries
+     * the padding, the body's own padded after it too).
+     */
+    gives?: number;
     /** Whether the window has a visualViewport. */
     viewport?: boolean;
     /** Whether the overlap moves over its transition: not where the browser cannot register it (`@property`). */
@@ -428,11 +437,15 @@ export class Room {
     readonly content: number;
     readonly basePadding: number;
     readonly fills: number;
+    readonly gives: number;
     readonly doc: FakeDocument;
     readonly win: FakeWindow;
     readonly root: FakeNode & { style: RootStyle };
     readonly panel: FakeNode;
     readonly body: FakeBody;
+
+    /** Every scrollTop asked of the body, as asked: the browser cuts it to how far the body scrolls, and `scrollTop` reads it cut. */
+    readonly asked: number[] = [];
 
     private readonly t0: number;
     private scroll = 0;
@@ -462,6 +475,7 @@ export class Room {
         this.content = opts.content;
         this.basePadding = opts.padding ?? 0;
         this.fills = opts.fills ?? 0;
+        this.gives = opts.gives ?? 0;
         this.transitions = opts.transitions ?? true;
         this.t0 = Date.now();
         const clock = () => this.now();
@@ -692,6 +706,7 @@ export class Room {
     }
 
     writeScrollTop(v: number): void {
+        this.asked.push(v);
         const before = this.readScrollTop();
         this.scroll = this.clampScroll(v);
         if (this.scroll !== before) this.queueScrollEvent();
@@ -824,7 +839,8 @@ export class Room {
             const panelTop = EDGE + Math.max(0, Math.min(free / 2, free - overlap));
             const height = lockedHeight(bodyHeight - (panel - h));
             const bodyTop = panelTop + bodyOffset;
-            const content = Math.max(this.content, Math.min(this.fills, height - pad));
+            const given = this.gives * (pad - this.basePadding);
+            const content = Math.max(this.content - given, Math.min(this.fills, height - pad));
             return {
                 panelTop, panelBottom: panelTop + h,
                 bodyTop, bodyBottom: bodyTop + height, bodyHeight: height,

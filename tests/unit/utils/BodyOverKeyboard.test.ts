@@ -21,8 +21,8 @@ const SHEET: RoomShape = { kind: 'sheet', above: 40, below: 60 };
 const FLAT_SHEET: RoomShape = { kind: 'sheet', above: 40, below: 0 };
 
 /** The room, its part mounted, a field focused `at` px into the body's content. */
-function focused(shape: RoomShape, at: number, opts: { content?: number; fills?: number; padding?: number; scrollTop?: number; viewport?: boolean; height?: number } = {}) {
-    const room = makeRoom({ shape, content: opts.content ?? 1000, fills: opts.fills, padding: opts.padding, viewport: opts.viewport, height: opts.height });
+function focused(shape: RoomShape, at: number, opts: { content?: number; fills?: number; gives?: number; padding?: number; scrollTop?: number; viewport?: boolean; height?: number } = {}) {
+    const room = makeRoom({ shape, content: opts.content ?? 1000, fills: opts.fills, gives: opts.gives, padding: opts.padding, viewport: opts.viewport, height: opts.height });
     if (opts.scrollTop !== undefined) room.scrollTop = opts.scrollTop;
     const field = room.field(at);
     room.focus(field);
@@ -144,14 +144,15 @@ describe('the body at rest while the keyboard is up', () => {
             // A part of the content cut to the room above the padding (to 478, 468 at rest) fills the
             // 480: no scroll room. The field at 92 + 420 = 512 lacks 22. A padding of 22 shortens the
             // part by as much and scrolls nothing; twice that, 66, cuts it under the content's 430 and
-            // gives 430 + 78 - 480 = 28.
+            // gives 430 + 78 - 480 = 28, 6 past the 22. Past the content, the scroll goes one for one
+            // with the padding: 6 less, 60, gives the 22 it lacks.
             const { room, field } = focused(BOX, 420, { content: 430, fills: 478, padding: 12 });
 
             viewportKeyboard(room, 300);
             await room.settle();
 
             expect(room.scrollTop).toBe(22);
-            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '78px' });
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '72px' });
             expect(room.bottomOf(field)).toBe(490);
 
             room.viewport(800);
@@ -159,6 +160,55 @@ describe('the body at rest while the keyboard is up', () => {
 
             expect(room.inline()).toEqual(NONE);
             expect(room.scrollTop).toBe(0);
+        });
+
+        it('pads as far as it may and scrolls no further than the body does where its content gives way to all the padding', async () => {
+            // The content shortens by each px of padding: 430 + 12 in 480 scrolls nothing, however padded.
+            // The field at 512 lacks 22: the padding goes as far as that and the body's 480, 502, and the
+            // body is asked to scroll no further than it can, the field left where it stands.
+            const { room, field } = focused(BOX, 420, { content: 430, gives: 1, padding: 12 });
+
+            viewportKeyboard(room, 300);
+            await room.settle();
+
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '514px' });
+            expect(room.scrollTop).toBe(0);
+            expect(room.asked.filter((top) => top > 0)).toEqual([]);
+            expect(room.bottomOf(field)).toBe(512);
+
+            room.viewport(800);
+            await room.settle();
+
+            expect(room.inline()).toEqual(NONE);
+            expect(room.scrollTop).toBe(0);
+        });
+
+        it('pads past what the field lacks by no more than is left where the scroll goes half as far as the padding', async () => {
+            // The content shortens by half of each px of padding: 430 - p/2 + 12 + p in 480 scrolls
+            // p/2 - 38 past 76. The field at 512 lacks 22: 22 and 66 scroll nothing, 154 scrolls 39, 17
+            // past. 17 less, 137, scrolls 30.5, still past the 22: the body scrolls to 22.
+            const { room, field } = focused(BOX, 420, { content: 430, gives: 0.5, padding: 12 });
+
+            viewportKeyboard(room, 300);
+            await room.settle();
+
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '149px' });
+            expect(room.scrollTop).toBe(22);
+            expect(room.bottomOf(field)).toBe(490);
+        });
+
+        it('keeps the padding that reached the field where the scroll goes further than the padding, rather than less', async () => {
+            // The content lengthens by each px of padding: 500 + p + 12 + p in 480 scrolls 32 + 2p. The
+            // field at 92 + 480 = 572 lacks 82: 50 scrolls 132, 50 past. 50 less, none, scrolls 32 alone,
+            // short of the 82: the 50 is kept.
+            const { room, field } = focused(BOX, 480, { content: 500, gives: -1, padding: 12 });
+
+            viewportKeyboard(room, 300);
+            await room.settle();
+
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '62px' });
+            expect(room.scrollTop).toBe(82);
+            expect(room.bottomOf(field)).toBe(490);
         });
 
         it('pads nothing where the body has the scroll room, its height still locked', async () => {
