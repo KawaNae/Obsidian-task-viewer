@@ -28,15 +28,16 @@ export interface FormAsk {
  * hand goes to last.
  *
  * Asked whether to throw something away (`FormAsk`), the same row asks: the
- * question comes in at its start, discard beside it, and cancel reads back,
- * which keeps what would be lost. Discard stands apart from the buttons a
+ * question comes in at its start, on a line of its own, discard at the
+ * start of the line under it, and cancel reads back, which keeps what would
+ * be lost. Discard stands apart from the buttons a
  * hand goes to, so a slip of the hand keeps it; the act stays offered, since
  * acting withdraws the question. A row with no cancel of its own (the hub
  * on a row, which saves as it goes) shows only while it asks.
  *
  * A form may put a control of its own at the row's start (`lead`), apart
  * from the buttons at its end. It steps aside while the row asks: the
- * question takes the start, and a line to itself on the phone.
+ * question takes the start, and a line to itself.
  */
 export class FormActions {
     /** Cancel, or back while asking: what the focus goes to as a question is put. */

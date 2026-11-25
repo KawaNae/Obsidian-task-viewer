@@ -8,6 +8,12 @@
  * what does not read, stays open, and closes on a value that does, in the
  * range of the settings' table (a work of a minute or more).
  *
+ * The forms that ask in their row of buttons whether to throw a draft away
+ * (the hub of a task not written yet, the hub's source mode, the send
+ * dialog) stand the question on a line of its own on the centered box,
+ * whatever its width: discard at the start of the next line, back and the
+ * act at its end.
+ *
  * The delete is chosen from a card's menu, as a user chooses it; the timer
  * is started on the completed row as its menu starts it. The note's bytes
  * are read back from the disk.
@@ -330,5 +336,98 @@ describe('the timer\'s Custom... length', () => {
         expect(steps.abc).toMatchObject({ open: true, says: tr('issue.shape.int') });
         expect(steps.long).toEqual({ open: false });
         expect(readSettings(KEYS)).toEqual({ pomodoroWorkMinutes: 200 });
+    });
+});
+
+describe('the row that asks whether to throw a draft away, on the centered box', () => {
+    const NOTE = ['# 見出し', '- [ ] 行 @2026-10-04', '    - [ ] 子', ''].join('\n');
+    /** The window's inner widths: the desktop's, and an iPad's in portrait, where the box is as wide as it gets. */
+    const WIDTHS = [1600, 656];
+
+    interface Shape { width: number; ask: string; discard: string; act: string; askBottom: number; tops: number[]; fromStart: number; toEnd: number }
+
+    /**
+     * Open each of the three forms that ask, give it a draft and ask it to
+     * close, in a window `width` wide, and read where the question and the
+     * row's buttons stand: the question's bottom, the tops of discard, back
+     * and the act, discard's left from the row's start and the act's right
+     * from the row's end.
+     */
+    const shapes = (width: number) => run<Record<string, Shape>>(`
+        const top = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-overlay__panel');
+        const shown = el => !!el && !el.hidden && getComputedStyle(el).display !== 'none';
+        const asking = () => [...(top()?.querySelectorAll('.tv-form__buttons') ?? [])].find(r => shown(r.querySelector('.tv-form__ask')));
+        const editorOf = el => el.cmTile?.view ?? el.cmView?.rootView?.view;
+        const shape = async () => {
+            await until(() => asking());
+            await sleep(100);
+            const row = asking();
+            const at = sel => row.querySelector(sel).getBoundingClientRect();
+            const box = row.getBoundingClientRect(), ask = at('.tv-form__ask'), discard = at('.tv-form__discard'), back = at('.tv-form__cancel'), act = at('.mod-cta');
+            const out = {
+                width: innerWidth,
+                ask: row.querySelector('.tv-form__ask').textContent, discard: row.querySelector('.tv-form__discard').textContent, act: row.querySelector('.mod-cta').textContent,
+                askBottom: ask.bottom - discard.top, tops: [back.top - discard.top, act.top - discard.top],
+                fromStart: discard.left - box.left, toEnd: box.right - act.right,
+            };
+            row.querySelector('.tv-form__discard').click();
+            await until(() => !document.querySelector('.tv-overlay'));
+            return out;
+        };
+        const win = require('electron').remote.getCurrentWindow();
+        const bounds = win.getBounds();
+        const was = innerWidth;
+        win.setBounds({ ...bounds, width: ${width} + (bounds.width - innerWidth) });
+        await until(() => innerWidth === ${width}, 3000, () => 'the window is ' + innerWidth + ' wide');
+        const out = {};
+        try {
+            const task = rowOf('行');
+
+            plugin.openDraftHub({ kind: 'childOf', taskId: task.id }, {});
+            await until(() => top()?.querySelector('.tv-form__name-section input'));
+            const name = top().querySelector('.tv-form__name-section input');
+            name.value = '捨てる子';
+            name.dispatchEvent(new Event('input', { bubbles: true }));
+            top().querySelector('.tv-overlay__close').click();
+            out.hub = await shape();
+
+            plugin.openTaskHub(task.id);
+            await until(() => top()?.querySelector('.task-hub__mode-toggle button'));
+            top().querySelectorAll('.task-hub__mode-toggle button')[1].click();
+            await until(() => top().querySelector('.tv-source-editor__children .cm-content'));
+            const children = editorOf(top().querySelector('.tv-source-editor__children .cm-content'));
+            children.dispatch({ changes: { from: children.state.doc.length, insert: '2' } });
+            top().querySelector('.tv-overlay__close').click();
+            out.source = await shape();
+
+            await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
+            menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
+            await until(() => top()?.querySelector('.tv-send .tv-source-editor__children .cm-content') && !top().querySelector('.tv-form__buttons .mod-cta').disabled);
+            const sent = editorOf(top().querySelector('.tv-send .tv-source-editor__children .cm-content'));
+            sent.dispatch({ changes: { from: sent.state.doc.line(1).to, insert: '2' } });
+            top().querySelector('.tv-overlay__close').click();
+            out.send = await shape();
+        } finally {
+            win.setBounds(bounds);
+            await until(() => innerWidth === was);
+        }
+        return JSON.stringify(out);
+    `);
+
+    it.each(WIDTHS)('stands the question on a line of its own, discard at the start of the next and back and the act at its end, in the hub, its source mode and the send dialog (window %ipx wide)', async (width) => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const seen = shapes(width);
+        expect(Object.keys(seen)).toEqual(['hub', 'source', 'send']);
+        expect(seen.hub).toMatchObject({ width, ask: tr('modal.newTask.discardAsk'), discard: tr('modal.hub.unsavedDiscard'), act: tr('modal.create') });
+        expect(seen.source).toMatchObject({ width, ask: tr('modal.draft.discardAsk'), discard: tr('modal.draft.discard') });
+        expect(seen.send).toMatchObject({ width, ask: tr('modal.draft.discardAsk'), discard: tr('modal.draft.discard') });
+        for (const [form, shape] of Object.entries(seen)) {
+            // The question ends above the line of buttons, discard first on that line, back and the act last.
+            expect(shape.askBottom, form).toBeLessThanOrEqual(0);
+            for (const top of shape.tops) expect(Math.abs(top), form).toBeLessThanOrEqual(0.5);
+            expect(Math.abs(shape.fromStart), form).toBeLessThanOrEqual(0.5);
+            expect(Math.abs(shape.toEnd), form).toBeLessThanOrEqual(0.5);
+        }
+        expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 });

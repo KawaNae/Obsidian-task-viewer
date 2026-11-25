@@ -191,7 +191,7 @@ describe('the hub\'s source mode', () => {
         // A close the user asks for keeps the draft, and asks.
         const asked = click('.task-hub .tv-overlay__close');
         expect(asked).toMatchObject({ hub: true, source: true, asking: true });
-        // One row asks: the question and discard beside it at its start, back (where cancel was, with the focus) and apply at its end.
+        // One row asks: the question on a line of its own, then discard at the start of the next, back (where cancel was, with the focus) and apply at its end.
         const row = run<Record<string, unknown>>(`
             const actions = document.querySelector('.task-hub__source-actions .tv-form__buttons');
             const items = [...actions.children].filter(el => getComputedStyle(el).display !== 'none');
@@ -199,14 +199,16 @@ describe('the hub\'s source mode', () => {
             const box = actions.getBoundingClientRect();
             return JSON.stringify({
                 items: items.map(el => el.textContent),
-                oneLine: rects.every(r => Math.abs(r.top + r.height / 2 - (rects[0].top + rects[0].height / 2)) < 2),
+                askAbove: rects[0].bottom <= rects[1].top,
+                buttonsOneLine: rects.slice(2).every(r => Math.abs(r.top - rects[1].top) < 1),
                 askAtStart: Math.abs(rects[0].left - box.left) < 2,
+                discardAtStart: Math.abs(rects[1].left - box.left) < 2,
                 applyAtEnd: Math.abs(rects[3].right - box.right) < 2,
                 apart: rects[2].left - rects[1].right > 16,
                 focused: document.activeElement === actions.querySelector('.tv-form__cancel'),
             });
         `);
-        expect(row).toEqual({ items: [tr('modal.draft.discardAsk'), tr('modal.draft.discard'), tr('modal.draft.keep'), tr('modal.hub.source.apply')], oneLine: true, askAtStart: true, applyAtEnd: true, apart: true, focused: true });
+        expect(row).toEqual({ items: [tr('modal.draft.discardAsk'), tr('modal.draft.discard'), tr('modal.draft.keep'), tr('modal.hub.source.apply')], askAbove: true, buttonsOneLine: true, askAtStart: true, discardAtStart: true, applyAtEnd: true, apart: true, focused: true });
         const kept = click('.task-hub__source-actions .tv-form__cancel');
         expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions .tv-form__buttons > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual([tr('modal.cancel'), tr('modal.hub.source.apply')]);
         expect(kept).toMatchObject({ source: true, asking: false, children: '- [ ] 子a2\n- [ ] 子b\n    - [ ] 孫' });
