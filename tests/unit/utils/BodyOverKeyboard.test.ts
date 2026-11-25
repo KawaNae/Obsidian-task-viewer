@@ -21,8 +21,8 @@ const SHEET: RoomShape = { kind: 'sheet', above: 40, below: 60 };
 const FLAT_SHEET: RoomShape = { kind: 'sheet', above: 40, below: 0 };
 
 /** The room, its part mounted, a field focused `at` px into the body's content. */
-function focused(shape: RoomShape, at: number, opts: { content?: number; padding?: number; scrollTop?: number; viewport?: boolean; height?: number } = {}) {
-    const room = makeRoom({ shape, content: opts.content ?? 1000, padding: opts.padding, viewport: opts.viewport, height: opts.height });
+function focused(shape: RoomShape, at: number, opts: { content?: number; fills?: number; padding?: number; scrollTop?: number; viewport?: boolean; height?: number } = {}) {
+    const room = makeRoom({ shape, content: opts.content ?? 1000, fills: opts.fills, padding: opts.padding, viewport: opts.viewport, height: opts.height });
     if (opts.scrollTop !== undefined) room.scrollTop = opts.scrollTop;
     const field = room.field(at);
     room.focus(field);
@@ -138,6 +138,27 @@ describe('the body at rest while the keyboard is up', () => {
             expect(room.scrollTop).toBe(162);
             expect(room.inline().paddingBottom).toBe('74px');
             expect(room.bottomOf(field)).toBe(490);
+        });
+
+        it('pads as far as the body then scrolls where its content gives way to the padding, the field 10px above the keyboard', async () => {
+            // A part of the content cut to the room above the padding (to 478, 468 at rest) fills the
+            // 480: no scroll room. The field at 92 + 420 = 512 lacks 22. A padding of 22 shortens the
+            // part by as much and scrolls nothing; twice that, 66, cuts it under the content's 430 and
+            // gives 430 + 78 - 480 = 28.
+            const { room, field } = focused(BOX, 420, { content: 430, fills: 478, padding: 12 });
+
+            viewportKeyboard(room, 300);
+            await room.settle();
+
+            expect(room.scrollTop).toBe(22);
+            expect(room.inline()).toEqual({ height: '480px', maxHeight: '480px', paddingBottom: '78px' });
+            expect(room.bottomOf(field)).toBe(490);
+
+            room.viewport(800);
+            await room.settle();
+
+            expect(room.inline()).toEqual(NONE);
+            expect(room.scrollTop).toBe(0);
         });
 
         it('pads nothing where the body has the scroll room, its height still locked', async () => {

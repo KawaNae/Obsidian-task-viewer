@@ -392,6 +392,14 @@ export interface RoomOptions {
     content: number;
     /** The body's bottom padding from the stylesheet (px). */
     padding?: number;
+    /**
+     * In the box, a part of the body's content out of sight that ends this
+     * far into it but is cut to the room the body leaves above its padding
+     * (a pane kept for the panel's height): the content reaches the lower of
+     * `content` and that part's end, so a padding shortens the part by as
+     * much until it ends above `content`.
+     */
+    fills?: number;
     /** Whether the window has a visualViewport. */
     viewport?: boolean;
     /** Whether the overlap moves over its transition: not where the browser cannot register it (`@property`). */
@@ -419,6 +427,7 @@ export class Room {
     readonly shape: RoomShape;
     readonly content: number;
     readonly basePadding: number;
+    readonly fills: number;
     readonly doc: FakeDocument;
     readonly win: FakeWindow;
     readonly root: FakeNode & { style: RootStyle };
@@ -452,6 +461,7 @@ export class Room {
         this.shape = opts.shape;
         this.content = opts.content;
         this.basePadding = opts.padding ?? 0;
+        this.fills = opts.fills ?? 0;
         this.transitions = opts.transitions ?? true;
         this.t0 = Date.now();
         const clock = () => this.now();
@@ -814,10 +824,11 @@ export class Room {
             const panelTop = EDGE + Math.max(0, Math.min(free / 2, free - overlap));
             const height = lockedHeight(bodyHeight - (panel - h));
             const bodyTop = panelTop + bodyOffset;
+            const content = Math.max(this.content, Math.min(this.fills, height - pad));
             return {
                 panelTop, panelBottom: panelTop + h,
                 bodyTop, bodyBottom: bodyTop + height, bodyHeight: height,
-                scrollHeight: Math.max(height, this.content + pad),
+                scrollHeight: Math.max(height, content + pad),
             };
         }
         const { above, below } = this.shape;
