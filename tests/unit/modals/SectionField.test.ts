@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emptySectionAsk, sectionChoices, type SectionChoice } from '../../../src/modals/section/SectionDialog';
+import { emptySectionAsk, sectionChoices, type SectionAsk, type SectionChoice } from '../../../src/modals/section/SectionDialog';
 import { SectionField } from '../../../src/modals/section/SectionField';
 import { frameHeadings } from '../../../src/services/data/MarkdownFrames';
 import { FakeEl, asEl } from '../helpers/fakeDom';
@@ -13,11 +13,11 @@ import { FakeEl, asEl } from '../helpers/fakeDom';
 
 interface Candidate { choice: SectionChoice; path: string }
 
-function fieldOf() {
+function fieldOf(initial: SectionAsk = emptySectionAsk()) {
     const container = new FakeEl();
     let changes = 0;
     const field = new SectionField({ scope: {}, keymap: { pushScope() { }, popScope() { } } } as never, asEl(container), {
-        initial: emptySectionAsk(),
+        initial,
         noteChanged: () => { },
         headingChanged: () => { changes++; },
         onEnter: () => { },
@@ -69,7 +69,7 @@ describe('SectionField', () => {
         expect(f.changes()).toBe(2);
     });
 
-    it('empties the heading field by its ×, the heading picked let go, as deleting the text does', () => {
+    it('empties the heading field by its ×, naming no heading picked, as deleting the text does', () => {
         const cleared = fieldOf();
         const deleted = fieldOf();
         for (const f of [cleared, deleted]) {
@@ -84,6 +84,47 @@ describe('SectionField', () => {
         expect(cleared.field.heading()).toEqual(deleted.field.heading());
         expect(cleared.changes()).toBe(deleted.changes());
         expect(cleared.headingClear.style.display).toBe('none');
+    });
+
+    it('the text changed after a pick: no heading picked while it differs, the heading picked again once it is typed back', () => {
+        const f = fieldOf();
+        f.field.offer('A.md', sectionChoices(frameHeadings(['# One'])));
+        f.pick(f.listed('One')[0]);
+        f.headingInput.type('One 2');
+        expect(f.field.heading()).toEqual({ text: 'One 2', picked: null });
+        f.headingInput.type('One');
+        expect(f.field.heading()).toEqual({ text: 'One', picked: { path: 'A.md', line: 0 } });
+    });
+
+    it('its × then the same text typed: the heading picked again', () => {
+        const f = fieldOf();
+        f.field.offer('A.md', sectionChoices(frameHeadings(['# One'])));
+        f.pick(f.listed('One')[0]);
+        f.headingClear.press();
+        f.headingInput.type('One');
+        expect(f.field.heading()).toEqual({ text: 'One', picked: { path: 'A.md', line: 0 } });
+    });
+
+    it('another choice picked replaces the heading picked, the whole note picking none', () => {
+        const f = fieldOf();
+        f.field.offer('A.md', sectionChoices(frameHeadings(['# One', '# Two'])));
+        f.pick(f.listed('One')[0]);
+        f.pick(f.listed('Two')[0]);
+        f.headingInput.type('One');
+        expect(f.field.heading()).toEqual({ text: 'One', picked: null });
+        f.pick(f.listed('Two')[0]);
+        f.pick(f.listed()[0]);
+        f.headingInput.type('Two');
+        expect(f.field.heading()).toEqual({ text: 'Two', picked: null });
+    });
+
+    it('opens on the heading it is told, held while the text is the text it opens with', () => {
+        const f = fieldOf({ note: { text: 'A', picked: 'A.md' }, heading: { text: 'One', picked: { path: 'A.md', line: 3 } } });
+        expect(f.field.heading()).toEqual({ text: 'One', picked: { path: 'A.md', line: 3 } });
+        f.headingInput.type('On');
+        expect(f.field.heading().picked).toBeNull();
+        f.headingInput.type('One');
+        expect(f.field.heading().picked).toEqual({ path: 'A.md', line: 3 });
     });
 
     it('focuses either field with the caret after its text', () => {
