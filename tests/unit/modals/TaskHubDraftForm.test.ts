@@ -110,7 +110,8 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
     const placeEl = root.createDiv();
     const placeInput = placeEl.createEl('input');
     const pane = {
-        focus: vi.fn(() => ({ to: asEl(placeInput), selection: 'end' as const })),
+        // Its text met otherwise than a field of the form's would be by default: the pane's own say is what is seen.
+        focus: vi.fn(() => ({ to: asEl(placeInput), selection: 'all' as const })),
         setEnabled: vi.fn(),
         dispose: vi.fn(),
     };
@@ -253,6 +254,48 @@ describe('the dates of a hub on a task not written yet', () => {
         s.el('name').focus();
         s.press(s.create());
         expect(s.places.create).toHaveBeenCalledTimes(1);
+        expect(startTime(s).ownerDocument.activeElement).toBe(startTime(s));
+    });
+});
+
+describe('a create of a hub on a task not written yet pressed while its place is read', () => {
+    const startTime = (s: Awaited<ReturnType<typeof setUp>>) => s.root.findAll('tv-ctrl__text-input')
+        .find(input => input.attrs.get('aria-label') === `${t('modal.start')} — ${t('modal.time')}`)!;
+
+    /** A form whose place gave a start date, a time committed leaning on it, and the place asked again after a refusal, its answer held. */
+    async function pressedWhileRead() {
+        const s = await setUp({}, { facts: { ...FACTS, inherits: { ...FACTS.inherits, startDate: '2031-01-10' } } });
+        startTime(s).focus();
+        startTime(s).type('10:00');
+        startTime(s).enter();
+        let give: (facts: PlaceFacts) => void = () => { };
+        s.places.facts.mockImplementation(() => new Promise<PlaceFacts>(resolve => { give = resolve; }));
+        s.press(s.create());
+        await s.write({ written: false, refused: null });
+        s.el('name').focus();
+        s.el('name').type('電話');
+        s.press(s.create());
+        return { s, give: async (facts: PlaceFacts) => { give(facts); await settle(); } };
+    }
+
+    it('reads as creating and shuts the fields from the press, the name typed before it in the create', async () => {
+        const { s, give } = await pressedWhileRead();
+        expect(s.create().text).toBe(t('modal.newTask.creating'));
+        expect(s.el('name').disabled).toBe(true);
+        expect(s.places.create).toHaveBeenCalledTimes(1);
+
+        await give({ ...FACTS, inherits: { ...FACTS.inherits, startDate: '2031-01-10' } });
+        expect(s.places.create).toHaveBeenCalledTimes(2);
+        expect(s.rows[1].line).toBe('- [ ] 電話 @10:00');
+    });
+
+    it('creates nothing where the place answered breaks a rule of a date, the fields open and the focus on the date', async () => {
+        const { s, give } = await pressedWhileRead();
+        await give(FACTS);
+
+        expect(s.places.create).toHaveBeenCalledTimes(1);
+        expect(s.el('name').disabled).toBe(false);
+        expect(s.create().text).toBe(t('modal.create'));
         expect(startTime(s).ownerDocument.activeElement).toBe(startTime(s));
     });
 });
@@ -460,7 +503,7 @@ describe('the place tab of a hub on a task not written yet', () => {
 
     it('focuses the place\'s first field as the place\'s pane says, its tab chosen first', async () => {
         const s = await setUp({}, { place: true });
-        expect(s.form.focusOf('place')).toEqual({ to: asEl(s.placeInput), selection: 'end' });
+        expect(s.form.focusOf('place')).toEqual({ to: asEl(s.placeInput), selection: 'all' });
         expect(s.form.fieldElement('place')).toBe(asEl(s.placeInput));
 
         s.form.focusField('place');
@@ -491,7 +534,9 @@ describe('the place tab of a hub on a task not written yet', () => {
         // The keep of a close's question.
         s.placeInput.focus();
         expect(s.form.beforeClose()).toBe('stay');
+        const before = s.revealed.length;
         s.press(s.root.find('tv-form__cancel')!);
+        expect(s.revealed).toHaveLength(before + 1);
         expect(s.revealed.at(-1)).toEqual({ el: s.el('start'), focused: false });
         expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
     });

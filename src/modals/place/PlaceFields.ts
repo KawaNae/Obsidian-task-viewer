@@ -14,12 +14,15 @@ import { DestinationText } from '../noteops/DestinationText';
  *
  * - What the destination is, is asked of the vault whenever a field
  *   changes, and as they open (`PlaceFieldsHost.read`, the fields read as
- *   the send dialog's are: `NotePlaces.readFields`). The host is told the
- *   fields are being read at once, before the answer (`reading`), so a
- *   create asked meanwhile waits for it; and then the answer to what they
- *   hold now (`answered`): the note and where in it, or why they name no
- *   note. An answer to an asking a later one came after is not handed on.
- *   A read that fails hands on nothing.
+ *   the send dialog's are: `NotePlaces.readFields`), and at no other time.
+ *   The host is told the fields are being read at once, before the answer
+ *   (`reading`), so a create asked meanwhile waits for it; and then the
+ *   answer to what they hold now (`answered`): the note and where in it,
+ *   why they name no note, or that it could not be read (a read that
+ *   fails or throws). Each `reading` is followed by one answer to what the
+ *   fields hold then, unless a later `reading` came first: an asking a
+ *   later one came after hands on nothing, its read answered or failed,
+ *   and the later one answers. The host waits on this.
  * - The note and the heading go as they are named, a heading by the name
  *   more than once too: whether the task has one place there is the host's
  *   to find, as it reads the place.
@@ -50,16 +53,16 @@ export interface PlaceSurface {
 export interface PlaceFieldsHost {
     /** What the destination the fields name is (`NotePlaces.readFields`). */
     read(ask: DestinationAsk): Promise<NoteRead>;
-    /** The fields changed, or opened: their answer is to come. */
+    /** The fields changed, or opened: their answer is to come, without fail. */
     reading(): void;
-    /** The answer to what the fields hold now; only the answer to the last asking. */
+    /** The answer to what the fields hold now, `unread` where it could not be read; only the answer to the last asking. */
     answered(answer: PlaceAnswer): void;
 }
 
 export class PlaceFields {
     private ask: DestinationAsk;
-    /** What the destination is, as last answered: an answer is taken only to the last asking. */
-    private readonly answer = new LastAnswer<NoteRead>();
+    /** What the destination is, as last answered, null where it could not be read: an answer is taken only to the last asking. */
+    private readonly answer = new LastAnswer<NoteRead | null>();
     private disposed = false;
 
     constructor(
@@ -101,21 +104,26 @@ export class PlaceFields {
     }
 
     private async take(ask: DestinationAsk): Promise<void> {
+        if (!(await this.answer.ask(() => this.read(ask)))) return;
+        if (this.disposed) return;
+        this.surface.render(this.state());
+        this.host.answered(answerOf(this.answer.value));
+    }
+
+    /** What the destination `ask` names is; null where the read fails or throws. */
+    private async read(ask: DestinationAsk): Promise<NoteRead | null> {
         try {
-            if (!(await this.answer.ask(() => this.host.read(ask)))) return;
+            return await this.host.read(ask);
         } catch (e) {
             logWarn(`[PlaceFields] the destination could not be read: ${String(e)}`);
-            return;
+            return null;
         }
-        const read = this.answer.value;
-        if (this.disposed || !read) return;
-        this.surface.render(this.state());
-        this.host.answered(answerOf(read));
     }
 }
 
-/** What the host is told of `read`: the note and where in it, or why the fields name no note. */
-function answerOf(read: NoteRead): PlaceAnswer {
+/** What the host is told of `read`: the note and where in it, why the fields name no note, or that it could not be read. */
+function answerOf(read: NoteRead | null): PlaceAnswer {
+    if (read === null) return { kind: 'unread' };
     return read.kind === 'unnamed' || read.kind === 'ambiguous' ? read : { kind: 'to', to: read.to };
 }
 

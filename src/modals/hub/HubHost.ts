@@ -26,8 +26,9 @@ export interface HubForm {
     /**
      * Create as the create button does: the fields seen first, what is typed
      * put in, and the host's create asked (`HubDraft.create`). The host asks
-     * it again for a create that waited for its place to be read, so the
-     * fields are seen under what the place gives now.
+     * it again for a create that waited for its place to be read, the fields
+     * opened for it, so they are seen under what the place gives now: one
+     * they break takes the focus, and the host's create is not asked.
      */
     create(): void;
 }
@@ -44,12 +45,14 @@ export interface HubDraft {
      * as the place last read says.
      */
     canCreate(): boolean;
-    /** Whether a create is under way: its write not yet answered. */
+    /** Whether a create is under way: from its press until it is written or found not to be, the fields shut. */
     creating(): boolean;
     /**
      * Write the task as it stands now; asked once the form has put in what is
-     * typed. The hub closes once it is written. Asked while the place is
-     * being read, it waits, and asks the form's create again once it is read.
+     * typed. It is under way from now, and the hub closes once it is written.
+     * Asked while the place is being read, it waits, and asks the form's
+     * create again once it is read where the task can go; it ends unwritten
+     * otherwise, why said above the create.
      */
     create(): void;
     /** Whether a write now would write anything other than the task as it opened: what a close asks about throwing away. */
