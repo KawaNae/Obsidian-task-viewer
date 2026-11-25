@@ -69,6 +69,12 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
         why: 'the dialog\'s initialFocus: answers where the overlay puts its first focus, and puts none',
     },
 
+    {
+        file: 'modals/hub/TaskHubForm.ts',
+        line: 'return this.deps.place?.pane.focus() ?? null;',
+        why: 'answers where the focus goes for the place tab\'s first field (HubPane.focus answers a FieldFocus) and puts none',
+    },
+
     // A part drawn again, or the typing going on to the next field: the keyboard is up, and a wait would close it.
     {
         file: 'modals/hub/fields/TagsFieldGroup.ts',

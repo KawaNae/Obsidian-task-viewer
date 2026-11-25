@@ -66,7 +66,7 @@ const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve()
 interface MenuItem { pick: () => void }
 
 /** A form on a draft at a place that has answered, its writes held until the test answers them. */
-async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts } = {}) {
+async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts; place?: boolean } = {}) {
     const doc = new FocusDoc();
     Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
     // The panel: the form in its body, the row of buttons in its foot.
@@ -78,6 +78,7 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
     const writes: ((answer: WriteAnswer) => void)[] = [];
     const places = {
         noteOf: () => 'n.md',
+        fromDestination: () => { throw new Error('the place fields give no answer here'); },
         facts: vi.fn(() => (opts.hold ? new Promise<PlaceFacts>(resolve => { answer = () => resolve(opts.facts ?? FACTS); }) : Promise.resolve(opts.facts ?? FACTS))),
         create: vi.fn((_place: CreatePlace, row: NewRow) => {
             rows.push(row);
@@ -104,14 +105,28 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
     const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
     const host = new DraftHost(PLACE, seed, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
     const closes: CloseAnswer[] = [];
-    const form: TaskHubForm = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot), requestClose: () => { closes.push(form.beforeClose()); } });
+    // The place tab's pane beside the form's, as the panel builds them: its
+    // field, and the tab chosen for an element, told with where the focus is then.
+    const placeEl = root.createDiv();
+    const placeInput = placeEl.createEl('input');
+    const pane = {
+        focus: vi.fn(() => ({ to: asEl(placeInput), selection: 'end' as const })),
+        setEnabled: vi.fn(),
+        dispose: vi.fn(),
+    };
+    const revealed: { el: FocusEl; focused: boolean }[] = [];
+    const tabs = opts.place ? {
+        place: { el: asEl(placeEl), pane },
+        reveal: (el: Element) => { const at = el as unknown as FocusEl; revealed.push({ el: at, focused: doc.activeElement === at }); },
+    } : {};
+    const form: TaskHubForm = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot), requestClose: () => { closes.push(form.beforeClose()); }, ...tabs });
     const panel = { redrawPreview: vi.fn(), close: vi.fn() };
     host.attach(panel);
     await settle();
     const el = (field: Parameters<TaskHubForm['fieldElement']>[0]) => form.fieldElement(field) as unknown as FocusEl;
     const create = () => root.findAll('mod-cta')[0];
     return {
-        root, body, foot, host, form, panel, places, rows, closes, menus, el, create,
+        root, body, foot, host, form, panel, places, rows, closes, menus, el, create, placeInput, pane, revealed,
         write: async (written: WriteAnswer) => { writes.at(-1)!(written); await settle(); },
         answer: async () => { answer(); await settle(); },
         press: (target: FocusEl) => target.dispatchEvent(new Event('click')),
@@ -426,6 +441,68 @@ describe('a close of a hub on a task not written yet', () => {
         await s.write({ written: true });
         expect(await answer).toBe('close');
         expect(s.panel.close).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('the place tab of a hub on a task not written yet', () => {
+    const asked = (s: Awaited<ReturnType<typeof setUp>>) => s.root.find('tv-form__ask')?.text ?? '';
+
+    it('focuses the place\'s first field as the place\'s pane says, its tab chosen first', async () => {
+        const s = await setUp({}, { place: true });
+        expect(s.form.focusOf('place')).toEqual({ to: asEl(s.placeInput), selection: 'end' });
+        expect(s.form.fieldElement('place')).toBe(asEl(s.placeInput));
+
+        s.form.focusField('place');
+        expect(s.revealed).toEqual([{ el: s.placeInput, focused: false }]);
+        expect(s.placeInput.ownerDocument.activeElement).toBe(s.placeInput);
+    });
+
+    it('has no place field without a place pane', async () => {
+        const s = await setUp();
+        expect(s.form.focusOf('place')).toBeNull();
+        expect(s.form.fieldElement('place')).toBeNull();
+    });
+
+    it('chooses the tab of each field it puts the focus on before it puts it there', async () => {
+        const s = await setUp({}, { place: true });
+        s.form.focusField('name');
+        expect(s.revealed.at(-1)).toEqual({ el: s.el('name'), focused: false });
+
+        // The create, on a value that does not read.
+        s.el('start').focus();
+        s.el('start').type('not a date');
+        s.placeInput.focus();
+        s.press(s.create());
+        expect(s.places.create).not.toHaveBeenCalled();
+        expect(s.revealed.at(-1)).toEqual({ el: s.el('start'), focused: false });
+        expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
+
+        // The keep of a close's question.
+        s.placeInput.focus();
+        expect(s.form.beforeClose()).toBe('stay');
+        s.press(s.root.find('tv-form__cancel')!);
+        expect(s.revealed.at(-1)).toEqual({ el: s.el('start'), focused: false });
+        expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
+    });
+
+    it('shuts the place\'s fields with its own while a create is under way, and opens them after', async () => {
+        const s = await setUp({}, { place: true });
+        s.press(s.create());
+        expect(s.pane.setEnabled).toHaveBeenLastCalledWith(false);
+        await s.write({ written: false, refused: null });
+        expect(s.pane.setEnabled).toHaveBeenLastCalledWith(true);
+    });
+
+    it('withdraws a close\'s question as the place\'s fields are typed in', async () => {
+        const s = await setUp({}, { place: true });
+        s.el('name').focus();
+        s.el('name').type('電話');
+        expect(s.form.beforeClose()).toBe('stay');
+        expect(asked(s)).toBe(t('modal.newTask.discardAsk'));
+
+        s.placeInput.focus();
+        s.placeInput.type('n');
+        expect(asked(s)).toBe('');
     });
 });
 

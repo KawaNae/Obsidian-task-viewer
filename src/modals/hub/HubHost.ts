@@ -22,6 +22,13 @@ export interface HubForm {
     sayPlace(issues: readonly FormIssue<never>[]): void;
     /** Draw the create again as `HubHost.draft` says now: whether it may be asked, and whether one is under way. */
     showDraft(): void;
+    /**
+     * Create as the create button does: the fields seen first, what is typed
+     * put in, and the host's create asked (`HubDraft.create`). The host asks
+     * it again for a create that waited for its place to be read, so the
+     * fields are seen under what the place gives now.
+     */
+    create(): void;
 }
 
 /**
@@ -30,11 +37,19 @@ export interface HubForm {
  * was given that a close would lose.
  */
 export interface HubDraft {
-    /** Whether a create may be asked now: the place has answered, the task can go there, and none is under way. */
+    /**
+     * Whether a create may be asked now: the place has answered, the task can
+     * go there, and none is under way. While the place is being read again,
+     * as the place last read says.
+     */
     canCreate(): boolean;
     /** Whether a create is under way: its write not yet answered. */
     creating(): boolean;
-    /** Write the task as it stands now; asked once the form has put in what is typed. The hub closes once it is written. */
+    /**
+     * Write the task as it stands now; asked once the form has put in what is
+     * typed. The hub closes once it is written. Asked while the place is
+     * being read, it waits, and asks the form's create again once it is read.
+     */
     create(): void;
     /** Whether a write now would write anything other than the task as it opened: what a close asks about throwing away. */
     changed(): boolean;

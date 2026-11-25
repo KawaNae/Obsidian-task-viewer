@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { TaskHubPanel, type TaskHubDeps } from '../../../src/modals/hub/TaskHubPanel';
+import { TaskHubPanel, type HubPane, type PaneMaker, type TaskHubDeps, type TaskHubPanelOptions } from '../../../src/modals/hub/TaskHubPanel';
+import { DraftHost } from '../../../src/modals/hub/DraftHost';
 import type { PanelHost } from '../../../src/modals/hub/HubHost';
 import type { CreatePlace, CreatePlaces, PlaceFacts } from '../../../src/services/data/CreatePlaces';
 import type { SourceHost } from '../../../src/modals/hub/TaskHubSource';
@@ -22,8 +23,8 @@ import { FocusDoc, type FocusEl } from '../helpers/focusDom';
  */
 
 const { shells, forms, sources, views } = vi.hoisted(() => ({
-    shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown } | null; close(): void }[],
-    forms: [] as { host: unknown; beforeClose: ReturnType<typeof vi.fn> }[],
+    shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
+    forms: [] as { host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { bar: unknown; card: unknown; pane: unknown; foot: unknown }[],
 }));
@@ -49,9 +50,11 @@ vi.mock('../../../src/views/sharedUI/OverlayShell', () => ({
 vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
     TaskHubForm: class {
         beforeClose = vi.fn(() => 'close');
-        constructor(_el: unknown, readonly host: unknown) { forms.push(this); }
+        constructor(_el: unknown, readonly host: unknown, readonly deps: { place?: { pane: { focus(): unknown } } }) { forms.push(this); }
         fieldElement() { return null; }
         focusField() { }
+        // The place tab's first field is the place pane's, as the form answers it.
+        focusOf(field: string) { return field === 'place' ? this.deps.place?.pane.focus() ?? null : null; }
     },
 }));
 vi.mock('../../../src/modals/hub/TaskHubSource', () => ({
@@ -121,6 +124,7 @@ const places = {
         note: 'existing', seed: 'daily', heading: { kind: 'none' }, ignored: false, inherits: {},
     }),
     create: async (): Promise<WriteAnswer> => ({ written: true }),
+    fromDestination: () => PLACE,
 } as unknown as CreatePlaces;
 const PLACE: CreatePlace = { kind: 'note', note: { kind: 'daily', date: '2031-01-15' }, spot: { heading: 'Tasks', level: 2, side: 'head' } };
 
@@ -199,6 +203,79 @@ describe('the hub on a task not written yet', () => {
         shells[1].close();
         expect(shells.map(shell => shell.opts !== null)).toEqual([true, false]);
         expect(r.listeners).toHaveLength(1);
+    });
+});
+
+/**
+ * A hub on a task not written yet given a place pane, as an entry hands it
+ * (`HubShape.place`): the panel's constructor is its entries' own, so it is
+ * reached past its type here.
+ */
+function openWithPlace(r: ReturnType<typeof rig>, maker: PaneMaker, options: TaskHubPanelOptions) {
+    const host = new DraftHost(PLACE, {}, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
+    type Make = new (...args: unknown[]) => { open(): Promise<void> };
+    return new (TaskHubPanel as unknown as Make)(r.app, host, { ...r.deps, places }, options, { source: null, inert: true, turns: null, place: maker }).open();
+}
+
+/** A place pane with one field, which records what the panel tells it. */
+function placePane() {
+    const made: { el: FocusEl; input: FocusEl; pane: HubPane & { dispose: ReturnType<typeof vi.fn> } }[] = [];
+    const maker: PaneMaker = (el) => {
+        const at = el as unknown as FocusEl;
+        const input = at.createEl('input');
+        const pane = { focus: () => ({ to: input as unknown as HTMLElement, selection: 'end' as const }), setEnabled: vi.fn(), dispose: vi.fn() };
+        made.push({ el: at, input, pane });
+        return pane;
+    };
+    return { maker, made };
+}
+
+describe('the hub on a task not written yet given a place pane', () => {
+    const tabs = (r: ReturnType<typeof rig>) => r.body.find('tv-tabs')!.findAll('tv-tabs__tab');
+
+    it('puts the tabs under the card, properties and place by their keys, each over its pane', async () => {
+        const r = rig();
+        const p = placePane();
+        await openWithPlace(r, p.maker, { focusField: 'name' });
+
+        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
+        expect(r.body.classes.has('task-hub__body--tabs')).toBe(true);
+        expect(tabs(r).map(tab => tab.find('tv-tabs__label')!.text)).toEqual([t('modal.hub.tabProperties'), t('modal.hub.tabPlace')]);
+        const [properties, place] = r.body.find('tv-tabs__panes')!.children;
+        expect(properties.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__form']);
+        expect(p.made.map(m => m.el)).toEqual([place]);
+    });
+
+    it('hands the form the place pane, and the tab chosen for an element', async () => {
+        const r = rig();
+        const p = placePane();
+        await openWithPlace(r, p.maker, { focusField: 'name' });
+
+        const deps = forms[0].deps as { place: { el: unknown; pane: unknown }; reveal: (el: Element) => void };
+        expect(deps.place).toEqual({ el: p.made[0].el, pane: p.made[0].pane });
+        deps.reveal(p.made[0].input as unknown as Element);
+        expect(tabs(r).map(tab => tab.attrs.get('aria-selected'))).toEqual(['false', 'true']);
+    });
+
+    it('opens on the properties for a field of theirs, and on the place for the place\'s field, which takes the first focus', async () => {
+        const onName = rig();
+        await openWithPlace(onName, placePane().maker, { focusField: 'name' });
+        expect(tabs(onName).map(tab => tab.attrs.get('aria-selected'))).toEqual(['true', 'false']);
+        shells[0].close();
+
+        const r = rig();
+        const p = placePane();
+        await openWithPlace(r, p.maker, { focusField: 'place' });
+        expect(tabs(r).map(tab => tab.attrs.get('aria-selected'))).toEqual(['false', 'true']);
+        expect(shells.at(-1)!.opts!.initialFocus!()).toEqual({ to: p.made[0].input, selection: 'end' });
+    });
+
+    it('lets the place pane go as it closes', async () => {
+        const r = rig();
+        const p = placePane();
+        await openWithPlace(r, p.maker, { focusField: 'name' });
+        shells[0].close();
+        expect(p.made[0].pane.dispose).toHaveBeenCalledTimes(1);
     });
 });
 

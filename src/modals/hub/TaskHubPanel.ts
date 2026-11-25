@@ -16,6 +16,8 @@ import type { PanelHost } from './HubHost';
 import type { CreatePlace, CreatePlaces } from '../../services/data/CreatePlaces';
 import type { DraftSeed } from '../../services/data/TaskDraft';
 import { indentUnit } from '../../utils/ObsidianConfig';
+import type { FieldFocus } from '../../utils/FieldFocus';
+import { TabStrip } from '../../views/sharedUI/TabStrip';
 
 export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
@@ -48,6 +50,26 @@ export type HubSource = Pick<TaskHubSource, 'beforeClose' | 'yieldsEscape' | 'ta
 /** Builds the source mode in the panel's slots, once, as the hub is built. */
 export type SourceMaker = (slots: SourceSlots) => HubSource;
 
+/**
+ * What an entry builds in the place tab's pane of a hub: fields that say
+ * where the task goes, or a place shown with no field. The form shuts it
+ * with its own fields and focuses its first field (`'place'`).
+ */
+export interface HubPane {
+    /** Where the focus goes for its first field, and how its text is met there; null when it has no field. */
+    focus(): FieldFocus | null;
+    /** Its fields enabled or not, as the form's are. */
+    setEnabled(enabled: boolean): void;
+    /** The hub closed: it takes nothing more. */
+    dispose(): void;
+}
+
+/** Builds the place tab's pane in `pane`, once, as the hub is built. */
+export type PaneMaker = (pane: HTMLElement) => HubPane;
+
+/** The tabs of a hub that has a place tab. */
+type HubTab = 'properties' | 'place';
+
 /** What an entry makes of a hub besides its host. */
 interface HubShape {
     /** Builds the source mode; null, the hub has none, nor its switch. */
@@ -56,6 +78,8 @@ interface HubShape {
     inert: boolean;
     /** The hubs this one opens one at a time with; null, it opens over whatever is open. */
     turns: OneAtATime | null;
+    /** Builds the place tab's pane; null, the hub has no tabs, the form alone under the card. */
+    place: PaneMaker | null;
 }
 
 /** A hub as the hubs it opens one at a time with see it: what closing it as the user would does. */
@@ -114,6 +138,10 @@ class OneAtATime {
  * プレビューのみに縮退。ソースモードを作る関数を入口が渡したときだけ、
  * プレビューの上の切り替えで、カードの代わりに行と部分木のソースを編集
  * できる（TaskHubSource）。渡さなければ切り替えの bar も作らない。
+ * 位置の中身を作る関数（`PaneMaker`）を入口が渡したときだけ、カードの下に
+ * 「プロパティ」と「位置」のタブ（TabStrip）を置き、フォームをプロパティの
+ * 中身に、入口の作る中身を位置の中身にする。初めのタブは初めのフォーカスの
+ * 欄のタブで、フォームは欄にフォーカスを置く前にそのタブを選ぶ。
  * 殻の上の場所に題を出す。まだ書いていないタスクのハブは「新しいタスクのプロパティ」
  * （子を作るときも同じ題）、今あるタスクのハブは、どの入口から開いても
  * 「プロパティを編集」である。
@@ -148,6 +176,8 @@ export class TaskHubPanel {
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
     private source: HubSource | null = null;
+    private tabs: TabStrip<HubTab> | null = null;
+    private placePane: HubPane | null = null;
 
     /**
      * Open the hub on a row the note already has (a segment of a split task
@@ -183,7 +213,7 @@ export class TaskHubPanel {
             }, view);
             return source;
         };
-        return new TaskHubPanel(app, host, deps, options, { source: makeSource, inert: false, turns: TaskHubPanel.rowHubs }).open();
+        return new TaskHubPanel(app, host, deps, options, { source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: null }).open();
     }
 
     /**
@@ -200,7 +230,7 @@ export class TaskHubPanel {
             places: deps.places,
             scopeKeys: () => deps.plugin.settings.scopeKeys,
         });
-        return new TaskHubPanel(app, host, deps, { focusField: 'name' }, { source: null, inert: true, turns: null }).open();
+        return new TaskHubPanel(app, host, deps, { focusField: 'name' }, { source: null, inert: true, turns: null, place: null }).open();
     }
 
     private constructor(
@@ -231,7 +261,12 @@ export class TaskHubPanel {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog task-hub',
             keymap: this.app.keymap,
-            initialFocus: () => (focusField ? this.form?.focusOf(focusField) ?? null : null),
+            initialFocus: () => {
+                const focus = focusField ? this.form?.focusOf(focusField) ?? null : null;
+                // The hub is built on this field's tab; a field in another pane would take no focus.
+                if (focus) this.tabs?.reveal(focus.to as unknown as Element);
+                return focus;
+            },
             build: (bodyEl, frame) => this.buildContent(bodyEl, frame),
             onClose: () => this.teardown(),
             // The source's draft first: while the source is open the form is shut.
@@ -259,7 +294,7 @@ export class TaskHubPanel {
         const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
         this.previewEl = card;
         const pane = makeSource ? bodyEl.createDiv() : null;
-        const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
+        const formHost = this.buildTabs(bodyEl).createDiv({ cls: 'task-hub__form' });
 
         this.renderPreview();
 
@@ -275,12 +310,38 @@ export class TaskHubPanel {
                 index: this.deps.index,
                 requestClose: () => { void this.overlay.requestClose(); },
                 foot: frame.foot,
+                ...(this.tabs && this.placePane && {
+                    place: { el: this.tabs.pane('place'), pane: this.placePane },
+                    reveal: (el: Element) => { this.tabs?.reveal(el); },
+                }),
             });
         }
 
         if (makeSource && bar && pane) {
             this.source = makeSource({ bar, card, pane, foot: frame.foot, close: () => this.close() });
         }
+    }
+
+    /**
+     * The tabs under the card, the place's pane built by the entry, opened on
+     * the tab of the field the hub focuses first: where the form goes, the
+     * properties' pane. With no place pane, no tabs: the form goes in `bodyEl`.
+     */
+    private buildTabs(bodyEl: HTMLElement): HTMLElement {
+        const makePlace = this.shape.place;
+        if (!makePlace) return bodyEl;
+        bodyEl.addClass('task-hub__body--tabs');
+        const panes = bodyEl.createDiv();
+        const tabs = new TabStrip<HubTab>(bodyEl, panes, [
+            { id: 'properties', label: t('modal.hub.tabProperties'), icon: 'list' },
+            { id: 'place', label: t('modal.hub.tabPlace'), icon: 'map-pin' },
+        ], { initial: this.options.focusField === 'place' ? 'place' : 'properties' });
+        panes.addClass('tv-tabs__panes--stacked');
+        // The row of tabs goes between the card and the panes.
+        bodyEl.appendChild(panes);
+        this.tabs = tabs;
+        this.placePane = makePlace(tabs.pane('place'));
+        return tabs.pane('properties');
     }
 
     private renderPreview(): void {
@@ -321,6 +382,9 @@ export class TaskHubPanel {
         this.host.dispose();
         this.source?.dispose();
         this.source = null;
+        this.placePane?.dispose();
+        this.placePane = null;
+        this.tabs = null;
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
         this.form = null;
