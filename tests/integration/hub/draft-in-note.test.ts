@@ -1,17 +1,19 @@
 /**
  * A task created in a note the user chooses, in the running E2E vault, as a
  * user does it: a Timeline's empty space, its menu's Create Task in a Note,
- * opens the place dialog, titled as the task it creates, the note field
- * empty and the heading field on the settings' heading, its next not
- * offered until a note is named. The note and the heading typed, next opens
- * the hub on a task not written yet, holding the day pressed (and the time,
- * on the timed lane), and its create writes the line there:
+ * opens the hub on a task not written yet on its place tab, the focus on
+ * the note field, empty, the heading field on the settings' heading, the
+ * line above the create asking for a note and the create not offered. The
+ * hub holds the day pressed (and the time, on the timed lane). The note and
+ * the heading typed in the place tab, the line above the create says each
+ * time where the task goes, and the create writes the line there:
  *
  * - in a note there, under a heading there;
  * - in a note not there, by its name alone, under a heading: the note made
- *   empty with the heading, in the folder for new notes seen from no note;
+ *   empty with the heading, in the folder for new notes seen from no note,
+ *   a warning under the note field and on the line above the create;
  * - in a note there, the heading field emptied: at the note's end;
- * - the dialog cancelled: no hub opens and nothing is written.
+ * - closed with nothing given: it asks nothing and nothing is written.
  *
  * The day is far off (2031-01-22) and its daily note is not made. The
  * notes' bytes are read back from the disk.
@@ -30,12 +32,13 @@ import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { MENUS } from '../helpers/menus';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
+import { DRAFT_HUB } from '../helpers/draft-hub';
 
 const DAY = '2031-01-22';
 const DAILY = `${DAY}.md`;
 const NOTE_NAME = 'test-int-draft-in-note';
 const NOTE_FILE = `${NOTE_NAME}.md`;
-/** A note not there: named in the dialog, made by the create. */
+/** A note not there: named in the place tab, made by the create. */
 const NEW_NAME = 'test-int-draft-in-note-new';
 
 /** A heading with nothing under it, so the line goes right under it at its head or its end. */
@@ -47,67 +50,34 @@ const NOTE = [
     '',
 ].join('\n');
 
+const INFO = 'tv-form__info';
+const WARNING = 'tv-form__warning';
+
 const PRELUDE = `
-const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${DIALOG_ROWS}
-const R = (window.__tvDraftInNoteE2E ??= {});
-const shown = el => !!el && getComputedStyle(el).display !== 'none';
-const overlays = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing)')];
-/** The place dialog: the panel that is not a hub, under the place dialog's title. */
-const place = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__panel')]
-    .find(p => !p.classList.contains('task-hub') && p.querySelector('h2.tv-form__title')?.textContent === ${JSON.stringify(tr('modal.place.title'))}) ?? null;
-const fields = () => [...place().querySelectorAll('.tv-form__clearable > input')];
-const next = () => formRow(place()).querySelector(':scope > .mod-cta');
-/** The hub on a task not written yet: the hub that offers a create. */
-const draft = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .task-hub')]
-    .find(p => formRow(p)?.querySelector(':scope > .mod-cta')) ?? null;
-const nameInput = () => draft()?.querySelector('.tv-form__name-section input') ?? null;
-const rowOf = label => [...draft().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
-const start = which => rowOf(${JSON.stringify(tr('modal.start'))}).querySelector('.tv-form__field--' + which + ' input.tv-ctrl__text-input').value;
-const lineSays = () => [...draft().querySelector(':scope > .tv-overlay__foot > .task-hub__create-line .task-hub__create-says').children].map(c => c.textContent);
-/** Typed as a person types: the text, then its input event. */
-const typeIn = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 ${MENUS}
-/** Pick the item titled so in the menu open now (on macOS the menu may be the native one, outside the DOM). */
-const pick = async title => {
-    await until(() => menuTitles().includes(title), 3000, () => menuTitles().join('|'));
-    menuItem(i => i.titleEl?.textContent === title);
-};
-/** A Timeline on DAY, its leaf kept to be closed after. */
-const timeline = async () => {
-    const leaf = app.workspace.getLeaf('tab');
-    await leaf.setViewState({ type: 'timeline-view', state: { date: ${JSON.stringify(DAY)} }, active: true });
-    R.tl = leaf;
-    return leaf;
-};
-const contextAt = (el, dx, dy) => {
-    const r = el.getBoundingClientRect();
-    el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + dx, clientY: r.top + dy }));
-};
-/** The place dialog opened from the all-day lane's menu, as it opens. */
-const openFromAllDay = async () => {
-    const leaf = await timeline();
-    let cell = null;
-    await until(() => (cell = leaf.view.contentEl.querySelector('.allday-section__cell[data-date="${DAY}"]')));
-    contextAt(cell, 5, 5);
-    await pick(${JSON.stringify(tr('menu.createTaskInNote'))});
-    await until(() => place() && document.activeElement === fields()[0]);
-    return { note: fields()[0].value, heading: fields()[1].value, canNext: !next().disabled, button: next().textContent };
-};
-/** Type the note and the heading, wait for next to be offered, press it, and wait for the hub. */
-const choose = async (note, heading) => {
-    typeIn(fields()[0], note);
-    typeIn(fields()[1], heading);
-    await until(() => !next().disabled, 3000, 'next not offered for ' + note + ' / ' + heading);
-    next().click();
-    await until(() => !place() && nameInput() && document.activeElement === nameInput());
+${DRAFT_HUB}
+const start = which => dateInput(${JSON.stringify(tr('modal.start'))}, which).value;
+/** The hub as Create Task in a Note opens it: the tab chosen, the focus, the place fields, the line above the create and the create. */
+const opening = async () => {
+    await until(() => draft() && noteInput() && document.activeElement === noteInput());
     await until(() => lineSays().length > 0);
+    return {
+        tab: tabOn(),
+        focusOnNote: document.activeElement === noteInput(),
+        note: noteInput().value,
+        heading: headingInput().value,
+        line: lineSays(),
+        offered: !createButton().disabled,
+        title: [...draft().querySelectorAll('h2')].map(h => h.textContent),
+    };
 };
-/** Name the task in the hub and create it; wait for the hub to close. */
+/** Name the task in the properties tab and create it; wait for the hub to close. */
 const createNamed = async name => {
+    tab('properties').click();
     typeIn(nameInput(), name);
-    formRow(draft()).querySelector(':scope > .mod-cta').click();
+    create();
     await until(() => !draft(), 5000, () => lineSays().join('|'));
 };
 `;
@@ -121,31 +91,30 @@ function run<T>(body: string): T {
     return result as T;
 }
 
-/** Close every overlay, throwing away what a hub asks about, then the menu and the leaves the tests opened. */
-function cleanUp(): void {
-    run(`
-        for (let i = 0; i < 6 && overlays().length > 0; i++) {
-            const top = overlays().pop();
-            const discard = () => [...top.querySelectorAll('.tv-form__discard')].find(shown);
-            if (discard()) discard().click();
-            else top.querySelector('.tv-overlay__close').click();
-            await until(() => !overlays().includes(top) || discard());
-        }
-        plugin.menuPresenter.dismiss();
-        for (const name of Object.keys(R)) { R[name]?.detach(); delete R[name]; }
-        return 'ok';
-    `);
-}
-
 interface Opened {
+    tab: string;
+    focusOnNote: boolean;
     note: string;
     heading: string;
-    canNext: boolean;
-    button: string;
+    line: string[];
+    offered: boolean;
+    title: string[];
 }
 
 /** The path the note made by the name alone is at: the folder for new notes seen from no note. */
 let newPath: string | null = null;
+
+function opened(): Opened {
+    return {
+        tab: 'place',
+        focusOnNote: true,
+        note: '',
+        heading: 'Tasks',
+        line: [`${INFO}: ${tr('modal.newTask.noNote')}`],
+        offered: false,
+        title: [tr('modal.newTask.title')],
+    };
+}
 
 beforeAll(() => {
     // Focus moves need the window to have the focus.
@@ -159,7 +128,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-    cleanUp();
+    run(`await cleanUpHubs(); return 'ok';`);
     expect(run<boolean>(`return JSON.stringify(!!app.vault.getAbstractFileByPath(${JSON.stringify(DAILY)}));`)).toBe(false);
 });
 
@@ -173,26 +142,29 @@ afterAll(async () => {
 describe('a task created in a note chosen', () => {
     it('in a note there, under a heading there, from the timed lane: the day and the time pressed carried to the hub', async () => {
         await writeIndexedTestFile(NOTE_FILE, NOTE);
-        const steps = run<{ opened: Opened; start: { date: string; time: string }; expected: string; line: string[] }>(`
-            const leaf = await timeline();
+        const steps = run<{ opened: Opened; start: { date: string; time: string }; expected: string; line: string[]; under: string[] }>(`
+            const leaf = await timeline(${JSON.stringify(DAY)});
             let col = null;
             await until(() => (col = leaf.view.contentEl.querySelector('.timeline-scroll-area__day-column[data-date="${DAY}"]')));
             // Five hours after the lane's start, a pixel down: rounded to that hour.
             const hour = parseFloat(getComputedStyle(col).getPropertyValue('--hour-height'));
             const startHour = plugin.settings.startHour;
-            contextAt(col, 5, hour * 5 + 1);
+            const r = col.getBoundingClientRect();
+            col.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 5, clientY: r.top + hour * 5 + 1 }));
             await pick(${JSON.stringify(tr('menu.createTaskInNote'))});
-            await until(() => place() && document.activeElement === fields()[0]);
-            const opened = { note: fields()[0].value, heading: fields()[1].value, canNext: !next().disabled, button: next().textContent };
-            await choose(${JSON.stringify(NOTE_NAME)}, 'Work');
+            const opened = await opening();
+            await retyped(noteInput(), ${JSON.stringify(NOTE_NAME)});
+            const line = await retyped(headingInput(), 'Work');
+            const under = says(noteInput());
             const at = { date: start('date'), time: start('time') };
-            const line = lineSays();
             await createNamed('選んだノートへ');
-            return JSON.stringify({ opened, start: at, expected: String((startHour + 5) % 24).padStart(2, '0') + ':00', line });
+            return JSON.stringify({ opened, start: at, expected: String((startHour + 5) % 24).padStart(2, '0') + ':00', line, under });
         `);
-        expect(steps.opened).toEqual({ note: '', heading: 'Tasks', canNext: false, button: tr('modal.place.next') });
+        expect(steps.opened).toEqual(opened());
         expect(steps.start).toEqual({ date: DAY, time: steps.expected });
-        expect(steps.line.length).toBeGreaterThan(0);
+        expect(steps.line).toEqual([`${INFO}: ${tr('modal.newTask.toHead', { note: NOTE_FILE, heading: 'Work' })}`]);
+        // A note there is said nothing of under its field.
+        expect(steps.under).toEqual([]);
         const lines = readTestFile(NOTE_FILE).split('\n');
         const at = lines.findIndex(l => l.includes('選んだノートへ'));
         expect(lines[at - 1]).toBe('## Work');
@@ -200,15 +172,20 @@ describe('a task created in a note chosen', () => {
         expect(lines[0]).toBe('# 見出し');
     });
 
-    it('in a note not there, by its name alone, under a heading: the note made empty with the heading', () => {
-        const steps = run<{ opened: Opened; level: number }>(`
-            const opened = await openFromAllDay();
-            await choose(${JSON.stringify(NEW_NAME)}, 'Plan');
+    it('in a note not there, by its name alone, under a heading: the note made empty with the heading, warned of', () => {
+        const steps = run<{ opened: Opened; line: string[]; under: string[]; level: number }>(`
+            await fromAllDay(${JSON.stringify(DAY)}, ${JSON.stringify(tr('menu.createTaskInNote'))});
+            const opened = await opening();
+            await retyped(noteInput(), ${JSON.stringify(NEW_NAME)});
+            const line = await retyped(headingInput(), 'Plan');
+            const under = says(noteInput());
             await createNamed('新しいノートへ');
             await until(() => app.vault.getAbstractFileByPath(${JSON.stringify(newPath)}));
-            return JSON.stringify({ opened, level: plugin.settings.taskHeadingLevel });
+            return JSON.stringify({ opened, line, under, level: plugin.settings.taskHeadingLevel });
         `);
-        expect(steps.opened).toEqual({ note: '', heading: 'Tasks', canNext: false, button: tr('modal.place.next') });
+        expect(steps.opened).toEqual(opened());
+        expect(steps.line).toEqual([`${WARNING}: ${tr('modal.newTask.toNewNote', { note: newPath!, heading: 'Plan' })}`]);
+        expect(steps.under).toEqual([`${WARNING}: ${tr('modal.newTask.noteNew')}`]);
         const lines = readTestFile(newPath!).split('\n');
         expect(lines[0]).toBe(`${'#'.repeat(steps.level)} Plan`);
         expect(lines[1]).toContain('新しいノートへ');
@@ -216,30 +193,31 @@ describe('a task created in a note chosen', () => {
 
     it('in a note there, the heading field emptied: at the note\'s end', async () => {
         await writeIndexedTestFile(NOTE_FILE, NOTE);
-        run(`
-            await openFromAllDay();
-            await choose(${JSON.stringify(NOTE_NAME)}, '');
+        const line = run<string[]>(`
+            await fromAllDay(${JSON.stringify(DAY)}, ${JSON.stringify(tr('menu.createTaskInNote'))});
+            await opening();
+            await retyped(noteInput(), ${JSON.stringify(NOTE_NAME)});
+            const line = await retyped(headingInput(), '');
             await createNamed('末尾へ');
-            return 'ok';
+            return JSON.stringify(line);
         `);
+        expect(line).toEqual([`${INFO}: ${tr('modal.newTask.toNoteEnd', { note: NOTE_FILE })}`]);
         const text = readTestFile(NOTE_FILE);
         expect(text.startsWith(NOTE)).toBe(true);
         const added = text.slice(NOTE.length).split('\n').filter(l => l !== '');
         expect(added[0]).toContain('末尾へ');
     });
 
-    it('the dialog cancelled: no hub opens and nothing is written', async () => {
+    it('closed with nothing given: it asks nothing, and nothing is written', async () => {
         await writeIndexedTestFile(NOTE_FILE, NOTE);
-        const steps = run<{ hub: boolean; place: boolean }>(`
-            await openFromAllDay();
-            typeIn(fields()[0], ${JSON.stringify(NOTE_NAME)});
-            await until(() => !next().disabled);
-            formRow(place()).querySelector('.tv-form__cancel').click();
-            await until(() => !place());
-            await new Promise(r => setTimeout(r, 300));
-            return JSON.stringify({ hub: !!draft(), place: !!place() });
+        const closed = run<boolean>(`
+            await fromAllDay(${JSON.stringify(DAY)}, ${JSON.stringify(tr('menu.createTaskInNote'))});
+            await opening();
+            draft().closest('.tv-overlay').querySelector('.tv-overlay__close').click();
+            await until(() => !draft());
+            return JSON.stringify(!draft());
         `);
-        expect(steps).toEqual({ hub: false, place: false });
+        expect(closed).toBe(true);
         expect(readTestFile(NOTE_FILE)).toBe(NOTE);
     });
 });
