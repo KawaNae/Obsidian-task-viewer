@@ -701,6 +701,46 @@ describe('DraftHost moved by the place fields', () => {
     });
 });
 
+describe('DraftHost under a row', () => {
+    const CHILD: CreatePlace = { kind: 'childOf', taskId: 'parent' };
+    const UNDER: PlaceFacts = { kind: 'childOf', parent: '親', path: 'f/n.md', under: 'Work', inherits: {} };
+
+    it('shows nothing of the place until it is read, and then the parent\'s note, the heading it stands under, and the parent', async () => {
+        const r = rig({}, CHILD);
+        r.open();
+        expect(r.host.shown()).toBeNull();
+        await r.answer(UNDER);
+        expect(r.host.shown()).toEqual({ note: 'f/n.md', heading: 'Work', parent: '親' });
+    });
+
+    it('shows a parent above the note\'s first heading as under none', async () => {
+        const r = rig({}, CHILD);
+        r.open();
+        await r.answer({ ...UNDER, under: null });
+        expect(r.host.shown()).toEqual({ note: 'f/n.md', heading: null, parent: '親' });
+    });
+
+    it('shows nothing once the parent is gone, nor where the place could not be read', async () => {
+        const gone = rig({}, CHILD);
+        gone.open();
+        await gone.answer({ kind: 'gone', inherits: {} });
+        expect(gone.host.shown()).toBeNull();
+
+        const unread = rig({}, CHILD);
+        unread.places.facts.mockImplementationOnce(() => Promise.reject(new Error('unreadable')));
+        unread.open();
+        await settle();
+        expect(unread.host.shown()).toBeNull();
+    });
+
+    it('shows nothing of a place in a note', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        expect(r.host.shown()).toBeNull();
+    });
+});
+
 describe('noPlaceIssues', () => {
     it('asks for a note while the field is empty, and says why one cannot be named otherwise', () => {
         expect(noPlaceIssues(EMPTY as Extract<PlaceAnswer, { kind: 'unnamed' }>)).toEqual([{ at: 'form', tone: 'info', text: t('modal.newTask.noNote') }]);
@@ -727,7 +767,7 @@ describe('placeText', () => {
         expect(placeText(daily({ heading: { kind: 'one', heading: {} as never }, spot: { ...SECTION, side: 'end' } }))).toEqual({ text: t('modal.newTask.toEnd', vars), tone: 'info' });
         expect(placeText(daily())).toEqual({ text: t('modal.newTask.toMade', vars), tone: 'info' });
         expect(placeText(daily({ heading: { kind: 'many', count: 2 } }))).toEqual({ text: t('modal.newTask.headings', { ...vars, count: '2' }), tone: 'error' });
-        expect(placeText({ kind: 'childOf', parent: '親', inherits: {} })).toEqual({ text: t('modal.newTask.toChild', { parent: '親' }), tone: 'info' });
+        expect(placeText({ kind: 'childOf', parent: '親', path: 'n.md', under: null, inherits: {} })).toEqual({ text: t('modal.newTask.toChild', { parent: '親' }), tone: 'info' });
         expect(placeText({ kind: 'gone', inherits: {} })).toEqual({ text: t('modal.newTask.gone'), tone: 'error' });
     });
 

@@ -346,3 +346,21 @@
 .tv-form__buttons .task-hub__create-toggle.is-warning {
     color: var(--tv-text-warning);
 }
+
+/* --- A place shown with no field (PlaceShown): the rows' labels in the
+   place fields' column, each value whole in the text's color, wrapped
+   where it is long; why it cannot be changed under them */
+.task-hub__shown .tv-form__row {
+    align-items: flex-start;
+}
+
+.task-hub__shown-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--tv-text);
+    overflow-wrap: anywhere;
+}
+
+.task-hub__shown > .tv-form__says {
+    margin-top: 8px;
+}

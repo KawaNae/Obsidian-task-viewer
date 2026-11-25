@@ -53,7 +53,7 @@ const SIBLING = FileParsePipeline.parse('n.md', [
 ], DEFAULT_SETTINGS, namesOutsideIndex('n.md')).tasks[0];
 
 const PLACE: CreatePlace = { kind: 'childOf', taskId: 'parent' };
-const FACTS: PlaceFacts = { kind: 'childOf', parent: '親', inherits: SIBLING.cascadeContext!, inheritedFrom: SIBLING.inheritedFrom };
+const FACTS: PlaceFacts = { kind: 'childOf', parent: '親', path: 'n.md', under: 'h', inherits: SIBLING.cascadeContext!, inheritedFrom: SIBLING.inheritedFrom };
 
 const GONE: PlaceFacts = { kind: 'gone', inherits: {} };
 const IGNORED: PlaceFacts = {
@@ -113,6 +113,7 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
         // Its text met otherwise than a field of the form's would be by default: the pane's own say is what is seen.
         focus: vi.fn(() => ({ to: asEl(placeInput), selection: 'all' as const })),
         setEnabled: vi.fn(),
+        refresh: vi.fn(),
         dispose: vi.fn(),
     };
     const revealed: { el: FocusEl; focused: boolean }[] = [];
@@ -562,6 +563,16 @@ describe('the place tab of a hub on a task not written yet', () => {
         expect(s.pane.setEnabled).toHaveBeenLastCalledWith(false);
         await s.write({ written: false, refused: null });
         expect(s.pane.setEnabled).toHaveBeenLastCalledWith(true);
+    });
+
+    it('draws the place\'s pane again from the host as it draws its own fields: once the place is read', async () => {
+        const s = await setUp({}, { place: true, hold: true });
+        const before = s.pane.refresh.mock.calls.length;
+        await s.answer();
+        expect(s.pane.refresh.mock.calls.length).toBeGreaterThan(before);
+        const read = s.pane.refresh.mock.calls.length;
+        s.form.refresh();
+        expect(s.pane.refresh).toHaveBeenCalledTimes(read + 1);
     });
 
     it('withdraws a close\'s question as the place\'s fields are typed in', async () => {

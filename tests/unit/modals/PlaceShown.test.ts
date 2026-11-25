@@ -1,0 +1,75 @@
+import { describe, it, expect, vi } from 'vitest';
+import { t } from '../../../src/i18n';
+import { PlaceShown, type ShownPlace } from '../../../src/modals/place/PlaceShown';
+import { FocusDoc, type FocusEl } from '../helpers/focusDom';
+
+// The icon a label shows, read back from its element.
+vi.mock('obsidian', async (importOriginal) => ({
+    ...await importOriginal<typeof import('obsidian')>(),
+    setIcon: (el: FocusEl, icon: string) => { el.setAttribute('data-icon', icon); },
+}));
+
+/**
+ * The place tab's pane of a hub whose place cannot be changed (`PlaceShown`):
+ * the note, the heading and the parent task, each a row with no field, as
+ * the value it is handed says them, and why the place cannot be changed.
+ * It reads the value as it is built and again when told to.
+ */
+
+const UNDER: ShownPlace = { note: 'f/n.md', heading: 'Work', parent: '親' };
+
+function rig(first: ShownPlace | null) {
+    let now = first;
+    const pane = new FocusDoc().root();
+    const read = vi.fn(() => now);
+    const shown = new PlaceShown(pane as unknown as HTMLElement, read);
+    const rows = () => pane.findAll('tv-form__row').map(row => ({
+        icon: row.find('tv-form__label-icon')?.attrs.get('data-icon'),
+        label: row.find('tv-form__label')!.children.map(c => c.text).join(''),
+        value: row.find('task-hub__shown-value')!.text,
+    }));
+    return { pane, read, shown, rows, set: (to: ShownPlace | null) => { now = to; } };
+}
+
+describe('PlaceShown', () => {
+    it('shows the note, the heading and the parent task, each labelled as the place fields are, and why they cannot be changed', () => {
+        const r = rig(UNDER);
+        expect(r.rows()).toEqual([
+            { icon: 'file-text', label: t('modal.note'), value: 'f/n.md' },
+            { icon: 'heading', label: t('modal.heading'), value: 'Work' },
+            { icon: 'arrow-up', label: t('modal.parentTask'), value: '親' },
+        ]);
+        const says = r.pane.find('tv-form__says')!;
+        expect(says.find('tv-form__info')!.text).toBe(t('modal.newTask.childFixed'));
+    });
+
+    it('shows a parent above the note\'s first heading as under none', () => {
+        const r = rig({ ...UNDER, heading: null });
+        expect(r.rows()[1].value).toBe(t('modal.newTask.noHeading'));
+    });
+
+    it('keeps its rows with no values while there is nothing to show', () => {
+        const r = rig(null);
+        expect(r.rows().map(row => [row.label, row.value])).toEqual([[t('modal.note'), ''], [t('modal.heading'), ''], [t('modal.parentTask'), '']]);
+    });
+
+    it('reads what it shows again when refreshed, and only then', () => {
+        const r = rig(null);
+        r.set(UNDER);
+        expect(r.rows()[0].value).toBe('');
+        r.shown.refresh();
+        expect(r.rows().map(row => row.value)).toEqual(['f/n.md', 'Work', '親']);
+        r.set(null);
+        r.shown.refresh();
+        expect(r.rows().map(row => row.value)).toEqual(['', '', '']);
+        expect(r.read).toHaveBeenCalledTimes(3);
+    });
+
+    it('has no field to focus', () => {
+        const r = rig(UNDER);
+        expect(r.shown.focus()).toBeNull();
+        r.shown.setEnabled(false);
+        r.shown.dispose();
+        expect(r.rows()[0].value).toBe('f/n.md');
+    });
+});

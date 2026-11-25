@@ -56,6 +56,9 @@ export class PlacePane implements HubPane, PlaceSurface {
         this.field.setEnabled(enabled);
     }
 
+    /** Nothing to draw again: its fields hold what the user typed, and the host follows them, not they the host. */
+    refresh(): void { }
+
     dispose(): void {
         this.fields.dispose();
     }

@@ -35,7 +35,7 @@ vi.mock('obsidian', async (importOriginal) => ({
 
 const { shells, forms, sources, views, panes, paneHas } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
-    forms: [] as { host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn> }[],
+    forms: [] as { host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { bar: unknown; card: unknown; pane: unknown; foot: unknown }[],
     panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
@@ -64,11 +64,21 @@ vi.mock('../../../src/views/sharedUI/OverlayShell', () => ({
 vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
     TaskHubForm: class {
         beforeClose = vi.fn(() => 'close');
-        constructor(_el: unknown, readonly host: unknown, readonly deps: { place?: { pane: { focus(): unknown } } }) { forms.push(this); }
+        constructor(_el: unknown, readonly host: { bind(form: unknown): void }, readonly deps: { place?: { pane: { focus(): unknown; refresh(): void } } }) {
+            host.bind(this);
+            forms.push(this);
+        }
         fieldElement() { return null; }
         focusField() { }
         // The place tab's first field is the place pane's, as the form answers it.
-        focusOf(field: string) { return field === 'place' ? this.deps.place?.pane.focus() ?? null : null; }
+        focusOf = vi.fn((field: string) => (field === 'place' ? this.deps.place?.pane.focus() ?? null : null));
+        // Drawn again from the host, the place pane with the form's fields.
+        refresh() { this.deps.place?.pane.refresh(); }
+        showShut() { }
+        showDraft() { }
+        sayWrite() { }
+        sayPlace() { }
+        create() { }
     },
 }));
 vi.mock('../../../src/modals/hub/TaskHubSource', () => ({
@@ -92,6 +102,7 @@ vi.mock('../../../src/modals/place/PlacePane', () => ({
     PlacePane: class {
         readonly input: unknown;
         setEnabled = vi.fn();
+        refresh = vi.fn();
         dispose = vi.fn();
         constructor(_app: unknown, readonly el: { createEl(tag: string): unknown }, readonly opts: { initial: unknown; host: unknown }) {
             this.input = el.createEl('input');
@@ -203,7 +214,8 @@ describe('the hub on a task not written yet', () => {
         const r = rig();
         await TaskHubPanel.openDraftHub(r.app, CHILD, { content: '下書き' }, { ...r.deps, places, notePlaces });
 
-        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'task-hub__form']);
+        // The card, and under it the tabs: no switch above the card.
+        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
         expect(sources).toHaveLength(0);
         expect(forms).toHaveLength(1);
         // Drawn as it opens, and again once the place has answered.
@@ -288,12 +300,31 @@ describe('the hub on a task not written yet, its place tab', () => {
         expect(shells.at(-1)!.opts!.initialFocus!()).toBeNull();
     });
 
-    it('under a row, has no tabs: the form alone under the card', async () => {
+    it('under a row, has the tabs, its place shown with no field, and opens on the properties with the focus on the name', async () => {
         const r = rig();
         await TaskHubPanel.openDraftHub(r.app, CHILD, {}, { ...r.deps, places, notePlaces });
 
-        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'task-hub__form']);
+        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
         expect(panes).toHaveLength(0);
+        expect(selected(r)).toEqual(['true', 'false']);
+        const [, place] = r.body.find('tv-tabs__panes')!.children;
+        expect(place.find('task-hub__shown')).not.toBeNull();
+        shells.at(-1)!.opts!.initialFocus!();
+        expect(forms[0].focusOf).toHaveBeenLastCalledWith('name');
+    });
+
+    it('under a row, shows the parent\'s note, heading and text in the place tab once the place is read', async () => {
+        const r = rig();
+        let answer = (_facts: PlaceFacts) => { };
+        const facts = () => new Promise<PlaceFacts>(resolve => { answer = resolve; });
+        await TaskHubPanel.openDraftHub(r.app, CHILD, {}, { ...r.deps, places: { ...places, facts } as unknown as CreatePlaces, notePlaces });
+        const values = () => r.body.find('tv-tabs__panes')!.findAll('task-hub__shown-value').map(value => value.text);
+        expect(values()).toEqual(['', '', '']);
+
+        answer({ kind: 'childOf', parent: '親', path: 'f/n.md', under: 'Work', inherits: {} });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(values()).toEqual(['f/n.md', 'Work', '親']);
     });
 
     it('hands the form the place pane, and the tab chosen for an element', async () => {

@@ -375,6 +375,29 @@ describe('the head of a row\'s children as a place', () => {
         expect(facts.inheritedFrom).toEqual(child.inheritedFrom);
     });
 
+    it('says the parent\'s note and the heading of the section its row stands in', async () => {
+        const { session, places: p } = await places({ 'f/n.md': LINES });
+        const parent = session.index.getTasks().find(task => task.content === '親')!;
+        expect(await p.facts({ kind: 'childOf', taskId: parent.id })).toMatchObject({ kind: 'childOf', parent: '親', path: 'f/n.md', under: 'Work' });
+    });
+
+    it('says the nearest heading above a row under nested headings', async () => {
+        const { session, places: p } = await places({ 'n.md': ['# Plan', '## Week', '- [ ] 親', '## Later', '- [ ] 別', ''].join('\n') });
+        const parent = session.index.getTasks().find(task => task.content === '親')!;
+        expect(await p.facts({ kind: 'childOf', taskId: parent.id })).toMatchObject({ path: 'n.md', under: 'Week' });
+    });
+
+    it('says no heading for a row above the note\'s first heading, or in a note with none', async () => {
+        const { session, places: p } = await places({
+            'above.md': ['- [ ] 上', '## Work', '- [ ] 下', ''].join('\n'),
+            'flat.md': ['- [ ] 平ら', ''].join('\n'),
+        });
+        const row = (content: string) => session.index.getTasks().find(task => task.content === content)!;
+        expect(await p.facts({ kind: 'childOf', taskId: row('上').id })).toMatchObject({ path: 'above.md', under: null });
+        expect(await p.facts({ kind: 'childOf', taskId: row('平ら').id })).toMatchObject({ path: 'flat.md', under: null });
+        expect(await p.facts({ kind: 'childOf', taskId: row('下').id })).toMatchObject({ path: 'above.md', under: 'Work' });
+    });
+
     it('a row no longer in the index: gone', async () => {
         const { places: p } = await places({ 'n.md': LINES });
         expect(await p.facts({ kind: 'childOf', taskId: 'nothing' })).toEqual({ kind: 'gone', inherits: {} });

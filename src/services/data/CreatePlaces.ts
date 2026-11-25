@@ -70,7 +70,9 @@ export interface Inheritance {
  *   one, where the write puts the line nowhere); or at the end of the note
  *   (`heading` null). `ignored`: a note the index does not read
  *   (`tv-ignore`), where the line is not seen.
- * - `childOf`: the row the line goes under, by its text.
+ * - `childOf`: the row the line goes under, by its text (`parent`), the
+ *   note it is in (`path`), and the heading of the section it stands in
+ *   (`under`: the nearest above it; null above the note's first heading).
  * - `gone`: the row is no longer in the index.
  */
 export type PlaceFacts =
@@ -83,7 +85,7 @@ export type PlaceFacts =
         heading: HeadingLookup | null;
         ignored: boolean;
     } & Inheritance
-    | { kind: 'childOf'; parent: string } & Inheritance
+    | { kind: 'childOf'; parent: string; path: string; under: string | null } & Inheritance
     | { kind: 'gone' } & Inheritance;
 
 /** A task line as the reading takes it, put where a new line goes to find the section it lands in. */
@@ -168,8 +170,8 @@ export class CreatePlaces {
         if (place.kind === 'childOf') {
             const parent = this.getTask(place.taskId);
             if (!parent) return { kind: 'gone', inherits: {} };
-            const lines = await this.linesOf(parent.file);
-            return { kind: 'childOf', parent: parent.content, ...inheritanceAt(lines ?? [], parent.line, settings) };
+            const section = sectionAt(await this.linesOf(parent.file) ?? [], parent.line, settings);
+            return { kind: 'childOf', parent: parent.content, path: parent.file, under: section?.heading?.text ?? null, ...inheritanceOf(section) };
         }
 
         const { spot } = place;
@@ -191,7 +193,7 @@ export class CreatePlaces {
             logWarn(`[CreatePlaces] where a line goes in ${path} could not be read: ${String(e)}`);
             return { ...facts, inherits: {} };
         }
-        return { ...facts, ...inheritanceAt(working, at, settings) };
+        return { ...facts, ...inheritanceOf(sectionAt(working, at, settings)) };
     }
 
     /**
@@ -224,10 +226,10 @@ function seedFor(note: PlaceNote): NoteSeed {
     return note.kind === 'daily' ? { kind: 'daily', date: note.date } : { kind: 'empty' };
 }
 
-/** What a line standing at `row` of `lines` inherits: its section's resolved values; none in a note the index does not read. */
-function inheritanceAt(lines: readonly string[], row: number, settings: TaskViewerSettings): Inheritance {
+/** The section a line standing at `row` of `lines` is in, its values resolved; none in a note the index does not read. */
+function sectionAt(lines: readonly string[], row: number, settings: TaskViewerSettings): SectionNode | undefined {
     const read = FileParsePipeline.resolveSections(lines, settings);
-    return inheritanceOf(read ? NoteSections.at(read.root, row) : undefined);
+    return read ? NoteSections.at(read.root, row) : undefined;
 }
 
 /** What a line standing in `section` inherits, and from where, as the reading gives a row there (`NoteTasks`); none with no section. */
