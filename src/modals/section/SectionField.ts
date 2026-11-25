@@ -4,6 +4,7 @@ import { renderComplex } from '../../suggest/candidateView';
 import { ShownSuggest } from '../../suggest/ShownSuggest';
 import { createClearableInput, type ClearButton } from '../form/ClearButton';
 import { onFormEnter } from '../form/formEnter';
+import { TextPick } from '../form/TextPick';
 import { createFormRow } from '../form/formRow';
 import type { IssueSlot } from '../form/FormIssue';
 import type { FieldFocus } from '../../utils/FieldFocus';
@@ -29,8 +30,11 @@ export interface SectionFieldOptions {
  * whole note, which it shows in its place. Each field's × empties it as
  * deleting its text does (`createClearableInput`).
  *
- * The heading field holds its text and the heading picked (`HeadingAsk`):
- * the heading picked is let go once the text changes. What the note is, and which headings it has, is the form's to
+ * The heading field holds its text and the heading picked (`HeadingAsk`),
+ * as the note field holds a note: the heading is picked while the field
+ * holds the text the pick put in, typed back or not, and the text is read on
+ * its own while it differs (`TextPick`). A heading picked is of the note it
+ * was picked in, by its path, so a note named since does not take it. What the note is, and which headings it has, is the form's to
  * find out and to hand in ({@link offer}).
  */
 export class SectionField {
@@ -39,8 +43,8 @@ export class SectionField {
     private readonly headingSays: HTMLElement;
     private readonly suggest: SectionChoiceSuggest;
     private readonly headingClear: ClearButton;
-    /** The heading picked, and the text the pick put in. */
-    private picked: { path: string; line: number; text: string } | null;
+    /** The heading picked: the note it was picked in, and its line there. */
+    private readonly picked: TextPick<{ path: string; line: number }>;
 
     constructor(app: App, container: HTMLElement, opts: SectionFieldOptions) {
         this.note = new NoteField(app, container, {
@@ -57,17 +61,14 @@ export class SectionField {
         const { heading } = opts.initial;
         this.headingInput.value = heading.text;
         this.headingClear.sync();
-        this.picked = heading.picked && { ...heading.picked, text: heading.text };
-        this.headingInput.addEventListener('input', () => {
-            if (this.picked && this.headingInput.value !== this.picked.text) this.picked = null;
-            opts.headingChanged();
-        });
+        this.picked = new TextPick(heading.picked, heading.text);
+        this.headingInput.addEventListener('input', () => opts.headingChanged());
         this.suggest = new SectionChoiceSuggest(app, this.headingInput, ({ choice, path }) => {
             if (choice.kind === 'note') {
-                this.picked = null;
+                this.picked.pick(null, '');
                 this.headingInput.value = '';
             } else {
-                this.picked = { path, line: choice.heading.line, text: choice.heading.text };
+                this.picked.pick({ path, line: choice.heading.line }, choice.heading.text);
                 this.headingInput.value = choice.heading.text;
             }
             this.headingClear.sync();
@@ -83,8 +84,8 @@ export class SectionField {
 
     /** What the heading field holds now. */
     heading(): HeadingAsk {
-        const { picked } = this;
-        return { text: this.headingInput.value, picked: picked && { path: picked.path, line: picked.line } };
+        const text = this.headingInput.value;
+        return { text, picked: this.picked.of(text) };
     }
 
     /** What the heading field offers: the choices of the note at `path`, as the form found them; none while there is no note. */

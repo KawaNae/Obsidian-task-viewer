@@ -5,6 +5,7 @@ import type { FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 import { NoteSuggest } from '../../suggest/NoteSuggest';
 import { createClearableInput, type ClearButton } from '../form/ClearButton';
 import { onFormEnter } from '../form/formEnter';
+import { TextPick } from '../form/TextPick';
 import { createFormRow } from '../form/formRow';
 
 /**
@@ -38,11 +39,9 @@ export interface NoteFieldOptions {
  * picked, so that a name other notes share still names that note; a note
  * the form opens the field on is held so too, and names its path even while
  * no note is there. The note is picked while the field holds the text the
- * pick put in: while the text differs, the text is read on its own, and
- * once the text is typed back, emptied by the × and typed again or so, the
- * note is picked again, since the field says what it said as the note was
- * picked. Picking another candidate replaces it; an unresolved link picks
- * none and puts its text in, which names the note the form makes. Its ×
+ * pick put in, typed back or not, and the text is read on its own while it
+ * differs (`TextPick`). An unresolved link picks none and puts its text in,
+ * which names the note the form makes. Its ×
  * empties it as deleting the text does, the focus left in it
  * (`createClearableInput`). Which note that is, and what is said of it
  * under the row ({@link says}), is the form's to find out.
@@ -53,8 +52,8 @@ export class NoteField {
     readonly says: HTMLElement;
     private readonly suggest: NoteSuggest;
     private readonly clear: ClearButton;
-    /** The note picked last, and the text the pick put in; picked while the field holds that text. */
-    private picked: { path: string; text: string } | null;
+    /** The path of the note picked. */
+    private readonly picked: TextPick<string>;
 
     constructor(app: App, container: HTMLElement, opts: NoteFieldOptions) {
         const { row, says } = createFormRow(container, t('modal.note'), { icon: 'file-text' });
@@ -62,16 +61,16 @@ export class NoteField {
         ({ input: this.input, clear: this.clear } = createClearableInput(row, t('modal.notePlaceholder')));
         this.input.value = opts.initial.text;
         this.clear.sync();
-        this.picked = opts.initial.picked === null ? null : { path: opts.initial.picked, text: opts.initial.text };
+        this.picked = new TextPick(opts.initial.picked, opts.initial.text);
         this.input.addEventListener('input', () => opts.onChange());
         this.suggest = new NoteSuggest(app, this.input, {
             kinds: { attachments: false, aliases: true, unresolved: opts.offersUnresolved },
             pick: (candidate) => {
                 if (candidate.kind === 'unresolved') {
-                    this.picked = null;
+                    this.picked.pick(null, candidate.linkpath);
                     this.input.value = candidate.linkpath;
                 } else {
-                    this.picked = { path: candidate.file.path, text: candidate.file.basename };
+                    this.picked.pick(candidate.file.path, candidate.file.basename);
                     this.input.value = candidate.file.basename;
                 }
                 this.clear.sync();
@@ -89,6 +88,6 @@ export class NoteField {
     /** What the field holds now. */
     ask(): NoteAsk {
         const text = this.input.value;
-        return { text, picked: this.picked?.text === text ? this.picked.path : null };
+        return { text, picked: this.picked.of(text) };
     }
 }
