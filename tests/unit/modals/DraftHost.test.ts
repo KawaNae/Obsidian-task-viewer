@@ -497,7 +497,7 @@ describe('DraftHost moved by the place fields', () => {
         r.host.reading();
         r.host.create();
         // The form's second look finds a date the place's inherits now break: it asks no create.
-        vi.mocked(r.form.create).mockImplementationOnce(() => { });
+        vi.mocked(r.form.create).mockImplementationOnce(() => { r.told.push(`form create:${r.host.shut() !== null}`); });
         r.told.length = 0;
         r.host.answered(to('2031-01-15.md'));
 
@@ -506,7 +506,7 @@ describe('DraftHost moved by the place fields', () => {
         expect(r.host.creating()).toBe(false);
         expect(r.host.shut()).toBeNull();
         // The fields open before the form looks, so its focus can go to the field.
-        expect(r.told).toEqual(['draft:false:true', 'shut:false', 'draft:true:false']);
+        expect(r.told).toEqual(['draft:false:true', 'shut:false', 'form create:false', 'draft:true:false']);
     });
 
     it('makes a create that waited once the fields answer the place it is in', async () => {
@@ -597,12 +597,14 @@ describe('DraftHost moved by the place fields', () => {
         await r.answer();
         r.host.create();
         r.places.facts.mockImplementationOnce(() => Promise.reject(new Error('unreadable')));
-        await r.write({ written: false, refused: REFUSED });
         const said = r.form.place.length;
+        await r.write({ written: false, refused: REFUSED });
 
         expect(r.host.canCreate()).toBe(true);
         expect(r.form.place).toHaveLength(said);
         expect(r.host.task().file).toBe('2031-01-15.md');
+        // The create was drawn offered as the refusal opened the fields, and stays so.
+        expect(r.told.at(-1)).toBe('draft:true:false');
     });
 
     it('ends a create that waited for the place asked again after a refusal unwritten once that asking fails, saying so above it', async () => {
@@ -615,6 +617,8 @@ describe('DraftHost moved by the place fields', () => {
         await r.write({ written: false, refused: REFUSED });
         r.host.create();
         expect(r.host.creating()).toBe(true);
+        const said = r.form.place.length;
+        r.told.length = 0;
         fail(new Error('unreadable'));
         await settle();
 
@@ -622,6 +626,9 @@ describe('DraftHost moved by the place fields', () => {
         expect(r.host.creating()).toBe(false);
         expect(r.form.said.at(-1)).toBe(t('modal.newTask.unread'));
         expect(r.host.canCreate()).toBe(true);
+        // The fields open, the create is drawn offered, and what is said of the place stays as last read.
+        expect(r.told).toEqual(['shut:false', 'draft:true:false']);
+        expect(r.form.place).toHaveLength(said);
     });
 
     it('offers no create while the place it comes back to from no place is read', async () => {

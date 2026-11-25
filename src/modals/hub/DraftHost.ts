@@ -149,7 +149,11 @@ export class DraftHost implements PanelHost, HubDraft {
         return this.fieldsReading || this.settled < this.asked;
     }
 
-    /** Whether a create's write is under way: it is made once nothing is being read, and nothing read is taken then. */
+    /**
+     * Whether a create's write is under way. It is made once nothing is being
+     * read, so no asking of the place ends during it; what the fields tell
+     * then is not taken.
+     */
     private writing(): boolean {
         return this.making?.writing === true;
     }
@@ -219,7 +223,7 @@ export class DraftHost implements PanelHost, HubDraft {
      */
     private readDone(): void {
         const waited = this.making;
-        if (!waited || waited.writing || this.waiting()) return;
+        if (!waited || this.waiting()) return;
         this.making = null;
         this.form?.showShut();
         if (this.canCreate()) this.form?.create();
@@ -235,7 +239,7 @@ export class DraftHost implements PanelHost, HubDraft {
     /** End the create waiting for a read unwritten, why said above it: the read failed. */
     private dropWaiting(why: string): void {
         const waited = this.making;
-        if (!waited || waited.writing) return;
+        if (!waited) return;
         this.making = null;
         waited.end(false);
         this.form?.sayWrite(why);
@@ -311,7 +315,7 @@ export class DraftHost implements PanelHost, HubDraft {
         this.panel?.redrawPreview();
     }
 
-    /** The hub closed: no answer is taken any more, a create waiting for one ends unwritten, and a refusal that comes after is told by a notice. */
+    /** The hub closed: no answer is taken any more, a create waiting for one ends unwritten (one being written ends with the write's answer), and a refusal that comes after is told by a notice. */
     dispose(): void {
         this.closed = true;
         const waited = this.making;
@@ -339,7 +343,6 @@ export class DraftHost implements PanelHost, HubDraft {
             if (same(this.read?.of ?? null, place)) {
                 // Asked again after a refusal: what was read of it stands, but not for a create that waited on this asking.
                 this.dropWaiting(t('modal.newTask.unread'));
-                this.form?.showDraft();
                 return;
             }
             // What was read of another place says nothing of this one.
