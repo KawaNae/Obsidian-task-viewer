@@ -84,6 +84,7 @@ const copyStaticFiles = {
           '_variables.css',
           '_base.css',
           '_controls.css',
+          '_tabs.css',
           '_form.css',
           '_sidebar.css',
           '_timeline-grid.css',

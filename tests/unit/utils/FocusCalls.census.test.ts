@@ -115,6 +115,11 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
         why: 'the question a close puts: its answer that keeps, a button, takes the focus, which raises no keyboard',
     },
     {
+        file: 'views/sharedUI/TabStrip.ts',
+        line: 'this.tabs.get(id)?.button.focus();',
+        why: 'a tab gone to by the arrow keys, or chosen while the focus was in the pane it hides: its button takes the focus, which raises no keyboard',
+    },
+    {
         file: 'views/sharedUI/NativePicker.ts',
         line: 'input.focus();',
         why: 'the native picker refused (showPicker threw): the date, time or colour input is focused and clicked in the press\'s own task, the best left to open it',
