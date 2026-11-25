@@ -15,23 +15,45 @@
     padding: 8px 0;
 }
 
-/* A hub with tabs: the body a column the panes shrink in, the card and
-   the row of tabs kept whole, so a pane off ends at the body's bottom and
-   the body scrolls only for the pane chosen (tv-tabs__panes--stacked). The
-   body still scrolls whole, the card and the tabs with it. */
+/* A hub with tabs: the body a grid of the card, the row of tabs and the
+   panes, each in an area of its own, the panes' element giving no box so
+   both panes lie in one cell. A pane chosen sets the cell's least height,
+   and the cell grows to the tallest pane as far as the body has room, so
+   choosing a tab changes nothing of the panel's size. A pane off is not
+   seen and ends at the cell's bottom: the body scrolls only for the pane
+   chosen, and its bottom padding comes after it. The body still scrolls
+   whole, the card and the tabs with it. */
 .tv-overlay__body.task-hub__body--tabs {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-areas: "card" "tabs" "panes";
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
 }
 
-.task-hub__body--tabs > .task-hub__preview,
+.task-hub__body--tabs > .task-hub__preview {
+    grid-area: card;
+}
+
 .task-hub__body--tabs > .tv-tabs {
-    flex: none;
+    grid-area: tabs;
 }
 
 .task-hub__body--tabs > .tv-tabs__panes {
-    flex: 0 1 auto;
+    display: contents;
+}
+
+.task-hub__body--tabs > .tv-tabs__panes > .tv-tabs__pane {
+    grid-area: panes;
+    min-width: 0;
+    align-self: start;
+}
+
+.task-hub__body--tabs > .tv-tabs__panes > .tv-tabs__pane.is-hidden {
+    display: block;
+    visibility: hidden;
+    overflow: hidden;
     min-height: 0;
+    max-height: 100%;
 }
 
 .task-hub__preview .task-card {

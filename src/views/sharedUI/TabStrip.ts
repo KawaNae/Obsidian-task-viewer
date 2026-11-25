@@ -21,9 +21,9 @@ let built = 0;
  * A row of tabs over the panes they choose between, knowing nothing of what
  * the panes hold.
  *
- * - The row and the element of the panes are built in that order at the end
- *   of the parent; the panes' element is handed on ({@link panes}) for the
- *   place it is used in to lay the panes out.
+ * - The row and the element of the panes (`tv-tabs__panes`) are built in
+ *   that order at the end of the parent, for the stylesheet of the place it
+ *   is used in to find them there.
  * - Each tab is a `button` (`role="tab"`) naming its tab's id (`data-tab`),
  *   so a tab is found by what it is, not by the ids the strip numbers. Enter
  *   and Space choose it as a button's own keys; the arrows go to the next
@@ -47,8 +47,6 @@ export class TabStrip<K extends string> {
     private readonly tabs = new Map<K, { button: HTMLElement; pane: HTMLElement }>();
     private readonly order: K[];
     private current: K;
-    /** The element the panes are in, after the row. */
-    readonly panes: HTMLElement;
 
     /** Build at the end of `parent` the row of tabs, and after it the element of a pane for each tab. */
     constructor(parent: HTMLElement, specs: readonly TabSpec<K>[], private readonly opts: TabStripOptions<K>) {
@@ -56,7 +54,6 @@ export class TabStrip<K extends string> {
         const list = parent.createDiv({ cls: 'tv-tabs' });
         list.setAttribute('role', 'tablist');
         const panes = parent.createDiv({ cls: 'tv-tabs__panes' });
-        this.panes = panes;
         this.order = specs.map(spec => spec.id);
         for (const spec of specs) {
             const tabId = `${prefix}-tab-${spec.id}`;

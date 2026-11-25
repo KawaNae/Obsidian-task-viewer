@@ -73,10 +73,9 @@ describe('TabStrip', () => {
         expect(s.buttons[1].find('tv-tabs__icon')).toBeNull();
     });
 
-    it('builds the row and then the panes at the end of its parent, and hands on the panes\' element', () => {
+    it('builds the row and then the panes at the end of its parent', () => {
         const s = setUp();
         expect(s.root.children).toEqual([s.before, s.list, s.panes]);
-        expect(s.strip.panes).toBe(asEl(s.panes));
     });
 
     it('names each tab\'s id on its button, for a tab to be found by what it is', () => {

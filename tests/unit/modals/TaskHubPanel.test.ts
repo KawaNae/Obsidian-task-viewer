@@ -215,7 +215,7 @@ describe('the hub on a task not written yet', () => {
         await TaskHubPanel.openDraftHub(r.app, CHILD, { content: '下書き' }, { ...r.deps, places, notePlaces });
 
         // The card, and under it the tabs: no switch above the card.
-        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
+        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes']);
         expect(sources).toHaveLength(0);
         expect(forms).toHaveLength(1);
         // Drawn as it opens, and again once the place has answered.
@@ -264,7 +264,7 @@ describe('the hub on a task not written yet, its place tab', () => {
         const r = rig();
         await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
 
-        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
+        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes']);
         expect(r.body.classes.has('task-hub__body--tabs')).toBe(true);
         expect(tabs(r).map(tab => tab.find('tv-tabs__label')!.text)).toEqual([t('modal.hub.tabProperties'), t('modal.hub.tabPlace')]);
         expect(tabs(r).map(tab => tab.find('tv-tabs__icon')!.attrs.get('data-icon'))).toEqual(['list', 'map-pin']);
@@ -304,7 +304,7 @@ describe('the hub on a task not written yet, its place tab', () => {
         const r = rig();
         await TaskHubPanel.openDraftHub(r.app, CHILD, {}, { ...r.deps, places, notePlaces });
 
-        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
+        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes']);
         expect(panes).toHaveLength(0);
         expect(selected(r)).toEqual(['true', 'false']);
         const [, place] = r.body.find('tv-tabs__panes')!.children;
