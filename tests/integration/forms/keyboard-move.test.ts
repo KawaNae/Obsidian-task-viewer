@@ -76,9 +76,9 @@ const opened = async () => {
     await until(() => !panelMoving(), 3000, () => panel().getAnimations().map(a => a.animationName ?? a.transitionProperty).join(' '));
     await until(() => panel().contains(document.activeElement));
 };
-/** The text fields the body shows, top first. */
+/** The text fields the body shows, top first: none of a pane off (\`inert\`, kept laid out though not seen). */
 const fields = () => [...body().querySelectorAll('input[type="text"], input:not([type]), textarea')]
-    .filter(el => el.offsetParent !== null && !el.disabled);
+    .filter(el => el.offsetParent !== null && !el.disabled && !el.closest('[inert]'));
 /** The hub of a task not written yet, the child of the note's first row. */
 const openDraft = () => plugin.openDraftHub({ kind: 'childOf', taskId: rowNamed('名前のある行').id }, {});
 /** The hub of the row with many properties, its body holding more than it shows. */
