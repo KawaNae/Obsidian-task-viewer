@@ -18,18 +18,21 @@
  *   keyboard is up the body's height is locked and its bottom padded, and
  *   both are put back with its scroll as the keyboard goes.
  * - A field the keyboard leaves in sight (the box of a row with many
- *   properties, its first field): the body is held where it stood until the did
+ *   properties, its Details tab chosen so the body holds more than it shows,
+ *   and that tab's first field): the body is held where it stood until the did
  *   show, the browser's own scroll (made by the test, at frames along the
  *   way) written over by the next frame, and is left as it was.
- * - The user scrolling the body while the keyboard rises (a wheel on it):
+ * - The user scrolling the body while the keyboard rises (a wheel on it; the
+ *   same box and tab, their last field):
  *   the body is no longer written while the keyboard moves; once it is up,
  *   the field left hidden there has the body scrolled for it at once, and
  *   the body goes back to where the user took it as the keyboard goes.
  * - A field the keyboard hides, focused once the keyboard is up: the body is
  *   scrolled for it at once, the field 10px above the keyboard's top, by the
  *   focus alone (the caret's `selectionchange` kept from the plugin).
- * - The keyboard rising while the hub still opens (a field focused as its
- *   panel pops in on the desktop, or slides up on a phone): the body is held
+ * - The keyboard rising while the hub still opens (the last field of the same
+ *   box's Details, focused as its panel pops in on the desktop, or slides up
+ *   on a phone, so the keyboard hides the field in both): the body is held
  *   until the panel has come in, and then moves until the field is 10px
  *   above the keyboard's top.
  *
@@ -48,6 +51,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { KEYBOARD, resetKeyboard } from '../helpers/keyboard';
+import { DIALOG_ROWS } from '../helpers/dialog-rows';
 
 const TEST_FILE = 'test-int-keyboard-move.md';
 
@@ -66,6 +70,7 @@ const PRELUDE = `
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${KEYBOARD}
+${DIALOG_ROWS}
 const root = () => document.querySelector('.tv-overlay:not(.is-closing)');
 const panel = () => root()?.querySelector('.tv-overlay__panel') ?? null;
 const body = () => panel()?.querySelector('.tv-overlay__body') ?? null;
@@ -82,8 +87,10 @@ const fields = () => [...body().querySelectorAll('input[type="text"], input:not(
     .filter(el => el.offsetParent !== null && !el.disabled && !el.closest('[inert]'));
 /** The hub of a task not written yet, the child of the note's first row. */
 const openDraft = () => plugin.openDraftHub({ kind: 'childOf', taskId: rowNamed('名前のある行').id }, {});
-/** The hub of the row with many properties, its body holding more than it shows. */
+/** The hub of the row with many properties. Its properties are on its Details tab, which the body scrolls once chosen. */
 const openTall = () => plugin.openTaskHub(rowNamed('背の高い行').id);
+/** Details chosen on the hub, as a user taps its tab before a field there. */
+const chooseDetails = () => chooseHubTab(panel(), 'detail');
 /** Focus \`el\` as a tap does, the browser scrolling nothing for it. */
 const focusField = el => el.focus({ preventScroll: true });
 /** The keyboard's height that ends its top \`${BELOW_KEYBOARD}\`px above the field's bottom as it stands. */
@@ -294,6 +301,8 @@ describe('a field the keyboard hides', () => {
 
 describe('a field the keyboard leaves in sight', () => {
     interface Held {
+        /** Whether the field took the focus, its tab chosen. */
+        focused: boolean;
         k: number;
         start: number;
         before: Inline;
@@ -308,8 +317,10 @@ describe('a field the keyboard leaves in sight', () => {
         const seen = run<Held>(`
             await openTall();
             await opened();
+            chooseDetails();
             const field = fields()[0];
             focusField(field);
+            const focused = document.activeElement === field;
             const start = body().scrollTop;
             const before = inline();
             // A keyboard covering half the window leaves the first field, near the box's top, in sight.
@@ -333,8 +344,9 @@ describe('a field the keyboard leaves in sight', () => {
                     scrolled.push({ at: i, overlap: f.overlap, to: body().scrollTop });
                 },
             });
-            return JSON.stringify({ k, start, before, scrolled, show, end: body().scrollTop, up: inline() });
+            return JSON.stringify({ focused, k, start, before, scrolled, show, end: body().scrollTop, up: inline() });
         `);
+        expect(seen.focused).toBe(true);
         // The test's scroll took, at both frames.
         expect(seen.scrolled).toHaveLength(2);
         expect(seen.scrolled[0].overlap).toBeGreaterThan(0);
@@ -351,11 +363,13 @@ describe('a field the keyboard leaves in sight', () => {
 
 describe('the user scrolling the body as the keyboard rises', () => {
     it('stops the body being written, measures it from where the user took it once the keyboard is up, and goes back there as the keyboard goes', () => {
-        const seen = run<{ start: number; userAt: number | null; at: number; show: Frame[]; end: number; endField: number; back: number; hidden: number }>(`
+        const seen = run<{ focused: boolean; start: number; userAt: number | null; at: number; show: Frame[]; end: number; endField: number; back: number; hidden: number }>(`
             await openTall();
             await opened();
+            chooseDetails();
             const field = fields().slice(-1)[0];
             focusField(field);
+            const focused = document.activeElement === field;
             const start = body().scrollTop;
             const hidden = body().scrollHeight - body().clientHeight;
             const k = keyboardUnder(field);
@@ -380,8 +394,9 @@ describe('the user scrolling the body as the keyboard rises', () => {
             hideKeyboard();
             await recordFrames(root(), body(), field, 0);
             await nextFrame();
-            return JSON.stringify({ start, userAt, at, show, end, endField, back: body().scrollTop, hidden });
+            return JSON.stringify({ focused, start, userAt, at, show, end, endField, back: body().scrollTop, hidden });
         `);
+        expect(seen.focused).toBe(true);
         expect(seen.userAt).not.toBeNull();
         // Within what the body holds past what it shows, so the scroll stays as the body's height is put back.
         expect(seen.userAt!).toBeLessThanOrEqual(seen.hidden);
@@ -412,10 +427,11 @@ describe('the keyboard rising while the hub opens', () => {
         it(`${phone ? "on a phone's sheet sliding up" : "in the desktop's box popping in"}, holds the body while the panel comes in, then moves it until the field is 10px above the keyboard's top`, () => {
             const seen = run<Opening>(`
                 if (${phone}) phoneLayout();
-                openDraft();
+                openTall();
                 // Past the frames where the hub draws its body and the panel takes
                 // the focus as it opens, a field focused stays so.
                 for (let i = 0; i < 3; i++) await nextFrame();
+                chooseDetails();
                 const field = fields().slice(-1)[0];
                 focusField(field);
                 const movingAtWill = panelMoving();

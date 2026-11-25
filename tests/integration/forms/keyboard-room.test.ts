@@ -14,13 +14,14 @@
  *   32px above the keyboard), and one that puts it at 32px, and back where
  *   it stood once the keyboard goes. The box keeps its height under each.
  *   A box holding more than the window less 64px (the hub of a row with
- *   many properties) is that tall, at 32px from the top, under keyboards
- *   of any height as with none.
+ *   many properties, in a window made too low for it) is that tall, at 32px
+ *   from the top, under keyboards of any height as with none.
  * - A phone's sheet stands on the keyboard: it keeps its bottom at the
  *   window's and takes the overlap as a padding of its own, its height at
  *   most the window's less the room kept above it, 120px less the overlap
  *   and 32px at least. A sheet with much in it (the hub, the filter menu
- *   anchored to a view's toolbar) leaves max(32, 120 - K) above it; one with
+ *   anchored to a view's toolbar, the hub of the row with many properties in
+ *   the low window) leaves max(32, 120 - K) above it; one with
  *   little in it (the delete's question) is as tall as what it holds, which
  *   stands right on the keyboard.
  * - A keyboard covering 31px of the window is a keyboard as any other: the
@@ -28,7 +29,9 @@
  *
  * The heights of the window and of each overlay are read as the test runs,
  * and the keyboard's heights are made from them, so the cases hold for the
- * window the vault is opened in.
+ * window the vault is opened in. The hub is as tall as its General tab
+ * makes it, whichever tab is chosen, so a hub taller than the room it is
+ * given is made by lowering the window (600px inside), put back after.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -56,6 +59,9 @@ const NOTE = [
 
 /** The view whose toolbar's filter menu is opened, kept under this name by `openView`. */
 const VIEW = 'kr-kanban';
+
+/** The inner height a window is lowered to for a hub taller than the room the window gives it. */
+const LOW_WINDOW = 600;
 
 const PRELUDE = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -97,6 +103,18 @@ const openFilter = async () => {
     el.querySelector('.view-toolbar__btn--icon:has(svg.lucide-filter)').click();
     await until(() => root()?.querySelector('.tv-overlay__panel.filter-popover'));
     await opened();
+};
+/** The window's inner height set to \`height\`; answers what puts it back. */
+const lowWindow = async height => {
+    const win = require('electron').remote.getCurrentWindow();
+    const bounds = win.getBounds();
+    const was = innerHeight;
+    win.setBounds({ ...bounds, height: bounds.height - (innerHeight - height) });
+    await until(() => innerHeight === height, 3000, () => 'the window is ' + innerHeight + 'px high');
+    return async () => {
+        win.setBounds(bounds);
+        await until(() => innerHeight === was, 3000, () => 'the window is ' + innerHeight + 'px high');
+    };
 };
 const rectOf = el => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; };
 `;
@@ -214,28 +232,34 @@ interface TallBox {
 }
 
 /**
- * Open the overlay `open` names as the desktop's centered box and tell it
- * keyboards covering a little of the window, half of it, and nearly all of
- * it, each going before the next comes.
+ * Open the overlay `open` names as the desktop's centered box, in the
+ * window lowered to `LOW_WINDOW`, and tell it keyboards covering a little
+ * of the window, half of it, and nearly all of it, each going before the
+ * next comes.
  */
 function tallUnderKeyboards(open: keyof typeof OPEN): TallBox {
     return run<TallBox>(`
-        ${OPEN[open]()}
-        const H = innerHeight;
-        const first = rectOf(panel());
-        const body = panel().querySelector('.tv-overlay__body');
-        const hidden = body.scrollHeight - body.clientHeight;
-        const under = [];
-        for (const k of [40, Math.round(H / 2), H - 50]) {
-            showKeyboard(k);
-            await overlapSettled(root(), k);
-            const { top, height } = rectOf(panel());
-            hideKeyboard();
-            await overlapSettled(root(), 0);
-            const back = rectOf(panel());
-            under.push({ k, top, height, back: back.top, backHeight: back.height });
+        const putBack = await lowWindow(${LOW_WINDOW});
+        try {
+            ${OPEN[open]()}
+            const H = innerHeight;
+            const first = rectOf(panel());
+            const body = panel().querySelector('.tv-overlay__body');
+            const hidden = body.scrollHeight - body.clientHeight;
+            const under = [];
+            for (const k of [40, Math.round(H / 2), H - 50]) {
+                showKeyboard(k);
+                await overlapSettled(root(), k);
+                const { top, height } = rectOf(panel());
+                hideKeyboard();
+                await overlapSettled(root(), 0);
+                const back = rectOf(panel());
+                under.push({ k, top, height, back: back.top, backHeight: back.height });
+            }
+            return JSON.stringify({ H, top: first.top, h: first.height, hidden, under });
+        } finally {
+            await putBack();
         }
-        return JSON.stringify({ H, top: first.top, h: first.height, hidden, under });
     `);
 }
 
@@ -260,24 +284,30 @@ interface SheetUnder {
  * 32px left above it (100px past the room it leaves under the window's
  * height less 120px, 100px at least), `half` one half as tall as that room,
  * so it stays as tall as what it holds, or a keyboard as tall as the number
- * given.
+ * given. `low` opens it in the window lowered to `LOW_WINDOW`, put back once
+ * the sheet has been read.
  */
-function sheetUnderKeyboard(open: keyof typeof OPEN, reach: 'full' | 'half' | number): SheetUnder {
+function sheetUnderKeyboard(open: keyof typeof OPEN, reach: 'full' | 'half' | number, low = false): SheetUnder {
     return run<SheetUnder>(`
-        phoneLayout();
-        ${OPEN[open]()}
-        const H = innerHeight;
-        const footPad = () => { const foot = panel().querySelector('.tv-overlay__foot'); return foot ? parseFloat(getComputedStyle(foot).paddingBottom) : null; };
-        const first = rectOf(panel());
-        const footFirst = footPad();
-        const room = H - 120 - first.height;
-        const reach = ${JSON.stringify(reach)};
-        const k = reach === 'full' ? Math.max(100, Math.round(room + 100)) : reach === 'half' ? Math.round(room / 2) : reach;
-        showKeyboard(k);
-        await overlapSettled(root(), k);
-        const under = rectOf(panel());
-        const contentsBottom = under.bottom - parseFloat(getComputedStyle(panel()).paddingBottom);
-        return JSON.stringify({ H, first, k, under, contentsBottom, foot: { first: footFirst, under: footPad() } });
+        const putBack = ${low} ? await lowWindow(${LOW_WINDOW}) : null;
+        try {
+            phoneLayout();
+            ${OPEN[open]()}
+            const H = innerHeight;
+            const footPad = () => { const foot = panel().querySelector('.tv-overlay__foot'); return foot ? parseFloat(getComputedStyle(foot).paddingBottom) : null; };
+            const first = rectOf(panel());
+            const footFirst = footPad();
+            const room = H - 120 - first.height;
+            const reach = ${JSON.stringify(reach)};
+            const k = reach === 'full' ? Math.max(100, Math.round(room + 100)) : reach === 'half' ? Math.round(room / 2) : reach;
+            showKeyboard(k);
+            await overlapSettled(root(), k);
+            const under = rectOf(panel());
+            const contentsBottom = under.bottom - parseFloat(getComputedStyle(panel()).paddingBottom);
+            return JSON.stringify({ H, first, k, under, contentsBottom, foot: { first: footFirst, under: footPad() } });
+        } finally {
+            await putBack?.();
+        }
     `);
 }
 
@@ -310,8 +340,8 @@ describe("the desktop's centered box stays in the window's middle and rises only
         expectBoxUnderKeyboards(seen);
     });
 
-    it('a tall box (the hub)', () => {
-        const seen = underKeyboards('hub');
+    it('a tall box (the hub of a row with many properties)', () => {
+        const seen = underKeyboards('tallHub');
         expect(seen.h).toBeGreaterThan(seen.H / 2);
         // Room enough under the hub for the three keyboards to differ.
         expect(seen.H - 64 - seen.h).toBeGreaterThan(80);
@@ -320,6 +350,7 @@ describe("the desktop's centered box stays in the window's middle and rises only
 
     it('a box holding more than the window less 64px (the hub of a row with many properties) keeps that height at 32px from the top', () => {
         const seen = tallUnderKeyboards('tallHub');
+        expect(seen.H).toBe(LOW_WINDOW);
         // With no keyboard it is as tall as the window less the 32px kept
         // above and below it, its body scrolling what it holds past that.
         expect(seen.hidden).toBeGreaterThan(0);
@@ -352,7 +383,8 @@ describe("a phone's sheet stands on the keyboard, the room above it giving way t
     });
 
     it('a hub taller than the window less 120px leaves 120px less the overlap above it under a low keyboard', () => {
-        const seen = sheetUnderKeyboard('tallHub', 56);
+        const seen = sheetUnderKeyboard('tallHub', 56, true);
+        expect(seen.H).toBe(LOW_WINDOW);
         // With no keyboard it stands at its greatest height, 120px left above it.
         expect(seen.first.top).toBeCloseTo(120, 0);
         expect(seen.under.top).toBeCloseTo(roomAbove(seen.k), 0);
