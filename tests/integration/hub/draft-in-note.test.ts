@@ -54,9 +54,9 @@ ${DIALOG_ROWS}
 const R = (window.__tvDraftInNoteE2E ??= {});
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
 const overlays = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing)')];
-/** The place dialog: the panel that is not a hub, titled as the task it creates. */
+/** The place dialog: the panel that is not a hub, under the place dialog's title. */
 const place = () => [...document.querySelectorAll('.tv-overlay:not(.is-closing) .tv-overlay__panel')]
-    .find(p => !p.classList.contains('task-hub') && p.querySelector('h2.tv-form__title')?.textContent === ${JSON.stringify(tr('modal.newTask.title'))}) ?? null;
+    .find(p => !p.classList.contains('task-hub') && p.querySelector('h2.tv-form__title')?.textContent === ${JSON.stringify(tr('modal.place.title'))}) ?? null;
 const fields = () => [...place().querySelectorAll('.tv-form__clearable > input')];
 const next = () => formRow(place()).querySelector(':scope > .mod-cta');
 /** The hub on a task not written yet: the hub that offers a create. */

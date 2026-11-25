@@ -46,7 +46,7 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * G5: 破壊的変更 — Open in Editor / Send to Note | Delete
+     * G5: 破壊的変更 — Open in Editor / Change Task Location | Delete
      * 行を消す Delete だけを、区切り線で前の2つから分ける。
      * onDestructive が渡されているとき各アクション実行後に invoke する。
      */
@@ -120,8 +120,8 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * "Send to Note": the row and its subtree, sent to a note the dialog
-     * names (`SendModal`). It opens on the row as the disk holds it
+     * "Change Task Location": the row and its subtree, sent to a note the
+     * dialog names (`SendModal`). It opens on the row as the disk holds it
      * (`NoteOps.previewSend`), and not when the row is not the one there,
      * which the user is told. The row leaves where it stood once it went,
      * all of it or some (`onDestructive`); a send not made keeps the dialog

@@ -112,17 +112,17 @@ function withAttr(el: FakeEl, name: string, value: string): FakeEl | null {
 const settle = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
 describe('PlaceModal', () => {
-    it('to make a task, the hub\'s title in the head, and cancel and next in the foot', () => {
+    it('to make a task, the place dialog\'s title in the head, and cancel and next in the foot', () => {
         const h = setUp({ purpose: 'create' });
 
-        expect(h.shell.head.textContent).toBe(t('modal.newTask.title'));
+        expect(h.shell.head.textContent).toBe(t('modal.place.title'));
         expect(h.buttons().map(b => b.text)).toEqual([t('modal.cancel'), t('modal.place.next')]);
     });
 
-    it('to move a task to make, the change title, and cancel and change', () => {
+    it('to move a task to make, the same title, and cancel and change', () => {
         const h = setUp({ purpose: 'move' });
 
-        expect(h.shell.head.textContent).toBe(t('modal.place.moveTitle'));
+        expect(h.shell.head.textContent).toBe(t('modal.place.title'));
         expect(h.buttons().map(b => b.text)).toEqual([t('modal.cancel'), t('modal.place.move')]);
     });
 

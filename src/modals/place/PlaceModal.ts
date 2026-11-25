@@ -14,9 +14,10 @@ export interface PlaceOptions {
     /** The fields as they open: the note, and the heading (empty for the note's end). */
     initial: DestinationAsk;
     /**
-     * What it is opened for, which the title and the button say: a task to
-     * make, the hub of which comes next (`create`: the hub's own title, and
-     * next), or the hub of a task to make moving it (`move`: change).
+     * What it is opened for, which the button says: a task to make, the
+     * hub of which comes next (`create`: next), or the hub of a task to make
+     * moving it (`move`: change). The title is the same for both, the task
+     * being new either way.
      */
     purpose: 'create' | 'move';
     /**
@@ -85,7 +86,7 @@ export class PlaceModal implements PlaceSurface {
     private build(bodyEl: HTMLElement, frame: OverlayFrame): void {
         const creating = this.opts.purpose === 'create';
         bodyEl.addClass('tv-form');
-        frame.head.createEl('h2', { text: creating ? t('modal.newTask.title') : t('modal.place.moveTitle'), cls: 'tv-form__title' });
+        frame.head.createEl('h2', { text: t('modal.place.title'), cls: 'tv-form__title' });
 
         const group = bodyEl.createDiv({ cls: 'tv-form__group' });
         this.field = new DestinationField(this.app, group, {
