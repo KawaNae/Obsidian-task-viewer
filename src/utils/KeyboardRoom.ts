@@ -149,32 +149,39 @@ interface Room {
     pad: number;
 }
 
-/** Where the body comes to rest: its scrollTop and its room, and what the field lacked of it (0 where it is left). */
+/** Where the body comes to rest: its scrollTop and its room, what the field lacked of it (0 where it is left), and the scrollTop that was reckoned from. */
 interface Rest extends Room {
+    from: number;
     top: number;
     lack: number;
 }
 
+/** How the body scrolls with a room, as the layout reads it. */
+interface Scroll {
+    /** How far it scrolls. */
+    range(): number;
+    /** The padding, at least the room's, that lets it scroll to `top` with its height locked, and how far it then scrolls. */
+    padFor(top: number): { pad: number; range: number };
+}
+
 /**
  * Where the body comes to rest under `place`, measured once as at rest
- * from the body scrolled to `from` with `room`, `range` being how far it
- * scrolls so (`from` within it). A field lacking more than a pixel has the
- * body scrolled by what it lacks; where the keyboard covers the body's
- * bottom, its height is locked and its bottom padded by what it lacks of
- * the scroll room (less than a pixel is left: the browser gives the scroll
- * room in whole px), else the body goes as far as it scrolls. Otherwise the
- * body is left at `from` with `room`.
+ * from the body scrolled to `ref` with `room` (within how far it scrolls
+ * so). A field lacking more than a pixel has the body scrolled by what it
+ * lacks; where the keyboard covers the body's bottom, its height is locked
+ * and its bottom padded as far as it needs to scroll there, as `scroll`
+ * reads it (less than a pixel is left: the browser gives the scroll room in
+ * whole px), else the body goes as far as it scrolls. Otherwise the body is
+ * left where it was reckoned from, with `room`.
  */
-function restOf(place: Place, from: number, room: Room, range: number): Rest {
+function restOf(place: Place, ref: number, room: Room, scroll: Scroll): Rest {
+    const range = scroll.range();
+    const from = Math.min(Math.max(0, ref), range);
     const need = lack(place, from);
-    if (need <= REST_SLACK) return { top: from, lack: 0, ...room };
-    let { locked, pad } = room;
-    if (covered(place)) {
-        locked = true;
-        const short = from + need - range;
-        if (short >= 1) pad += short;
-    }
-    return { top: Math.min(from + need, range + pad - room.pad), lack: need, locked, pad };
+    if (need <= REST_SLACK) return { from, top: from, lack: 0, ...room };
+    if (!covered(place)) return { from, top: Math.min(from + need, range), lack: need, ...room };
+    const fit = scroll.padFor(from + need);
+    return { from, top: Math.min(from + need, fit.range), lack: need, locked: true, pad: fit.pad };
 }
 
 /**
@@ -195,7 +202,9 @@ function restOf(place: Place, from: number, room: Room, range: number): Rest {
  * keyboard's top and the body's visible bottom has the body scrolled by
  * what it lacks, and where the keyboard covers the body's bottom (a box
  * taller than the room above the keyboard), the body's height is locked
- * as it stands, and its bottom padded by what it lacks of the scroll room.
+ * as it stands, and its bottom padded as far as it needs to scroll there,
+ * the range read after each padding written (`RoomLayout.padFor`): a
+ * content laid out by the body's height may give way to the padding.
  * It does not hang on what came while the keyboard rose, but where the user
  * scrolled the body meanwhile: that is where it is measured from.
  *
@@ -462,9 +471,8 @@ export class KeyboardRoom {
         }
 
         const { now, rest } = read;
-        const range = Math.max(0, rest.scrollRange - this.extraPad + roomBefore.pad);
-        const from = Math.min(Math.max(0, ref), range);
-        const end = restOf(rest, from, roomBefore, range);
+        const end = restOf(rest, ref, roomBefore, this.scroll(rest, roomBefore));
+        const from = end.from;
         this.setRoom({ locked: end.locked || this.layout.locked(), pad: Math.max(end.pad, this.extraPad) }, rest.bodyHeight);
         if (end.lack > 0) {
             this.returnTo ??= from;
@@ -485,6 +493,20 @@ export class KeyboardRoom {
     /** The body's lock and padding as they stand. */
     private room(): Room {
         return { locked: this.layout.locked(), pad: this.extraPad };
+    }
+
+    /**
+     * How the body scrolls with `room`, read from the layout: a locked body
+     * is read padded as `room` pads it, and one not locked as `place` read
+     * it; locked to pad, at the height `place` read.
+     */
+    private scroll(place: Place, room: Room): Scroll {
+        return {
+            range: () => this.layout.locked()
+                ? this.layout.padFor(0, room.pad, place.bodyHeight).range
+                : place.scrollRange,
+            padFor: (top) => this.layout.padFor(top, room.pad, place.bodyHeight),
+        };
     }
 
     /** Give the body `room`: locked at `height` where it is not yet, and padded; or let go. */
@@ -681,7 +703,7 @@ export class KeyboardRoom {
         const field = this.activeField();
         if (!field) return;
         const place = this.layout.read(field, this.layout.writtenOverlap());
-        const end = restOf(place, place.scrollTop, this.room(), place.scrollRange);
+        const end = restOf(place, place.scrollTop, this.room(), this.scroll(place, this.room()));
         if (end.lack === 0) return;
         this.returnTo ??= place.scrollTop;
         this.setRoom(end, place.bodyHeight);

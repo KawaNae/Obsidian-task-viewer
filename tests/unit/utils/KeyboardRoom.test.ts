@@ -113,6 +113,33 @@ describe('the body along the keyboard rising', () => {
         });
     }
 
+    it('rises along with the keyboard to the field 10px above it where the content gives way to the padding, and goes back', async () => {
+        // The content gives way to the padding until it ends at 430 (BodyOverKeyboard.test.ts):
+        // the field at 420 lacks 22 under 300, and the body is padded as far as it scrolls so.
+        const room = makeRoom({ shape: BOX, content: 430, fills: 478, padding: 12 });
+        const field = room.field(420);
+        room.focus(field);
+        room.mount();
+        const start = room.bottomOf(field);
+        const seen = watch(room, field);
+
+        room.iPadShow(K);
+        await room.settle();
+
+        expect(seen.length).toBeGreaterThan(10);
+        expect(nonDecreasing(seen.map((s) => s.scrollTop))).toBe(true);
+        for (const s of seen) expect(s.field).toBeLessThanOrEqual(Math.max(start, s.edge - 10) + 1);
+        expect(seen.some((s) => s.scrollTop > 0 && s.scrollTop < 22)).toBe(true);
+        expect(room.scrollTop).toBe(22);
+        expect(room.bottomOf(field)).toBe(490);
+
+        room.iPadHide();
+        await room.settle();
+
+        expect(room.scrollTop).toBe(0);
+        expect(room.inline()).toEqual(NONE);
+    });
+
     it('asks for no frame once the keyboard is up and at rest, nor once it has gone', async () => {
         const { room } = focused(BOX, 450);
         room.iPadShow(K);

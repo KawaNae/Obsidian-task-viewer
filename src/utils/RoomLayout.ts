@@ -125,8 +125,57 @@ export class RoomLayout {
             bodyBottom: rect.bottom,
             bodyHeight: rect.height,
             scrollTop,
-            scrollRange: Math.max(0, (body.scrollHeight - body.clientHeight) || 0),
+            scrollRange: this.range(),
         };
+    }
+
+    /** How far the body scrolls as it is laid out now: its scrollHeight less its clientHeight. */
+    private range(): number {
+        return Math.max(0, (this.body.scrollHeight - this.body.clientHeight) || 0);
+    }
+
+    /**
+     * The padding the body needs to scroll to `top`, at least `least` px
+     * past the stylesheet's, with its height locked as it is, or at
+     * `height` where it is not; and how far it then scrolls. The padding
+     * is written and the range read after each write: a padding does not
+     * lengthen the range by as much where the content gives way to it (a
+     * part cut to the room left above the padding grows shorter by as much,
+     * until it is cut to nothing more). The body's height, padding and
+     * scrollTop are given back as they were.
+     *
+     * Each write adds what the range still lacks, or twice the last step
+     * where that step lengthened it by nothing, the content having given way
+     * to it all. What gives way stands in the body's room, so it gives at
+     * most the body's height: the padding goes no further than what was
+     * lacking at `least` and that height, past which no layout lengthens
+     * the range by more, and where it still lacks then, the body is given
+     * that padding and scrolls as far as it does.
+     */
+    padFor(top: number, least: number, height: number): { pad: number; range: number } {
+        const locked = this.saved !== null;
+        const written = this.body.style.paddingBottom;
+        const scrollTop = this.body.scrollTop;
+        if (!locked) this.lock(height);
+        try {
+            let pad = least;
+            this.pad(pad);
+            let range = this.range();
+            const most = pad + Math.max(0, top - range) + this.body.clientHeight;
+            let step = top - range;
+            while (top - range >= 1 && pad < most) {
+                const before = range;
+                pad = Math.min(most, pad + step);
+                this.pad(pad);
+                range = this.range();
+                step = range - before < 1 ? step * 2 : top - range;
+            }
+            return { pad, range };
+        } finally {
+            if (locked) this.body.style.paddingBottom = written;
+            else this.release();
+            if (this.body.scrollTop !== scrollTop) this.scrollTop = scrollTop;
+        }
     }
 
     get scrollTop(): number {
