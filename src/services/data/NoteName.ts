@@ -29,15 +29,15 @@ export type NameCheck =
 /**
  * What a note field holds (see `NoteField`, in the send dialog, the section
  * dialog and the place dialog): the text typed, and the note it names by its
- * path, while the text is what put it there: a candidate picked from the
- * field's list, or the form that opened the field on a note.
+ * path, while the text is the text that put it there: a candidate picked
+ * from the field's list, or the form that opened the field on a note.
  */
 export interface NoteAsk {
     text: string;
     /**
      * The path of the note picked, or of the note the field was opened on,
-     * which may not be made yet; null when there is none, or the text
-     * changed since.
+     * which may not be made yet; null when there is none, or while the text
+     * is not the text it put in.
      */
     picked: string | null;
 }
