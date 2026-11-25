@@ -8,7 +8,8 @@
  * in keyboard-room.test.ts and the unit tests.
  *
  * - A phone's sheet, its field hidden by the keyboard (the hub of a task not
- *   written yet, its lowest field): the body rises with the keyboard over
+ *   written yet, its lowest field, the body first scrolled until the field
+ *   shows, as a user does to press it): the body rises with the keyboard over
  *   many frames, never jumping in one, the field never below 10px above the
  *   keyboard's top or the body's bottom, the higher of the two, and resting
  *   there; it goes back the same way as the keyboard goes.
@@ -122,6 +123,8 @@ interface Inline {
 interface Rise {
     /** The keyboard's height told. */
     k: number;
+    /** How far above the body's bottom the field's bottom stands as it is focused. */
+    shown: number;
     /** The body's scrollTop and what is written on it inline, before the keyboard, once it is up, and once it has gone. */
     start: number;
     before: Inline;
@@ -143,6 +146,13 @@ function riseOverLowField(open: 'openDraft()', phone: boolean): Rise {
         ${open};
         await opened();
         const field = fields().slice(-1)[0];
+        // The body scrolled until the field shows, as a user does to press it.
+        const hidden = field.getBoundingClientRect().bottom - (body().getBoundingClientRect().bottom - 10);
+        if (hidden > 0) {
+            body().scrollTop += Math.ceil(hidden);
+            await nextFrame();
+        }
+        const shown = body().getBoundingClientRect().bottom - field.getBoundingClientRect().bottom;
         focusField(field);
         const start = body().scrollTop;
         const before = inline();
@@ -154,7 +164,7 @@ function riseOverLowField(open: 'openDraft()', phone: boolean): Rise {
         const hide = await recordFrames(root(), body(), field, 0);
         // The frame the plugin puts the body back at has run before the last recorded.
         await nextFrame();
-        return JSON.stringify({ k, start, before, up, end, after: inline(), show, hide });
+        return JSON.stringify({ k, shown, start, before, up, end, after: inline(), show, hide });
     `);
 }
 
@@ -201,6 +211,8 @@ afterAll(async () => {
 describe('a field the keyboard hides', () => {
     it("on a phone's sheet, the body rises with the keyboard over many frames, the field never below 10px above the keyboard's top or the body's bottom, and goes back the same way", () => {
         const seen = riseOverLowField('openDraft()', true);
+        // The field shows as it is focused, 10px above the body's bottom at least.
+        expect(seen.shown).toBeGreaterThanOrEqual(10);
         // The keyboard hides the field by more than a little.
         expect(seen.end - seen.start).toBeGreaterThan(50);
 
@@ -219,6 +231,7 @@ describe('a field the keyboard hides', () => {
 
     it("in the desktop's tall box, the field stays until the keyboard's top comes to it and then rides 10px above it, the body's height locked and padded until the keyboard has gone", () => {
         const seen = riseOverLowField('openDraft()', false);
+        expect(seen.shown).toBeGreaterThanOrEqual(10);
         expect(seen.end - seen.start).toBeGreaterThan(50);
 
         const tops = seen.show.map((f) => f.scrollTop);
