@@ -588,19 +588,23 @@ describe('the send dialog\'s note field', () => {
         expect(lines(`${DIR}/a/同名.md`)).not.toContain(ROW);
     });
 
-    it('a pick let go once the text changes: the text read on its own again', async () => {
+    it('a pick let go while the text differs, the text read on its own, and taken again once its text is typed back', async () => {
         await openOnRow();
-        const s = onDialog<DialogState>(`
+        const picked = tr('modal.destination.noteExisting', { note: `${DIR}/a/同名.md` });
+        const s = onDialog<{ differs: DialogState; back: DialogState }>(`
             await pickFrom(0, '同名', '同名', ${JSON.stringify(`${DIR}/a/`)});
             await until(() => state().canSend);
             typeIn(inputs()[0], '同名x');
+            await until(() => state().noteSays?.includes('同名x'));
+            const differs = state();
             typeIn(inputs()[0], '同名');
             document.activeElement?.blur();
-            await until(() => state().noteErrors);
-            return JSON.stringify(state());
+            await until(() => state().noteSays === ${JSON.stringify(picked)});
+            return JSON.stringify({ differs, back: state() });
         `);
-        expect(s.canSend).toBe(false);
-        expect(s.noteErrors).toBe(ambiguous());
+        // Two notes go by the name: read on its own it would name neither, so the note named is the one picked.
+        expect(s.differs.noteSays).not.toBe(picked);
+        expect(s.back).toMatchObject({ note: '同名', noteSays: picked, noteErrors: null, canSend: true });
     });
 
     it('a path whose folder is not there: the note and the folder made, and the row goes to it', async () => {
