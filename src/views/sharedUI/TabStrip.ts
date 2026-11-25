@@ -21,11 +21,16 @@ let built = 0;
  * A row of tabs over the panes they choose between, knowing nothing of what
  * the panes hold.
  *
- * - Each tab is a `button` (`role="tab"`), so Enter and Space choose it as a
- *   button's own keys; the arrows go to the next and the previous tab,
- *   round at the ends, Home and End to the first and the last, choosing it
- *   and moving the focus to its button. The tab chosen alone is in the Tab
- *   order (`tabindex`), so Tab goes from it into its pane.
+ * - The row and the element of the panes are built in that order at the end
+ *   of the parent; the panes' element is handed on ({@link panes}) for the
+ *   place it is used in to lay the panes out.
+ * - Each tab is a `button` (`role="tab"`) naming its tab's id (`data-tab`),
+ *   so a tab is found by what it is, not by the ids the strip numbers. Enter
+ *   and Space choose it as a button's own keys; the arrows go to the next
+ *   and the previous tab, round at the ends, Home and End to the first and
+ *   the last, choosing it and moving the focus to its button. The tab
+ *   chosen alone is in the Tab order (`tabindex`), so Tab goes from it into
+ *   its pane.
  * - Every pane is built once and kept: what was typed in one stays as
  *   another is chosen. The panes not chosen are marked off, `inert` (out of
  *   the Tab order and of what assistive technology reads, their fields
@@ -42,20 +47,23 @@ export class TabStrip<K extends string> {
     private readonly tabs = new Map<K, { button: HTMLElement; pane: HTMLElement }>();
     private readonly order: K[];
     private current: K;
+    /** The element the panes are in, after the row. */
+    readonly panes: HTMLElement;
 
-    /** Build the row of tabs in `bar`, and in `panes` a pane for each tab. */
-    constructor(bar: HTMLElement, panes: HTMLElement, specs: readonly TabSpec<K>[], private readonly opts: TabStripOptions<K>) {
+    /** Build at the end of `parent` the row of tabs, and after it the element of a pane for each tab. */
+    constructor(parent: HTMLElement, specs: readonly TabSpec<K>[], private readonly opts: TabStripOptions<K>) {
         const prefix = `tv-tabs-${++built}`;
-        const list = bar.createDiv({ cls: 'tv-tabs' });
+        const list = parent.createDiv({ cls: 'tv-tabs' });
         list.setAttribute('role', 'tablist');
-        panes.addClass('tv-tabs__panes');
+        const panes = parent.createDiv({ cls: 'tv-tabs__panes' });
+        this.panes = panes;
         this.order = specs.map(spec => spec.id);
         for (const spec of specs) {
             const tabId = `${prefix}-tab-${spec.id}`;
             const paneId = `${prefix}-pane-${spec.id}`;
             const button = list.createEl('button', {
                 cls: 'tv-tabs__tab',
-                attr: { type: 'button', role: 'tab', id: tabId, 'aria-controls': paneId },
+                attr: { type: 'button', role: 'tab', id: tabId, 'aria-controls': paneId, 'data-tab': spec.id },
             });
             if (spec.icon) setIcon(button.createSpan({ cls: 'tv-tabs__icon' }), spec.icon);
             button.createSpan({ cls: 'tv-tabs__label', text: spec.label });

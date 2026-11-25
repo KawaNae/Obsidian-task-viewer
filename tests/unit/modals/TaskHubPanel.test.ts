@@ -27,12 +27,20 @@ import { FocusDoc, type FocusEl } from '../helpers/focusDom';
  * stand-in index and stand-in places.
  */
 
-const { shells, forms, sources, views, panes } = vi.hoisted(() => ({
+// The icon a tab shows, read back from its element.
+vi.mock('obsidian', async (importOriginal) => ({
+    ...await importOriginal<typeof import('obsidian')>(),
+    setIcon: (el: FocusEl, icon: string) => { el.setAttribute('data-icon', icon); },
+}));
+
+const { shells, forms, sources, views, panes, paneHas } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
     forms: [] as { host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { bar: unknown; card: unknown; pane: unknown; foot: unknown }[],
     panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
+    /** Whether the place pane built next has a field: one shown with none focuses nothing. */
+    paneHas: { field: true },
 }));
 const body = { current: null as FocusEl | null, head: null as FocusEl | null, foot: null as FocusEl | null };
 
@@ -89,7 +97,7 @@ vi.mock('../../../src/modals/place/PlacePane', () => ({
             this.input = el.createEl('input');
             panes.push(this);
         }
-        focus() { return { to: this.input, selection: 'end' }; }
+        focus() { return paneHas.field ? { to: this.input, selection: 'end' } : null; }
     },
 }));
 
@@ -100,6 +108,7 @@ afterEach(() => {
     sources.length = 0;
     views.length = 0;
     panes.length = 0;
+    paneHas.field = true;
 });
 
 /** A body to build in, and the panel's deps, the card's draws counted by the content each drew. */
@@ -246,6 +255,8 @@ describe('the hub on a task not written yet, its place tab', () => {
         expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
         expect(r.body.classes.has('task-hub__body--tabs')).toBe(true);
         expect(tabs(r).map(tab => tab.find('tv-tabs__label')!.text)).toEqual([t('modal.hub.tabProperties'), t('modal.hub.tabPlace')]);
+        expect(tabs(r).map(tab => tab.find('tv-tabs__icon')!.attrs.get('data-icon'))).toEqual(['list', 'map-pin']);
+        expect(tabs(r).map(tab => tab.attrs.get('data-tab'))).toEqual(['properties', 'place']);
         const [properties, place] = r.body.find('tv-tabs__panes')!.children;
         expect(properties.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__form']);
         expect(panes.map(pane => pane.el)).toEqual([place]);
@@ -266,6 +277,15 @@ describe('the hub on a task not written yet, its place tab', () => {
         expect(selected(r)).toEqual(['false', 'true']);
         expect(panes[0].opts.initial).toEqual({ note: { text: '', picked: null }, heading: DEFAULT_SETTINGS.taskHeading });
         expect(shells.at(-1)!.opts!.initialFocus!()).toEqual({ to: panes[0].input, selection: 'end' });
+    });
+
+    it('opens on the properties when the place\'s pane has no field to focus first', async () => {
+        const r = rig();
+        paneHas.field = false;
+        await TaskHubPanel.openDraftHub(r.app, null, {}, { ...r.deps, places, notePlaces });
+
+        expect(selected(r)).toEqual(['true', 'false']);
+        expect(shells.at(-1)!.opts!.initialFocus!()).toBeNull();
     });
 
     it('under a row, has no tabs: the form alone under the card', async () => {

@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
+import type { FieldFocus } from '../../utils/FieldFocus';
 import type { FormIssue } from '../form/FormIssue';
 import type { LineTarget } from './SourceLine';
 
@@ -101,6 +102,24 @@ export interface HubPanel {
     /** Close the hub, asking nothing: a navigation away. */
     close(): void;
 }
+
+/**
+ * What an entry builds in the place tab's pane of a hub: fields that say
+ * where the task goes, or a place shown with no field. The form shuts it
+ * with its own fields and focuses its first field (`'place'`); the hub opens
+ * on the place tab only when the pane has a field to focus there.
+ */
+export interface HubPane {
+    /** Where the focus goes for its first field, and how its text is met there; null when it has no field. */
+    focus(): FieldFocus<HTMLElement> | null;
+    /** Its fields enabled or not, as the form's are. */
+    setEnabled(enabled: boolean): void;
+    /** The hub closed: it takes nothing more. */
+    dispose(): void;
+}
+
+/** Builds the place tab's pane in `pane`, once, as the hub is built. */
+export type PaneMaker = (pane: HTMLElement) => HubPane;
 
 /** A hub's host as its panel sees it: the form's host, told when the hub has opened and when it has closed. */
 export interface PanelHost extends HubHost {

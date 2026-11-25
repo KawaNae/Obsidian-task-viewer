@@ -392,6 +392,17 @@ describe('a close of a hub on a task not written yet', () => {
         expect(s.form.beforeClose()).toBe('stay');
     });
 
+    it('withdraws its question as a field of its own is typed in', async () => {
+        const s = await setUp();
+        s.el('name').focus();
+        s.el('name').type('電話');
+        expect(s.form.beforeClose()).toBe('stay');
+        expect(asked(s)).toBe(t('modal.newTask.discardAsk'));
+
+        s.el('name').type('電話を');
+        expect(asked(s)).toBe('');
+    });
+
     it('asks whether to throw the whole task away when a value typed does not read, and closes on one answer, writing nothing', async () => {
         const s = await setUp();
         s.el('name').focus();

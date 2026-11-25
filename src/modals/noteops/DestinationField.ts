@@ -86,7 +86,7 @@ export class DestinationField {
     }
 
     /** The focus on the note field, or on the heading, its text met as a name's is. */
-    focus(at: 'note' | 'heading'): FieldFocus {
+    focus(at: 'note' | 'heading'): FieldFocus<HTMLElement> {
         return at === 'note' ? this.note.focus() : { to: this.headingInput, selection: NAME_ON_FOCUS };
     }
 }
