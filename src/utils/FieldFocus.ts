@@ -23,9 +23,13 @@ export interface Focusable {
  */
 export type SelectionOnFocus = 'all' | 'end';
 
-/** Where a focus goes, and how its text is met there; with no `selection`, the focus alone (a button, an editor). */
-export interface FieldFocus {
-    to: Focusable;
+/**
+ * Where a focus goes, and how its text is met there; with no `selection`,
+ * the focus alone (a button, an editor). `T` narrows what it goes to, for a
+ * caller that must find it in the DOM (an element, not an editor).
+ */
+export interface FieldFocus<T extends Focusable = Focusable> {
+    to: T;
     selection?: SelectionOnFocus;
 }
 

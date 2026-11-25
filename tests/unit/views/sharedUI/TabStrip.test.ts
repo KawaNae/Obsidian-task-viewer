@@ -19,15 +19,15 @@ type Tab = 'one' | 'two' | 'three';
 function setUp(initial: Tab = 'one') {
     const doc = new FocusDoc();
     const root = doc.root();
-    const bar = root.createDiv();
-    const panes = root.createDiv();
+    const before = root.createDiv();
     const onSelect = vi.fn();
-    const strip = new TabStrip<Tab>(asEl(bar), asEl(panes), [
+    const strip = new TabStrip<Tab>(asEl(root), [
         { id: 'one', label: '一', icon: 'list' },
         { id: 'two', label: '二' },
         { id: 'three', label: '三' },
     ], { initial, onSelect });
-    const list = bar.find('tv-tabs')!;
+    const list = root.find('tv-tabs')!;
+    const panes = root.find('tv-tabs__panes')!;
     const buttons = list.findAll('tv-tabs__tab');
     const paneEls = panes.findAll('tv-tabs__pane');
     const key = (target: FocusEl, name: string) => {
@@ -36,7 +36,7 @@ function setUp(initial: Tab = 'one') {
         return e;
     };
     const press = (target: FocusEl) => target.dispatchEvent(new Event('click'));
-    return { doc, bar, panes, strip, list, buttons, paneEls, onSelect, key, press };
+    return { doc, root, before, panes, strip, list, buttons, paneEls, onSelect, key, press };
 }
 
 /** Which tabs read as chosen, by their marks: the class, `aria-selected`, the Tab order, and the pane's marks. */
@@ -71,6 +71,17 @@ describe('TabStrip', () => {
         expect(s.buttons[0].find('tv-tabs__label')!.text).toBe('一');
         expect(s.buttons[0].find('tv-tabs__icon')).not.toBeNull();
         expect(s.buttons[1].find('tv-tabs__icon')).toBeNull();
+    });
+
+    it('builds the row and then the panes at the end of its parent, and hands on the panes\' element', () => {
+        const s = setUp();
+        expect(s.root.children).toEqual([s.before, s.list, s.panes]);
+        expect(s.strip.panes).toBe(asEl(s.panes));
+    });
+
+    it('names each tab\'s id on its button, for a tab to be found by what it is', () => {
+        const s = setUp();
+        expect(s.buttons.map(b => b.attrs.get('data-tab'))).toEqual(['one', 'two', 'three']);
     });
 
     it('gives each strip ids of its own', () => {

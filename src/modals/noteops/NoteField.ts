@@ -82,7 +82,7 @@ export class NoteField {
     }
 
     /** The focus on the field, its text met as a name's is ({@link NAME_ON_FOCUS}). */
-    focus(): FieldFocus {
+    focus(): FieldFocus<HTMLElement> {
         return { to: this.input, selection: NAME_ON_FOCUS };
     }
 

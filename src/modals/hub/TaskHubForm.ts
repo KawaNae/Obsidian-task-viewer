@@ -21,10 +21,9 @@ import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
 import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
-import type { HubForm, HubHost } from './HubHost';
+import type { HubForm, HubHost, HubPane } from './HubHost';
 import type { FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 import { placeFocus } from '../../views/sharedUI/FocusPlacement';
-import type { HubPane } from './TaskHubPanel';
 
 export type TaskHubFocusField =
     | 'name' | 'status' | 'start' | 'end' | 'due'
@@ -72,7 +71,7 @@ export interface TaskHubFormDeps {
      */
     place?: { el: HTMLElement; pane: HubPane };
     /** Choose the tab whose pane holds `el`, before the focus is put on it. None on a hub without tabs. */
-    reveal?: (el: Element) => void;
+    reveal?: (el: HTMLElement) => void;
 }
 
 /**
@@ -260,7 +259,7 @@ export class TaskHubForm implements HubForm {
         });
         // Typing in a field while asked is fixing it: the question is withdrawn.
         // In the place's fields too, which are of the draft as much.
-        for (const el of [c, this.deps.place?.el]) el?.addEventListener('input', () => { this.guard.withdraw(); }, { capture: true });
+        for (const el of [c, this.deps.place?.el]) el?.addEventListener('input', () => { this.guard.withdraw(); });
         this.renderActions();
 
         // The row's dates as it opens: their placeholders, and a rule the line
@@ -520,9 +519,8 @@ export class TaskHubForm implements HubForm {
      * Put the focus on a field of the form or of the place's pane, its tab
      * chosen first: a field in a pane not chosen takes no focus.
      */
-    private focusTo(focus: FieldFocus): void {
-        // Every field of the hub, and of the pane beside it, is an element.
-        this.deps.reveal?.(focus.to as unknown as Element);
+    private focusTo(focus: FieldFocus<HTMLElement>): void {
+        this.deps.reveal?.(focus.to);
         placeFocus(focus);
     }
 
@@ -532,19 +530,19 @@ export class TaskHubForm implements HubForm {
      * what the hub opens on (`initialFocus`) and what the menu focuses
      * alike. Null when the form has no such field.
      */
-    focusOf(field: TaskHubFocusField): FieldFocus | null {
+    focusOf(field: TaskHubFocusField): FieldFocus<HTMLElement> | null {
         if (field === 'place') return this.placeFocusOf();
         const to = this.fieldElement(field);
         return to ? { to, selection: selectionOnFocus(field) } : null;
     }
 
-    private placeFocusOf(): FieldFocus | null {
+    private placeFocusOf(): FieldFocus<HTMLElement> | null {
         return this.deps.place?.pane.focus() ?? null;
     }
 
     /** The element of the field named. */
     fieldElement(field: TaskHubFocusField): HTMLElement | null {
-        if (field === 'place') return (this.placeFocusOf()?.to as HTMLElement | undefined) ?? null;
+        if (field === 'place') return this.placeFocusOf()?.to ?? null;
         if (field.startsWith('property:')) {
             return this.propsField.fieldElement(field.slice('property:'.length));
         }

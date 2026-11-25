@@ -16,9 +16,11 @@
  * - A field's text is selected (`select`, `setSelectionRange`), and the
  *   field scrolled in itself (`scrollLeft`, `scrollTop`), as an input's.
  * - An event is heard by the listeners put on in the capture phase of the
- *   target's ancestors, from the top, then by the target's own; it does not
- *   bubble, as a blur does not. A listener put on with a `signal` is taken
- *   off once the signal aborts.
+ *   target's ancestors, from the top, then by the target's own; one that
+ *   bubbles (`bubbles`, as an input and a keydown do) is heard after by the
+ *   ancestors' other listeners, from the nearest, and one that does not (a
+ *   blur) is not. A listener put on with a `signal` is taken off once the
+ *   signal aborts.
  */
 type Listener = (e: Event) => void;
 interface Entry { fn: Listener; capture: boolean }
@@ -173,6 +175,7 @@ export class FocusEl {
         for (let at = this.parent; at; at = at.parent) path.unshift(at);
         for (const el of path) for (const entry of el.listeners.get(e.type) ?? []) if (entry.capture) entry.fn(e);
         for (const entry of this.listeners.get(e.type) ?? []) entry.fn(e);
+        if (e.bubbles) for (const el of [...path].reverse()) for (const entry of el.listeners.get(e.type) ?? []) if (!entry.capture) entry.fn(e);
         return true;
     }
 
@@ -194,10 +197,10 @@ export class FocusEl {
     /** Type `text` as a person does: the value, then an `input` event. */
     type(text: string): void {
         this.value = text;
-        this.dispatchEvent(Object.assign(new Event('input'), { isComposing: false }));
+        this.dispatchEvent(Object.assign(new Event('input', { bubbles: true }), { isComposing: false }));
     }
     enter(): void {
-        this.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Enter', keyCode: 13, isComposing: false }));
+        this.dispatchEvent(Object.assign(new Event('keydown', { bubbles: true }), { key: 'Enter', keyCode: 13, isComposing: false }));
     }
 }
 

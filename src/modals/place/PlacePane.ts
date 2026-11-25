@@ -3,7 +3,7 @@ import type { DestinationAsk } from '../../services/data/NotePlaces';
 import type { FieldFocus } from '../../utils/FieldFocus';
 import { IssueBoard } from '../form/FormIssue';
 import { DestinationField } from '../noteops/DestinationField';
-import type { HubPane } from '../hub/TaskHubPanel';
+import type { HubPane } from '../hub/HubHost';
 import { PlaceFields, type PlaceField, type PlaceFieldsHost, type PlaceSurface, type PlaceViewState } from './PlaceFields';
 
 /** What the place tab's pane opens with, and whom it tells. */
@@ -48,7 +48,7 @@ export class PlacePane implements HubPane, PlaceSurface {
         this.fields = new PlaceFields(this.field.ask(), opts.host, this);
     }
 
-    focus(): FieldFocus {
+    focus(): FieldFocus<HTMLElement> {
         return this.field.focus('note');
     }
 
