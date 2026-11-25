@@ -106,8 +106,9 @@ export interface TaskHubFormDeps {
  *
  * まだ書いていないタスクには [キャンセル] と [作成] を出す。[キャンセル] は ×
  * と同じ閉じる手順を通る（`requestClose`）。[作成]（{@link create}）は、読めない
- * 打ちかけの欄があれば作らずにその欄へフォーカスを置き、無ければ打ちかけの
- * 欄を保存してから作る。欄の Enter は欄を確定するだけで、作らない。
+ * 打ちかけの欄があれば作らずにその欄へフォーカスを置く。次に、今の受け継ぐ値で
+ * 日付の規則が破れた欄があれば、同じく作らずにその欄へフォーカスを置く。どちらも
+ * 無ければ打ちかけの欄を保存してから作る。欄の Enter は欄を確定するだけで、作らない。
  *
  * 欄の DOM 構築とコミット/echo の取り込みは欄の部品が持つ: 名前、状態、
  * タグ、スタイル、プロパティは `fields/` 配下、日付は `DateFieldGroup`。
@@ -344,18 +345,20 @@ export class TaskHubForm implements HubForm {
 
     /**
      * Create the task not written yet, as the fields hold it: a value typed
-     * that does not read keeps it from being created, and takes the focus
-     * (why is said under it); what is typed and reads is put in first, as a
-     * close saves it. A question a close put is withdrawn: creating is
-     * acting on what it was about.
+     * that does not read, and then a date the rules across the dates do not
+     * let be written as it is inherited now, keeps it from being created,
+     * and takes the focus (why is said under it); what is typed and reads is
+     * put in first, as a close saves it. A question a close put is
+     * withdrawn: creating is acting on what it was about.
      */
     private create(): void {
         const draft = this.host.draft;
         if (!draft?.canCreate()) return;
         this.guard.withdraw();
-        const first = this.unsaved()[0];
+        const broken = this.dateGroup.ruleBroken()[0];
+        const first = this.unsaved()[0]?.input ?? (broken && this.dateGroup.getInput(broken));
         if (first) {
-            placeFocus({ to: first.input });
+            placeFocus({ to: first });
             return;
         }
         for (const part of this.parts()) part.save();

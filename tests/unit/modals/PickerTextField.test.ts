@@ -250,3 +250,44 @@ describe('DateFieldGroup.refresh', () => {
         expect(said).toEqual([[]]);
     });
 });
+
+describe('DateFieldGroup.ruleBroken', () => {
+    function group(values: Partial<DateTimeFields>) {
+        const ctx = { hasImplicitStartDate: true };
+        const root = new FakeEl('div');
+        const g = new DateFieldGroup(root as unknown as HTMLElement, {
+            labels: { start: 'start', end: 'end', due: 'due' },
+            current: () => ({ ...NO_DATES, ...values }),
+            onCommit: () => { },
+            buildOverlayTask: () => makeTask({ id: 'overlay' }),
+            getStartHour: () => 0,
+            taskLookup: () => undefined,
+            getValidationCtx: () => ctx,
+            issues: () => { /* none said */ },
+        });
+        const inputs = root.findAll('tv-ctrl__text-input');
+        return { g, ctx, inputs };
+    }
+
+    it('names the field a rule is broken at as the values stand under what is inherited now, nothing typed', () => {
+        const { g, ctx } = group({ startTime: '10:00' });
+        expect(g.ruleBroken()).toEqual([]);
+        ctx.hasImplicitStartDate = false;
+        expect(g.ruleBroken()).toEqual(['startTime']);
+    });
+
+    it('reads the text in the fields, typed and not committed', () => {
+        const { g, ctx, inputs } = group({});
+        ctx.hasImplicitStartDate = false;
+        expect(g.ruleBroken()).toEqual([]);
+        inputs[1].value = '10:00';
+        expect(g.ruleBroken()).toEqual(['startTime']);
+    });
+
+    it('names none while a field does not read', () => {
+        const { g, ctx, inputs } = group({ startTime: '10:00' });
+        ctx.hasImplicitStartDate = false;
+        inputs[0].value = 'not a date';
+        expect(g.ruleBroken()).toEqual([]);
+    });
+});
