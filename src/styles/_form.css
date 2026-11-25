@@ -333,7 +333,7 @@
 
 /* What a form says, of a field or of itself (IssueBoard): a line each, in
    its tone's class below. A field's lines stand under its row, from where
-   its controls begin; the form's above its buttons, or at its end. Empty,
+   its controls begin; the form's above its buttons, above its tabs, or at its end. Empty,
    the place takes no room. */
 .tv-form__says:empty {
     display: none;

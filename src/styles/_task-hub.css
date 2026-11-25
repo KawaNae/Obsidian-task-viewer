@@ -15,41 +15,59 @@
     padding: 8px 0;
 }
 
-/* A hub with tabs: the body a grid of the card, the row of tabs and the
-   panes, each in an area of its own, the panes' element giving no box so
-   both panes lie in one cell. A pane chosen sets the cell's least height,
-   and the cell grows to the tallest pane as far as the body has room, so
-   choosing a tab changes nothing of the panel's size. A pane off is not
-   seen and ends at the cell's bottom: the body scrolls only for the pane
-   chosen, and its bottom padding comes after it. The body still scrolls
-   whole, the card and the tabs with it. */
+/* A hub with a form: the body a grid of the source's switch, the card, the
+   source, what the form says of itself, the row of the form's tabs and its
+   panes, each in an area of its own. The form and the panes' element give
+   no box, so their children are the grid's, and both panes lie in one
+   cell. A pane chosen sets the cell's least height, and the cell grows to
+   the tallest pane as far as the body has room, so choosing a tab changes
+   nothing of the panel's size. A pane off is not seen and ends at the
+   cell's bottom: the body scrolls only for the pane chosen, and its bottom
+   padding comes after it. The body still scrolls whole, the card and the
+   tabs with it. An area with nothing in it takes no height. */
 .tv-overlay__body.task-hub__body--tabs {
     display: grid;
-    grid-template-areas: "card" "tabs" "panes";
+    grid-template-areas: "bar" "card" "source" "says" "tabs" "panes";
     grid-template-columns: minmax(0, 1fr);
     align-content: start;
+}
+
+.task-hub__body--tabs > .task-hub__mode-bar {
+    grid-area: bar;
 }
 
 .task-hub__body--tabs > .task-hub__preview {
     grid-area: card;
 }
 
-.task-hub__body--tabs > .tv-tabs {
-    grid-area: tabs;
+.task-hub__body--tabs > .task-hub__source-pane {
+    grid-area: source;
 }
 
-.task-hub__body--tabs > .tv-tabs__panes {
+.task-hub__body--tabs > .task-hub__form,
+.task-hub__body--tabs > .task-hub__form > .tv-tabs__panes {
     display: contents;
 }
 
-.task-hub__body--tabs > .tv-tabs__panes > .tv-tabs__pane {
+.task-hub__body--tabs > .task-hub__form > .tv-form__says--form {
+    grid-area: says;
+}
+
+.task-hub__body--tabs > .task-hub__form > .tv-tabs {
+    grid-area: tabs;
+}
+
+.task-hub__body--tabs > .task-hub__form > .tv-tabs__panes > .tv-tabs__pane {
     grid-area: panes;
     min-width: 0;
     align-self: start;
+    /* the form's sections, apart as the form without tabs sets them */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.task-hub__body--tabs > .tv-tabs__panes > .tv-tabs__pane.is-hidden {
-    display: block;
+.task-hub__body--tabs > .task-hub__form > .tv-tabs__panes > .tv-tabs__pane.is-hidden {
     visibility: hidden;
     overflow: hidden;
     min-height: 0;

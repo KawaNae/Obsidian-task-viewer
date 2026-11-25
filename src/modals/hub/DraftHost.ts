@@ -483,7 +483,7 @@ export function placeText(facts: PlaceFacts): { text: string; tone: Tone } {
 /**
  * The tone of where a line put in a note goes: an error where the heading
  * names no one section; a warning where a note is made empty for it, so a
- * name mistyped in the place's fields is seen from the properties' tab too;
+ * name mistyped in the place's fields is seen from the details' tab too;
  * an info otherwise, a daily note made of its day's template among them.
  */
 function noteTone(facts: Extract<PlaceFacts, { kind: 'note' }>): Tone {

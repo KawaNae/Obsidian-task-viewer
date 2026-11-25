@@ -31,8 +31,8 @@ export interface RowHostDeps {
  *
  * Writes handed on one after another are asked at once: the operations keep
  * their order (each is planned from what the one before left, `onRow`). Each
- * is asked with no notice (`tellRefusal: false`): a refusal is said at the
- * form's end once and the value goes back to the index's copy; once the hub
+ * is asked with no notice (`tellRefusal: false`): a refusal is said above the
+ * form's tabs once and the value goes back to the index's copy; once the hub
  * has closed, a refusal is told by a notice, as any write's is.
  *
  * The fields are shut while the source mode holds the row (two ways of
@@ -90,7 +90,7 @@ export class RowHost implements PanelHost {
 
     /**
      * A write's answer. Written, the last refusal said is taken back. Refused,
-     * why is said at the form's end, and the value goes back to the index's
+     * why is said above the form's tabs, and the value goes back to the index's
      * copy: the fields refused keep what was typed, and are written again from
      * the new reading when committed again.
      */
@@ -140,8 +140,8 @@ export class RowHost implements PanelHost {
     readonly draft = null;
 
     /**
-     * All written, the hub closes; one refused, it stays open with why at the
-     * form's end. With the fields shut it closes at once: the source mode
+     * All written, the hub closes; one refused, it stays open with why above
+     * the form's tabs. With the fields shut it closes at once: the source mode
      * opened once the writes were done, and a row gone has nothing to wait for.
      */
     closing(): CloseAnswer {

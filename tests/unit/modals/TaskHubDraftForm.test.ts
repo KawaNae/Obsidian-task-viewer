@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
-import { TaskHubForm } from '../../../src/modals/hub/TaskHubForm';
+import { TaskHubForm, tabOf, type TaskHubFocusField } from '../../../src/modals/hub/TaskHubForm';
 import { DraftHost } from '../../../src/modals/hub/DraftHost';
 import type { CreatePlace, PlaceFacts } from '../../../src/services/data/CreatePlaces';
 import type { NewRow } from '../../../src/services/persistence/NewRow';
@@ -28,7 +28,9 @@ vi.mock('obsidian', async (importOriginal) => ({
  * put in first; a close asks whether to throw away a task that was given
  * anything, and once only. What the create does, and why a create was
  * refused, is said on a line above it in the foot, which a button at the
- * row's start shows or hides.
+ * row's start shows or hides. The fields stand in two tabs, the basic one
+ * with the place the entry builds after the dates, and a field is focused
+ * on its tab.
  */
 
 beforeAll(() => {
@@ -66,7 +68,7 @@ const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve()
 interface MenuItem { pick: () => void }
 
 /** A form on a draft at a place that has answered, its writes held until the test answers them. */
-async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts; place?: boolean } = {}) {
+async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts; place?: boolean; opensOn?: TaskHubFocusField } = {}) {
     const doc = new FocusDoc();
     Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
     // The panel: the form in its body, the row of buttons in its foot.
@@ -105,36 +107,40 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
     const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
     const host = new DraftHost(PLACE, seed, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
     const closes: CloseAnswer[] = [];
-    // The place tab's pane beside the form's, as the panel builds them: its
-    // field, and the tab chosen for an element, told with where the focus is then.
-    const placeEl = root.createDiv();
-    const placeInput = placeEl.createEl('input');
-    const pane = {
-        // Its text met otherwise than a field of the form's would be by default: the pane's own say is what is seen.
+    // Where the task goes, as an entry builds it: a group of one field at the
+    // end of what it is given, and the element it was given.
+    let placeInput!: FocusEl;
+    let placeParent: FocusEl | null = null;
+    const place = {
+        // Its text met otherwise than a field of the form's would be by default: the place's own say is what is seen.
         focus: vi.fn(() => ({ to: asEl(placeInput), selection: 'all' as const })),
         setEnabled: vi.fn(),
         refresh: vi.fn(),
         dispose: vi.fn(),
     };
-    const revealed: { el: FocusEl; focused: boolean }[] = [];
-    // The place tab's button, which the panel chooses and focuses as the form asks.
-    const placeTab = root.createEl('button');
-    const choosePlace = vi.fn(() => { placeTab.focus(); });
-    const tabs = opts.place ? {
-        place: { el: asEl(placeEl), pane },
-        reveal: (el: Element) => { const at = el as unknown as FocusEl; revealed.push({ el: at, focused: doc.activeElement === at }); },
-        placeTab: choosePlace,
-    } : {};
+    const makePlace = (parent: HTMLElement) => {
+        placeParent = parent as unknown as FocusEl;
+        placeInput = placeParent.createDiv({ cls: 'tv-form__group task-hub__place' }).createEl('input');
+        return place;
+    };
     // The focus is in the hub while it is on anything in the panel but the panel itself.
     const hasFocus = () => doc.activeElement !== root && root.contains(doc.activeElement);
-    const form: TaskHubForm = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot), requestClose: () => { closes.push(form.beforeClose()); }, hasFocus, ...tabs });
+    const form: TaskHubForm = new TaskHubForm(asEl(body), host, {
+        app, plugin, index, foot: asEl(foot), requestClose: () => { closes.push(form.beforeClose()); }, hasFocus,
+        ...(opts.place && { place: makePlace }),
+        ...(opts.opensOn && { opensOn: opts.opensOn }),
+    });
     const panel = { redrawPreview: vi.fn(), close: vi.fn() };
     host.attach(panel);
     await settle();
     const el = (field: Parameters<TaskHubForm['fieldElement']>[0]) => form.fieldElement(field) as unknown as FocusEl;
     const create = () => root.findAll('mod-cta')[0];
+    /** The button of the tab `id`. */
+    const tab = (id: string) => body.find('tv-tabs')!.findAll('tv-tabs__tab').find(button => button.attrs.get('data-tab') === id)!;
     return {
-        doc, root, body, foot, host, form, panel, places, rows, closes, menus, el, create, placeInput, placeTab, choosePlace, pane, revealed,
+        doc, root, body, foot, host, form, panel, places, rows, closes, menus, el, create, placeInput, placeParent, place, tab,
+        /** The tab chosen now. */
+        selected: () => body.find('tv-tabs')!.findAll('tv-tabs__tab').find(button => button.attrs.get('aria-selected') === 'true')!.attrs.get('data-tab'),
         write: async (written: WriteAnswer) => { writes.at(-1)!(written); await settle(); },
         answer: async () => { answer(); await settle(); },
         press: (target: FocusEl) => target.dispatchEvent(new Event('click')),
@@ -520,82 +526,150 @@ describe('a close of a hub on a task not written yet', () => {
     });
 });
 
-describe('the place tab of a hub on a task not written yet', () => {
+describe('the tabs of a hub on a task not written yet', () => {
+    const asked = (s: Awaited<ReturnType<typeof setUp>>) => s.root.find('tv-form__ask')?.text ?? '';
+    const classesOf = (el: FocusEl) => [...el.classes].join(' ');
+
+    it('stand under what is said of the form as a whole, the basic tab and the details by their keys', async () => {
+        const s = await setUp({}, { place: true });
+        expect(s.body.children.map(classesOf)).toEqual(['tv-form__says tv-form__says--form', 'tv-tabs', 'tv-tabs__panes']);
+        const buttons = s.body.find('tv-tabs')!.findAll('tv-tabs__tab');
+        expect(buttons.map(button => button.attrs.get('data-tab'))).toEqual(['basic', 'detail']);
+        expect(buttons.map(button => button.find('tv-tabs__label')!.text)).toEqual([t('modal.hub.tabBasic'), t('modal.hub.tabDetail')]);
+        expect(buttons.map(button => button.find('tv-tabs__icon')!.attrs.get('data-icon'))).toEqual(['list', 'sliders-horizontal']);
+        expect(s.body.find('tv-tabs__panes')!.children.map(pane => pane.classes.has('task-hub__pane--basic') ? 'basic' : pane.classes.has('task-hub__pane--detail') ? 'detail' : '')).toEqual(['basic', 'detail']);
+    });
+
+    it('hold the name, the status and the dates in the basic tab, the place after them as its last group, and the rest in the details', async () => {
+        const s = await setUp({}, { place: true });
+        const basic = s.body.find('task-hub__pane--basic')!;
+        const detail = s.body.find('task-hub__pane--detail')!;
+        expect(s.placeParent).toBe(basic);
+        const groups = basic.children.filter(child => child.classes.has('tv-form__group'));
+        expect(groups).toHaveLength(3);
+        expect(groups[2].classes.has('task-hub__place')).toBe(true);
+        expect(groups[1].contains(s.el('status')) && groups[1].contains(s.el('due'))).toBe(true);
+        for (const field of ['name', 'status', 'start', 'end', 'due'] as const) expect(basic.contains(s.el(field))).toBe(true);
+        for (const field of ['tags', 'color', 'linestyle', 'mask', 'properties'] as const) expect(detail.contains(s.el(field))).toBe(true);
+    });
+
+    it('have the dates\' group last in the basic tab where there is no place', async () => {
+        const s = await setUp();
+        const groups = s.body.find('task-hub__pane--basic')!.children.filter(child => child.classes.has('tv-form__group'));
+        expect(groups).toHaveLength(2);
+        expect(groups[1].contains(s.el('due'))).toBe(true);
+    });
+
+    it('open on the tab of the field the hub opens on: the basic tab with none', async () => {
+        const opened = async (opensOn?: TaskHubFocusField) => (await setUp({}, { place: true, ...(opensOn && { opensOn }) })).selected();
+        expect(await opened()).toBe('basic');
+        expect(await opened('name')).toBe('basic');
+        expect(await opened('place')).toBe('basic');
+        expect(await opened('due')).toBe('basic');
+        expect(await opened('tags')).toBe('detail');
+        expect(await opened('property:owner')).toBe('detail');
+    });
+
+    it('tell a field\'s tab by its name', () => {
+        const fields: TaskHubFocusField[] = ['name', 'status', 'start', 'end', 'due', 'place', 'tags', 'color', 'linestyle', 'mask', 'properties', 'property:owner'];
+        expect(fields.map(tabOf)).toEqual(['basic', 'basic', 'basic', 'basic', 'basic', 'basic', 'detail', 'detail', 'detail', 'detail', 'detail', 'detail']);
+    });
+
+    it('are chosen for a field the focus is put on, as the menu asks for it', async () => {
+        const s = await setUp({}, { place: true });
+        s.form.focusField('tags');
+        expect(s.selected()).toBe('detail');
+        expect(s.doc.activeElement).toBe(s.el('tags'));
+
+        s.form.focusField('start');
+        expect(s.selected()).toBe('basic');
+        expect(s.doc.activeElement).toBe(s.el('start'));
+    });
+
+    it('choose the details where the create finds a value typed there that does not read, the focus on it', async () => {
+        const s = await setUp();
+        s.press(s.tab('detail'));
+        s.el('linestyle').focus();
+        s.el('linestyle').type('zigzag');
+        s.press(s.tab('basic'));
+        expect(s.selected()).toBe('basic');
+
+        s.press(s.create());
+        expect(s.places.create).not.toHaveBeenCalled();
+        expect(s.selected()).toBe('detail');
+        expect(s.doc.activeElement).toBe(s.el('linestyle'));
+    });
+
+    it('choose the details where the keep of a close\'s question finds a value typed there that does not read', async () => {
+        const s = await setUp();
+        s.press(s.tab('detail'));
+        s.el('linestyle').focus();
+        s.el('linestyle').type('zigzag');
+        s.press(s.tab('basic'));
+        expect(s.form.beforeClose()).toBe('stay');
+
+        s.press(s.root.find('tv-form__cancel')!);
+        expect(asked(s)).toBe('');
+        expect(s.selected()).toBe('detail');
+        expect(s.doc.activeElement).toBe(s.el('linestyle'));
+    });
+});
+
+describe('the place of a hub on a task not written yet', () => {
     const asked = (s: Awaited<ReturnType<typeof setUp>>) => s.root.find('tv-form__ask')?.text ?? '';
 
-    it('focuses the place\'s first field as the place\'s pane says, its tab chosen first', async () => {
-        const s = await setUp({}, { place: true });
+    it('focuses the place\'s first field as the place says, the basic tab chosen first', async () => {
+        const s = await setUp({}, { place: true, opensOn: 'tags' });
         expect(s.form.focusOf('place')).toEqual({ to: asEl(s.placeInput), selection: 'all' });
         expect(s.form.fieldElement('place')).toBe(asEl(s.placeInput));
 
         s.form.focusField('place');
-        expect(s.revealed).toEqual([{ el: s.placeInput, focused: false }]);
-        expect(s.placeInput.ownerDocument.activeElement).toBe(s.placeInput);
+        expect(s.selected()).toBe('basic');
+        expect(s.doc.activeElement).toBe(s.placeInput);
     });
 
-    it('has no place field without a place pane', async () => {
+    it('has no place field where the entry builds no place', async () => {
         const s = await setUp();
         expect(s.form.focusOf('place')).toBeNull();
         expect(s.form.fieldElement('place')).toBeNull();
     });
 
-    it('chooses the tab of each field it puts the focus on before it puts it there', async () => {
-        const s = await setUp({}, { place: true });
-        s.form.focusField('name');
-        expect(s.revealed.at(-1)).toEqual({ el: s.el('name'), focused: false });
-
-        // The create, on a value that does not read.
-        s.el('start').focus();
-        s.el('start').type('not a date');
-        s.placeInput.focus();
-        s.press(s.create());
-        expect(s.places.create).not.toHaveBeenCalled();
-        expect(s.revealed.at(-1)).toEqual({ el: s.el('start'), focused: false });
-        expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
-
-        // The keep of a close's question.
-        s.placeInput.focus();
-        expect(s.form.beforeClose()).toBe('stay');
-        const before = s.revealed.length;
-        s.press(s.root.find('tv-form__cancel')!);
-        expect(s.revealed).toHaveLength(before + 1);
-        expect(s.revealed.at(-1)).toEqual({ el: s.el('start'), focused: false });
-        expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
-    });
-
     it('puts the focus on the create once a create refused ends with the create offered, the place asked again', async () => {
         const s = await setUp({}, { place: true });
+        s.press(s.tab('detail'));
         s.press(s.create());
         await s.write({ written: false, refused: null });
 
         expect(s.doc.activeElement).toBe(s.create());
         expect(s.create().disabled).toBe(false);
-        expect(s.revealed).toEqual([]);
+        expect(s.selected()).toBe('detail');
     });
 
-    it('puts the focus on the place\'s field its pane answers, its tab chosen first, once a create ends where the task cannot go', async () => {
+    it('puts the focus on the place\'s field it answers, the basic tab chosen first, once a create ends where the task cannot go', async () => {
         const s = await setUp({}, { place: true });
-        // The pane answers its field something wrong is said under: here a second one.
+        // The place answers its field something wrong is said under: here a second one.
         const heading = s.placeInput.parent!.createEl('input');
-        s.pane.focus.mockReturnValue({ to: asEl(heading), selection: 'all' });
+        s.place.focus.mockReturnValue({ to: asEl(heading), selection: 'all' });
         s.places.facts.mockResolvedValueOnce(GONE);
+        s.press(s.tab('detail'));
         s.press(s.create());
         await s.write({ written: false, refused: null });
 
         expect(s.host.draft!.canCreate()).toBe(false);
-        expect(s.revealed).toEqual([{ el: heading, focused: false }]);
+        expect(s.selected()).toBe('basic');
         expect(s.doc.activeElement).toBe(heading);
     });
 
-    it('chooses the place tab and puts the focus on its button where its pane has no field, once a create ends where the task cannot go', async () => {
+    it('chooses the basic tab and puts the focus on its button where the place has no field, once a create ends where the task cannot go', async () => {
         const s = await setUp({}, { place: true });
-        s.pane.focus.mockReturnValue(null as never);
+        s.place.focus.mockReturnValue(null as never);
         s.places.facts.mockResolvedValueOnce(GONE);
+        s.press(s.tab('detail'));
         s.press(s.create());
         await s.write({ written: false, refused: null });
 
-        expect(s.choosePlace).toHaveBeenCalledTimes(1);
-        expect(s.doc.activeElement).toBe(s.placeTab);
+        expect(s.selected()).toBe('basic');
+        expect(s.doc.activeElement).toBe(s.tab('basic'));
     });
 
     it('leaves the focus where it is in the hub once a create ends unwritten', async () => {
@@ -613,19 +687,19 @@ describe('the place tab of a hub on a task not written yet', () => {
     it('shuts the place\'s fields with its own while a create is under way, and opens them after', async () => {
         const s = await setUp({}, { place: true });
         s.press(s.create());
-        expect(s.pane.setEnabled).toHaveBeenLastCalledWith(false);
+        expect(s.place.setEnabled).toHaveBeenLastCalledWith(false);
         await s.write({ written: false, refused: null });
-        expect(s.pane.setEnabled).toHaveBeenLastCalledWith(true);
+        expect(s.place.setEnabled).toHaveBeenLastCalledWith(true);
     });
 
-    it('draws the place\'s pane again from the host as it draws its own fields: once the place is read', async () => {
+    it('draws the place again from the host as it draws its own fields: once the place is read', async () => {
         const s = await setUp({}, { place: true, hold: true });
-        const before = s.pane.refresh.mock.calls.length;
+        const before = s.place.refresh.mock.calls.length;
         await s.answer();
-        expect(s.pane.refresh.mock.calls.length).toBeGreaterThan(before);
-        const read = s.pane.refresh.mock.calls.length;
+        expect(s.place.refresh.mock.calls.length).toBeGreaterThan(before);
+        const read = s.place.refresh.mock.calls.length;
         s.form.refresh();
-        expect(s.pane.refresh).toHaveBeenCalledTimes(read + 1);
+        expect(s.place.refresh).toHaveBeenCalledTimes(read + 1);
     });
 
     it('withdraws a close\'s question as the place\'s fields are typed in', async () => {
@@ -638,6 +712,12 @@ describe('the place tab of a hub on a task not written yet', () => {
         s.placeInput.focus();
         s.placeInput.type('n');
         expect(asked(s)).toBe('');
+    });
+
+    it('lets the place go once the hub has closed', async () => {
+        const s = await setUp({}, { place: true });
+        s.form.dispose();
+        expect(s.place.dispose).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -730,7 +810,7 @@ describe('the line above the create of a hub on a task not written yet', () => {
         expect(s.places.facts).toHaveBeenCalledTimes(2);
     });
 
-    it('leaves the notice that the fields are shut while creating at the form\'s end', async () => {
+    it('leaves the notice that the fields are shut while creating above the form\'s tabs', async () => {
         const s = await setUp();
         s.press(s.create());
         expect(s.body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual([t('modal.newTask.formShut')]);

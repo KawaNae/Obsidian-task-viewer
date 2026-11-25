@@ -9,8 +9,8 @@ import { DestinationText } from '../noteops/DestinationText';
  * The place fields of a hub on a task not written yet: a note and where in
  * it (a heading's section, or the note's end) the task is made. This is
  * their logic, apart from the DOM: what they name, told to the hub's host,
- * and what is said under them. What they look like is the place tab's pane
- * (`PlacePane`).
+ * and what is said under them. What they look like is the place's group
+ * of the form's basic tab (`PlacePane`).
  *
  * - What the destination is, is asked of the vault whenever a field
  *   changes, and as they open (`PlaceFieldsHost.read`, the fields read as

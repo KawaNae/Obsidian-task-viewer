@@ -66,13 +66,13 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     {
         file: 'modals/place/PlacePane.ts',
         line: 'return this.field.focus(wrong ?? \'note\');',
-        why: 'answers where the focus goes in the place tab (HubPane.focus) and puts none',
+        why: 'answers where the focus goes in the place\'s fields (HubPlace.focus) and puts none',
     },
 
     {
         file: 'modals/hub/TaskHubForm.ts',
-        line: 'return this.deps.place?.pane.focus() ?? null;',
-        why: 'answers where the focus goes in the place tab (HubPane.focus answers a FieldFocus) and puts none',
+        line: 'return this.place?.focus() ?? null;',
+        why: 'answers where the focus goes in the place\'s fields (HubPlace.focus answers a FieldFocus) and puts none',
     },
 
     // A part drawn again, or the typing going on to the next field: the keyboard is up, and a wait would close it.
@@ -128,7 +128,7 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     {
         file: 'views/sharedUI/TabStrip.ts',
         line: 'this.tabs.get(id)?.button.focus();',
-        why: 'a tab gone to by the arrow keys, chosen with the focus by its caller (focusTab), or chosen while the focus was in the pane it hides: its button takes the focus, which raises no keyboard',
+        why: 'a tab gone to by the arrow keys, chosen with the focus by its caller (focusTab: the hub form\'s basic tab, for a place with no field), or chosen while the focus was in the pane it hides: its button takes the focus, which raises no keyboard',
     },
     {
         file: 'views/sharedUI/NativePicker.ts',

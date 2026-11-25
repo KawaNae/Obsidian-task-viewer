@@ -41,7 +41,7 @@ export function openDraftHubForDailyNote(plugin: PluginContext, date: string, mi
 
 /**
  * Open the hub on a task not written yet in no place, for the user to
- * choose the note in its place tab, starting as {@link seedAt} says. The
+ * choose the note in its note field, starting as {@link seedAt} says. The
  * note stays the one chosen whatever start date the task is given.
  */
 export function openDraftHubInNote(plugin: PluginContext, date: string, minutes?: number): void {
