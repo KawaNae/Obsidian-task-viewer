@@ -2,7 +2,7 @@ import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { DestinationAsk } from '../../services/data/NotePlaces';
 import { ShownSuggest } from '../../suggest/ShownSuggest';
-import { createClearableInput } from '../form/ClearButton';
+import { createClearableInput, type ClearButton } from '../form/ClearButton';
 import { onFormEnter } from '../form/formEnter';
 import { createFormRow } from '../form/formRow';
 import type { IssueSlot } from '../form/FormIssue';
@@ -22,7 +22,7 @@ export interface DestinationFieldOptions {
 /**
  * Where lines go: a note (`NoteField`), and a heading in it, the note's
  * headings suggested: two form rows, each with its icon, as the hub's rows
- * are. The send dialog and the dialog that places a task to make hold it.
+ * are. The send dialog and the place tab of the hub on a task to make hold it.
  * The heading field left empty stands for the note's end, under no
  * heading, for every form (`NotePlaces.readFields` reads it so); the field
  * says so in its place. Each field's × empties it as deleting its text does
@@ -36,6 +36,7 @@ export interface DestinationFieldOptions {
 export class DestinationField {
     private readonly note: NoteField;
     private readonly headingInput: HTMLInputElement;
+    private readonly headingClear: ClearButton;
     private readonly headingSays: HTMLElement;
     private readonly headingSuggest: HeadingSuggest;
 
@@ -52,8 +53,9 @@ export class DestinationField {
         this.headingSays = says;
         const heading = createClearableInput(row, t('modal.destination.headingEmpty'));
         this.headingInput = heading.input;
+        this.headingClear = heading.clear;
         this.headingInput.value = opts.initial.heading;
-        heading.clear.sync();
+        this.headingClear.sync();
         this.headingInput.addEventListener('input', () => opts.onChange());
         this.headingSuggest = new HeadingSuggest(app, this.headingInput);
         onFormEnter(this.headingInput, () => opts.onEnter(), { takesEnter: () => this.headingSuggest.listShown });
@@ -62,6 +64,13 @@ export class DestinationField {
     /** What the fields hold now. */
     ask(): DestinationAsk {
         return { note: this.note.ask(), heading: this.headingInput.value };
+    }
+
+    /** Both fields taking input or not, their × with them. */
+    setEnabled(enabled: boolean): void {
+        this.note.setEnabled(enabled);
+        this.headingInput.disabled = !enabled;
+        this.headingClear.sync();
     }
 
     /** The headings the heading field suggests: the note's, as the form found them. */

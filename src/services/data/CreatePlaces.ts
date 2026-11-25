@@ -38,7 +38,7 @@ export type CreatePlace =
     | { kind: 'note'; note: PlaceNote; spot: NoteSpot }
     | { kind: 'childOf'; taskId: string };
 
-/** A place in a note: the place the place dialog chooses and is opened on. */
+/** A place in a note: the place the place fields of the hub on a task to make name, and are opened on. */
 export type PlaceInNote = Extract<CreatePlace, { kind: 'note' }>;
 
 /** What a line put in a place inherits there: the values its section resolves to, as a row's `cascadeContext` holds them. */
@@ -93,7 +93,7 @@ const PROBE = '- [ ] _';
  * The places a new task line is made in, as the hub on a task not written
  * yet asks of them: the daily note's place ({@link dailyNote}), the place
  * a note and a spot chosen name ({@link fromDestination}) and the place
- * dialog's fields that name a place ({@link askOf}), what a place
+ * fields that name a place ({@link askOf}), what a place
  * is and what a line there inherits ({@link facts}), the note a line put
  * there is in ({@link noteOf}), and the write of the line there
  * ({@link create}). Beside `NoteOps`, which answers the same of a send's
@@ -113,16 +113,15 @@ export class CreatePlaces {
     }
 
     /**
-     * The place the place dialog's answer `to` names (`PlaceModal`): its note
-     * by its path, made empty when it is not there, and where in it.
+     * The place the place fields' answer `to` names (`PlaceFields`): its
+     * note by its path, made empty when it is not there, and where in it.
      *
-     * `openedOn`, the place the hub on a task not written yet opened on, when
-     * the hub asks the dialog to move it: an answer in its note stays the
-     * note it is — a daily note is still made of its day's template — and
-     * takes the answer's spot alone. That is the one place a daily note
-     * comes from: the dialog answers with a path, and every place the hub
-     * moved to since is the note at a path, which the answer's path names
-     * again on its own.
+     * `openedOn`, the place the hub on a task not written yet opened on: an
+     * answer in its note stays the note it is — a daily note is still made
+     * of its day's template — and takes the answer's spot alone. That is the
+     * one place a daily note comes from: the fields answer with a path, and
+     * every place the hub moved to since is the note at a path, which the
+     * answer's path names again on its own.
      */
     fromDestination(to: NoteDestination, openedOn?: CreatePlace): PlaceInNote {
         if (openedOn?.kind === 'note' && this.pathOf(openedOn.note) === to.note.path) return { ...openedOn, spot: to.spot };
@@ -130,7 +129,7 @@ export class CreatePlaces {
     }
 
     /**
-     * The place dialog's fields as they name `place` (`PlaceModal`'s
+     * The place fields as they name `place`, as they open (`PlacePane`'s
      * `initial`): the note field the note's name, holding its path as
      * picked — the note the path names, there or not yet
      * (`NoteName.find`) — and the heading field the section's heading, or

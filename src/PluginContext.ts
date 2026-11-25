@@ -87,10 +87,11 @@ export interface PluginContext {
 
     /**
      * Open the hub on a task not written yet, to be put in `place`, holding
-     * `seed`'s values: nothing is written until it is created there. The one
-     * way in for every place a task is made from, a view's or the editor's.
+     * `seed`'s values: nothing is written until it is created there. Null
+     * for a note the user chooses in the hub's place tab. The one way in for
+     * every place a task is made from, a view's or the editor's.
      */
-    openDraftHub(place: CreatePlace, seed: DraftSeed): void;
+    openDraftHub(place: CreatePlace | null, seed: DraftSeed): void;
 
     /** Tell the editor's inline task menu that its settings moved. */
     notifyEditorMenuSettingsChanged(): void;

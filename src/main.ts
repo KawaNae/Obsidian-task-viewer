@@ -349,7 +349,7 @@ export default class TaskViewerPlugin extends Plugin {
         this.taskHub.open(taskId, options);
     }
 
-    openDraftHub(place: CreatePlace, seed: DraftSeed): void {
+    openDraftHub(place: CreatePlace | null, seed: DraftSeed): void {
         this.taskHub.openDraft(place, seed);
     }
 

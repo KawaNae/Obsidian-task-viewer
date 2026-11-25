@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { TaskHubPanel, type HubPane, type PaneMaker, type TaskHubDeps, type TaskHubPanelOptions } from '../../../src/modals/hub/TaskHubPanel';
-import { DraftHost } from '../../../src/modals/hub/DraftHost';
+import { TaskHubPanel, type TaskHubDeps } from '../../../src/modals/hub/TaskHubPanel';
 import type { PanelHost } from '../../../src/modals/hub/HubHost';
+import type { PlaceFieldsHost } from '../../../src/modals/place/PlaceFields';
+import type { DestinationAsk, NoteRead } from '../../../src/services/data/NotePlaces';
 import type { CreatePlace, CreatePlaces, PlaceFacts } from '../../../src/services/data/CreatePlaces';
 import type { SourceHost } from '../../../src/modals/hub/TaskHubSource';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import { t } from '../../../src/i18n';
+import ja from '../../../src/i18n/locales/ja.json';
+import en from '../../../src/i18n/locales/en.json';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 import { FocusDoc, type FocusEl } from '../helpers/focusDom';
@@ -17,16 +20,19 @@ import { FocusDoc, type FocusEl } from '../helpers/focusDom';
  * host follows and waiting for the host's writes, and hubs on rows open one
  * at a time. On a task not written yet: no source mode, the card drawn as
  * one nothing is done on and drawn again as the draft changes, and the hub
- * opened over a hub on a row, which it leaves open. The overlay, the form,
- * and the source mode's own logic and surface stand in here; the hosts are
- * the real ones, on a stand-in index and stand-in places.
+ * opened over a hub on a row, which it leaves open, with a place tab whose
+ * fields open on the place it is put in, or on none for the user to choose.
+ * The overlay, the form, the place tab's pane, and the source mode's own
+ * logic and surface stand in here; the hosts are the real ones, on a
+ * stand-in index and stand-in places.
  */
 
-const { shells, forms, sources, views } = vi.hoisted(() => ({
+const { shells, forms, sources, views, panes } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
     forms: [] as { host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { bar: unknown; card: unknown; pane: unknown; foot: unknown }[],
+    panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
 }));
 const body = { current: null as FocusEl | null, head: null as FocusEl | null, foot: null as FocusEl | null };
 
@@ -73,12 +79,27 @@ vi.mock('../../../src/modals/hub/TaskHubSourceView', () => ({
     },
 }));
 
+vi.mock('../../../src/modals/place/PlacePane', () => ({
+    // One field, as the pane's first: what the panel hands it, and how it is shut, recorded.
+    PlacePane: class {
+        readonly input: unknown;
+        setEnabled = vi.fn();
+        dispose = vi.fn();
+        constructor(_app: unknown, readonly el: { createEl(tag: string): unknown }, readonly opts: { initial: unknown; host: unknown }) {
+            this.input = el.createEl('input');
+            panes.push(this);
+        }
+        focus() { return { to: this.input, selection: 'end' }; }
+    },
+}));
+
 afterEach(() => {
     for (const shell of shells) shell.close();
     shells.length = 0;
     forms.length = 0;
     sources.length = 0;
     views.length = 0;
+    panes.length = 0;
 });
 
 /** A body to build in, and the panel's deps, the card's draws counted by the content each drew. */
@@ -107,7 +128,8 @@ function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: tr
         operations: { updateTask: vi.fn(updateTask) } as never,
         plugin: { settings: DEFAULT_SETTINGS } as never,
     };
-    const app = { keymap: {} } as never;
+    // New notes go in Inbox, whatever note they are reckoned from.
+    const app = { keymap: {}, fileManager: { getNewFileParent: () => ({ path: 'Inbox' }) } } as never;
     /** The index changes the row to `row`, and says so. */
     const change = (row: Task | undefined) => {
         copy = row;
@@ -115,6 +137,9 @@ function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: tr
     };
     return { body: body.current, deps, app, drawn, change, listeners };
 }
+
+/** The vault as the place fields name it: no note while they name none. */
+const notePlaces = { readFields: async (): Promise<NoteRead> => ({ kind: 'unnamed', why: { ok: false, why: 'empty', at: 'name' } }) };
 
 /** The places a draft is put in: a daily note, answered at once. */
 const places = {
@@ -125,8 +150,10 @@ const places = {
     }),
     create: async (): Promise<WriteAnswer> => ({ written: true }),
     fromDestination: () => PLACE,
+    askOf: (): DestinationAsk => ({ note: { text: '2031-01-15', picked: '2031-01-15.md' }, heading: 'Tasks' }),
 } as unknown as CreatePlaces;
 const PLACE: CreatePlace = { kind: 'note', note: { kind: 'daily', date: '2031-01-15' }, spot: { heading: 'Tasks', level: 2, side: 'head' } };
+const CHILD: CreatePlace = { kind: 'childOf', taskId: 'task-1' };
 
 /** What each draw of the card was given: its content, and whether it is one nothing is done on. */
 const draws = (deps: TaskHubDeps) => (deps.taskRenderer.render as ReturnType<typeof vi.fn>).mock.calls
@@ -146,7 +173,7 @@ describe('a hub with nothing to wait for', () => {
 
     it('on a task not written yet is open with its card drawn as the call returns', () => {
         const r = rig();
-        void TaskHubPanel.openDraftHub(r.app, PLACE, { content: '下書き' }, { ...r.deps, places });
+        void TaskHubPanel.openDraftHub(r.app, PLACE, { content: '下書き' }, { ...r.deps, places, notePlaces });
 
         expect(openAndDrawn(r.deps, 0)).toBe(true);
     });
@@ -155,7 +182,7 @@ describe('a hub with nothing to wait for', () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
         (r.deps.taskRenderer.render as ReturnType<typeof vi.fn>).mockClear();
-        void TaskHubPanel.openDraftHub(r.app, PLACE, { content: '下書き' }, { ...r.deps, places });
+        void TaskHubPanel.openDraftHub(r.app, PLACE, { content: '下書き' }, { ...r.deps, places, notePlaces });
 
         expect(shells.map(shell => shell.opts !== null)).toEqual([true, true]);
         expect(openAndDrawn(r.deps, 1)).toBe(true);
@@ -165,7 +192,7 @@ describe('a hub with nothing to wait for', () => {
 describe('the hub on a task not written yet', () => {
     it('builds no source mode, nor its switch, and draws its card as one nothing is done on', async () => {
         const r = rig();
-        await TaskHubPanel.openDraftHub(r.app, PLACE, { content: '下書き' }, { ...r.deps, places });
+        await TaskHubPanel.openDraftHub(r.app, CHILD, { content: '下書き' }, { ...r.deps, places, notePlaces });
 
         expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'task-hub__form']);
         expect(sources).toHaveLength(0);
@@ -177,14 +204,16 @@ describe('the hub on a task not written yet', () => {
 
     it('is titled as the task it creates, above the body', async () => {
         const r = rig();
-        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places });
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
 
         expect(body.head!.children.map(child => child.text)).toEqual([t('modal.newTask.title')]);
+        // The one dialog that creates the task: its properties and its place both.
+        expect([ja.modal.newTask.title, en.modal.newTask.title]).toEqual(['新しいタスクを作成', 'Create new task']);
     });
 
     it('draws the card again as the draft is handed a change, once the field is done', async () => {
         const r = rig();
-        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places });
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
         const host = forms[0].host as PanelHost;
         await Promise.resolve();
 
@@ -197,7 +226,7 @@ describe('the hub on a task not written yet', () => {
     it('opens over a hub on a row, which stays open once it closes', async () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
-        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places });
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
 
         expect(shells.map(shell => shell.opts !== null)).toEqual([true, true]);
         shells[1].close();
@@ -206,76 +235,90 @@ describe('the hub on a task not written yet', () => {
     });
 });
 
-/**
- * A hub on a task not written yet given a place pane, as an entry hands it
- * (`HubShape.place`): the panel's constructor is its entries' own, so it is
- * reached past its type here.
- */
-function openWithPlace(r: ReturnType<typeof rig>, maker: PaneMaker, options: TaskHubPanelOptions) {
-    const host = new DraftHost(PLACE, {}, { places, scopeKeys: () => DEFAULT_SETTINGS.scopeKeys });
-    type Make = new (...args: unknown[]) => { open(): Promise<void> };
-    return new (TaskHubPanel as unknown as Make)(r.app, host, { ...r.deps, places }, options, { source: null, inert: true, turns: null, place: maker }).open();
-}
-
-/** A place pane with one field, which records what the panel tells it. */
-function placePane() {
-    const made: { el: FocusEl; input: FocusEl; pane: HubPane & { dispose: ReturnType<typeof vi.fn> } }[] = [];
-    const maker: PaneMaker = (el) => {
-        const at = el as unknown as FocusEl;
-        const input = at.createEl('input');
-        const pane = { focus: () => ({ to: input as unknown as HTMLElement, selection: 'end' as const }), setEnabled: vi.fn(), dispose: vi.fn() };
-        made.push({ el: at, input, pane });
-        return pane;
-    };
-    return { maker, made };
-}
-
-describe('the hub on a task not written yet given a place pane', () => {
+describe('the hub on a task not written yet, its place tab', () => {
     const tabs = (r: ReturnType<typeof rig>) => r.body.find('tv-tabs')!.findAll('tv-tabs__tab');
+    const selected = (r: ReturnType<typeof rig>) => tabs(r).map(tab => tab.attrs.get('aria-selected'));
 
-    it('puts the tabs under the card, properties and place by their keys, each over its pane', async () => {
+    it('puts the tabs under the card, properties and place by their keys, the form and the place\'s fields each in its pane', async () => {
         const r = rig();
-        const p = placePane();
-        await openWithPlace(r, p.maker, { focusField: 'name' });
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
 
         expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'tv-tabs', 'tv-tabs__panes tv-tabs__panes--stacked']);
         expect(r.body.classes.has('task-hub__body--tabs')).toBe(true);
         expect(tabs(r).map(tab => tab.find('tv-tabs__label')!.text)).toEqual([t('modal.hub.tabProperties'), t('modal.hub.tabPlace')]);
         const [properties, place] = r.body.find('tv-tabs__panes')!.children;
         expect(properties.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__form']);
-        expect(p.made.map(m => m.el)).toEqual([place]);
+        expect(panes.map(pane => pane.el)).toEqual([place]);
+    });
+
+    it('in a note, opens on the properties, the place\'s fields on that note and its heading', async () => {
+        const r = rig();
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
+
+        expect(selected(r)).toEqual(['true', 'false']);
+        expect(panes[0].opts.initial).toEqual({ note: { text: '2031-01-15', picked: '2031-01-15.md' }, heading: 'Tasks' });
+    });
+
+    it('on no place, opens on the place, the note field empty and the heading the settings\', the first focus on the place\'s first field', async () => {
+        const r = rig();
+        await TaskHubPanel.openDraftHub(r.app, null, {}, { ...r.deps, places, notePlaces });
+
+        expect(selected(r)).toEqual(['false', 'true']);
+        expect(panes[0].opts.initial).toEqual({ note: { text: '', picked: null }, heading: DEFAULT_SETTINGS.taskHeading });
+        expect(shells.at(-1)!.opts!.initialFocus!()).toEqual({ to: panes[0].input, selection: 'end' });
+    });
+
+    it('under a row, has no tabs: the form alone under the card', async () => {
+        const r = rig();
+        await TaskHubPanel.openDraftHub(r.app, CHILD, {}, { ...r.deps, places, notePlaces });
+
+        expect(r.body.children.map(child => [...child.classes].join(' '))).toEqual(['task-hub__preview', 'task-hub__form']);
+        expect(panes).toHaveLength(0);
     });
 
     it('hands the form the place pane, and the tab chosen for an element', async () => {
         const r = rig();
-        const p = placePane();
-        await openWithPlace(r, p.maker, { focusField: 'name' });
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
 
         const deps = forms[0].deps as { place: { el: unknown; pane: unknown }; reveal: (el: Element) => void };
-        expect(deps.place).toEqual({ el: p.made[0].el, pane: p.made[0].pane });
-        deps.reveal(p.made[0].input as unknown as Element);
-        expect(tabs(r).map(tab => tab.attrs.get('aria-selected'))).toEqual(['false', 'true']);
+        expect(deps.place).toEqual({ el: panes[0].el, pane: panes[0] });
+        deps.reveal(panes[0].input as Element);
+        expect(selected(r)).toEqual(['false', 'true']);
     });
 
-    it('opens on the properties for a field of theirs, and on the place for the place\'s field, which takes the first focus', async () => {
-        const onName = rig();
-        await openWithPlace(onName, placePane().maker, { focusField: 'name' });
-        expect(tabs(onName).map(tab => tab.attrs.get('aria-selected'))).toEqual(['true', 'false']);
-        shells[0].close();
-
+    it('reads the place\'s fields with a new note\'s folder reckoned from no note', async () => {
         const r = rig();
-        const p = placePane();
-        await openWithPlace(r, p.maker, { focusField: 'place' });
-        expect(tabs(r).map(tab => tab.attrs.get('aria-selected'))).toEqual(['false', 'true']);
-        expect(shells.at(-1)!.opts!.initialFocus!()).toEqual({ to: p.made[0].input, selection: 'end' });
+        const readFields = vi.fn(notePlaces.readFields);
+        await TaskHubPanel.openDraftHub(r.app, null, {}, { ...r.deps, places, notePlaces: { readFields } });
+        const ask: DestinationAsk = { note: { text: 'Plan', picked: null }, heading: '' };
+        await (panes[0].opts.host as PlaceFieldsHost).read(ask);
+
+        expect(readFields).toHaveBeenCalledWith(ask, 'Inbox');
+    });
+
+    it('moves the draft by the place\'s fields: what they answer is read as the place it is put in', async () => {
+        const r = rig();
+        const facts = vi.fn(places.facts);
+        await TaskHubPanel.openDraftHub(r.app, null, {}, { ...r.deps, places: { ...places, facts } as unknown as CreatePlaces, notePlaces });
+        const host = panes[0].opts.host as PlaceFieldsHost;
+        const draft = (forms[0].host as PanelHost).draft!;
+        expect(facts).not.toHaveBeenCalled();
+        expect(draft.canCreate()).toBe(false);
+
+        host.reading();
+        host.answered({ kind: 'to', to: { note: { kind: 'existing', path: '2031-01-15.md' }, spot: { heading: 'Tasks', level: 2, side: 'head' } } });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(facts).toHaveBeenCalledWith(PLACE);
+        expect(draft.canCreate()).toBe(true);
     });
 
     it('lets the place pane go as it closes', async () => {
         const r = rig();
-        const p = placePane();
-        await openWithPlace(r, p.maker, { focusField: 'name' });
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
         shells[0].close();
-        expect(p.made[0].pane.dispose).toHaveBeenCalledTimes(1);
+        expect(panes[0].dispose).toHaveBeenCalledTimes(1);
     });
 });
 

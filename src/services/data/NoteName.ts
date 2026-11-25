@@ -28,7 +28,7 @@ export type NameCheck =
 
 /**
  * What a note field holds (see `NoteField`, in the send dialog, the section
- * dialog and the place dialog): the text typed, and the note it names by its
+ * dialog and the place tab of the hub on a task to make): the text typed, and the note it names by its
  * path, while the text is the text that put it there: a candidate picked
  * from the field's list, or the form that opened the field on a note.
  */

@@ -32,7 +32,8 @@ export interface NoteFieldOptions {
  * are, searched by name or folder among the vault's notes and aliases, and
  * the unresolved links for a form that may make the note one names, as
  * Obsidian's `[[` lists them (`NoteSuggest`). The send dialog, the place
- * dialog and the sidebar's section dialog name a note with it.
+ * tab of the hub on a task to make and the sidebar's section dialog name a
+ * note with it.
  *
  * It holds the text typed and the note picked (`NoteAsk`). A note picked,
  * or an alias of one, puts the note's name in the field and is held as
@@ -83,6 +84,12 @@ export class NoteField {
     /** The focus on the field, its text met as a name's is ({@link NAME_ON_FOCUS}). */
     focus(): FieldFocus {
         return { to: this.input, selection: NAME_ON_FOCUS };
+    }
+
+    /** The field taking input or not, its × with it. */
+    setEnabled(enabled: boolean): void {
+        this.input.disabled = !enabled;
+        this.clear.sync();
     }
 
     /** What the field holds now. */

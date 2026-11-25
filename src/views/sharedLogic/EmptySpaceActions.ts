@@ -13,7 +13,6 @@ import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import type { DraftSeed } from '../../services/data/TaskDraft';
-import { PlaceModal } from '../../modals/place/PlaceModal';
 import { DateUtils } from '../../utils/DateUtils';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
@@ -41,21 +40,12 @@ export function openDraftHubForDailyNote(plugin: PluginContext, date: string, mi
 }
 
 /**
- * Ask where a task to create goes (`PlaceModal`, the note field empty and
- * the heading field on the settings' heading), then open the hub on a task
- * not written yet there, starting as {@link seedAt} says. The note stays
- * the one chosen whatever start date the task is given. Nothing opens when
- * the dialog is closed without a choice.
+ * Open the hub on a task not written yet in no place, for the user to
+ * choose the note in its place tab, starting as {@link seedAt} says. The
+ * note stays the one chosen whatever start date the task is given.
  */
-export async function openDraftHubInNote(plugin: PluginContext, date: string, minutes?: number): Promise<void> {
-    const seed = seedAt(date, minutes);
-    const to = await PlaceModal.pick(plugin.app, plugin.getNotePlaces(), {
-        purpose: 'create',
-        initial: { note: { text: '', picked: null }, heading: plugin.settings.taskHeading },
-        folderFrom: '',
-    });
-    if (!to) return;
-    plugin.openDraftHub(plugin.getCreatePlaces().fromDestination(to), seed);
+export function openDraftHubInNote(plugin: PluginContext, date: string, minutes?: number): void {
+    plugin.openDraftHub(null, seedAt(date, minutes));
 }
 
 /**
@@ -108,7 +98,7 @@ export function appendEmptySpaceMenuItems(
     menu.addItem((item) => {
         item.setTitle(t('menu.createTaskInNote'))
             .setIcon('file-plus')
-            .onClick(() => { void openDraftHubInNote(plugin, date, minutes); });
+            .onClick(() => openDraftHubInNote(plugin, date, minutes));
     });
 
     menu.addSeparator();
