@@ -144,7 +144,17 @@ export class DateFieldGroup {
         const read = KEYS.flatMap(key => readIssue(key, this.readIssues.get(key) ?? null));
         if (read.length > 0) return read;
         const fields = this.readAll();
-        return fields ? dateRuleIssues(fields, this.opts.getValidationCtx()) : [];
+        return fields ? this.ruleIssues(fields) : [];
+    }
+
+    /** The rules across the six as read, under what is inherited now. */
+    private ruleIssues(fields: DateTimeFields): FormIssue<DateKey>[] {
+        return dateRuleIssues(fields, this.opts.getValidationCtx());
+    }
+
+    /** The fields a rule across them is broken at, as `issues` finds them. */
+    private brokenAt(fields: DateTimeFields): DateKey[] {
+        return [...new Set(this.ruleIssues(fields).flatMap(issue => (issue.at === 'form' ? [] : [issue.at])))];
     }
 
     private tell(): void {
@@ -155,7 +165,7 @@ export class DateFieldGroup {
     private commitGroup(group: DateGroupKey): boolean | Promise<boolean> {
         const fields = this.readAll();
         this.tell();
-        if (!fields || dateRuleIssues(fields, this.opts.getValidationCtx()).length > 0) return false;
+        if (!fields || this.ruleIssues(fields).length > 0) return false;
         return this.opts.onCommit(group, fields) ?? true;
     }
 
@@ -170,9 +180,20 @@ export class DateFieldGroup {
         const unread = pending.filter(key => !this.bound.get(key)!.pending()!.ok);
         if (unread.length > 0) return unread;
         const fields = this.readAll();
-        if (!fields) return [];
-        const broken = dateRuleIssues(fields, this.opts.getValidationCtx()).flatMap(issue => (issue.at === 'form' ? [] : [issue.at]));
-        return [...new Set(broken)];
+        return fields ? this.brokenAt(fields) : [];
+    }
+
+    /**
+     * The fields a rule across the six is broken at, as they hold their text
+     * now, typed or not, and under what is inherited now: what a create
+     * cannot write. A field committed keeps a rule only as it was inherited
+     * then, and what is inherited changes with the place (a start date the
+     * heading gave, gone), so a value saved may break one since. None while
+     * a field does not read, which says why under it.
+     */
+    ruleBroken(): DateKey[] {
+        const fields = this.readAll();
+        return fields ? this.brokenAt(fields) : [];
     }
 
     /**

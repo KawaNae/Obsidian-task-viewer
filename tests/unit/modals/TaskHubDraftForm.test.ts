@@ -221,6 +221,25 @@ describe('the dates of a hub on a task not written yet', () => {
         expect(given.host.task().startTime).toBe('10:00');
         expect(given.host.task().startDate).toBeUndefined();
     });
+
+    it('creates nothing where a time committed breaks a rule once the place no longer gives the start date it leant on, and puts the focus on it', async () => {
+        const s = await setUp({}, { facts: { ...FACTS, inherits: { ...FACTS.inherits, startDate: '2031-01-10' } } });
+        startTime(s).focus();
+        startTime(s).type('10:00');
+        startTime(s).enter();
+        expect(s.host.task().startTime).toBe('10:00');
+
+        // A refused create asks the place again, which now gives no start date.
+        s.places.facts.mockResolvedValue(FACTS);
+        s.press(s.create());
+        await s.write({ written: false, refused: null });
+        expect(s.host.task().cascadeContext?.startDate).toBeUndefined();
+
+        s.el('name').focus();
+        s.press(s.create());
+        expect(s.places.create).toHaveBeenCalledTimes(1);
+        expect(startTime(s).ownerDocument.activeElement).toBe(startTime(s));
+    });
 });
 
 describe('the create of a hub on a task not written yet', () => {
