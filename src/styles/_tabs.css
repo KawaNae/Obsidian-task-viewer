@@ -1,0 +1,99 @@
+/* ======================================================
+   Tabs (tv-tabs__*): a row of tabs over the panes they
+   choose between (TabStrip). The row is underlined tabs
+   sharing its width, the tab chosen marked by a line of the
+   accent under it. How a pane off is hidden is the place's
+   that uses the strip: here it takes no room, and
+   tv-tabs__panes--stacked keeps one height for them all.
+   ====================================================== */
+
+.tv-tabs {
+    display: flex;
+    width: 100%;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+/* Obsidian's button look taken off, as tv-icon-btn takes it (see
+   _controls.css for the specificity): (0,2,1) wins the tablet's padding. */
+.tv-tabs > button.tv-tabs__tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: var(--input-height);
+    padding: 0 12px;
+    margin-bottom: -1px;
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--tv-text-muted);
+    font-size: var(--font-ui-small);
+    cursor: pointer;
+}
+
+.tv-tabs > button.tv-tabs__tab:hover {
+    background: transparent;
+    box-shadow: none;
+    color: var(--tv-text);
+}
+
+.tv-tabs > button.tv-tabs__tab.is-active {
+    border-bottom-color: var(--tv-accent);
+    color: var(--tv-text);
+    font-weight: var(--font-semibold);
+}
+
+/* A height a finger presses on a phone. */
+.is-phone .tv-tabs > button.tv-tabs__tab {
+    height: 40px;
+    font-size: var(--font-ui-medium);
+}
+
+.tv-tabs__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.tv-tabs__icon svg {
+    width: var(--icon-s);
+    height: var(--icon-s);
+}
+
+.tv-tabs__label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.tv-tabs__pane.is-hidden {
+    display: none;
+}
+
+/* The panes laid over one another in one cell, as tall as the tallest, so
+   choosing a tab moves nothing around them. A pane off is not seen, and
+   as tall as the cell at most: a cell bounded by its place (a column the
+   panes shrink in) then scrolls nothing of it. */
+.tv-tabs__panes--stacked {
+    display: grid;
+    grid-template: minmax(0, auto) / minmax(0, 1fr);
+}
+
+.tv-tabs__panes--stacked > .tv-tabs__pane {
+    grid-area: 1 / 1;
+    min-width: 0;
+    align-self: start;
+}
+
+.tv-tabs__panes--stacked > .tv-tabs__pane.is-hidden {
+    display: block;
+    visibility: hidden;
+    overflow: hidden;
+    min-height: 0;
+    max-height: 100%;
+}
