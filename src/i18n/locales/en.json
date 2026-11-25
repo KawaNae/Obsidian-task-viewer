@@ -554,6 +554,7 @@
       "formShut": "Creating the task. The fields cannot be edited until it is done.",
       "discardAsk": "The task is not created yet. Discard it?",
       "noNote": "Choose a note to create the task in",
+      "unread": "Could not read the note.",
       "noteNew": "No note matches. Makes a new note",
       "toHead": "Creates the task at the top of the heading {{heading}} in {{note}}",
       "toEnd": "Creates the task at the end of the heading {{heading}} in {{note}}",

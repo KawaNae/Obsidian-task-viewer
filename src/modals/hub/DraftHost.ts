@@ -33,25 +33,33 @@ export interface DraftHostDeps {
  *   answer puts the draft in the place anew (`withPlace`): what it inherits
  *   changes, what it was given stays. A create is not offered until the
  *   place has answered, nor where the task cannot go.
- * - The place fields tell each time they are typed in (`reading`) and each
- *   answer to what they hold now (`answered`). An answer naming a note is
- *   the place `fromDestination` makes of it by the place the hub opened on,
- *   so an answer in that note is that note still, a daily note made of its
- *   day's template; it is read anew unless it is the place the draft is in
- *   already. An answer naming no note leaves the draft in no place, says
+ * - The place fields tell each time they are typed in (`reading`) and then
+ *   the answer to what they hold now (`answered`), which comes without fail.
+ *   An answer naming a note is the place `fromDestination` makes of it by
+ *   the place the hub opened on, so an answer in that note is that note
+ *   still, a daily note made of its day's template; it is read anew unless
+ *   it is the place the draft is in already. An answer naming no note, or
+ *   saying the fields could not be read, leaves the draft in no place, says
  *   why above the create, and offers no create. Moving takes back why a
- *   create was refused: that was of the place left.
+ *   create was refused: that was of the place left. A place moved to that
+ *   could not be read is said so, and keeps nothing of the place left; the
+ *   place asked again after a refusal that could not be read stays as it
+ *   was last read.
  * - While the fields or the place are being read, the create looks as it
- *   did, so it does not flicker at each key typed; a create asked then
- *   waits for the answer, and is asked of the form again once it comes
- *   (`HubForm.create`), so the dates are seen under what the place
- *   gives now. An answer naming no note drops it.
- * - A create waits for the write: written, the hub closes; refused, why is
- *   said above the create once, with no notice, and the place is asked
- *   again. The fields are shut meanwhile: what was typed after the write was
- *   made would not be written, and would be lost as the hub closes. A close
- *   asked for meanwhile waits for the write. A refusal that comes after the
- *   hub closed otherwise is told by a notice.
+ *   did, so it does not flicker at each key typed.
+ * - A create is under way from its press until it is written or found not
+ *   to be: the fields are shut (what was typed after the press would not be
+ *   written, and would be lost as the hub closes), the create reads as
+ *   creating, and a close asked meanwhile waits for its end. Asked while the
+ *   fields or the place are being read, it waits for them; once they have
+ *   answered, it is asked of the form again (`HubForm.create`), the fields
+ *   open, so the dates are seen under what the place gives now (a field
+ *   they break takes the focus, and nothing is written), and it ends
+ *   unwritten where the task cannot go or the place could not be read, why
+ *   said above the create.
+ * - Written, the hub closes; refused, why is said above the create once,
+ *   with no notice, and the place is asked again. A refusal that comes after
+ *   the hub closed otherwise is told by a notice.
  * - Whether anything was given is whether a write now would write other
  *   than the task as it opened (`newRowOf`), or the place is another than
  *   it opened on (`samePlace`): a value given and taken back again is nothing.
@@ -66,19 +74,20 @@ export class DraftHost implements PanelHost, HubDraft {
     /** The place the hub opened on: what an answer is taken by (`fromDestination`), and what {@link changed} compares with. */
     private readonly openedOn: CreatePlace | null;
     private at: DraftAt;
-    private facts: PlaceFacts | null = null;
-    /** The place `facts` were read of. */
-    private factsOf: CreatePlace | null = null;
+    /** What the place last read is, with the place it was read of: of the place left while the one moved to is read. */
+    private read: { of: CreatePlace; facts: PlaceFacts } | null = null;
     /** How many times the place was asked: an answer is taken only to the last. */
     private asked = 0;
     /** The asking last done with, answered or failed: one after it is still under way. */
     private settled = 0;
     /** The place fields were typed in, and their answer is yet to come. */
     private fieldsReading = false;
-    /** A create was asked while the fields or the place were being read: it is asked again once they answer. */
-    private createWhenRead = false;
-    /** The create's write while it is under way. */
-    private making: Promise<WriteAnswer> | null = null;
+    /**
+     * The create under way, from its press until it is written or found not
+     * to be: told whether it was written as it ends. It waits for the fields
+     * and the place while they are read, and writes once they are not.
+     */
+    private making: Making | null = null;
     private form: HubForm | null = null;
     private panel: HubPanel | null = null;
     /** Whether what was handed on is yet to be drawn in the card and the fields. */
@@ -131,13 +140,18 @@ export class DraftHost implements PanelHost, HubDraft {
 
     /** Whether a create may be asked: while the fields or the place are being read, as the place last read says. */
     canCreate(): boolean {
-        return this.place !== null && this.facts !== null && !placeIssues(this.facts).some(issue => issue.tone === 'error')
+        return this.place !== null && this.read !== null && !placeIssues(this.read.facts).some(issue => issue.tone === 'error')
             && this.making === null && !this.closed;
     }
 
     /** Whether the place fields or the place are being read: a create asked now waits for them. */
     private waiting(): boolean {
         return this.fieldsReading || this.settled < this.asked;
+    }
+
+    /** Whether a create's write is under way: it is made once nothing is being read, and nothing read is taken then. */
+    private writing(): boolean {
+        return this.making?.writing === true;
     }
 
     creating(): boolean {
@@ -150,33 +164,37 @@ export class DraftHost implements PanelHost, HubDraft {
     }
 
     /**
-     * Write the draft in the place, as its row (`newRowOf`); nothing while a
-     * create may not be asked. Asked while the fields or the place are being
-     * read, it waits for them.
+     * Begin a create, as its row (`newRowOf`) in the place; nothing while a
+     * create may not be asked. It is under way from now: written at once,
+     * or, while the fields or the place are being read, once they answer.
      */
     create(): void {
-        if (!this.canCreate() || !this.place) return;
-        if (this.waiting()) {
-            this.createWhenRead = true;
-            return;
-        }
-        this.createWhenRead = false;
-        const row = newRowOf(this.value, this.deps.scopeKeys());
-        const making = this.deps.places.create(this.place, row, { tellRefusal: false })
-            .catch((e: unknown) => {
-                logError(`[DraftHost] create failed: ${e instanceof Error ? e.message : String(e)}`);
-                return notWritten();
-            });
-        this.making = making;
+        if (!this.canCreate()) return;
+        this.making = making();
         this.form?.sayWrite(null);
         this.form?.showShut();
         this.form?.showDraft();
-        void making.then(answer => this.made(answer));
+        if (!this.waiting()) this.write(this.making);
+    }
+
+    /** Write the draft in the place: what the create under way waited for is read. */
+    private write(making: Making): void {
+        const place = this.place;
+        if (!place) return;
+        making.writing = true;
+        const row = newRowOf(this.value, this.deps.scopeKeys());
+        void this.deps.places.create(place, row, { tellRefusal: false })
+            .catch((e: unknown) => {
+                logError(`[DraftHost] create failed: ${e instanceof Error ? e.message : String(e)}`);
+                return notWritten();
+            })
+            .then(answer => this.made(answer, making));
     }
 
     /** The create's answer: written, the hub closes; refused, why is said, the fields open again, and the place is asked again. */
-    private made(answer: WriteAnswer): void {
+    private made(answer: WriteAnswer, making: Making): void {
         this.making = null;
+        making.end(answer.written);
         if (this.closed) {
             if (!answer.written && answer.refused) new Notice(refusalNotice(answer.refused));
             return;
@@ -192,10 +210,43 @@ export class DraftHost implements PanelHost, HubDraft {
         void this.lookUp();
     }
 
-    /** A create under way is waited for: written, the hub closes; refused, it stays open with why above the create. */
+    /**
+     * The fields and the place have been read while a create waits for them:
+     * it is asked of the form again, the fields open, where the task can go
+     * there (the form asks {@link create} once it finds nothing to fix, and
+     * this create ends as that one does); it ends unwritten otherwise, or
+     * where the form finds a field to fix, why said as the answer said it.
+     */
+    private readDone(): void {
+        const waited = this.making;
+        if (!waited || waited.writing || this.waiting()) return;
+        this.making = null;
+        this.form?.showShut();
+        if (this.canCreate()) this.form?.create();
+        const again = this.making as Making | null;
+        if (again) {
+            void again.done.then(waited.end);
+            return;
+        }
+        waited.end(false);
+        this.form?.showDraft();
+    }
+
+    /** End the create waiting for a read unwritten, why said above it: the read failed. */
+    private dropWaiting(why: string): void {
+        const waited = this.making;
+        if (!waited || waited.writing) return;
+        this.making = null;
+        waited.end(false);
+        this.form?.sayWrite(why);
+        this.form?.showShut();
+        this.form?.showDraft();
+    }
+
+    /** A create under way is waited for: written, the hub closes; not written, it stays open with why above the create. */
     closing(): CloseAnswer {
         if (!this.making) return 'close';
-        return this.making.then(answer => (answer.written ? 'close' : 'stay'));
+        return this.making.done.then(written => (written ? 'close' : 'stay'));
     }
 
     bind(form: HubForm): void {
@@ -209,29 +260,30 @@ export class DraftHost implements PanelHost, HubDraft {
         else this.form?.sayPlace(noPlaceIssues(NO_NOTE));
     }
 
-    /** The place fields were typed in: their answer is waited for. Nothing is taken while a create is under way. */
+    /** The place fields were typed in: their answer is waited for. Nothing is taken while a write is under way. */
     reading(): void {
-        if (this.making || this.closed) return;
+        if (this.writing() || this.closed) return;
         this.fieldsReading = true;
     }
 
     /**
      * The place fields' answer to what they hold now: the draft moves to the
      * place it names, read anew unless it is there already, or to no place.
-     * Nothing is taken while a create is under way (the fields are shut,
-     * and only an answer asked before it can come), nor once the hub closed.
+     * Nothing is taken while a write is under way (the fields are shut, and
+     * no answer is to come), nor once the hub closed.
      */
     answered(answer: PlaceAnswer): void {
-        if (this.making || this.closed) return;
+        if (this.writing() || this.closed) return;
         this.fieldsReading = false;
         if (answer.kind !== 'to') {
             this.moveToNone(answer);
+            this.readDone();
             return;
         }
         const next = this.deps.places.fromDestination(answer.to, this.openedOn ?? undefined);
-        if (this.place && samePlace(next, this.place) && (this.facts !== null || this.waiting())) {
+        if (this.place && samePlace(next, this.place) && (this.read !== null || this.waiting())) {
             this.form?.showDraft();
-            this.createIfAsked();
+            this.readDone();
             return;
         }
         this.place = next;
@@ -239,33 +291,33 @@ export class DraftHost implements PanelHost, HubDraft {
         void this.lookUp();
     }
 
-    /** The place fields name no note: the draft is in no place, why is said, and no create is offered nor waits. */
-    private moveToNone(answer: Extract<PlaceAnswer, { kind: 'unnamed' | 'ambiguous' }>): void {
+    /** The place fields name no note, or could not be read: the draft is in no place, why is said, and no create is offered. */
+    private moveToNone(answer: Exclude<PlaceAnswer, { kind: 'to' }>): void {
         this.place = null;
         this.form?.sayWrite(null);
         // No asking still under way is taken: it is of the place left.
         this.settled = ++this.asked;
-        this.facts = null;
-        this.factsOf = null;
-        this.createWhenRead = false;
+        this.putNowhere(noPlaceIssues(answer));
+    }
+
+    /** The draft in no place known: it inherits nothing, its card names no note, and `issues` say why above the create. */
+    private putNowhere(issues: readonly FormIssue<never>[]): void {
+        this.read = null;
         this.at = { file: '', inherits: {} };
         this.value = withPlace(this.value, this.at);
-        this.form?.sayPlace(noPlaceIssues(answer));
+        this.form?.sayPlace(issues);
         this.form?.refresh();
         this.form?.showDraft();
         this.panel?.redrawPreview();
     }
 
-    /** A create asked while reading, asked of the form again once nothing is being read. */
-    private createIfAsked(): void {
-        if (!this.createWhenRead || this.waiting()) return;
-        this.createWhenRead = false;
-        this.form?.create();
-    }
-
-    /** The hub closed: no answer is taken any more, and a refusal that comes after is told by a notice. */
+    /** The hub closed: no answer is taken any more, a create waiting for one ends unwritten, and a refusal that comes after is told by a notice. */
     dispose(): void {
         this.closed = true;
+        const waited = this.making;
+        if (!waited || waited.writing) return;
+        this.making = null;
+        waited.end(false);
     }
 
     /**
@@ -283,17 +335,21 @@ export class DraftHost implements PanelHost, HubDraft {
         } catch (e) {
             logWarn(`[DraftHost] the place could not be read: ${String(e)}`);
             if (this.closed || seq !== this.asked) return;
-            // What was read of another place says nothing of this one: no create is offered here.
             this.settled = seq;
-            this.createWhenRead = false;
-            if (!same(this.factsOf, place)) this.facts = null;
-            this.form?.showDraft();
+            if (same(this.read?.of ?? null, place)) {
+                // Asked again after a refusal: what was read of it stands, but not for a create that waited on this asking.
+                this.dropWaiting(t('modal.newTask.unread'));
+                this.form?.showDraft();
+                return;
+            }
+            // What was read of another place says nothing of this one.
+            this.putNowhere(UNREAD_ISSUES);
+            this.readDone();
             return;
         }
         if (this.closed || seq !== this.asked) return;
         this.settled = seq;
-        this.facts = facts;
-        this.factsOf = place;
+        this.read = { of: place, facts };
         const { inherits, inheritedFrom } = facts;
         this.at = { file: this.deps.places.noteOf(place) ?? this.at.file, inherits, ...(inheritedFrom && { inheritedFrom }) };
         this.value = withPlace(this.value, this.at);
@@ -301,9 +357,25 @@ export class DraftHost implements PanelHost, HubDraft {
         this.form?.refresh();
         this.form?.showDraft();
         this.panel?.redrawPreview();
-        this.createIfAsked();
+        this.readDone();
     }
 }
+
+/** A create under way: whether it was written, told once as it ends, and whether its write is made (it waits for a read until then). */
+interface Making {
+    readonly done: Promise<boolean>;
+    end(written: boolean): void;
+    writing: boolean;
+}
+
+function making(): Making {
+    let end: (written: boolean) => void = () => { };
+    const done = new Promise<boolean>(resolve => { end = resolve; });
+    return { done, end, writing: false };
+}
+
+/** What is said above the create while what the place fields name, or the place moved to, could not be read. */
+const UNREAD_ISSUES: FormIssue<never>[] = [{ at: 'form', tone: 'error', text: t('modal.newTask.unread') }];
 
 /** The note field empty: no note named yet. */
 const NO_NOTE: Extract<NoteRead, { kind: 'unnamed' }> = { kind: 'unnamed', why: { ok: false, why: 'empty', at: 'name' } };
@@ -324,7 +396,8 @@ function sameRow(a: NewRow, b: NewRow): boolean {
  * no note can have and more than one note by the name are errors, said as
  * under the field, so they are seen from another tab too.
  */
-export function noPlaceIssues(read: Extract<NoteRead, { kind: 'unnamed' | 'ambiguous' }>): FormIssue<never>[] {
+export function noPlaceIssues(read: Exclude<PlaceAnswer, { kind: 'to' }>): FormIssue<never>[] {
+    if (read.kind === 'unread') return UNREAD_ISSUES;
     if (read.kind === 'unnamed' && read.why.why === 'empty') return [{ at: 'form', tone: 'info', text: t('modal.newTask.noNote') }];
     const text = read.kind === 'unnamed' ? DestinationText.unnamed(read) : DestinationText.ambiguous(read);
     return [{ at: 'form', tone: 'error', text }];

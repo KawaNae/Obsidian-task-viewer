@@ -159,11 +159,50 @@ describe('answering', () => {
         expect(h.told).toEqual(['reading', 'reading', { kind: 'to', to: { note: { kind: 'existing', path: 'Plan.md' }, spot: 'end' } }]);
     });
 
-    it('answers nothing when the destination could not be read', async () => {
-        const h = setUp({ note: typed('Plan'), heading: '' });
+    it('answers that the fields could not be read when the destination\'s read fails, taking back what was said under them', async () => {
+        const h = await answered(CHARS);
+        expect(h.state().issues).toHaveLength(1);
+        h.fields.fieldsChanged({ note: typed('Plan'), heading: '' });
+        await h.asks[1].fail(new Error('read'));
+
+        expect(h.told).toEqual(['reading', CHARS, 'reading', { kind: 'unread' }]);
+        expect(h.state()).toEqual({ headings: [], issues: [] });
+    });
+
+    it('answers that the fields could not be read when the read throws as it is asked', async () => {
+        const told: unknown[] = [];
+        const host: PlaceFieldsHost = {
+            read: () => { throw new Error('read'); },
+            reading: () => { told.push('reading'); },
+            answered: (answer) => { told.push(answer); },
+        };
+        new PlaceFields({ note: typed('Plan'), heading: '' }, host, { render: () => { } });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(told).toEqual(['reading', { kind: 'unread' }]);
+    });
+
+    it('tells nothing of a read that fails once a later asking came: the later one answers', async () => {
+        const h = setUp({ note: typed('A'), heading: 'Tasks' });
+        h.fields.fieldsChanged({ note: typed('Plan'), heading: '' });
+        await h.asks[0].fail(new Error('read'));
+        expect(h.told).toEqual(['reading', 'reading']);
+
+        await h.asks[1].answer(at('end', null));
+        expect(h.told.at(-1)).toEqual({ kind: 'to', to: { note: { kind: 'existing', path: 'Plan.md' }, spot: 'end' } });
+    });
+
+    it('follows each reading it tells with one answer to what the fields hold then, however their reads end', async () => {
+        const h = setUp({ note: typed('A'), heading: 'Tasks' });
+        h.fields.fieldsChanged({ note: typed('B'), heading: '' });
+        h.fields.fieldsChanged({ note: typed('Plan'), heading: '' });
+        await h.asks[2].fail(new Error('read'));
+        await h.asks[1].answer(place());
         await h.asks[0].fail(new Error('read'));
 
-        expect(h.told).toEqual(['reading']);
+        // Three readings told, the last answered once; the two overtaken tell nothing.
+        expect(h.told).toEqual(['reading', 'reading', 'reading', { kind: 'unread' }]);
     });
 
     it('tells nothing, nor draws, once disposed', async () => {

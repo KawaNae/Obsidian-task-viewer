@@ -25,9 +25,12 @@ vi.mock('obsidian', async () => {
  * none for the user to choose, and the place fields move it: each answer
  * naming a note is a place by the place it opened on (`fromDestination`),
  * read anew unless it is the place already; an answer naming none leaves it
- * on no place, saying why, with no create. A create asked while the fields
- * or the place are being read waits for the answer, and is asked of the
- * form again once it comes. What the fields hand on is
+ * on no place, saying why, with no create, as an answer that they could not
+ * be read does. A create is under way from the press until it is written
+ * or not: asked while the fields or the place are being read, the fields
+ * are shut, it reads as creating, and it is asked of the form again once
+ * they answer where it can go, or ends unwritten, why said, where it
+ * cannot. What the fields hand on is
  * put over the draft at once and written nowhere; the card and the fields
  * are drawn again once the field handing it on is done. What the place is
  * is asked once the hub has opened, again after a write refused, and only
@@ -102,6 +105,9 @@ const EMPTY: PlaceAnswer = { kind: 'unnamed', why: { ok: false, why: 'empty', at
 const CHARS: Extract<NoteRead, { kind: 'unnamed' }> = { kind: 'unnamed', why: { ok: false, why: 'chars', chars: '?', at: 'name' } };
 const AMBIGUOUS: Extract<NoteRead, { kind: 'ambiguous' }> = { kind: 'ambiguous', name: 'n', files: [{ path: 'a/n.md' }, { path: 'b/n.md' }] as never };
 const OTHER: CreatePlace = { kind: 'note', note: { kind: 'path', path: 'other.md' }, spot: SECTION };
+const UNREAD: PlaceAnswer = { kind: 'unread' };
+/** What is said above the create while the place could not be read. */
+const UNREAD_SAID = [{ at: 'form', tone: 'error', text: t('modal.newTask.unread') }];
 
 beforeEach(() => { Notice.messages.length = 0; });
 
@@ -408,15 +414,20 @@ describe('DraftHost moved by the place fields', () => {
         expect(r.host.task().file).toBe('');
     });
 
-    it('offers no create where the place it moved to could not be read', async () => {
-        const r = rig();
+    it('offers no create where the place it moved to could not be read, saying so, and keeps nothing of the place left', async () => {
+        const r = rig({}, null);
         r.open();
+        r.host.answered(to('2031-01-15.md'));
         await r.answer();
+        expect(r.host.task().file).toBe('2031-01-15.md');
         r.places.facts.mockImplementationOnce(() => Promise.reject(new Error('unreadable')));
         r.host.answered(to('other.md'));
         await settle();
 
         expect(r.host.canCreate()).toBe(false);
+        expect(r.form.place.at(-1)).toEqual(UNREAD_SAID);
+        expect(r.host.task().file).toBe('');
+        expect(r.told.slice(-3)).toEqual(['form', 'draft:false:false', 'card']);
         r.host.create();
         expect(r.places.create).not.toHaveBeenCalled();
         // Answered again, it is read again.
@@ -424,23 +435,78 @@ describe('DraftHost moved by the place fields', () => {
         expect(r.places.facts).toHaveBeenCalledTimes(3);
     });
 
-    it('keeps the create offered while the fields are read, and a create asked then waits for the answer', async () => {
+    it('keeps the create offered while the fields are read, and a create asked then is under way from the press: the fields shut, read as creating', async () => {
         const r = rig();
         r.open();
         await r.answer();
         r.host.reading();
         expect(r.host.canCreate()).toBe(true);
+        r.told.length = 0;
         r.host.create();
+
         expect(r.places.create).not.toHaveBeenCalled();
+        expect(r.host.creating()).toBe(true);
+        expect(r.host.canCreate()).toBe(false);
+        expect(r.host.shut()).toBe(t('modal.newTask.formShut'));
+        expect(r.told).toEqual(['shut:true', 'draft:false:true']);
+        expect(await r.host.put({ content: '後から' })).toBe(false);
+        r.host.create();
 
         r.host.answered(to('other.md'));
-        expect(r.host.canCreate()).toBe(true);
+        expect(r.host.creating()).toBe(true);
         expect(r.places.create).not.toHaveBeenCalled();
         await r.answer(daily({ path: 'other.md' }));
 
         expect(r.form.create).toHaveBeenCalledTimes(1);
         expect(r.places.create).toHaveBeenCalledTimes(1);
         expect(r.places.create.mock.calls[0][0]).toEqual(OTHER);
+        expect(r.rows[0].line.trimEnd()).toBe('- [ ]');
+        expect(r.host.creating()).toBe(true);
+    });
+
+    it('waits a close asked while a create waits for a read for that create: written, it closes', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        const closing = r.host.closing();
+        expect(closing).toBeInstanceOf(Promise);
+
+        r.host.answered(to('2031-01-15.md'));
+        await r.write({ written: true });
+        expect(await closing).toBe('close');
+    });
+
+    it('waits a close asked while a create waits for a read for that create: not written, it stays', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        const closing = r.host.closing();
+
+        r.host.answered(EMPTY);
+        expect(await closing).toBe('stay');
+    });
+
+    it('ends a create that waited unwritten, the fields open, where the form finds a field it cannot create with under the place now', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        // The form's second look finds a date the place's inherits now break: it asks no create.
+        vi.mocked(r.form.create).mockImplementationOnce(() => { });
+        r.told.length = 0;
+        r.host.answered(to('2031-01-15.md'));
+
+        expect(r.form.create).toHaveBeenCalledTimes(1);
+        expect(r.places.create).not.toHaveBeenCalled();
+        expect(r.host.creating()).toBe(false);
+        expect(r.host.shut()).toBeNull();
+        // The fields open before the form looks, so its focus can go to the field.
+        expect(r.told).toEqual(['draft:false:true', 'shut:false', 'draft:true:false']);
     });
 
     it('makes a create that waited once the fields answer the place it is in', async () => {
@@ -454,7 +520,7 @@ describe('DraftHost moved by the place fields', () => {
         expect(r.places.create.mock.calls[0][0]).toEqual(PLACE);
     });
 
-    it('makes no create that waited where the answer says the task cannot go', async () => {
+    it('ends a create that waited unwritten, the fields open, where the answer says the task cannot go, why said above it', async () => {
         const r = rig();
         r.open();
         await r.answer();
@@ -462,19 +528,125 @@ describe('DraftHost moved by the place fields', () => {
         r.host.create();
         r.host.answered(to('other.md'));
         await r.answer(daily({ path: 'other.md', heading: { kind: 'many', count: 2 } }));
+
         expect(r.places.create).not.toHaveBeenCalled();
+        expect(r.form.create).not.toHaveBeenCalled();
+        expect(r.host.creating()).toBe(false);
+        expect(r.host.shut()).toBeNull();
+        expect(r.told.at(-1)).toBe('draft:false:false');
+        expect(r.form.place.at(-1)?.[0].tone).toBe('error');
     });
 
-    it('drops a create that waited once an answer names no note', async () => {
+    it('ends a create that waited unwritten once an answer names no note, why said above it', async () => {
         const r = rig();
         r.open();
         await r.answer();
         r.host.reading();
         r.host.create();
         r.host.answered(EMPTY);
+
+        expect(r.host.creating()).toBe(false);
+        expect(r.host.shut()).toBeNull();
+        expect(r.form.place.at(-1)).toEqual(noPlaceIssues(EMPTY as Extract<PlaceAnswer, { kind: 'unnamed' }>));
+        r.host.reading();
         r.host.answered(to('other.md'));
         await r.answer(daily({ path: 'other.md' }));
         expect(r.places.create).not.toHaveBeenCalled();
+    });
+
+    it('is on no place once the fields could not be read, saying so, and ends a create that waited for them unwritten', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        r.host.answered(UNREAD);
+
+        expect(r.places.create).not.toHaveBeenCalled();
+        expect(r.host.creating()).toBe(false);
+        expect(r.host.shut()).toBeNull();
+        expect(r.host.canCreate()).toBe(false);
+        expect(r.form.place.at(-1)).toEqual(UNREAD_SAID);
+        expect(r.host.task().file).toBe('');
+
+        // Typed again, they are read again.
+        r.host.reading();
+        r.host.answered(to('2031-01-15.md'));
+        expect(r.places.facts).toHaveBeenCalledTimes(2);
+    });
+
+    it('ends a create that waited for the place it moved to unwritten once that place could not be read', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        r.places.facts.mockImplementationOnce(() => Promise.reject(new Error('unreadable')));
+        r.host.answered(to('other.md'));
+        await settle();
+
+        expect(r.places.create).not.toHaveBeenCalled();
+        expect(r.host.creating()).toBe(false);
+        expect(r.host.shut()).toBeNull();
+        expect(r.form.place.at(-1)).toEqual(UNREAD_SAID);
+    });
+
+    it('keeps the place as last read, the create offered, where asking it again after a refusal fails', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.create();
+        r.places.facts.mockImplementationOnce(() => Promise.reject(new Error('unreadable')));
+        await r.write({ written: false, refused: REFUSED });
+        const said = r.form.place.length;
+
+        expect(r.host.canCreate()).toBe(true);
+        expect(r.form.place).toHaveLength(said);
+        expect(r.host.task().file).toBe('2031-01-15.md');
+    });
+
+    it('ends a create that waited for the place asked again after a refusal unwritten once that asking fails, saying so above it', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.create();
+        let fail = (_e: Error) => { };
+        r.places.facts.mockImplementationOnce(() => new Promise<PlaceFacts>((_resolve, reject) => { fail = reject; }));
+        await r.write({ written: false, refused: REFUSED });
+        r.host.create();
+        expect(r.host.creating()).toBe(true);
+        fail(new Error('unreadable'));
+        await settle();
+
+        expect(r.places.create).toHaveBeenCalledTimes(1);
+        expect(r.host.creating()).toBe(false);
+        expect(r.form.said.at(-1)).toBe(t('modal.newTask.unread'));
+        expect(r.host.canCreate()).toBe(true);
+    });
+
+    it('offers no create while the place it comes back to from no place is read', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.answered(EMPTY);
+        r.host.answered(to('2031-01-15.md'));
+
+        expect(r.places.facts).toHaveBeenCalledTimes(2);
+        expect(r.host.canCreate()).toBe(false);
+        await r.answer();
+        expect(r.host.canCreate()).toBe(true);
+    });
+
+    it('writes nothing for a create that waited once the hub has closed', async () => {
+        const r = rig();
+        r.open();
+        await r.answer();
+        r.host.reading();
+        r.host.create();
+        r.host.dispose();
+        r.host.answered(to('2031-01-15.md'));
+        expect(r.places.create).not.toHaveBeenCalled();
+        expect(r.host.creating()).toBe(false);
     });
 
     it('takes no reading nor answer while a create is under way, nor once the hub has closed', async () => {
@@ -527,6 +699,7 @@ describe('noPlaceIssues', () => {
         expect(noPlaceIssues(EMPTY as Extract<PlaceAnswer, { kind: 'unnamed' }>)).toEqual([{ at: 'form', tone: 'info', text: t('modal.newTask.noNote') }]);
         expect(noPlaceIssues(CHARS)).toEqual([{ at: 'form', tone: 'error', text: DestinationText.unnamed(CHARS) }]);
         expect(noPlaceIssues(AMBIGUOUS)).toEqual([{ at: 'form', tone: 'error', text: DestinationText.ambiguous(AMBIGUOUS) }]);
+        expect(noPlaceIssues({ kind: 'unread' })).toEqual(UNREAD_SAID);
     });
 });
 

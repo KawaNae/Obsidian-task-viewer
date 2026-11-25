@@ -51,11 +51,13 @@ export type NoteRead =
 /**
  * What the destination fields name, as a form that follows them as they are
  * typed takes it: a note by its path and where in it, or why they name
- * none (the field empty, a name no note can have, more than one note).
+ * none (the field empty, a name no note can have, more than one note), or
+ * that what they name could not be read (`unread`).
  */
 export type PlaceAnswer =
     | { kind: 'to'; to: NoteDestination }
-    | Extract<NoteRead, { kind: 'unnamed' | 'ambiguous' }>;
+    | Extract<NoteRead, { kind: 'unnamed' | 'ambiguous' }>
+    | { kind: 'unread' };
 
 /**
  * A note the fields name, as it stands now. Read again whenever a field
