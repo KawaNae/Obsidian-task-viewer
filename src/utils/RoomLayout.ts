@@ -135,9 +135,9 @@ export class RoomLayout {
     }
 
     /**
-     * The padding the body needs to scroll to `top`, at least `least` px
-     * past the stylesheet's, with its height locked as it is, or at
-     * `height` where it is not; and how far it then scrolls. The padding
+     * The least padding found that lets the body scroll to `top`, at least
+     * `least` px past the stylesheet's, with its height locked as it is, or
+     * at `height` where it is not; and how far it then scrolls. The padding
      * is written and the range read after each write: a padding does not
      * lengthen the range by as much where the content gives way to it (a
      * part cut to the room left above the padding grows shorter by as much,
@@ -151,6 +151,14 @@ export class RoomLayout {
      * lacking at `least` and that height, past which no layout lengthens
      * the range by more, and where it still lacks then, the body is given
      * that padding and scrolls as far as it does.
+     *
+     * A step twice the last may take the range past `top`. The padding is
+     * then lessened by what went past, down to `least`, and kept so only
+     * where the body still scrolls to `top` with it: a layout lengthening
+     * the range by more than the padding would be left short. Where the
+     * range goes one for one with the padding, past what gave way, that is
+     * the padding `top` needs; where it goes by less, some of what went past
+     * is left.
      */
     padFor(top: number, least: number, height: number): { pad: number; range: number } {
         const locked = this.saved !== null;
@@ -169,6 +177,16 @@ export class RoomLayout {
                 this.pad(pad);
                 range = this.range();
                 step = range - before < 1 ? step * 2 : top - range;
+            }
+            const past = range - top;
+            if (past >= 1 && pad > least) {
+                const less = Math.max(least, pad - past);
+                this.pad(less);
+                const back = this.range();
+                if (top - back < 1) {
+                    pad = less;
+                    range = back;
+                }
             }
             return { pad, range };
         } finally {
