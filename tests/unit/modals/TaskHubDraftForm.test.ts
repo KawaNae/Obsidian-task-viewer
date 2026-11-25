@@ -117,18 +117,24 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
         dispose: vi.fn(),
     };
     const revealed: { el: FocusEl; focused: boolean }[] = [];
+    // The place tab's button, which the panel chooses and focuses as the form asks.
+    const placeTab = root.createEl('button');
+    const choosePlace = vi.fn(() => { placeTab.focus(); });
     const tabs = opts.place ? {
         place: { el: asEl(placeEl), pane },
         reveal: (el: Element) => { const at = el as unknown as FocusEl; revealed.push({ el: at, focused: doc.activeElement === at }); },
+        placeTab: choosePlace,
     } : {};
-    const form: TaskHubForm = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot), requestClose: () => { closes.push(form.beforeClose()); }, ...tabs });
+    // The focus is in the hub while it is on anything in the panel but the panel itself.
+    const hasFocus = () => doc.activeElement !== root && root.contains(doc.activeElement);
+    const form: TaskHubForm = new TaskHubForm(asEl(body), host, { app, plugin, index, foot: asEl(foot), requestClose: () => { closes.push(form.beforeClose()); }, hasFocus, ...tabs });
     const panel = { redrawPreview: vi.fn(), close: vi.fn() };
     host.attach(panel);
     await settle();
     const el = (field: Parameters<TaskHubForm['fieldElement']>[0]) => form.fieldElement(field) as unknown as FocusEl;
     const create = () => root.findAll('mod-cta')[0];
     return {
-        root, body, foot, host, form, panel, places, rows, closes, menus, el, create, placeInput, pane, revealed,
+        doc, root, body, foot, host, form, panel, places, rows, closes, menus, el, create, placeInput, placeTab, choosePlace, pane, revealed,
         write: async (written: WriteAnswer) => { writes.at(-1)!(written); await settle(); },
         answer: async () => { answer(); await settle(); },
         press: (target: FocusEl) => target.dispatchEvent(new Event('click')),
@@ -555,6 +561,53 @@ describe('the place tab of a hub on a task not written yet', () => {
         expect(s.revealed).toHaveLength(before + 1);
         expect(s.revealed.at(-1)).toEqual({ el: s.el('start'), focused: false });
         expect(s.el('start').ownerDocument.activeElement).toBe(s.el('start'));
+    });
+
+    it('puts the focus on the create once a create refused ends with the create offered, the place asked again', async () => {
+        const s = await setUp({}, { place: true });
+        s.press(s.create());
+        await s.write({ written: false, refused: null });
+
+        expect(s.doc.activeElement).toBe(s.create());
+        expect(s.create().disabled).toBe(false);
+        expect(s.revealed).toEqual([]);
+    });
+
+    it('puts the focus on the place\'s field its pane answers, its tab chosen first, once a create ends where the task cannot go', async () => {
+        const s = await setUp({}, { place: true });
+        // The pane answers its field something wrong is said under: here a second one.
+        const heading = s.placeInput.parent!.createEl('input');
+        s.pane.focus.mockReturnValue({ to: asEl(heading), selection: 'all' });
+        s.places.facts.mockResolvedValueOnce(GONE);
+        s.press(s.create());
+        await s.write({ written: false, refused: null });
+
+        expect(s.host.draft!.canCreate()).toBe(false);
+        expect(s.revealed).toEqual([{ el: heading, focused: false }]);
+        expect(s.doc.activeElement).toBe(heading);
+    });
+
+    it('chooses the place tab and puts the focus on its button where its pane has no field, once a create ends where the task cannot go', async () => {
+        const s = await setUp({}, { place: true });
+        s.pane.focus.mockReturnValue(null as never);
+        s.places.facts.mockResolvedValueOnce(GONE);
+        s.press(s.create());
+        await s.write({ written: false, refused: null });
+
+        expect(s.choosePlace).toHaveBeenCalledTimes(1);
+        expect(s.doc.activeElement).toBe(s.placeTab);
+    });
+
+    it('leaves the focus where it is in the hub once a create ends unwritten', async () => {
+        const s = await setUp({}, { place: true, hold: true });
+        await s.answer();
+        s.press(s.create());
+        await s.write({ written: false, refused: null });
+        // The fields open again while the place is asked again: the user goes on typing.
+        s.el('name').focus();
+        await s.answer();
+
+        expect(s.doc.activeElement).toBe(s.el('name'));
     });
 
     it('shuts the place\'s fields with its own while a create is under way, and opens them after', async () => {

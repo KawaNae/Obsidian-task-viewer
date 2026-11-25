@@ -196,6 +196,23 @@ describe('TabStrip', () => {
         expect(s.onSelect).toHaveBeenCalledTimes(1);
     });
 
+    it('chooses a tab and puts the focus on its button when told to, as the arrows do', () => {
+        const s = setUp();
+        const outside = s.doc.root().createEl('input');
+        outside.focus();
+        s.strip.focusTab('three');
+        expect(s.strip.selected).toBe('three');
+        expect(s.doc.activeElement).toBe(s.buttons[2]);
+        expect(marks(s)).toEqual([OFF, OFF, ON]);
+        expect(s.onSelect).toHaveBeenCalledWith('three');
+
+        // On the tab chosen already: its button takes the focus, nothing told.
+        outside.focus();
+        s.strip.focusTab('three');
+        expect(s.doc.activeElement).toBe(s.buttons[2]);
+        expect(s.onSelect).toHaveBeenCalledTimes(1);
+    });
+
     it('chooses nothing for an element in no pane', () => {
         const s = setUp();
         const outside = s.doc.root().createEl('input');

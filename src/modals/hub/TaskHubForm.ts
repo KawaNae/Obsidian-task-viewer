@@ -72,6 +72,10 @@ export interface TaskHubFormDeps {
     place?: { el: HTMLElement; pane: HubPane };
     /** Choose the tab whose pane holds `el`, before the focus is put on it. None on a hub without tabs. */
     reveal?: (el: HTMLElement) => void;
+    /** Choose the place tab and put the focus on its button: for a place with no field. None on a hub without tabs. */
+    placeTab?: () => void;
+    /** Whether the focus is in the hub now, on anything but its panel holding it. None: taken as not. */
+    hasFocus?: () => boolean;
 }
 
 /**
@@ -375,6 +379,27 @@ export class TaskHubForm implements HubForm {
         }
         for (const part of this.parts()) part.save();
         draft.create();
+    }
+
+    /**
+     * A create ended unwritten (`HubForm.notCreated`): the focus goes where
+     * what keeps the task from being created is, unless it is in the hub
+     * already, where the user goes on. With a create that may be asked again
+     * nothing is to be fixed: the create takes it. Without, it is the place:
+     * the field of the place's pane it answers, its tab chosen first, and with
+     * no field there, the place tab's button. A button raises no on-screen
+     * keyboard; a field does.
+     */
+    notCreated(): void {
+        const draft = this.host.draft;
+        if (!draft || this.deps.hasFocus?.()) return;
+        if (draft.canCreate()) {
+            this.actions.focusAct();
+            return;
+        }
+        const field = this.placeFocusOf();
+        if (field) this.focusTo(field);
+        else this.deps.placeTab?.();
     }
 
     /** The parts of the form a close asks: the name, the dates, the style, the tags and the properties. */

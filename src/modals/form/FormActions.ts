@@ -105,6 +105,11 @@ export class FormActions {
         this.cancelButton.focus();
     }
 
+    /** The form's act (`'cta'`) takes the focus: what the form can do now, with no field to put it on. */
+    focusAct(): void {
+        this.buttons.find(({ spec }) => spec.tone === 'cta')?.el.focus();
+    }
+
     /** The form's act (`'cta'`), shown or not: a form that cannot act now has no act to offer. */
     showAct(shown: boolean): void {
         for (const { el, spec } of this.buttons) if (spec.tone === 'cta') el.toggle(shown);

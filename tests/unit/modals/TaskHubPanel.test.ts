@@ -35,20 +35,21 @@ vi.mock('obsidian', async (importOriginal) => ({
 
 const { shells, forms, sources, views, panes, paneHas } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
-    forms: [] as { host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn> }[],
+    forms: [] as { host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn>; notCreated: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { bar: unknown; card: unknown; pane: unknown; foot: unknown }[],
     panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     /** Whether the place pane built next has a field: one shown with none focuses nothing. */
     paneHas: { field: true },
 }));
-const body = { current: null as FocusEl | null, head: null as FocusEl | null, foot: null as FocusEl | null };
+const body = { panel: null as FocusEl | null, current: null as FocusEl | null, head: null as FocusEl | null, foot: null as FocusEl | null };
 
 vi.mock('../../../src/views/sharedUI/OverlayShell', () => ({
     OverlayShell: class {
         opts: { build(body: unknown, frame: unknown): void; onClose?: () => void } | null = null;
         constructor() { shells.push(this); }
         isOpen() { return this.opts !== null; }
+        getPanel() { return this.opts ? body.panel : null; }
         open(opts: { build(body: unknown, frame: unknown): void; onClose?: () => void }) {
             this.opts = opts;
             opts.build(body.current, { head: body.head, foot: body.foot });
@@ -79,6 +80,13 @@ vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
         sayWrite() { }
         sayPlace() { }
         create() { }
+        // Where no create may be asked, the form's focus on the place, as it asks the panel for it.
+        notCreated = vi.fn(() => {
+            const deps = this.deps as { place?: { pane: { focus(): { to: Element } | null } }; reveal?(el: Element): void; placeTab?(): void };
+            const field = deps.place?.pane.focus();
+            if (field) deps.reveal?.(field.to);
+            else deps.placeTab?.();
+        });
     },
 }));
 vi.mock('../../../src/modals/hub/TaskHubSource', () => ({
@@ -125,9 +133,11 @@ afterEach(() => {
 /** A body to build in, and the panel's deps, the card's draws counted by the content each drew. */
 function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: true })) {
     const doc = new FocusDoc();
-    body.current = doc.root();
-    body.head = doc.root();
-    body.foot = doc.root();
+    // The overlay's panel: its head, its body and its foot in it.
+    body.panel = doc.root();
+    body.head = body.panel.createDiv();
+    body.current = body.panel.createDiv();
+    body.foot = body.panel.createDiv();
     const drawn: string[] = [];
     let copy: Task | undefined = makeTask({ id: 'task-1', content: '元の名前' });
     const listeners: ((taskId?: string) => void)[] = [];
@@ -155,7 +165,7 @@ function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: tr
         copy = row;
         for (const listener of [...listeners]) listener('task-1');
     };
-    return { body: body.current, deps, app, drawn, change, listeners };
+    return { doc, panel: body.panel, body: body.current, deps, app, drawn, change, listeners };
 }
 
 /** The vault as the place fields name it: no note while they name none. */
@@ -334,6 +344,55 @@ describe('the hub on a task not written yet, its place tab', () => {
         const deps = forms[0].deps as { place: { el: unknown; pane: unknown }; reveal: (el: Element) => void };
         expect(deps.place).toEqual({ el: panes[0].el, pane: panes[0] });
         deps.reveal(panes[0].input as Element);
+        expect(selected(r)).toEqual(['false', 'true']);
+    });
+
+    it('hands the form the place tab chosen with the focus on its button, the properties seen until then', async () => {
+        const r = rig();
+        await TaskHubPanel.openDraftHub(r.app, CHILD, {}, { ...r.deps, places, notePlaces });
+        expect(selected(r)).toEqual(['true', 'false']);
+
+        (forms[0].deps as { placeTab: () => void }).placeTab();
+        expect(selected(r)).toEqual(['false', 'true']);
+        expect(r.doc.activeElement).toBe(tabs(r)[1]);
+    });
+
+    it('hands the form whether the focus is in the hub: on anything in its panel but the panel itself', async () => {
+        const r = rig();
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
+        const hasFocus = (forms[0].deps as { hasFocus: () => boolean }).hasFocus;
+
+        expect(hasFocus()).toBe(false);
+        (panes[0].input as FocusEl).focus();
+        expect(hasFocus()).toBe(true);
+        tabs(r)[0].focus();
+        expect(hasFocus()).toBe(true);
+        r.panel!.focus();
+        expect(hasFocus()).toBe(false);
+        r.doc.root().createEl('input').focus();
+        expect(hasFocus()).toBe(false);
+    });
+
+    it('chooses the place tab, seen on the properties, once a create refused ends where the place asked again says the task cannot go', async () => {
+        const r = rig();
+        const facts = vi.fn(places.facts);
+        const create = vi.fn(async (): Promise<WriteAnswer> => ({ written: false, refused: null }));
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places: { ...places, facts, create } as unknown as CreatePlaces, notePlaces });
+        const draft = (forms[0].host as PanelHost).draft!;
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(draft.canCreate()).toBe(true);
+        expect(selected(r)).toEqual(['true', 'false']);
+
+        facts.mockResolvedValueOnce({
+            kind: 'note', path: '2031-01-15.md', spot: { heading: 'Tasks', level: 2, side: 'head' },
+            note: 'existing', seed: 'daily', heading: { kind: 'many', count: 2 }, ignored: false, inherits: {},
+        });
+        draft.create();
+        for (let i = 0; i < 6; i++) await Promise.resolve();
+
+        expect(draft.canCreate()).toBe(false);
+        expect(forms[0].notCreated).toHaveBeenCalledTimes(1);
         expect(selected(r)).toEqual(['false', 'true']);
     });
 

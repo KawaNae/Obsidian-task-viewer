@@ -31,6 +31,15 @@ export interface HubForm {
      * they break takes the focus, and the host's create is not asked.
      */
     create(): void;
+    /**
+     * A create ended unwritten, the fields open again and the place read:
+     * the focus goes where what keeps the task from being created is, unless
+     * it is in the hub already. Where a create may be asked again
+     * (`HubDraft.canCreate`), nothing is to be fixed: the create. Where it
+     * may not, what keeps it is the place: the place's pane, where it says.
+     * Not told where the form itself found a field to fix and focused it.
+     */
+    notCreated(): void;
 }
 
 /**
@@ -109,11 +118,15 @@ export interface HubPanel {
 /**
  * What an entry builds in the place tab's pane of a hub: fields that say
  * where the task goes, or a place shown with no field. The form shuts it
- * with its own fields and focuses its first field (`'place'`); the hub opens
- * on the place tab only when the pane has a field to focus there.
+ * with its own fields and focuses it (`'place'`); the hub opens on the place
+ * tab only when the pane has a field to focus there.
  */
 export interface HubPane {
-    /** Where the focus goes for its first field, and how its text is met there; null when it has no field. */
+    /**
+     * Where the focus goes in it, and how its text is met there: the first
+     * field an error is said under, else its first field; null when it has
+     * no field.
+     */
     focus(): FieldFocus<HTMLElement> | null;
     /** Its fields enabled or not, as the form's are. */
     setEnabled(enabled: boolean): void;
