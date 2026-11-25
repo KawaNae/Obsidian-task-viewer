@@ -1,32 +1,41 @@
 /**
- * The tabs of the hub on a task not written yet, "Properties" and
- * "Location", under its card, in the running E2E vault.
+ * The tabs of the hub on a task not written yet, "General" and "Details",
+ * under its card, in the running E2E vault. General holds the name, the
+ * status, the dates and the place after them; Details the tags, the style,
+ * the mask and the properties.
  *
  * - On a daily note (a Timeline's all-day empty space, Create task for
- *   daily note): it opens on the properties, the focus on the name, the
- *   place tab's fields on the daily note's name and the settings' heading.
- *   The panel does not move nor change its size as the tab is changed.
- * - Its body, bounded by the window: the properties scroll with the card and
- *   the tabs, the body's bottom padding after them at the scroll's end; on
- *   the place tab the body scrolls only as far as the place's pane reaches.
+ *   daily note): it opens on General, the focus on the name, the place's
+ *   fields there on the daily note's name and the settings' heading. The
+ *   panel does not move nor change its size as the tab is changed.
+ * - Its body, bounded by the window: General scrolls with the card and the
+ *   tabs, the body's bottom padding after it at the scroll's end; on
+ *   Details, lower, the body scrolls only as far as Details reaches.
+ * - Details taller than General (the child of a row whose section gives
+ *   many properties), in the desktop's box and on a phone's sheet: the panel
+ *   keeps the size General gives it, and the body scrolls, the card and the
+ *   tabs with it, until Details' last field stands the body's bottom
+ *   padding above the body's bottom.
+ * - Details' last field under a keyboard, in the desktop's box: the field
+ *   rides 10px above the keyboard's top, and the padding written on the
+ *   body is no more than the field needs to come there.
  * - The keys: the arrows go from tab to tab, round at the ends, and Tab
  *   goes from the tab chosen into its pane, never into the pane not chosen.
- * - Its place changed in the place tab: to another note, to a note not
- *   there and back to the daily note, the line above the create saying each
- *   time where the task goes; the daily note not there is made of its
- *   day's template, as it is when the place is not changed.
+ * - Its place changed: to another note, to a note not there and back to
+ *   the daily note, the line above the create saying each time where the
+ *   task goes; the daily note not there is made of its day's template, as
+ *   it is when the place is not changed.
  * - Closed: a place changed alone is asked about, a place changed back is
  *   not, nor is a hub given nothing.
- * - A create pressed on the place tab while a date of the properties does
- *   not read, or while a time with no date has lost the date the place gave
- *   it, writes nothing and goes to the properties tab, the focus on that
- *   field.
+ * - A create pressed on Details while a date does not read, or while a
+ *   time with no date has lost the date the place gave it, writes nothing
+ *   and goes to General, the focus on that field.
  * - An Escape while the note field's list is open closes the list alone;
  *   the next goes the way the hub closes.
  * - A create pressed while the note just typed is being read waits for it,
  *   and writes the name typed before the press in that note.
  * - Under a row (a card's menu, Add child task): the tabs are there, it
- *   opens on the properties, and the place tab shows the parent's note, the
+ *   opens on General, which shows under the dates the parent's note, the
  *   heading its row is under ("None" above the note's first heading) and
  *   the parent, with no field. The child goes first among the parent's
  *   children.
@@ -52,6 +61,7 @@ import { deleteTestFile, readTestFile, writeIndexedTestFile, writeTestFile } fro
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { MENUS } from '../helpers/menus';
+import { KEYBOARD, resetKeyboard } from '../helpers/keyboard';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
 import { DRAFT_HUB } from '../helpers/draft-hub';
 
@@ -59,8 +69,12 @@ import { DRAFT_HUB } from '../helpers/draft-hub';
 const DAYS = ['2031-02-03', '2031-02-04', '2031-02-05', '2031-02-06', '2031-02-07', '2031-02-08', '2031-02-09', '2031-02-10'];
 const [OPEN_DAY, TEMPLATE_DAY, CLOSE_DAY, DATE_DAY, ESCAPE_DAY, WAIT_DAY, KEYS_DAY, SCROLL_DAY] = DAYS;
 
-/** The window's inner height that leaves the desktop's box less than its properties (px). */
+/** The window's inner height that leaves the desktop's box and a phone's sheet less than their General tab (px). */
 const LOW_WINDOW = 600;
+
+/** The window's inner size and the keyboard's height that hide Details' last field in the desktop's box (px). */
+const KEYBOARD_WINDOW = { width: 656, height: 1000 };
+const KEYBOARD_HEIGHT = 520;
 
 const OTHER_NAME = 'test-int-draft-tabs-other';
 const OTHER_FILE = `${OTHER_NAME}.md`;
@@ -70,6 +84,7 @@ const INHERIT_NAME = 'test-int-draft-tabs-inherit';
 const INHERIT_FILE = `${INHERIT_NAME}.md`;
 const CHILD_FILE = 'test-int-draft-tabs-child.md';
 const TEMPLATE_FILE = 'test-int-draft-tabs-template.md';
+const TALL_FILE = 'test-int-draft-tabs-tall.md';
 
 const OTHER_NOTE = [
     '# 別',
@@ -95,6 +110,14 @@ const CHILD_NOTE = [
     '',
 ].join('\n');
 
+/** A section giving many properties: the hub of a child under its row shows each in Details. */
+const TALL_NOTE = [
+    '## Work',
+    ...Array.from({ length: 14 }, (_, i) => `- p${String(i).padStart(2, '0')}:: v${i}`),
+    '- [ ] 高い親',
+    '',
+].join('\n');
+
 const TEMPLATE = [
     '# テンプレート',
     '## Tasks',
@@ -109,6 +132,7 @@ const PRELUDE = `
 ${UNTIL}
 ${DIALOG_ROWS}
 ${MENUS}
+${KEYBOARD}
 ${DRAFT_HUB}
 const ask = () => { const el = formRow(draft())?.querySelector('.tv-form__ask'); return shown(el) ? el.textContent : null; };
 const button = text => [...formRow(draft()).querySelectorAll('button')].filter(shown).find(b => b.textContent === text);
@@ -138,6 +162,29 @@ const rowTask = (file, name) => {
     return task;
 };
 const exists = path => !!app.vault.getAbstractFileByPath(path);
+/** The hub of a task not written yet under the row of \`file\` named so, the focus on its name and its place read. */
+const openChild = async (file, name) => {
+    plugin.openDraftHub({ kind: 'childOf', taskId: rowTask(file, name).id }, {});
+    await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
+};
+/** The text fields a pane shows, top first. */
+const fieldsOf = pane => [...pane.querySelectorAll('input, textarea')].filter(el => el.offsetParent !== null && !el.disabled && el.type !== 'checkbox');
+/** The window's inner size set to \`width\` by \`height\`; answers what puts it back. */
+const sizeWindow = async (width, height) => {
+    const win = require('electron').remote.getCurrentWindow();
+    const bounds = win.getBounds();
+    const set = async (w, h) => {
+        const b = win.getBounds();
+        win.setBounds({ ...b, width: w + (b.width - innerWidth), height: h + (b.height - innerHeight) });
+        await until(() => innerWidth === w && innerHeight === h, 3000, () => innerWidth + 'x' + innerHeight);
+    };
+    await set(width, height);
+    return async () => {
+        const w = innerWidth, h = innerHeight;
+        win.setBounds(bounds);
+        await until(() => innerWidth !== w || innerHeight !== h || (bounds.width === win.getBounds().width && bounds.height === win.getBounds().height));
+    };
+};
 `;
 
 /** Run `body` (statements, ending in a `return`) in Obsidian after the prelude. */
@@ -161,17 +208,20 @@ beforeAll(() => {
     if (folder !== '/') throw new Error(`new notes are made in ${folder}: the test names a daily note at the root by its name alone.`);
 });
 
-afterEach(() => { run(`await cleanUpHubs(); return 'ok';`); });
+afterEach(() => {
+    resetKeyboard();
+    run(`await cleanUpHubs(); return 'ok';`);
+});
 
 afterAll(async () => {
-    for (const file of [...DAYS.map(dailyOf), `${NEW_NAME}.md`, OTHER_FILE, INHERIT_FILE, CHILD_FILE, TEMPLATE_FILE]) {
+    for (const file of [...DAYS.map(dailyOf), `${NEW_NAME}.md`, OTHER_FILE, INHERIT_FILE, CHILD_FILE, TEMPLATE_FILE, TALL_FILE]) {
         deleteTestFile(file);
         await waitForFileDeindexed(file);
     }
 });
 
 describe('the tabs of the hub on a daily note', () => {
-    it('opens on the properties, the focus on the name, the place\'s fields on the daily note and the settings\' heading, the panel still as the tab changes', () => {
+    it('opens on General, the focus on the name, the place\'s fields there on the daily note and the settings\' heading, the panel still as the tab changes', () => {
         const steps = run<Record<string, unknown>>(`
             await fromAllDay(${JSON.stringify(OPEN_DAY)}, ${JSON.stringify(tr('menu.createTaskForDailyNote'))});
             await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
@@ -181,25 +231,28 @@ describe('the tabs of the hub on a daily note', () => {
                     tabs: [...panel.querySelectorAll('button.tv-tabs__tab')].map(b => b.dataset.tab + ': ' + b.textContent),
                     tab: tabOn(),
                     onName: document.activeElement === nameInput(),
+                    placeOnBasic: placeInputs().length === 2 && placeInputs().every(i => paneOf('basic').contains(i)),
                     note: noteInput().value,
                     heading: headingInput().value,
                     line: lineSays(),
                 },
                 rects: [rect(panel)],
             };
-            await choose('place');
+            out.offDetail = { inert: paneOf('detail').inert, display: getComputedStyle(paneOf('detail')).display };
+            await choose('detail');
             await nextFrame();
             out.rects.push(rect(panel));
-            out.offPane = { inert: paneOf('properties').inert, visibility: getComputedStyle(paneOf('properties')).visibility };
-            await choose('properties');
+            out.offBasic = { inert: paneOf('basic').inert, visibility: getComputedStyle(paneOf('basic')).visibility };
+            await choose('basic');
             await nextFrame();
             out.rects.push(rect(panel));
             return JSON.stringify(out);
         `);
         expect(steps.opened).toEqual({
-            tabs: [`properties: ${tr('modal.hub.tabProperties')}`, `place: ${tr('modal.hub.tabPlace')}`],
-            tab: 'properties',
+            tabs: [`basic: ${tr('modal.hub.tabBasic')}`, `detail: ${tr('modal.hub.tabDetail')}`],
+            tab: 'basic',
             onName: true,
+            placeOnBasic: true,
             note: OPEN_DAY,
             heading: 'Tasks',
             line: [`${INFO}: ${tr('modal.newTask.toNew', { note: dailyOf(OPEN_DAY), heading: 'Tasks' })}`],
@@ -211,56 +264,57 @@ describe('the tabs of the hub on a daily note', () => {
             expect(r.width).toBeCloseTo(first.width, 1);
             expect(r.height).toBeCloseTo(first.height, 1);
         }
-        expect(steps.offPane).toEqual({ inert: true, visibility: 'hidden' });
+        // General off keeps its room, unseen; Details off takes none.
+        expect(steps.offBasic).toEqual({ inert: true, visibility: 'hidden' });
+        expect(steps.offDetail).toEqual({ inert: true, display: 'none' });
     });
 
     it('goes from tab to tab by the arrows, round at the ends, and by Tab into the pane chosen alone', () => {
         const steps = run<Record<string, unknown>>(`
             await openDaily(${JSON.stringify(KEYS_DAY)});
             const out = {};
-            tab('properties').focus();
+            tab('basic').focus();
             await moveBy('Right');
-            out.right = { tab: tabOn(), onTab: document.activeElement === tab('place') };
-            await moveBy('Tab');
-            out.tabIntoPlace = { onNote: document.activeElement === noteInput() };
-            tab('place').focus();
+            out.right = { tab: tabOn(), onTab: document.activeElement === tab('detail') };
+            const into = await moveBy('Tab');
+            out.tabIntoDetail = { inDetail: paneOf('detail').contains(into), first: into === fieldsOf(paneOf('detail'))[0] };
+            tab('detail').focus();
             await moveBy('Right');
-            out.round = { tab: tabOn(), onTab: document.activeElement === tab('properties') };
+            out.round = { tab: tabOn(), onTab: document.activeElement === tab('basic') };
             await moveBy('Left');
-            out.left = { tab: tabOn(), onTab: document.activeElement === tab('place') };
+            out.left = { tab: tabOn(), onTab: document.activeElement === tab('detail') };
             await moveBy('Left');
-            // From the properties' tab, Tab after Tab until the focus leaves the hub.
+            // From General's tab, Tab after Tab until the focus leaves the hub.
             const visits = [];
             for (let i = 0; i < 60 && draft()?.contains(document.activeElement); i++) {
                 const at = await moveBy('Tab');
-                visits.push(paneOf('place').contains(at) ? 'place' : paneOf('properties').contains(at) ? 'properties' : 'other');
+                visits.push(paneOf('detail').contains(at) ? 'detail' : paneOf('basic').contains(at) ? 'basic' : 'other');
             }
-            out.walk = { tab: tabOn(), first: visits[0], place: visits.filter(v => v === 'place').length, properties: visits.filter(v => v === 'properties').length, left: !draft()?.contains(document.activeElement) };
+            out.walk = { tab: tabOn(), first: visits[0], detail: visits.filter(v => v === 'detail').length, basic: visits.filter(v => v === 'basic').length, left: !draft()?.contains(document.activeElement) };
             return JSON.stringify(out);
         `);
-        expect(steps.right).toEqual({ tab: 'place', onTab: true });
-        expect(steps.tabIntoPlace).toEqual({ onNote: true });
-        expect(steps.round).toEqual({ tab: 'properties', onTab: true });
-        expect(steps.left).toEqual({ tab: 'place', onTab: true });
-        const walk = steps.walk as { tab: string; first: string; place: number; properties: number; left: boolean };
-        expect(walk).toMatchObject({ tab: 'properties', first: 'properties', place: 0, left: true });
-        expect(walk.properties).toBeGreaterThan(1);
+        expect(steps.right).toEqual({ tab: 'detail', onTab: true });
+        expect(steps.tabIntoDetail).toEqual({ inDetail: true, first: true });
+        expect(steps.round).toEqual({ tab: 'basic', onTab: true });
+        expect(steps.left).toEqual({ tab: 'detail', onTab: true });
+        const walk = steps.walk as { tab: string; first: string; detail: number; basic: number; left: boolean };
+        expect(walk).toMatchObject({ tab: 'basic', first: 'basic', detail: 0, left: true });
+        // The name, the dates and the place's two fields at least.
+        expect(walk.basic).toBeGreaterThan(4);
     });
 
     it.each([
-        ['the desktop\'s box, in a window too low for it', false],
+        ['the desktop\'s box', false],
         ['a phone\'s sheet', true],
-    ])('in %s, scrolls the body for the pane chosen alone, the card and the tabs with it, the body\'s bottom padding after the pane', (_, phone) => {
+    ])('in %s, in a window too low for General, scrolls the body for the pane chosen alone, the card and the tabs with it, the body\'s bottom padding after the pane', (_, phone) => {
         const steps = run<Record<string, unknown>>(`
             const win = require('electron').remote.getCurrentWindow();
             const bounds = win.getBounds();
             try {
                 if (${phone}) document.body.classList.add('is-phone');
-                else {
-                    const height = innerHeight;
-                    win.setBounds({ ...bounds, height: bounds.height - (innerHeight - ${LOW_WINDOW}) });
-                    await until(() => innerHeight !== height);
-                }
+                const height = innerHeight;
+                win.setBounds({ ...bounds, height: bounds.height - (innerHeight - ${LOW_WINDOW}) });
+                await until(() => innerHeight !== height);
                 await openDaily(${JSON.stringify(SCROLL_DAY)});
                 const b = draft().querySelector('.tv-overlay__body');
                 const pad = parseFloat(getComputedStyle(b).paddingBottom);
@@ -280,38 +334,42 @@ describe('the tabs of the hub on a daily note', () => {
                         panel: rect(draft()),
                     };
                 };
-                const out = { pad, top: seen('properties') };
+                const out = { pad, top: seen('basic') };
                 b.scrollTop = b.scrollHeight;
                 await nextFrame();
-                out.end = seen('properties');
+                out.end = seen('basic');
                 b.scrollTop = 0;
-                await choose('place');
+                await choose('detail');
                 await nextFrame();
-                out.place = seen('place');
-                /** Where the place's pane ends in the body's scroll, its padding after it. */
-                out.placeEnd = paneOf('place').getBoundingClientRect().bottom - b.getBoundingClientRect().top + b.scrollTop + pad;
+                out.detail = seen('detail');
+                /** Where Details' last group ends in the body's scroll, the body's padding after it. */
+                const last = [...paneOf('detail').children].filter(c => getComputedStyle(c).display !== 'none').at(-1);
+                out.detailEnd = last.getBoundingClientRect().bottom - b.getBoundingClientRect().top + b.scrollTop + pad;
+                out.basicHeight = paneOf('basic').scrollHeight;
+                out.detailHeight = paneOf('detail').getBoundingClientRect().height;
                 b.scrollTop = b.scrollHeight;
                 await nextFrame();
-                out.placeScrolled = b.scrollTop;
+                out.detailScrolled = b.scrollTop;
                 return JSON.stringify(out);
             } finally {
                 await cleanUpHubs();
                 document.body.classList.remove('is-phone');
                 const height = innerHeight;
                 win.setBounds(bounds);
-                if (!${phone}) await until(() => innerHeight !== height);
+                await until(() => innerHeight !== height);
             }
         `);
         type Seen = { scrollHeight: number; clientHeight: number; scrollTop: number; paneToBottom: number; fieldToBottom: number | null; card: number; tabs: number; panel: { top: number; left: number; width: number; height: number } };
         const pad = steps.pad as number;
         const top = steps.top as Seen;
         const end = steps.end as Seen;
-        const place = steps.place as Seen;
-        // The window bounds the body: the properties are more than it shows.
+        const detail = steps.detail as Seen;
+        // The window bounds the body: General is more than it shows, and Details is lower.
         expect(top.scrollHeight, 'the window is too tall for the body to scroll').toBeGreaterThan(top.clientHeight + 10);
         expect(pad).toBeGreaterThan(0);
+        expect(steps.detailHeight as number).toBeLessThan(steps.basicHeight as number);
 
-        // Scrolled to its end, the body shows its padding under the properties.
+        // Scrolled to its end, the body shows its padding under General.
         // Within a pixel each: the scroll is whole pixels, the layout is not.
         expect(Math.abs(end.scrollTop - (end.scrollHeight - end.clientHeight))).toBeLessThanOrEqual(1);
         expect(Math.abs(end.paneToBottom - pad)).toBeLessThanOrEqual(1);
@@ -320,17 +378,155 @@ describe('the tabs of the hub on a daily note', () => {
         expect(Math.abs(top.card - end.card - end.scrollTop)).toBeLessThanOrEqual(1);
         expect(Math.abs(top.tabs - end.tabs - end.scrollTop)).toBeLessThanOrEqual(1);
 
-        // On the place tab the panel and the body are as they were, and the
-        // body scrolls only as far as the place's pane and the padding after it reach.
-        for (const side of ['top', 'left', 'width', 'height'] as const) expect(place.panel[side]).toBeCloseTo(top.panel[side], 1);
-        expect(place.clientHeight).toBe(top.clientHeight);
-        expect(Math.abs(place.scrollHeight - Math.max(place.clientHeight, steps.placeEnd as number))).toBeLessThanOrEqual(1);
-        expect(Math.abs((steps.placeScrolled as number) - (place.scrollHeight - place.clientHeight))).toBeLessThanOrEqual(1);
-        expect(place.scrollHeight).toBeLessThan(top.scrollHeight);
+        // On Details the panel and the body are as they were, and the body
+        // scrolls only as far as Details and the padding after it reach: no
+        // further for General's room, kept unseen.
+        for (const side of ['top', 'left', 'width', 'height'] as const) expect(detail.panel[side]).toBeCloseTo(top.panel[side], 1);
+        expect(detail.clientHeight).toBe(top.clientHeight);
+        expect(Math.abs(detail.scrollHeight - Math.max(detail.clientHeight, steps.detailEnd as number))).toBeLessThanOrEqual(1);
+        expect(Math.abs((steps.detailScrolled as number) - (detail.scrollHeight - detail.clientHeight))).toBeLessThanOrEqual(1);
+        expect(detail.scrollHeight).toBeLessThan(top.scrollHeight);
     });
 });
 
-describe('the place of the hub on a daily note, changed in its tab', () => {
+describe('Details taller than General (the child of a row whose section gives many properties)', () => {
+    it.each([
+        ['the desktop\'s box', false],
+        ['a phone\'s sheet', true],
+    ])('in %s, keeps the panel General sizes and scrolls the body, the card and the tabs with it, until Details\' last field stands the body\'s padding above its bottom', async (_, phone) => {
+        await writeIndexedTestFile(TALL_FILE, TALL_NOTE);
+        const steps = run<Record<string, unknown>>(`
+            try {
+                if (${phone}) document.body.classList.add('is-phone');
+                await openChild(${JSON.stringify(TALL_FILE)}, '高い親');
+                const panel = draft();
+                const b = panel.querySelector('.tv-overlay__body');
+                const pad = parseFloat(getComputedStyle(b).paddingBottom);
+                const body = () => ({ scrollHeight: b.scrollHeight, clientHeight: b.clientHeight, scrollTop: b.scrollTop });
+                const out = { pad, rects: [rect(panel)], basic: { ...body(), height: paneOf('basic').getBoundingClientRect().height } };
+                await choose('detail');
+                await nextFrame();
+                out.rects.push(rect(panel));
+                const field = fieldsOf(paneOf('detail')).at(-1);
+                const last = [...paneOf('detail').children].filter(c => getComputedStyle(c).display !== 'none').at(-1);
+                const tops = () => ({ card: panel.querySelector('.task-hub__preview').getBoundingClientRect().top, tabs: panel.querySelector('.tv-tabs').getBoundingClientRect().top });
+                out.detail = { ...body(), height: paneOf('detail').getBoundingClientRect().height, properties: paneOf('detail').querySelectorAll('.task-hub__source').length, ...tops() };
+                b.scrollTop = b.scrollHeight;
+                await nextFrame();
+                const bottom = b.getBoundingClientRect().bottom;
+                out.end = { ...body(), lastToBottom: bottom - last.getBoundingClientRect().bottom, fieldToBottom: bottom - field.getBoundingClientRect().bottom, inLast: last.contains(field), ...tops() };
+                b.scrollTop = 0;
+                await choose('basic');
+                await nextFrame();
+                out.rects.push(rect(panel));
+                out.back = body();
+                return JSON.stringify(out);
+            } finally {
+                await cleanUpHubs();
+                document.body.classList.remove('is-phone');
+            }
+        `);
+        type Body = { scrollHeight: number; clientHeight: number; scrollTop: number };
+        const pad = steps.pad as number;
+        const basic = steps.basic as Body & { height: number };
+        const detail = steps.detail as Body & { height: number; properties: number; card: number; tabs: number };
+        const end = steps.end as Body & { lastToBottom: number; fieldToBottom: number; inLast: boolean; card: number; tabs: number };
+        // Each property the section gives is a row of Details, which is taller than General by far.
+        expect(detail.properties).toBeGreaterThanOrEqual(14);
+        expect(detail.height).toBeGreaterThan(basic.height + 100);
+        expect(pad).toBeGreaterThan(0);
+
+        // The panel stands as General sizes it whichever tab is chosen.
+        const [first, ...rest] = steps.rects as { top: number; left: number; width: number; height: number }[];
+        for (const r of rest) {
+            for (const side of ['top', 'left', 'width', 'height'] as const) expect(r[side]).toBeCloseTo(first[side], 1);
+        }
+        expect(detail.clientHeight).toBe(basic.clientHeight);
+        expect(steps.back).toEqual({ scrollHeight: basic.scrollHeight, clientHeight: basic.clientHeight, scrollTop: basic.scrollTop });
+
+        // Details is more than the body shows: the body scrolls for it, to
+        // its end, with the card and the tabs, Details' last field the body's
+        // padding above the body's bottom. Within a pixel each: the scroll is
+        // whole pixels, the layout is not.
+        expect(detail.scrollHeight).toBeGreaterThan(detail.clientHeight + 100);
+        expect(Math.abs(end.scrollTop - (end.scrollHeight - end.clientHeight))).toBeLessThanOrEqual(1);
+        expect(end.inLast).toBe(true);
+        expect(Math.abs(end.lastToBottom - pad)).toBeLessThanOrEqual(1);
+        expect(end.fieldToBottom).toBeGreaterThanOrEqual(pad - 1);
+        expect(Math.abs(detail.card - end.card - end.scrollTop)).toBeLessThanOrEqual(1);
+        expect(Math.abs(detail.tabs - end.tabs - end.scrollTop)).toBeLessThanOrEqual(1);
+    });
+});
+
+describe('Details\' last field under a keyboard, in the desktop\'s box', () => {
+    it.each([
+        ['Details lower than General (a row\'s child)', CHILD_FILE, '親'],
+        ['Details taller than General (a child given many properties)', TALL_FILE, '高い親'],
+    ])('%s: the field rides 10px above the keyboard\'s top, the body padded no more than the field needs', async (_, file, parent) => {
+        await writeIndexedTestFile(CHILD_FILE, CHILD_NOTE);
+        await writeIndexedTestFile(TALL_FILE, TALL_NOTE);
+        const steps = run<Record<string, unknown>>(`
+            const restore = await sizeWindow(${KEYBOARD_WINDOW.width}, ${KEYBOARD_WINDOW.height});
+            try {
+                await openChild(${JSON.stringify(file)}, ${JSON.stringify(parent)});
+                const panel = draft();
+                const root = panel.closest('.tv-overlay');
+                const b = panel.querySelector('.tv-overlay__body');
+                await choose('detail');
+                await nextFrame();
+                const out = {
+                    heights: { basic: paneOf('basic').scrollHeight, detail: paneOf('detail').getBoundingClientRect().height },
+                    stylePad: parseFloat(getComputedStyle(b).paddingBottom),
+                };
+                const field = fieldsOf(paneOf('detail')).at(-1);
+                // The body scrolled until the field shows, as a user does to press it.
+                const hidden = field.getBoundingClientRect().bottom - (b.getBoundingClientRect().bottom - 10);
+                if (hidden > 0) {
+                    b.scrollTop += Math.ceil(hidden);
+                    await nextFrame();
+                }
+                field.focus({ preventScroll: true });
+                out.focused = document.activeElement === field;
+                out.start = b.scrollTop;
+                const frames = await recordFrames(root, b, field, ${KEYBOARD_HEIGHT}, { after: showKeyboardAsIPad(${KEYBOARD_HEIGHT}) });
+                out.rest = frames.at(-1);
+                out.written = b.style.paddingBottom;
+                const pad = parseFloat(b.style.paddingBottom);
+                const top = b.scrollTop;
+                const range = () => b.scrollHeight - b.clientHeight;
+                out.top = top;
+                out.range = range();
+                // The padding written, less a pixel: how far the body then scrolls.
+                b.style.paddingBottom = (pad - 1) + 'px';
+                out.rangeLess = range();
+                b.style.paddingBottom = out.written;
+                b.scrollTop = top;
+                out.pad = pad;
+                return JSON.stringify(out);
+            } finally {
+                hideKeyboard();
+                await cleanUpHubs();
+                await restore();
+            }
+        `);
+        type Frame = { field: number; keyboardTop: number; bodyBottom: number; scrollTop: number };
+        const heights = steps.heights as { basic: number; detail: number };
+        if (file === CHILD_FILE) expect(heights.detail).toBeLessThan(heights.basic);
+        else expect(heights.detail).toBeGreaterThan(heights.basic);
+        expect(steps.focused).toBe(true);
+        const rest = steps.rest as Frame;
+        // The keyboard hides the field: the body moved for it.
+        expect(rest.scrollTop).toBeGreaterThan(steps.start as number);
+        expect(Math.abs(rest.field - (Math.min(rest.keyboardTop, rest.bodyBottom) - 10))).toBeLessThanOrEqual(1);
+        expect(steps.written).not.toBe('');
+        expect(steps.pad as number).toBeGreaterThan(steps.stylePad as number);
+        // The body scrolls as far as the field needs with the padding written, and a pixel less of it falls short.
+        expect(steps.range as number).toBeGreaterThanOrEqual((steps.top as number) - 1);
+        expect(steps.rangeLess as number).toBeLessThan(steps.top as number);
+    });
+});
+
+describe('the place of the hub on a daily note, changed', () => {
     it('says where the task goes as the note is changed, and makes the daily note of its template once it is named again', async () => {
         await writeIndexedTestFile(OTHER_FILE, OTHER_NOTE);
         // A note with no task: the vault lists it, the index does not.
@@ -345,7 +541,6 @@ describe('the place of the hub on a daily note, changed in its tab', () => {
                 await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
                 const out = { opened: lineSays() };
                 type(nameInput(), '戻した');
-                await choose('place');
                 out.other = await retyped(noteInput(), ${JSON.stringify(OTHER_NAME)});
                 out.made = await retyped(noteInput(), ${JSON.stringify(NEW_NAME)});
                 out.madeUnder = says(noteInput());
@@ -386,7 +581,6 @@ describe('the place of the hub on a daily note, changed in its tab', () => {
             out.nothing = { open: !!draft() };
 
             await openDaily(${JSON.stringify(CLOSE_DAY)});
-            await choose('place');
             await retyped(noteInput(), ${JSON.stringify(OTHER_NAME)});
             closeHub();
             await until(() => ask());
@@ -409,13 +603,13 @@ describe('the place of the hub on a daily note, changed in its tab', () => {
     });
 });
 
-describe('a create pressed on the place tab, over a value of the properties that cannot be written', () => {
-    it('a date that does not read: goes to the properties tab, the focus on the date, and writes nothing', () => {
+describe('a create pressed on Details, over a value of General that cannot be written', () => {
+    it('a date that does not read: goes to General, the focus on the date, and writes nothing', () => {
         run(`
             await openDaily(${JSON.stringify(DATE_DAY)});
             type(nameInput(), '日付');
             typeIn(dateInput(${JSON.stringify(tr('modal.start'))}, 'date'), 'あした');
-            await choose('place');
+            await choose('detail');
             create();
             return 'ok';
         `);
@@ -423,10 +617,10 @@ describe('a create pressed on the place tab, over a value of the properties that
             const date = dateInput(${JSON.stringify(tr('modal.start'))}, 'date');
             return JSON.stringify({ open: !!draft(), tab: tabOn(), focused: document.activeElement === date, says: says(date).length, made: exists(${JSON.stringify(dailyOf(DATE_DAY))}) });
         `);
-        expect(after).toEqual({ open: true, tab: 'properties', focused: true, says: 1, made: false });
+        expect(after).toEqual({ open: true, tab: 'basic', focused: true, says: 1, made: false });
     });
 
-    it('a time whose date the place gave, the place changed to one that gives none: goes to the properties tab, the focus on the time, and writes nothing', async () => {
+    it('a time whose date the place gave, the place changed to one that gives none: goes to General, the focus on the time, and writes nothing', async () => {
         await writeIndexedTestFile(INHERIT_FILE, INHERIT_NOTE);
         await writeIndexedTestFile(OTHER_FILE, OTHER_NOTE);
         const steps = run<Record<string, unknown>>(`
@@ -434,15 +628,14 @@ describe('a create pressed on the place tab, over a value of the properties that
             await until(() => draft() && document.activeElement === noteInput());
             await retyped(noteInput(), ${JSON.stringify(INHERIT_NAME)});
             await retyped(headingInput(), 'Work');
-            await choose('properties');
             const time = () => dateInput(${JSON.stringify(tr('modal.start'))}, 'time');
             const date = () => dateInput(${JSON.stringify(tr('modal.start'))}, 'date');
             type(nameInput(), '時刻だけ');
             type(time(), '10:00');
             const out = { inherited: { placeholder: date().placeholder, says: says(time()) } };
-            await choose('place');
             await retyped(noteInput(), ${JSON.stringify(OTHER_NAME)});
             await retyped(headingInput(), 'Tasks');
+            await choose('detail');
             create();
             return JSON.stringify(out);
         `);
@@ -451,18 +644,17 @@ describe('a create pressed on the place tab, over a value of the properties that
             return JSON.stringify({ open: !!draft(), tab: tabOn(), focused: document.activeElement === time, says: says(time) });
         `);
         expect(steps.inherited).toEqual({ placeholder: '2031-02-01', says: [] });
-        expect(after).toEqual({ open: true, tab: 'properties', focused: true, says: [`${ERROR}: ${tr('validation.startRequiresDate')}`] });
+        expect(after).toEqual({ open: true, tab: 'basic', focused: true, says: [`${ERROR}: ${tr('validation.startRequiresDate')}`] });
         expect(readTestFile(INHERIT_FILE)).toBe(INHERIT_NOTE);
         expect(readTestFile(OTHER_FILE)).toBe(OTHER_NOTE);
     });
 });
 
-describe('the note field of the place tab', () => {
+describe('the note field of the place', () => {
     it('closes its list alone on an Escape, and the next Escape goes the way the hub closes', async () => {
         await writeIndexedTestFile(OTHER_FILE, OTHER_NOTE);
         const steps = run<Record<string, unknown>>(`
             await openDaily(${JSON.stringify(ESCAPE_DAY)});
-            await choose('place');
             const list = () => document.querySelector('.suggestion-container');
             const items = () => [...document.querySelectorAll('.suggestion-container .suggestion-item')].map(el => el.textContent);
             typeIn(noteInput(), ${JSON.stringify(OTHER_NAME.slice(0, -3))});
@@ -492,7 +684,6 @@ describe('a create pressed while the note just typed is read', () => {
         const steps = run<Record<string, unknown>>(`
             await openDaily(${JSON.stringify(WAIT_DAY)});
             type(nameInput(), '待った');
-            await choose('place');
             holdReads();
             const out = {};
             try {
@@ -544,11 +735,12 @@ describe('the tabs of the hub under a row (a card\'s menu, Add child task)', () 
         await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
         await pick(${JSON.stringify(tr('menu.addChildTask'))});
         await until(() => nameInput() && document.activeElement === nameInput() && lineSays().length > 0);
-        const values = () => [...paneOf('place').querySelectorAll('.task-hub__shown-value')].map(v => v.textContent);
-        const labels = () => [...paneOf('place').querySelectorAll('.tv-form__row .tv-form__label')].map(l => l.textContent);
+        const shownPlace = () => paneOf('basic').querySelector('.task-hub__shown');
+        const values = () => [...shownPlace().querySelectorAll('.task-hub__shown-value')].map(v => v.textContent);
+        const labels = () => [...shownPlace().querySelectorAll('.tv-form__row .tv-form__label')].map(l => l.textContent);
     `;
 
-    it('opens on the properties and shows the parent\'s note, heading and text with no field; the child goes first among its children', async () => {
+    it('opens on General, which shows the parent\'s note, heading and text with no field; the child goes first among its children', async () => {
         await writeIndexedTestFile(CHILD_FILE, CHILD_NOTE);
         const steps = run<Record<string, unknown>>(`
             ${OPEN('親')}
@@ -557,16 +749,14 @@ describe('the tabs of the hub under a row (a card\'s menu, Add child task)', () 
                 tab: tabOn(),
                 onName: document.activeElement === nameInput(),
             };
-            await choose('place');
-            out.place = { labels: labels(), values: values(), fields: paneOf('place').querySelectorAll('input').length, says: [...paneOf('place').querySelectorAll('.tv-form__says > *')].map(c => c.className + ': ' + c.textContent) };
-            await choose('properties');
+            out.place = { labels: labels(), values: values(), fields: shownPlace().querySelectorAll('input').length, says: [...shownPlace().querySelectorAll('.tv-form__says > *')].map(c => c.className + ': ' + c.textContent) };
             type(nameInput(), '新しい子');
             create();
             await until(() => !draft());
             out.disk = await disk(${JSON.stringify(CHILD_FILE)});
             return JSON.stringify(out);
         `);
-        expect(steps).toMatchObject({ tabs: ['properties', 'place'], tab: 'properties', onName: true });
+        expect(steps).toMatchObject({ tabs: ['basic', 'detail'], tab: 'basic', onName: true });
         expect(steps.place).toEqual({
             labels: [tr('modal.note'), tr('modal.heading'), tr('modal.parentTask')],
             values: [CHILD_FILE, '見出し', '親'],
@@ -580,7 +770,6 @@ describe('the tabs of the hub under a row (a card\'s menu, Add child task)', () 
         await writeIndexedTestFile(CHILD_FILE, CHILD_NOTE);
         const values = run<string[]>(`
             ${OPEN('上の親')}
-            await choose('place');
             return JSON.stringify(values());
         `);
         expect(values).toEqual([CHILD_FILE, tr('modal.newTask.noHeading'), '上の親']);

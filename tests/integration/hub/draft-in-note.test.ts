@@ -1,12 +1,12 @@
 /**
  * A task created in a note the user chooses, in the running E2E vault, as a
  * user does it: a Timeline's empty space, its menu's Create Task in a Note,
- * opens the hub on a task not written yet on its place tab, the focus on
- * the note field, empty, the heading field on the settings' heading, the
- * line above the create asking for a note and the create not offered. The
- * hub holds the day pressed (and the time, on the timed lane). The note and
- * the heading typed in the place tab, the line above the create says each
- * time where the task goes, and the create writes the line there:
+ * opens the hub on a task not written yet on its basic tab, the focus on
+ * the note field under the dates, empty, the heading field on the settings'
+ * heading, the line above the create asking for a note and the create not
+ * offered. The hub holds the day pressed (and the time, on the timed lane).
+ * The note and the heading typed, the line above the create says each time
+ * where the task goes, and the create writes the line there:
  *
  * - in a note there, under a heading there;
  * - in a note not there, by its name alone, under a heading: the note made
@@ -38,7 +38,7 @@ const DAY = '2031-01-22';
 const DAILY = `${DAY}.md`;
 const NOTE_NAME = 'test-int-draft-in-note';
 const NOTE_FILE = `${NOTE_NAME}.md`;
-/** A note not there: named in the place tab, made by the create. */
+/** A note not there: named in the note field, made by the create. */
 const NEW_NAME = 'test-int-draft-in-note-new';
 
 /** A heading with nothing under it, so the line goes right under it at its head or its end. */
@@ -73,9 +73,8 @@ const opening = async () => {
         title: [...draft().querySelectorAll('h2')].map(h => h.textContent),
     };
 };
-/** Name the task in the properties tab and create it; wait for the hub to close. */
+/** Name the task, in the same tab as the place, and create it; wait for the hub to close. */
 const createNamed = async name => {
-    tab('properties').click();
     typeIn(nameInput(), name);
     create();
     await until(() => !draft(), 5000, () => lineSays().join('|'));
@@ -106,7 +105,7 @@ let newPath: string | null = null;
 
 function opened(): Opened {
     return {
-        tab: 'place',
+        tab: 'basic',
         focusOnNote: true,
         note: '',
         heading: 'Tasks',

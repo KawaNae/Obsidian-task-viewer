@@ -14,10 +14,12 @@
  * - Under a row, opened from a card's menu ("Add child task"): it says
  *   whose child the task is, shows what the parent's section gives (the
  *   start date, a tag, a color, a property) with where it is from, a label
- *   that opens nothing; a time with no date is taken there, and the child
+ *   that opens nothing, the tag, the color and the property in the details
+ *   tab; a time with no date is taken there, and the child
  *   goes first among the parent's children, indented as Obsidian's settings
  *   say.
- * - The create: nothing is written while the fields are edited; the create
+ * - The create: nothing is written while the fields are edited, the tag,
+ *   the color and the property typed in the details tab; the create
  *   writes the task's line and its property lines with one write, and the
  *   index reads back the values given. A task with no name is written as
  *   `- [ ] `, its card showing the link to its note before it is made. A
@@ -386,6 +388,7 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
             await pick(${JSON.stringify(tr('menu.addChildTask'))});
             await until(() => nameInput() && document.activeElement === nameInput());
             await until(() => lineSays().length > 0);
+            chooseHubTab(draft(), 'detail');
             const propRow = rowOf('area');
             const chip = draft().querySelector('.task-hub__tag-chip--cascade');
             const out = {
@@ -408,6 +411,7 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
                 leaves: app.workspace.getLeavesOfType('markdown').length - R.leafCount,
                 activeFile: (app.workspace.getActiveFile()?.path ?? null) === R.activeFile,
             };
+            chooseHubTab(draft(), 'basic');
             type(nameInput(), '子');
             type(dateInput(${JSON.stringify(tr('modal.start'))}, 'time'), '10:00');
             create();
@@ -487,6 +491,9 @@ describe('the create', () => {
             const doing = plugin.settings.statusDefinitions.find(d => d.char === '/');
             await pick(doing.label);
             await until(() => draft().querySelector('.task-hub__status-pill').textContent === doing.label);
+            chooseHubTab(draft(), 'detail');
+            tagInput().focus();
+            const tagFocused = document.activeElement === tagInput();
             type(tagInput(), 'proj');
             await until(() => draft().querySelector('.task-hub__tag-chip')?.textContent.includes('proj'));
             type(colorInput(), 'blue');
@@ -494,7 +501,7 @@ describe('the create', () => {
             typeIn(valueInput(), 'lab');
             valueInput().dispatchEvent(new FocusEvent('blur'));
             await until(() => rowOf('area'));
-            return JSON.stringify({ card: card().textContent });
+            return JSON.stringify({ card: card().textContent, tagFocused });
         `);
         const edited = run<Record<string, unknown>>(`
             const out = { open: !!draft(), seen: { ...R.seen, written: R.seen.written.length }, disk: await disk(${JSON.stringify(MAKE_FILE)}) };
@@ -507,6 +514,7 @@ describe('the create', () => {
             return JSON.stringify(out);
         `);
         expect(steps.card).toContain('作る');
+        expect(steps.tagFocused).toBe(true);
         expect(edited).toMatchObject({ open: true, seen: { written: 0, modified: 0 }, disk: MAKE_NOTE });
         const made = edited.made as { seen: { written: string[]; modified: number }; disk: string };
         // One write, which the note holds as it is: no state between came to the note.
