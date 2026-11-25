@@ -13,10 +13,11 @@
  *   many frames, never jumping in one, the field never below 10px above the
  *   keyboard's top or the body's bottom, the higher of the two, and resting
  *   there; it goes back the same way as the keyboard goes.
- * - The desktop's tall centered box (the same hub): the field stays until
- *   the keyboard's top comes to it, then rides 10px above it. Once the
- *   keyboard is up the body's height is locked and its bottom padded, and
- *   both are put back with its scroll as the keyboard goes.
+ * - The desktop's centered box (the same hub), taller than the room the
+ *   keyboard leaves above it, so the keyboard covers the body's bottom: the
+ *   field stays until the keyboard's top comes to it, then rides 10px above
+ *   it. Once the keyboard is up the body's height is locked and its bottom
+ *   padded, and both are put back with its scroll as the keyboard goes.
  * - A field the keyboard leaves in sight (the box of a row with many
  *   properties, its Details tab chosen so the body holds more than it shows,
  *   and that tab's first field): the body is held where it stood until the did
@@ -236,7 +237,7 @@ describe('a field the keyboard hides', () => {
         expect(back[back.length - 1]).toBe(seen.start);
     });
 
-    it("in the desktop's tall box, the field stays until the keyboard's top comes to it and then rides 10px above it, the body's height locked and padded until the keyboard has gone", () => {
+    it("in the desktop's box, taller than the room the keyboard leaves above it, the field stays until the keyboard's top comes to it and then rides 10px above it, the body's height locked and padded until the keyboard has gone", () => {
         const seen = riseOverLowField('openDraft()', false);
         expect(seen.shown).toBeGreaterThanOrEqual(10);
         expect(seen.end - seen.start).toBeGreaterThan(50);
