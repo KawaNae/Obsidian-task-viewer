@@ -18,14 +18,19 @@
 /* A hub with a form: the body a grid of the source's switch, the card, the
    source, what the form says of itself, the row of the form's tabs and its
    panes, each in an area of its own. The form and the panes' element give
-   no box, so their children are the grid's, and both panes lie in one
-   cell. A pane chosen sets the cell's least height, and the cell grows to
-   the tallest pane as far as the body has room, so choosing a tab changes
-   nothing of the panel's size. A pane off is not seen and ends at the
-   cell's bottom: the body scrolls only for the pane chosen, and its bottom
-   padding comes after it. The body still scrolls whole, the card and the
-   tabs with it. An area with nothing in it takes no height. */
+   no box, so their children are the grid's. An area with nothing in it
+   takes no height.
+
+   The General pane alone sets the panes' row, so the panel is as tall for
+   either tab. Off, it is not seen, and it is cut to the room the body has
+   left, so a shorter Details scrolls no further than it needs. The Details
+   pane lies over the row, out of the flow: taller than General, it runs
+   past the row's bottom and the body scrolls whole to show it, the card and
+   the tabs with it. The body's bottom padding, the keyboard's included, is
+   handed down to Details to end it, since a box out of the flow is not
+   followed by the body's own padding. Off, Details takes no box. */
 .tv-overlay__body.task-hub__body--tabs {
+    position: relative;
     display: grid;
     grid-template-areas: "bar" "card" "source" "says" "tabs" "panes";
     grid-template-columns: minmax(0, 1fr);
@@ -47,6 +52,7 @@
 .task-hub__body--tabs > .task-hub__form,
 .task-hub__body--tabs > .task-hub__form > .tv-tabs__panes {
     display: contents;
+    padding-bottom: inherit;
 }
 
 .task-hub__body--tabs > .task-hub__form > .tv-form__says--form {
@@ -60,18 +66,27 @@
 .task-hub__body--tabs > .task-hub__form > .tv-tabs__panes > .tv-tabs__pane {
     grid-area: panes;
     min-width: 0;
-    align-self: start;
     /* the form's sections, apart as the form without tabs sets them */
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.task-hub__body--tabs > .task-hub__form > .tv-tabs__panes > .tv-tabs__pane.is-hidden {
+.task-hub__body--tabs > .task-hub__form > .tv-tabs__panes > .task-hub__pane--basic.is-hidden {
     visibility: hidden;
     overflow: hidden;
     min-height: 0;
     max-height: 100%;
+}
+
+.task-hub__body--tabs > .task-hub__form > .tv-tabs__panes > .task-hub__pane--detail {
+    position: absolute;
+    inset: 0 0 auto 0;
+    padding-bottom: inherit;
+}
+
+.task-hub__body--tabs > .task-hub__form > .tv-tabs__panes > .task-hub__pane--detail.is-hidden {
+    display: none;
 }
 
 .task-hub__preview .task-card {
