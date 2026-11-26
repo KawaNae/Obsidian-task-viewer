@@ -431,6 +431,16 @@
     flex-basis: 28px;
 }
 
+/* The × in a property's field (a value's, a list item's) is 28px wide on
+ * every device, as the field's text keeps clear of it and as wide as the
+ * menu button. Obsidian pads a button on a tablet 4px 20px
+ * (`.is-tablet button:not(.clickable-icon)`, (0,2,1)), which widens a 28px
+ * × to 40px over the end of the text; this takes it off at (0,3,1). The
+ * other fields' × are left as _form.css draws them. */
+.tv-ctrl .task-hub__props button.tv-form__clear-button {
+    padding: 0;
+}
+
 /* Hide an inherited value: an icon beside the source, drawn as a row's × is */
 .tv-ctrl .task-hub__hide {
     width: 16px;
