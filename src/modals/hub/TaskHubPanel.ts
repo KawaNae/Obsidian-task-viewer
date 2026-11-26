@@ -53,8 +53,6 @@ export interface SourceSlots {
     pane: HTMLElement;
     /** Where its row of controls goes: the overlay's foot, below the body. */
     foot: HTMLElement;
-    /** Close the hub, asking nothing more. */
-    close(): void;
 }
 
 /** What the panel asks of its source mode (`TaskHubSource`) as the hub closes. */
@@ -210,28 +208,21 @@ export class TaskHubPanel {
                 app, plugin: deps.plugin, index: deps.index, operations: deps.operations,
                 noteOps, indentUnit: () => indentUnit(app),
             },
-            { follow: (row) => source?.follow(row), hold: (held) => source?.hold(held) },
+            { redraw: () => source?.redraw(), hold: (held) => source?.hold(held) },
             opening,
         );
         const makeSource: SourceMaker = (slots) => {
+            const apply = host.sourceApply;
             const view = new TaskHubSourceView(app, slots, {
                 enter: () => { void source?.enter(); },
-                apply: () => { void source?.apply(); },
-                cancel: () => source?.cancel(),
-                discard: () => source?.discard(),
-                keep: () => source?.keep(),
+                back: () => source?.back(),
                 draftText: () => source?.draftText() ?? null,
+                cancel: () => apply.back(),
+                apply: () => { void apply.apply(); },
+                discard: () => apply.discard(),
+                keep: () => apply.keep(),
             });
-            source = new TaskHubSource(host.task(), {
-                drained: () => host.drained(),
-                confirm: (id) => deps.operations.confirmTask(id),
-                reread: (id) => deps.index.getTask(id),
-                // The refusal is shown under the draft it leaves; a notice would say it twice.
-                replace: (id, base, replacement) => deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
-                indentUnit: () => indentUnit(app),
-                lockForm: (locked) => host.setSourceOpen(locked),
-                closeHub: slots.close,
-            }, view);
+            source = new TaskHubSource({ seat: () => host.seat(), indentUnit: () => indentUnit(app) }, view);
             return source;
         };
         const makePlace: PlaceMaker = (parent) => new RowPlace(app, parent, host, !host.task().isReadOnly);
@@ -378,7 +369,7 @@ export class TaskHubPanel {
         }
 
         if (makeSource && toggle && shut && pane) {
-            this.source = makeSource({ toggle, shut, card, pane, foot: frame.foot, close: () => this.close() });
+            this.source = makeSource({ toggle, shut, card, pane, foot: frame.foot });
         }
     }
 

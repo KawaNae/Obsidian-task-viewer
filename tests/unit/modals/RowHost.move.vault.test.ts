@@ -79,7 +79,7 @@ async function open(lines: string[] = NOTE, opts: { opening?: MoveStart; beforeA
         const preview = await noteOps.previewSend([row.id]);
         opening = { preview: preview!, start: opts.opening };
     }
-    const source = { follow: vi.fn(), hold: vi.fn() };
+    const source = { redraw: vi.fn(), hold: vi.fn() };
     const host = new RowHost(row, {
         app: app as never,
         plugin: { settings: DEFAULT_SETTINGS } as never,

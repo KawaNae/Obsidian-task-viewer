@@ -5,6 +5,8 @@ import type { PlaceFieldsHost } from '../../../src/modals/place/PlaceFields';
 import type { DestinationAsk, NoteRead } from '../../../src/services/data/NotePlaces';
 import type { CreatePlace, CreatePlaces, PlaceFacts } from '../../../src/services/data/CreatePlaces';
 import type { SourceHost } from '../../../src/modals/hub/TaskHubSource';
+import type { SourceApply } from '../../../src/modals/hub/SourceApply';
+import { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import type { SendPreview } from '../../../src/services/data/NoteOps';
 import type { TaskMenuHooks } from '../../../src/interaction/menu/MenuHandler';
@@ -20,8 +22,8 @@ import { TFile } from '../mocks/obsidian';
 
 /**
  * The hub's panel as it joins its pieces, opened by its two entries. On a
- * row: the source mode built in the panel's slots, following the row the
- * host follows and waiting for the host's writes, and hubs on rows open one
+ * row: the source mode built in the panel's slots, its seat the host's,
+ * drawn on the row the host follows and waiting for the host's writes, and hubs on rows open one
  * at a time. On a task not written yet: no source mode, the card drawn as
  * one nothing is done on and drawn again as the draft changes, and the hub
  * opened over a hub on a row, which it leaves open, with the place's fields
@@ -34,7 +36,7 @@ import { TFile } from '../mocks/obsidian';
 const { shells, forms, sources, views, panes, paneHas } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
     forms: [] as { el: unknown; host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn>; notWritten: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
-    sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
+    sources: [] as { host: unknown; redraw: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     views: [] as { slots: Record<string, unknown> }[],
     panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     /** Whether the place's fields built next have a field: a place shown with none focuses nothing. */
@@ -90,13 +92,13 @@ vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
 }));
 vi.mock('../../../src/modals/hub/TaskHubSource', () => ({
     TaskHubSource: class {
-        follow = vi.fn();
+        redraw = vi.fn();
         hold = vi.fn();
         dispose = vi.fn();
         beforeClose() { return true; }
         yieldsEscape() { return false; }
         takesBack() { return false; }
-        constructor(readonly task: unknown, readonly host: unknown) { sources.push(this); }
+        constructor(readonly host: unknown) { sources.push(this); }
     },
 }));
 vi.mock('../../../src/modals/hub/TaskHubSourceView', () => ({
@@ -487,17 +489,26 @@ describe('the hub on a row', () => {
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1', content: '元の名前' }), r.deps);
 
         expect(sources).toHaveLength(1);
-        expect(sources[0].task).toMatchObject({ id: 'task-1', content: '元の名前' });
+        expect((sources[0].host as SourceHost).seat().row()?.task).toMatchObject({ id: 'task-1', content: '元の名前' });
         // Why the source cannot open first, above the card: the body starts with no row of the switch's.
         const [shut, card, pane] = r.body.children;
         expect(views[0].slots).toMatchObject({ toggle: body.head!.children[1], shut, card, pane, foot: body.foot });
     });
 
-    it('closes when the source mode asks it to', async () => {
+    it('closes when a draft of the source is thrown away for a close', async () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
+        const seat = (sources[0].host as SourceHost).seat() as SourceApply;
+        const opening = SubtreeFrame.open(['- [ ] P'], '    ');
+        if (!opening.open) throw new Error('the frame did not open');
+        seat.opened({
+            frame: opening.frame,
+            editor: { draft: () => ({ parent: '- [ ] Q', children: [] }) } as never,
+            say: () => { }, redraw: () => { }, asked: () => { }, focusEditor: () => { }, end: () => { },
+        });
 
-        (sources[0].host as SourceHost).closeHub();
+        expect(seat.beforeClose()).toBe(false);
+        seat.discard();
         expect(shells[0].opts).toBeNull();
         expect(r.listeners).toHaveLength(0);
     });
@@ -515,13 +526,14 @@ describe('the hub on a row', () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
         const order: string[] = [];
-        sources[0].follow.mockImplementation((row: Task | undefined) => { order.push(`follow:${row?.content ?? 'none'}`); });
+        const seat = (sources[0].host as SourceHost).seat();
+        sources[0].redraw.mockImplementation(() => { order.push(`source:${seat.row()?.task.content ?? 'none'}`); });
         (r.deps.taskRenderer.render as ReturnType<typeof vi.fn>).mockImplementation((_el: unknown, dt: Task) => { order.push(`card:${dt.content}`); });
 
         r.change(makeTask({ id: 'task-1', content: '外の名前' }));
         r.change(undefined);
 
-        expect(order).toEqual(['card:外の名前', 'follow:外の名前', 'follow:none']);
+        expect(order).toEqual(['card:外の名前', 'source:外の名前', 'source:none']);
     });
 
     it('lets the source mode open only once the writes the form asked are done', async () => {
@@ -529,11 +541,12 @@ describe('the hub on a row', () => {
         const r = rig(() => new Promise<WriteAnswer>(resolve => { release = () => resolve({ written: true }); }));
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
         const host = forms[0].host as PanelHost;
-        const sourceHost = sources[0].host as SourceHost;
+        const seat = (sources[0].host as SourceHost).seat();
 
         void host.put({ content: '打った名前' });
         let drained = false;
-        const waiting = sourceHost.drained().then(() => { drained = true; });
+        // No longer wanted once the writes are done: it goes no further than the wait.
+        const waiting = seat.open(() => false).then(() => { drained = true; });
         await Promise.resolve();
         expect(drained).toBe(false);
         release();

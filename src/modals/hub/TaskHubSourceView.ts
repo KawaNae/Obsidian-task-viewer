@@ -7,15 +7,22 @@ import { IssueBoard } from '../form/FormIssue';
 import type { SourceSurface, SourceViewState } from './TaskHubSource';
 import type { SourceSlots } from './TaskHubPanel';
 
-/** What the view's controls do: the source mode's operations (`TaskHubSource`). */
+/**
+ * What the view's controls do: the switch's (`TaskHubSource`), and those of
+ * the seat whose row of buttons and lost row's discard the view draws
+ * (`SourceApply`), shown only while the seat's answer says so (`SeatView`).
+ */
 export interface SourceViewActions {
     enter(): void;
-    apply(): void;
-    cancel(): void;
-    discard(): void;
-    keep(): void;
+    /** The switch back to the card. */
+    back(): void;
     /** The draft as the file's lines, to copy; null when none is open. */
     draftText(): string | null;
+    /** The seat's row: cancel, apply, and the answers of its question. */
+    cancel(): void;
+    apply(): void;
+    discard(): void;
+    keep(): void;
 }
 
 /**
@@ -23,7 +30,8 @@ export interface SourceViewActions {
  * source on the title's line, why the source cannot open above the card,
  * and, in the source, the editor with one row of controls under it, why the
  * last apply wrote nothing, and what is left once the row is lost. It draws
- * what the mode's state says (`SourceViewState`) and does nothing of its own.
+ * what the switch's state and its seat's answer say (`SourceViewState`,
+ * `SeatView`) and does nothing of its own.
  *
  * The switch is two icon buttons, the one shown marked active: the form by
  * the pencil and the source by the code icon, the icons Obsidian's status bar
@@ -33,9 +41,10 @@ export interface SourceViewActions {
  * reason: the line takes no room otherwise.
  *
  * The row of controls is cancel and apply at its end (`FormActions`), which
- * asks whether to throw the draft away as every form's row does. It stands in
- * the overlay's foot (`OverlayFrame`), after the form's row, which shows on a
- * row only while it asks.
+ * asks whether to throw the draft away as every form's row does, shown while
+ * the seat has a row (`SeatView.foot`). It stands in the overlay's foot
+ * (`OverlayFrame`), after the form's row, which shows on a row only while it
+ * asks.
  */
 export class TaskHubSourceView implements SourceSurface {
     private readonly viewBtn: HTMLButtonElement;
@@ -47,6 +56,7 @@ export class TaskHubSourceView implements SourceSurface {
     /** Why the last apply wrote nothing, said under the editor. */
     private readonly issues: IssueBoard<never>;
     private readonly lostEl: HTMLElement;
+    private readonly lostDiscardBtn: HTMLButtonElement;
     /** Where the row of controls stands, in the overlay's foot: hidden while the card shows. */
     private readonly actionsHost: HTMLElement;
     private readonly actions: FormActions;
@@ -66,7 +76,7 @@ export class TaskHubSourceView implements SourceSurface {
         toggle.addClass('task-hub__mode-toggle', 'tv-ctrl__segments');
         this.viewBtn = modeButton(toggle, 'edit-3', t('modal.hub.source.view'));
         this.sourceBtn = modeButton(toggle, 'code-2', t('modal.hub.source.source'));
-        this.viewBtn.addEventListener('click', () => actions.cancel());
+        this.viewBtn.addEventListener('click', () => actions.back());
         this.sourceBtn.addEventListener('click', () => actions.enter());
 
         this.pane = paneHost;
@@ -86,8 +96,8 @@ export class TaskHubSourceView implements SourceSurface {
                 () => new Notice(t('modal.hub.source.copyFailed')),
             );
         });
-        const lostDiscardBtn = this.lostEl.createEl('button', { cls: 'mod-warning', text: t('modal.draft.discard'), attr: { type: 'button' } });
-        lostDiscardBtn.addEventListener('click', () => actions.discard());
+        this.lostDiscardBtn = this.lostEl.createEl('button', { cls: 'mod-warning', text: t('modal.draft.discard'), attr: { type: 'button' } });
+        this.lostDiscardBtn.addEventListener('click', () => actions.discard());
 
         this.actionsHost = foot.createDiv({ cls: 'task-hub__source-actions' });
         this.actions = new FormActions(this.actionsHost, {
@@ -102,10 +112,13 @@ export class TaskHubSourceView implements SourceSurface {
     }
 
     render(state: SourceViewState): void {
-        const open = state.phase === 'source' || state.phase === 'applying';
+        const seat = state.seat;
+        const open = seat !== null;
+        const busy = seat?.busy ?? false;
+        const asking = seat?.asking ?? false;
         this.viewBtn.toggleClass('is-active', !open);
         this.sourceBtn.toggleClass('is-active', open);
-        this.viewBtn.disabled = state.phase === 'applying' || state.asking;
+        this.viewBtn.disabled = busy || asking;
         this.sourceBtn.disabled = state.phase !== 'view' || state.shut !== null || state.held;
         this.sourceBtn.title = state.shut ?? '';
         this.shutEl.setText(state.shut ?? '');
@@ -115,20 +128,19 @@ export class TaskHubSourceView implements SourceSurface {
         this.pane.toggle(open);
         this.issues.set('apply', state.issues);
         this.messageEl.toggle(open);
-        const asking = open && state.asking;
         this.pane.toggleClass('tv-source-drafts--asking', asking);
-        this.lostEl.toggle(open && state.lost && !asking);
-        // A lost row has its own way out; asked there, the row asks as anywhere.
+        this.lostEl.toggle(seat?.lost != null);
+        this.lostDiscardBtn.toggle(seat?.lost?.discard ?? false);
         this.actions.render({
-            busy: state.phase === 'applying',
-            ctaEnabled: state.phase === 'source',
+            busy,
+            ctaEnabled: open && !busy,
             ask: asking ? t('modal.draft.discardAsk') : null,
         });
-        this.actions.cancelButton.disabled = !asking && state.phase !== 'source';
+        this.actions.cancelButton.disabled = !asking && (!open || busy);
         // Asked, the apply stays offered: applying withdraws the question.
-        this.actions.showAct(!state.lost);
+        this.actions.showAct(seat?.foot?.act ?? false);
         // Hidden by its attribute, which the overlay's foot reads to show or not (`OverlayFrame`).
-        this.actionsHost.hidden = !(open && (!state.lost || asking));
+        this.actionsHost.hidden = !seat?.foot;
     }
 
     /** Asked, first or again: back takes the focus, where cancel was. */

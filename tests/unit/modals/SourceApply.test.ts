@@ -1,0 +1,524 @@
+import { describe, it, expect, vi } from 'vitest';
+import { t } from '../../../src/i18n';
+import { TaskHubSource, type SourceViewState } from '../../../src/modals/hub/TaskHubSource';
+import { SourceApply, type SourceApplyHost } from '../../../src/modals/hub/SourceApply';
+import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
+import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
+import type { SubtreeReplacement } from '../../../src/services/persistence/TaskOps';
+import type { DraftEditor, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
+import type { FormIssue } from '../../../src/modals/form/FormIssue';
+import type { Task } from '../../../src/types';
+import { makeTask } from '../helpers/makeTask';
+
+/**
+ * The source's seat on the row the note holds (`SourceApply`), as the hub's
+ * switch (`TaskHubSource`) opens and draws it, apart from the DOM: the
+ * editor is a stand-in holding a draft, the host answers as the hub would,
+ * and the surface records what it was told to show. `SubtreeFrame` is the
+ * real one, so a draft comes to what the write would be handed.
+ */
+
+const SUBTREE = ['- [ ] P', '    - [ ] a', '    - [ ] b'];
+
+class FakeEditor implements DraftEditor {
+    parent: string;
+    children: SourceDraft['children'];
+    completing = false;
+    destroyed = false;
+    focused = 0;
+    constructor(private readonly frame: SubtreeFrame, readonly hooks: { submit(): void; edited(): void; linkSource(): string }) {
+        this.parent = frame.parent;
+        this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
+    }
+    draft(): SourceDraft { return { parent: this.parent, children: this.children.map(line => ({ ...line })) }; }
+    isCompleting(): boolean { return this.completing; }
+    closeCompletion(): boolean {
+        const was = this.completing;
+        this.completing = false;
+        return was;
+    }
+    focus(): void { this.focused++; }
+    destroy(): void { this.destroyed = true; }
+    /** Change the parent's text as the user would, the editor telling of it. */
+    type(parent: string): void { this.parent = parent; this.hooks.edited(); }
+}
+
+/** What the surface was told, as the user sees it: `'applying'` while the seat writes the draft. */
+interface Drawn {
+    phase: SourceViewState['phase'] | 'applying';
+    shut: string | null;
+    held: boolean;
+    issues: readonly FormIssue<never>[];
+    asking: boolean;
+    /** The lost row's line is shown. */
+    lost: boolean;
+    /** The seat's row of buttons is shown, and its apply offered in it. */
+    foot: boolean;
+    act: boolean;
+}
+
+function drawnOf(state: SourceViewState): Drawn {
+    const seat = state.seat;
+    return {
+        phase: seat?.busy ? 'applying' : state.phase,
+        shut: state.shut,
+        held: state.held,
+        issues: state.issues,
+        asking: seat?.asking ?? false,
+        lost: seat?.lost != null,
+        foot: seat?.foot != null,
+        act: seat?.foot?.act ?? false,
+    };
+}
+
+function rowOf(overrides: Partial<Task> = {}): Task {
+    return makeTask({ id: 'row-1', content: 'P', subtreeLines: SUBTREE, ...overrides });
+}
+
+function setUp(opts: { task?: Task; answers?: WriteAnswer[]; confirm?: boolean; drained?: Promise<void> } = {}) {
+    let followed: Task | undefined = opts.task ?? rowOf();
+    const row: Task = followed;
+    const answers = [...(opts.answers ?? [])];
+    const states: Drawn[] = [];
+    const editors: FakeEditor[] = [];
+    let asked = 0;
+    const replace = vi.fn(async (_id: string, _base: readonly string[], _r: SubtreeReplacement): Promise<WriteAnswer> => answers.shift() ?? { written: true });
+    const confirm = vi.fn(async () => opts.confirm ?? true);
+    const lockForm = vi.fn();
+    const closeHub = vi.fn();
+    const host: SourceApplyHost = {
+        row: () => followed,
+        drained: () => opts.drained ?? Promise.resolve(),
+        confirm,
+        reread: () => row,
+        replace,
+        lockForm,
+        closeHub,
+    };
+    const apply = new SourceApply(host);
+    const source = new TaskHubSource({ seat: () => apply, indentUnit: () => '    ' }, {
+        openEditor: (frame, hooks) => { const editor = new FakeEditor(frame, hooks); editors.push(editor); return editor; },
+        render: (state) => { states.push(drawnOf(state)); },
+        asked: () => { asked++; },
+    });
+    return {
+        source,
+        apply,
+        replace,
+        confirm,
+        lockForm,
+        closeHub,
+        editor: () => editors[editors.length - 1],
+        editors,
+        state: () => states[states.length - 1],
+        /** How many times the question was put, the focus taken to its answer. */
+        asked: () => asked,
+        /** The row as the hub follows it changed (undefined: lost), and the switch is told to draw again. */
+        follow: (next: Task | undefined) => { followed = next; source.redraw(); },
+        /** The hub closed: the host lets its seat go, then the panel the switch. */
+        close: () => { apply.dispose(); source.dispose(); },
+    };
+}
+
+async function opened(opts: Parameters<typeof setUp>[0] = {}) {
+    const h = setUp(opts);
+    await h.source.enter();
+    return h;
+}
+
+describe('entering the source', () => {
+    it('opens the subtree the index holds once the form\'s writes are done, and shuts the form', async () => {
+        let drain!: () => void;
+        const h = setUp({ drained: new Promise<void>(resolve => { drain = resolve; }) });
+        const entering = h.source.enter();
+        expect(h.state().phase).toBe('entering');
+        expect(h.confirm).not.toHaveBeenCalled();
+
+        drain();
+        await entering;
+
+        expect(h.confirm).toHaveBeenCalledWith('row-1');
+        expect(h.state().phase).toBe('source');
+        expect(h.lockForm).toHaveBeenCalledWith(true);
+        // The seat's row of buttons under the editor, apply offered in it.
+        expect(h.state()).toMatchObject({ foot: true, act: true, lost: false });
+        expect(h.editor().draft()).toEqual({ parent: '- [ ] P', children: [{ text: '- [ ] a', was: 1 }, { text: '- [ ] b', was: 2 }] });
+        expect(h.editor().focused).toBe(1);
+        // A link typed under the row is written in the row's note.
+        expect(h.editor().hooks.linkSource()).toBe(rowOf().file);
+    });
+
+    it('stays on the card when the index\'s copy is not the row on the disk', async () => {
+        const h = await opened({ confirm: false });
+        expect(h.state().phase).toBe('view');
+        expect(h.editors).toEqual([]);
+        expect(h.lockForm).not.toHaveBeenCalled();
+    });
+
+    it('is not offered for a read-only row, saying why', async () => {
+        const h = await opened({ task: rowOf({ isReadOnly: true }) });
+        expect(h.state()).toMatchObject({ phase: 'view', shut: t('modal.hub.source.readOnly') });
+        expect(h.confirm).not.toHaveBeenCalled();
+    });
+
+    it('is not offered for a subtree with a line shallower than its children, saying which', async () => {
+        const h = await opened({ task: rowOf({ subtreeLines: ['- [ ] P', '  going on', '    - [ ] a'] }) });
+        expect(h.state()).toMatchObject({ phase: 'view', shut: t('modal.hub.source.shallow', { line: '1' }) });
+        expect(h.confirm).not.toHaveBeenCalled();
+    });
+
+    it('is not offered once the hub lost the row', async () => {
+        const h = setUp();
+        h.follow(undefined);
+        await h.source.enter();
+        expect(h.state()).toMatchObject({ phase: 'view', shut: t('modal.hub.taskMissing') });
+        expect(h.confirm).not.toHaveBeenCalled();
+    });
+
+    it('is not offered while the hub holds the row for a write of its own, no reason said; offered again once it lets it go', async () => {
+        const h = setUp();
+        h.source.hold(true);
+        expect(h.state()).toMatchObject({ phase: 'view', shut: null, held: true });
+        await h.source.enter();
+        expect(h.state().phase).toBe('view');
+        expect(h.confirm).not.toHaveBeenCalled();
+
+        h.source.hold(false);
+        expect(h.state().held).toBe(false);
+        await h.source.enter();
+        expect(h.state().phase).toBe('source');
+    });
+
+    it('goes back to the card when the hub holds the row while it waits', async () => {
+        let drain!: () => void;
+        const h = setUp({ drained: new Promise<void>(resolve => { drain = resolve; }) });
+        const entering = h.source.enter();
+        h.source.hold(true);
+        expect(h.state().phase).toBe('view');
+        drain();
+        await entering;
+        expect(h.editors).toEqual([]);
+        expect(h.lockForm).not.toHaveBeenCalled();
+    });
+
+    it('gives up quietly when the hub closes while it waits', async () => {
+        let drain!: () => void;
+        const h = setUp({ drained: new Promise<void>(resolve => { drain = resolve; }) });
+        const entering = h.source.enter();
+        expect(h.source.beforeClose()).toBe(true);
+        h.close();
+        drain();
+        await entering;
+        expect(h.editors).toEqual([]);
+        expect(h.confirm).not.toHaveBeenCalled();
+    });
+});
+
+describe('applying a draft', () => {
+    it('writes the parent and the children in one write, on the subtree opened, and goes back to the card', async () => {
+        const h = await opened();
+        h.editor().parent = '- [x] P';
+        h.editor().children[0].text = '- [ ] a2';
+
+        await h.apply.apply();
+
+        expect(h.replace).toHaveBeenCalledTimes(1);
+        expect(h.replace).toHaveBeenCalledWith('row-1', SUBTREE, {
+            text: '- [x] P',
+            children: [{ text: '    - [ ] a2', was: 1 }, { text: '    - [ ] b', was: 2 }],
+        });
+        expect(h.state().phase).toBe('view');
+        expect(h.editor().destroyed).toBe(true);
+        expect(h.lockForm).toHaveBeenLastCalledWith(false);
+    });
+
+    it('writes the draft on Mod+Enter as the apply button does', async () => {
+        const h = await opened();
+        h.editor().parent = '- [x] P';
+        h.editor().hooks.submit();
+        await vi.waitFor(() => expect(h.state().phase).toBe('view'));
+        expect(h.replace).toHaveBeenCalledTimes(1);
+        expect(h.replace.mock.calls[0][2].text).toBe('- [x] P');
+    });
+
+    it('writes to the row by the name the hub follows it by', async () => {
+        const h = await opened();
+        h.follow(rowOf({ id: 'row-2' }));
+        h.editor().parent = '- [x] P';
+        await h.apply.apply();
+        expect(h.replace.mock.calls[0][0]).toBe('row-2');
+    });
+
+    it('writes nothing for a draft that is the subtree opened, and goes back to the card', async () => {
+        const h = await opened();
+        await h.apply.apply();
+        expect(h.replace).not.toHaveBeenCalled();
+        expect(h.state().phase).toBe('view');
+    });
+
+    it('keeps a refused draft, with why under it', async () => {
+        const refused = { file: 'note.md', reason: { kind: 'disturbs' as const, fence: null }, subject: 'P' };
+        const h = await opened({ answers: [{ written: false, refused }] });
+        h.editor().parent = '- [x] P';
+
+        await h.apply.apply();
+
+        expect(h.state()).toMatchObject({
+            phase: 'source',
+            issues: [{ at: 'form', tone: 'error', text: t('notice.notWritten', { reason: t('notice.refusedDisturbs'), subject: 'P' }) }],
+        });
+        expect(h.editor().destroyed).toBe(false);
+        expect(h.editor().draft().parent).toBe('- [x] P');
+        expect(h.lockForm).not.toHaveBeenCalledWith(false);
+    });
+
+    it('does not write the draft refused last again, and says why again; a changed draft is written', async () => {
+        const refused = { file: 'note.md', reason: { kind: 'disturbs' as const, fence: null }, subject: 'P' };
+        const h = await opened({ answers: [{ written: false, refused }, { written: true }] });
+        h.editor().parent = '- [x] P';
+        await h.apply.apply();
+        const why = h.state().issues;
+
+        await h.apply.apply();
+        expect(h.replace).toHaveBeenCalledTimes(1);
+        expect(h.state()).toMatchObject({ phase: 'source', issues: why });
+
+        h.editor().parent = '- [x] P2';
+        await h.apply.apply();
+        expect(h.replace).toHaveBeenCalledTimes(2);
+        expect(h.state().phase).toBe('view');
+    });
+
+    it('tells the same lines with other lines kept apart from the draft refused', async () => {
+        const refused = { file: 'note.md', reason: { kind: 'changed' as const }, subject: 'P' };
+        const h = await opened({ answers: [{ written: false, refused }, { written: true }] });
+        h.editor().children[0].text = '- [ ] b';
+        h.editor().children[1].text = '- [ ] a';
+        await h.apply.apply();
+        // The same text, but each line a new one: another write.
+        h.editor().children = [{ text: '- [ ] b', was: null }, { text: '- [ ] a', was: null }];
+        await h.apply.apply();
+        expect(h.replace).toHaveBeenCalledTimes(2);
+    });
+
+    it('refuses a first line that is no task line, writing nothing', async () => {
+        const h = await opened();
+        h.editor().parent = 'P';
+        await h.apply.apply();
+        expect(h.replace).not.toHaveBeenCalled();
+        expect(h.state()).toMatchObject({ phase: 'source', issues: [{ at: 'form', tone: 'error', text: t('modal.hub.source.notTask') }] });
+    });
+
+    it('is not made while a write of the draft is on its way', async () => {
+        let answer!: (a: WriteAnswer) => void;
+        const h = await opened();
+        h.replace.mockImplementationOnce(() => new Promise<WriteAnswer>(resolve => { answer = resolve; }));
+        h.editor().parent = '- [x] P';
+        const first = h.apply.apply();
+        expect(h.state().phase).toBe('applying');
+        await h.apply.apply();
+        expect(h.replace).toHaveBeenCalledTimes(1);
+        answer({ written: true });
+        await first;
+        expect(h.state().phase).toBe('view');
+    });
+});
+
+describe('cancelling', () => {
+    it('goes back to the card at once when there is no draft', async () => {
+        const h = await opened();
+        h.source.back();
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+        expect(h.lockForm).toHaveBeenLastCalledWith(false);
+    });
+
+    it('asks whether to throw a draft away; back keeps it, discard throws it away', async () => {
+        const h = await opened();
+        h.editor().parent = '- [ ] P2';
+
+        h.source.back();
+        expect(h.state()).toMatchObject({ phase: 'source', asking: true });
+
+        h.apply.keep();
+        expect(h.state()).toMatchObject({ phase: 'source', asking: false });
+        expect(h.editor().draft().parent).toBe('- [ ] P2');
+        expect(h.replace).not.toHaveBeenCalled();
+
+        h.source.back();
+        h.apply.discard();
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+        expect(h.editor().destroyed).toBe(true);
+        expect(h.closeHub).not.toHaveBeenCalled();
+    });
+
+    it('takes the focus back to the editor when the draft is kept, and puts none with no question to withdraw', async () => {
+        const h = await opened();
+        h.editor().parent = '- [ ] P2';
+        const before = h.editor().focused;
+
+        h.apply.keep();
+        expect(h.editor().focused).toBe(before);
+
+        h.source.back();
+        h.apply.keep();
+        expect(h.editor().focused).toBe(before + 1);
+    });
+});
+
+describe('closing the hub (beforeClose)', () => {
+    it('lets it close over an edit that writes nothing: a blank line added at the end of the children', async () => {
+        const h = await opened();
+        h.editor().children.push({ text: '', was: null });
+        expect(h.source.beforeClose()).toBe(true);
+        expect(h.asked()).toBe(0);
+        // Back to the card, too, without asking.
+        h.source.back();
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+    });
+
+    it('lets it close on the card, and in the source without a draft', async () => {
+        const h = setUp();
+        expect(h.source.beforeClose()).toBe(true);
+        await h.source.enter();
+        expect(h.source.beforeClose()).toBe(true);
+    });
+
+    it('keeps it open over a draft and asks; asked again, it stays open and puts the same question again', async () => {
+        const h = await opened();
+        h.editor().parent = '- [ ] P2';
+        expect(h.source.beforeClose()).toBe(false);
+        expect(h.state().asking).toBe(true);
+        expect(h.asked()).toBe(1);
+        const drawn = h.state();
+        // The focus may have gone back to the editor meanwhile: the question takes it to its answer again.
+        expect(h.source.beforeClose()).toBe(false);
+        expect(h.asked()).toBe(2);
+        expect(h.state()).toBe(drawn);
+        expect(h.closeHub).not.toHaveBeenCalled();
+    });
+
+    it('closes the hub once the draft is thrown away, as asked', async () => {
+        const h = await opened();
+        h.editor().parent = '- [ ] P2';
+        h.source.beforeClose();
+        h.apply.discard();
+        expect(h.closeHub).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes once the draft is thrown away, when a close is asked for while the switch to the card is asking', async () => {
+        const h = await opened();
+        h.editor().parent = '- [ ] P2';
+        h.source.back();
+        expect(h.state().asking).toBe(true);
+        expect(h.asked()).toBe(1);
+        expect(h.source.beforeClose()).toBe(false);
+        expect(h.asked()).toBe(2);
+        h.apply.discard();
+        expect(h.closeHub).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a refused draft from a close as any draft', async () => {
+        const refused = { file: 'note.md', reason: { kind: 'changed' as const }, subject: 'P' };
+        const h = await opened({ answers: [{ written: false, refused }] });
+        h.editor().parent = '- [x] P';
+        await h.apply.apply();
+        expect(h.source.beforeClose()).toBe(false);
+    });
+});
+
+describe('going back to the draft while asked', () => {
+    it('withdraws the question on an edit, the close asked about given up', async () => {
+        const h = await opened();
+        h.editor().type('- [ ] P2');
+        expect(h.source.beforeClose()).toBe(false);
+        expect(h.state().asking).toBe(true);
+
+        h.editor().type('- [ ] P3');
+        expect(h.state()).toMatchObject({ phase: 'source', asking: false });
+        expect(h.closeHub).not.toHaveBeenCalled();
+        expect(h.editor().destroyed).toBe(false);
+    });
+
+    it('withdraws it on an apply, which writes the draft and goes back to the card with the hub open', async () => {
+        const h = await opened();
+        h.editor().type('- [x] P');
+        h.source.beforeClose();
+        expect(h.state().asking).toBe(true);
+
+        await h.apply.apply();
+        expect(h.replace).toHaveBeenCalledTimes(1);
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+        expect(h.closeHub).not.toHaveBeenCalled();
+    });
+
+    it('withdraws it on an apply that is refused, the draft and why kept', async () => {
+        const h = await opened();
+        h.editor().type('text');
+        h.source.back();
+        await h.apply.apply();
+        expect(h.replace).not.toHaveBeenCalled();
+        expect(h.state()).toMatchObject({ phase: 'source', asking: false, issues: [{ at: 'form', tone: 'error', text: t('modal.hub.source.notTask') }] });
+    });
+
+    it('forgets the close given up on back: a discard asked later by cancel goes back to the card, the hub open', async () => {
+        const h = await opened();
+        h.editor().type('- [ ] P2');
+        h.source.beforeClose();
+        h.apply.keep();
+        expect(h.state().asking).toBe(false);
+
+        h.source.back();
+        h.apply.discard();
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+        expect(h.closeHub).not.toHaveBeenCalled();
+    });
+});
+
+describe('a row the hub lost', () => {
+    it('keeps the draft and offers no apply; the draft can be copied as the file\'s lines', async () => {
+        const h = await opened();
+        h.editor().parent = '- [x] P';
+        h.editor().children.push({ text: '    - [ ] c', was: null });
+
+        h.follow(undefined);
+        // The lost row's own line takes the row of buttons' place.
+        expect(h.state()).toMatchObject({ phase: 'source', lost: true, foot: false });
+        await h.apply.apply();
+        expect(h.replace).not.toHaveBeenCalled();
+        expect(h.source.draftText()).toBe(['- [x] P', '    - [ ] a', '    - [ ] b', '        - [ ] c'].join('\n'));
+
+        h.apply.discard();
+        expect(h.state().phase).toBe('view');
+    });
+
+    it('asks in the row of buttons as anywhere, offering no apply in it, the lost row\'s line hidden meanwhile', async () => {
+        const h = await opened();
+        h.editor().parent = '- [x] P';
+        h.follow(undefined);
+        expect(h.source.beforeClose()).toBe(false);
+        expect(h.state()).toMatchObject({ asking: true, lost: false, foot: true, act: false });
+
+        h.apply.keep();
+        expect(h.state()).toMatchObject({ asking: false, lost: true, foot: false });
+    });
+});
+
+describe('Escape', () => {
+    it('is the editor\'s while it shows a completion list, else the hub\'s', async () => {
+        const h = await opened();
+        expect(h.source.yieldsEscape()).toBe(false);
+        h.editor().completing = true;
+        expect(h.source.yieldsEscape()).toBe(true);
+    });
+});
+
+describe('back', () => {
+    it('closes a completion list the editor shows, taking the back, else leaves it to the hub', async () => {
+        const h = await opened();
+        expect(h.source.takesBack()).toBe(false);
+        h.editor().completing = true;
+        expect(h.source.takesBack()).toBe(true);
+        expect(h.editor().completing).toBe(false);
+        expect(h.state().asking).toBe(false);
+    });
+});
