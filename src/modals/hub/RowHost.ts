@@ -4,7 +4,7 @@ import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
 import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
-import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
+import { getOriginalTaskId, type TaskLookup } from '../../services/display/DisplayTaskConverter';
 import { refusalNotice } from '../../services/core/RefusalClause';
 import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import { logError } from '../../log/log';
@@ -133,6 +133,11 @@ export class RowHost implements PanelHost, RowPlaceHost {
     /** The value: the move's draft while the hub is in one. */
     task(): Task {
         return this.move?.task() ?? this.value;
+    }
+
+    /** The draft's rows while the hub is in a move (`RowMove.cardRows`); the index's out of one. */
+    cardRows(): TaskLookup | null {
+        return this.move?.cardRows() ?? null;
     }
 
     /**

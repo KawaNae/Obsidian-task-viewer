@@ -272,6 +272,17 @@ describe('while the row moves', () => {
         expect(h.host.openSource).toBeNull();
     });
 
+    it('has the card read the move\'s rows, the draft as it is now, and the index again once the move is thrown away', async () => {
+        const h = await open();
+        expect(h.host.cardRows()).toBeNull();
+        await h.begin();
+        await h.host.put({ content: 'Renamed' });
+        expect(h.host.cardRows()!(h.row.id)).toEqual(h.host.task());
+        expect(h.host.cardRows()!(h.row.id)!.content).toBe('Renamed');
+        h.host.draft()!.discard!();
+        expect(h.host.cardRows()).toBeNull();
+    });
+
     it('takes a change of the fields into the draft and writes no note: the card and the fields draw the draft', async () => {
         const h = await open();
         await h.begin();

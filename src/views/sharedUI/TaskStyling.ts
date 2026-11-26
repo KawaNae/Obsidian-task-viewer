@@ -109,7 +109,7 @@ export class TaskStyling {
         else delete el.dataset.readOnly;
     }
 
-    /** Marks a card nothing is done on (`RenderOptions.inert`): its checkboxes and links take no press. */
+    /** Marks a card nothing is done on (`RenderOptions.rows`): its checkboxes and links take no press. */
     static applyInert(el: HTMLElement, inert: boolean): void {
         if (inert) el.dataset.inert = 'true';
         else delete el.dataset.inert;

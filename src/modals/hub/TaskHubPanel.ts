@@ -67,8 +67,6 @@ export type SourceMaker = (slots: SourceSlots) => HubSource;
 interface HubShape {
     /** Builds the source mode; null, the hub has none, nor its switch. */
     source: SourceMaker | null;
-    /** Whether the card is drawn as one nothing is done on (`RenderOptions.inert`). */
-    inert: boolean;
     /** The hubs this one opens one at a time with; null, it opens over whatever is open. */
     turns: OneAtATime | null;
     /** Builds where the task goes, in the form's basic tab; null, the hub says no place. */
@@ -145,7 +143,10 @@ class OneAtATime {
  * 開く入口は2つある。今あるタスクのハブ（`openRowHub`）は、今あるタスクの
  * ハブどうしで同時に1つだけ開く（`OneAtATime`）。まだ書いていないタスクの
  * ハブ（`openDraftHub`）は、その規則に入らず、開いているハブの上に重なって
- * 開き、閉じると下のハブがそのまま残る。カードは何もできない形で描く。
+ * 開き、閉じると下のハブがそのまま残る。
+ * カードは、ホストが行を渡すとき（`PanelHost.cardRows`）はその行から、子も
+ * 進み具合の数も描き、何もできない形になる。まだ書いていないタスクのハブと、
+ * 移動の間の今あるタスクのハブがそれに当たる。ほかは索引から描く。
  * 待つ相手（閉じるのを待つ今あるタスクのハブ）が無ければ、開く呼び出しが
  * 返る時点でハブは開き、カードを描き終えている。
  * 利用者が閉じる経路（×、Escape、外側、下へ払う、戻る、別のハブを開く）は
@@ -236,7 +237,7 @@ export class TaskHubPanel {
         const makePlace: PlaceMaker = (parent) => new RowPlace(app, parent, host, !host.task().isReadOnly);
         const panelOptions: TaskHubPanelOptions = 'move' in options ? { focusField: 'place' } : options;
         return new TaskHubPanel(app, host, deps, panelOptions, {
-            source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: makePlace, title: t('modal.hub.title'),
+            source: makeSource, turns: TaskHubPanel.rowHubs, place: makePlace, title: t('modal.hub.title'),
             beginMove: () => { void host.beginMove('defaults'); },
         }).open();
     }
@@ -284,7 +285,7 @@ export class TaskHubPanel {
             : (parent) => new PlaceShown(parent, () => host.shown(), { why: t('modal.newTask.childFixed') });
         const options: TaskHubPanelOptions = { focusField: place === null ? 'place' : 'name' };
         return new TaskHubPanel(app, host, deps, options, {
-            source: null, inert: true, turns: null, place: makePlace, title: t('modal.newTask.title'), beginMove: null,
+            source: null, turns: null, place: makePlace, title: t('modal.newTask.title'), beginMove: null,
         }).open();
     }
 
@@ -398,7 +399,10 @@ export class TaskHubPanel {
         const card = this.previewEl.createDiv('task-card task-card--in-hub-preview');
         const closePanel = () => this.close();
 
-        const dt = toDisplayTask(this.host.task(), settings.startHour, (id) => this.deps.index.getTask(id));
+        // The host's rows, where the index holds none of the task as the card
+        // shows it: the card is then one nothing is done on.
+        const rows = this.host.cardRows();
+        const dt = toDisplayTask(this.host.task(), settings.startHour, rows ?? ((id) => this.deps.index.getTask(id)));
         this.deps.taskRenderer.render(card, dt, settings, {
             key: { scope: 'hub', name: dt.id },
             // The user asked to look at this task: all of it, its links
@@ -407,7 +411,7 @@ export class TaskHubPanel {
             alwaysLinks: true,
             doubleTap: false,
             mask: false,
-            inert: this.shape.inert,
+            ...(rows && { rows }),
             hooks: {
                 onNavigate: closePanel,
                 // The menu's destructive items close the hub, and its

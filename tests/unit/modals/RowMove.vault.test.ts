@@ -214,3 +214,31 @@ describe('throwing it away', () => {
         expect(m.host.leave).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('the card\'s rows', () => {
+    const TREE = ['# Tasks', '- [ ] Row', '    - [x] Child', '        - [ ] Grandchild', '    - note line', '# Done', ''];
+
+    it('are the draft\'s: the row, its children by the names its row names them, and theirs', async () => {
+        const m = await open(TREE);
+        const rows = m.move.cardRows();
+        const row = rows(m.row.id)!;
+        expect(row).toEqual(m.move.task());
+        expect(row.childIds).toHaveLength(1);
+        const child = rows(row.childIds[0])!;
+        expect(child).toMatchObject({ content: 'Child', statusChar: 'x', parentId: m.row.id });
+        expect(rows(child.childIds[0])).toMatchObject({ content: 'Grandchild', statusChar: ' ' });
+        expect(row.childLines.map(line => line.text.trim())).toEqual(['- note line']);
+        // Named outside the index: the index's child is none of these.
+        const indexChild = m.session.index.getTasks().find(task => task.content === 'Child')!;
+        expect(rows(indexChild.id)).toBeUndefined();
+    });
+
+    it('read the draft as a field\'s change left it', async () => {
+        const m = await open(TREE);
+        expect(m.move.put({ content: 'Renamed', color: 'blue' })).toBe(true);
+        const row = m.move.cardRows()(m.row.id)!;
+        expect(row.content).toBe('Renamed');
+        expect(row.childLines.map(line => line.propertyKey)).toContain('tv-color');
+        expect(m.move.cardRows()(row.childIds[0])).toMatchObject({ content: 'Child' });
+    });
+});
