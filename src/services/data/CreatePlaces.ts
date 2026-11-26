@@ -227,7 +227,7 @@ function seedFor(note: PlaceNote): NoteSeed {
 }
 
 /** The section a line standing at `row` of `lines` is in, its values resolved; none in a note the index does not read. */
-function sectionAt(lines: readonly string[], row: number, settings: TaskViewerSettings): SectionNode | undefined {
+export function sectionAt(lines: readonly string[], row: number, settings: TaskViewerSettings): SectionNode | undefined {
     const read = FileParsePipeline.resolveSections(lines, settings);
     return read ? NoteSections.at(read.root, row) : undefined;
 }

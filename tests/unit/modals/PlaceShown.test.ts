@@ -10,21 +10,22 @@ vi.mock('obsidian', async (importOriginal) => ({
 }));
 
 /**
- * The place of a hub whose place cannot be changed (`PlaceShown`), a group
- * of the form's basic tab:
- * the note, the heading and the parent task, each a row with no field, as
- * the value it is handed says them, and why the place cannot be changed.
- * It reads the value as it is built and again when told to.
+ * A place shown with no field (`PlaceShown`), a group of the form's basic
+ * tab: the note, the heading and the parent task, each a row with no field,
+ * as the value it is handed says them, and, where the hub says it, why the
+ * place cannot be changed. The parent's row is there while the value names a
+ * parent. It reads the value as it is built and again when told to.
  */
 
 const UNDER: ShownPlace = { note: 'f/n.md', heading: 'Work', parent: '親' };
+const FIXED = { why: t('modal.newTask.childFixed') };
 
-function rig(first: ShownPlace | null) {
+function rig(first: ShownPlace | null, options: { why?: string } = FIXED) {
     let now = first;
     const pane = new FocusDoc().root();
     const read = vi.fn(() => now);
-    const shown = new PlaceShown(pane as unknown as HTMLElement, read);
-    const rows = () => pane.findAll('tv-form__row').map(row => ({
+    const shown = new PlaceShown(pane as unknown as HTMLElement, read, options);
+    const rows = () => pane.findAll('tv-form__row').filter(row => row.style.display !== 'none').map(row => ({
         icon: row.find('tv-form__label-icon')?.attrs.get('data-icon'),
         label: row.find('tv-form__label')!.children.map(c => c.text).join(''),
         value: row.find('task-hub__shown-value')!.text,
@@ -71,6 +72,32 @@ describe('PlaceShown', () => {
         r.shown.refresh();
         expect(r.rows().map(row => row.value)).toEqual(['', '', '']);
         expect(r.read).toHaveBeenCalledTimes(3);
+    });
+
+    it('says nothing under the rows where the hub gives no reason', () => {
+        const r = rig(UNDER, {});
+        expect(r.pane.find('tv-form__says')).toBeNull();
+        expect(r.pane.children[0].children.map(child => [...child.classes].join(' '))).toEqual(['tv-form__row', 'tv-form__row', 'tv-form__row']);
+    });
+
+    it('has no row of the parent for a task with none, and has it again once there is one', () => {
+        const r = rig({ ...UNDER, parent: null }, {});
+        expect(r.rows().map(row => row.label)).toEqual([t('modal.note'), t('modal.heading')]);
+        r.set(UNDER);
+        r.shown.refresh();
+        expect(r.rows().map(row => row.value)).toEqual(['f/n.md', 'Work', '親']);
+    });
+
+    it('keeps the rows as they were, with no values, while there is nothing to show, the parent\'s row as it was', () => {
+        const r = rig({ ...UNDER, parent: null }, {});
+        r.set(null);
+        r.shown.refresh();
+        expect(r.rows().map(row => [row.label, row.value])).toEqual([[t('modal.note'), ''], [t('modal.heading'), '']]);
+    });
+
+    it('shows a heading not read yet with no value', () => {
+        const r = rig({ note: 'f/n.md', parent: null }, {});
+        expect(r.rows().map(row => row.value)).toEqual(['f/n.md', '']);
     });
 
     it('has no field to focus', () => {

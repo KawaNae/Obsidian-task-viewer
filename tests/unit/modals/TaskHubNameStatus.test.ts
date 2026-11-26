@@ -65,7 +65,8 @@ function setUp(task: Task = makeTask({ id: 'task-1', content: '元の名前', st
     });
     let copy: Task | undefined;
     const listeners: ((taskId?: string) => void)[] = [];
-    const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
+    // No note to read the heading the row stands under from.
+    const app = { keymap: { pushScope: () => { }, popScope: () => { } }, vault: { getAbstractFileByPath: () => null } } as never;
     const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present } } as never;
     const index = {
         getTasks: () => [],

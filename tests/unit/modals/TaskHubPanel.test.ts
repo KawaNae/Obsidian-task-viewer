@@ -13,6 +13,7 @@ import en from '../../../src/i18n/locales/en.json';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 import { FocusDoc, type FocusEl } from '../helpers/focusDom';
+import { TFile } from '../mocks/obsidian';
 
 /**
  * The hub's panel as it joins its pieces, opened by its two entries. On a
@@ -151,8 +152,14 @@ function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: tr
         operations: { updateTask: vi.fn(updateTask) } as never,
         plugin: { settings: DEFAULT_SETTINGS } as never,
     };
+    // The row's note, the row above its first heading: read for the heading the row stands under.
+    const notes: Record<string, string> = { 'note.md': '- [ ] Test task @2026-03-11\n# 見出し\n' };
+    const vault = {
+        getAbstractFileByPath: (path: string) => (path in notes ? Object.assign(new TFile(), { path }) : null),
+        cachedRead: async (file: TFile) => notes[file.path],
+    };
     // New notes go in Inbox, whatever note they are reckoned from.
-    const app = { keymap: {}, fileManager: { getNewFileParent: () => ({ path: 'Inbox' }) } } as never;
+    const app = { keymap: {}, vault, fileManager: { getNewFileParent: () => ({ path: 'Inbox' }) } } as never;
     /** The index changes the row to `row`, and says so. */
     const change = (row: Task | undefined) => {
         copy = row;
@@ -415,13 +422,23 @@ describe('the hub on a row', () => {
         expect([ja.modal.hub.title, en.modal.hub.title]).toEqual(['タスクを編集', 'Edit task']);
     });
 
-    it('lays the form out with the card as the hub on a task not written yet does, handing it no place and the field it opens on', async () => {
+    it('lays the form out with the card as the hub on a task not written yet does, handing it the place and the field it opens on', async () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps, { focusField: 'tags' });
 
         expect(r.body.classes.has('task-hub__body--tabs')).toBe(true);
         expect(forms[0].el).toBe(r.body.find('task-hub__form'));
-        expect(handedOf(0)).toEqual({ place: undefined, opensOn: 'tags' });
+        expect(handedOf(0)).toEqual({ place: expect.any(Function), opensOn: 'tags' });
+    });
+
+    it('has the form show where the row stands with no field: its note, and the heading once the note is read, with no reason the place cannot be changed', async () => {
+        const r = rig();
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
+        const values = () => r.body.findAll('task-hub__shown-value').filter(el => el.parent?.style.display !== 'none').map(el => el.text);
+
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+        expect(values()).toEqual(['note.md', t('modal.newTask.noHeading')]);
+        expect(r.body.find('task-hub__shown')!.find('tv-form__says')).toBeNull();
     });
 
     it('builds no form, and lays out no tabs, on a task that is read only', async () => {
@@ -433,6 +450,22 @@ describe('the hub on a row', () => {
         expect(forms).toHaveLength(0);
         expect(r.body.classes.has('task-hub__body--tabs')).toBe(false);
         expect(r.body.find('task-hub__read-only-notice')!.text).toBe(t('modal.hub.readOnlyNotice'));
+    });
+
+    it('shows where a row that is read only stands under its notice, drawn again as the row changes, and lets it go as it closes', async () => {
+        const r = rig();
+        r.change(makeTask({ id: 'task-1', isReadOnly: true }));
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1', isReadOnly: true }), r.deps);
+        const form = r.body.find('task-hub__form')!;
+        const values = () => form.findAll('task-hub__shown-value').filter(el => el.parent?.style.display !== 'none').map(el => el.text);
+
+        expect(form.children.map(child => [...child.classes][0])).toEqual(['task-hub__read-only-notice', 'tv-form__group']);
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+        expect(values()).toEqual(['note.md', t('modal.newTask.noHeading')]);
+
+        r.change(undefined);
+        expect(values()).toEqual(['', '']);
+        shells[0].close();
     });
 
     it('builds the source mode on the row, in the panel\'s slots', async () => {
