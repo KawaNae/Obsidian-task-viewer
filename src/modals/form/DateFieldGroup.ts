@@ -208,6 +208,13 @@ export class DateFieldGroup {
         this.tell();
     }
 
+    /** Throw away all that is typed, read or not: every field shows its value again. */
+    discardTyped(): void {
+        for (const key of KEYS) this.bound.get(key)!.discard();
+        this.updatePlaceholders();
+        this.tell();
+    }
+
     /** Commit every field typed in that reads, as a blur would: what a close saves. */
     save(): void {
         for (const key of KEYS) if (this.bound.get(key)!.pending()?.ok) this.bound.get(key)!.commit();

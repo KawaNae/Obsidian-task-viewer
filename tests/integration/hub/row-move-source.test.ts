@@ -310,6 +310,21 @@ describe('the source opened while the hub moves a row', () => {
         });
     });
 
+    it('leaves nothing of the card a keyboard reaches: its checkboxes and its links take no focus', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const seen = run<Record<string, unknown>>(`
+            await beginMove('動かす行');
+            await openSource();
+            edit('children', viewOf('children').state.doc.length, undefined, '\\n- [ ] 子c [[ほかのノート]]');
+            pressButton(pencil());
+            const card = () => hub().querySelector('.task-hub__preview .task-card');
+            await until(() => !viewOf('children') && card()?.textContent.includes('子c'));
+            const reached = [...card().querySelectorAll('input[type="checkbox"], a')].filter(el => { el.focus(); return document.activeElement === el; });
+            return JSON.stringify({ links: card().querySelectorAll('a').length > 0, reached: reached.map(el => el.tagName) });
+        `);
+        expect(seen).toEqual({ links: true, reached: [] });
+    });
+
     it('keeps the source open over a move the disk refused, why above the buttons, and moves the text mended after, the child taken out gone', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const seen = run<Record<string, unknown>>(`
@@ -396,6 +411,106 @@ describe('the source opened while the hub moves a row', () => {
         expect(seen).toEqual({
             list: 0, hub: true, ask: null,
             open: true, parent: '- [ ] 動かす行 [[test-int', children: '- [ ] 子a\n- [ ] 子b', message: null, focused: 'parent',
+        });
+    });
+});
+
+describe('a value the move\'s draft refused', () => {
+    /** The row's property written twice: the draft refuses a change of it. */
+    const TWICE = ['# 予定', '- [ ] 動かす行', '    - area:: a', '    - area:: b', '# 済み', ''].join('\n');
+
+    it('is said refused once the source took a text in, asked of by [Cancel], and thrown away the fields show the row, a blur writing nothing', async () => {
+        await writeIndexedTestFile(TEST_FILE, TWICE);
+        const seen = run<Record<string, unknown>>(`
+            await beginMove('動かす行');
+            const addRow = () => [...hub().querySelectorAll('.task-hub__prop-add input')];
+            const says = () => [...hub().querySelectorAll('.task-hub__form > .tv-form__says--form .tv-form__error')].map(el => el.textContent);
+            hub().querySelector('button.tv-tabs__tab[data-tab="detail"]').click();
+            await sleep(100);
+            type(addRow()[0], 'area');
+            type(addRow()[1], 'zz');
+            addRow()[1].blur();
+            await sleep(200);
+            const refused = says().length;
+            await openSource();
+            edit('children', viewOf('children').state.doc.length, undefined, '\\n- [ ] 子c');
+            pressButton(pencil());
+            await until(() => !viewOf('children'));
+            await sleep(200);
+            hub().querySelector('button.tv-tabs__tab[data-tab="detail"]').click();
+            await sleep(100);
+            const back = { typed: addRow().map(input => input.value), said: says().length };
+            pressButton(formRow(hub()).querySelector('.tv-form__cancel'));
+            await sleep(100);
+            const asked = ask();
+            pressButton(buttonNamed(${JSON.stringify(tr('modal.draft.discard'))}));
+            await until(() => !act());
+            await sleep(200);
+            const thrown = { typed: addRow().map(input => input.value), said: says().length };
+            addRow()[0].focus();
+            addRow()[0].blur();
+            await sleep(500);
+            return JSON.stringify({ refused, back, asked, thrown, disk: await disk() });
+        `);
+        expect(seen).toEqual({
+            refused: 1,
+            back: { typed: ['area', 'zz'], said: 1 },
+            asked: tr('modal.hub.move.discardAsk'),
+            thrown: { typed: ['', ''], said: 0 },
+            disk: TWICE,
+        });
+    });
+});
+
+describe('the source opened while the hub moves a row a timer runs on', () => {
+    /** The count-up started on the child 子a, its first line written under it; its id. */
+    const startTimer = () => run<string>(`
+        const widget = plugin.getTimerWidget();
+        const before = new Set(widget.board.values().map(one => one.id));
+        widget.startTimer(rowNamed('子a'), 'child', { kind: 'countup' });
+        const timer = widget.board.values().find(one => !before.has(one.id));
+        await until(() => timer.tail && !timer.opening, 5000);
+        await sleep(300);
+        return timer.id;
+    `);
+    let timer: string | null = null;
+    afterEach(() => {
+        if (timer === null) return;
+        run(`
+            const widget = plugin.getTimerWidget();
+            const timer = widget.board.get(${JSON.stringify(timer)});
+            if (timer) await widget.lifecycle.close(timer);
+            return 'true';
+        `);
+        timer = null;
+    });
+
+    it('refuses [Move] on a text that leaves the timer\'s lines out, why above the buttons, and takes the text typed back on the next [Move], which moves it', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        timer = startTimer();
+        const seen = run<Record<string, unknown>>(`
+            const timed = await disk();
+            await beginMove('動かす行');
+            await retarget();
+            await openSource();
+            const children = viewOf('children').state.doc.toString();
+            edit('children', 0, undefined, '- [ ] 子b');
+            const before = !act().disabled;
+            act().click();
+            await sleep(500);
+            const refused = { pressable: !act().disabled, says: footSays().length > 0, open: !!viewOf('children'), disk: (await disk()) === timed };
+            edit('children', 0, undefined, children);
+            const typedBack = !act().disabled;
+            act().click();
+            await until(() => !hub(), 5000);
+            const lines = (await disk()).split('\\n');
+            return JSON.stringify({ before, refused, typedBack, moved: lines.indexOf('- [ ] 動かす行') > lines.indexOf('# 済み') });
+        `);
+        expect(seen).toEqual({
+            before: true,
+            refused: { pressable: false, says: true, open: true, disk: true },
+            typedBack: true,
+            moved: true,
         });
     });
 });

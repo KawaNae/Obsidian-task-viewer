@@ -26,7 +26,8 @@
  *   value typed that does not read keeps it from being made, and takes the
  *   focus.
  * - Its card is one nothing is done on: a press on it, its checkbox or its
- *   link opens no menu, changes no status and opens no note.
+ *   link opens no menu, changes no status and opens no note, and neither
+ *   its checkbox nor its link takes the focus a keyboard would press it by.
  * - The name's list offers the vault's notes on a daily note not made yet.
  * - The line above the create is hidden by the button at the row's start,
  *   the foot then as tall as the row alone, and shown again by it.
@@ -597,8 +598,10 @@ describe('the card of a task not written yet', () => {
             const link = card().querySelector('a.internal-link');
             /** What a press at the middle of \`el\` lands on, as a pointer would. */
             const under = el => { const r = el.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); };
+            /** Whether \`el\` takes the focus, as a keyboard's Tab would give it. */
+            const focuses = el => { el.focus(); return document.activeElement === el; };
             const out = {
-                pointer: { checkbox: getComputedStyle(checkbox).pointerEvents, link: getComputedStyle(link).pointerEvents },
+                focus: { checkbox: focuses(checkbox), link: focuses(link) },
                 hit: { checkbox: under(checkbox) === checkbox, link: under(link) === link },
             };
             card().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
@@ -620,8 +623,8 @@ describe('the card of a task not written yet', () => {
             });
         `);
         expect(after).toEqual({ open: true, menu: [], status: true, cardStatus: '', leaves: 0, activeFile: true, notices: 0 });
-        // A pointer does not reach the checkbox or the link.
-        expect(steps).toEqual({ pointer: { checkbox: 'none', link: 'none' }, hit: { checkbox: false, link: false } });
+        // Neither a pointer nor the keyboard reaches the checkbox or the link.
+        expect(steps).toEqual({ focus: { checkbox: false, link: false }, hit: { checkbox: false, link: false } });
         expect(readTestFile(MAKE_FILE)).toBe(MAKE_NOTE);
     });
 });

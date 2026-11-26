@@ -172,6 +172,10 @@ export class StyleFieldGroup implements ClosingPart {
         for (const field of FIELDS) if (this.bound[field].pending()?.ok === false) this.bound[field].discard();
     }
 
+    discardTyped(): void {
+        for (const field of FIELDS) this.bound[field].discard();
+    }
+
     save(): void {
         for (const field of FIELDS) if (this.bound[field].pending()?.ok) this.bound[field].commit();
     }

@@ -137,6 +137,15 @@ export interface SendHost {
      * the host, which holds the drafts.
      */
     drafts(): readonly (SubtreeReplacement | null)[] | null;
+    /**
+     * Whether the drafts hold all the host holds of the rows: not while it
+     * holds a text not taken into them yet, which the send takes in first.
+     * What is asked of the drafts' lines (the timers) is not asked
+     * meanwhile: a send may be asked as where it goes and the rows say, and
+     * the lines are asked of as the send is asked, on the drafts the text
+     * made, why said as before where they keep it.
+     */
+    draftsTaken(): boolean;
     /** The send was made for every row: what the dialog is shown in goes, asking nothing more. */
     close(): void;
 }
@@ -200,7 +209,7 @@ export class SendDialog {
             const { heading } = note.to.spot;
             error('heading', t('modal.send.headings', { note: note.path, heading, count: String(note.heading.count) }));
         }
-        const timers = this.timersRefuse(note);
+        const timers = this.host.draftsTaken() ? this.timersRefuse(note) : null;
         if (timers !== null) error('form', timers);
         const stays = note !== null && this.staysAt(note);
         if (stays) {

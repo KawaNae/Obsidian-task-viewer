@@ -165,6 +165,11 @@ export class TagsFieldGroup implements ClosingPart {
         this.addBound.discard();
     }
 
+    discardTyped(): void {
+        this.draft = '';
+        this.addBound?.discard();
+    }
+
     save(): void {
         if (this.addBound?.pending()?.ok) this.addBound.commit();
     }

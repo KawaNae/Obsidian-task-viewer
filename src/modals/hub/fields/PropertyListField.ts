@@ -297,6 +297,11 @@ export class PropertyListField {
         }
     }
 
+    /** Throw away all that is typed in the items and the item to add, read or not. */
+    discardTyped(): void {
+        for (const bound of [...this.itemBound, ...(this.addBound ? [this.addBound] : [])]) bound.discard();
+    }
+
     /**
      * Save what is typed and reads, as blurs would, in one write: each item
      * typed over in its place (taken out when emptied), and an item to add

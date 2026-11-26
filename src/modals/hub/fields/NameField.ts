@@ -56,6 +56,10 @@ export class NameField implements ClosingPart {
         if (this.bound.pending()?.ok === false) this.bound.discard();
     }
 
+    discardTyped(): void {
+        this.bound.discard();
+    }
+
     save(): void {
         if (this.bound.pending()?.ok) this.bound.commit();
     }

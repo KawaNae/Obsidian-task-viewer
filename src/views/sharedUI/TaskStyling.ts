@@ -109,10 +109,20 @@ export class TaskStyling {
         else delete el.dataset.readOnly;
     }
 
-    /** Marks a card nothing is done on (`RenderOptions.rows`): its checkboxes and links take no press. */
+    /**
+     * Marks a card nothing is done on (`RenderOptions.rows`), and makes it
+     * inert (`inert`): its checkboxes and links take no press, and no focus,
+     * so the keyboard reaches none of them either, a Space ticking a box
+     * with nothing written.
+     */
     static applyInert(el: HTMLElement, inert: boolean): void {
-        if (inert) el.dataset.inert = 'true';
-        else delete el.dataset.inert;
+        if (inert) {
+            el.dataset.inert = 'true';
+            el.setAttribute('inert', '');
+        } else {
+            delete el.dataset.inert;
+            el.removeAttribute('inert');
+        }
     }
 
     /**
