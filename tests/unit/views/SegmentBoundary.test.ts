@@ -45,13 +45,13 @@ describe('a segment acts on its row', () => {
     it('the hub works on the row, found by its name', () => {
         const [first] = segments();
         const row = makeTask({ id: NAME });
-        const host = new RowHost(first, { index: { getTask: (id: string) => (id === NAME ? row : undefined) } } as never, () => { });
+        const host = new RowHost(first, { index: { getTask: (id: string) => (id === NAME ? row : undefined) } } as never, { follow: () => { }, hold: () => { } });
         expect(host.task()).toBe(row);
     });
 
     it('the hub names the row even when the index no longer holds it', () => {
         const [first] = segments();
-        const host = new RowHost(first, { index: { getTask: () => undefined } } as never, () => { });
+        const host = new RowHost(first, { index: { getTask: () => undefined } } as never, { follow: () => { }, hold: () => { } });
         expect(host.task().id).toBe(NAME);
     });
 });

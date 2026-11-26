@@ -11,6 +11,7 @@ import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
 import { RowHost } from './RowHost';
+import { RowPlace } from './RowPlace';
 import { DraftHost } from './DraftHost';
 import type { HubForm, HubPlace, PlaceMaker, PanelHost } from './HubHost';
 import type { CreatePlace, CreatePlaces } from '../../services/data/CreatePlaces';
@@ -171,15 +172,20 @@ export class TaskHubPanel {
      * follows the row in the index (`RowHost`), and the source mode edits
      * the row and its subtree, following the row as the host does. Its basic
      * tab, or, on a row that is read only, the place under the notice, shows
-     * where the row stands with no field (`PlaceShown`): the note, the
-     * heading and the parent the host reads.
+     * where the row stands with no field: the note, the heading and the
+     * parent the host reads (`RowPlace`). On a row that is not read only, a
+     * button there begins a move, the fields of where the row goes in the
+     * place's stead, the changes held until the move (`RowHost.beginMove`).
      */
     static openRowHub(app: App, task: Task, deps: TaskHubDeps, options: TaskHubPanelOptions = {}): Promise<void> {
         let source: TaskHubSource | null = null;
         const host = new RowHost(
             task,
-            { app, plugin: deps.plugin, index: deps.index, operations: deps.operations },
-            (row) => source?.follow(row),
+            {
+                app, plugin: deps.plugin, index: deps.index, operations: deps.operations,
+                noteOps: deps.plugin.getNoteOps(), indentUnit: () => indentUnit(app),
+            },
+            { follow: (row) => source?.follow(row), hold: (held) => source?.hold(held) },
         );
         const makeSource: SourceMaker = (slots) => {
             const view = new TaskHubSourceView(app, slots, {
@@ -202,7 +208,7 @@ export class TaskHubPanel {
             }, view);
             return source;
         };
-        const makePlace: PlaceMaker = (parent) => new PlaceShown(parent, () => host.shown());
+        const makePlace: PlaceMaker = (parent) => new RowPlace(app, parent, host, !host.task().isReadOnly);
         return new TaskHubPanel(app, host, deps, options, {
             source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: makePlace, title: t('modal.hub.title'),
         }).open();
@@ -420,10 +426,14 @@ class PlaceOnly implements HubForm {
     }
 
     showShut(): void { }
+    sayPut(): void { }
     sayWrite(): void { }
     sayPlace(): void { }
     showDraft(): void { }
     write(): void { }
+    putTyped(): boolean {
+        return false;
+    }
     notWritten(): void { }
 
     dispose(): void {

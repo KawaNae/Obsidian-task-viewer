@@ -75,6 +75,16 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     },
 
     {
+        file: 'modals/hub/RowPlace.ts',
+        line: 'return this.editing?.fields.focus(this.errorAt ?? \'note\') ?? null;',
+        why: 'answers where the focus goes in a move\'s fields (HubPlace.focus) and puts none',
+    },
+    {
+        file: 'modals/hub/RowPlace.ts',
+        line: 'placeFocus(fields.focus(\'note\'));',
+        why: 'answers where the focus goes as a move\'s fields come in (SendFields.focus answers a FieldFocus); placeFocus puts it',
+    },
+    {
         file: 'modals/hub/TaskHubForm.ts',
         line: 'return this.place?.focus() ?? null;',
         why: 'answers where the focus goes in the place\'s fields (HubPlace.focus answers a FieldFocus) and puts none',

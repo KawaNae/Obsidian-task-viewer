@@ -67,10 +67,17 @@ describe('opening', () => {
         expect(m.move.changed()).toBe(false);
     });
 
-    it('here, on a row above the note\'s first heading: the heading field is empty', async () => {
+    it('here, on a row above the note\'s first heading: the heading field is empty, the note\'s end, which is in the last heading\'s section', async () => {
         const m = await open(['- [ ] Row', '# Tasks', '- [ ] Other', '']);
         expect(m.move.initial.heading).toBe('');
+        expect(m.move.canWrite()).toBe(true);
+    });
+
+    it('here, on a row of a note with no heading: the note\'s end is where it stands, no move', async () => {
+        const m = await open(['- [ ] Row', '- [ ] Other', '']);
+        expect(m.move.initial.heading).toBe('');
         expect(m.move.canWrite()).toBe(false);
+        expect(m.noteSays()).toEqual([['info', t('modal.send.samePlace')]]);
     });
 
     it('defaults: the fields open as a send of the row does', async () => {
@@ -136,7 +143,9 @@ describe('the move', () => {
         m.move.write();
         expect(m.move.writing()).toBe(true);
         expect(m.host.underWay).toHaveBeenCalledTimes(1);
+        const made = m.move.moving();
         await vi.waitFor(() => expect(m.host.close).toHaveBeenCalled());
+        expect(await made).toBe(true);
         expect(m.lines()).toEqual(['# Tasks', '- [ ] Parent', '# Done', '- [ ] Renamed @2026-11-26', '- [ ] Other', '']);
     });
 

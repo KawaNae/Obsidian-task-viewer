@@ -37,6 +37,10 @@ export interface PlaceShownOptions {
  * the hub says the note's path.
  */
 export class PlaceShown implements HubPlace {
+    /** The group, among the form's groups. */
+    readonly el: HTMLElement;
+    /** The note's row: what the hub offers to do with the place goes at its end. */
+    readonly noteRow: HTMLElement;
     private readonly note: HTMLElement;
     private readonly heading: HTMLElement;
     private readonly parent: ShownRow;
@@ -44,7 +48,10 @@ export class PlaceShown implements HubPlace {
     /** Build the group at the end of `parent`, among the form's groups. */
     constructor(parent: HTMLElement, private readonly read: () => ShownPlace | null, options: PlaceShownOptions = {}) {
         const group = parent.createDiv({ cls: 'tv-form__group task-hub__place task-hub__shown' });
-        this.note = shownRow(group, t('modal.note'), 'file-text').value;
+        this.el = group;
+        const note = shownRow(group, t('modal.note'), 'file-text');
+        this.noteRow = note.row;
+        this.note = note.value;
         this.heading = shownRow(group, t('modal.heading'), 'heading').value;
         this.parent = shownRow(group, t('modal.parentTask'), 'arrow-up');
         if (options.why !== undefined) group.createDiv({ cls: 'tv-form__says' }).createDiv({ cls: 'tv-form__info', text: options.why });

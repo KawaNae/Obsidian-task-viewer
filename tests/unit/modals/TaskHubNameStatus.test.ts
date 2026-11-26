@@ -73,7 +73,7 @@ function setUp(task: Task = makeTask({ id: 'task-1', content: '元の名前', st
         getTask: () => copy,
         onChange: (listener: (taskId?: string) => void) => { listeners.push(listener); return () => { }; },
     } as never;
-    const host = new RowHost(task, { app, plugin, index, operations: { updateTask } as never }, () => { });
+    const host = new RowHost(task, { app, plugin, index, operations: { updateTask } as never, noteOps: {} as never, indentUnit: () => '    ' }, { follow: () => { }, hold: () => { } });
     const form = new TaskHubForm(asEl(root), host, { app, plugin, index, foot: asEl(root) });
     host.attach({ redrawPreview: () => { }, close: () => { } });
     const change = (row: Task | undefined) => {

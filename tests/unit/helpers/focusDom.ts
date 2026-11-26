@@ -102,6 +102,28 @@ export class FocusEl {
         }
         return child;
     }
+    get parentElement(): FocusEl | null {
+        return this.parent;
+    }
+    /** Taken out of its parent, as Obsidian's `detach` does; nothing when it has none. */
+    detach(): void {
+        this.parent?.removeChild(this);
+    }
+    /** Put `nodes` after this element, in their order, from wherever they were. */
+    after(...nodes: FocusEl[]): void {
+        const parent = this.parent!;
+        let next = parent.children[parent.children.indexOf(this) + 1] ?? null;
+        for (const node of nodes) {
+            if (node === next) next = parent.children[parent.children.indexOf(node) + 1] ?? null;
+            else parent.insertBefore(node, next);
+        }
+    }
+    /** Put `node` in this element's place, this one taken out. */
+    replaceWith(node: FocusEl): void {
+        const parent = this.parent!;
+        parent.insertBefore(node, this);
+        parent.removeChild(this);
+    }
     getBoundingClientRect(): { left: number; right: number; top: number; bottom: number } {
         return { left: 0, right: 0, top: 0, bottom: 0 };
     }

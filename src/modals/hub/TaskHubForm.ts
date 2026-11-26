@@ -118,14 +118,14 @@ export interface TaskHubFormDeps {
  * どちらを見ていても見えるためである。行が日付の規則を破っていれば（規則4
  * など）、開いたときから破れた欄の下に出す。
  *
- * 書き込みの拒否はホストが言う（`HubForm.sayWrite`）。行のハブでは拒まれた
- * 理由をフォーム全体の文の場所に出す。拒まれた欄は打った値のまま残り（`bindField`）、
+ * 欄から渡した変更の拒否はホストが言う（`HubForm.sayPut`）。拒まれた理由は
+ * フォーム全体の文の場所に出す。拒まれた欄は打った値のまま残り（`bindField`）、
  * もう一度確定すれば新しい版へ書く。
  *
  * ホストがまだ書いていないもの（`HubHost.draft`）を持つ間は、右のボタン（まだ
- * 書いていないタスクでは [作成]）を押すと何が起きるか（書く先と、その先に
- * ついて気をつけること）と、書き込みが拒まれた理由を、foot のボタンの行の
- * 上に出す（`CreateLine`）。押せない理由が、押せないボタンの隣に見える。
+ * 書いていないタスクでは [作成]、移動の間の行では [移動]）を押すと何が起きるか
+ * （書く先と、その先について気をつけること）と、その書き込みが拒まれた理由
+ * （`HubForm.sayWrite`）を、foot のボタンの行の上に出す（`CreateLine`）。押せない理由が、押せないボタンの隣に見える。
  * 書いている間に欄が閉じている理由は、欄についての文なのでフォーム全体の文の場所に出す。
  *
  * 閉じる手順（{@link beforeClose}）: ×、Escape、
@@ -133,8 +133,8 @@ export interface TaskHubFormDeps {
  * 保存できない値（読めない値、日付の規則に反する値）が残れば閉じずに問い
  * （`DraftGuard`）、[直す] にフォーカスを置く。[捨てて閉じる] はその値を
  * 元に戻し、ほかの欄を保存して閉じる。ホストがまだ書いていないもの（`HubHost.draft`）
- * を持つ間は、閉じると失うのはその全部なので、問いは「まだ作成していません。
- * 捨てますか」の1種類で、[捨てて閉じる] と [戻る] で答える。保存できない値が
+ * を持つ間は、閉じると失うのはその全部なので、問いはそのものが持つ文
+ * （`HubDraft.discardAsk`）の1種類で、[捨てて閉じる] と [戻る] で答える。保存できない値が
  * あるとき、または欄を保存した後に何か入れていれば問う。保存の後にも問うのは、
  * 名前を打って blur せずに閉じたときに、問わずに名前を失わないためである。
  * [戻る] は保存できない欄に、無ければ名前の欄にフォーカスを置く。どちらの
@@ -223,7 +223,8 @@ export class TaskHubForm implements HubForm {
             app: deps.app,
             plugin: deps.plugin,
             index: deps.index,
-            openSource: this.host.openSource,
+            // Read each time: the host offers none while it moves the row.
+            get openSource() { return host.openSource; },
             issues: this.issues,
             findings: () => this.findings,
             locked: (field) => this.locks.has(field),
@@ -440,6 +441,23 @@ export class TaskHubForm implements HubForm {
     }
 
     /**
+     * Put in what is typed in every field, as a close saves it, with no
+     * question (`HubForm.putTyped`): a value that cannot be saved keeps all
+     * of it, and takes the focus. A question a close put is withdrawn once
+     * all is put in: nothing it asked of is left.
+     */
+    putTyped(): boolean {
+        const first = this.unsaved()[0];
+        if (first) {
+            this.focusTo({ to: first.input });
+            return false;
+        }
+        for (const part of this.parts()) part.save();
+        this.guard.withdraw();
+        return true;
+    }
+
+    /**
      * Cancel: throw away what the host holds not written yet. Where that is
      * all the hub is (`HubDraft.discard` null), it is the close the user
      * asks for, as ×: it asks of what it would lose. Otherwise the fields
@@ -537,7 +555,7 @@ export class TaskHubForm implements HubForm {
         const draft = this.host.draft();
         const ask = loss?.kind === 'unsaved'
             ? t('modal.hub.unsavedAsk', { fields: loss.fields.join(t('modal.hub.fieldJoin')) })
-            : loss?.kind === 'draft' ? t('modal.newTask.discardAsk') : null;
+            : loss?.kind === 'draft' ? draft?.discardAsk ?? null : null;
         this.createLine.offer(draft !== null);
         this.actions.render({
             busy: draft?.writing() ?? false,
@@ -567,10 +585,12 @@ export class TaskHubForm implements HubForm {
         this.sayFindings();
     }
 
+    sayPut(refusal: string | null): void {
+        this.issues.set('put', refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }]);
+    }
+
     sayWrite(refusal: string | null): void {
-        const issues: FormIssue<never>[] = refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }];
-        if (this.host.draft()) this.createLine.say('write', issues);
-        else this.issues.set('write', issues);
+        this.createLine.say('write', refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }]);
     }
 
     sayPlace(issues: readonly FormIssue<never>[]): void {

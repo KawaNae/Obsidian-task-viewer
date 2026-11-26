@@ -106,7 +106,7 @@ export class TaskHubSourceView implements SourceSurface {
         this.viewBtn.toggleClass('is-active', !open);
         this.sourceBtn.toggleClass('is-active', open);
         this.viewBtn.disabled = state.phase === 'applying' || state.asking;
-        this.sourceBtn.disabled = state.phase !== 'view' || state.shut !== null;
+        this.sourceBtn.disabled = state.phase !== 'view' || state.shut !== null || state.held;
         this.sourceBtn.title = state.shut ?? '';
         this.shutEl.setText(state.shut ?? '');
         this.shutEl.toggle(state.shut !== null);

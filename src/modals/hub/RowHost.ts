@@ -13,19 +13,40 @@ import type { HubForm, HubPanel, PanelHost } from './HubHost';
 import { openSourceLine, type LineTarget } from './SourceLine';
 import type { ShownPlace } from '../place/PlaceShown';
 import { sectionAt } from '../../services/data/CreatePlaces';
+import type { NoteOps } from '../../services/data/NoteOps';
 import { splitLines } from '../../services/persistence/FileLines';
+import { RowMove, type MoveHost, type MoveStart } from './RowMove';
+import type { RowPlaceHost } from './RowPlace';
 
 export interface RowHostDeps {
     app: App;
     plugin: PluginContext;
     index: IndexReads;
     operations: Operations;
+    /** What a move asks of the notes: the row as the disk holds it, where it goes, and the send. */
+    noteOps: Pick<NoteOps, 'previewSend' | 'destinationFacts' | 'timersRefuse' | 'send'>;
+    /** One level of indentation (`ObsidianConfig.indentUnit`), for the draft a move holds. */
+    indentUnit(): string;
+}
+
+/** The hub's source mode as the host tells it of the row. */
+export interface RowSourceLink {
+    /** Each change of the row after the card and the fields are told of it; undefined once the index no longer holds it. */
+    follow(row: Task | undefined): void;
+    /** The host holds the row for its move, or lets it go: the source does not open meanwhile. */
+    hold(held: boolean): void;
 }
 
 /**
- * The host of a hub on a row the note already has: each change handed on is
- * written to the row at once (`Operations.updateTask`), and the row is
- * followed in the index.
+ * The host of a hub on a row the note already has. It is in one of two
+ * states: it writes each change handed on to the row at once, or, while it
+ * moves the row (`RowMove`), holds the changes in a draft and writes them
+ * with the move, at once. Which it is in is whether it holds a move; `task`,
+ * `put`, `draft`, `closing`, `openSource` and the following of the index
+ * answer by it.
+ *
+ * Out of a move, each change handed on is written to the row at once
+ * (`Operations.updateTask`), and the row is followed in the index.
  *
  * The value is what the fields hold, not the index's copy: a change handed on
  * is put over it before it is written, so the next one is built from what was
@@ -45,8 +66,18 @@ export interface RowHostDeps {
  * Where the row stands is shown with no field (`shown`): its note and its
  * parent from the value, the heading it stands under from the note's lines,
  * read again as the row changes (`readHeading`).
+ *
+ * A move begins ({@link beginMove}) once what is typed is put in, the
+ * writes asked are written, and the row is read as the disk holds it
+ * (`NoteOps.previewSend`). While it lasts, the draft is the value, a change
+ * the draft refuses is said above the form's tabs, nothing of the row's
+ * lines is offered to open (the draft's lines are on no disk), and the source
+ * mode is held. The index's changes are not put over the draft: the move is
+ * told the index's row, and compares it with the row it opened on. Thrown
+ * away (cancel), the host writes each change as it comes again, from the
+ * index's copy; made, the hub closes.
  */
-export class RowHost implements PanelHost {
+export class RowHost implements PanelHost, RowPlaceHost {
     private value: Task;
     private form: HubForm | null = null;
     private panel: HubPanel | null = null;
@@ -65,26 +96,31 @@ export class RowHost implements PanelHost {
     private headingOf: string | null = null;
     /** Reads of the heading asked: only the last one's answer is taken. */
     private headingReads = 0;
+    /** The move the hub is in: the changes are held in its draft. Null while each is written as it comes. */
+    private move: RowMove | null = null;
+    /** A move is being begun: what it waits for is not answered yet. */
+    private beginning = false;
 
-    /**
-     * @param follow told of each change of the row after the card and the
-     *   fields are, undefined once the index no longer holds it: the hub's
-     *   source mode follows the row by it
-     */
-    constructor(task: Task, private readonly deps: RowHostDeps, private readonly follow: (row: Task | undefined) => void) {
+    /** @param source the hub's source mode, told of the row and held while the row moves */
+    constructor(task: Task, private readonly deps: RowHostDeps, private readonly source: RowSourceLink) {
         // A segment of a split task is a key within the display: the hub
         // works on its row, by the row's name.
         const originalId = getOriginalTaskId(task);
         this.value = deps.index.getTask(originalId) ?? { ...task, id: originalId };
     }
 
+    /** The value: the move's draft while the hub is in one. */
     task(): Task {
-        return this.value;
+        return this.move?.task() ?? this.value;
     }
 
-    /** @returns whether it was written (a field refused keeps what was typed: `bindField`) */
+    /**
+     * @returns whether it was written, or, in a move, taken into the draft (a
+     *   field refused keeps what was typed: `bindField`)
+     */
     put(updates: Partial<Task> | null): Promise<boolean> {
         if (!updates) return Promise.resolve(true);
+        if (this.move) return Promise.resolve(this.move.put(updates));
         this.value = { ...this.value, ...updates };
         const id = this.value.id;
         const write: Promise<boolean> = this.deps.operations.updateTask(id, updates, { tellRefusal: false })
@@ -113,10 +149,10 @@ export class RowHost implements PanelHost {
             return;
         }
         if (answer.written) {
-            this.form?.sayWrite(null);
+            this.form?.sayPut(null);
             return;
         }
-        this.form?.sayWrite(refusalText(answer.refused));
+        this.form?.sayPut(refusalText(answer.refused));
         const fresh = this.deps.index.getTask(id);
         if (fresh) this.take(fresh);
     }
@@ -133,14 +169,24 @@ export class RowHost implements PanelHost {
         this.form?.refresh();
     }
 
+    /**
+     * In a move, shut only while it is under way: the draft takes changes
+     * whether or not the row is still the one it opened on.
+     */
     shut(): string | null {
+        if (this.move) return this.move.writing() ? t('modal.hub.move.formShut') : null;
         if (this.sourceOpen) return t('modal.hub.source.formShut');
         if (this.missing) return t('modal.hub.taskMissing');
         return null;
     }
 
+    /** Open the line on the value (`openSourceLine`); none in a move, whose draft is on no disk. */
+    get openSource(): ((locate: (task: Task) => LineTarget | null) => void) | null {
+        return this.move ? null : this.openLine;
+    }
+
     /** Open the line on the value (`openSourceLine`); the hub closes, as for any navigation. */
-    readonly openSource = (locate: (task: Task) => LineTarget | null): void => {
+    private readonly openLine = (locate: (task: Task) => LineTarget | null): void => {
         void openSourceLine(
             { app: this.deps.app, index: this.deps.index, reuseTab: this.deps.plugin.settings.reuseExistingTab },
             this.value,
@@ -149,17 +195,24 @@ export class RowHost implements PanelHost {
         this.panel?.close();
     };
 
-    /** Each change is written as it comes: nothing held to write. */
-    draft(): null {
-        return null;
+    /** The move, whose write is [Move]; none while each change is written as it comes. */
+    draft(): RowMove | null {
+        return this.move;
     }
 
     /**
      * All written, the hub closes; one refused, it stays open with why above
      * the form's tabs. With the fields shut it closes at once: the source mode
      * opened once the writes were done, and a row gone has nothing to wait for.
+     * In a move, asked once the form has asked whether to throw it away: it
+     * closes, but while the move is under way, which is waited for; made in
+     * part or not at all, the hub stays with why.
      */
     closing(): CloseAnswer {
+        if (this.move) {
+            const moving = this.move.moving();
+            return moving ? moving.then(made => (made ? 'close' : 'stay')) : 'close';
+        }
         if (this.shut() !== null || this.writing.size === 0) return 'close';
         return this.settled().then(written => (written ? 'close' : 'stay'));
     }
@@ -181,6 +234,102 @@ export class RowHost implements PanelHost {
 
     bind(form: HubForm): void {
         this.form = form;
+    }
+
+    /** The move the hub is in, for the place to draw where the row goes; null out of one. */
+    moving(): RowMove | null {
+        return this.move;
+    }
+
+    /**
+     * Begin a move of the row, the fields of where it goes opened on where it
+     * stands (`'here'`) or where a send goes (`'defaults'`): what is typed is
+     * put in first, as a close saves it, and the writes asked are waited
+     * for; then the row is read as the disk holds it. None begins on a row
+     * lost, read only, or held by the source mode, nor while one is begun,
+     * and none once a value typed cannot be saved (its field takes the
+     * focus), a write was refused (why is said), the row is not the one on
+     * the disk (the user is told), or the hub closed meanwhile. The source
+     * mode is held from the start: it does not open while the move is begun.
+     */
+    async beginMove(start: MoveStart): Promise<void> {
+        const form = this.form;
+        if (!form || this.move || this.beginning || this.closed || this.shut() !== null || this.value.isReadOnly) return;
+        this.beginning = true;
+        this.source.hold(true);
+        try {
+            if (!form.putTyped()) return;
+            if (!(await this.settled())) return;
+            const id = this.value.id;
+            if (!this.free()) return;
+            const preview = await this.deps.noteOps.previewSend([id]);
+            if (!preview || !this.free()) return;
+            this.move = new RowMove(preview, start, {
+                settings: this.deps.plugin.settings,
+                unit: this.deps.indentUnit(),
+                ops: this.deps.noteOps,
+                host: this.moveHost,
+            });
+        } catch (e) {
+            logError(`[RowHost] the move could not begin: ${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            this.beginning = false;
+            if (!this.move) this.source.hold(false);
+        }
+        if (!this.move) return;
+        // The move drew itself as it was made, before the host held it: drawn again now.
+        form.sayPut(null);
+        form.showShut();
+        form.refresh();
+        this.panel?.redrawPreview();
+        form.showDraft();
+    }
+
+    /** Whether a move begun may still be held: the hub open on the row, the fields not shut. */
+    private free(): boolean {
+        return !this.closed && this.shut() === null;
+    }
+
+    /** What the move tells the hub. */
+    private readonly moveHost: MoveHost = {
+        say: (issues) => this.form?.sayPlace(issues),
+        refuse: (why) => this.form?.sayPut(why),
+        drafted: () => {
+            this.form?.refresh();
+            this.panel?.redrawPreview();
+        },
+        underWay: () => this.form?.showShut(),
+        showDraft: () => this.form?.showDraft(),
+        submit: () => this.form?.write(),
+        leave: () => this.leave(),
+        close: () => this.panel?.close(),
+    };
+
+    /**
+     * The move thrown away: each change is written as it comes again, from
+     * the index's copy (the fields shut if the row is gone), where the row
+     * stands shown again, and what was said of the move taken back.
+     */
+    private leave(): void {
+        const move = this.move;
+        if (!move) return;
+        move.dispose();
+        this.move = null;
+        this.source.hold(false);
+        const fresh = this.deps.index.getTask(this.value.id);
+        this.missing = fresh === undefined;
+        if (fresh) {
+            this.value = fresh;
+            this.readHeading();
+        } else {
+            this.forgetHeading();
+        }
+        this.form?.sayPlace([]);
+        this.form?.sayPut(null);
+        this.form?.showShut();
+        this.form?.refresh();
+        this.panel?.redrawPreview();
+        this.form?.showDraft();
     }
 
     /** The source mode opened or closed on the row: the fields are shut while it is open. */
@@ -207,7 +356,10 @@ export class RowHost implements PanelHost {
             }
             if (taskId !== undefined && taskId !== this.value.id) return;
             const fresh = this.deps.index.getTask(this.value.id);
-            if (fresh) {
+            if (this.move) {
+                // The draft is the user's work: the move compares the index's row with the one it opened on.
+                this.move.follow(fresh);
+            } else if (fresh) {
                 this.value = fresh;
                 panel.redrawPreview();
                 this.take(fresh);
@@ -215,7 +367,7 @@ export class RowHost implements PanelHost {
             } else {
                 this.lose();
             }
-            this.follow(fresh);
+            this.source.follow(fresh);
         });
     }
 
@@ -223,11 +375,16 @@ export class RowHost implements PanelHost {
     private lose(): void {
         if (this.missing) return;
         this.missing = true;
+        this.forgetHeading();
+        this.form?.showShut();
+        this.form?.refresh();
+    }
+
+    /** Where the row stood is no longer said: a read under way comes to nothing. */
+    private forgetHeading(): void {
         this.headingReads++;
         this.heading = undefined;
         this.headingOf = null;
-        this.form?.showShut();
-        this.form?.refresh();
     }
 
     /**
@@ -288,5 +445,6 @@ export class RowHost implements PanelHost {
         this.unsubscribe?.();
         this.unsubscribe = null;
         this.closed = true;
+        this.move?.dispose();
     }
 }

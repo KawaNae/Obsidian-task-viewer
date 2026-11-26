@@ -58,7 +58,7 @@ import { DestinationText } from './DestinationText';
  *   to say. The answer to the last send keeps none from being asked again.
  * - A dialog on one row told where it stands (`SendOptions.stands`) does
  *   not send it there: the note it is in and the heading it stands under
- *   (the note's end for a row above the first heading). The send would
+ *   (the note's end for a row in a note with no heading). The send would
  *   still move it, to the section's head or end and out from under its
  *   parent. Said under the note, in place of where the row goes.
  * - A send not made keeps the drafts and says why; a send made is told to
@@ -298,12 +298,18 @@ export class SendDialog {
         this.render();
     }
 
-    /** Whether a send to `facts` leaves the row where it stands: its own note, under the heading it stands under. */
+    /**
+     * Whether a send to `facts` leaves the row where it stands: its own note,
+     * under the heading it stands under. The note's end is where a row above
+     * the first heading stands only in a note with no heading: in one with
+     * headings, the end is in the last heading's section.
+     */
     private staysAt(facts: NoteFacts): boolean {
         const stands = this.options.stands;
         if (!stands || facts.kind !== 'same' || facts.path !== stands.note) return false;
         const spot = facts.to.spot;
-        return (spot === 'end' ? null : spot.heading) === stands.heading;
+        if (spot === 'end') return stands.heading === null && facts.headings.length === 0;
+        return spot.heading === stands.heading;
     }
 
     private isChecked(candidate: InheritedValue): boolean {
