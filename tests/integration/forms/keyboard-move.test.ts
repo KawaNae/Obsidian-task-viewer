@@ -459,3 +459,71 @@ describe('the keyboard rising while the hub opens', () => {
         });
     }
 });
+
+describe('the source opened by the switch on the title\'s line, the body scrolled down', () => {
+    interface Swap {
+        k: number;
+        /** The body's scrollTop as the switch was pressed, once the source showed, once the keyboard was up, and once it had gone. */
+        pressed: number;
+        opened: number;
+        up: number;
+        gone: number;
+        /** The top of the source's place, and the bottom of the editor's first line, less the body's top, with the keyboard up; the body's room then. */
+        paneTop: number;
+        caret: number;
+        keyboardTop: number;
+        /** The card's top less the body's top once the switch took the source back, the body scrolled down again first, and the body's room. */
+        cardTop: number;
+        room: number;
+    }
+
+    it("on a phone's sheet, brings the source's top into the body before the keyboard rises for the editor, which moves the body from there and back to there as it goes", () => {
+        const seen = run<Swap>(`
+            phoneLayout();
+            openTall();
+            await opened();
+            chooseDetails();
+            await nextFrame();
+            const b = body();
+            const down = () => b.scrollTo({ top: b.scrollHeight, behavior: 'instant' });
+            const toggle = () => panel().querySelectorAll('.task-hub__mode-toggle button');
+            const above = el => el.getBoundingClientRect().top - b.getBoundingClientRect().top;
+            down();
+            await nextFrame();
+            const pressed = b.scrollTop;
+            toggle()[1].click();
+            await until(() => panel().querySelector('.tv-source-editor__parent .cm-content') === document.activeElement);
+            const shownAt = b.scrollTop;
+            const pane = panel().querySelector('.task-hub__source-pane');
+            const line = panel().querySelector('.tv-source-editor__parent .cm-line');
+            const k = Math.round(innerHeight / 2);
+            await showKeyboardAsIPad(k);
+            await overlapSettled(root(), k);
+            for (let i = 0; i < 3; i++) await nextFrame();
+            const up = b.scrollTop;
+            const paneTop = above(pane);
+            const caret = line.getBoundingClientRect().bottom;
+            const keyboardTop = innerHeight - k;
+            hideKeyboard();
+            await overlapSettled(root(), 0);
+            for (let i = 0; i < 3; i++) await nextFrame();
+            const gone = b.scrollTop;
+            down();
+            await nextFrame();
+            toggle()[0].click();
+            await until(() => !panel().querySelector('.tv-source-editor'));
+            await nextFrame();
+            const cardTop = above(panel().querySelector('.task-hub__preview'));
+            return JSON.stringify({ k, pressed, opened: shownAt, up, gone, paneTop, caret, keyboardTop, cardTop, room: b.clientHeight });
+        `);
+        expect(seen.pressed).toBeGreaterThan(0);
+        expect(seen.opened).toBeLessThan(seen.pressed);
+        // The editor's first line is in sight above the keyboard: the body is left where the switch put it.
+        expect(seen.caret).toBeLessThanOrEqual(seen.keyboardTop);
+        expect(seen.up).toBe(seen.opened);
+        expect(seen.paneTop).toBeGreaterThanOrEqual(-0.5);
+        expect(seen.gone).toBe(seen.opened);
+        expect(seen.cardTop).toBeGreaterThanOrEqual(-0.5);
+        expect(seen.cardTop).toBeLessThan(seen.room);
+    });
+});

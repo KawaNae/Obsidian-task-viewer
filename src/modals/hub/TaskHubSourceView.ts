@@ -40,6 +40,16 @@ export interface SourceViewActions {
  * button's tooltip, and a line of its own above the card while there is a
  * reason: the line takes no room otherwise.
  *
+ * The switch stands on the title's line, which does not scroll, so it is
+ * pressed with the body scrolled wherever the user left it. Whichever of
+ * the card and the source it shows is brought into the body's sight as the
+ * two are swapped, and the source again when the switch back leaves it
+ * open (a text that does not take, said under the editor): scrolled no
+ * further than to show it whole, or, taller than the body, its top at the
+ * body's top ({@link bringIntoView}). It is done as they are drawn, before
+ * the editor takes the focus, so a keyboard rising for the editor moves
+ * the body from there (`KeyboardRoom`).
+ *
  * The row of controls is cancel and apply at its end (`FormActions`), which
  * asks whether to throw the draft away as every form's row does, shown while
  * the seat has a row (`SeatView.foot`). It stands in the overlay's foot
@@ -63,21 +73,30 @@ export class TaskHubSourceView implements SourceSurface {
     private readonly actions: FormActions;
 
     private readonly card: HTMLElement;
+    /** The overlay's body, which scrolls: the card and the source's place stand in it. */
+    private readonly body: HTMLElement;
+    /** Whether the source shows in the card's place, as last drawn. */
+    private sourceShown = false;
 
-    /** Built in the panel's slots (`SourceSlots`): the switch, why it cannot open, the card, the source's place and the foot. */
+    /** Built in the panel's slots (`SourceSlots`): the switch, why it cannot open, the card, the source's place, the foot and the body. */
     constructor(
         private readonly app: App,
-        slots: Pick<SourceSlots, 'toggle' | 'shut' | 'card' | 'pane' | 'foot'>,
+        slots: SourceSlots,
         actions: SourceViewActions,
     ) {
         const { toggle, card, pane: paneHost, foot } = slots;
         this.card = card;
+        this.body = slots.body;
         this.shutEl = slots.shut;
         this.shutEl.addClass('task-hub__mode-shut');
         toggle.addClass('task-hub__mode-toggle', 'tv-ctrl__segments');
         this.viewBtn = modeButton(toggle, 'edit-3', t('modal.hub.source.view'));
         this.sourceBtn = modeButton(toggle, 'code-2', t('modal.hub.source.source'));
-        this.viewBtn.addEventListener('click', () => actions.back());
+        this.viewBtn.addEventListener('click', () => {
+            actions.back();
+            // Not gone back, the source stays with why said under it.
+            if (this.sourceShown) bringIntoView(this.body, this.pane);
+        });
         this.sourceBtn.addEventListener('click', () => actions.enter());
 
         this.pane = paneHost;
@@ -143,12 +162,34 @@ export class TaskHubSourceView implements SourceSurface {
         this.actions.showAct(seat?.foot?.act ?? false);
         // Hidden by its attribute, which the overlay's foot reads to show or not (`OverlayFrame`).
         this.actionsHost.hidden = !seat?.foot;
+
+        if (open !== this.sourceShown) {
+            this.sourceShown = open;
+            bringIntoView(this.body, open ? this.pane : this.card);
+        }
     }
 
     /** Asked, first or again: back takes the focus, where cancel was. */
     asked(): void {
         this.actions.focusKeep();
     }
+}
+
+/**
+ * Scroll `body` so that `el`, in it, is in its sight: no further than to show
+ * it whole, or, when it is taller than the body shows, until its top is at
+ * the body's top. Left as it is when `el` is in sight already.
+ */
+function bringIntoView(body: HTMLElement, el: HTMLElement): void {
+    const top = body.getBoundingClientRect().top + body.clientTop;
+    const room = body.clientHeight;
+    const box = el.getBoundingClientRect();
+    const above = box.top - top;
+    const below = box.bottom - top - room;
+    const by = above < 0 || box.bottom - box.top > room ? above : below > 0 ? below : 0;
+    if (by === 0) return;
+    // At once, whatever scroll-behavior the stylesheet gives the body.
+    body.scrollTo({ top: body.scrollTop + by, behavior: 'instant' });
 }
 
 /** A button of the switch: its icon, and its label as its name and tooltip. */
