@@ -58,8 +58,8 @@ export type Issue =
     | { readonly code: 'reserved'; readonly field?: { readonly key: string; readonly builtin: ReservedBuiltin } }
     /**
      * A property key that starts as a list item's marker (`- `, `* `, `+ `,
-     * `1. `, `1) `) or a `#` does: written after a property line's bullet,
-     * Markdown reads a nested list, a heading or a tag there.
+     * `1. `, `1) `), a `#` or a `>` does: written after a property line's
+     * bullet, Markdown reads a nested list, a heading, a tag or a quote there.
      */
     | { readonly code: 'listMark' }
     /** A property key a row stands for already (`key`, as the row shows it), its case aside: its value is edited there. */

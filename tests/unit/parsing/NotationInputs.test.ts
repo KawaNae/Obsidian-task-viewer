@@ -78,6 +78,13 @@ describe('a property key typed to add', () => {
         for (const key of ['-x', '1.x', '1)x', 'a - x', 'x#', '-']) expect(keys.read(key), key).toEqual({ ok: true, value: key });
     });
 
+    it('refuses a key that starts with a quote\'s >, with a space after it or none, which the line after a bullet spells as a quote', () => {
+        for (const key of ['> x', '>x', '>']) {
+            expect(keys.read(key), key).toEqual({ ok: false, issue: { code: 'listMark' } });
+        }
+        for (const key of ['a>x', 'x >']) expect(keys.read(key), key).toEqual({ ok: true, value: key });
+    });
+
     it('refuses a key the plugin keeps for itself, naming the built-in\'s field when one edits it', () => {
         expect(keys.read('tv-start')).toEqual({ ok: false, issue: { code: 'reserved', field: { key: 'tv-start', builtin: 'start' } } });
         expect(keys.read('tags')).toEqual({ ok: false, issue: { code: 'reserved', field: { key: 'tags', builtin: 'tags' } } });

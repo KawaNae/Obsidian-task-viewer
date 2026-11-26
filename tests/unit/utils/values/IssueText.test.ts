@@ -21,7 +21,7 @@ describe('issueText', () => {
         [{ code: 'digitsOnly' }, 'start must not be digits alone'],
         [{ code: 'reserved' }, 'start is reserved'],
         [{ code: 'reserved', field: { key: 'Tags', builtin: 'tags' } }, 'start is reserved: Tags is set in the tags field'],
-        [{ code: 'listMark' }, 'start must not start with a list marker (-, *, +, 1., 1)) or #'],
+        [{ code: 'listMark' }, 'start must not start with a list or quote marker (-, *, +, 1., 1), >) or #'],
         [{ code: 'hasRow', key: 'Area' }, 'start already has a field: Area'],
         [{ code: 'duplicate' }, 'start is already used'],
         [{ code: 'shape', kind: 'statusChar' }, 'start must be one character that is not a line break'],
