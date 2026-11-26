@@ -35,7 +35,7 @@ import { PropertyListField, type ListFocus } from './PropertyListField';
  * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
  * 打ちかけの字は残す。足す書き込みが拒まれ、ホストが打った字を欄に残して
  * よいと答えたら（`HubHost.put`）、打った字を追加行に戻す。残さないと
- * 答えたら、追加行は空のままにする。Enter で足したときは、組み直した追加行の
+ * 答えたら、追加行は空のままにし、Enter で足したときは、組み直した追加行の
  * 同じ欄にフォーカスを戻す。
  *
  * 行は組み立てごとに1つの `AbortSignal`（`built`）を持ち、その組み立てで
@@ -192,17 +192,26 @@ export class PropertiesFieldGroup implements ClosingPart {
             if (!key?.ok) return;
             const raw = valueInput.value;
             const typed = { key: keyInput.value, value: raw };
+            const doc = keyInput.ownerDocument;
             // An Enter leaves the focus in the add row; a blur has taken it elsewhere already.
-            const active = keyInput.ownerDocument.activeElement;
-            const held = active === keyInput ? 'key' : active === valueInput ? 'value' : null;
+            const held = doc.activeElement === keyInput ? 'key' : doc.activeElement === valueInput ? 'value' : null;
             const write = this.set(key.value, raw, 'propKey');
             this.draft = { key: '', value: '' };
             this.render(true);
-            if (held) this.addRow?.[held === 'key' ? 'keyInput' : 'valueInput'].focus();
-            // Refused where it may be taken once added again: what was typed is
-            // the add row's again, unless something was typed since. Dropped,
-            // the row stays empty.
             void write?.then((written) => {
+                // Dropped, the row stays empty, and the focus an Enter left in
+                // it goes back, unless it went elsewhere meanwhile. Not before
+                // the answer: the rows are drawn from the value with the
+                // property added, which a write refused takes back, and with
+                // the focus in them the rows are not built anew from the
+                // value taken back.
+                if (written === 'dropped') {
+                    const active = doc.activeElement;
+                    if (held && (!active || active === doc.body)) this.addRow?.[held === 'key' ? 'keyInput' : 'valueInput'].focus();
+                    return;
+                }
+                // Refused where it may be taken once added again: what was
+                // typed is the add row's again, unless something was typed since.
                 if (written !== false || this.draft.key !== '' || this.draft.value !== '') return;
                 this.draft = typed;
                 const row = this.addRow;
