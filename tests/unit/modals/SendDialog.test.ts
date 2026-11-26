@@ -107,6 +107,8 @@ function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (
         hold: (next: typeof drafts) => { drafts = next; dialog.draftsChanged(); },
         /** How many times the dialog was drawn. */
         drawn: () => states.length,
+        /** Each state drawn, in order. */
+        drawnStates: () => [...states],
         /** What was drawn last. */
         state: () => states[states.length - 1],
         /** Answer the last asking of the destination. */
@@ -270,6 +272,33 @@ describe('the values offered to write into the note', () => {
 
         expect(h.state().candidates).toBeNull();
         expect(h.dialog.request()?.values).toEqual([]);
+    });
+
+    it('none before the first answer, then as each answer says, kept as the last answer said while a later asking is read', async () => {
+        const h = setUp({ preview: previewOf({ candidates }) });
+        // Opened on the rows' own note, as a move from its hub is: none until read, none once read.
+        expect(h.state().candidates).toBeNull();
+        await h.answer(facts({ kind: 'same', path: 'note.md' }));
+        expect(h.state().candidates).toBeNull();
+
+        h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
+        expect(h.state().candidates).toBeNull();
+        await h.answer(facts({ kind: 'existing', path: 'Plan.md' }));
+        expect(h.state().candidates?.map(one => one.key)).toEqual(['tv-color', 'aliases', '時給']);
+
+        h.dialog.fieldsChanged({ note: typed('note'), heading: '' });
+        expect(h.state().candidates?.map(one => one.key)).toEqual(['tv-color', 'aliases', '時給']);
+        await h.answer(facts({ kind: 'same', path: 'note.md' }));
+        expect(h.state().candidates).toBeNull();
+        // Each drawing since the first: the values came once and went once.
+        expect(h.drawnStates().map(state => state.candidates !== null)).toEqual([false, false, false, true, true, false]);
+    });
+
+    it('all of them while the fields name no one note, none said present, kept so while the next asking is read', async () => {
+        const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|', at: 'name' } }, { preview: previewOf({ candidates }) });
+        expect(h.state().candidates?.map(one => [one.key, one.shut])).toEqual([['tv-color', null], ['aliases', null], ['時給', null]]);
+        h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
+        expect(h.state().candidates).toHaveLength(3);
     });
 
     it('none when the rows inherit nothing', async () => {

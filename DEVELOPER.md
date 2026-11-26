@@ -439,7 +439,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
     - 行の下のリストの項目でない行は値の一部でないので、写さない
 - 送り先が既に言うキーの値は書かない（`SendWriter.saidIn`。ダイアログには `NoteFacts.present` で出す）。`root` の値は、送り先の根の行にそのキーがあれば書かない。`frontmatter` の値は、送り先の frontmatter か根の行にあれば書かない。根の値は frontmatter に勝つので、根にあるキーを frontmatter に書いても効かないためである
 - 書き込み（`SendWriter.placeInNote`）は1回で、frontmatter のキーを足し、根の行を根の頭（`Placement.rootHead`）に置いてから、行をセクションかノートの末尾（`SendTo.spot`、`Notes.noteSpot`）に置く。新しいノートでは frontmatter の直後に根の行が来て、見出しはその後ろに作られる
-- 移動の欄（`SendFields`）は候補を書く先ごとに見出しで分け、「frontmatter に書く値」の下に組み込みのキーを、「ノートの先頭に書く値」の下にカスタムの値を置く。どの候補も既定でチェックする。行の `- aliases:: x` は Obsidian の別名でなくカスタムプロパティなので、ほかの値と同じく扱う
+- 移動の欄（`SendFields`）は候補を書く先ごとに見出しで分け、「frontmatter に書く値」の下に組み込みのキーを、「ノートの先頭に書く値」の下にカスタムの値を置く。どの候補も既定でチェックする。候補は移動先を読んだ答えから出す（`SendDialog.candidatesOf`）。初めの答えが来るまでは出さず、欄を打ち替えて読み直している間は前の答えのまま出すので、1字打つたびに行が出入りしない。答えが行と同じノートなら出さず、1 つのノートに決まらない答え（ノートにできない名前、見分けられない複数のノート）の間は、全部をどれも書けるものとして出す。行と同じノートで開くダイアログ（ハブの位置の行から入る移動）で、読むまでの間だけ候補が出て消えることはない。行の `- aliases:: x` は Obsidian の別名でなくカスタムプロパティなので、ほかの値と同じく扱う
 
 ### プロパティの値
 

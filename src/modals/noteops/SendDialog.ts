@@ -34,7 +34,9 @@ import { DestinationText } from './DestinationText';
  *   changes (`SendHost.facts`), and only the answer to the last asking is
  *   taken: a send is not offered until the answer is for what the fields
  *   hold now.
- * - The values offered to write into the note are checked by default; a
+ * - The values offered to write into the note are offered once the
+ *   destination is first answered, as the last answer says while the next
+ *   is read, and are checked by default; a
  *   check the user changed stays as they left it whichever note the fields
  *   name. Each says where it is written (`CandidateView.to`): a built-in
  *   into the frontmatter, a custom property on a line above the first
@@ -226,7 +228,7 @@ export class SendDialog {
         return {
             phase: this.phase,
             headings: note?.headings ?? [],
-            candidates: this.candidatesOf(note),
+            candidates: this.candidatesOf(facts),
             issues: this.message === null ? held : [...held, { at: 'form', tone: 'error', text: this.message }],
             canSend,
         };
@@ -336,9 +338,18 @@ export class SendDialog {
         return this.checks.get(candidate.key) ?? true;
     }
 
-    /** The values offered, as the note the fields name has them; none for the rows' own note. */
-    private candidatesOf(present: NoteFacts | null): CandidateView[] | null {
-        if (present?.kind === 'same' || this.preview.candidates.length === 0) return null;
+    /**
+     * The values offered, as the last answer (`facts`) says: none for the
+     * rows' own note, and all of them, none said present, while the fields
+     * name no one note. None before the first answer: a dialog opened on
+     * the rows' own note (a move from its hub) would show them only until
+     * it is read. While a later asking is read the last answer still says,
+     * so they do not come and go as the fields are typed in.
+     */
+    private candidatesOf(facts: DestinationFacts | null): CandidateView[] | null {
+        if (facts === null || this.preview.candidates.length === 0) return null;
+        const present = oneNote(facts);
+        if (present?.kind === 'same') return null;
         return this.preview.candidates.map((one): CandidateView => {
             const has = present?.present.includes(one.key) ?? false;
             return {
