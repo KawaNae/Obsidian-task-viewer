@@ -9,7 +9,8 @@ import type { FocusEl } from '../helpers/focusDom';
  * The hub's form on a row the hub moves, with the source open on the move's
  * draft or not: what cancel and a close do while the move is under way,
  * when [Move] may be pressed while the source holds a text not taken in,
- * and what the fields show of a value the draft did not take. The host, the
+ * what the fields show of a value the draft did not take, and what of the
+ * source's text is taken into the draft, and asked of. The host, the
  * move, the source mode and the form are real (`openMoveHub`).
  */
 
@@ -258,5 +259,76 @@ describe('the values the fields show while the row moves', () => {
         h.field('start').focus();
         await tick(60);
         expect(h.lines()[1]).toBe('- [ ] Row @2026-11-26');
+    });
+});
+
+describe('the source\'s text and the draft', () => {
+    it('a child changed in place, as many lines as before, is a text not taken in: cancel asks of it', async () => {
+        const h = await open();
+        await h.begin();
+        await h.source.enter();
+        h.editor().type({ children: [{ text: '- [ ] a changed', was: 1 }, { text: '- [ ] b', was: 2 }] });
+        h.click(h.cancelButton());
+        await settle();
+        expect(h.ask()).toBe(t('modal.hub.move.discardAsk'));
+        expect(h.move()).not.toBeNull();
+    });
+
+    it('opens on the draft once what is typed in a field is put in, and takes its text in on that', async () => {
+        const h = await open();
+        await h.begin();
+        const name = h.field('name');
+        name.focus();
+        name.type('Typed');
+        await h.source.enter();
+        expect(h.editor().frame.parent).toBe('- [ ] Typed @2026-11-26');
+        h.editor().type({ children: [{ text: '- [ ] a', was: 1 }] });
+        expect(() => h.source.back()).not.toThrow();
+        expect(h.state().phase).toBe('view');
+        expect(h.host.task().subtreeLines).toEqual(['- [ ] Typed @2026-11-26', '    - [ ] a']);
+    });
+
+    it('a text typed back to what it opened on, after another was taken in, is not taken in yet: cancel asks of it', async () => {
+        const h = await open();
+        await h.begin();
+        await h.host.put({ content: 'X' });
+        await h.source.enter();
+        const opened = h.editor().draft();
+        h.editor().type({ parent: opened.parent.replace('X', 'Row') });
+        expect(h.move()!.seat.take()).toBe(true);
+        h.editor().type({ parent: opened.parent });
+        h.click(h.cancelButton());
+        await settle();
+        expect(h.ask()).toBe(t('modal.hub.move.discardAsk'));
+    });
+
+    it('says nothing under the editor once a text that did not take is mended and taken in, the move not made', async () => {
+        const h = await open();
+        await h.begin();
+        await h.toDone();
+        await h.source.enter();
+        h.editor().type({ parent: 'just text' });
+        h.click(h.act());
+        await settle();
+        expect(h.sourceSays()).toBe(t('modal.hub.source.notTask'));
+        h.editor().type({ parent: '- [ ] Row @2026-11-26' });
+        vi.spyOn(h.noteOps, 'send').mockResolvedValueOnce({ kind: 'not-done', why: 'not moved' });
+        h.click(h.act());
+        await tick(20);
+        expect(h.state().phase).toBe('source');
+        expect(h.sourceSays()).toBeNull();
+    });
+
+    it('thrown away on a row lost meanwhile, the switch says the row is gone', async () => {
+        const h = await open();
+        await h.begin();
+        await h.source.enter();
+        await h.writeOutside(['# Tasks', '# Done', '- [ ] Other', '']);
+        h.click(h.cancelButton());
+        await settle();
+        h.click(h.foot.find('tv-form__discard'));
+        await settle();
+        expect(h.move()).toBeNull();
+        expect(h.state().shut).toBe(t('modal.hub.taskMissing'));
     });
 });
