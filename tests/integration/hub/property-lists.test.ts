@@ -134,12 +134,12 @@ describe('the hub edits a list item by item', () => {
         expect(focused).toBe(true);
     });
 
-    it('takes an item out by its ×, and the line with the last one', () => {
+    it('takes an item out by its ×, and with the last one leaves the line with no value', () => {
         openHub('親');
         run(`items('k')[1].closest('.task-hub__list-item').querySelector('.tv-ctrl__pill-remove').click(); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(7, 8));
         run(`items('k')[0].closest('.task-hub__list-item').querySelector('.tv-ctrl__pill-remove').click(); await sleep(600); return 'ok';`);
-        expect(readTestFile(TEST_FILE)).toBe(withLines(5, 8));
+        expect(readTestFile(TEST_FILE)).toBe(withLines(6, 8));
     });
 
     it('leaves the focus where it was when an item is taken out', () => {
@@ -168,7 +168,8 @@ describe('the hub edits a list item by item', () => {
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 7));
         const left = run<boolean>(`type(items('k')[0], ''); chooseTabOf(nameInput()).focus(); await sleep(600); return document.activeElement === nameInput();`);
         expect(left).toBe(true);
-        expect(readTestFile(TEST_FILE)).toBe(withLines(5, 8));
+        // The last item emptied leaves the line with no value.
+        expect(readTestFile(TEST_FILE)).toBe(withLines(6, 8));
     });
 
     it('follows the focus to the next item when an item typed over is written on leaving it', () => {

@@ -21,10 +21,12 @@ import { PropertyRows, type PropertyRow, type PropertyRowField } from './Propert
 /**
  * カスタムプロパティ行。どの行があり、各行が何を出すかは `PropertyRows` が決め、
  * ここはそれを描く。
- * - own キー: value 編集可 + 行削除ボタン
- * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格
+ * - own キー: value 編集可 + 行削除ボタン。値を空にして確定すると、行を残して
+ *   値のないプロパティ（`- key::`）を書く。行を消すのは行削除ボタンだけである
+ * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格。
+ *   空にして確定すると、継承した値を隠す値のないプロパティを書く
  * - リストの値: 項目ごとの欄（`PropertyListField`）。自分のリストには行削除ボタンを
- *   出さず、最後の項目を消すと行も消える。受け継いだリストは読むだけで、
+ *   出さず、最後の項目を消すと値なしになる。受け継いだリストは読むだけで、
  *   「このタスクの値にする」で項目を写した下書きになり、最初の確定で書く
  * - 所見のあるキー: 編集できない行（`FieldGroupContext.locked`）
  *
@@ -295,14 +297,14 @@ export class PropertiesFieldGroup implements ClosingPart {
         // inherited one. Left as it is, no own value is made; typed again,
         // the inherited value is written as the row's own (`takesSame`).
         // What is typed reads as a line reads it (`PropertyValueInput`);
-        // nothing typed takes the row's own line out, and the value above
-        // comes through.
+        // nothing typed is no value (`- key::`), the row kept: over an
+        // inherited value, it hides it.
         const value = bindField(valueInput, {
             codec: PropertyValueInput,
             current: () => lineValueOf(editsOwn ? PropertyKey.get(this.ctx.task().properties, key)?.value : shown),
             // An own line keeps its key as written; an inherited value made
             // the task's own is written under the key it was inherited by.
-            commit: (typed) => typed.type === 'null' && typed.spelling === '' ? this.remove(key) : this.setValue(key, typed),
+            commit: (typed) => this.setValue(key, typed),
             issues: () => { /* any text is a value */ },
             takesEnter: () => suggest.listShown,
             takesSame: () => !editsOwn,
@@ -375,14 +377,14 @@ export class PropertiesFieldGroup implements ClosingPart {
     }
 
     /**
-     * Write `items` as the row's own list of the property `key` (none takes
-     * its line out), the draft written so let go, and build the rows anew
-     * with the focus at `focus` in the list.
+     * Write `items` as the row's own list of the property `key` (none is no
+     * value, the line kept and its items' lines taken out: over an inherited
+     * value, it hides it), the draft written so let go, and build the rows
+     * anew with the focus at `focus` in the list.
      */
     private writeList(folded: string, key: string, items: PropertyScalar[], focus?: ListFocus): void {
         this.drafts.delete(folded);
-        if (items.length === 0) void this.remove(key);
-        else void this.setValue(key, { type: 'list', items });
+        void this.setValue(key, items.length === 0 ? NO_VALUE : { type: 'list', items });
         if (focus !== undefined) this.focusAfter = { folded, focus };
         this.render(true);
     }

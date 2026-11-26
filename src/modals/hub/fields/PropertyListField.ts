@@ -53,8 +53,8 @@ export interface PropertyListFieldOptions {
  * Alt+Up and Alt+Down in its text. An item is read as a line holding it
  * reads it (`PropertyItemInput`): what does not read back as that one item
  * (`null`, `[ ] x`, `a:: b`) is said under the row and not written. Every
- * edit writes the whole list (`write`); a list left with no item takes the
- * property's line out, and the value above comes through.
+ * edit writes the whole list (`write`); a list left with no item is
+ * written as no value (`PropertiesFieldGroup`), the property's line kept.
  *
  * A write builds the rows anew, and the focus stays where it was: in the
  * add field, or in the item it was in at that item's new place (the add
