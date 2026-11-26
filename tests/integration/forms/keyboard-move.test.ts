@@ -119,6 +119,8 @@ interface Frame {
     field: number;
     keyboardTop: number;
     bodyBottom: number;
+    /** The panel's top as it is seen. */
+    panelTop: number;
 }
 
 interface Inline {
