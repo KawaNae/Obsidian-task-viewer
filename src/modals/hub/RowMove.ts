@@ -81,6 +81,7 @@ export interface MoveDeps {
 export class RowMove implements HubDraft, SendHost, SendSurface {
     readonly label = t('modal.send.send');
     readonly busyLabel = t('modal.send.sending');
+    readonly discardAsk = t('modal.hub.move.discardAsk');
     readonly discard = (): void => this.deps.host.leave();
     /** The fields of where the row goes as it opened. */
     readonly initial: DestinationAsk;
@@ -94,6 +95,10 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
     /** Why no move can be asked: the row changed outside, or was lost; null while it is the one opened on. */
     private stale: string | null = null;
     private sending = false;
+    /** The move asked last, resolving to whether it was made for the row; null before any. */
+    private asked: Promise<boolean> | null = null;
+    /** The move was made for the row: the hub closes. */
+    private made = false;
 
     constructor(private readonly preview: SendPreview, start: MoveStart, private readonly deps: MoveDeps) {
         const snapshot = preview.rows[0];
@@ -176,7 +181,12 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
     }
 
     write(): void {
-        void this.dialog.send();
+        this.asked = this.dialog.send().then(() => this.made);
+    }
+
+    /** The move under way, resolving to whether it was made for the row; null while none is. */
+    moving(): Promise<boolean> | null {
+        return this.sending ? this.asked : null;
     }
 
     changed(): boolean {
@@ -207,6 +217,7 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
     sent(): void { }
 
     close(): void {
+        this.made = true;
         this.deps.host.close();
     }
 

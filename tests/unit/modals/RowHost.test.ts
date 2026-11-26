@@ -69,17 +69,21 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         plugin: { settings: { ...DEFAULT_SETTINGS, reuseExistingTab: true } } as never,
         index: { getTask, onChange } as never,
         operations: { updateTask } as never,
-    }, follow);
+        noteOps: {} as never,
+        indentUnit: () => '    ',
+    }, { follow, hold: vi.fn() });
     copy = fresh;
 
     const form: HubForm & { said: (string | null)[] } = {
         said: [],
         refresh: vi.fn(() => { told.push('form'); }),
         showShut: vi.fn(() => { told.push(`shut:${host.shut()}`); }),
-        sayWrite(refusal) { this.said.push(refusal); },
+        sayPut(refusal) { this.said.push(refusal); },
+        sayWrite: vi.fn(),
         sayPlace: vi.fn(),
         showDraft: vi.fn(),
         write: vi.fn(),
+        putTyped: vi.fn(() => true),
         notWritten: vi.fn(),
     };
     if (bound) host.bind(form);
@@ -438,7 +442,7 @@ describe('RowHost.openSource', () => {
         void h.host.put({ content: '打った名前' });
         const locate = () => null;
 
-        h.host.openSource(locate);
+        h.host.openSource!(locate);
         expect(openSourceLine).toHaveBeenCalledWith(expect.objectContaining({ reuseTab: true }), h.host.task(), locate);
         expect(h.panel.close).toHaveBeenCalledTimes(1);
     });

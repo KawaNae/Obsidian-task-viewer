@@ -150,7 +150,7 @@ function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: tr
         } as never,
         index: index as never,
         operations: { updateTask: vi.fn(updateTask) } as never,
-        plugin: { settings: DEFAULT_SETTINGS } as never,
+        plugin: { settings: DEFAULT_SETTINGS, getNoteOps: () => ({}) } as never,
     };
     // The row's note, the row above its first heading: read for the heading the row stands under.
     const notes: Record<string, string> = { 'note.md': '- [ ] Test task @2026-03-11\n# 見出し\n' };
@@ -439,6 +439,8 @@ describe('the hub on a row', () => {
         for (let i = 0; i < 5; i++) await Promise.resolve();
         expect(values()).toEqual(['note.md', t('modal.newTask.noHeading')]);
         expect(r.body.find('task-hub__shown')!.find('tv-form__says')).toBeNull();
+        // The button that begins a move, on the note's row.
+        expect(r.body.find('task-hub__shown')!.findAll('tv-form__row')[0].find('task-hub__move')!.attrs.get('aria-label')).toBe(t('menu.sendToNote'));
     });
 
     it('builds no form, and lays out no tabs, on a task that is read only', async () => {
@@ -462,6 +464,8 @@ describe('the hub on a row', () => {
         expect(form.children.map(child => [...child.classes][0])).toEqual(['task-hub__read-only-notice', 'tv-form__group']);
         for (let i = 0; i < 5; i++) await Promise.resolve();
         expect(values()).toEqual(['note.md', t('modal.newTask.noHeading')]);
+        // A row read only is not moved from its hub.
+        expect(form.find('task-hub__move')).toBeNull();
 
         r.change(undefined);
         expect(values()).toEqual(['', '']);

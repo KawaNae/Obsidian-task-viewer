@@ -119,6 +119,7 @@ export class DraftHost implements PanelHost {
     private readonly asDraft: HubDraft = {
         label: t('modal.create'),
         busyLabel: t('modal.newTask.creating'),
+        discardAsk: t('modal.newTask.discardAsk'),
         canWrite: () => this.canCreate(),
         writing: () => this.creating(),
         write: () => this.create(),

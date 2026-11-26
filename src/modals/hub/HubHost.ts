@@ -15,9 +15,15 @@ export interface HubForm {
     /** Enable the fields or not, and say why not above the form's tabs, as `HubHost.shut` says now. */
     showShut(): void;
     /**
-     * Say why a write was refused: while the host holds something not
-     * written yet (`HubHost.draft`), above its write, as what the write did;
-     * otherwise above the form's tabs. Null takes back what was said.
+     * Say why a change the fields handed on was not taken (`HubHost.put`):
+     * above the form's tabs, in sight from either. Null takes back what was
+     * said.
+     */
+    sayPut(refusal: string | null): void;
+    /**
+     * Say why the write of what the host holds not written yet
+     * (`HubDraft.write`) was refused: above the write, as what it did. Null
+     * takes back what was said.
      */
     sayWrite(refusal: string | null): void;
     /** Say above the write where what is held goes, and what of that place to heed; none takes back what was said. */
@@ -39,6 +45,12 @@ export interface HubForm {
      */
     write(): void;
     /**
+     * Put in what is typed in every field, as a close saves it, with no
+     * question: whether all of it was. A value that cannot be saved is not,
+     * nor anything else: its field takes the focus, its tab chosen first.
+     */
+    putTyped(): boolean;
+    /**
      * A write ended unwritten, the fields open again and the place read:
      * the focus goes where what keeps it from being written is, unless it is
      * in the hub already. Where a write may be asked again
@@ -51,13 +63,16 @@ export interface HubForm {
 
 /**
  * What a hub's host holds that is not written yet, and its write, which
- * writes all of it at once: a task to be created, as the fields hold it.
- * The form shows cancel and the write only while the host holds one.
+ * writes all of it at once: a task to be created, as the fields hold it, or
+ * a row's changes and where it goes, its move. The form shows cancel and
+ * the write only while the host holds one.
  */
 export interface HubDraft {
     /** What the write reads, and what it reads while it is under way. */
     readonly label: string;
     readonly busyLabel: string;
+    /** The question whether to throw it away, put before a step that would lose it. */
+    readonly discardAsk: string;
     /**
      * Whether the write may be asked now: where it goes has answered, what
      * is held can go there, and none is under way. While the place is being
@@ -98,7 +113,7 @@ export interface HubHost {
     task(): Task;
     /**
      * Hand a change of the fields on: whether it was taken. A refusal is said
-     * by the host (`HubForm.sayWrite`); a field refused keeps what was typed.
+     * by the host (`HubForm.sayPut`); a field refused keeps what was typed.
      */
     put(updates: Partial<Task> | null): Promise<boolean>;
     /** Why the fields take no edit now, in the words the form says it in; null while they take them. */
@@ -115,8 +130,8 @@ export interface HubHost {
      * What is held not written yet, and its write, as it is now: the form
      * asks it each time it is told to draw it (`HubForm.showDraft`), and as
      * it acts on it. Null while the host writes what is handed on as it
-     * comes (a row the note has): nothing to write but that, and nothing a
-     * close loses but what cannot be saved.
+     * comes (a row the note has, not being moved): nothing to write but
+     * that, and nothing a close loses but what cannot be saved.
      */
     draft(): HubDraft | null;
     /**

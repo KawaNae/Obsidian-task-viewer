@@ -40,6 +40,9 @@ import { placeFocus } from '../../views/sharedUI/FocusPlacement';
  * - A row the hub lost (a change from outside renamed it) keeps the draft,
  *   and offers no apply: copying the draft and throwing it away is the way
  *   out.
+ * - The hub may hold the row for a way of writing it of its own (its move):
+ *   the switch to the source is not offered meanwhile, and an entering
+ *   under way gives up ({@link hold}).
  */
 
 /** Where the mode is: showing the card, opening the source, editing it, or writing a draft. */
@@ -56,6 +59,8 @@ export interface SourceViewState {
     asking: boolean;
     /** The hub lost the row: the draft cannot be written. */
     lost: boolean;
+    /** The hub holds the row for a write of its own: the switch to the source is not offered. */
+    held: boolean;
 }
 
 export interface SourceSurface {
@@ -115,6 +120,8 @@ export class TaskHubSource {
     /** The draft last refused, and why: not written again while it stays the same. */
     private refused: { key: string; message: string } | null = null;
     private disposed = false;
+    /** The hub holds the row for a write of its own. */
+    private held = false;
 
     constructor(task: Task, private readonly host: SourceHost, private readonly surface: SourceSurface) {
         this.current = task;
@@ -134,12 +141,25 @@ export class TaskHubSource {
             issues: this.message === null ? [] : [{ at: 'form', tone: 'error', text: this.message }],
             asking: this.guard.asking !== null,
             lost: this.current === undefined,
+            held: this.held,
         };
+    }
+
+    /**
+     * The hub holds the row for a write of its own, or lets it go: while it
+     * holds it the source does not open, and an entering under way goes back
+     * to the card. Told only while the source is not open.
+     */
+    hold(held: boolean): void {
+        if (this.held === held) return;
+        this.held = held;
+        if (held && this.phase === 'entering') return this.back();
+        this.render();
     }
 
     /** Switch to the source. */
     async enter(): Promise<void> {
-        if (this.phase !== 'view' || this.shutReason() !== null) return;
+        if (this.phase !== 'view' || this.held || this.shutReason() !== null) return;
         this.phase = 'entering';
         this.render();
 

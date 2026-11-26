@@ -864,7 +864,7 @@ describe('the hub on a row', () => {
 
         expect(foot.find('task-hub__create-line')).toBeNull();
         expect(foot.find('task-hub__create-toggle')).toBeNull();
-        form.sayWrite('refused');
+        form.sayPut('refused');
         expect(body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual(['refused']);
     });
 });
@@ -900,6 +900,7 @@ describe('a hub whose host comes to hold something not written yet and lets it g
         const draftOf = (label: string, opts: { changed?: boolean; discard?: boolean } = {}) => ({
             label,
             busyLabel: `${label}…`,
+            discardAsk: `${label}を捨てますか`,
             canWrite: () => true,
             writing: () => false,
             write: vi.fn(),
@@ -958,17 +959,50 @@ describe('a hub whose host comes to hold something not written yet and lets it g
         expect(row.children.indexOf(s.cancel())).toBeLessThan(row.children.indexOf(s.act()!));
     });
 
-    it('says a refusal above the write while something is held, and above the tabs while nothing is', () => {
+    it('says a refusal of the write above the write, and of a change the fields handed on above the tabs, whatever is held', () => {
         const s = setUpHeld();
         s.hold(s.draftOf('移動'));
-        s.form.sayWrite('refused');
+        s.form.sayWrite('write refused');
         expect(footOf(s).line).toBe(true);
         expect(s.body.find('tv-form__says--form')!.children).toEqual([]);
 
+        s.form.sayPut('change refused');
+        expect(s.body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual(['change refused']);
+        const said = (el: FocusEl): string[] => [el.text, ...el.children.flatMap(said)].filter(text => text !== '');
+        expect(said(s.line()!)).toContain('write refused');
+        expect(said(s.line()!)).not.toContain('change refused');
+
+        s.form.sayPut(null);
+        expect(s.body.find('tv-form__says--form')!.children).toEqual([]);
         s.hold(null);
-        s.form.sayWrite('refused again');
+        s.form.sayPut('refused again');
         expect(footOf(s).line).toBe(false);
         expect(s.body.find('tv-form__says--form')!.children.map(c => c.text)).toEqual(['refused again']);
+    });
+
+    it('asks whether to throw away what is held in the words it holds', () => {
+        const s = setUpHeld();
+        s.hold(s.draftOf('移動', { changed: true }));
+        s.press(s.cancel());
+        expect(s.ask()).toBe('移動を捨てますか');
+    });
+
+    it('puts in what is typed with no question; a value that cannot be saved keeps it all, and takes the focus on its tab', () => {
+        const s = setUpHeld();
+        s.el('start').focus();
+        s.el('start').type('not a date');
+        s.el('name').type('電話');
+        s.press(s.tab('detail'));
+        expect(s.form.putTyped()).toBe(false);
+        expect(s.puts).toEqual([]);
+        expect(s.selected()).toBe('basic');
+        expect(s.doc.activeElement).toBe(s.el('start'));
+        expect(s.ask()).toBe('');
+
+        s.el('start').type('');
+        expect(s.form.putTyped()).toBe(true);
+        expect(s.puts).toEqual([{ content: '電話' }]);
+        expect(s.ask()).toBe('');
     });
 
     it('keeps what is typed, the focus, the tab chosen and the question put however the draft comes, changes and goes', () => {
@@ -1008,7 +1042,7 @@ describe('a hub whose host comes to hold something not written yet and lets it g
         given.press(given.cancel());
         // The fields are saved first, as for a close: what is typed is in what is thrown away.
         expect(given.puts).toEqual([{ content: '電話' }]);
-        expect(given.ask()).toBe(t('modal.newTask.discardAsk'));
+        expect(given.ask()).toBe('移動を捨てますか');
         expect(changed.discard).not.toHaveBeenCalled();
 
         given.press(given.foot.find('tv-form__discard')!);

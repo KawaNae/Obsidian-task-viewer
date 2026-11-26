@@ -811,11 +811,18 @@ describe('what a dialog opens with besides its rows', () => {
         expect(away.state().canSend).toBe(true);
     });
 
-    it('a row above its note\'s first heading stands where the heading field names the note\'s end', async () => {
+    it('a row in a note with no heading stands where the heading field names the note\'s end', async () => {
         const stands = { note: 'note.md', heading: null };
         const end = await answered(facts({ kind: 'same', path: 'note.md', to: { note: { kind: 'existing', path: 'note.md' }, spot: 'end' }, heading: null }), { options: { stands } });
         expect(end.state().canSend).toBe(false);
         const under = await answered(facts({ kind: 'same', path: 'note.md' }), { options: { stands } });
         expect(under.state().canSend).toBe(true);
+    });
+
+    it('a row above the first heading of a note with headings is sent to the note\'s end: the end is in the last heading\'s section', async () => {
+        const stands = { note: 'note.md', heading: null };
+        const end = await answered(facts({ kind: 'same', path: 'note.md', to: { note: { kind: 'existing', path: 'note.md' }, spot: 'end' }, heading: null, headings: ['Tasks'] }), { options: { stands } });
+        expect(end.state().canSend).toBe(true);
+        expect(end.state().issues).not.toContainEqual({ at: 'note', tone: 'info', text: t('modal.send.samePlace') });
     });
 });

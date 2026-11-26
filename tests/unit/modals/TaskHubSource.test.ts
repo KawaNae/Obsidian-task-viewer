@@ -136,6 +136,32 @@ describe('entering the source', () => {
         expect(h.state()).toMatchObject({ phase: 'view', shut: t('modal.hub.taskMissing'), lost: true });
     });
 
+    it('is not offered while the hub holds the row for a write of its own, no reason said; offered again once it lets it go', async () => {
+        const h = setUp();
+        h.source.hold(true);
+        expect(h.state()).toMatchObject({ phase: 'view', shut: null, held: true });
+        await h.source.enter();
+        expect(h.state().phase).toBe('view');
+        expect(h.confirm).not.toHaveBeenCalled();
+
+        h.source.hold(false);
+        expect(h.state().held).toBe(false);
+        await h.source.enter();
+        expect(h.state().phase).toBe('source');
+    });
+
+    it('goes back to the card when the hub holds the row while it waits', async () => {
+        let drain!: () => void;
+        const h = setUp({ drained: new Promise<void>(resolve => { drain = resolve; }) });
+        const entering = h.source.enter();
+        h.source.hold(true);
+        expect(h.state().phase).toBe('view');
+        drain();
+        await entering;
+        expect(h.editors).toEqual([]);
+        expect(h.lockForm).not.toHaveBeenCalled();
+    });
+
     it('gives up quietly when the hub closes while it waits', async () => {
         let drain!: () => void;
         const h = setUp({ drained: new Promise<void>(resolve => { drain = resolve; }) });

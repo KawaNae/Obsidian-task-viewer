@@ -534,7 +534,9 @@
       "cascadeTagLocked": "Inherited tag ({{source}}) — edit the source to remove it",
       "move": {
         "changed": "The task's lines changed outside the hub, so it cannot be moved. Cancel to go back.",
-        "lost": "The task was lost: its note changed elsewhere. It cannot be moved. Cancel to go back."
+        "lost": "The task was lost: its note changed elsewhere. It cannot be moved. Cancel to go back.",
+        "formShut": "Moving the task. The fields cannot be edited until it is done.",
+        "discardAsk": "The task is not moved yet. Discard the changes and the destination?"
       },
       "source": {
         "view": "Preview",

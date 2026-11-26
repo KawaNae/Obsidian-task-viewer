@@ -78,11 +78,13 @@ function rig(seed: Parameters<typeof makeHost>[0] = {}, place: CreatePlace | nul
         place: [],
         refresh: vi.fn(() => { told.push('form'); }),
         showShut: vi.fn(() => { told.push(`shut:${host.shut() !== null}`); }),
+        sayPut: vi.fn(),
         sayWrite(refusal) { this.said.push(refusal); },
         sayPlace(issues) { this.place.push(issues); },
         showDraft: vi.fn(() => { told.push(`draft:${host.canCreate()}:${host.creating()}`); }),
         // The form's create, its fields all saved: it asks the host's.
         write: vi.fn(() => { host.create(); }),
+        putTyped: vi.fn(() => true),
         // Told with whether the fields are open and whether a create may be asked then.
         notWritten: vi.fn(() => { told.push(`unwritten:${host.shut() === null}:${host.canCreate()}`); }),
     };

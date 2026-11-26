@@ -428,3 +428,12 @@
 .task-hub__shown > .tv-form__says {
     margin-top: 8px;
 }
+
+/* The button that begins a move, at the end of the note's row: as tall as
+   a line of the value, so the row keeps its height, the icon centred on
+   the line */
+.task-hub__shown .task-hub__move {
+    width: 24px;
+    height: 24px;
+    margin-block: calc((1lh - 24px) / 2);
+}
