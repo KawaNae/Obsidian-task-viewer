@@ -66,10 +66,13 @@ function nonIncreasing(values: number[]): boolean {
 }
 
 describe('the body along the keyboard rising', () => {
-    // The box: the field at 610, 10px above the keyboard's top once the overlap passes 248, and 52 short under 300.
+    // The box: the field at 610, 10px above the keyboard's top once the overlap passes 233, and 52 short under 300.
+    // Laid out at 32 at once, the box is drawn 68 lower, the shift moving to 0 as the overlap moves to 300 (both
+    // over the same curve e): the field stands at 542 + 68(1 - e) and the keyboard's top at 800 - 300e, 10px apart
+    // where e = 180 / 232, the overlap 233.
     // The sheet: the field at 610, 10px above the body's bottom once the overlap passes 208, and 92 short under 300.
     const cases: { name: string; shape: RoomShape; from: number; end: number }[] = [
-        { name: 'the tall box', shape: BOX, from: 248, end: 52 },
+        { name: 'the tall box', shape: BOX, from: 233, end: 52 },
         { name: 'the sheet', shape: SHEET, from: 208, end: 92 },
     ];
 
@@ -212,6 +215,181 @@ describe('the body along the keyboard rising', () => {
     });
 });
 
+describe('the box along the keyboard', () => {
+    /** The box's top as seen at each frame, and its shift. */
+    function watchBox(room: Room): { t: number; top: number; shift: number }[] {
+        const seen: { t: number; top: number; shift: number }[] = [];
+        room.watchFrames(() => seen.push({ t: room.now(), top: room.layout().panelTop, shift: room.shownShift() }));
+        return seen;
+    }
+
+    /** How far the box moved at each frame, from where it was seen before it. */
+    function steps(from: number, seen: { top: number }[]): number[] {
+        return seen.map((s, i) => Math.abs(s.top - (i === 0 ? from : seen[i - 1].top)));
+    }
+
+    // At rest the box stands at 100; under 300 it is laid out at 32 (BOX).
+    for (const c of [
+        { name: 'rises', from: 100, to: 32, tell: (room: Room) => room.iPadShow(K) },
+        { name: 'goes back', from: 32, to: 100, tell: (room: Room) => room.iPadHide() },
+    ]) {
+        it(`${c.name} from the first frame to where it rests by the end of the keyboard's move, slowing to its stop`, async () => {
+            const { room } = focused(BOX, 450);
+            if (c.name === 'goes back') {
+                room.iPadShow(K);
+                await room.settle();
+            }
+            expect(room.layout().panelTop).toBe(c.from);
+            const t0 = room.now();
+            const seen = watchBox(room);
+
+            c.tell(room);
+            await room.settle();
+
+            expect(Math.abs(seen[0].top - c.from)).toBeGreaterThan(0.5);
+            expect(seen.filter((s) => s.top !== c.to).length).toBeGreaterThan(10);
+            // Still on its way 200ms in, and at rest once the move's 250ms have run.
+            expect(seen.some((s) => s.t - t0 >= 200 && Math.abs(s.top - c.to) > 0.5)).toBe(true);
+            expect(seen.filter((s) => s.t - t0 > 250).every((s) => s.top === c.to)).toBe(true);
+            expect(room.layout().panelTop).toBe(c.to);
+            // The curve's second half: each frame moves it less than the one before.
+            const late = steps(c.from, seen).filter((_, i) => seen[i].t - t0 > 125 && seen[i].t - t0 <= 250);
+            expect(late.length).toBeGreaterThan(5);
+            expect(late.every((d, i) => i === 0 || d <= late[i - 1] + 1e-6)).toBe(true);
+            expect(Math.max(...late.slice(-2))).toBeLessThan(Math.max(...steps(c.from, seen)) / 4);
+            expect(room.writtenShift()).toBeUndefined();
+            expect(room.shownShift()).toBe(0);
+        });
+    }
+
+    for (const c of [
+        { name: 'goes back from where it is seen when the keyboard goes while it rises', first: () => K, then: 0, end: 100 },
+        { name: 'rises from where it is seen when the keyboard comes back while it goes', first: () => 0, then: K, end: 32 },
+    ]) {
+        it(c.name, async () => {
+            const { room } = focused(BOX, 450);
+            if (c.first() === 0) {
+                room.iPadShow(K);
+                await room.settle();
+                room.native('keyboardWillHide');
+            } else {
+                room.native('keyboardWillShow', K);
+            }
+            await room.advance(100);
+            const at = room.layout().panelTop;
+            expect(at).toBeGreaterThan(32 + 5);
+            expect(at).toBeLessThan(100 - 5);
+            const seen = watchBox(room);
+
+            if (c.then === 0) room.native('keyboardWillHide');
+            else room.native('keyboardWillShow', c.then);
+
+            // Seen where it stood as the keyboard turned, and moving on from there.
+            expect(Math.abs(room.layout().panelTop - at)).toBeLessThan(0.5);
+            await room.settle();
+            const tops = [at, ...seen.map((s) => s.top)];
+            expect(c.end === 100 ? nonDecreasing(tops) : nonIncreasing(tops)).toBe(true);
+            expect(Math.max(...steps(at, seen))).toBeLessThan(10);
+            expect(room.layout().panelTop).toBe(c.end);
+            expect(room.shownShift()).toBe(0);
+        });
+    }
+
+    it('keeps the body locked and moved along until the box stands where it rests, its shift moving longer than the overlap', async () => {
+        const room = makeRoom({ shape: BOX, content: 1000, shiftMs: 400 });
+        const field = room.field(450);
+        room.focus(field);
+        room.mount();
+        room.iPadShow(K);
+        await room.settle();
+        expect(room.inline().height).toBe('480px');
+
+        room.iPadHide();
+        await room.advance(300);
+        expect(room.overlapMoving()).toBe(false);
+        expect(room.shiftMoving()).toBe(true);
+        expect(room.inline().height).toBe('480px');
+        expect(room.framesAsked()).toBe(1);
+
+        await room.settle();
+        expect(room.layout().panelTop).toBe(100);
+        expect(room.scrollTop).toBe(0);
+        expect(room.inline()).toEqual(NONE);
+    });
+
+    it('stands where it rests at once when the overlay opens over an open keyboard', async () => {
+        const room = makeRoom({ shape: BOX, content: 1000, viewport: false });
+        room.native('keyboardWillShow', K);
+        room.native('keyboardDidShow', K);
+        room.mount();
+
+        expect(room.layout().panelTop).toBe(32);
+        expect(room.writtenShift()).toBeUndefined();
+        expect(room.shiftMoving()).toBe(false);
+    });
+
+    it('moves the whole of the keyboard\'s move when the overlay opens over an open keyboard laid out as it is built', async () => {
+        const room = makeRoom({ shape: BOX, content: 1000, viewport: false });
+        room.native('keyboardWillShow', K);
+        room.native('keyboardDidShow', K);
+        room.mount({ laidOut: true });
+
+        expect(room.layout().panelTop).toBe(100);
+        expect(room.shiftMoving()).toBe(true);
+        await room.settle();
+        expect(room.layout().panelTop).toBe(32);
+    });
+
+    it('is given what it moved by as laid out, whatever the opening\'s scale, while the overlay opens', async () => {
+        const room = makeRoom({ shape: BOX, content: 1000 });
+        const field = room.field(450);
+        room.open();
+        room.focus(field);
+        room.mount();
+        await room.advance(40);
+        const at = room.layout().panelTop;
+
+        room.iPadShow(K);
+
+        expect(room.writtenShift()).toBeUndefined();
+        expect(room.shownShift()).toBe(68);
+        expect(Math.abs(room.layout().panelTop - at)).toBeLessThan(0.5);
+        await room.settle();
+        expect(room.layout().panelTop).toBe(32);
+        expect(room.scrollTop).toBe(52);
+    });
+
+    it('stands at once where the stylesheet lays it out when it changes height once the keyboard is up', async () => {
+        const { room } = focused({ ...BOX }, 450);
+        room.iPadShow(K);
+        await room.settle();
+        expect(room.layout().panelTop).toBe(32);
+
+        // 400 tall, it is laid out at 32 + min(168, 336 - 300): 68.
+        (room.shape as { panel: number }).panel = 400;
+
+        expect(room.layout().panelTop).toBe(68);
+        expect(room.shownShift()).toBe(0);
+        expect(room.framesAsked()).toBe(0);
+    });
+
+    it('is given no shift on the sheet, which moves by the overlap alone', async () => {
+        const { room } = focused(SHEET, 450);
+        const shifts: number[] = [];
+        room.watchFrames(() => shifts.push(room.shownShift()));
+
+        room.iPadShow(K);
+        await room.settle();
+        room.iPadHide();
+        await room.settle();
+
+        expect(shifts.length).toBeGreaterThan(20);
+        expect(shifts.every((s) => s === 0)).toBe(true);
+        expect(room.writtenShift()).toBeUndefined();
+        expect(room.shiftMoving()).toBe(false);
+    });
+});
+
 describe('the browser and the user scrolling the body as the keyboard rises', () => {
     for (const hidden of [true, false]) {
         it(`writes the planned place over the browser's own scroll at the next frame, a field ${hidden ? 'the keyboard hides' : 'left in sight'}`, async () => {
@@ -262,7 +440,7 @@ describe('the browser and the user scrolling the body as the keyboard rises', ()
             const { room, field } = focused(BOX, 450);
             const seen = watch(room, field);
             room.iPadShow(K);
-            await room.advance(200); // the overlap past 248: the body under way
+            await room.advance(200); // the overlap past 233: the body under way
             const at = room.scrollTop;
             expect(at).toBeGreaterThan(0);
 
@@ -358,7 +536,7 @@ describe('what comes while the keyboard rises', () => {
         room.iPadShow(K);
         await room.settle();
         room.native('keyboardWillHide');
-        await room.advance(20); // the overlap still past 248: the body under way back
+        await room.advance(20); // the overlap still past 233: the body under way back
         expect(room.scrollTop).toBeGreaterThan(0);
 
         room.iPadShow(200);
@@ -421,7 +599,7 @@ describe('what comes while the keyboard rises', () => {
     it('puts the body back once the keyboard is up when the focus left the fields while it rose', async () => {
         const { room } = focused(BOX, 450, { scrollTop: 7 });
         room.iPadShow(K);
-        await room.advance(200); // the overlap past 248: the body under way and locked
+        await room.advance(200); // the overlap past 233: the body under way and locked
         expect(room.scrollTop).toBeGreaterThan(7);
         expect(room.inline().height).toBe('480px');
 
@@ -668,7 +846,7 @@ describe('where the keyboard is told otherwise', () => {
 });
 
 describe('a read that throws', () => {
-    it('gives the root its transition back and has the overlap move from where it was shown', async () => {
+    it('gives the root its transition back and has the overlap and the box move from where they were shown', async () => {
         const { room, field } = focused(BOX, 450);
         // Read where it stands, then thrown on where it will stand.
         const read = field.getBoundingClientRect.bind(field);
@@ -684,6 +862,11 @@ describe('a read that throws', () => {
         expect(room.writtenOverlap()).toBe(`${K}px`);
         expect(room.overlapMoving()).toBe(true);
         expect(room.shownOverlap()).toBe(0);
+        // The box laid out where it goes, and seen where it stood, moving on from there.
+        expect(room.overlapTo()).toBe(K);
+        expect(room.shiftMoving()).toBe(true);
+        expect(room.shownShift()).toBe(68);
+        expect(room.layout().panelTop).toBe(100);
     });
 });
 

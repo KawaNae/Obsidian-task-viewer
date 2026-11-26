@@ -67,7 +67,8 @@ describe('the keyboard as the plugin loads', () => {
 
         const root = new Root();
         const body = Object.assign(new Target(), { scrollTop: 0, scrollTo() {} });
-        const room = new KeyboardRoom(root as never, win as never, body as never);
+        const panel = new Target();
+        const room = new KeyboardRoom(root as never, win as never, panel as never, body as never);
         room.attach();
 
         expect(root.vars.get(KEYBOARD_OVERLAP_VAR)).toBe('336px');

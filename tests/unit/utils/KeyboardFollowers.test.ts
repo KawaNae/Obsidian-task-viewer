@@ -156,8 +156,9 @@ function openContainer(): Opened {
     const win = new Win();
     const doc = new Doc(win);
     const root = new El(doc, 'tv-overlay');
-    const body = new El(doc, 'tv-overlay__body');
-    const room = new KeyboardRoom(root as never, win as never, body as never);
+    const panel = root.createDiv('tv-overlay__panel');
+    const body = panel.createDiv('tv-overlay__body');
+    const room = new KeyboardRoom(root as never, win as never, panel as never, body as never);
     room.attach();
     return {
         win,
@@ -417,7 +418,11 @@ describe('the anchored overlay on a keyboard event', () => {
             ? `tv-overlay ${KEYBOARD_OVERLAP_VAR} removed`
             : `tv-overlay ${KEYBOARD_OVERLAP_VAR}=300px`;
         const placed = `tv-overlay__panel max-height=${HIDES.includes(how) ? WIN_H - 16 : WIN_H - 300 - 16}px`;
-        expect(part.doc.log).toEqual([told, placed]);
+        // What else the root is given with the overlap (what lays out the
+        // centred box) is written with it, before the panel is placed too.
+        const log = part.doc.log;
+        expect(log.filter((l) => l === told || !l.startsWith('tv-overlay '))).toEqual([told, placed]);
+        expect(log[log.length - 1]).toBe(placed);
         part.close();
     });
 });
