@@ -10,6 +10,7 @@ import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/S
 import { FormActions } from '../form/FormActions';
 import { DestinationField } from './DestinationField';
 import { SendDialog, initialAsk, type CandidateView, type SendField, type SendSurface, type SendViewState } from './SendDialog';
+import { SendEditors, type SendEditorsHost } from './SendEditors';
 
 /**
  * The send dialog as it looks: the rows to send
@@ -19,7 +20,9 @@ import { SendDialog, initialAsk, type CandidateView, type SendField, type SendSu
  * (`IssueBoard`: under the note, the heading or a row, or above the
  * buttons), and cancel and send. It draws
  * what the dialog's state says (`SendViewState`) and does nothing of its
- * own; the dialog's logic is `SendDialog`.
+ * own; the dialog's logic is `SendDialog`, and the rows' editors, their
+ * drafts and the question a close puts of them are `SendEditors`, which
+ * hands the dialog the drafts.
  *
  * It is built of the form's shared pieces, as the task hub is (`_form.css`):
  * the rows, the destination and the values offered are sections
@@ -33,13 +36,14 @@ import { SendDialog, initialAsk, type CandidateView, type SendField, type SendSu
  *
  * It stands on an overlay (`OverlayShell`, centered), which keeps
  * Obsidian's hotkeys off the note behind while the focus is in it, and asks
- * the dialog before a close the user asks for (`beforeClose`). Asked
+ * the editors before a close the user asks for (`beforeClose`). Asked
  * whether to throw the draft away, the row of buttons asks, as every form's
  * row does (`FormActions`).
  */
-export class SendModal implements SendSurface {
+export class SendModal implements SendSurface, Pick<SendEditorsHost, 'openEditor' | 'showFixed'> {
     private readonly overlay = new OverlayShell();
     private dialog: SendDialog | null = null;
+    private editors: SendEditors | null = null;
     private field!: DestinationField;
     private rowsEl!: HTMLElement;
     /** The line under each row, in the order of the rows. */
@@ -70,17 +74,19 @@ export class SendModal implements SendSurface {
             // The first draft, which puts its own caret; the note field when
             // no row opened in the editor.
             initialFocus: () => {
-                const editor = this.dialog?.firstEditor();
+                const editor = this.editors?.firstEditor();
                 return editor ? { to: editor } : this.field.focus('note');
             },
             build: (bodyEl, frame) => this.build(bodyEl, frame),
             onClose: () => {
                 this.dialog?.dispose();
                 this.dialog = null;
+                this.editors?.dispose();
+                this.editors = null;
             },
-            beforeClose: () => ((this.dialog?.beforeClose() ?? true) ? 'close' : 'stay'),
-            yieldsEscape: () => this.dialog?.yieldsEscape() ?? false,
-            takesBack: () => this.dialog?.takesBack() ?? false,
+            beforeClose: () => ((this.editors?.beforeClose() ?? true) ? 'close' : 'stay'),
+            yieldsEscape: () => this.editors?.yieldsEscape() ?? false,
+            takesBack: () => this.editors?.takesBack() ?? false,
         });
     }
 
@@ -96,7 +102,7 @@ export class SendModal implements SendSurface {
         this.field = new DestinationField(this.app, destination, {
             initial,
             onChange: () => this.dialog?.fieldsChanged(this.field.ask()),
-            onEnter: () => { void this.dialog?.send(); },
+            onEnter: () => this.send(),
         });
 
         // Put in and taken out rather than hidden (renderCandidates): the
@@ -117,19 +123,41 @@ export class SendModal implements SendSurface {
 
         this.actions = new FormActions(frame.foot, {
             cancel: { run: () => { void this.overlay.requestClose(); } },
-            actions: [{ label: t('modal.send.send'), busyLabel: t('modal.send.sending'), tone: 'cta', run: () => { void this.dialog?.send(); } }],
-            ask: { discardLabel: t('modal.draft.discard'), keepLabel: t('modal.draft.keep'), discard: () => this.dialog?.discard(), keep: () => this.dialog?.keep() },
+            actions: [{ label: t('modal.send.send'), busyLabel: t('modal.send.sending'), tone: 'cta', run: () => this.send() }],
+            ask: { discardLabel: t('modal.draft.discard'), keepLabel: t('modal.draft.keep'), discard: () => this.editors?.discard(), keep: () => this.editors?.keep() },
         });
 
+        this.editors = new SendEditors(this.preview, indentUnit(this.app), {
+            openEditor: (frame, hooks) => this.openEditor(frame, hooks),
+            showFixed: (lines, why) => this.showFixed(lines, why),
+            submit: () => this.send(),
+            linkSource: (rowFile) => this.dialog?.notePath() ?? rowFile,
+            changed: () => this.dialog?.draftsChanged(),
+            asked: () => this.actions.focusKeep(),
+            close: () => this.overlay.close(),
+        });
+        const editors = this.editors;
         this.dialog = new SendDialog(this.preview, {
             facts: (ask) => this.ops.destinationFacts(this.preview, ask),
             timers: (sending) => this.ops.timersRefuse(sending),
             // Shown under the fields; a notice would say it twice.
             send: (req) => this.ops.send(req, { tellRefusal: false }),
-            indentUnit: () => indentUnit(this.app),
+            drafts: () => editors.drafts(),
             sent: (result) => this.sent(result),
             close: () => this.overlay.close(),
         }, this);
+    }
+
+    /**
+     * Send as the dialog holds it: the send button, Enter in a field, or
+     * Mod+Enter in an editor. A send that may be asked withdraws the
+     * question whether to throw the drafts away.
+     */
+    private send(): void {
+        const dialog = this.dialog;
+        if (!dialog) return;
+        if (dialog.request() && dialog.state().canSend) this.editors?.withdraw();
+        void dialog.send();
     }
 
     openEditor(frame: SubtreeFrame, hooks: EditorOnHooks): DraftEditor {
@@ -152,16 +180,17 @@ export class SendModal implements SendSurface {
     }
 
     render(state: SendViewState): void {
-        this.rowsEl.toggleClass('tv-source-drafts--asking', state.asking);
+        const asking = this.editors?.asking() ?? false;
+        this.rowsEl.toggleClass('tv-source-drafts--asking', asking);
 
         this.field.offerHeadings(state.headings);
         this.renderCandidates(state.candidates);
-        this.issues.set('dialog', state.issues);
+        this.issues.set('dialog', [...state.issues, ...this.editors?.issues() ?? []]);
 
         this.actions.render({
             busy: state.phase === 'sending',
             ctaEnabled: state.canSend,
-            ask: state.asking ? t('modal.draft.discardAsk') : null,
+            ask: asking ? t('modal.draft.discardAsk') : null,
         });
     }
 
@@ -197,9 +226,5 @@ export class SendModal implements SendSurface {
         if (one.shut) label.createSpan({ cls: 'tv-send__from', text: one.shut });
     }
 
-    /** Asked, first or again: back takes the focus, where cancel was. */
-    asked(): void {
-        this.actions.focusKeep();
-    }
 }
 

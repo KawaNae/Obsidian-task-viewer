@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { t } from '../../../src/i18n';
 import { SendDialog, initialAsk, lineValue, yamlValue, type SendHost, type SendViewState } from '../../../src/modals/noteops/SendDialog';
+import { SendEditors } from '../../../src/modals/noteops/SendEditors';
 import type { DraftEditor, EditorOnHooks, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { InheritedValue } from '../../../src/services/data/InheritedValues';
@@ -12,11 +13,12 @@ import type { DestinationAsk } from '../../../src/services/data/NotePlaces';
 import { makeTask } from '../helpers/makeTask';
 
 /**
- * The send dialog as logic (`SendDialog`), apart from the DOM: the editor
- * is a stand-in holding a draft, the host answers the destination and the
- * send as told, and the surface records what it was told to show.
- * `SubtreeFrame` is the real one, so a draft comes to what the send would
- * be handed.
+ * The send dialog as logic (`SendDialog`), apart from the DOM, with the rows'
+ * editors that hand it their drafts (`SendEditors`), wired as the send modal
+ * wires them: the editor is a stand-in holding a draft, the host answers the
+ * destination and the send as told, and the surface records what it was told
+ * to show. `SubtreeFrame` is the real one, so a draft comes to what the send
+ * would be handed.
  */
 
 const SUBTREE = ['- [ ] A', '    - [ ] a'];
@@ -111,6 +113,21 @@ function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (
     const send = vi.fn(async (_req: SendRequest): Promise<SendResult> => results.shift() ?? { kind: 'done', note: new TFile() });
     const sent = vi.fn();
     const close = vi.fn();
+    let dialog: SendDialog | null = null;
+    /** Send as the modal does: a send that may be asked withdraws the question a close put. */
+    const sendNow = () => {
+        if (dialog!.request() && dialog!.state().canSend) rows.withdraw();
+        return dialog!.send();
+    };
+    const rows = new SendEditors(preview, '    ', {
+        openEditor: (frame, hooks) => { const editor = new FakeEditor(frame, hooks); editors.push(editor); return editor; },
+        showFixed: (lines, why) => { fixed.push({ lines, why }); },
+        submit: () => { void sendNow(); },
+        linkSource: (rowFile) => dialog?.notePath() ?? rowFile,
+        changed: () => dialog?.draftsChanged(),
+        asked: () => { asked++; },
+        close,
+    });
     const host: SendHost = {
         facts: (ask) => new Promise<DestinationFacts>((resolve) => {
             asks.push({
@@ -120,20 +137,25 @@ function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (
         }),
         timers: opts.timers ?? (() => null),
         send,
-        indentUnit: () => '    ',
+        drafts: () => rows.drafts(),
         sent,
         close,
     };
-    const dialog = new SendDialog(preview, host, {
-        openEditor: (frame, hooks) => { const editor = new FakeEditor(frame, hooks); editors.push(editor); return editor; },
-        showFixed: (lines, why) => { fixed.push({ lines, why }); },
+    dialog = new SendDialog(preview, host, {
         render: (state) => { states.push(state); },
-        asked: () => { asked++; },
     });
     return {
-        dialog, send, sent, close, editors, fixed, asks,
+        dialog, rows, send, sent, close, editors, fixed, asks,
+        /** Send as the send button does. */
+        sendNow,
         editor: () => editors[0],
-        state: () => states[states.length - 1],
+        /** How many times the dialog was drawn. */
+        drawn: () => states.length,
+        /** What was drawn last, with what the editors say under their rows, as the modal draws them together. */
+        state: () => {
+            const last = states[states.length - 1];
+            return { ...last, issues: [...last.issues, ...rows.issues()] };
+        },
         asked: () => asked,
         /** Answer the last asking of the destination. */
         answer: (f: DestinationFacts) => asks[asks.length - 1].answer(f),
@@ -207,7 +229,7 @@ describe('opening', () => {
         expect(h.fixed).toEqual([{ lines: ['- [ ] A', '  going on', '    - [ ] a'], why: t('modal.send.shallow', { line: '1' }) }]);
         expect(h.state()).toMatchObject({ canSend: true });
         expect(h.dialog.request()?.rows).toEqual([{ taskId: 'row-1', base: subtree }]);
-        expect(h.dialog.beforeClose()).toBe(true);
+        expect(h.rows.beforeClose()).toBe(true);
     });
 });
 
@@ -272,7 +294,7 @@ describe('where in the note the send puts the rows, said under the heading', () 
 
         expect(errors(h.state())).toEqual([]);
         expect(h.state().canSend).toBe(true);
-        await h.dialog.send();
+        await h.sendNow();
         expect(h.send.mock.calls[0][0].to).toEqual({ note: { kind: 'existing', path: 'Plan.md' }, spot: 'end' });
     });
 
@@ -412,7 +434,7 @@ describe('what keeps a send from being asked', () => {
         expect(h.state().headings).toEqual([]);
         expect(h.dialog.request()).toBeNull();
         expect(timers).not.toHaveBeenCalled();
-        await h.dialog.send();
+        await h.sendNow();
         expect(h.send).not.toHaveBeenCalled();
     });
 
@@ -488,7 +510,7 @@ describe('what keeps a send from being asked', () => {
         h.editor().type('- [ ] A ^t');
         expect(h.state().canSend).toBe(false);
         expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['lost']);
-        await h.dialog.send();
+        await h.sendNow();
         expect(h.send).not.toHaveBeenCalled();
     });
 
@@ -514,7 +536,7 @@ describe('what keeps a send from being asked', () => {
 
         expect(h.state().canSend).toBe(false);
         expect(said(h.state(), { at: 'note', tone: 'error' })).toEqual([t('modal.destination.nameChars', { chars: '|' })]);
-        await h.dialog.send();
+        await h.sendNow();
         expect(h.send).not.toHaveBeenCalled();
     });
 });
@@ -569,7 +591,7 @@ describe('a send', () => {
         const h = await answered(f, { preview: previewOf({ candidates: [value('project')] }) });
         h.editor().type('- [ ] A2');
 
-        await h.dialog.send();
+        await h.sendNow();
 
         expect(h.send).toHaveBeenCalledWith({
             rows: [{ taskId: 'row-1', base: SUBTREE, draft: { text: '- [ ] A2', children: [{ text: '    - [ ] a', was: 1 }] } }],
@@ -580,7 +602,7 @@ describe('a send', () => {
 
     it('with no draft, the row as opened alone', async () => {
         const h = await answered();
-        await h.dialog.send();
+        await h.sendNow();
         expect(h.send.mock.calls[0][0].rows).toEqual([{ taskId: 'row-1', base: SUBTREE }]);
     });
 
@@ -589,7 +611,7 @@ describe('a send', () => {
         const h = await answered(facts(), { results: [{ kind: 'done', note }] });
         h.editor().type('- [ ] A2');
 
-        await h.dialog.send();
+        await h.sendNow();
 
         expect(h.sent).toHaveBeenCalledWith({ kind: 'done', note });
         expect(h.close).toHaveBeenCalledTimes(1);
@@ -599,7 +621,7 @@ describe('a send', () => {
         const h = await answered(facts(), { results: [{ kind: 'not-done', why: 'Not sent: changed' }] });
         h.editor().type('- [ ] A2');
 
-        const sending = h.dialog.send();
+        const sending = h.sendNow();
         expect(h.state()).toMatchObject({ phase: 'sending', canSend: false });
         await sending;
 
@@ -614,7 +636,7 @@ describe('a send', () => {
         expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Not sent: changed']);
         expect(h.editor().destroyed).toBe(false);
 
-        await h.dialog.send();
+        await h.sendNow();
         expect(h.send).toHaveBeenCalledTimes(2);
         expect(h.close).toHaveBeenCalledTimes(1);
     });
@@ -622,7 +644,7 @@ describe('a send', () => {
     it('made for some rows: told to the caller, why under the draft, open, and no send again', async () => {
         const h = await answered(facts(), { results: [{ kind: 'partly', note: new TFile(), refused: ['b.md'], why: 'Sent some' }] });
 
-        await h.dialog.send();
+        await h.sendNow();
 
         expect(h.sent).toHaveBeenCalledTimes(1);
         expect(h.close).not.toHaveBeenCalled();
@@ -641,7 +663,7 @@ describe('a send', () => {
 describe('closing', () => {
     it('closes at once with no draft', async () => {
         const h = await answered();
-        expect(h.dialog.beforeClose()).toBe(true);
+        expect(h.rows.beforeClose()).toBe(true);
         expect(h.asked()).toBe(0);
     });
 
@@ -649,34 +671,34 @@ describe('closing', () => {
         const h = await answered();
         h.editor().type('- [ ] A2');
 
-        expect(h.dialog.beforeClose()).toBe(false);
-        expect(h.state().asking).toBe(true);
-        expect(h.dialog.beforeClose()).toBe(false);
+        expect(h.rows.beforeClose()).toBe(false);
+        expect(h.rows.asking()).toBe(true);
+        expect(h.rows.beforeClose()).toBe(false);
         expect(h.asked()).toBe(2);
 
-        h.dialog.discard();
+        h.rows.discard();
         expect(h.close).toHaveBeenCalledTimes(1);
     });
 
     it('keeping the draft, or editing it, withdraws the question', async () => {
         const h = await answered();
         h.editor().type('- [ ] A2');
-        h.dialog.beforeClose();
+        h.rows.beforeClose();
 
-        h.dialog.keep();
-        expect(h.state().asking).toBe(false);
+        h.rows.keep();
+        expect(h.rows.asking()).toBe(false);
         expect(h.editor().focused).toBe(1);
 
-        h.dialog.beforeClose();
+        h.rows.beforeClose();
         h.editor().type('- [ ] A3');
-        expect(h.state().asking).toBe(false);
+        expect(h.rows.asking()).toBe(false);
     });
 
     it('a keep with no question to withdraw puts no focus on the editor', async () => {
         const h = await answered();
         h.editor().type('- [ ] A2');
 
-        h.dialog.keep();
+        h.rows.keep();
         expect(h.editor().focused).toBe(0);
     });
 
@@ -684,30 +706,83 @@ describe('closing', () => {
         const h = await answered();
         h.editor().type('- [ ] A2');
         h.editor().type('- [ ] A');
-        expect(h.dialog.beforeClose()).toBe(true);
+        expect(h.rows.beforeClose()).toBe(true);
     });
 
     it('a draft that cannot be written is a draft', async () => {
         const h = await answered();
         h.editor().type('plain');
-        expect(h.dialog.beforeClose()).toBe(false);
+        expect(h.rows.beforeClose()).toBe(false);
     });
 
     it('an Escape or a back an editor\'s completion list takes', async () => {
         const h = await answered();
-        expect(h.dialog.yieldsEscape()).toBe(false);
+        expect(h.rows.yieldsEscape()).toBe(false);
         h.editor().completing = true;
-        expect(h.dialog.yieldsEscape()).toBe(true);
-        expect(h.dialog.takesBack()).toBe(true);
-        expect(h.dialog.takesBack()).toBe(false);
+        expect(h.rows.yieldsEscape()).toBe(true);
+        expect(h.rows.takesBack()).toBe(true);
+        expect(h.rows.takesBack()).toBe(false);
     });
 
     it('once closed, an answer or a result comes to nothing', async () => {
         const h = setUp();
         h.dialog.dispose();
+        h.rows.dispose();
         expect(h.editor().destroyed).toBe(true);
-        const drawn = h.state();
+        const drawn = h.drawn();
         await h.answer(facts());
-        expect(h.state()).toBe(drawn);
+        expect(h.drawn()).toBe(drawn);
+    });
+});
+
+describe('drafts its host holds', () => {
+    /** A dialog with no editor: its host holds the drafts, as `held` says when asked. */
+    async function held(initial: ReturnType<SendHost['drafts']>) {
+        let drafts = initial;
+        const states: SendViewState[] = [];
+        const send = vi.fn(async (_req: SendRequest): Promise<SendResult> => ({ kind: 'done', note: new TFile() }));
+        let answer: (f: DestinationFacts) => void = () => { };
+        const timers = vi.fn((_sending: SendingLines) => null);
+        const dialog = new SendDialog(previewOf(), {
+            facts: () => new Promise<DestinationFacts>((resolve) => { answer = resolve; }),
+            timers,
+            send,
+            drafts: () => drafts,
+            sent: () => { },
+            close: () => { },
+        }, { render: (state) => { states.push(state); } });
+        answer(facts());
+        await Promise.resolve();
+        await Promise.resolve();
+        return { dialog, send, timers, states, hold: (next: typeof drafts) => { drafts = next; } };
+    }
+
+    it('are asked as they are now: as a send is asked, and as the timers are', async () => {
+        const h = await held([null]);
+        expect(h.dialog.request()?.rows).toEqual([{ taskId: 'row-1', base: SUBTREE }]);
+
+        const draft = { text: '- [ ] A2', children: [{ text: '    - [ ] a', was: 1 }] };
+        h.hold([draft]);
+        h.dialog.draftsChanged();
+        expect(h.timers.mock.calls.at(-1)![0].from[0].sent).toEqual(['- [ ] A2', '    - [ ] a']);
+        await h.dialog.send();
+        expect(h.send.mock.calls[0][0].rows).toEqual([{ taskId: 'row-1', base: SUBTREE, draft }]);
+    });
+
+    it('none while one cannot be written: no send asked, and nothing said of it by the dialog', async () => {
+        const h = await held(null);
+        h.dialog.draftsChanged();
+        expect(h.states.at(-1)!.canSend).toBe(false);
+        expect(h.states.at(-1)!.issues.filter(one => one.tone === 'error')).toEqual([]);
+        expect(h.dialog.request()).toBeNull();
+        await h.dialog.send();
+        expect(h.send).not.toHaveBeenCalled();
+    });
+
+    it('a change of them drawn again as the host tells it', async () => {
+        const h = await held([null]);
+        const drawn = h.states.length;
+        h.dialog.draftsChanged();
+        expect(h.states.length).toBe(drawn + 1);
     });
 });

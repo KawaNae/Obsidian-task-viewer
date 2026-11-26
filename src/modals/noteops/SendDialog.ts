@@ -13,13 +13,10 @@ import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { Outline } from '../../services/parsing/utils/Outline';
 import { PropertyLines } from '../../services/parsing/utils/PropertyLines';
 import { PropertyValues } from '../../services/parsing/utils/PropertyValues';
-import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/SubtreeFrame';
-import type { DraftEditor, EditorOnHooks } from '../form/source/SourceEditor';
+import type { SubtreeReplacement } from '../../services/persistence/TaskOps';
 import type { FormIssue, Tone } from '../form/FormIssue';
-import { DraftGuard } from '../form/DraftGuard';
 import { LastAnswer } from '../form/LastAnswer';
 import { DestinationText } from './DestinationText';
-import { placeFocus } from '../../views/sharedUI/FocusPlacement';
 
 /**
  * The send dialog: rows and their subtrees sent to a section of a note, or
@@ -27,12 +24,12 @@ import { placeFocus } from '../../views/sharedUI/FocusPlacement';
  * This is its logic, apart from the DOM: what it
  * opens on, what it says of the destination the fields name, which values
  * it offers to write into the note, whether a send may be asked, what
- * a send asks, and whether the dialog may close. What it looks like is the
- * surface's (`SendModal`).
+ * a send asks, and what its answer does. What it looks like is the
+ * surface's, and the rows' drafts are its host's: it holds no editor.
  *
- * - Each row opens in the source editor (`SubtreeFrame.open`), as the hub's
- *   source mode opens it. A row whose subtree does not open (`shallow`) is
- *   shown as its lines, moved to the first column, and goes as it stands.
+ * - Each row goes as it opened (`SendRow.base`), with the draft the host
+ *   holds for it as it is when asked (`SendHost.drafts`): as a send is
+ *   asked, as what the dialog says is drawn, and as the timers are asked.
  * - What the destination is, is asked of the vault whenever a field
  *   changes (`SendHost.facts`), and only the answer to the last asking is
  *   taken: a send is not offered until the answer is for what the fields
@@ -54,19 +51,15 @@ import { placeFocus } from '../../views/sharedUI/FocusPlacement';
  *   the rows' own note, or the note the send makes (and its folder), or why
  *   the field names none — a name or a path no note can be made at, or more
  *   than one note it does not tell apart; under the heading, where in the note they go, or why the
- *   heading names no one place; why a row's draft cannot be written, under
- *   that row; the rest (the timers, what a send is asked in spite of, the
- *   last send's answer) of the form. A send is asked only while no error is
- *   said of what the dialog holds; the answer to the last send keeps none
- *   from being asked again.
- * - A send not made keeps the draft and says why under it; a send made
- *   closes the dialog. A send made for some rows only says why too, and
- *   offers no send again: the rows that went are no longer where the
- *   dialog opened them.
- * - A draft is never lost to a close the user asks for: the dialog asks
- *   first (`beforeClose`), as the hub's source mode does (`DraftGuard`). A
- *   draft is a row whose editor holds other lines than it opened on
- *   (`SubtreeFrame.check` is not `same`); the fields are not asked about.
+ *   heading names no one place; the rest (the timers, what a send is asked
+ *   in spite of, the last send's answer) of the form. A send is asked only
+ *   while no error is said of what the dialog holds, and the host holds a
+ *   draft for every row that can be written; why one cannot is the host's
+ *   to say. The answer to the last send keeps none from being asked again.
+ * - A send not made keeps the drafts and says why; a send made is told to
+ *   the host, which closes what the dialog is shown in. A send made for some
+ *   rows only says why too, and offers no send again: the rows that went
+ *   are no longer where the dialog opened them.
  */
 
 /** Where the dialog is: open to a send, sending, or past a send made for some rows only. */
@@ -86,7 +79,7 @@ export interface CandidateView {
     shut: string | null;
 }
 
-/** What the dialog's issues are said of: the note, the heading, a row's draft (`row:<i>`, in the order of the rows). */
+/** What the dialog's issues are said of: the note, the heading, a row's draft (`row:<i>`, in the order of the rows: its host's to say). */
 export type SendField = 'note' | 'heading' | `row:${number}`;
 
 /** What the surface shows. */
@@ -104,22 +97,10 @@ export interface SendViewState {
      */
     issues: readonly FormIssue<SendField>[];
     canSend: boolean;
-    /** Asking whether to throw the draft away. */
-    asking: boolean;
 }
 
 export interface SendSurface {
-    /**
-     * Open an editor on a row's subtree, in the order of the rows: `submit`
-     * on Mod+Enter, `edited` on a change of its text; a link typed in it is
-     * spelt from the note `linkSource` names.
-     */
-    openEditor(frame: SubtreeFrame, hooks: EditorOnHooks): DraftEditor;
-    /** Show a row the editor cannot open, in the order of the rows: its lines as they go, and why. */
-    showFixed(lines: readonly string[], why: string): void;
     render(state: SendViewState): void;
-    /** The question whether to throw the draft away was put, first or again: the focus goes to its answer that keeps the draft. */
-    asked(): void;
 }
 
 export interface SendHost {
@@ -129,21 +110,27 @@ export interface SendHost {
     timers(sending: SendingLines): string | null;
     /** Make the send (`NoteOps.send`), a send not made shown here rather than in a notice. */
     send(req: SendRequest): Promise<SendResult>;
-    /** A new level of indentation, as Obsidian's settings say (`ObsidianConfig.indentUnit`). */
-    indentUnit(): string;
+    /**
+     * Each row's draft as it is now, in the order of the rows: the
+     * replacement of its subtree, or null where it goes as it opened. Null
+     * while a draft cannot be written: no send is asked, and why is said by
+     * the host, which holds the drafts.
+     */
+    drafts(): readonly (SubtreeReplacement | null)[] | null;
     /** The rows went, all or some: what the caller does once they left where they stood. */
     sent(result: Exclude<SendResult, { kind: 'not-done' }>): void;
-    /** Close the dialog, asking nothing more. */
+    /** The send was made for every row: what the dialog is shown in goes, asking nothing more. */
     close(): void;
 }
 
-/** A row as the dialog opened it: in an editor, or as it stands. */
-type OpenedRow =
-    | { kind: 'editor'; taskId: string; frame: SubtreeFrame; editor: DraftEditor }
-    | { kind: 'fixed'; taskId: string; base: readonly string[] };
+/** The lines a row of `preview` goes as when it has no draft: its subtree as the preview read it, or its line alone. */
+export function rowBase(row: SendPreview['rows'][number]): readonly string[] {
+    return row.task.subtreeLines ?? row.lines.slice(row.task.line, row.task.line + 1);
+}
 
 export class SendDialog {
-    private readonly rows: OpenedRow[] = [];
+    /** Each row, by its name and the lines it opened as. */
+    private readonly rows: readonly { taskId: string; base: readonly string[] }[];
     private phase: SendPhase = 'open';
     private ask: DestinationAsk;
     /** What the destination is, as last answered: an answer is taken only to the last asking. */
@@ -151,13 +138,6 @@ export class SendDialog {
     /** The checks the user changed, by key. */
     private readonly checks = new Map<string, boolean>();
     private message: string | null = null;
-    /** Whether to throw the drafts away, asked before a close that would lose them. */
-    private readonly guard: DraftGuard<'close'> = new DraftGuard<'close'>({
-        loss: () => (this.hasDraft() ? { kind: 'draft' } : null),
-        render: () => this.render(),
-        asked: () => this.surface.asked(),
-        goOn: () => this.host.close(),
-    });
     private disposed = false;
 
     constructor(
@@ -166,21 +146,7 @@ export class SendDialog {
         private readonly surface: SendSurface,
     ) {
         this.ask = initialAsk(preview);
-        for (const row of preview.rows) {
-            const base = row.task.subtreeLines ?? row.lines.slice(row.task.line, row.task.line + 1);
-            const opening = SubtreeFrame.open(base, host.indentUnit());
-            if (opening.open) {
-                const editor = surface.openEditor(opening.frame, {
-                    submit: () => { void this.send(); },
-                    edited: () => this.edited(),
-                    linkSource: () => this.linkSource(row.task.file),
-                });
-                this.rows.push({ kind: 'editor', taskId: row.task.id, frame: opening.frame, editor });
-            } else {
-                surface.showFixed(atFirstColumn(base), t('modal.send.shallow', { line: String(opening.line) }));
-                this.rows.push({ kind: 'fixed', taskId: row.task.id, base });
-            }
-        }
+        this.rows = preview.rows.map(row => ({ taskId: row.task.id, base: rowBase(row) }));
         void this.lookUp();
     }
 
@@ -188,6 +154,19 @@ export class SendDialog {
     fieldsChanged(ask: DestinationAsk): void {
         this.ask = { ...ask };
         void this.lookUp();
+    }
+
+    /** A row's draft changed: what the dialog says, and whether a send may be asked, is drawn again. */
+    draftsChanged(): void {
+        this.render();
+    }
+
+    /**
+     * The note the fields name now, as last answered: where a link typed in
+     * a draft is spelt from. Null while they name no one note.
+     */
+    notePath(): string | null {
+        return oneNote(this.answer.value)?.path ?? null;
     }
 
     /** The user checked or unchecked the value `key` offered. */
@@ -210,9 +189,6 @@ export class SendDialog {
             const { heading } = note.to.spot;
             error('heading', t('modal.send.headings', { note: note.path, heading, count: String(note.heading.count) }));
         }
-        this.drafts().forEach(({ check }, i) => {
-            if (check?.kind === 'refused') error(`row:${i}`, draftError(check.reason));
-        });
         const timers = this.timersRefuse(note);
         if (timers !== null) error('form', timers);
         if (note) {
@@ -221,7 +197,8 @@ export class SendDialog {
             if (says) held.push({ at: 'heading', ...says });
             held.push(...this.warningsOf(note));
         }
-        const canSend = this.phase === 'open' && this.answer.caughtUp && !held.some(issue => issue.tone === 'error');
+        const canSend = this.phase === 'open' && this.answer.caughtUp && this.host.drafts() !== null
+            && !held.some(issue => issue.tone === 'error');
 
         return {
             phase: this.phase,
@@ -229,15 +206,13 @@ export class SendDialog {
             candidates: this.candidatesOf(note),
             issues: this.message === null ? held : [...held, { at: 'form', tone: 'error', text: this.message }],
             canSend,
-            asking: this.guard.asking !== null,
         };
     }
 
-    /** Send as the dialog holds it: the send button, or Mod+Enter. Asked whether to throw the draft away, the question is withdrawn. */
+    /** Send as the dialog holds it, the drafts as they are now: nothing while a send may not be asked. */
     async send(): Promise<void> {
         const req = this.request();
         if (!req || !this.state().canSend) return;
-        this.guard.withdraw();
         this.phase = 'sending';
         this.message = null;
         this.render();
@@ -261,22 +236,19 @@ export class SendDialog {
 
     /**
      * What a send asks now (see {@link SendRequest}): each row as the dialog
-     * opened it, with its draft when its editor holds one; where the fields
+     * opened it, with its draft where the host holds one; where the fields
      * name, as last answered; and the values checked the note has none of,
      * none for the rows' own note. Null while the fields name no one note,
      * or a draft cannot be written.
      */
     request(): SendRequest | null {
         const facts = oneNote(this.answer.value);
-        if (!facts) return null;
-        const rows: SendRow[] = [];
-        for (const { row, check } of this.drafts()) {
-            if (check?.kind === 'refused') return null;
-            const base = row.kind === 'editor' ? row.frame.base : row.base;
-            rows.push(check?.kind === 'write'
-                ? { taskId: row.taskId, base, draft: check.replacement }
-                : { taskId: row.taskId, base });
-        }
+        const drafts = this.host.drafts();
+        if (!facts || !drafts) return null;
+        const rows: SendRow[] = this.rows.map(({ taskId, base }, i) => {
+            const draft = drafts[i] ?? null;
+            return draft ? { taskId, base, draft } : { taskId, base };
+        });
         return {
             rows,
             to: facts.to,
@@ -284,46 +256,9 @@ export class SendDialog {
         };
     }
 
-    /**
-     * Whether the dialog may close now (`OverlayShell` asks it before a
-     * close the user asked for). Not while a row's editor holds a draft: the
-     * dialog asks whether to throw it away, and closes if the user says so.
-     * Asked again while it asks, the question is put again.
-     */
-    beforeClose(): boolean {
-        return this.guard.request('close');
-    }
-
-    /** Throw the draft away, as asked, and close. */
-    discard(): void {
-        this.guard.discard();
-    }
-
-    /** Keep the draft: the question is withdrawn, and the first editor takes the focus. */
-    keep(): void {
-        if (!this.guard.keep()) return;
-        const editor = this.firstEditor();
-        if (editor) placeFocus({ to: editor });
-    }
-
-    /** Whether an Escape is an editor's own (a completion list to close), not the dialog's. */
-    yieldsEscape(): boolean {
-        return this.editors().some(editor => editor.isCompleting());
-    }
-
-    /** The back as an editor's own: a completion list closes, as on Escape. Whether one took it. */
-    takesBack(): boolean {
-        return this.editors().map(editor => editor.closeCompletion()).some(Boolean);
-    }
-
-    /** The editor the dialog focuses as it opens; none when no row opened in one. */
-    firstEditor(): DraftEditor | null {
-        return this.editors()[0] ?? null;
-    }
-
+    /** What the dialog is shown in went: an answer or a result that comes after comes to nothing. */
     dispose(): void {
         this.disposed = true;
-        for (const editor of this.editors()) editor.destroy();
     }
 
     /** Ask what the destination the fields name is; the answer is taken only if no asking came after. */
@@ -338,33 +273,6 @@ export class SendDialog {
             return;
         }
         this.render();
-    }
-
-    /**
-     * The note a link typed in a row's editor is written in: the note the
-     * fields name now, where the row goes; while they name none, the note
-     * the row is in (`rowFile`).
-     */
-    private linkSource(rowFile: string): string {
-        return oneNote(this.answer.value)?.path ?? rowFile;
-    }
-
-    /** A draft's text changed: what it says is drawn again, and, asked whether to throw it away, the question is withdrawn. */
-    private edited(): void {
-        if (!this.guard.withdraw()) this.render();
-    }
-
-    private editors(): DraftEditor[] {
-        return this.rows.flatMap(row => (row.kind === 'editor' ? [row.editor] : []));
-    }
-
-    /** Each row, and what its editor's draft comes to; no check for a row shown as it stands. */
-    private drafts(): { row: OpenedRow; check: DraftCheck | null }[] {
-        return this.rows.map(row => ({ row, check: row.kind === 'editor' ? row.frame.check(row.editor.draft()) : null }));
-    }
-
-    private hasDraft(): boolean {
-        return this.drafts().some(({ check }) => check !== null && check.kind !== 'same');
     }
 
     private isChecked(candidate: InheritedValue): boolean {
@@ -389,7 +297,7 @@ export class SendDialog {
 
     /**
      * Why the open timers keep a send to the note `facts` names from being
-     * made, the rows as their editors hold them; null when nothing keeps it,
+     * made, the rows as their drafts are; null when nothing keeps it,
      * or the fields name no one note, or a draft cannot be written (said
      * already).
      */
@@ -495,10 +403,6 @@ export function headingText(facts: NoteFacts): { text: string; tone: Tone } | nu
     }
 }
 
-function draftError(reason: Extract<DraftCheck, { kind: 'refused' }>['reason']): string {
-    return reason === 'parent-break' ? t('modal.send.parentBreak') : t('modal.send.notTask');
-}
-
 function unresolvedText(one: UnresolvedReference, note: string): string {
     if (one.kind === 'block') return t('modal.send.unresolvedBlock', { name: one.name, note });
     return t(one.found === 'many' ? 'modal.send.unresolvedHeadings' : 'modal.send.unresolvedHeading', { name: one.name, note });
@@ -576,10 +480,4 @@ function writtenValue(yaml: readonly string[]): string {
     if (rest.length === 0) return onLine;
     const items = rest.map(line => line.trim().replace(/^- /, ''));
     return onLine === '' ? items.join(', ') : [onLine, ...items].join(' ');
-}
-
-/** A subtree's lines as they read from the row: the row's indentation taken off every line. */
-function atFirstColumn(base: readonly string[]): string[] {
-    const indent = Outline.indentOf(base[0]);
-    return base.map(line => (Outline.isBlank(line) ? '' : Outline.shiftIndent(line, indent, '')));
 }
