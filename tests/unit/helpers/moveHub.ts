@@ -10,6 +10,7 @@ import { TaskHubSource, type SourceViewState } from '../../../src/modals/hub/Tas
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { DraftEditor, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
 import { FocusDoc, FocusEl, asEl } from './focusDom';
+import { menuSpy } from './menuSpy';
 
 /**
  * A hub on a row of a live vault, whole but for its DOM and its editor: the
@@ -82,7 +83,8 @@ export async function openMoveHub(onSession: (session: VaultSession) => void, li
     const row = session.index.getTasks().find(one => one.content.startsWith(opts.rowName ?? 'Row'))!;
     let source: TaskHubSource | null = null;
     const link = { redraw: () => source?.redraw(), hold: (held: boolean) => source?.hold(held) };
-    const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } };
+    const menus = menuSpy();
+    const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: menus.presenter };
     const host = new RowHost(row, {
         app: app as never, plugin: plugin as never, index: session.index, operations: session.ops, noteOps, indentUnit: () => '    ',
     }, link);
@@ -134,6 +136,8 @@ export async function openMoveHub(onSession: (session: VaultSession) => void, li
         /** What is said above the form's tabs. */
         formSays: () => root.find('tv-form__says--form')?.children.map(child => child.text) ?? [],
         click,
+        /** The menus shown (`menuSpy`). */
+        menus,
         /** Begin a move from where the row stands, and let where its fields name answer. */
         begin: async () => { await host.beginMove('here'); await settle(); },
         /** Send the row under Done. */

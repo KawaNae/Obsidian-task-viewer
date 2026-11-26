@@ -242,10 +242,6 @@
 }
 
 /* --- Style rows (color / linestyle / mask) & custom property rows --- */
-.task-hub__row--cascade .tv-ctrl__text-input {
-    color: var(--tv-text-muted);
-}
-
 /* A property a finding locks: its value is shown, and taken no edit */
 .task-hub__row--locked .tv-ctrl__text-input {
     color: var(--tv-text-muted);
@@ -306,6 +302,8 @@
     border-radius: var(--tv-radius-s);
 }
 
+/* An item's text in its box with its ×, and the add field, take the room left */
+.task-hub__list-item > .task-hub__list-item-box,
 .task-hub__list-item > .tv-ctrl__text-input {
     flex: 1 1 0;
     min-width: 0;
@@ -346,12 +344,91 @@
 .task-hub__list-chip--cascade {
     background: var(--tv-bg-secondary);
     color: var(--tv-text-muted);
-    border: 1px dashed var(--tv-border);
+    border: 1px dashed var(--tv-text-faint);
 }
 
-.task-hub__make-own {
+/* --- A custom property's row: the key and its mark, the field, the menu
+ * button (…) at the end. The key column keeps its width with a mark in it,
+ * the key cut short. --- */
+.task-hub__prop-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.task-hub__prop-key {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* link-2 for a value inherited, link-2off (lucide's link-2-off) for one hidden */
+.task-hub__prop-mark {
+    display: inline-flex;
     flex: 0 0 auto;
-    font-size: 0.75em;
+    color: var(--tv-text-faint);
+}
+
+.task-hub__prop-mark .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* A value the row inherits and does not say itself: a dashed frame, the
+ * field's ground not filled. Focused, it is framed as any field is. */
+.tv-ctrl .task-hub__row--inherited .tv-ctrl__text-input {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--tv-text-faint);
+    color: var(--tv-text-muted);
+}
+
+.tv-ctrl .task-hub__row--inherited .tv-ctrl__text-input:focus {
+    border-style: solid;
+    border-color: var(--tv-accent);
+}
+
+/* No value hiding an inherited value: the value hidden, struck through */
+.tv-ctrl .tv-ctrl__text-input.task-hub__value--struck::placeholder {
+    text-decoration: line-through;
+}
+
+/* The menu button: 24×24 on a desktop, as wide as a field's × and as tall
+ * as the field on a phone or a tablet. On an own list's row it keeps to
+ * the first item. A row with no menu, and the add row, keep its room. */
+.tv-ctrl .task-hub__prop-more {
+    width: 24px;
+    height: 24px;
+    opacity: 0.6;
+}
+
+.tv-ctrl .tv-form__row--start > .task-hub__prop-more {
+    align-self: flex-start;
+    margin-top: calc((var(--input-height) - 24px) / 2);
+}
+
+.task-hub__prop-more > span {
+    display: inline-flex;
+}
+
+.task-hub__prop-more .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.task-hub__prop-more-room {
+    flex: 0 0 24px;
+}
+
+.is-mobile .tv-ctrl .task-hub__prop-more {
+    width: 28px;
+    height: var(--input-height);
+    margin-top: 0;
+}
+
+.is-mobile .task-hub__prop-more-room {
+    flex-basis: 28px;
 }
 
 /* Hide an inherited value: an icon beside the source, drawn as a row's × is */

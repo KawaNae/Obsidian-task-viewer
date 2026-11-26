@@ -1,12 +1,12 @@
 /**
  * The hub opens the line a value is written on, in the running E2E vault:
- * an inherited value's source label and a finding's button open the row's
- * note with the cursor on that line, and a frontmatter key the Properties
- * view shows is lit there. A value written above the first heading is said
- * to be the file's, as the frontmatter's is, and its line opens as a
- * section's does. A line our own write moved is followed. A write still
- * under way as the hub goes to the line, refused once it has gone, is told
- * by a notice.
+ * a style's source label, a property's menu ("Open inherited line") and a
+ * finding's button open the row's note with the cursor on that line, and a
+ * frontmatter key the Properties view shows is lit there. A style's value
+ * written above the first heading is said to be the file's, as the
+ * frontmatter's is, and a property's line there opens as a section's does.
+ * A line our own write moved is followed. A write still under way as the
+ * hub goes to the line, refused once it has gone, is told by a notice.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -19,6 +19,7 @@ import { deleteTestFile, writeIndexedTestFile } from '../helpers/test-file-manag
 import { tr } from '../helpers/view-helper';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
+import { MENUS } from '../helpers/menus';
 
 const TEST_FILE = 'test-int-hub-source-line.md';
 
@@ -45,9 +46,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${DIALOG_ROWS}
+${MENUS}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const valueInput = key => rowOf(key).querySelector('input.tv-ctrl__text-input');
+/** Choose the item titled \`title\` from the menu of the property's row \`key\`. */
+const pickOf = (key, title) => { rowOf(key).querySelector('.task-hub__prop-more').click(); menuItem(i => i.titleEl?.textContent === title); };
+const openInherited = key => pickOf(key, ${JSON.stringify(tr('modal.hub.openInheritedLine'))});
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
 const leave = async input => { input.dispatchEvent(new FocusEvent('blur')); await sleep(600); };
@@ -95,18 +100,16 @@ afterAll(async () => {
 });
 
 describe('the hub opens the line a value is written on', () => {
-    it('opens a section\'s property line from its source label', () => {
+    it('opens a section\'s property line from its menu', () => {
         openHub('親');
-        const line = run<number>(`rowOf('area').querySelector('.task-hub__source').click(); return await cursorLine();`);
+        const line = run<number>(`openInherited('area'); return await cursorLine();`);
         expect(line).toBe(6);
     });
 
-    it('says a value above the first heading is the file\'s, a section\'s the section\'s, and opens its line', () => {
+    it('opens the line of a property written above the first heading from its menu, as a section\'s', () => {
         openHub('親');
-        const labels = run<string[]>(`return JSON.stringify(['時給', 'area'].map(key => rowOf(key).querySelector('.task-hub__source').textContent));`);
-        expect(labels).toEqual([tr('modal.hub.inheritedFromFile'), tr('modal.hub.inheritedFromSection')]);
         expect(run<boolean>(`return !rowOf('owner');`)).toBe(true);
-        const line = run<number>(`rowOf('時給').querySelector('.task-hub__source').click(); return await cursorLine();`);
+        const line = run<number>(`openInherited('時給'); return await cursorLine();`);
         expect(line).toBe(4);
     });
 
@@ -132,7 +135,7 @@ describe('the hub opens the line a value is written on', () => {
     it('opens a finding\'s line where a write of ours moved it', () => {
         openHub('親');
         const line = run<number>(`
-            rowOf('ok').querySelector('.tv-ctrl__pill-remove').click();
+            pickOf('ok', ${JSON.stringify(tr('modal.hub.deleteProperty'))});
             await until(() => !rowOf('ok'));
             await sleep(600);
             rowOf('memo').nextElementSibling.querySelector('.tv-form__issue-action').click();
@@ -154,7 +157,7 @@ describe('the hub opens the line a value is written on', () => {
                 const input = nameInput();
                 type(input, '親6');
                 input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-                rowOf('area').querySelector('.task-hub__source').click();
+                openInherited('area');
                 await until(() => !hub(), 3000, 'the hub gone to the line');
                 release();
                 await until(() => document.querySelectorAll('.notice').length > before, 3000, 'a notice of the write refused');

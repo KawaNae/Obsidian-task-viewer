@@ -6,14 +6,15 @@ import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import type { Task } from '../../../src/types';
 import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
+import { menuSpy } from '../helpers/menuSpy';
 
 /**
  * Where the hub's fields say an inherited value comes from: the tag's chip,
- * the style's label, a property's label, and a finding's "open the line".
+ * the style's label, a property's menu, and a finding's "open the line".
  * With a host that has a row to open, each opens the line; with one that
  * has none (`HubHost.openSource` null), each is said and nothing is
- * listened for: the labels are drawn as nothing to press, and a finding
- * offers no action.
+ * listened for: the labels are drawn as nothing to press, the property's
+ * menu item is greyed, and a finding offers no action.
  */
 
 beforeAll(() => {
@@ -55,7 +56,8 @@ function formOn(openSource: HubHost['openSource']) {
         bind: () => { },
     };
     const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
-    const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } } as never;
+    const menus = menuSpy();
+    const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: menus.presenter } as never;
     const index = { getTasks: () => [], getTask: () => ROW, onChange: () => () => { } } as never;
     new TaskHubForm(asEl(root), host, { app, plugin, index, foot: asEl(root) });
     const labels = root.findAll('task-hub__source').filter(el => el.text !== '');
@@ -64,6 +66,11 @@ function formOn(openSource: HubHost['openSource']) {
         tag: root.find('task-hub__tag-chip--cascade')!,
         labels,
         actions: root.findAll('tv-form__issue-action'),
+        /** The property's "open inherited line", from its row's menu. */
+        propertyOpen: () => {
+            click(root.find('task-hub__prop-more')!);
+            return menus.last()!.items.find(item => item.title === 'Open inherited line')!;
+        },
     };
 }
 
@@ -73,18 +80,20 @@ describe('where an inherited value comes from', () => {
     it('opens the line each says, with a row to open', () => {
         const open = vi.fn();
         const f = formOn(open);
-        expect(f.labels).toHaveLength(3);
+        expect(f.labels).toHaveLength(2);
         expect(f.actions).toHaveLength(1);
 
         for (const el of [f.tag, ...f.labels, ...f.actions]) click(el);
+        f.propertyOpen().click!();
         expect(open).toHaveBeenCalledTimes(5);
         expect(f.labels.every(el => !el.classes.has('task-hub__source--plain'))).toBe(true);
     });
 
     it('is said, drawn as nothing to press, and pressed does nothing, with no row to open', () => {
         const f = formOn(null);
-        expect(f.labels).toHaveLength(3);
+        expect(f.labels).toHaveLength(2);
         expect(f.labels.every(el => el.classes.has('task-hub__source--plain'))).toBe(true);
+        expect(f.propertyOpen()).toMatchObject({ disabled: true, click: null });
 
         for (const el of [f.tag, ...f.labels]) expect(() => click(el)).not.toThrow();
         // The finding is said, with nothing to press.

@@ -524,11 +524,12 @@ describe('the move thrown away', () => {
     it('lets go of an inherited list made the row\'s own and not written yet: the inherited list shows again', async () => {
         const h = await open(LISTS, { rowName: 'Row' });
         await h.begin();
-        h.click(rowOf(h, 'area')!.find('task-hub__make-own')!);
-        expect(rowOf(h, 'area')!.find('task-hub__make-own')).toBeNull();
+        h.click(rowOf(h, 'area')!.find('task-hub__prop-more')!);
+        h.menus.last()!.items.find(item => item.title === t('modal.hub.makeOwn'))!.click!();
+        expect(rowOf(h, 'area')!.find('task-hub__list-chip--cascade')).toBeNull();
         h.click(h.cancelButton());
         await settle();
         expect(h.move()).toBeNull();
-        expect(rowOf(h, 'area')!.find('task-hub__make-own')).not.toBeNull();
+        expect(rowOf(h, 'area')!.find('task-hub__list-chip--cascade')).not.toBeNull();
     });
 });

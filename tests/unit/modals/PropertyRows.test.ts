@@ -8,7 +8,7 @@ import { byKey } from '../helpers/properties';
 /**
  * The hub's custom property rows: which rows there are, in which order, what
  * each holds of the row's own lines and of the layers above, and what each
- * draws. A row's own value and the value it inherits are kept on two sides,
+ * draws and offers in its menu. A row's own value and the value it inherits are kept on two sides,
  * so a row that overrides or hides an inherited value holds both.
  */
 
@@ -35,81 +35,116 @@ function only(task: Task, opts: Partial<Omit<PropertyRowsInput, 'task'>> = {}) {
     return { row: rows[0], form: PropertyRows.formOf(rows[0]) };
 }
 
-describe('PropertyRows.of and formOf: what each row is and draws', () => {
-    const plain = { inheritedLook: false, source: null, hide: false, makeOwn: false };
+describe('PropertyRows.of, formOf and menuOf: what each row is, draws and offers', () => {
+    const plain = { inheritedLook: false, mark: null };
+    const inheritedLook = { inheritedLook: true, mark: 'inherited' };
+    const textField = (shown: PropertyValue, editsOwn: boolean, placeholder = '', struck = false) => ({ kind: 'text', shown, editsOwn, placeholder, struck });
+    /** A menu of `actions`, none greyed. */
+    const menu = (...actions: string[]) => actions.map(action => ({ action, disabled: false }));
 
     it.each([
         {
             name: 'its own text value',
             task: taskOf({ memo: text('a') }),
             own: { kind: 'value', value: text('a') }, inherited: { kind: 'none' },
-            form: { ...plain, field: { kind: 'text', shown: text('a'), editsOwn: true }, remove: 'line' },
+            form: { ...plain, field: textField(text('a'), true) },
+            menu: menu('remove'),
         },
         {
             name: 'its own list',
             task: taskOf({ memo: list('a', 'b') }),
             own: { kind: 'list', items: [text('a'), text('b')] }, inherited: { kind: 'none' },
-            form: { ...plain, field: { kind: 'list', items: [text('a'), text('b')], editsOwn: true }, remove: null },
+            form: { ...plain, field: { kind: 'list', items: [text('a'), text('b')], editsOwn: true } },
+            menu: menu('noValue', 'remove'),
         },
         {
-            name: 'its own no value, nothing inherited',
+            name: 'its own no value, nothing inherited: "no value", no mark',
             task: taskOf({ memo: none }),
             own: { kind: 'null', value: none }, inherited: { kind: 'none' },
-            form: { ...plain, field: { kind: 'text', shown: none, editsOwn: true }, remove: 'line' },
+            form: { ...plain, field: textField(none, true, 'No value') },
+            menu: menu('remove'),
         },
         {
             name: 'an inherited text value alone',
             task: taskOf({}, { memo: text('a') }),
             own: { kind: 'none' }, inherited: { kind: 'value', value: text('a'), source: 'section' },
-            form: { inheritedLook: true, source: 'section', hide: true, makeOwn: false, field: { kind: 'text', shown: text('a'), editsOwn: false }, remove: null },
+            form: { ...inheritedLook, field: textField(text('a'), false) },
+            menu: menu('openSource'),
         },
         {
             name: 'an inherited list alone',
             task: taskOf({}, { memo: list('a') }),
             own: { kind: 'none' }, inherited: { kind: 'value', value: list('a'), source: 'section' },
-            form: { inheritedLook: true, source: 'section', hide: true, makeOwn: true, field: { kind: 'list', items: [text('a')], editsOwn: false }, remove: null },
+            form: { ...inheritedLook, field: { kind: 'list', items: [text('a')], editsOwn: false } },
+            menu: menu('openSource', 'makeOwn', 'noValue'),
         },
         {
-            name: 'an inherited no value alone: nothing more to hide',
+            name: 'an inherited no value alone: drawn as an inherited text value',
             task: taskOf({}, { memo: none }),
             own: { kind: 'none' }, inherited: { kind: 'value', value: none, source: 'section' },
-            form: { inheritedLook: true, source: 'section', hide: false, makeOwn: false, field: { kind: 'text', shown: none, editsOwn: false }, remove: null },
+            form: { ...inheritedLook, field: textField(none, false, 'No value') },
+            menu: menu('openSource'),
         },
         {
             name: 'its own text value over an inherited list',
             task: taskOf({ memo: text('b') }, { memo: list('a') }),
             own: { kind: 'value', value: text('b') }, inherited: { kind: 'value', value: list('a'), source: 'section' },
-            form: { ...plain, field: { kind: 'text', shown: text('b'), editsOwn: true }, remove: 'line' },
+            form: { ...plain, field: textField(text('b'), true) },
+            menu: menu('openSource', 'revert'),
         },
         {
             name: 'its own list over an inherited text value',
             task: taskOf({ memo: list('b') }, { memo: text('a') }),
             own: { kind: 'list', items: [text('b')] }, inherited: { kind: 'value', value: text('a'), source: 'section' },
-            form: { ...plain, field: { kind: 'list', items: [text('b')], editsOwn: true }, remove: null },
+            form: { ...plain, field: { kind: 'list', items: [text('b')], editsOwn: true } },
+            menu: menu('openSource', 'noValue', 'revert'),
         },
         {
-            name: 'its own no value hiding an inherited value',
+            name: 'its own no value hiding an inherited text value: the value struck through',
             task: taskOf({ memo: none }, { memo: text('a') }),
             own: { kind: 'null', value: none }, inherited: { kind: 'value', value: text('a'), source: 'section' },
-            form: { ...plain, field: { kind: 'text', shown: none, editsOwn: true }, remove: 'line' },
+            form: { inheritedLook: false, mark: 'hiding', field: textField(none, true, 'a', true) },
+            menu: menu('openSource', 'revert'),
         },
         {
-            name: 'its own no value hiding an inherited no value',
+            name: 'its own no value hiding an inherited list: the items joined, struck through',
+            task: taskOf({ memo: none }, { memo: list('a', 'b') }),
+            own: { kind: 'null', value: none }, inherited: { kind: 'value', value: list('a', 'b'), source: 'section' },
+            form: { inheritedLook: false, mark: 'hiding', field: textField(none, true, 'a, b', true) },
+            menu: menu('openSource', 'revert'),
+        },
+        {
+            name: 'its own no value hiding an inherited no value: "no value", not struck',
             task: taskOf({ memo: none }, { memo: none }),
             own: { kind: 'null', value: none }, inherited: { kind: 'value', value: none, source: 'section' },
-            form: { ...plain, field: { kind: 'text', shown: none, editsOwn: true }, remove: 'line' },
+            form: { inheritedLook: false, mark: 'hiding', field: textField(none, true, 'No value') },
+            menu: menu('openSource', 'revert'),
         },
-    ])('$name', ({ task, own, inherited, form }) => {
+    ])('$name', ({ task, own, inherited, form, menu: items }) => {
         const got = only(task);
         expect(got.row).toEqual({ folded: 'memo', key: 'memo', own, inherited, locked: false });
         expect(got.form).toEqual(form);
+        expect(PropertyRows.menuOf(got.row, { opensSource: true })).toEqual(items);
     });
 
-    it('an inherited list copied as a draft: edited as its own, its × throwing the draft away', () => {
+    it('an inherited list copied as a draft: edited as its own, as an own list over it is, the draft thrown away by revert', () => {
         const got = only(taskOf({}, { memo: list('a') }), { drafts: new Map([['memo', [text('a')]]]) });
         expect(got.row.own).toEqual({ kind: 'draft', items: [text('a')] });
         expect(got.row.inherited).toEqual({ kind: 'value', value: list('a'), source: 'section' });
-        expect(got.form).toEqual({ ...plain, field: { kind: 'list', items: [text('a')], editsOwn: true }, remove: 'draft' });
+        expect(got.form).toEqual({ ...plain, field: { kind: 'list', items: [text('a')], editsOwn: true } });
+        expect(PropertyRows.menuOf(got.row, { opensSource: true })).toEqual(menu('openSource', 'noValue', 'revert'));
+    });
+
+    it('greys the inherited line\'s item where the hub has no line to open, the menu keeping its shape', () => {
+        for (const inherited of [text('a'), list('a'), none]) {
+            for (const own of [{}, { memo: text('b') }, { memo: none }] as Record<string, PropertyValue>[]) {
+                const { row } = only(taskOf(own, { memo: inherited }));
+                const opens = PropertyRows.menuOf(row, { opensSource: true });
+                const greyed = PropertyRows.menuOf(row, { opensSource: false });
+                expect(greyed).toEqual([{ action: 'openSource', disabled: true }, ...opens.slice(1)]);
+            }
+        }
+        expect(PropertyRows.menuOf(only(taskOf({ memo: text('a') })).row, { opensSource: false })).toEqual(menu('remove'));
     });
 
     it('a draft is no row\'s once the row has a value of its own', () => {
@@ -120,13 +155,15 @@ describe('PropertyRows.of and formOf: what each row is and draws', () => {
     it('a row with a value a finding locks: what it is stays, and it is locked', () => {
         const got = only(taskOf({ memo: text('a') }), { locked: (field) => field === 'prop:memo', findings: [finding('memo')] });
         expect(got.row).toMatchObject({ own: { kind: 'value' }, locked: true });
-        expect(got.form.field).toEqual({ kind: 'text', shown: text('a'), editsOwn: true });
+        expect(got.form.field).toEqual({ kind: 'text', shown: text('a'), editsOwn: true, placeholder: '', struck: false });
+        expect(PropertyRows.menuOf(got.row, { opensSource: true })).toEqual([]);
     });
 
     it('a property a finding names with no value: one locked row with a blank field, under the key the finding names', () => {
         const rows = rowsOf(taskOf({}), { locked: () => true, findings: [finding('Dup'), finding('dup'), finding('Color', 'color')] });
         expect(rows).toEqual([{ folded: 'dup', key: 'Dup', own: { kind: 'none' }, inherited: { kind: 'none' }, locked: true }]);
-        expect(PropertyRows.formOf(rows[0])).toEqual({ ...plain, field: { kind: 'blank' }, remove: null });
+        expect(PropertyRows.formOf(rows[0])).toEqual({ ...plain, field: { kind: 'blank' } });
+        expect(PropertyRows.menuOf(rows[0], { opensSource: true })).toEqual([]);
     });
 
     it('rows in the order of the values in effect, the key as the winning layer writes it, then the findings\' rows', () => {

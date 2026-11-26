@@ -3,8 +3,9 @@
  * shown an item a line, each item edited, taken out, added and moved, and
  * every edit writes the list as its block of the note. An item that would
  * not read back as one is said under the row and not written. An inherited
- * list is shown and not edited, and made the row's own from a copy of its
- * items, written by the first edit.
+ * list is shown as chips and not edited, and made the row's own from a copy
+ * of its items by its menu, written by the first edit. A list, the row's
+ * own or inherited, is made no value by its menu.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -16,6 +17,8 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
+import { MENUS } from '../helpers/menus';
+import { tr } from '../helpers/view-helper';
 
 const TEST_FILE = 'test-int-hub-property-lists.md';
 
@@ -38,10 +41,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
 ${UNTIL}
 ${DIALOG_ROWS}
+${MENUS}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
 const rowOf = label => [...hub().querySelectorAll('.tv-form__row')].find(r => r.querySelector('.tv-form__label')?.textContent === label);
 const items = key => [...rowOf(key).querySelectorAll('.task-hub__list-items .task-hub__list-item input')];
 const addItem = key => rowOf(key).querySelector('.task-hub__list-add');
+/** The titles of the menu of the property's row \`key\`, the menu closed again. */
+const menuOf = key => { rowOf(key).querySelector('.task-hub__prop-more').click(); const titles = menuTitles(); closeMenus(); return titles; };
+/** Choose the item titled \`title\` from the menu of the property's row \`key\`. */
+const pickOf = (key, title) => { rowOf(key).querySelector('.task-hub__prop-more').click(); menuItem(i => i.titleEl?.textContent === title); };
 const nameInput = () => hub().querySelector('.tv-form__name-section input');
 const says = row => [...row.nextElementSibling.children].map(c => c.className + ': ' + c.firstChild.textContent);
 const type = (input, text) => { chooseTabOf(input).focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
@@ -101,24 +109,56 @@ describe('the hub edits a list item by item', () => {
                 add: !!addItem('k'),
                 inherited: [...rowOf('area').querySelectorAll('.task-hub__list-chip')].map(c => c.textContent),
                 inheritedInputs: rowOf('area').querySelectorAll('input').length,
-                makeOwn: !!rowOf('area').querySelector('.task-hub__make-own'),
+                inheritedMenu: menuOf('area'),
             });
         `);
-        expect(shown).toEqual({ own: ['a', 'b'], add: true, inherited: ['lab', 'home'], inheritedInputs: 0, makeOwn: true });
+        expect(shown).toEqual({
+            own: ['a', 'b'], add: true, inherited: ['lab', 'home'], inheritedInputs: 0,
+            inheritedMenu: [tr('modal.hub.openInheritedLine'), tr('modal.hub.makeOwn'), tr('modal.hub.setNoValue')],
+        });
     });
 
-    it('shows no × that takes the row\'s own list out whole, as a value\'s row and the inherited list keep theirs', () => {
+    it('shows a × in each item\'s field and none for the list whole, the row\'s menu button standing by its first item, and the inherited chips on the key\'s line', () => {
         openHub('親');
         const shown = run<Record<string, unknown>>(`
-            const removes = row => row.querySelectorAll('.task-hub__prop-remove').length;
+            const top = el => Math.round(el.getBoundingClientRect().top);
+            const middle = el => { const r = el.getBoundingClientRect(); return Math.round(r.top + r.height / 2); };
+            const own = rowOf('k');
+            const more = own.querySelector('.task-hub__prop-more');
+            const first = own.querySelector('.task-hub__list-item');
+            const inherited = rowOf('area');
+            const label = inherited.querySelector('.tv-form__label').getBoundingClientRect();
+            const chips = inherited.querySelector('.task-hub__list-chips').getBoundingClientRect();
             return JSON.stringify({
-                own: removes(rowOf('k')),
-                itemRemoves: rowOf('k').querySelectorAll('.task-hub__list-item .tv-ctrl__pill-remove:not(.is-placeholder)').length,
-                value: removes(rowOf('memo')),
-                inherited: [removes(rowOf('area')), !!rowOf('area').querySelector('.task-hub__hide')],
+                itemXs: [...own.querySelectorAll('.task-hub__list-item .tv-form__clear-button')].map(x => x.getAttribute('aria-label')),
+                addX: !!own.querySelector('.task-hub__list-item--add .tv-form__clear-button'),
+                ownMenu: menuOf('k'),
+                moreByFirst: Math.abs(middle(more) - middle(first)) <= 1,
+                moreLabel: more.getAttribute('aria-label'),
+                chipsBesideKey: chips.left >= label.right && Math.abs(top(inherited.querySelector('.task-hub__list-chip')) - top(inherited)) < 12,
+                inheritedXs: inherited.querySelectorAll('.tv-form__clear-button').length,
             });
         `);
-        expect(shown).toEqual({ own: 0, itemRemoves: 2, value: 1, inherited: [0, true] });
+        expect(shown).toEqual({
+            itemXs: [tr('modal.hub.removeItem', { item: 'a' }), tr('modal.hub.removeItem', { item: 'b' })],
+            addX: false,
+            ownMenu: [tr('modal.hub.setNoValue'), tr('modal.hub.deleteProperty')],
+            moreByFirst: true,
+            moreLabel: tr('modal.hub.propertyMenu', { key: 'k' }),
+            chipsBesideKey: true,
+            inheritedXs: 0,
+        });
+    });
+
+    it('makes the inherited list and the row\'s own no value from their menus', () => {
+        openHub('親');
+        run(`pickOf('area', ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(9, 9, '\t- area::'));
+        run(`pickOf('k', ${JSON.stringify(tr('modal.hub.setNoValue'))}); await sleep(600); return 'ok';`);
+        const out = [...LINES];
+        out.splice(9, 0, '\t- area::');
+        out.splice(6, 2);
+        expect(readTestFile(TEST_FILE)).toBe(out.join('\n'));
     });
 
     it('writes an item typed over in its place', () => {
@@ -136,15 +176,15 @@ describe('the hub edits a list item by item', () => {
 
     it('takes an item out by its ×, and with the last one leaves the line with no value', () => {
         openHub('親');
-        run(`items('k')[1].closest('.task-hub__list-item').querySelector('.tv-ctrl__pill-remove').click(); await sleep(600); return 'ok';`);
+        run(`items('k')[1].closest('.task-hub__list-item').querySelector('.tv-form__clear-button').click(); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(7, 8));
-        run(`items('k')[0].closest('.task-hub__list-item').querySelector('.tv-ctrl__pill-remove').click(); await sleep(600); return 'ok';`);
+        run(`items('k')[0].closest('.task-hub__list-item').querySelector('.tv-form__clear-button').click(); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 8));
     });
 
     it('leaves the focus where it was when an item is taken out', () => {
         openHub('親');
-        const removeOf = `i => items('k')[i].closest('.task-hub__list-item').querySelector('.tv-ctrl__pill-remove')`;
+        const removeOf = `i => items('k')[i].closest('.task-hub__list-item').querySelector('.tv-form__clear-button')`;
         const focus = run<Record<string, unknown>>(`
             const removeAt = ${removeOf};
             document.activeElement?.blur();
@@ -210,7 +250,7 @@ describe('the hub edits a list item by item', () => {
 
     it('makes an inherited list the row\'s own from a copy, written by the first edit, leaving the focus out of its inputs', () => {
         openHub('親');
-        const inInput = run<boolean>(`rowOf('area').querySelector('.task-hub__make-own').click(); await sleep(300); return document.activeElement instanceof HTMLInputElement;`);
+        const inInput = run<boolean>(`pickOf('area', ${JSON.stringify(tr('modal.hub.makeOwn'))}); await sleep(300); return document.activeElement instanceof HTMLInputElement;`);
         expect(inInput).toBe(false);
         expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
         const shown = run<string[]>(`return JSON.stringify(items('area').map(i => i.value));`);
@@ -219,15 +259,20 @@ describe('the hub edits a list item by item', () => {
         expect(readTestFile(TEST_FILE)).toBe(withLines(9, 9, '\t- area::', '\t\t- lab', '\t\t- home', '\t\t- desk'));
     });
 
-    it('throws a draft of an inherited list away by its ×, writing nothing', () => {
+    it('throws a draft of an inherited list away by its menu\'s revert, writing nothing', () => {
         openHub('親');
-        run(`rowOf('area').querySelector('.task-hub__make-own').click(); await sleep(300); return 'ok';`);
+        run(`pickOf('area', ${JSON.stringify(tr('modal.hub.makeOwn'))}); await sleep(300); return 'ok';`);
         const shown = run<Record<string, unknown>>(`
-            rowOf('area').querySelector('.task-hub__prop-remove').click();
+            const menu = menuOf('area');
+            pickOf('area', ${JSON.stringify(tr('modal.hub.revertToInherited'))});
             await sleep(300);
-            return JSON.stringify({ inputs: rowOf('area').querySelectorAll('input').length, makeOwn: !!rowOf('area').querySelector('.task-hub__make-own') });
+            return JSON.stringify({ menu, inputs: rowOf('area').querySelectorAll('input').length, chips: rowOf('area').querySelectorAll('.task-hub__list-chip').length });
         `);
-        expect(shown).toEqual({ inputs: 0, makeOwn: true });
+        expect(shown).toEqual({
+            menu: [tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.revertToInherited')],
+            inputs: 0,
+            chips: 2,
+        });
         expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
     });
 });

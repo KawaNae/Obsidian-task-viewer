@@ -154,6 +154,23 @@ describe('the hub writes a custom property back as it is spelled', () => {
         run(`chooseTabOf(valueInput('memo')).focus(); await leave(valueInput('memo')); chooseTabOf(valueInput('e')).focus(); await leave(valueInput('e')); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLine(7, '\t- memo::'));
     });
+
+    it('writes no value at once as the × in a value\'s field is pressed, the row kept and the focus not put in the field', () => {
+        openHub('親');
+        const before = run<Record<string, unknown>>(`
+            const shown = el => !!el && getComputedStyle(el).display !== 'none';
+            return JSON.stringify({ memo: shown(rowOf('memo').querySelector('.tv-form__clear-button')), e: shown(rowOf('e').querySelector('.tv-form__clear-button')) });
+        `);
+        // A field with no value has no ×.
+        expect(before).toEqual({ memo: true, e: false });
+        const after = run<Record<string, unknown>>(`
+            rowOf('memo').querySelector('.tv-form__clear-button').click();
+            await sleep(600);
+            return JSON.stringify({ value: valueInput('memo').value, placeholder: valueInput('memo').placeholder, focused: document.activeElement === valueInput('memo') });
+        `);
+        expect(readTestFile(TEST_FILE)).toBe(withLine(7, '\t- memo::'));
+        expect(after).toEqual({ value: '', placeholder: tr('modal.hub.noValue'), focused: false });
+    });
 });
 
 describe('the hub writes a property as its block', () => {

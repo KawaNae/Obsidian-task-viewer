@@ -7,8 +7,9 @@ import { FilterValueCollector } from '../../../services/filter/FilterValueCollec
 import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
 import { PropertyValueInput, type PropertyLineValue } from '../../../services/parsing/utils/PropertyItemInput';
 import type { Read } from '../../../utils/values/Read';
-import { CascadeSource, type CascadeSourceKind } from '../CascadeSource';
+import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
+import { ClearButton } from '../../form/ClearButton';
 import { createFormRow } from '../../form/formRow';
 import { onFormEnter } from '../../form/formEnter';
 import { bindField, type BoundField, type Written } from '../../form/bindField';
@@ -16,19 +17,29 @@ import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { ValueSuggest, type ValueSuggestOptions } from '../../../suggest/ValueSuggest';
 import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './FieldGroupContext';
 import { PropertyListField, type ListFocus } from './PropertyListField';
-import { PropertyRows, type PropertyRow, type PropertyRowField } from './PropertyRows';
+import {
+    PropertyRows,
+    type PropertyMenuAction,
+    type PropertyMenuItem,
+    type PropertyRow,
+    type PropertyRowField,
+    type PropertyRowMark,
+} from './PropertyRows';
 
 /**
- * カスタムプロパティ行。どの行があり、各行が何を出すかは `PropertyRows` が決め、
- * ここはそれを描く。
- * - own キー: value 編集可 + 行削除ボタン。値を空にして確定すると、行を残して
- *   値のないプロパティ（`- key::`）を書く。行を消すのは行削除ボタンだけである
- * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格。
- *   空にして確定すると、継承した値を隠す値のないプロパティを書く
- * - リストの値: 項目ごとの欄（`PropertyListField`）。自分のリストには行削除ボタンを
- *   出さず、最後の項目を消すと値なしになる。受け継いだリストは読むだけで、
- *   「このタスクの値にする」で項目を写した下書きになり、最初の確定で書く
- * - 所見のあるキー: 編集できない行（`FieldGroupContext.locked`）
+ * カスタムプロパティ行。どの行があり、各行が何を出すか（欄、キーの横の印、
+ * … のメニューの項目）は `PropertyRows` が決め、ここはそれを描く。行は
+ * 「キー、値の欄、…」で、行を消す操作と継承元の行を開く操作は … のメニューにある。
+ * - own キー: value 編集可。値を空にして確定するか、欄の中の × を押すと、行を
+ *   残して値のないプロパティ（`- key::`）を書く。× はすぐ書き、フォーカスを
+ *   欄へ置かない。行を消すのはメニューだけである
+ * - 継承しただけのキー: 破線の枠と `link-2` の印。value を編集し確定すると own
+ *   上書きに昇格。空にするか × を押すと、継承した値を隠す値のないプロパティを書く。
+ *   隠している行は `link-2off`（lucide の link-2-off）の印で、隠している値を欄の薄い字に打ち消し線で出す
+ * - リストの値: 項目ごとの欄（`PropertyListField`）。項目の × は項目を消し、
+ *   最後の項目を消すと値なしになる。継承しただけのリストはチップで出し、
+ *   メニューの「このタスクの値にする」で項目を写した下書きになり、最初の確定で書く
+ * - 所見のあるキー: 編集できない行（`FieldGroupContext.locked`）。メニューは無い
  *
  * 行はキーを大文字と小文字を区別せずに1つずつ出し（`PropertyKey`）、キーは
  * 効いている値を書いた層の綴りで出す。
@@ -125,6 +136,8 @@ export class PropertiesFieldGroup implements ClosingPart {
             type: 'text', placeholder: t('modal.hub.propertyValue'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
         });
+        // The room of the rows' menu button, so that the value field ends where theirs do.
+        addRow.createSpan({ cls: 'task-hub__prop-more-room' });
         keyInput.disabled = shut;
         valueInput.disabled = shut;
         this.addKeyInput = keyInput;
@@ -233,58 +246,114 @@ export class PropertiesFieldGroup implements ClosingPart {
         });
     }
 
-    /** A property's row, drawn as `PropertyRows.formOf` says it is. */
+    /**
+     * A property's row, drawn as `PropertyRows` says it is: the key (and its
+     * mark), the field, and the button of the row's menu at its end.
+     */
     private renderRow(prop: PropertyRow): void {
         const { folded, key } = prop;
         const form = PropertyRows.formOf(prop);
         const { field } = form;
-        const disabled = this.ctx.isShut() || prop.locked;
+        const shut = this.ctx.isShut();
+        const disabled = shut || prop.locked;
 
-        const { row, says } = createFormRow(this.sectionEl, key, field.kind === 'list' ? { alignStart: true } : undefined);
+        // An own list stands an item a line: its key and its menu button keep to the first.
+        const ownList = field.kind === 'list' && field.editsOwn;
+        const { row, labelEl, says } = createFormRow(this.sectionEl, '', ownList ? { alignStart: true } : undefined);
+        labelEl.addClass('task-hub__prop-label');
+        labelEl.createSpan({ cls: 'task-hub__prop-key', text: key });
+        if (form.mark) {
+            const [icon, label] = MARKS[form.mark];
+            const mark = labelEl.createSpan({ cls: `task-hub__prop-mark task-hub__prop-mark--${form.mark}`, attr: { 'aria-label': t(label) } });
+            setIcon(mark, icon);
+        }
         if (field.kind === 'list') row.addClass('task-hub__row--list');
-        if (form.inheritedLook) row.addClass('task-hub__row--cascade');
+        if (form.inheritedLook) row.addClass('task-hub__row--inherited');
         if (prop.locked) row.addClass('task-hub__row--locked');
         this.valueSays.set(folded, says);
 
         if (field.kind === 'text') this.textField(row, folded, key, field, disabled);
         else if (field.kind === 'list') this.listField(row, folded, key, field, disabled);
         else {
-            const valueInput = row.createEl('input', { type: 'text', cls: VALUE_INPUT_CLS });
+            const valueInput = row.createEl('input', { type: 'text', cls: `${VALUE_INPUT_CLS} tv-form__control` });
             valueInput.disabled = true;
             this.valueInputs.set(folded, valueInput);
         }
 
-        if (form.remove) {
-            const remove = form.remove === 'line'
-                ? () => { this.remove(key); }
-                // The draft is not written yet: its × throws it away, and the inherited list shows again.
-                : () => { this.drafts.delete(folded); };
-            this.removeButton(row, key, disabled, remove);
+        const menu = PropertyRows.menuOf(prop, { opensSource: this.ctx.openSource !== null });
+        if (menu.length > 0) this.menuButton(row, prop, menu, shut);
+        // A row with no menu keeps the button's room, so that its field ends where the others' do.
+        else row.createSpan({ cls: 'task-hub__prop-more-room' });
+    }
+
+    /**
+     * The row's menu button (…), which shows its items under it as the hub's
+     * other menus are shown (`menuPresenter`). An item done builds the rows
+     * anew, and puts the focus in no field: a tap brings up no keyboard.
+     */
+    private menuButton(row: HTMLElement, prop: PropertyRow, items: readonly PropertyMenuItem[], shut: boolean): void {
+        const button = row.createEl('button', {
+            cls: 'tv-icon-btn task-hub__prop-more',
+            attr: { type: 'button', 'aria-label': t('modal.hub.propertyMenu', { key: prop.key }) },
+        });
+        setIcon(button.createSpan(), 'more-horizontal');
+        button.disabled = shut;
+        button.addEventListener('click', () => {
+            if (this.ctx.isShut()) return;
+            this.ctx.plugin.menuPresenter.present((menu) => {
+                for (const { action, disabled } of items) {
+                    const [title, icon] = MENU_ITEMS[action];
+                    menu.addItem((item) => {
+                        item.setTitle(t(title)).setIcon(icon).setDisabled(disabled);
+                        if (!disabled) item.onClick(() => this.runMenu(prop, action));
+                    });
+                }
+            }, { kind: 'belowRect', rect: button.getBoundingClientRect() });
+        }, { signal: this.built.signal });
+    }
+
+    /** Do what the menu item `action` of the row `prop` does. */
+    private runMenu(prop: PropertyRow, action: PropertyMenuAction): void {
+        if (this.ctx.isShut()) return;
+        const { folded, key, own, inherited } = prop;
+        switch (action) {
+            case 'openSource':
+                this.ctx.openSource?.(copy => CascadeSource.lineOfProperty(copy, key));
+                return;
+            case 'makeOwn':
+                if (inherited.kind === 'value' && inherited.value.type === 'list') this.drafts.set(folded, [...inherited.value.items]);
+                break;
+            case 'noValue':
+                this.drafts.delete(folded);
+                void this.setValue(key, NO_VALUE);
+                break;
+            case 'remove':
+                void this.remove(key);
+                break;
+            case 'revert':
+                // A draft is not written yet: it is thrown away, and the inherited list shows again.
+                if (own.kind === 'draft') this.drafts.delete(folded);
+                else void this.remove(key);
+                break;
         }
-        if (form.source) this.sourceLabel(row, key, form.source);
-        if (form.hide) this.hideButton(row, key, disabled);
-        if (form.makeOwn && field.kind === 'list' && !disabled) {
-            const items = field.items;
-            const makeOwn = row.createEl('button', { cls: 'task-hub__make-own', text: t('modal.hub.makeOwnList'), attr: { type: 'button' } });
-            // The focus is not put in the draft: a tap on the button brings up no keyboard.
-            makeOwn.addEventListener('click', () => {
-                this.drafts.set(folded, [...items]);
-                this.render(true);
-            }, { signal: this.built.signal });
-        }
+        this.render(true);
     }
 
     /**
      * The field of a property whose value is one text (a value, or no
      * value): its own value edited in place, or the inherited one shown,
-     * which typed again is made the row's own.
+     * which typed again is made the row's own. The × in its end empties it
+     * and writes no value at once (`- key::`), the row kept: over an
+     * inherited value, it hides it.
      */
     private textField(row: HTMLElement, folded: string, key: string, field: PropertyRowField & { kind: 'text' }, disabled: boolean): void {
         const { shown, editsOwn } = field;
-        const valueInput = row.createEl('input', { type: 'text', cls: VALUE_INPUT_CLS });
+        const box = row.createDiv({ cls: 'tv-form__control task-hub__value-box' });
+        const valueInput = box.createEl('input', { type: 'text', cls: VALUE_INPUT_CLS });
         valueInput.value = PropertyValueInput.show(lineValueOf(shown));
-        // No value written as none (`- key::`): the field is empty, and says so.
-        if (shown.type === 'null') valueInput.placeholder = t('modal.hub.noValue');
+        // No value (`- key::`): the field is empty, and says so, or shows the value it hides struck through.
+        valueInput.placeholder = field.placeholder;
+        if (field.struck) valueInput.addClass('task-hub__value--struck');
         valueInput.disabled = disabled;
         this.valueInputs.set(folded, valueInput);
 
@@ -311,6 +380,18 @@ export class PropertiesFieldGroup implements ClosingPart {
             signal: this.built.signal,
         });
         this.valueBound.set(folded, value);
+        // As a date's × does: the field emptied is written at once, and the focus is not put in it.
+        if (!disabled) {
+            new ClearButton(box, valueInput, {
+                clear: () => {
+                    valueInput.value = '';
+                    valueInput.dispatchEvent(new Event('input'));
+                    value.commit();
+                    this.render(true);
+                },
+                focusesField: false,
+            });
+        }
     }
 
     /**
@@ -332,43 +413,6 @@ export class PropertiesFieldGroup implements ClosingPart {
             say: (source, issues) => this.ctx.issues.set(source, issues),
             signal: this.built.signal,
         }));
-    }
-
-    /**
-     * The button that hides an inherited value: the row's own line with no
-     * value (`- key::`), which the value above does not come through. Its
-     * × takes the line out again.
-     */
-    private hideButton(row: HTMLElement, key: string, disabled: boolean): void {
-        const hide = row.createEl('button', { cls: 'tv-icon-btn task-hub__hide', attr: { type: 'button' } });
-        setIcon(hide.createSpan(), 'ban');
-        hide.setAttribute('aria-label', t('modal.hub.hideInherited', { key }));
-        hide.disabled = disabled;
-        hide.addEventListener('click', () => {
-            void this.setValue(key, { type: 'null', spelling: '' });
-            this.render(true);
-        }, { signal: this.built.signal });
-    }
-
-    /** The × that takes the row's own property out (or throws a draft away), and builds the rows anew. */
-    private removeButton(row: HTMLElement, key: string, disabled: boolean, remove: () => void): void {
-        const removeBtn = row.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove task-hub__prop-remove' });
-        setIcon(removeBtn.createSpan(), 'x');
-        removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
-        removeBtn.disabled = disabled;
-        removeBtn.addEventListener('click', () => {
-            remove();
-            // 構造コミット: 楽観 model から行を即時再構築
-            this.render(true);
-        }, { signal: this.built.signal });
-    }
-
-    /** Where an inherited value is written, opened from the row when there is a row to open. */
-    private sourceLabel(row: HTMLElement, key: string, source: CascadeSourceKind): void {
-        const sourceEl = row.createSpan({ cls: 'task-hub__source', text: CascadeSource.label(source) });
-        const open = this.ctx.openSource;
-        if (open) sourceEl.addEventListener('click', () => open(copy => CascadeSource.lineOfProperty(copy, key)), { signal: this.built.signal });
-        else sourceEl.addClass('task-hub__source--plain');
     }
 
     /** The values offered for the property `key`, as spelled. */
@@ -502,7 +546,23 @@ export class PropertiesFieldGroup implements ClosingPart {
     }
 }
 
-const VALUE_INPUT_CLS = 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control';
+const VALUE_INPUT_CLS = 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow task-hub__value';
+
+/** The mark beside a row's key: its icon, and what it is called. */
+const MARKS: Record<PropertyRowMark, readonly [icon: string, label: string]> = {
+    inherited: ['link-2', 'modal.hub.markInherited'],
+    // Lucide's link-2-off, which Obsidian's icons name `link-2off`: `link-2-off` draws nothing there.
+    hiding: ['link-2off', 'modal.hub.markHiding'],
+};
+
+/** An item of a row's menu: its title, and its icon. */
+const MENU_ITEMS: Record<PropertyMenuAction, readonly [title: string, icon: string]> = {
+    openSource: ['modal.hub.openInheritedLine', 'external-link'],
+    makeOwn: ['modal.hub.makeOwn', 'copy'],
+    noValue: ['modal.hub.setNoValue', 'ban'],
+    remove: ['modal.hub.deleteProperty', 'trash'],
+    revert: ['modal.hub.revertToInherited', 'undo-2'],
+};
 
 /** The field of the property `key`'s row, as its issues are said of it. */
 function propField(key: string): HubField {

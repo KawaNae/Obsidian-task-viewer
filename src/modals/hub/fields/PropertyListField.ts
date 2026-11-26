@@ -4,6 +4,7 @@ import type { PropertyScalar } from '../../../types';
 import { PropertyItemInput } from '../../../services/parsing/utils/PropertyItemInput';
 import { optional, type Issue } from '../../../utils/values/Read';
 import { bindField, type BoundField } from '../../form/bindField';
+import { ClearButton } from '../../form/ClearButton';
 import { readIssue, type FormIssue } from '../../form/FormIssue';
 import { ValueSuggest } from '../../../suggest/ValueSuggest';
 import type { HubField, UnsavedField } from './FieldGroupContext';
@@ -48,7 +49,8 @@ export interface PropertyListFieldOptions {
  * it under `- key::`.
  *
  * The row's own items are edited in place: each item's text (an item
- * emptied is taken out), its × taking it out, the add field putting one at
+ * emptied is taken out), the × in its field's end taking it out
+ * (`ClearButton`, out of the Tab order), the add field putting one at
  * the end, and the order changed by dragging an item's handle or by
  * Alt+Up and Alt+Down in its text. An item is read as a line holding it
  * reads it (`PropertyItemInput`): what does not read back as that one item
@@ -61,9 +63,9 @@ export interface PropertyListFieldOptions {
  * field when the item is gone). Focus outside the list's inputs is not
  * moved, so a tap on an item's × or handle brings up no keyboard.
  *
- * An inherited list is shown as it is, and not edited here: its source is
- * opened from the row, and the row made its own starts from a copy of its
- * items (`PropertiesFieldGroup`).
+ * An inherited list is shown as it is, its items as chips, and
+ * not edited here: its source is opened from the row's menu, and the row
+ * made its own starts from a copy of its items (`PropertiesFieldGroup`).
  */
 export class PropertyListField {
     readonly el: HTMLElement;
@@ -113,7 +115,8 @@ export class PropertyListField {
             handle.setAttribute('aria-label', t('modal.hub.moveItem'));
             if (!disabled) this.dragBy(handle, itemEl, listEl);
 
-            const input = itemEl.createEl('input', {
+            const box = itemEl.createDiv({ cls: 'task-hub__list-item-box' });
+            const input = box.createEl('input', {
                 type: 'text',
                 cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow',
             });
@@ -146,16 +149,18 @@ export class PropertyListField {
                 this.writeKept(moved(this.opts.items, index, to), moved(places(this.opts.items), index, to));
             }, { signal: this.opts.signal });
 
-            const removeBtn = itemEl.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove' });
-            setIcon(removeBtn.createSpan(), 'x');
-            removeBtn.setAttribute('aria-label', t('modal.hub.removeItem', { item: item.spelling }));
-            removeBtn.disabled = disabled;
-            removeBtn.addEventListener('click', () => {
-                this.writeKept(...removed(this.opts.items, index));
-            }, { signal: this.opts.signal });
+            // The item's × stands in its field's end, and takes the item out.
+            // None while nothing is edited.
+            if (!disabled) {
+                new ClearButton(box, input, {
+                    clear: () => this.writeKept(...removed(this.opts.items, index)),
+                    focusesField: false,
+                    label: t('modal.hub.removeItem', { item: item.spelling }),
+                });
+            }
         });
 
-        // The add field stands where an item's text does: a handle's room before it, a ×'s after.
+        // The add field stands where an item's text does: a handle's room before it.
         const addEl = this.el.createDiv({ cls: 'task-hub__list-item task-hub__list-item--add' });
         setIcon(addEl.createSpan({ cls: 'task-hub__list-handle is-placeholder' }), 'grip-vertical');
         const add = addEl.createEl('input', {
@@ -163,7 +168,6 @@ export class PropertyListField {
             placeholder: t('modal.hub.addItem'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow task-hub__list-add',
         });
-        setIcon(addEl.createEl('button', { cls: 'tv-icon-btn tv-ctrl__pill-remove is-placeholder', attr: { tabindex: '-1', 'aria-hidden': 'true' } }).createSpan(), 'x');
         add.disabled = disabled;
         this.addInput = add;
         const suggest = this.offer(add, (value) => {

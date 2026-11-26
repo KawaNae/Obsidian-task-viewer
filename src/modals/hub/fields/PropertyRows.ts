@@ -1,3 +1,4 @@
+import { t } from '../../../i18n';
 import type { PropertyScalar, PropertyValue, Task } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
 import { PropertyKey } from '../../../services/parsing/utils/PropertyKey';
@@ -65,32 +66,61 @@ export interface PropertyRowsInput {
  * The field a row is edited or shown by.
  * - `text`: one text field showing `shown` as a line spells it. With
  *   `editsOwn` it edits the row's own value; else it shows the inherited
- *   one, which typed again is made the row's own
+ *   one, which typed again is made the row's own. A field with no value
+ *   shows `placeholder` faintly: "no value", or the inherited value it
+ *   hides, `struck` through
  * - `list`: an item a line (`PropertyListField`), edited when `editsOwn`
  * - `blank`: an empty field that takes nothing, for a locked row with no value
  */
 export type PropertyRowField =
-    | { readonly kind: 'text'; readonly shown: PropertyValue; readonly editsOwn: boolean }
+    | {
+        readonly kind: 'text';
+        readonly shown: PropertyValue;
+        readonly editsOwn: boolean;
+        readonly placeholder: string;
+        readonly struck: boolean;
+    }
     | { readonly kind: 'list'; readonly items: readonly PropertyScalar[]; readonly editsOwn: boolean }
     | { readonly kind: 'blank' };
 
-/** What a row draws, besides its key. */
+/**
+ * The mark beside a row's key: `inherited` for a value the row inherits and
+ * does not say itself, `hiding` for the row's own no value that hides an
+ * inherited value.
+ */
+export type PropertyRowMark = 'inherited' | 'hiding';
+
+/** What a row draws, besides its key and its menu (`menuOf`). */
 export interface PropertyRowForm {
     readonly field: PropertyRowField;
-    /** Drawn as a value the row inherits and does not say itself. */
+    /** Drawn as a value the row inherits and does not say itself: a dashed frame. */
     readonly inheritedLook: boolean;
-    /** Where the inherited value is written, said by a label that opens its line; null for none. */
-    readonly source: CascadeSourceKind | null;
-    /** The button that hides the inherited value with the row's own no value. */
-    readonly hide: boolean;
-    /** The button that copies the inherited list into a draft of the row's own. */
-    readonly makeOwn: boolean;
-    /**
-     * The row's ×: `line` takes the row's own line out, `draft` throws the
-     * draft away. An own list has none: it would stand beside the items' ×s
-     * and look as theirs do.
-     */
-    readonly remove: 'line' | 'draft' | null;
+    readonly mark: PropertyRowMark | null;
+}
+
+/**
+ * What an item of a row's menu does.
+ * - `openSource`: open the line the inherited value is written on
+ * - `makeOwn`: copy the inherited list into a draft of the row's own, which
+ *   its first edit writes
+ * - `noValue`: write the row's own no value (`- key::`) over its list, or
+ *   over the inherited list, which it hides
+ * - `remove`: take the row's own line out, with nothing inherited to come through
+ * - `revert`: take the row's own line out (or throw its draft away), the
+ *   inherited value coming through again
+ */
+export type PropertyMenuAction = 'openSource' | 'makeOwn' | 'noValue' | 'remove' | 'revert';
+
+/** An item of a row's menu: shown greyed, and taking no press, when `disabled`. */
+export interface PropertyMenuItem {
+    readonly action: PropertyMenuAction;
+    readonly disabled: boolean;
+}
+
+/** What a row's menu is built from besides the row. */
+export interface PropertyMenuInput {
+    /** Whether the hub has a line of the note to open (none while the task is moved, or for a task to make). */
+    readonly opensSource: boolean;
 }
 
 const NONE = { kind: 'none' } as const;
@@ -132,25 +162,52 @@ export const PropertyRows = {
 
     /** What the row draws. */
     formOf(row: PropertyRow): PropertyRowForm {
-        const { own, inherited } = row;
-        const plain = { inheritedLook: false, source: null, hide: false, makeOwn: false } as const;
+        const { own } = row;
+        const above = aboveOf(row);
+        const plain = { inheritedLook: false, mark: null } as const;
         switch (own.kind) {
             case 'value':
-            case 'null':
-                return { ...plain, field: { kind: 'text', shown: own.value, editsOwn: true }, remove: 'line' };
+                return { ...plain, field: { kind: 'text', shown: own.value, editsOwn: true, placeholder: '', struck: false } };
+            case 'null': {
+                // Over an inherited value, the value hidden is shown struck
+                // through; over an inherited no value, no value is all there is.
+                const hides = above !== null && above.type !== 'null';
+                const placeholder = hides ? spellingOf(above) : t('modal.hub.noValue');
+                const field = { kind: 'text', shown: own.value, editsOwn: true, placeholder, struck: hides } as const;
+                return { inheritedLook: false, mark: above ? 'hiding' : null, field };
+            }
             case 'list':
-                return { ...plain, field: { kind: 'list', items: own.items, editsOwn: true }, remove: null };
             case 'draft':
-                return { ...plain, field: { kind: 'list', items: own.items, editsOwn: true }, remove: 'draft' };
+                return { ...plain, field: { kind: 'list', items: own.items, editsOwn: true } };
             case 'none':
                 break;
         }
-        if (inherited.kind === 'none') return { ...plain, field: { kind: 'blank' }, remove: null };
-        const shown = inherited.value;
-        const from = { inheritedLook: true, source: inherited.source, remove: null } as const;
-        if (shown.type === 'list') return { ...from, field: { kind: 'list', items: shown.items, editsOwn: false }, hide: true, makeOwn: true };
-        // An inherited no value hides nothing more.
-        return { ...from, field: { kind: 'text', shown, editsOwn: false }, hide: shown.type !== 'null', makeOwn: false };
+        if (!above) return { ...plain, field: { kind: 'blank' } };
+        const from = { inheritedLook: true, mark: 'inherited' } as const;
+        if (above.type === 'list') return { ...from, field: { kind: 'list', items: above.items, editsOwn: false } };
+        const placeholder = above.type === 'null' ? t('modal.hub.noValue') : '';
+        return { ...from, field: { kind: 'text', shown: above, editsOwn: false, placeholder, struck: false } };
+    },
+
+    /**
+     * The row's menu, built from its two sides in this order: the inherited
+     * value's line, what is done to the value, then the row's own line taken
+     * out. A locked row has none, and draws no menu button.
+     */
+    menuOf(row: PropertyRow, input: PropertyMenuInput): PropertyMenuItem[] {
+        if (row.locked) return [];
+        const { own } = row;
+        const above = aboveOf(row);
+        const items: PropertyMenuItem[] = [];
+        const add = (action: PropertyMenuAction, disabled = false) => { items.push({ action, disabled }); };
+        // Greyed where the hub has no line to open, so that the menu keeps its shape.
+        if (above) add('openSource', !input.opensSource);
+        const inheritedList = own.kind === 'none' && above?.type === 'list';
+        if (inheritedList) add('makeOwn');
+        // A list has no × that empties all of it, as a text's field has.
+        if (own.kind === 'list' || own.kind === 'draft' || inheritedList) add('noValue');
+        if (own.kind !== 'none') add(above ? 'revert' : 'remove');
+        return items;
     },
 
     /**
@@ -163,6 +220,17 @@ export const PropertyRows = {
         return rows.find(row => row.folded === folded);
     },
 };
+
+/** The value the row inherits, whether or not its own line wins over it; null for none. */
+function aboveOf(row: PropertyRow): PropertyValue | null {
+    return row.inherited.kind === 'value' ? row.inherited.value : null;
+}
+
+/** A value hidden, as the field's faint text shows it: as a line spells it, a list's items joined. */
+function spellingOf(value: PropertyValue): string {
+    if (value.type === 'list') return value.items.map(item => item.spelling).join(t('modal.hub.itemJoin'));
+    return value.spelling;
+}
 
 function ownSide(value: PropertyValue | undefined, draft: readonly PropertyScalar[] | undefined): OwnSide {
     if (value === undefined) return draft ? { kind: 'draft', items: draft } : NONE;
