@@ -16,6 +16,7 @@ import { obsidianEval } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, writeIndexedTestFile } from '../helpers/test-file-manager';
 import { UNTIL, waitForFileDeindexed } from '../helpers/waits';
 import { DIALOG_ROWS } from '../helpers/dialog-rows';
+import { tr } from '../helpers/view-helper';
 
 const TEST_FILE = 'test-int-hub-property-values.md';
 
@@ -195,29 +196,31 @@ describe('the hub writes a property as its block', () => {
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
     });
 
-    it('writes nothing over a key written twice, says so at the form\'s end, and keeps what was typed in the add row', () => {
+    it('refuses a key written twice as it is read: writes nothing, says under the key that its row stands, and keeps what was typed in the add row', () => {
         openHub('親');
-        const after = run<{ said: string; key: string; value: string }>(`
+        const after = run<{ said: string[]; form: string; key: string; value: string }>(`
             const key = hub().querySelector('.task-hub__prop-add .tv-form__label input');
             type(key, 'dup');
             const value = hub().querySelector('.task-hub__prop-add input.tv-form__control');
             type(value, '3');
             await leave(value);
             const row = hub().querySelector('.task-hub__prop-add');
-            const kept = { said: hub().textContent, key: row.querySelector('.tv-form__label input').value, value: row.querySelector('input.tv-form__control').value };
+            const said = [...(row.nextElementSibling?.querySelectorAll('.tv-form__error') ?? [])].map(one => one.textContent);
+            const kept = { said, form: hub().querySelector('.task-hub__form > .tv-form__says--form')?.textContent ?? '', key: row.querySelector('.tv-form__label input').value, value: row.querySelector('input.tv-form__control').value };
             // Emptied as a person would, so that the hub closes.
             type(row.querySelector('.tv-form__label input'), '');
             type(row.querySelector('input.tv-form__control'), '');
             return JSON.stringify(kept);
         `);
         expect(readTestFile(TEST_FILE)).toBe(BLOCK.join('\n'));
-        expect(after.said).toContain('dup');
+        expect(after.said).toEqual([tr('issue.keyHasRow', { key: 'dup' })]);
+        expect(after.form).not.toContain('dup');
         expect([after.key, after.value]).toEqual(['dup', '3']);
     });
 
-    it('stays open on a close while the add row holds a key that cannot be written, and closes once the row is emptied', () => {
+    it('asks on a close while the add row holds a key that has a row, and closes once what was typed is thrown away, writing nothing', () => {
         openHub('親');
-        const after = run<{ open: boolean; said: string; key: string; closed: boolean }>(`
+        const after = run<{ open: boolean; ask: string; key: string; closed: boolean }>(`
             const key = hub().querySelector('.task-hub__prop-add .tv-form__label input');
             type(key, 'dup');
             const value = hub().querySelector('.task-hub__prop-add input.tv-form__control');
@@ -227,15 +230,13 @@ describe('the hub writes a property as its block', () => {
             close();
             await sleep(600);
             const row = hub()?.querySelector('.task-hub__prop-add');
-            const stayed = { open: !!hub(), said: hub()?.querySelector('.task-hub__form')?.textContent ?? '', key: row?.querySelector('.tv-form__label input').value ?? '' };
-            type(row.querySelector('.tv-form__label input'), '');
-            type(row.querySelector('input.tv-form__control'), '');
-            close();
+            const asked = { open: !!hub(), ask: formRow(hub())?.querySelector('.tv-form__ask')?.textContent ?? '', key: row?.querySelector('.tv-form__label input').value ?? '' };
+            formRow(hub()).querySelector('.tv-form__discard').click();
             await until(() => !hub());
-            return JSON.stringify({ ...stayed, closed: !hub() });
+            return JSON.stringify({ ...asked, closed: !hub() });
         `);
         expect(after.open).toBe(true);
-        expect(after.said).toContain('dup');
+        expect(after.ask).toContain(tr('modal.hub.unsavedAsk', { fields: tr('modal.hub.propertyKeyField') }));
         expect(after.key).toBe('dup');
         expect(after.closed).toBe(true);
         expect(readTestFile(TEST_FILE)).toBe(BLOCK.join('\n'));

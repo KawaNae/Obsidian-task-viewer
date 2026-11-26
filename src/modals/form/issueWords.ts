@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import type { Issue, NotationKind, ShapeKind } from '../../utils/values/Read';
+import type { Issue, NotationKind, ReservedBuiltin, ShapeKind } from '../../utils/values/Read';
 
 /**
  * An issue of a reading (`utils/values`) as a sentence in the user's
@@ -21,8 +21,26 @@ export function issueWords(issue: Issue): string {
         case 'notation': return notationWords(issue.kind);
         case 'chars': return t('issue.chars', { chars: issue.chars });
         case 'digitsOnly': return t('issue.digitsOnly');
-        case 'reserved': return t('issue.reserved');
+        case 'reserved':
+            return issue.field
+                ? t('issue.reservedField', { key: issue.field.key, field: builtinFieldWords(issue.field.builtin) })
+                : t('issue.reserved');
+        case 'listMark': return t('issue.keyListMark');
+        case 'hasRow': return t('issue.keyHasRow', { key: issue.key });
         case 'duplicate': return t('issue.duplicate');
+    }
+}
+
+/** The name of the hub's field that edits a built-in, as its row is labelled. */
+function builtinFieldWords(builtin: ReservedBuiltin): string {
+    switch (builtin) {
+        case 'tags': return t('modal.hub.tags');
+        case 'color': return t('modal.hub.color');
+        case 'linestyle': return t('modal.hub.linestyle');
+        case 'mask': return t('modal.hub.mask');
+        case 'start': return t('modal.start');
+        case 'end': return t('modal.end');
+        case 'due': return t('modal.due');
     }
 }
 

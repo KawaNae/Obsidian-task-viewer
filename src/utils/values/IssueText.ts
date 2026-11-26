@@ -43,7 +43,9 @@ function sentence(issue: Issue, label: string): string {
         case 'notation': return `${label} must not hold ${NOTATION[issue.kind]}`;
         case 'chars': return `${label} must not hold: ${issue.chars}`;
         case 'digitsOnly': return `${label} must not be digits alone`;
-        case 'reserved': return `${label} is reserved`;
+        case 'reserved': return issue.field ? `${label} is reserved: ${issue.field.key} is set in the ${issue.field.builtin} field` : `${label} is reserved`;
+        case 'listMark': return `${label} must not start with a list marker (-, *, +, 1., 1)) or #`;
+        case 'hasRow': return `${label} already has a field: ${issue.key}`;
         case 'duplicate': return `${label} is already used`;
     }
 }

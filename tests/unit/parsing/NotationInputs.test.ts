@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { notationInName, TaskContentInput } from '../../../src/services/parsing/tv-inline/TaskContentInput';
-import { PropertyItemInput } from '../../../src/services/parsing/utils/PropertyItemInput';
+import { PropertyItemInput, PropertyValueInput } from '../../../src/services/parsing/utils/PropertyItemInput';
 import { TagInput } from '../../../src/services/parsing/utils/TagInput';
 import { PropertyKeyInput, ScopeKeyInput } from '../../../src/services/parsing/utils/PropertyKeyInput';
 import { StatusCharInput } from '../../../src/services/parsing/utils/StatusCharInput';
@@ -47,7 +47,7 @@ describe('tags typed to add', () => {
 });
 
 describe('a property key typed to add', () => {
-    const keys = PropertyKeyInput.of(DEFAULT_SCOPE_KEYS);
+    const keys = PropertyKeyInput.of(DEFAULT_SCOPE_KEYS, () => null);
 
     it('reads a key with the space around it taken off', () => {
         expect(keys.read('  場所 ')).toEqual({ ok: true, value: '場所' });
@@ -60,8 +60,8 @@ describe('a property key typed to add', () => {
         expect(keys.read(' \u3000 ')).toEqual({ ok: false, issue: { code: 'empty' } });
     });
 
-    it('takes a key exactly when the property line reads it as written', () => {
-        const typed = ['area', '**k**', '#tag', 'a b', ' 場所 ', '', ' ', 'a:b', 'a]', '[a', '`a`', 'a`b', '\u3000'];
+    it('takes a key exactly when the property line reads it as written, one starting as a list item or a # does aside', () => {
+        const typed = ['area', '**k**', 'a#tag', '-x', '1.x', 'a b', ' 場所 ', '', ' ', 'a:b', 'a]', '[a', '`a`', 'a`b', '\u3000'];
         for (const text of typed) {
             const [line] = PropertyLines.ofSection(Outline.read([`- ${text}:: v`]), null, 0, 1).lines;
             const read = keys.read(text);
@@ -69,16 +69,54 @@ describe('a property key typed to add', () => {
         }
     });
 
-    it('refuses a key the plugin keeps for itself', () => {
-        expect(keys.read('tv-start')).toEqual({ ok: false, issue: { code: 'reserved' } });
-        expect(keys.read('tags')).toEqual({ ok: false, issue: { code: 'reserved' } });
+    it('refuses a key that starts as a list item\'s marker or a # does, which the line after a bullet spells as a nested list, a heading or a tag', () => {
+        for (const key of ['- x', '* x', '+ x', '1. x', '1) x', '12.\tx', '#x', '# x', ' - x']) {
+            // The plugin's own reading takes the key: the line is refused for what Markdown reads in it.
+            expect(PropertyLines.ofSection(Outline.read([`- ${key}:: v`]), null, 0, 1).lines[0]?.key, key).toBe(key.trim());
+            expect(keys.read(key), key).toEqual({ ok: false, issue: { code: 'listMark' } });
+        }
+        for (const key of ['-x', '1.x', '1)x', 'a - x', 'x#', '-']) expect(keys.read(key), key).toEqual({ ok: true, value: key });
+    });
+
+    it('refuses a key the plugin keeps for itself, naming the built-in\'s field when one edits it', () => {
+        expect(keys.read('tv-start')).toEqual({ ok: false, issue: { code: 'reserved', field: { key: 'tv-start', builtin: 'start' } } });
+        expect(keys.read('tags')).toEqual({ ok: false, issue: { code: 'reserved', field: { key: 'tags', builtin: 'tags' } } });
+        for (const key of ['position', 'tv-ignore', 'tv-status']) {
+            expect(keys.read(key), key).toEqual({ ok: false, issue: { code: 'reserved' } });
+        }
+    });
+
+    it('names the built-in by the scope key the settings give it', () => {
+        const renamed = PropertyKeyInput.of({ ...DEFAULT_SCOPE_KEYS, color: 'colour' }, () => null);
+        expect(renamed.read('Colour')).toEqual({ ok: false, issue: { code: 'reserved', field: { key: 'Colour', builtin: 'color' } } });
+        expect(renamed.read('tv-color')).toEqual({ ok: true, value: 'tv-color' });
     });
 
     it('refuses a key the plugin keeps in another case, and takes a full-width one as another key', () => {
-        for (const key of ['Tags', 'TV-COLOR', 'Position', 'TV-Status']) {
+        expect(keys.read('TV-COLOR')).toEqual({ ok: false, issue: { code: 'reserved', field: { key: 'TV-COLOR', builtin: 'color' } } });
+        expect(keys.read('Tags')).toEqual({ ok: false, issue: { code: 'reserved', field: { key: 'Tags', builtin: 'tags' } } });
+        for (const key of ['Position', 'TV-Status']) {
             expect(keys.read(key), key).toEqual({ ok: false, issue: { code: 'reserved' } });
         }
         expect(keys.read('ｔａｇｓ')).toEqual({ ok: true, value: 'ｔａｇｓ' });
+    });
+
+    it('refuses a key a row stands for, naming it as the row shows it', () => {
+        const rows = PropertyKeyInput.of(DEFAULT_SCOPE_KEYS, (key) => key.toLowerCase() === 'area' ? 'Area' : null);
+        expect(rows.read(' AREA ')).toEqual({ ok: false, issue: { code: 'hasRow', key: 'Area' } });
+        expect(rows.read('place')).toEqual({ ok: true, value: 'place' });
+    });
+});
+
+describe('a property value typed in a field', () => {
+    it('reads the text with the space around it taken off, as the line reads its value', () => {
+        expect(PropertyValueInput.read('  x y ')).toEqual({ ok: true, value: { type: 'text', text: 'x y', spelling: 'x y' } });
+        expect(PropertyValueInput.read(' 12 ')).toEqual({ ok: true, value: { type: 'number', number: 12, spelling: '12' } });
+        expect(PropertyValueInput.read(' " a " ')).toEqual({ ok: true, value: { type: 'text', text: ' a ', spelling: '" a "' } });
+    });
+
+    it('reads nothing typed as no value', () => {
+        expect(PropertyValueInput.read('   ')).toEqual({ ok: true, value: { type: 'null', spelling: '' } });
     });
 });
 

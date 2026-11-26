@@ -415,11 +415,11 @@ describe('the source opened while the hub moves a row', () => {
     });
 });
 
-describe('a value the move\'s draft refused', () => {
-    /** The row's property written twice: the draft refuses a change of it. */
+describe('a key the move\'s draft writes twice, typed in the add row', () => {
+    /** The row's property written twice: its row stands, locked, and the add row refuses its key. */
     const TWICE = ['# 予定', '- [ ] 動かす行', '    - area:: a', '    - area:: b', '# 済み', ''].join('\n');
 
-    it('empties the add row and is said under it, not above the tabs; [Cancel] asks nothing of it alone and throws the move away, a blur writing nothing', async () => {
+    it('is refused as it is read and said under the key, what was typed kept; [Cancel] asks of it and throws it away with the move, a blur writing nothing', async () => {
         await writeIndexedTestFile(TEST_FILE, TWICE);
         const seen = run<Record<string, unknown>>(`
             await beginMove('動かす行');
@@ -433,19 +433,23 @@ describe('a value the move\'s draft refused', () => {
             type(addRow()[1], 'zz');
             addRow()[1].blur();
             await sleep(200);
-            const refused = { typed: addRow().map(input => input.value), under: addSays().length, above: formSays().length };
+            const refused = { typed: addRow().map(input => input.value), under: addSays(), above: formSays().length };
             pressButton(formRow(hub()).querySelector('.tv-form__cancel'));
+            await sleep(200);
+            const asked = ask();
+            formRow(hub()).querySelector('.tv-form__discard').click();
             await until(() => !act());
             await sleep(200);
-            const thrown = { asked: ask(), typed: addRow().map(input => input.value), under: addSays().length, above: formSays().length };
+            const thrown = { typed: addRow().map(input => input.value), under: addSays().length, above: formSays().length };
             addRow()[0].focus();
             addRow()[0].blur();
             await sleep(500);
-            return JSON.stringify({ refused, thrown, disk: await disk() });
+            return JSON.stringify({ refused, asked, thrown, disk: await disk() });
         `);
         expect(seen).toEqual({
-            refused: { typed: ['', ''], under: 1, above: 0 },
-            thrown: { asked: null, typed: ['', ''], under: 0, above: 0 },
+            refused: { typed: ['area', 'zz'], under: [tr('issue.keyHasRow', { key: 'area' })], above: 0 },
+            asked: tr('modal.hub.move.discardAsk'),
+            thrown: { typed: ['', ''], under: 0, above: 0 },
             disk: TWICE,
         });
     });
