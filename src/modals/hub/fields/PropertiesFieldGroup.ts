@@ -64,7 +64,8 @@ import {
  * 行の見た目（破線の枠、キーの横の印、薄い字と打ち消し線、×）と … のメニューは、
  * 描く時、確定した時、メニューを開く時の行（`rowNow`）から決める。フォーカスが
  * 節の中にある間は要素を作り直さず、行の見た目だけを当て直す（`restyle`）。
- * 行の増減や欄の種類の変化は、フォーカスが節から出た時に組み直す。
+ * 行の増減や欄の種類の変化は、フォーカスが節から出た時に組み直す。それまで
+ * 残る、消えた行と形の変わった行の欄は、何も書かない（`writeField`）。
  *
  * 行は組み立てごとに1つの `AbortSignal`（`built`）を持ち、その組み立てで
  * 付けた listener、候補の一覧、リストの欄はすべてそれに掛ける。組み直す前に
@@ -303,8 +304,8 @@ export class PropertiesFieldGroup implements ClosingPart {
      * built anew: its key, its mark, its frame, and its field's faint text,
      * strike and ×, a text field given the value as {@link BoundField.set}
      * gives it (what is typed in it kept). A row added, gone, or now of
-     * another shape is left as it is, and the rows are built anew once the
-     * focus leaves them.
+     * another shape is left as it is, its field writing nothing
+     * (`writeField`), and the rows are built anew once the focus leaves them.
      */
     private restyle(): void {
         const rows = this.rows();
@@ -477,7 +478,8 @@ export class PropertiesFieldGroup implements ClosingPart {
             // An own line keeps its key as written; an inherited value made
             // the task's own is written under the key it was inherited by.
             commit: (typed) => {
-                const written = this.setValue(this.rowNow(folded)?.key ?? key, typed);
+                const written = this.writeField(folded, typed);
+                if (written === false) return false;
                 this.restyle();
                 return written;
             },
@@ -524,7 +526,7 @@ export class PropertiesFieldGroup implements ClosingPart {
             items: field.items,
             disabled,
             candidates: () => this.candidates(key),
-            write: (next, focus) => this.writeList(folded, key, next, focus),
+            write: (next, focus) => this.writeList(folded, next, focus),
             say: (source, issues) => this.ctx.issues.set(source, issues),
             signal: this.built.signal,
         }));
@@ -536,16 +538,35 @@ export class PropertiesFieldGroup implements ClosingPart {
     }
 
     /**
-     * Write `items` as the row's own list of the property `key` (none is no
-     * value, the line kept and its items' lines taken out: over an inherited
-     * value, it hides it), the draft written so let go, and build the rows
-     * anew with the focus at `focus` in the list.
+     * Write `items` as the row's own list of the property `folded` (none is
+     * no value, the line kept and its items' lines taken out: over an
+     * inherited value, it hides it), the draft written so let go, and build
+     * the rows anew with the focus at `focus` in the list. Nothing, the rows
+     * left as they are, from a list that no longer stands for its row
+     * (`writeField`).
      */
-    private writeList(folded: string, key: string, items: PropertyScalar[], focus?: ListFocus): void {
+    private writeList(folded: string, items: PropertyScalar[], focus?: ListFocus): void {
+        if (this.writeField(folded, items.length === 0 ? NO_VALUE : { type: 'list', items }) === false) return;
         this.drafts.delete(folded);
-        void this.setValue(key, items.length === 0 ? NO_VALUE : { type: 'list', items });
         if (focus !== undefined) this.focusAfter = { folded, focus };
         this.render(true);
+    }
+
+    /**
+     * Write `value` from the field of the row `folded`, under the key the row
+     * has now: what each value field and each list writes through, from a
+     * commit, a ×, or a close's save. A field built for the row as it no
+     * longer is writes nothing (`false`), typed over or not: its row gone,
+     * or now of another shape (`shapeOf`), as a write from outside makes it
+     * while the focus is in the rows and they are not built anew. Its text
+     * or its items stand for no value of the row now, and written they would
+     * put back what the write from outside changed. The rows are built anew,
+     * as they are, once the focus leaves them.
+     */
+    private writeField(folded: string, value: PropertyValue): Promise<Written> | undefined | false {
+        const now = this.rowNow(folded);
+        if (!now || this.drawn.get(folded)?.shape !== this.shapeOf(now)) return false;
+        return this.setValue(now.key, value);
     }
 
     /** A list of values under `input`, closed when the rows are built anew. */

@@ -8,9 +8,9 @@ import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
-import type { Properties } from '../../../src/types';
+import type { Properties, PropertyScalar } from '../../../src/types';
 import { t } from '../../../src/i18n';
-import { valuesOf } from '../helpers/properties';
+import { byKey, valuesOf } from '../helpers/properties';
 import { menuSpy } from '../helpers/menuSpy';
 import { FocusDoc, type FocusEl, asEl } from '../helpers/focusDom';
 
@@ -139,6 +139,7 @@ async function typeEnter(h: PropHub, key: string, text: string) {
 }
 
 const text = (s: string) => ({ type: 'text', text: s, spelling: s });
+const item = (s: string): PropertyScalar => ({ type: 'text', text: s, spelling: s });
 
 describe.each(HOSTS)('a property\'s row once its value is committed with Enter, on %s', (_name, open) => {
     it('emptied: shows no value at once, the field kept with the focus, and its menu offers no conversion', async () => {
@@ -198,5 +199,27 @@ describe.each(HOSTS)('a property\'s row once its value is committed with Enter, 
         expect(focused(h)).toBe(field);
         expect([markOf(h, 'k'), inheritedLook(h, 'k'), field.placeholder, field.classes.has('task-hub__value--struck')])
             .toEqual(['hiding', false, 's', true]);
+    });
+});
+
+describe('a row the plugin writes elsewhere while the focus is in the hub\'s rows', () => {
+    const note = ['# Tasks', '- [ ] Row', '    - k:: a', '    - m:: x', '# Done', ''];
+    const written = ['# Tasks', '- [ ] Row', '    - k::', '        - p', '        - q', '    - m:: y', '# Done', ''];
+
+    it.each(['touched and left', 'the hub closed'])('keeps the list written elsewhere over the text field its row was built as: %s', async (then) => {
+        const h = await openMoveHub(s => { lives.push(s); }, note);
+        const hub = asHub(h);
+        await typeEnter(hub, 'm', 'y');
+        // Another view writes the row, as the hub's own writes go: the hub follows it.
+        await h.session.ops.updateTask(h.host.task().id, { properties: byKey({ k: { type: 'list', items: [item('p'), item('q')] }, m: item('y') }) });
+        await hub.settle();
+        expect([h.lines(), h.host.shut()]).toEqual([written, null]);
+        if (then === 'the hub closed') h.form.beforeClose();
+        else {
+            valueOf(hub, 'k').focus();
+            hub.name().focus();
+        }
+        await hub.settle();
+        expect(h.lines()).toEqual(written);
     });
 });
