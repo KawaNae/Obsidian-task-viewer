@@ -602,7 +602,7 @@ export class TaskHubForm implements HubForm {
         const ask = loss?.kind === 'unsaved'
             ? t('modal.hub.unsavedAsk', { fields: loss.fields.join(t('modal.hub.fieldJoin')) })
             : loss?.kind === 'draft' ? draft?.discardAsk ?? null : null;
-        this.createLine.offer(draft !== null);
+        this.createLine.offer(draft?.label ?? null);
         this.actions.render({
             busy: draft?.writing() ?? false,
             ctaEnabled: draft?.canWrite() ?? false,

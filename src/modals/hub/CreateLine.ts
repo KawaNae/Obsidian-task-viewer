@@ -7,15 +7,17 @@ export type CreateLineSource = 'place' | 'write';
 
 /**
  * The line above the write of a hub whose host holds something not written
- * yet (a task to create), in the overlay's foot: what pressing the write
- * does, why it cannot be pressed, and why a write was refused. It stands
- * over the row of buttons, so the sentence that keeps the write from being
- * pressed is beside it however the body is scrolled. While the host holds
- * nothing to write, the line is taken out of the foot ({@link offer}),
+ * yet (a task to create, a move), in the overlay's foot: what pressing the
+ * write does, why it cannot be pressed, and why a write was refused. It
+ * stands over the row of buttons, so the sentence that keeps the write from
+ * being pressed is beside it however the body is scrolled. While the host
+ * holds nothing to write, the line is taken out of the foot ({@link offer}),
  * keeping what it says.
  *
  * A button at the row's start ({@link drawToggle}) shows the line or hides
  * it, all of it, errors and warnings too: hidden, the foot is the row alone.
+ * The button is named as showing or hiding what the write does, by the
+ * write's own label ({@link offer}): "what Create does", "what Move does".
  * The line opens shown each time the hub opens; hiding it is not kept. While
  * it is hidden the button reads as what it would show: a chevron up, or the
  * warning mark in the tone of the worst it hides (an error's red, a
@@ -35,8 +37,8 @@ export class CreateLine {
     private readonly says: IssueBoard<never>;
     private toggle: HTMLButtonElement | null = null;
     private shown = true;
-    /** Whether the host holds something to write, which the line is of. */
-    private offered = true;
+    /** The label of the write the host holds, which the line is of; null while it holds none. */
+    private act: string | null = null;
     /** What the line says, as last drawn: a change shows the line again. */
     private said = '';
 
@@ -46,6 +48,8 @@ export class CreateLine {
         this.line = foot.createDiv({ cls: 'task-hub__create-line' });
         const texts = this.line.createDiv({ cls: 'tv-form__says task-hub__create-says' });
         this.says = new IssueBoard<never>({ field: () => null, form: texts });
+        // Out of the foot until the host is told to hold a write (`offer`), its place kept.
+        foot.removeChild(this.line);
         this.render();
     }
 
@@ -70,12 +74,18 @@ export class CreateLine {
         this.render();
     }
 
-    /** Whether the host holds something to write now: with nothing, the line is out of the foot, and keeps what it says. */
-    offer(offered: boolean): void {
-        if (offered === this.offered) return;
-        this.offered = offered;
-        if (offered) this.foot.insertBefore(this.line, this.foot.children[this.at] ?? null);
-        else this.foot.removeChild(this.line);
+    /**
+     * The label of the write the host holds now, which names the line's
+     * button; null, it holds nothing to write, and the line is out of the
+     * foot, keeping what it says.
+     */
+    offer(act: string | null): void {
+        if (act === this.act) return;
+        const was = this.act;
+        this.act = act;
+        if (was === null) this.foot.insertBefore(this.line, this.foot.children[this.at] ?? null);
+        else if (act === null) this.foot.removeChild(this.line);
+        this.render();
     }
 
     private render(): void {
@@ -92,10 +102,11 @@ export class CreateLine {
         button.toggleClass('is-warning', hidden === 'warning');
         button.setAttribute('aria-expanded', String(this.shown));
         button.setAttribute('aria-label', t(
-            hidden === null ? 'modal.newTask.hideLine'
-                : hidden === 'error' ? 'modal.newTask.showLineError'
-                    : hidden === 'warning' ? 'modal.newTask.showLineWarning'
-                        : 'modal.newTask.showLine',
+            hidden === null ? 'modal.hub.actLine.hide'
+                : hidden === 'error' ? 'modal.hub.actLine.showError'
+                    : hidden === 'warning' ? 'modal.hub.actLine.showWarning'
+                        : 'modal.hub.actLine.show',
+            { act: this.act ?? '' },
         ));
     }
 }

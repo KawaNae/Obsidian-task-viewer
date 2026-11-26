@@ -542,6 +542,12 @@
         "refusedProperty": "The lines of property \"{{key}}\" (line {{line}} under this task) hold a key written twice or something the plugin does not read; mend them in the source",
         "refusedPropertyShut": "The lines of property \"{{key}}\" (line {{line}} under this task) hold a key written twice or something the plugin does not read; cancel the move, then mend them in the editor"
       },
+      "actLine": {
+        "hide": "Hide what {{act}} does",
+        "show": "Show what {{act}} does",
+        "showError": "Show what {{act}} does (it has an error)",
+        "showWarning": "Show what {{act}} does (it has a warning)"
+      },
       "source": {
         "view": "Preview",
         "source": "Source",
@@ -580,11 +586,7 @@
       "toChild": "Creates the task first among the children of {{parent}}",
       "gone": "The parent task is no longer there.",
       "childFixed": "A child task is created under its parent task, so its location cannot be changed",
-      "noHeading": "None",
-      "hideLine": "Hide what Create does",
-      "showLine": "Show what Create does",
-      "showLineError": "Show what Create does (it has an error)",
-      "showLineWarning": "Show what Create does (it has a warning)"
+      "noHeading": "None"
     },
     "draft": {
       "discardAsk": "Discard the draft?",

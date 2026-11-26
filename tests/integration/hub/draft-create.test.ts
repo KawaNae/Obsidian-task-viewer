@@ -464,7 +464,7 @@ describe('the line above the create', () => {
             return JSON.stringify(out);
         `);
         const { opened, hidden, shown } = steps;
-        expect(opened).toMatchObject({ line: true, first: true, label: tr('modal.newTask.hideLine') });
+        expect(opened).toMatchObject({ line: true, first: true, label: tr('modal.hub.actLine.hide', { act: tr('modal.create') }) });
         const toggle = opened.toggle as { width: number; height: number; radius: string };
         const cancel = opened.cancel as { width: number; height: number; radius: string };
         expect(toggle.height).toBeCloseTo(cancel.height, 0);
@@ -472,7 +472,7 @@ describe('the line above the create', () => {
         expect(toggle.radius).toBe(cancel.radius);
         expect(opened.foot as number).toBeGreaterThan(opened.row as number + 1);
 
-        expect(hidden).toMatchObject({ line: false, label: tr('modal.newTask.showLine') });
+        expect(hidden).toMatchObject({ line: false, label: tr('modal.hub.actLine.show', { act: tr('modal.create') }) });
         expect(hidden.foot as number).toBeCloseTo(hidden.row as number, 0);
 
         expect(shown).toMatchObject({ line: true, says: [`${INFO}: ${tr('modal.newTask.toChild', { parent: '親' })}`] });
