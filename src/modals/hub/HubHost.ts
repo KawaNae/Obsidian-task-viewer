@@ -116,7 +116,11 @@ export interface HubHost {
      * by the host (`HubForm.sayPut`); a field refused keeps what was typed.
      */
     put(updates: Partial<Task> | null): Promise<boolean>;
-    /** Why the fields take no edit now, in the words the form says it in; null while they take them. */
+    /**
+     * Why the fields take no edit now, in the words the form says it in;
+     * empty, they take none and nothing is said (a wait too short to be
+     * read); null while they take them.
+     */
     shut(): string | null;
     /**
      * Open a line of the row's note in the editor and light it: the line

@@ -1,6 +1,6 @@
 import { parseYaml } from 'obsidian';
 import { t } from '../../i18n';
-import { logWarn } from '../../log/log';
+import { logError, logWarn } from '../../log/log';
 import type { InheritedValue } from '../../services/data/InheritedValues';
 import type {
     DestinationFacts, NoteFacts, SendingLines, SendPreview, SendRequest, SendResult, SendRow,
@@ -61,8 +61,9 @@ import { DestinationText } from './DestinationText';
  *   (the note's end for a row in a note with no heading). The send would
  *   still move it, to the section's head or end and out from under its
  *   parent. Said under the note, in place of where the row goes.
- * - A send not made keeps the drafts and says why; a send made is told to
- *   the host, which closes what the dialog is shown in. A send made for some
+ * - A send not made, or one that threw, keeps the drafts and says why; a
+ *   send made is told to the host, which closes what the dialog is shown
+ *   in. A send made for some
  *   rows only says why too, and offers no send again: the rows that went
  *   are no longer where the dialog opened them.
  */
@@ -230,7 +231,7 @@ export class SendDialog {
         this.message = null;
         this.render();
 
-        const result = await this.host.send(req);
+        const result = await this.sent(req);
         if (this.disposed) return;
         if (result.kind === 'done') return this.host.close();
         this.message = result.why;
@@ -242,6 +243,19 @@ export class SendDialog {
         this.phase = 'open';
         // The note may have changed under the send: its headings, its keys.
         void this.lookUp();
+    }
+
+    /**
+     * The answer of the send `req`; one that threw is a send not made, said
+     * as one the send's caller asked wrongly is, and written to the log.
+     */
+    private async sent(req: SendRequest): Promise<SendResult> {
+        try {
+            return await this.host.send(req);
+        } catch (e) {
+            logError(`[SendDialog] the send failed: ${e instanceof Error ? e.message : String(e)}`);
+            return { kind: 'not-done', why: t('notice.notSent') };
+        }
     }
 
     /**

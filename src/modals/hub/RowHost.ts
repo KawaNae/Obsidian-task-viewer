@@ -108,7 +108,10 @@ export class RowHost implements PanelHost, RowPlaceHost {
     private headingReads = 0;
     /** The move the hub is in: the changes are held in its draft. Null while each is written as it comes. */
     private move: RowMove | null = null;
-    /** A move is being begun: what it waits for is not answered yet. */
+    /**
+     * A move is being begun: what it waits for is not answered yet. The host
+     * is in neither state meanwhile, and takes no change of the fields.
+     */
     private beginning = false;
 
     /**
@@ -138,6 +141,7 @@ export class RowHost implements PanelHost, RowPlaceHost {
      */
     put(updates: Partial<Task> | null): Promise<boolean> {
         if (!updates) return Promise.resolve(true);
+        if (this.beginning) return Promise.resolve(false);
         if (this.move) return Promise.resolve(this.move.put(updates));
         this.value = { ...this.value, ...updates };
         const id = this.value.id;
@@ -188,10 +192,20 @@ export class RowHost implements PanelHost, RowPlaceHost {
     }
 
     /**
-     * In a move, shut only while it is under way: the draft takes changes
-     * whether or not the row is still the one it opened on.
+     * Shut while a move is begun, nothing said: the wait is a write's answer
+     * and a read of the note, gone before a sentence could be read. Else as
+     * the state the host is in says ({@link shutWhy}).
      */
     shut(): string | null {
+        return this.beginning ? '' : this.shutWhy();
+    }
+
+    /**
+     * Why the fields are shut in the state the host is in. In a move, only
+     * while it is under way: the draft takes changes whether or not the row
+     * is still the one it opened on.
+     */
+    private shutWhy(): string | null {
         if (this.move) return this.move.writing() ? t('modal.hub.move.formShut') : null;
         if (this.sourceOpen) return t('modal.hub.source.formShut');
         if (this.missing) return t('modal.hub.taskMissing');
@@ -231,7 +245,7 @@ export class RowHost implements PanelHost, RowPlaceHost {
             const moving = this.move.moving();
             return moving ? moving.then(made => (made ? 'close' : 'stay')) : 'close';
         }
-        if (this.shut() !== null || this.writing.size === 0) return 'close';
+        if (this.shutWhy() !== null || this.writing.size === 0) return 'close';
         return this.settled().then(written => (written ? 'close' : 'stay'));
     }
 
@@ -269,31 +283,42 @@ export class RowHost implements PanelHost, RowPlaceHost {
      * focus), a write was refused (why is said), the row is not the one on
      * the disk (the user is told), or the hub closed meanwhile. The source
      * mode is held from the start: it does not open while the move is begun.
+     * Once what is typed is put in, the fields are shut until the move is
+     * held, or open again as they were when none is.
      */
     async beginMove(start: MoveStart): Promise<void> {
         const form = this.form;
-        if (!form || this.move || this.beginning || this.closed || this.shut() !== null || this.value.isReadOnly) return;
-        this.beginning = true;
+        if (!form || this.move || this.closed || this.shut() !== null || this.value.isReadOnly) return;
         this.source.hold(true);
+        // Put in while each change is still written as it comes.
+        if (!form.putTyped()) {
+            this.source.hold(false);
+            return;
+        }
+        this.beginning = true;
+        form.showShut();
         try {
-            if (!form.putTyped()) return;
             if (!(await this.settled())) return;
             const id = this.value.id;
             if (!this.free()) return;
             const preview = await this.deps.noteOps.previewSend([id]);
             if (!preview || !this.free()) return;
+            this.beginning = false;
             this.hold(form, { preview, start });
         } catch (e) {
             logError(`[RowHost] the move could not begin: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             this.beginning = false;
-            if (!this.move) this.source.hold(false);
+            if (!this.move) {
+                this.source.hold(false);
+                if (!this.closed) form.showShut();
+            }
         }
     }
 
-    /** Whether a move begun may still be held: the hub open on the row, the fields not shut. */
+    /** Whether a move begun may still be held: the hub open on the row, the fields not shut but by the beginning itself. */
     private free(): boolean {
-        return !this.closed && this.shut() === null;
+        return !this.closed && this.shutWhy() === null;
     }
 
     /**

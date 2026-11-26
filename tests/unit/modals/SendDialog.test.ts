@@ -549,6 +549,24 @@ describe('a send', () => {
         expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Sent some']);
     });
 
+    it('that threw: as one not made, open again with why said, and sent again when asked', async () => {
+        const h = await answered();
+        h.hold([draftOf('- [ ] A2')]);
+        h.send.mockRejectedValueOnce(new Error('the disk did not answer'));
+
+        await h.sendNow();
+
+        expect(h.close).not.toHaveBeenCalled();
+        expect(h.state().phase).toBe('open');
+        expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual([t('notice.notSent')]);
+        await h.answer(facts());
+        expect(h.state().canSend).toBe(true);
+
+        await h.sendNow();
+        expect(h.send).toHaveBeenCalledTimes(2);
+        expect(h.close).toHaveBeenCalledTimes(1);
+    });
+
 });
 
 describe('closing', () => {
