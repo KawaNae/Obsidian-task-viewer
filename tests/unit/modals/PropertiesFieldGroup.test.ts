@@ -484,3 +484,94 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         expect(s.doc.activeElement).toBe(s.doc.body);
     });
 });
+
+describe('a row written from outside while the focus is in the rows', () => {
+    const NONE = { type: 'null', spelling: '' } as const;
+    const list = (...items: string[]) => ({ type: 'list', items: items.map(text) }) as const;
+    const shown = (el: FocusEl | null) => el !== null && el.style.display !== 'none';
+
+    /** The rows `k:: a` and `m:: x`, the focus kept in m once `y` is written with Enter. */
+    function focusedInM() {
+        const s = setUp(byKey({ k: text('a'), m: text('x') }));
+        const m = s.valueOf('m');
+        m.focus();
+        m.type('y');
+        m.enter();
+        expect(s.writes).toHaveLength(1);
+        return s;
+    }
+
+    const CHANGES: [string, Properties][] = [
+        ['made a list', byKey({ k: list('p', 'q'), m: text('y') })],
+        ['taken out', byKey({ m: text('y') })],
+    ];
+
+    it('keeps a row made a list as the text field it was built as while the focus is in the rows, and builds it as a list once the focus leaves them', async () => {
+        const s = focusedInM();
+        const field = s.valueOf('k');
+        s.outside(byKey({ k: list('p', 'q'), m: text('y') }));
+        expect(s.valueOf('k')).toBe(field);
+        expect(field.value).toBe('a');
+        s.leave();
+        await Promise.resolve();
+        expect(s.rowOf('k')!.find('task-hub__value')).toBeNull();
+        expect(s.rowOf('k')!.findAll('task-hub__list-item').filter(item => !item.classes.has('task-hub__list-item--add')).map(item => item.find('tv-ctrl__text-input')!.value))
+            .toEqual(['p', 'q']);
+        expect(s.writes).toHaveLength(1);
+    });
+
+    it.each(CHANGES)('writes nothing from the field of a row %s: touched and left, typed over and left, its × pressed, or the focus kept as the hub closes', (_name, next) => {
+        for (const then of ['touched', 'typed', 'x', 'close']) {
+            const s = focusedInM();
+            const field = s.valueOf('k');
+            s.outside(next);
+            if (then === 'close') s.group.save();
+            else if (then === 'x') s.rowOf('k')?.find('tv-form__clear-button')?.press();
+            else {
+                field.focus();
+                if (then === 'typed') field.type('b');
+                if (then === 'typed') field.enter();
+                s.leave();
+            }
+            expect(s.writes, then).toHaveLength(1);
+        }
+    });
+
+    it('writes nothing from the field of a row a finding locks meanwhile, typed over and left', () => {
+        const findings: HubFinding[] = [];
+        const s = setUp(byKey({ k: text('a'), m: text('x') }), { findings });
+        s.valueOf('m').focus();
+        findings.push({ kind: 'duplicate-key', field: 'prop:k', tone: 'error', text: 'twice', key: 'k', line: 1 });
+        s.outside(byKey({ k: text('a'), m: text('x') }));
+        s.valueOf('k').focus();
+        s.valueOf('k').type('b');
+        s.leave();
+        expect(s.writes).toEqual([]);
+    });
+
+    it('compares a field whose value was written from outside with the value as it is now: touched and left it writes nothing, and the value it was built with typed back is written', () => {
+        const s = focusedInM();
+        s.outside(byKey({ k: text('c'), m: text('y') }));
+        expect(s.valueOf('k').value).toBe('c');
+        s.valueOf('k').focus();
+        s.leave();
+        expect(s.writes).toHaveLength(1);
+        s.valueOf('k').focus();
+        s.valueOf('k').type('a');
+        s.leave();
+        expect(s.writes.slice(1).map(valuesOf)).toEqual([{ k: text('a'), m: text('y') }]);
+    });
+
+    it('puts each field\'s faint text, strike and × on it again as the rows written from outside are now', () => {
+        const s = setUp(byKey({ k: text('a'), n: NONE, Place: NONE, m: text('x') }), { inherited: byKey({ Place: text('home') }) });
+        s.valueOf('m').focus();
+        expect([s.valueOf('n').placeholder, s.valueOf('Place').classes.has('task-hub__value--struck'), shown(s.rowOf('k')!.find('tv-form__clear-button'))])
+            .toEqual(['No value', true, true]);
+        s.outside(byKey({ k: NONE, n: text('b'), m: text('x') }));
+        expect(s.valueOf('m')).toBe(s.doc.activeElement);
+        // A value has no faint text; the inherited value no longer hidden is not struck through; no value has no ×.
+        expect([s.valueOf('n').placeholder, s.valueOf('Place').classes.has('task-hub__value--struck'), shown(s.rowOf('k')!.find('tv-form__clear-button'))])
+            .toEqual(['', false, false]);
+        expect([s.valueOf('n').value, s.valueOf('Place').value, s.valueOf('k').placeholder]).toEqual(['b', 'home', 'No value']);
+    });
+});
