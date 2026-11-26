@@ -9,6 +9,7 @@ import { refusalNotice } from '../../services/core/RefusalClause';
 import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import { logError } from '../../log/log';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
+import type { Written } from '../form/bindField';
 import type { HubForm, HubPanel, HubShut, PanelHost } from './HubHost';
 import { openSourceLine, type LineTarget } from './SourceLine';
 import type { ShownPlace } from '../place/PlaceShown';
@@ -80,7 +81,8 @@ export interface MoveOpening {
  * A move begins ({@link beginMove}) once what is typed is put in, the
  * writes asked are written, and the row is read as the disk holds it
  * (`NoteOps.previewSend`). While it lasts, the draft is the value, a change
- * the draft refuses is said above the form's tabs, nothing of the row's
+ * the draft refuses is said under the field it came from, which shows the
+ * draft's value again (`HubHost.put`), nothing of the row's
  * lines is offered to open (the draft's lines are on no disk), and the
  * source opens on the draft, on the move's seat (`RowMove.seat`), how far
  * the fields are shut the move's to answer (`RowMove.shut`). The source mode
@@ -174,13 +176,15 @@ export class RowHost implements PanelHost, RowPlaceHost {
     }
 
     /**
-     * @returns whether it was written, or, in a move, taken into the draft (a
-     *   field refused keeps what was typed: `bindField`)
+     * @returns whether it was written, or, in a move, taken into the draft. A
+     *   write refused leaves what was typed in the field, to be written again
+     *   from the new reading; a change the draft refused does not, as the
+     *   draft refuses it for its own lines (`HubHost.put`).
      */
-    put(updates: Partial<Task> | null): Promise<boolean> {
+    put(updates: Partial<Task> | null): Promise<Written> {
         if (!updates) return Promise.resolve(true);
         if (this.beginning) return Promise.resolve(false);
-        if (this.move) return Promise.resolve(this.move.put(updates));
+        if (this.move) return Promise.resolve(this.move.put(updates) || 'dropped');
         this.value = { ...this.value, ...updates };
         const id = this.value.id;
         const write: Promise<boolean> = this.deps.operations.updateTask(id, updates, { tellRefusal: false })

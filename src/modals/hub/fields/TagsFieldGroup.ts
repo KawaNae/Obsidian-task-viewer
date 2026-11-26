@@ -6,7 +6,7 @@ import { FilterValueCollector } from '../../../services/filter/FilterValueCollec
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
-import { bindField, type BoundField } from '../../form/bindField';
+import { bindField, type BoundField, type Written } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { TagInput } from '../../../services/parsing/utils/TagInput';
 import { TagRule } from '../../../services/parsing/utils/TagRule';
@@ -102,9 +102,11 @@ export class TagsFieldGroup implements ClosingPart {
             this.draft = '';
             input.value = '';
             const write = this.commit([...this.ctx.task().tags, ...added]);
-            // Refused: what was typed is the field's again, unless something was typed since.
+            // Refused where it may be taken once added again: what was typed is
+            // the field's again, unless something was typed since. Dropped, the
+            // field stays empty, as the value it stands for is.
             void write?.then((written) => {
-                if (written || this.draft !== '') return;
+                if (written !== false || this.draft !== '') return;
                 this.draft = typed;
                 if (this.addInput && this.addInput.value === '') this.addInput.value = typed;
             });
@@ -142,9 +144,9 @@ export class TagsFieldGroup implements ClosingPart {
         this.ctx.issues.redraw();
     }
 
-    private commit(tags: string[]): Promise<boolean> | undefined {
+    private commit(tags: string[]): Promise<Written> | undefined {
         if (this.ctx.isShut() || this.ctx.locked('tags')) return undefined;
-        const write = this.ctx.put(TaskUpdateBuilder.tags(this.ctx.task(), tags));
+        const write = this.ctx.put(TaskUpdateBuilder.tags(this.ctx.task(), tags), 'tags');
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。
         const restoreFocus = !!this.addInput && this.addInput.ownerDocument.activeElement === this.addInput;

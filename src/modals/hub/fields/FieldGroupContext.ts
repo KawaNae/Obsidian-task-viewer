@@ -4,6 +4,7 @@ import type { PluginContext } from '../../../PluginContext';
 import type { IndexReads } from '../../../services/core/TaskIndex';
 import type { DateKey } from '../../form/DateFieldGroup';
 import type { IssueBoard } from '../../form/FormIssue';
+import type { Written } from '../../form/bindField';
 import type { FindingField, HubFinding } from '../HubFindings';
 import type { LineTarget } from '../SourceLine';
 
@@ -45,8 +46,13 @@ export interface ClosingPart {
 export interface FieldGroupContext {
     task: () => Task;
     isShut: () => boolean;
-    /** Hand `updates` on to the host: whether they were taken (a refusal is said by the host). */
-    put: (updates: Partial<Task> | null) => Promise<boolean>;
+    /**
+     * Hand `updates` on to the host from the field `at` (`'form'`: a field
+     * with no place of its own to say a refusal under, the status): whether
+     * they were taken, and, refused, whether the field keeps what was typed
+     * (`HubHost.put`). A refusal is said by the host.
+     */
+    put: (updates: Partial<Task> | null, at: HubField | 'form') => Promise<Written>;
     app: App;
     plugin: PluginContext;
     index: IndexReads;

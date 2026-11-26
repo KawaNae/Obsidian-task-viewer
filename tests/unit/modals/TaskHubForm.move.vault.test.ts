@@ -140,12 +140,30 @@ describe('[Move] while the source holds a text not taken in', () => {
 
 /** A row with a property written twice: the draft refuses a change of it. */
 const TWICE = ['# Tasks', '- [ ] Row', '    - area:: a', '    - area:: b', '# Done', ''];
+/** {@link TWICE} with a property the draft takes changes of. */
+const TWICE_X = ['# Tasks', '- [ ] Row', '    - area:: a', '    - area:: b', '    - x:: 1', '# Done', ''];
+
+type Hub = Awaited<ReturnType<typeof open>>;
 
 /** The add row's key and value fields. */
-const addRow = (h: Awaited<ReturnType<typeof open>>) => h.root.find('task-hub__prop-add')!.findAll('tv-ctrl__text-input') as FocusEl[];
+const addRow = (h: Hub) => h.root.find('task-hub__prop-add')!.findAll('tv-ctrl__text-input') as FocusEl[];
+
+/** What is said under the fields, the form's own place left out. */
+const rowSays = (h: Hub) => h.root.findAll('tv-form__says')
+    .filter(says => !says.classes.has('tv-form__says--form'))
+    .flatMap(says => says.children.map(child => child.text));
+
+/** The draft's refusal of a change of `area`, told by one of its two lines under the row. */
+const AREA_REFUSED = ['1', '2'].map(line => t('modal.hub.move.refusedProperty', { key: 'area', line }));
+
+/** Whether the draft's refusal of a change of `area` is said under a field (beside the finding of its key written twice). */
+const saysArea = (h: Hub) => rowSays(h).some(text => AREA_REFUSED.includes(text));
+
+/** The element the focus is on. */
+const focused = (h: Hub) => (h.root as unknown as { ownerDocument: { activeElement: unknown } }).ownerDocument.activeElement;
 
 /** Type `key` and `value` in the add row, and leave it for the name: the draft refuses it. */
-async function addRefused(h: Awaited<ReturnType<typeof open>>, key = 'area', value = 'zz') {
+async function addRefused(h: Hub, key = 'area', value = 'zz') {
     const [keyInput, valueInput] = addRow(h);
     keyInput.focus();
     keyInput.type(key);
@@ -155,110 +173,152 @@ async function addRefused(h: Awaited<ReturnType<typeof open>>, key = 'area', val
     await settle();
 }
 
-describe('the values the fields show while the row moves', () => {
-    it('a value the draft refused is said refused, once the source took a text in as well', async () => {
+/** The draft refuses every change of the name, saying `why`. */
+function refuseName(h: Hub, why = 'the name is refused') {
+    const move = h.move()!;
+    const put = move.put.bind(move);
+    vi.spyOn(move, 'put').mockImplementation((updates) => {
+        if (updates.content !== undefined) {
+            move['deps'].host.refuse(why);
+            return false;
+        }
+        return put(updates);
+    });
+}
+
+describe('a change the draft refuses while the row moves', () => {
+    it('empties the add row and says why under it, the focus where it went', async () => {
         const h = await open(TWICE);
         await h.begin();
         await addRefused(h);
-        expect(h.formSays().some(text => text.includes('area'))).toBe(true);
-        await h.source.enter();
-        h.editor().type({ children: [{ text: '- area:: a', was: 1 }, { text: '- area:: b', was: 2 }, { text: '- [ ] c', was: null }] });
-        h.root.focus();
-        h.source.back();
-        await settle();
         const [keyInput, valueInput] = addRow(h);
-        expect([keyInput.value, valueInput.value]).toEqual(['area', 'zz']);
-        expect(h.formSays().some(text => text.includes('area'))).toBe(true);
+        expect([keyInput.value, valueInput.value]).toEqual(['', '']);
+        expect(saysArea(h)).toBe(true);
+        expect(h.formSays()).toEqual([]);
+        expect(focused(h)).toBe(h.field('name'));
+        expect(h.host.task().subtreeLines).toEqual(['- [ ] Row', '    - area:: a', '    - area:: b']);
     });
 
-    it('a value the draft refused is put in again once the source mends what refused it', async () => {
+    it('committed by Enter in the add row, leaves the focus in the add row\'s field it was in', async () => {
         const h = await open(TWICE);
         await h.begin();
+        const [keyInput, valueInput] = addRow(h);
+        keyInput.focus();
+        keyInput.type('area');
+        valueInput.focus();
+        valueInput.type('zz');
+        valueInput.enter();
+        await settle();
+        const [keyNow, valueNow] = addRow(h);
+        expect([keyNow.value, valueNow.value]).toEqual(['', '']);
+        expect(focused(h)).toBe(valueNow);
+        expect(saysArea(h)).toBe(true);
+    });
+
+    it('shows the draft\'s value in a field it refused, the field keeping the focus Enter left in it', async () => {
+        const h = await open();
+        await h.begin();
+        refuseName(h);
+        const name = h.field('name');
+        name.focus();
+        name.type('Typed');
+        name.enter();
+        await settle();
+        expect(name.value).toBe('Row');
+        expect(focused(h)).toBe(name);
+        expect(rowSays(h)).toContain('the name is refused');
+    });
+
+    it('says why under each field it refused, until the draft changes', async () => {
+        const h = await open(TWICE);
+        await h.begin();
+        refuseName(h);
+        await addRefused(h);
+        const name = h.field('name');
+        name.type('Typed');
+        h.field('start').focus();
+        await settle();
+        expect(name.value).toBe('Row');
+        expect(rowSays(h)).toContain('the name is refused');
+        expect(saysArea(h)).toBe(true);
+        const start = h.field('start');
+        start.type('2026-11-28');
+        h.field('end').focus();
+        await settle();
+        expect(h.host.task().startDate).toBe('2026-11-28');
+        expect(rowSays(h)).not.toContain('the name is refused');
+        expect(saysArea(h)).toBe(false);
+    });
+
+    it('leaves another field\'s change, taken by Enter after a refusal, with the focus in its field', async () => {
+        const h = await open(TWICE_X);
+        await h.begin();
+        await addRefused(h);
+        const x = h.field('property:x');
+        x.focus();
+        x.type('2');
+        x.enter();
+        await settle();
+        expect(h.host.task().subtreeLines).toEqual(['- [ ] Row', '    - area:: a', '    - area:: b', '    - x:: 2']);
+        expect(focused(h)).toBe(x);
+        expect(h.field('property:x')).toBe(x);
+    });
+
+    it('puts in no text another field holds typed when a change is taken', async () => {
+        const h = await open();
+        await h.begin();
+        const name = h.field('name');
+        name.focus();
+        name.type('Typed');
+        await h.host.put({ startDate: '2026-11-27' });
+        await settle();
+        expect(h.host.task().content).toBe('Row');
+        expect(name.value).toBe('Typed');
+        expect(focused(h)).toBe(name);
+    });
+
+    it('is not put in by [Move] once the source mends what refused it: the move writes the draft as it holds it', async () => {
+        const h = await open(TWICE);
+        await h.begin();
+        await h.toDone();
         await addRefused(h);
         await h.source.enter();
         h.editor().type({ children: [{ text: '- area:: a', was: 1 }] });
-        h.root.focus();
-        h.source.back();
-        await settle();
-        expect(h.host.task().subtreeLines).toEqual(['- [ ] Row', '    - area:: zz']);
-        expect(h.formSays().some(text => text.includes('area'))).toBe(false);
+        h.click(h.act());
+        await tick(30);
+        expect(h.closed()).toBe(true);
+        expect(h.lines()).toEqual(['# Tasks', '# Done', '- [ ] Row', '    - area:: a', '']);
     });
 
-    it('a value the draft refused is said refused once another field\'s change is taken', async () => {
-        const h = await open(TWICE);
-        await h.begin();
-        await addRefused(h);
-        const name = h.field('name');
-        name.focus();
-        name.type('Row2');
-        h.field('start').focus();
-        await settle();
-        expect(h.host.task().content).toBe('Row2');
-        expect(h.formSays().some(text => text.includes('area'))).toBe(true);
-    });
-
-    it('cancel asks of a value the draft refused, and thrown away the fields show the index\'s row, which a blur writes nothing of', async () => {
+    it('is no loss that cancel asks of: cancel throws the move away at once, and a blur writes nothing after', async () => {
         const h = await open(TWICE);
         await h.begin();
         await addRefused(h);
         h.click(h.cancelButton());
         await settle();
-        expect(h.ask()).toBe(t('modal.hub.move.discardAsk'));
-        expect(h.move()).not.toBeNull();
-        h.click(h.foot.find('tv-form__discard'));
-        await settle();
+        expect(h.ask()).toBeNull();
         expect(h.move()).toBeNull();
-        const [keyInput, valueInput] = addRow(h);
-        expect([keyInput.value, valueInput.value]).toEqual(['', '']);
+        expect(saysArea(h)).toBe(false);
         expect(h.formSays()).toEqual([]);
+        const [keyInput] = addRow(h);
         keyInput.focus();
         h.field('name').focus();
         await tick(60);
         expect(h.lines()).toEqual(TWICE);
     });
 
-    it('thrown away with the source open, a value the draft refused goes too', async () => {
+    it('is said no more once the source takes a text in, the fields showing the draft', async () => {
         const h = await open(TWICE);
         await h.begin();
         await addRefused(h);
         await h.source.enter();
-        h.click(h.cancelButton());
+        h.editor().type({ children: [{ text: '- area:: a', was: 1 }, { text: '- area:: b', was: 2 }, { text: '- [ ] c', was: null }] });
+        h.root.focus();
+        h.source.back();
         await settle();
-        h.click(h.foot.find('tv-form__discard'));
-        await settle();
-        expect(h.move()).toBeNull();
         const [keyInput, valueInput] = addRow(h);
         expect([keyInput.value, valueInput.value]).toEqual(['', '']);
-    });
-
-    it('a name the draft refused is shown as the index\'s once the move is thrown away', async () => {
-        const h = await open();
-        await h.begin();
-        const move = h.move()!;
-        const put = move.put.bind(move);
-        vi.spyOn(move, 'put').mockImplementation((updates) => {
-            if (updates.content !== undefined) {
-                move['deps'].host.refuse('the name is refused');
-                return false;
-            }
-            return put(updates);
-        });
-        const name = h.field('name');
-        name.focus();
-        name.type('Typed');
-        h.field('start').focus();
-        await settle();
-        expect(h.formSays()).toContain('the name is refused');
-        h.click(h.cancelButton());
-        await settle();
-        h.click(h.foot.find('tv-form__discard'));
-        await settle();
-        expect(h.move()).toBeNull();
-        expect(name.value).toBe('Row');
-        name.focus();
-        h.field('start').focus();
-        await tick(60);
-        expect(h.lines()[1]).toBe('- [ ] Row @2026-11-26');
+        expect(saysArea(h)).toBe(false);
     });
 });
 

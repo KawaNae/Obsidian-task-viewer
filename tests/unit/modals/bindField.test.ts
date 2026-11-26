@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bindField } from '../../../src/modals/form/bindField';
+import { bindField, type Written } from '../../../src/modals/form/bindField';
 import { DateInput } from '../../../src/utils/values/DateValues';
 import { optional, type Issue } from '../../../src/utils/values/Read';
 import { FakeEl, asEl } from '../helpers/fakeDom';
@@ -193,6 +193,51 @@ describe('bindField', () => {
         field.set('2026-10-01');
         expect(input.value).toBe('2026-09-01');
         expect(field.pending()).toEqual({ ok: true, value: '2026-09-01' });
+    });
+
+    describe('a write refused for what the value holds (dropped)', () => {
+        /** A date field whose writes are answered by the test, the value left as it was by a refusal. */
+        function dropped() {
+            const input = new FakeEl();
+            input.value = '2026-10-01';
+            const value: string | undefined = '2026-10-01';
+            const commits: (string | undefined)[] = [];
+            let answer!: (written: Written) => void;
+            const field = bindField(asEl(input), {
+                codec: optional(DateInput),
+                current: () => value,
+                commit: (v) => {
+                    commits.push(v);
+                    return new Promise<Written>(resolve => { answer = resolve; });
+                },
+                issues: () => { },
+            });
+            return { input, field, commits, answer: (written: Written) => answer(written) };
+        }
+
+        it('shows the value again, holding nothing to commit, and a value from outside comes in', async () => {
+            const f = dropped();
+            f.input.type('2026-09-01');
+            f.input.enter();
+            f.answer('dropped');
+            await Promise.resolve();
+            expect(f.input.value).toBe('2026-10-01');
+            expect(f.field.pending()).toBeNull();
+            f.input.blur();
+            expect(f.commits).toEqual(['2026-09-01']);
+            f.field.set('2026-10-02');
+            expect(f.input.value).toBe('2026-10-02');
+        });
+
+        it('leaves a text typed over the field meanwhile as typed', async () => {
+            const f = dropped();
+            f.input.type('2026-09-01');
+            f.input.enter();
+            f.input.type('2026-09-0');
+            f.answer('dropped');
+            await Promise.resolve();
+            expect(f.input.value).toBe('2026-09-0');
+        });
     });
 
     describe('a field that shows an inherited value (takesSame)', () => {

@@ -6,7 +6,7 @@ import { DateInput, TimeInput } from '../../utils/values/DateValues';
 import { optional, type FieldCodec, type Issue } from '../../utils/values/Read';
 import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
 import { dateRuleIssues, type DateTimeFields, type ValidationContext } from '../TaskDateValidator';
-import { bindField, type BoundField } from './bindField';
+import { bindField, type BoundField, type Written } from './bindField';
 import { readIssue, type FormIssue, type IssueSlot } from './FormIssue';
 import { createPickerTextField, type PickerTextField } from './PickerTextField';
 import { createFormRow } from './formRow';
@@ -40,10 +40,10 @@ export interface DateFieldGroupOptions {
     /**
      * A group's fields were committed (a blur, the form's Enter, a pick, a
      * clear), every field reading and the rules holding: `f` is the six as
-     * read. Not called while one does not read or a rule is broken. Whether
-     * the write took it, when a write decides (`bindField`'s commit).
+     * read. Not called while one does not read or a rule is broken. What the
+     * write came to, when a write decides (`bindField`'s commit, `Written`).
      */
-    onCommit: (group: DateGroupKey, f: DateTimeFields) => void | Promise<boolean>;
+    onCommit: (group: DateGroupKey, f: DateTimeFields) => void | Promise<Written>;
     /** What the six fields say now, in place of what they said: each field's reading, then the rules across them. */
     issues: (issues: FormIssue<DateKey>[]) => void;
 }
@@ -162,7 +162,7 @@ export class DateFieldGroup {
     }
 
     /** Commit `group` as its fields read, unless a field does not read or a rule is broken. */
-    private commitGroup(group: DateGroupKey): boolean | Promise<boolean> {
+    private commitGroup(group: DateGroupKey): boolean | Promise<Written> {
         const fields = this.readAll();
         this.tell();
         if (!fields || this.ruleIssues(fields).length > 0) return false;

@@ -1,7 +1,7 @@
 import { t } from '../../../i18n';
 import { TaskNameSuggest } from '../../../suggest/TaskNameSuggest';
 import { attachBracketPairing } from '../../form/bracketPairing';
-import { bindField, type BoundField } from '../../form/bindField';
+import { bindField, type BoundField, type Written } from '../../form/bindField';
 import { readIssue, type IssueSlot } from '../../form/FormIssue';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { TaskContentInput } from '../../../services/parsing/tv-inline/TaskContentInput';
@@ -43,9 +43,9 @@ export class NameField implements ClosingPart {
         });
     }
 
-    private commit(content: string): Promise<boolean> | void {
+    private commit(content: string): Promise<Written> | void {
         if (this.ctx.isShut()) return;
-        return this.ctx.put(TaskUpdateBuilder.content(this.ctx.task(), content));
+        return this.ctx.put(TaskUpdateBuilder.content(this.ctx.task(), content), 'name');
     }
 
     unsaved(): UnsavedField[] {

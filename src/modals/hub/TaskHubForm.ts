@@ -9,6 +9,7 @@ import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { IssueBoard, type FormIssue, type IssueSlot } from '../form/FormIssue';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import type { DateGroupKey, DateKey } from '../form/DateFieldGroup';
+import type { Written } from '../form/bindField';
 import type { DateTimeFields } from '../TaskDateValidator';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import { DraftGuard, type Loss } from '../form/DraftGuard';
@@ -118,11 +119,14 @@ export interface TaskHubFormDeps {
  * どちらを見ていても見えるためである。行が日付の規則を破っていれば（規則4
  * など）、開いたときから破れた欄の下に出す。
  *
- * 欄から渡した変更の拒否はホストが言う（`HubForm.sayPut`）。拒まれた理由は
- * フォーム全体の文の場所に出す。拒まれた欄は打った値のまま残り（`bindField`）、
- * もう一度確定すれば新しい版へ書く。ホストがまだ書いていないものを持つ間は、
- * 拒否が取り下げられると、残っている値をもう一度渡す（`sayPut`）。欄に見える
- * 値は、ホストの値か、拒まれた理由が出ている値である。
+ * 欄から渡した変更の拒否はホストが言う（`HubForm.sayPut`）。拒まれた欄が
+ * 打った値を残すかは、ホストが渡した変更への答えで決める（`HubHost.put`）。
+ * ノートへの書き込みが拒まれたら、欄は打った値のまま残り（`bindField`）、
+ * もう一度確定すれば新しい版へ書く。理由は後から届くので、フォーム全体の
+ * 文の場所に出す。下書き（移動の間の行）が拒んだら、拒んだ理由は下書きの
+ * 行にあり、同じ値をもう一度渡しても通らない。そのため拒まれた欄は下書きの
+ * 値に戻り、理由はその欄の下に出る。ほかの欄の打ちかけとフォーカスは
+ * そのままである。理由の文は、次に下書きが変わるか、移動の間が終わるまで残る。
  *
  * ホストがまだ書いていないもの（`HubHost.draft`）を持つ間は、右のボタン（まだ
  * 書いていないタスクでは [作成]、移動の間の行では [移動]）を押すと何が起きるか
@@ -180,10 +184,10 @@ export class TaskHubForm implements HubForm {
     private readonly guard: DraftGuard<'close' | 'discard'>;
     /** The user said to throw away what the close would lose: the close that goes on asks nothing more. */
     private thrownAway = false;
-    /** Why a change handed on was not taken, as said now; null while nothing is said. */
-    private refusal: string | null = null;
-    /** The fields' values are being put again ({@link putAgain}): the last refusal said meanwhile, which is said once it is done. */
-    private again: { refusal: string | null } | null = null;
+    /** The field whose change is being handed on to the host now; null between. */
+    private handing: HubField | 'form' | null = null;
+    /** Why the changes handed on were not taken, as said now, each of the field it came from. */
+    private refusals: readonly FormIssue<HubField>[] = [];
     private actions!: FormActions;
     /** The line above the write, shown while the host holds something not written yet: where it goes, and why a write was refused. */
     private createLine!: CreateLine;
@@ -235,7 +239,7 @@ export class TaskHubForm implements HubForm {
         this.fieldCtx = {
             task: () => this.host.task(),
             isShut: () => this.reach !== null,
-            put: (updates) => this.host.put(updates),
+            put: (updates, at) => this.handOn(updates, at),
             app: deps.app,
             plugin: deps.plugin,
             index: deps.index,
@@ -386,14 +390,25 @@ export class TaskHubForm implements HubForm {
 
     // ==================== コミット ====================
 
-    private commitDates(group: DateGroupKey, f: DateTimeFields): Promise<boolean> | void {
+    private commitDates(group: DateGroupKey, f: DateTimeFields): Promise<Written> | void {
         if (this.reach !== null) return;
         const task = this.host.task();
         const updates =
             group === 'start' ? TaskUpdateBuilder.dateGroup(task, 'start', f.startDate, f.startTime)
             : group === 'end' ? TaskUpdateBuilder.dateGroup(task, 'end', f.endDate, f.endTime)
             : TaskUpdateBuilder.due(task, f.dueDate, f.dueTime);
-        return this.host.put(updates);
+        return this.handOn(updates, `${group}Date`);
+    }
+
+    /** Hand `updates` on to the host from the field `at`: a refusal said meanwhile is of that field (`sayPut`). */
+    private handOn(updates: Partial<Task> | null, at: HubField | 'form'): Promise<Written> {
+        const outer = this.handing;
+        this.handing = at;
+        try {
+            return this.host.put(updates);
+        } finally {
+            this.handing = outer;
+        }
     }
 
     // ==================== 閉じる手順 ====================
@@ -501,8 +516,8 @@ export class TaskHubForm implements HubForm {
     /**
      * Have the host throw away what it holds (`HubDraft.discard`), and
      * throw away all that is typed in the fields, those shut among them:
-     * what was typed was of what is thrown away, a value the host refused
-     * too, and the fields show the host's value as it is now.
+     * what was typed was of what is thrown away, and the fields show the
+     * host's value as it is now.
      */
     private throwAway(draft: HubDraft): void {
         draft.discard?.();
@@ -559,15 +574,15 @@ export class TaskHubForm implements HubForm {
      * as it comes, the values that cannot be saved, by their fields' names:
      * the rest is written as it is saved. While it holds something not
      * written yet, the whole of it, once it was given anything: a value typed
-     * that cannot be saved, a value typed it refused (said refused), or a
-     * change saved (`HubDraft.changed`). Nothing while the whole form is
-     * shut, nor once the user said to throw it away.
+     * that cannot be saved, or a change saved (`HubDraft.changed`). A change
+     * it refused is not among them: its field shows what is held. Nothing
+     * while the whole form is shut, nor once the user said to throw it away.
      */
     private loss(): Loss | null {
         if (this.reach === 'form' || this.thrownAway) return null;
         const fields = this.unsaved();
         const draft = this.host.draft();
-        if (draft) return fields.length > 0 || this.refusal !== null || draft.changed() ? { kind: 'draft' } : null;
+        if (draft) return fields.length > 0 || draft.changed() ? { kind: 'draft' } : null;
         return fields.length > 0 ? { kind: 'unsaved', fields: fields.map(one => one.label) } : null;
     }
 
@@ -634,49 +649,18 @@ export class TaskHubForm implements HubForm {
     }
 
     /**
-     * While the host holds what is not written yet, a refusal taken back
-     * (the value changed) is not taken back at once: the values the fields
-     * hold and the host has not taken are put again on the value as it is
-     * now ({@link putAgain}), and are taken, or said refused again. A value
-     * typed is the host's, or said refused, never neither.
+     * Said while a field hands its change on, a refusal is of that field, and
+     * said under it beside the others said since the last was taken back:
+     * each field refused says why. Said after, it is a write's answer, said
+     * above the tabs in place of what was said.
      */
     sayPut(refusal: string | null): void {
-        if (this.again) {
-            if (refusal !== null) this.again.refusal = refusal;
-            return;
+        if (refusal === null) this.refusals = [];
+        else {
+            const said: FormIssue<HubField> = { at: this.handing ?? 'form', tone: 'error', text: refusal };
+            this.refusals = this.handing === null ? [said] : [...this.refusals, said];
         }
-        if (refusal === null && this.host.draft()) {
-            // Once the change that took it back is done: the field that handed it on shows it as its value then.
-            queueMicrotask(() => this.putAgain());
-            return;
-        }
-        this.showRefusal(refusal);
-    }
-
-    private showRefusal(refusal: string | null): void {
-        this.refusal = refusal;
-        this.issues.set('put', refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }]);
-    }
-
-    /**
-     * Put the values the fields hold that the host has not taken in again,
-     * as a close saves them: what is said refused after is the last refusal
-     * said meanwhile, none where all were taken. While the fields are shut
-     * none is put, and what was said stays: the values stay in the fields,
-     * put again once a refusal is taken back with the fields open.
-     */
-    private putAgain(): void {
-        if (this.again) return;
-        const parts = this.parts();
-        if (parts.length === 0) return;
-        const again = { refusal: null as string | null };
-        this.again = again;
-        try {
-            for (const part of parts) part.save();
-        } finally {
-            this.again = null;
-        }
-        this.showRefusal(again.refusal);
+        this.issues.set('put', this.refusals);
     }
 
     sayWrite(refusal: string | null): void {
