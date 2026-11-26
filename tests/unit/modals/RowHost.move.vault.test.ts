@@ -103,6 +103,7 @@ async function open(lines: string[] = NOTE, opts: { opening?: MoveStart; beforeA
         write: vi.fn(() => { if (host.draft()?.canWrite()) host.draft()!.write(); }),
         putTyped: vi.fn(() => { told.push('typed'); return typed; }),
         notWritten: vi.fn(),
+        edited: vi.fn(),
     };
     host.bind(form);
     const panel: HubPanel = { redrawPreview: vi.fn(() => { told.push('card'); }), close: vi.fn() };
@@ -264,12 +265,27 @@ describe('beginning a move', () => {
 });
 
 describe('while the row moves', () => {
-    it('holds the source mode, and offers no line of the row to open', async () => {
+    it('holds the source mode only while the move is begun, its seat the move\'s once held, and offers no line of the row to open', async () => {
         const h = await open();
         expect(h.host.openSource).not.toBeNull();
+        expect(h.host.seat()).toBe(h.host.sourceApply);
         await h.begin();
-        expect(h.source.hold.mock.calls).toEqual([[true]]);
+        expect(h.source.hold.mock.calls).toEqual([[true], [false]]);
+        expect(h.host.seat()).toBe(h.move().seat);
+        expect(h.source.redraw).toHaveBeenCalled();
         expect(h.host.openSource).toBeNull();
+    });
+
+    it('holds the source mode while the move is under way, and lets it go once it is not made', async () => {
+        const h = await open();
+        await h.begin();
+        h.move().fieldsChanged({ ...h.move().initial, heading: 'Done' });
+        await settle();
+        h.source.hold.mockClear();
+        vi.spyOn(h.noteOps, 'send').mockResolvedValueOnce({ kind: 'not-done', why: 'refused here' });
+        h.form.write();
+        expect(h.source.hold.mock.calls).toEqual([[true]]);
+        await vi.waitFor(() => expect(h.source.hold.mock.calls).toEqual([[true], [false]]));
     });
 
     it('has the card read the move\'s rows, the draft as it is now, and the index again once the move is thrown away', async () => {
@@ -411,6 +427,7 @@ describe('throwing the move away', () => {
         expect(h.place).toEqual([[]]);
         expect(h.told).toEqual(['shut:null', 'refresh', 'card', 'draft:false']);
         expect(h.source.hold.mock.calls).toEqual([[true], [false]]);
+        expect(h.host.seat()).toBe(h.host.sourceApply);
         expect(h.host.openSource).not.toBeNull();
         expect(h.lines()).toEqual(NOTE);
 
@@ -463,7 +480,10 @@ describe('a hub opened in a move', () => {
         // The move draws itself as it is made, before the host holds it (`draft:false`), then is drawn again.
         expect(h.told.slice(0, 5)).toEqual(['draft:false', 'shut:null', 'refresh', 'card', 'draft:true']);
         expect(h.form.putTyped).not.toHaveBeenCalled();
-        expect(h.source.hold.mock.calls).toEqual([[true]]);
+        // Nothing to hold: the move is the hub's as it opens, and the switch is drawn on its seat.
+        expect(h.source.hold).not.toHaveBeenCalled();
+        expect(h.host.seat()).toBe(h.move().seat);
+        expect(h.source.redraw).toHaveBeenCalled();
         expect(h.host.openSource).toBeNull();
     });
 

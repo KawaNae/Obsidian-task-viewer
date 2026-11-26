@@ -190,9 +190,9 @@ describe('in the source', () => {
 
     it('draws what the seat says of it, again when the seat asks', async () => {
         const h = await opened();
-        h.seat.shown = { foot: null, busy: true, asking: false, lost: { discard: false } };
+        h.seat.shown = { foot: null, busy: true, asking: false, lost: { why: 'lost', discard: false } };
         h.seat.source!.redraw();
-        expect(h.state().seat).toEqual({ foot: null, busy: true, asking: false, lost: { discard: false } });
+        expect(h.state().seat).toEqual({ foot: null, busy: true, asking: false, lost: { why: 'lost', discard: false } });
     });
 
     it('says under the editor what the seat says, until the seat takes it back', async () => {

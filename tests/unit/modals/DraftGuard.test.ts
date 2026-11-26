@@ -32,15 +32,20 @@ describe('DraftGuard', () => {
         expect(h.told.goneOn).toEqual(['view']);
     });
 
-    it('asked again while it asks, puts the question again without drawing it again, and goes on to the step asked last', () => {
+    it('asked again while it asks, puts the question again, drawn again only for another step, and goes on to the step asked last', () => {
         const h = guarded();
         h.guard.request('view');
         // Nothing would be lost now, but the question stands until it is answered.
         h.setLoss(null);
-        expect(h.guard.request('close')).toBe(false);
+        expect(h.guard.request('view')).toBe(false);
         expect(h.told).toMatchObject({ renders: 1, asked: 2 });
+        // For another step, its answer that throws away may read otherwise.
+        expect(h.guard.request('close')).toBe(false);
+        expect(h.guard.step).toBe('close');
+        expect(h.told).toMatchObject({ renders: 2, asked: 3 });
         h.guard.discard();
         expect(h.told.goneOn).toEqual(['close']);
+        expect(h.guard.step).toBeNull();
     });
 
     it('draws the question again when what would be lost changed', () => {

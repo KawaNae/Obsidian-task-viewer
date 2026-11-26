@@ -22,9 +22,9 @@ import { placeFocus } from '../../views/sharedUI/FocusPlacement';
  * - The source opens on the lines the seat hands (`SourceSeat.open`), once:
  *   that subtree is the frame every draft is read against
  *   (`SubtreeFrame.open`).
- * - The hub may hold the row for a way of writing it of its own (its move):
- *   the switch to the source is not offered meanwhile, and an opening under
- *   way gives up ({@link hold}).
+ * - The hub may hold the row for a write of its own (a move being begun, or
+ *   under way): the switch to the source is not offered meanwhile, and an
+ *   opening under way gives up ({@link hold}).
  */
 
 /** Where the switch is: showing the card, opening the source, or in it. */
@@ -50,8 +50,8 @@ export interface SeatView {
     busy: boolean;
     /** The seat asks whether to throw the draft away: the switch back is not offered, and the editor's frame is marked. */
     asking: boolean;
-    /** The row is lost, said with a button to copy the draft, and `discard` one to throw it away; null, nothing is said. */
-    lost: { discard: boolean } | null;
+    /** The row is lost, or changed outside: `why`, said with a button to copy the draft, and `discard` one to throw it away; null, nothing is said. */
+    lost: { why: string; discard: boolean } | null;
 }
 
 /** Whose the source's text is (`SourceHost.seat`): what each step on it does. */
@@ -159,7 +159,7 @@ export class TaskHubSource {
     /**
      * The hub holds the row for a write of its own, or lets it go: while it
      * holds it the source does not open, and an opening under way goes back
-     * to the card. Told only while the source is not open.
+     * to the card. A source open stays as its seat says.
      */
     hold(held: boolean): void {
         if (this.held === held) return;

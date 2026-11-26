@@ -104,7 +104,7 @@ export class SourceApply implements SourceSeat {
             foot: own ? null : { act: !lost },
             busy: this.applying,
             asking,
-            lost: own ? { discard: true } : null,
+            lost: own ? { why: t('modal.hub.source.lost'), discard: true } : null,
         };
     }
 

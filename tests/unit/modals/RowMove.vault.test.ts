@@ -45,6 +45,9 @@ async function open(lines: string[] = NOTE, start: MoveStart = 'here', files: Re
         submit: vi.fn(),
         leave: vi.fn(),
         close: vi.fn(),
+        putTyped: vi.fn(() => true),
+        sourceChanged: vi.fn(),
+        edited: vi.fn(),
     };
     const move = new RowMove(preview, start, { settings: DEFAULT_SETTINGS, unit: '    ', ops, host });
     const drawn: SendViewState[] = [];

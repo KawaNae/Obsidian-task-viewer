@@ -145,6 +145,10 @@ export interface TaskHubFormDeps {
  * （`HubDraft.changed`）を見て問う。[戻る] は、ホストが編集している所に
  * フォーカスを引き受ければ（`HubDraft.keep`）そこに、そうでなければ名前の欄に置く。
  *
+ * [キャンセル] から出た問いの捨てる答えは [捨てる] と読む。ハブは閉じないためである。
+ * フォームの欄の外（ソースの編集器）で、ホストが持つものを直したときも、問いを
+ * 取り下げる（`edited`）。
+ *
  * [キャンセル] と右のボタンは、ホストがまだ書いていないものを持つ間だけ出す。
  * フォームは、作るときに形を決めず、ホストが描き直させるたび（`showDraft`）に
  * ホストに聞き直して出し隠しする。欄の打ちかけ、フォーカス、タブ、出ている
@@ -577,6 +581,8 @@ export class TaskHubForm implements HubForm {
             ctaEnabled: draft?.canWrite() ?? false,
             ask,
             ...(loss?.kind === 'draft' && { keep: t('modal.draft.keep') }),
+            // Cancel throws away what is held with the hub left open: its answer does not close.
+            ...(this.guard.step === 'discard' && { discard: t('modal.draft.discard') }),
             offered: draft !== null,
             ...(draft && { act: { label: draft.label, busyLabel: draft.busyLabel } }),
         });
@@ -614,6 +620,10 @@ export class TaskHubForm implements HubForm {
 
     showDraft(): void {
         this.renderActions();
+    }
+
+    edited(): void {
+        this.guard.withdraw();
     }
 
     /** How far the form takes no edit now, as the host answers (`HubHost.shut`); null while it takes them all. */

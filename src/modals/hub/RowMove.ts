@@ -8,9 +8,11 @@ import type { DestinationAsk } from '../../services/data/NotePlaces';
 import { RowDraft, type RowDraftRefusal } from '../../services/data/RowDraft';
 import type { SubtreeReplacement } from '../../services/persistence/TaskOps';
 import { refusalText } from '../../services/operations/WriteAnswer';
+import { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
 import type { FormIssue } from '../form/FormIssue';
 import { SendDialog, initialAsk, type RowStand, type SendHost, type SendSurface, type SendViewState } from '../noteops/SendDialog';
-import type { HubDraft } from './HubHost';
+import type { HubDraft, HubShut } from './HubHost';
+import { MoveSource } from './MoveSource';
 
 /**
  * What the fields of where the row goes open with: where it stands now (its
@@ -38,8 +40,14 @@ export interface MoveHost {
     underWay(): void;
     /** Whether a move may be asked, or is under way, may have changed: the row of buttons draws it again. */
     showDraft(): void;
-    /** Write as the write button does: Enter in a field of where the row goes. */
+    /** Write as the write button does: Enter in a field of where the row goes, and Mod+Enter in the source. */
     submit(): void;
+    /** Put in what is typed in the fields, as a close saves it (`HubForm.putTyped`): whether all of it was. */
+    putTyped(): boolean;
+    /** The source opened on the draft, or closed: the fields are shut, or open again, as the move answers (`shut`). */
+    sourceChanged(): void;
+    /** The source's text changed: a question put of what the move holds is withdrawn, as typing in a field withdraws it. */
+    edited(): void;
     /** The draft and where it goes are thrown away: the hub writes each change as it comes again. */
     leave(): void;
     /** The row went: the hub closes, asking nothing. */
@@ -61,7 +69,9 @@ export interface MoveDeps {
  * goes is the send dialog's (`SendDialog`, its fields drawn in the hub's
  * place, `SendSurface`); the move writes both at once (`NoteOps.send`, the
  * draft as the row's replacement). It is the hub's write while it lasts
- * (`HubDraft`: [Move]), and the send's host (`SendHost`).
+ * (`HubDraft`: [Move]), and the send's host (`SendHost`). The source mode
+ * shows the draft as text meanwhile, on the move's seat (`seat`,
+ * `MoveSource`): what is typed there goes into the draft, not a note.
  *
  * - It opens on `preview`, a row the disk holds as the index's copy reads
  *   it (`NoteOps.previewSend`): the draft opens as that row, and the send
@@ -73,8 +83,13 @@ export interface MoveDeps {
  *   be refused, and the draft is the user's work. Cancel is the way out.
  *   Whether it changed is read from the index's row each time it is told
  *   ({@link follow}), not from being told.
+ * - While the source is open, the fields of the row's values take no change
+ *   (`shut`): the source's drafts are taken in on the mark it opened on,
+ *   which a field's change would end. [Move] takes the source's text in
+ *   first, and is not asked when it does not take.
  * - Throwing it away (cancel) asks of what it would lose where the draft,
- *   or where it goes, is not what it opened with (`changed`).
+ *   or where it goes, is not what it opened with, or the source holds what
+ *   the draft has not taken in (`changed`); thrown away, the source closes.
  * - A move made for the row closes the hub; one not made keeps the draft
  *   and says why above the write; one made in part (the row landed and its
  *   note refused to let it go) says why and offers no move again.
@@ -83,9 +98,14 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
     readonly label = t('modal.send.send');
     readonly busyLabel = t('modal.send.sending');
     readonly discardAsk = t('modal.hub.move.discardAsk');
-    readonly discard = (): void => this.deps.host.leave();
+    readonly discard = (): void => {
+        this.seat.end();
+        this.deps.host.leave();
+    };
     /** The fields of where the row goes as it opened. */
     readonly initial: DestinationAsk;
+    /** The source's seat while the move lasts: the draft as text. */
+    readonly seat: MoveSource;
     private readonly draft: RowDraft;
     private readonly dialog: SendDialog;
     private readonly row: Task;
@@ -113,6 +133,21 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
             ? { note: NoteName.askOf(stands.note), heading: stands.heading ?? '' }
             : initialAsk(preview);
         this.ask = this.initial;
+        const host = deps.host;
+        this.seat = new MoveSource(this.draft, {
+            sending: () => this.sending,
+            stale: () => this.stale !== null,
+            // Where the move writes the text: a link spelt from there
+            // resolves once it is moved. While the fields name no one note,
+            // the row's.
+            linkSource: () => this.dialog.notePath() ?? this.row.file,
+            putTyped: () => host.putTyped(),
+            refusal: (refused) => this.refusalOf(refused),
+            drafted: () => this.drafted(),
+            changed: () => host.sourceChanged(),
+            submit: () => host.submit(),
+            edited: () => host.edited(),
+        });
         this.dialog = new SendDialog(preview, this, this, { initial: this.initial, stands });
     }
 
@@ -131,18 +166,59 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
         return (id) => rows.get(id);
     }
 
-    /** Take a field's change into the draft: whether it was taken, why not said by the host. None while the move is under way. */
+    /**
+     * Take a field's change into the draft: whether it was taken, why not
+     * said by the host. None while the move is under way, nor while the
+     * source is open: its drafts are taken in on the mark it opened on.
+     */
     put(updates: Partial<Task>): boolean {
-        if (this.sending) return false;
+        if (this.sending || this.seat.isOpen()) return false;
         const refused = this.draft.apply(updates);
         if (refused) {
-            this.deps.host.refuse(refusalOf(refused, this.row));
+            this.deps.host.refuse(this.refusalOf(refused));
             return false;
         }
+        this.drafted();
+        return true;
+    }
+
+    /** The draft changed: the last refusal is taken back, and the card, the fields and where the row goes read it. */
+    private drafted(): void {
         this.deps.host.refuse(null);
         this.deps.host.drafted();
         this.dialog.draftsChanged();
-        return true;
+    }
+
+    /**
+     * Why a change was not taken into the draft, as a write refused for it
+     * is said. A property's lines are told by where they stand under the
+     * row: the draft's lines are on no disk, and the row's line in the note
+     * is not where they would be found. They are mended in the source, or,
+     * where the source does not open on the draft, in the editor once the
+     * move is thrown away.
+     */
+    private refusalOf(refused: RowDraftRefusal): string {
+        if (refused.kind === 'not-task') return t('modal.hub.source.notTask');
+        if (refused.kind === 'property') {
+            const opens = SubtreeFrame.open(this.draft.subtree(), this.deps.unit).open;
+            return t(opens ? 'modal.hub.move.refusedProperty' : 'modal.hub.move.refusedPropertyShut', {
+                key: refused.key,
+                line: String(refused.line - this.row.line),
+            });
+        }
+        return refusalText({ file: this.row.file, reason: refused, subject: this.row.content });
+    }
+
+    /**
+     * How far the fields take no edit: all of them while the move is under
+     * way; only those of the row's values while the source is open on the
+     * draft, where the row goes and the values to write into the note still
+     * taking edits; none else.
+     */
+    shut(): HubShut | null {
+        if (this.sending) return { reach: 'form', why: t('modal.hub.move.formShut') };
+        if (this.seat.isOpen()) return { reach: 'values', why: t('modal.hub.move.sourceShut') };
+        return null;
     }
 
     /** The fields of where the row goes changed. */
@@ -191,7 +267,16 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
         return this.sending;
     }
 
+    /**
+     * Move as the draft holds the row, the source's text taken in first;
+     * one that does not take is not moved, why said under the editor, the
+     * focus in it.
+     */
     write(): void {
+        if (!this.seat.take()) {
+            this.seat.focusEditor();
+            return;
+        }
         this.asked = this.dialog.send().then(() => this.made);
     }
 
@@ -201,7 +286,12 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
     }
 
     changed(): boolean {
-        return this.draft.replacement() !== null || !sameAsk(this.ask, this.initial);
+        return this.draft.replacement() !== null || !sameAsk(this.ask, this.initial) || this.seat.pending();
+    }
+
+    /** Kept, as asked: the source's editor takes the focus while it is open. */
+    keep(): boolean {
+        return this.seat.keep();
     }
 
     // ==================== SendHost ====================
@@ -258,12 +348,6 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
         this.view = null;
         this.dialog.dispose();
     }
-}
-
-/** Why a change was not taken into the draft, as a write refused for it is said. */
-function refusalOf(refused: RowDraftRefusal, row: Task): string {
-    if (refused.kind === 'not-task') return t('modal.hub.source.notTask');
-    return refusalText({ file: row.file, reason: refused, subject: row.content });
 }
 
 function sameLines(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {

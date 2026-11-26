@@ -60,6 +60,12 @@ export interface HubForm {
      * told where the form itself found a field to fix and focused it.
      */
     notWritten(): void;
+    /**
+     * What the host holds was edited outside the form's fields (the
+     * source's text, in a move): a question put of it is withdrawn, as
+     * typing in a field withdraws it.
+     */
+    edited(): void;
 }
 
 /**
@@ -103,7 +109,9 @@ export interface HubDraft {
     writing(): boolean;
     /**
      * Write what is held as it stands now; asked once the form has put in
-     * what is typed. It is under way from now. Asked while the place is
+     * what is typed. It is under way from now, unless what is held where the
+     * host edits it does not take (the source's text, in a move): nothing
+     * is written then, why said there, the focus put there. Asked while the place is
      * being read, it waits, and asks the form's write again once it is read
      * where what is held can go; it ends unwritten otherwise, why said above
      * the write.

@@ -536,7 +536,11 @@
         "changed": "The task's lines changed outside the hub, so it cannot be moved. Cancel to go back.",
         "lost": "The task was lost: its note changed elsewhere. It cannot be moved. Cancel to go back.",
         "formShut": "Moving the task. The fields cannot be edited until it is done.",
-        "discardAsk": "The task is not moved yet. Discard the changes and the destination?"
+        "discardAsk": "The task is not moved yet. Discard the changes and the destination?",
+        "sourceShut": "Editing the source. Go back to the preview to edit these fields.",
+        "sourceLost": "The task's lines changed outside the hub. The source's text can be copied.",
+        "refusedProperty": "The lines of property \"{{key}}\" (line {{line}} under this task) hold a key written twice or something the plugin does not read; mend them in the source",
+        "refusedPropertyShut": "The lines of property \"{{key}}\" (line {{line}} under this task) hold a key written twice or something the plugin does not read; cancel the move, then mend them in the editor"
       },
       "source": {
         "view": "Preview",
