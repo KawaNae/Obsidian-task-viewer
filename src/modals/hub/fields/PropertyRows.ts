@@ -2,6 +2,7 @@ import { t } from '../../../i18n';
 import type { PropertyScalar, PropertyValue, Task } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
 import { PropertyKey } from '../../../services/parsing/utils/PropertyKey';
+import { PropertyItemInput } from '../../../services/parsing/utils/PropertyItemInput';
 import { CascadeSource, type CascadeSourceKind } from '../CascadeSource';
 import type { FindingField, HubFinding } from '../HubFindings';
 
@@ -101,6 +102,8 @@ export interface PropertyRowForm {
 /**
  * What an item of a row's menu does.
  * - `openSource`: open the line the inherited value is written on
+ * - `toList`: write the row's own value as a list of it alone (`writes`)
+ * - `toText`: write the one item of the row's own list (or its draft) as its value (`writes`)
  * - `makeOwn`: copy the inherited list into a draft of the row's own, which
  *   its first edit writes
  * - `noValue`: write the row's own no value (`- key::`) over its list, or
@@ -109,12 +112,33 @@ export interface PropertyRowForm {
  * - `revert`: take the row's own line out (or throw its draft away), the
  *   inherited value coming through again
  */
-export type PropertyMenuAction = 'openSource' | 'makeOwn' | 'noValue' | 'remove' | 'revert';
+export type PropertyMenuAction = 'openSource' | 'toList' | 'toText' | 'makeOwn' | 'noValue' | 'remove' | 'revert';
 
-/** An item of a row's menu: shown greyed, and taking no press, when `disabled`. */
-export interface PropertyMenuItem {
-    readonly action: PropertyMenuAction;
-    readonly disabled: boolean;
+/**
+ * An item of a row's menu: shown greyed, and taking no press, when
+ * `disabled`. A conversion carries the value it writes, read where it is
+ * decided whether the row offers it.
+ */
+export type PropertyMenuItem =
+    | { readonly action: Exclude<PropertyMenuAction, 'toList' | 'toText'>; readonly disabled: boolean }
+    | { readonly action: 'toList' | 'toText'; readonly disabled: boolean; readonly writes: PropertyValue };
+
+/**
+ * A line at the head of a row's menu, greyed and taking no press, that says
+ * what the row's value is.
+ * - `type`: the type of the value the row shows (its own, else the
+ *   inherited one), as the line reads it; none for no value
+ * - `source`: where the inherited value is written, for a row that
+ *   inherits one, whether or not its own line wins over it
+ */
+export type PropertyMenuAttribute =
+    | { readonly kind: 'type'; readonly type: Exclude<PropertyValue['type'], 'null'> }
+    | { readonly kind: 'source'; readonly source: CascadeSourceKind };
+
+/** A row's menu: its attributes' lines first, a separator under them when there are any, then its items. */
+export interface PropertyMenu {
+    readonly attributes: readonly PropertyMenuAttribute[];
+    readonly items: readonly PropertyMenuItem[];
 }
 
 /** What a row's menu is built from besides the row. */
@@ -190,24 +214,43 @@ export const PropertyRows = {
     },
 
     /**
-     * The row's menu, built from its two sides in this order: the inherited
-     * value's line, what is done to the value, then the row's own line taken
-     * out. A locked row has none, and draws no menu button.
+     * The row's menu, built from its two sides. Its attributes: the type of
+     * the value shown, then where the inherited value is written. Its items,
+     * in this order: the inherited value's line, what is done to the value,
+     * then the row's own line taken out. A locked row has none, and draws no
+     * menu button.
      */
-    menuOf(row: PropertyRow, input: PropertyMenuInput): PropertyMenuItem[] {
-        if (row.locked) return [];
-        const { own } = row;
+    menuOf(row: PropertyRow, input: PropertyMenuInput): PropertyMenu {
+        if (row.locked) return { attributes: [], items: [] };
+        const { own, inherited } = row;
         const above = aboveOf(row);
+
+        const attributes: PropertyMenuAttribute[] = [];
+        const type = typeShown(row);
+        if (type) attributes.push({ kind: 'type', type });
+        if (inherited.kind === 'value') attributes.push({ kind: 'source', source: inherited.source });
+
         const items: PropertyMenuItem[] = [];
-        const add = (action: PropertyMenuAction, disabled = false) => { items.push({ action, disabled }); };
+        const add = (action: Exclude<PropertyMenuAction, 'toList' | 'toText'>, disabled = false) => { items.push({ action, disabled }); };
         // Greyed where the hub has no line to open, so that the menu keeps its shape.
         if (above) add('openSource', !input.opensSource);
+        // A value converts to a list of it alone only where a line holding
+        // it reads back as that one item: no value is left out, since a list
+        // of none is written as no value, and so is a value no item spells
+        // (`[ ] x`, `a:: b`).
+        if (own.kind === 'value') {
+            const item = PropertyItemInput.read(own.value.spelling);
+            if (item.ok) items.push({ action: 'toList', disabled: false, writes: { type: 'list', items: [item.value] } });
+        }
+        if ((own.kind === 'list' || own.kind === 'draft') && own.items.length === 1) {
+            items.push({ action: 'toText', disabled: false, writes: own.items[0] });
+        }
         const inheritedList = own.kind === 'none' && above?.type === 'list';
         if (inheritedList) add('makeOwn');
         // A list has no × that empties all of it, as a text's field has.
         if (own.kind === 'list' || own.kind === 'draft' || inheritedList) add('noValue');
         if (own.kind !== 'none') add(above ? 'revert' : 'remove');
-        return items;
+        return { attributes, items };
     },
 
     /**
@@ -224,6 +267,24 @@ export const PropertyRows = {
 /** The value the row inherits, whether or not its own line wins over it; null for none. */
 function aboveOf(row: PropertyRow): PropertyValue | null {
     return row.inherited.kind === 'value' ? row.inherited.value : null;
+}
+
+/**
+ * The type of the value the row shows: its own (a draft is a list), else
+ * the inherited one. None for no value: the row's own, which hides what is
+ * inherited, or an inherited one, or none at all.
+ */
+function typeShown(row: PropertyRow): Exclude<PropertyValue['type'], 'null'> | null {
+    const { own } = row;
+    switch (own.kind) {
+        case 'value': return own.value.type;
+        case 'list':
+        case 'draft': return 'list';
+        case 'null': return null;
+        case 'none': break;
+    }
+    const above = aboveOf(row);
+    return above && above.type !== 'null' ? above.type : null;
 }
 
 /** A value hidden, as the field's faint text shows it: as a line spells it, a list's items joined. */

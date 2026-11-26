@@ -533,3 +533,27 @@ describe('the move thrown away', () => {
         expect(rowOf(h, 'area')!.find('task-hub__list-chip--cascade')).not.toBeNull();
     });
 });
+
+describe('a move\'s property converted from its row\'s menu', () => {
+    const LISTS = ['# Tasks', '- [ ] Row @2026-11-26', '    - l::', '        - p', '    - m:: q', '# Done', ''];
+    const pickOf = (h: Hub, key: string, title: string) => {
+        h.click(rowOf(h, key)!.find('task-hub__prop-more')!);
+        h.menus.last()!.items.find(item => item.title === title)!.click!();
+    };
+
+    it('writes the conversions into the draft, not the note: a list of one item to its text, and a text to a list of it', async () => {
+        const h = await open(LISTS, { rowName: 'Row' });
+        await h.begin();
+        pickOf(h, 'l', t('modal.hub.toText'));
+        await settle();
+        pickOf(h, 'm', t('modal.hub.toList'));
+        await settle();
+        const props = h.host.task().properties ?? {};
+        expect([props.l?.value, props.m?.value]).toEqual([
+            { type: 'text', text: 'p', spelling: 'p' },
+            { type: 'list', items: [{ type: 'text', text: 'q', spelling: 'q' }] },
+        ]);
+        expect(h.lines()).toEqual(LISTS);
+        expect(focused(h)).not.toBe(h.field('property:l'));
+    });
+});

@@ -8,9 +8,10 @@ export interface MenuItemSpy {
     click: (() => void) | null;
 }
 
-/** A menu shown: its items, in order, and where it was put. */
+/** A menu shown: its items, in order, where its separators fall (each the count of items above it), and where it was put. */
 export interface MenuShown {
     items: MenuItemSpy[];
+    separatorsAt: number[];
     anchor: unknown;
 }
 
@@ -23,6 +24,7 @@ export function menuSpy() {
     const shown: MenuShown[] = [];
     const present = (build: (menu: Menu) => void, anchor: unknown) => {
         const items: MenuItemSpy[] = [];
+        const separatorsAt: number[] = [];
         const menu = {
             addItem(cb: (item: unknown) => void) {
                 const spy: MenuItemSpy = { title: '', icon: '', disabled: false, click: null };
@@ -36,10 +38,10 @@ export function menuSpy() {
                 items.push(spy);
                 return menu;
             },
-            addSeparator() { return menu; },
+            addSeparator() { separatorsAt.push(items.length); return menu; },
         };
         build(menu as unknown as Menu);
-        if (items.length > 0) shown.push({ items, anchor });
+        if (items.length > 0) shown.push({ items, separatorsAt, anchor });
     };
     return {
         presenter: { present },

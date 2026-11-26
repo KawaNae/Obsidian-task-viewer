@@ -356,16 +356,50 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         expect(s.menus.shown).toEqual([]);
     });
 
-    it('shows the menu under its button, its items titled and greyed as the row\'s menu says', () => {
+    it('shows the menu under its button: the attributes greyed, a separator, then the items titled and greyed as the row\'s menu says', () => {
         const s = setUp({}, { inherited: byKey({ crew: list('x') }), noSource: true });
         const items = s.menuOf('crew');
-        expect(items.map(item => [item.title, item.disabled])).toEqual([
-            ['Open inherited line', true],
-            ['Make it this task\'s own', false],
-            ['Set to no value', false],
+        expect(items.map(item => [item.title, item.icon, item.disabled])).toEqual([
+            ['Type: list', 'list', true],
+            ['Inherited from section', 'heading', true],
+            ['Open inherited line', 'external-link', true],
+            ['Make it this task\'s own', 'copy', false],
+            ['Set to no value', 'ban', false],
         ]);
-        expect(items[0].click).toBeNull();
+        expect(s.menus.last()!.separatorsAt).toEqual([2]);
+        expect(items.slice(0, 3).map(item => item.click)).toEqual([null, null, null]);
         expect(s.menus.last()!.anchor).toMatchObject({ kind: 'belowRect' });
+    });
+
+    it('says each type of the value a row shows with its icon, and puts no separator in a menu with no attribute', () => {
+        const s = setUp(byKey({ n: { type: 'number', number: 12, spelling: '12' }, b: { type: 'boolean', boolean: true, spelling: 'true' }, t: text('x'), empty: NONE }));
+        const head = (key: string) => s.menuOf(key)[0];
+        expect([head('n'), head('b'), head('t')].map(item => [item.title, item.icon, item.disabled])).toEqual([
+            ['Type: number', 'hash', true],
+            ['Type: boolean', 'toggle-left', true],
+            ['Type: text', 'type', true],
+        ]);
+        expect(s.menuOf('empty').map(item => item.title)).toEqual(['Delete']);
+        expect(s.menus.last()!.separatorsAt).toEqual([]);
+    });
+
+    it('converts a text to a list of it and a list of one item to its text, the rows built anew with the focus put in no field', () => {
+        const s = setUp(byKey({ Area: text('lab'), one: list('a') }), { inherited: byKey({ crew: list('x') }) });
+        s.pick('Area', 'Convert to list');
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: list('lab'), one: list('a') });
+        expect(s.rowOf('Area')!.findAll('task-hub__list-item').length).toBeGreaterThan(0);
+        s.pick('one', 'Convert to text');
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: list('lab'), one: text('a') });
+        expect(s.valueOf('one').value).toBe('a');
+        expect(s.doc.activeElement).toBe(s.doc.body);
+
+        // A draft of the inherited list converted: the text written, the draft let go.
+        s.pick('crew', 'Make it this task\'s own');
+        s.pick('crew', 'Convert to text');
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({ Area: list('lab'), one: text('a'), crew: text('x') });
+        expect(s.valueOf('crew').value).toBe('x');
+        expect(s.menuOf('crew').map(item => item.title)).toContain('Convert to list');
+        expect(s.doc.activeElement).toBe(s.doc.body);
     });
 
     it('does each item of the menu, the rows built anew with the focus put in no field', () => {

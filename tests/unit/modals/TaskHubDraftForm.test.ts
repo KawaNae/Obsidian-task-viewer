@@ -105,6 +105,7 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
                 items.push(one);
                 return menu;
             },
+            addSeparator: () => menu,
         };
         build(menu);
         menus.push(items);
@@ -241,6 +242,24 @@ describe('the fields of a hub on a task not written yet', () => {
         s.form.refresh();
         expect(s.host.task().properties).toEqual({});
         expect(s.rowOf('memo')).toBeUndefined();
+    });
+
+    it('convert a property\'s text to a list of it and back from its menu, into the draft', async () => {
+        const s = await setUp();
+        const addRow = () => s.root.find('task-hub__prop-add')!;
+        const key = addRow().find('tv-form__label')!.children.find(c => c.placeholder !== '')!;
+        key.focus();
+        key.type('memo');
+        addRow().find('tv-form__control')!.type('x');
+        key.enter();
+
+        s.pick(s.rowOf('memo')!, 'Convert to list');
+        await settle();
+        expect(valuesOf(s.host.task().properties)).toEqual({ memo: { type: 'list', items: [{ type: 'text', text: 'x', spelling: 'x' }] } });
+        s.pick(s.rowOf('memo')!, 'Convert to text');
+        await settle();
+        expect(valuesOf(s.host.task().properties)).toEqual({ memo: { type: 'text', text: 'x', spelling: 'x' } });
+        expect(s.places.create).not.toHaveBeenCalled();
     });
 });
 
