@@ -702,7 +702,7 @@
     "reserved": "This key is reserved.",
     "reservedField": "Enter {{key}} in the {{field}} field.",
     "keyListMark": "A key cannot start with a list or quote marker, #, or a code fence (~~~).",
-    "keyHasRow": "{{key}} already has a field. Edit it there.",
+    "keyHasRow": "The key {{key}} already exists, so it cannot be added.",
     "duplicate": "This value is already used."
   },
   "validation": {

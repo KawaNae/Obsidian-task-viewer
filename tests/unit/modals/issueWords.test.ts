@@ -44,6 +44,6 @@ describe('issueWords', () => {
         expect(issueWords({ code: 'reserved', field: { key: 'TV-COLOR', builtin: 'color' } })).toBe('Enter TV-COLOR in the Color field.');
         expect(issueWords({ code: 'reserved', field: { key: 'tv-due', builtin: 'due' } })).toBe('Enter tv-due in the Due field.');
         expect(issueWords({ code: 'reserved' })).toBe('This key is reserved.');
-        expect(issueWords({ code: 'hasRow', key: 'Area' })).toBe('Area already has a field. Edit it there.');
+        expect(issueWords({ code: 'hasRow', key: 'Area' })).toBe('The key Area already exists, so it cannot be added.');
     });
 });
