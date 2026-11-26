@@ -701,7 +701,7 @@
     "digitsOnly": "A word of digits alone is not a tag.",
     "reserved": "This key is reserved.",
     "reservedField": "Enter {{key}} in the {{field}} field.",
-    "keyListMark": "A key cannot start with a list or quote marker, or #.",
+    "keyListMark": "A key cannot start with a list or quote marker, #, or a code fence (~~~).",
     "keyHasRow": "{{key}} already has a field. Edit it there.",
     "duplicate": "This value is already used."
   },

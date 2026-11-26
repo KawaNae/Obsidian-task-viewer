@@ -68,6 +68,8 @@ class FakeEl {
         this.dispatchEvent(new Event('click'));
     }
     focus(): void { this.dispatchEvent(new Event('focus')); }
+    /** A document whose focus is on none of these elements: a clear button's press finds its field out of focus. */
+    get ownerDocument(): { activeElement: null } { return { activeElement: null }; }
     showPicker(): void { this.shown++; }
 
     find(cls: string): FakeEl {
