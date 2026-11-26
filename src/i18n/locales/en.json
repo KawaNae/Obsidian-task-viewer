@@ -601,10 +601,6 @@
       "folderDot": "A folder name cannot start with a dot."
     },
     "send": {
-      "title": "Change task location",
-      "shallow": "Line {{line}} is indented less than the children, so the rows cannot be edited here. They are moved as they are.",
-      "parentBreak": "The task's line must stay one line.",
-      "notTask": "The first line is not a task line.",
       "noteSame": "The note the rows are in: {{note}}",
       "samePlace": "The destination is where the task is now",
       "toNew": "Makes the heading {{heading}} and moves the rows under it",

@@ -36,9 +36,8 @@
     outline: none;
 }
 
-/* Asking whether to throw the draft away (the hub's source, the send
- * dialog): both boxes read as an invalid input does (the fields' invalid
- * rule, _controls.css). */
+/* Asking whether to throw the draft away (the hub's source): both boxes
+ * read as an invalid input does (the fields' invalid rule, _controls.css). */
 .tv-ctrl .tv-source-drafts--asking .tv-source-editor > .tv-ctrl__input-wrap {
     border-color: var(--tv-text-danger) !important;
     background-color: var(--tv-danger-bg-subtle);

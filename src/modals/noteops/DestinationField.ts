@@ -22,7 +22,8 @@ export interface DestinationFieldOptions {
 /**
  * Where lines go: a note (`NoteField`), and a heading in it, the note's
  * headings suggested: two form rows, each with its icon, as the hub's rows
- * are. The send dialog and the basic tab of the hub on a task to make hold it.
+ * are. The hub moving a row (`SendFields`) and the basic tab of the hub on a
+ * task to make hold it.
  * The heading field left empty stands for the note's end, under no
  * heading, for every form (`NotePlaces.readFields` reads it so); the field
  * says so in its place. Each field's × empties it as deleting its text does

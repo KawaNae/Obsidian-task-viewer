@@ -183,7 +183,7 @@ export function createTaskMenuExtension(
                 actionsBuilder.addDuplicateActions(menu, task);
                 menu.addSeparator();
                 // G5: 破壊的変更
-                actionsBuilder.addDestructiveActions(menu, task);
+                actionsBuilder.addDestructiveActions(menu, task, () => openTaskHub(task.id, { move: 'defaults' }));
             } else {
                 // A checkbox the index reads no task on: status and the basic
                 // actions, written through CheckboxLineOps as the line stands.

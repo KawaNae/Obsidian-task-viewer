@@ -213,9 +213,6 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
         return this.stale === null ? [this.draft.replacement()] : null;
     }
 
-    /** A move made in part says why, as a move not made does, and offers none again (the dialog's `spent`). */
-    sent(): void { }
-
     close(): void {
         this.made = true;
         this.deps.host.close();

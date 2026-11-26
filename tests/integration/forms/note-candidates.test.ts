@@ -1,7 +1,7 @@
 /**
  * The notes a field suggests, listed and drawn as Obsidian's `[[` lists and
  * draws them (`NoteCandidates`, `candidateView`),
- * in the running E2E vault: the send dialog's note, the settings' note
+ * in the running E2E vault: the note a row is moved to, the settings' note
  * templates, and the `[[` of the task name and of the source editor, whose
  * picks write the link Obsidian's `[[` writes (the note a link is spelt
  * from is the unit tests': the vault's link format is not changed here,
@@ -9,7 +9,7 @@
  * it at 12px with a `/` at its end, nothing under a note at the root); with
  * nothing typed the most recently modified come first; a note whose name
  * holds what is typed comes above one whose folder alone does; a list of
- * notes holds no image, the send dialog's holds an alias with its mark;
+ * notes holds no image, the move's note holds an alias with its mark;
  * picking a template puts its path in.
  *
  * The notes are made through Obsidian (`app.vault.create`), one after
@@ -93,7 +93,7 @@ afterAll(() => {
 
 interface Item { title: string; note: string | null }
 
-describe('the send dialog\'s note', () => {
+describe('the note a row is moved to', () => {
     afterEach(() => { closeDialog(); });
 
     it('lists the notes as Obsidian\'s items: the name, the folder under it, nothing under a note at the root; an alias with its mark; no image', () => {
@@ -221,13 +221,12 @@ describe('the settings\' note template', () => {
 
 /**
  * The hub opened on the row of SRC, its name field and its source editor;
- * after the send dialog's prelude (`DIALOG`: `press`, `items`, `itemOf`,
- * `typeIn`). The name's text is put back before the hub closes, so nothing
+ * after the move's prelude (`DIALOG`: `press`, `items`, `itemOf`, `typeIn`,
+ * `nameInput`). The name's text is put back before the hub closes, so nothing
  * is written.
  */
 const HUB = `${DIALOG}
 const hub = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
-const nameInput = () => hub()?.querySelector('.tv-form__name-section input') ?? null;
 const hubView = which => {
     const el = hub()?.querySelector('.tv-source-editor__' + which + ' .cm-content');
     return el ? (el.cmTile?.view ?? el.cmView?.rootView?.view ?? null) : null;

@@ -1,11 +1,11 @@
 /* ======================================================
    Shared form widgets (tv-form__*)
-   TaskHubForm（+ PickerTextField）、SendModal が共有する
+   TaskHubForm（+ PickerTextField）、TimerStartOffsetModal が共有する
    フォーム部品。問いのダイアログは _ask-dialog.css、コントロール原子は
    _controls.css（tv-ctrl__*）。
    ====================================================== */
 
-/* OverlayShell の上のフォームダイアログ（SendModal など）の見出し。殻の上の場所に置く */
+/* OverlayShell の上のフォームダイアログ（タスクハブなど）の見出し。殻の上の場所に置く */
 .tv-form__title {
     margin: 0 0 12px;
     /* Obsidian's large UI size (20px on the desktop, 1.2 of the text size on

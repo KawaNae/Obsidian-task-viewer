@@ -5,9 +5,13 @@ import { t } from '../../../src/i18n';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { NoteOps } from '../../../src/services/data/NoteOps';
 import { NotePlaces } from '../../../src/services/data/NotePlaces';
-import { RowHost } from '../../../src/modals/hub/RowHost';
+import { RowHost, type MoveOpening } from '../../../src/modals/hub/RowHost';
+import type { MoveStart } from '../../../src/modals/hub/RowMove';
+import { initialAsk } from '../../../src/modals/noteops/SendDialog';
+import { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { HubForm, HubPanel } from '../../../src/modals/hub/HubHost';
 import type { FormIssue } from '../../../src/modals/form/FormIssue';
+import type { Task } from '../../../src/types';
 
 /**
  * The host of a hub on a row in its two states over a vault: writing each
@@ -16,7 +20,8 @@ import type { FormIssue } from '../../../src/modals/form/FormIssue';
  * operations and the send are real; the form and the panel record what they
  * were told. The move itself (its draft, where the row goes, the send's
  * answers) is seen in RowMove.vault.test.ts: here, how the host goes into
- * it, what it answers meanwhile, and how it comes out.
+ * it, what it answers meanwhile, and how it comes out, begun from the hub or
+ * opened in it.
  */
 
 const FILE = 'note.md';
@@ -28,8 +33,21 @@ afterEach(() => { live?.dispose(); live = undefined; vi.restoreAllMocks(); });
 /** Let the asks of where the fields name, and the scans, answer. */
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
-async function open(lines: string[] = NOTE) {
+/**
+ * A host on the row `Row` of `lines`, its form bound and its hub attached.
+ * `opening`: the hub opens in a move of the row from where it says, the row
+ * read from the disk first, as the hub's entry reads it; `beforeAttach` runs
+ * between that read and the hub opening.
+ */
+async function open(lines: string[] = NOTE, opts: { opening?: MoveStart; beforeAttach?: (session: VaultSession, row: Task) => Promise<void> } = {}) {
     const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
+    /** The note written from outside, and the index told. */
+    const writeOutside = async (next: string[]) => {
+        contents.set(FILE, next.join('\n'));
+        await session.fireVault('modify', session.app.vault.getAbstractFileByPath(FILE));
+        // The index tells its listeners once the changes of a moment are gathered (`NotifyCoalescer`).
+        await new Promise(resolve => setTimeout(resolve, 40));
+    };
     const getSettings = () => ({ ...DEFAULT_SETTINGS });
     const noteOps = new NoteOps(session.app, session.ops, getSettings, {
         places: new NotePlaces(session.app, getSettings),
@@ -39,6 +57,11 @@ async function open(lines: string[] = NOTE) {
     const vault = session.app.vault;
     const app = { ...session.app, vault: Object.assign(Object.create(vault), { cachedRead: (file: TFile) => vault.read(file) }) };
     const row = session.index.getTasks().find(one => one.content === 'Row')!;
+    let opening: MoveOpening | null = null;
+    if (opts.opening) {
+        const preview = await noteOps.previewSend([row.id]);
+        opening = { preview: preview!, start: opts.opening };
+    }
     const source = { follow: vi.fn(), hold: vi.fn() };
     const host = new RowHost(row, {
         app: app as never,
@@ -47,7 +70,7 @@ async function open(lines: string[] = NOTE) {
         operations: session.ops,
         noteOps,
         indentUnit: () => '    ',
-    }, source);
+    }, source, opening);
     const told: string[] = [];
     const put: (string | null)[] = [];
     const place: (readonly FormIssue<never>[])[] = [];
@@ -66,19 +89,14 @@ async function open(lines: string[] = NOTE) {
     };
     host.bind(form);
     const panel: HubPanel = { redrawPreview: vi.fn(() => { told.push('card'); }), close: vi.fn() };
+    await opts.beforeAttach?.(session, row);
     host.attach(panel);
     await settle();
     return {
         session, contents, noteOps, host, form, panel, source, told, put, place, row,
         typedFails: () => { typed = false; },
         lines: () => contents.get(FILE)!.split('\n'),
-        /** The note written from outside, and the index told. */
-        writeOutside: async (next: string[]) => {
-            contents.set(FILE, next.join('\n'));
-            await session.fireVault('modify', session.app.vault.getAbstractFileByPath(FILE));
-            // The index tells its listeners once the changes of a moment are gathered (`NotifyCoalescer`).
-            await new Promise(resolve => setTimeout(resolve, 40));
-        },
+        writeOutside,
         /** Begin a move, and let where its fields name answer. */
         begin: async () => {
             await host.beginMove('here');
@@ -281,5 +299,93 @@ describe('throwing the move away', () => {
         await h.writeOutside(['# Tasks', '- [ ] Other', '']);
         h.host.draft()!.discard!();
         expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
+    });
+});
+
+describe('a hub opened in a move', () => {
+    it('holds the move as the hub opens, the form, the card and the row of buttons drawn, nothing put in first', async () => {
+        const h = await open(NOTE, { opening: 'defaults' });
+        expect(h.host.draft()).not.toBeNull();
+        // The move draws itself as it is made, before the host holds it (`draft:false`), then is drawn again.
+        expect(h.told.slice(0, 5)).toEqual(['draft:false', 'shut:null', 'refresh', 'card', 'draft:true']);
+        expect(h.form.putTyped).not.toHaveBeenCalled();
+        expect(h.source.hold.mock.calls).toEqual([[true]]);
+        expect(h.host.openSource).toBeNull();
+    });
+
+    it('opens the fields of where the row goes where a send goes, as the send dialog opened them', async () => {
+        const h = await open(NOTE, { opening: 'defaults' });
+        const preview = await h.noteOps.previewSend([h.row.id]);
+        expect(h.move().initial).toEqual(initialAsk(preview!));
+        expect(h.move().initial).not.toEqual({ note: { text: 'note', picked: FILE }, heading: 'Tasks' });
+    });
+
+    it('compares the index\'s row as the hub opens with the one read: written since, no move is asked, and why is said', async () => {
+        const h = await open(NOTE, {
+            opening: 'here',
+            beforeAttach: async (session, row) => {
+                await session.ops.updateTask(row.id, { startDate: '2026-11-27' });
+                await new Promise(resolve => setTimeout(resolve, 40));
+            },
+        });
+        h.move().fieldsChanged({ ...h.move().initial, heading: 'Done' });
+        await settle();
+        expect(h.host.draft()!.canWrite()).toBe(false);
+        expect(h.place.at(-1)!.map(issue => issue.text)).toContain(t('modal.hub.move.changed'));
+    });
+
+    it('begins no move again from the hub while it is in one', async () => {
+        const h = await open(NOTE, { opening: 'defaults' });
+        const move = h.move();
+        const preview = vi.spyOn(h.noteOps, 'previewSend');
+        await h.host.beginMove('defaults');
+        expect(h.move()).toBe(move);
+        expect(preview).not.toHaveBeenCalled();
+    });
+
+    it('thrown away, writes each change as it comes again, as a move begun from the hub', async () => {
+        const h = await open(NOTE, { opening: 'defaults' });
+        await h.host.put({ content: 'Renamed' });
+        h.told.length = 0;
+        h.host.draft()!.discard!();
+        expect(h.host.draft()).toBeNull();
+        expect(h.told).toEqual(['shut:null', 'refresh', 'card', 'draft:false']);
+        expect(h.host.task().content).toBe('Row');
+        await h.host.put({ content: 'Written' });
+        expect(h.lines()).toContain('    - [ ] Written @2026-11-26');
+    });
+
+    it('made, writes the draft and where the row goes at once, and closes the hub', async () => {
+        const h = await open(NOTE, { opening: 'here' });
+        await h.host.put({ content: 'Renamed' });
+        h.move().fieldsChanged({ ...h.move().initial, heading: 'Done' });
+        await settle();
+        h.form.write();
+        await vi.waitFor(() => expect(h.panel.close).toHaveBeenCalled());
+        expect(h.lines()).toEqual(['# Tasks', '- [ ] Parent', '# Done', '- [ ] Renamed @2026-11-26', '- [ ] Other', '']);
+    });
+});
+
+describe('a row whose subtree the source cannot open', () => {
+    /** A line under the row shallower than its child: the source mode does not open on the subtree. */
+    const SHALLOW = ['# Tasks', '- [ ] Row', '  going on', '    - [ ] child', '# Done', ''];
+
+    it('is moved with its lines as they stand, from a move begun in the hub and from a hub opened in one', async () => {
+        const h = await open(SHALLOW);
+        expect(SubtreeFrame.open(h.row.subtreeLines!, '    ')).toMatchObject({ open: false, reason: 'shallow' });
+        await h.begin();
+        await h.host.put({ content: 'Renamed' });
+        h.move().fieldsChanged({ ...h.move().initial, heading: 'Done' });
+        await settle();
+        h.form.write();
+        await vi.waitFor(() => expect(h.panel.close).toHaveBeenCalled());
+        expect(h.lines()).toEqual(['# Tasks', '# Done', '- [ ] Renamed', '  going on', '    - [ ] child', '']);
+
+        const g = await open(SHALLOW, { opening: 'here' });
+        g.move().fieldsChanged({ ...g.move().initial, heading: 'Done' });
+        await settle();
+        g.form.write();
+        await vi.waitFor(() => expect(g.panel.close).toHaveBeenCalled());
+        expect(g.lines()).toEqual(['# Tasks', '# Done', '- [ ] Row', '  going on', '    - [ ] child', '']);
     });
 });

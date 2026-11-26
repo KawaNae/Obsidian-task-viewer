@@ -33,7 +33,7 @@ import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { createTaskHubOpener, type TaskHubOpenerHandle } from './views/sharedUI/CardRendering';
 import { closeAllOverlays } from './views/sharedUI/OverlayRegistry';
 import { OverdueWatcher } from './services/display/OverdueWatcher';
-import type { TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
+import type { RowHubOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
 import { fireFilter } from './editor/FlowFireExtension';
@@ -345,7 +345,7 @@ export default class TaskViewerPlugin extends Plugin {
      * Open the task hub outside the views (the editor's ··· menu); a view
      * opens it through its own cards. See `createTaskHubOpener`.
      */
-    openTaskHub(taskId: string, options?: TaskHubPanelOptions): void {
+    openTaskHub(taskId: string, options?: RowHubOptions): void {
         this.taskHub.open(taskId, options);
     }
 

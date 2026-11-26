@@ -13,7 +13,7 @@ import type { HubForm, HubPanel, PanelHost } from './HubHost';
 import { openSourceLine, type LineTarget } from './SourceLine';
 import type { ShownPlace } from '../place/PlaceShown';
 import { sectionAt } from '../../services/data/CreatePlaces';
-import type { NoteOps } from '../../services/data/NoteOps';
+import type { NoteOps, SendPreview } from '../../services/data/NoteOps';
 import { splitLines } from '../../services/persistence/FileLines';
 import { RowMove, type MoveHost, type MoveStart } from './RowMove';
 import type { RowPlaceHost } from './RowPlace';
@@ -35,6 +35,12 @@ export interface RowSourceLink {
     follow(row: Task | undefined): void;
     /** The host holds the row for its move, or lets it go: the source does not open meanwhile. */
     hold(held: boolean): void;
+}
+
+/** A move a hub opens in (`RowHost`): the row as the disk held it when asked (`NoteOps.previewSend`), and what the fields of where it goes open with. */
+export interface MoveOpening {
+    preview: SendPreview;
+    start: MoveStart;
 }
 
 /**
@@ -76,6 +82,10 @@ export interface RowSourceLink {
  * told the index's row, and compares it with the row it opened on. Thrown
  * away (cancel), the host writes each change as it comes again, from the
  * index's copy; made, the hub closes.
+ *
+ * A hub may open in a move, on a row its entry read from the disk first
+ * (`MoveOpening`): the move is held as the hub opens, in the same task as
+ * the form is built, as one begun is held.
  */
 export class RowHost implements PanelHost, RowPlaceHost {
     private value: Task;
@@ -101,8 +111,16 @@ export class RowHost implements PanelHost, RowPlaceHost {
     /** A move is being begun: what it waits for is not answered yet. */
     private beginning = false;
 
-    /** @param source the hub's source mode, told of the row and held while the row moves */
-    constructor(task: Task, private readonly deps: RowHostDeps, private readonly source: RowSourceLink) {
+    /**
+     * @param source the hub's source mode, told of the row and held while the row moves
+     * @param opening the move the hub opens in; null, it opens writing each change as it comes
+     */
+    constructor(
+        task: Task,
+        private readonly deps: RowHostDeps,
+        private readonly source: RowSourceLink,
+        private opening: MoveOpening | null = null,
+    ) {
         // A segment of a split task is a key within the display: the hub
         // works on its row, by the row's name.
         const originalId = getOriginalTaskId(task);
@@ -264,30 +282,41 @@ export class RowHost implements PanelHost, RowPlaceHost {
             if (!this.free()) return;
             const preview = await this.deps.noteOps.previewSend([id]);
             if (!preview || !this.free()) return;
-            this.move = new RowMove(preview, start, {
-                settings: this.deps.plugin.settings,
-                unit: this.deps.indentUnit(),
-                ops: this.deps.noteOps,
-                host: this.moveHost,
-            });
+            this.hold(form, { preview, start });
         } catch (e) {
             logError(`[RowHost] the move could not begin: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             this.beginning = false;
             if (!this.move) this.source.hold(false);
         }
-        if (!this.move) return;
-        // The move drew itself as it was made, before the host held it: drawn again now.
-        form.sayPut(null);
-        form.showShut();
-        form.refresh();
-        this.panel?.redrawPreview();
-        form.showDraft();
     }
 
     /** Whether a move begun may still be held: the hub open on the row, the fields not shut. */
     private free(): boolean {
         return !this.closed && this.shut() === null;
+    }
+
+    /**
+     * Hold a move of the row from `opening`, the source mode held already.
+     * The index's row as it is now is compared with the one read, which it
+     * may no longer be after the wait. The fields, the card and the row of
+     * buttons are drawn again: the move drew itself as it was made, before
+     * the host held it.
+     */
+    private hold(form: HubForm, { preview, start }: MoveOpening): void {
+        const move = new RowMove(preview, start, {
+            settings: this.deps.plugin.settings,
+            unit: this.deps.indentUnit(),
+            ops: this.deps.noteOps,
+            host: this.moveHost,
+        });
+        this.move = move;
+        move.follow(this.deps.index.getTask(this.value.id));
+        form.sayPut(null);
+        form.showShut();
+        form.refresh();
+        this.panel?.redrawPreview();
+        form.showDraft();
     }
 
     /** What the move tells the hub. */
@@ -343,7 +372,9 @@ export class RowHost implements PanelHost, RowPlaceHost {
      * Follow the row in the index for the hub that has opened: each change of
      * it (our own writes' echoes among them) becomes the value, drawn in the
      * card and the fields, then told to `follow`; a row the index no longer
-     * holds shuts the fields.
+     * holds shuts the fields. A hub that opens in a move holds it once the
+     * hub has opened, the form built; none on a row read only, or with the
+     * fields shut.
      */
     attach(panel: HubPanel): void {
         this.panel = panel;
@@ -369,6 +400,11 @@ export class RowHost implements PanelHost, RowPlaceHost {
             }
             this.source.follow(fresh);
         });
+        const opening = this.opening;
+        this.opening = null;
+        if (!opening || !this.form || this.value.isReadOnly || !this.free()) return;
+        this.source.hold(true);
+        this.hold(this.form, opening);
     }
 
     /** The row is gone from the index (deleted, or its name changed): the fields are shut, and where it stood is no longer said. */

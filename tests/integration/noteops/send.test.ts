@@ -2,11 +2,12 @@
  * Sending a row and its subtree to a note (`NoteOps.send`), in the
  * running E2E vault: to a new note, to a note there is, to a heading of the
  * row's own note, and a send whose note the row came from refuses once the
- * new note is written, which takes the new note away again. Then the send
- * dialog, opened from a card's menu: the note and the heading picked
- * from their lists with the pointer while the rows' editor holds a draft,
- * the heading field left on the settings' heading and emptied, and a subtree it cannot open in the editor, shown as it stands. The
- * notes' bytes are read back from the disk.
+ * new note is written, which takes the new note away again. Then the row
+ * moved from its hub, opened in the move from a card's menu: the note and
+ * the heading picked from their lists with the pointer while the name's
+ * change is held, the heading field left on the settings' heading and
+ * emptied, the values the row inherits, and a subtree the source cannot
+ * open, moved as it stands. The notes' bytes are read back from the disk.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open,
@@ -290,44 +291,48 @@ describe('sending a row a timer runs on', () => {
     });
 });
 
-/** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu. */
+/** Open the hub in a move of the row of `SRC` whose text is `name`, from its card's menu. */
 function openDialog(name: string): DialogState {
     return openDialogOn(SRC, name);
 }
 
-describe('the send dialog', () => {
+describe('a row moved from the hub the card\'s menu opens', () => {
     // Some of the dialog's events need the window to have the focus.
     beforeAll(() => { if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']); });
     afterEach(() => { closeDialog(); });
 
-    it('picks the note and the heading from their lists with the pointer, a draft kept, and moves the draft to the heading of its own note', async () => {
+    it('opens in the move on the basic tab, picks the note and the heading from their lists with the pointer, the name\'s change held, and moves the row so changed to the heading of its own note', async () => {
         await writeIndexedTestFile(SRC, ['- [ ] 動かす', '    - [ ] 子', '## Done', '- [x] 済み', ''].join('\n'));
         const opened = openDialog('動かす');
-        expect(opened).toMatchObject({ open: true, note: '動かす', editors: 2, asking: false });
+        expect(opened).toMatchObject({ open: true, note: '動かす', heading: 'Tasks', asking: false, tab: 'basic', focusOnNote: true });
 
-        const picked = onDialog<DialogState & { draft: string }>(`
-            const children = viewOf('children');
-            children.dispatch({ changes: { from: children.state.doc.line(1).to, insert: '2' } });
+        const picked = onDialog<DialogState & { draft: string; disk: string }>(`
+            const name = nameInput();
+            name.focus();
+            name.value = '動かす2';
+            name.dispatchEvent(new InputEvent('input', { bubbles: true }));
+            // The name is taken into the move's draft as the focus leaves it, for the note field.
             await pickFrom(0, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC.slice(0, -3))});
             await until(() => state().noteSays === ${JSON.stringify(tr('modal.send.noteSame', { note: SRC }))});
             await pickFrom(1, 'Do', 'Done');
             await until(() => state().says?.includes('Done') && state().canSend);
-            return JSON.stringify({ ...state(), draft: children.state.doc.toString() });
+            return JSON.stringify({ ...state(), draft: nameInput().value, disk: await app.vault.adapter.read(${JSON.stringify(SRC)}) });
         `);
-        // A press on either list neither closed the dialog nor asked to throw the draft away.
-        expect(picked).toMatchObject({ open: true, closing: false, asking: false, note: SRC.slice(0, -3), heading: 'Done', canSend: true, draft: '- [ ] 子2' });
+        // A press on either list neither closed the hub nor asked to throw the move away; the name is held, not written.
+        expect(picked).toMatchObject({ open: true, closing: false, asking: false, note: SRC.slice(0, -3), heading: 'Done', canSend: true, draft: '動かす2' });
+        expect(picked.disk).toBe(['- [ ] 動かす', '    - [ ] 子', '## Done', '- [x] 済み', ''].join('\n'));
         expect(picked.noteSays).toBe(tr('modal.send.noteSame', { note: SRC }));
         expect(picked.says).toBe(tr('modal.send.withinHead', { heading: 'Done' }));
 
         const sent = onDialog<{ open: boolean; notices: number }>(`
             const before = new Set(document.querySelectorAll('.notice'));
-            panel().querySelector('.tv-form__buttons .mod-cta').click();
+            act().click();
             await until(() => !panel());
             await sleep(300);
             return JSON.stringify({ open: !!panel(), notices: [...document.querySelectorAll('.notice')].filter(el => !before.has(el)).length });
         `);
         expect(sent).toEqual({ open: false, notices: 0 });
-        expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす', '    - [ ] 子2', '- [x] 済み', ''].join('\n'));
+        expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす2', '    - [ ] 子', '- [x] 済み', ''].join('\n'));
     });
 
     describe('the heading field', () => {
@@ -345,7 +350,7 @@ describe('the send dialog', () => {
             `);
         };
         const pressSend = () => onDialog<DialogState>(`
-            panel().querySelector('.tv-form__buttons .mod-cta').click();
+            act().click();
             await until(() => !panel());
             await sleep(300);
             return JSON.stringify(state());
@@ -405,7 +410,7 @@ describe('the send dialog', () => {
         });
 
         const sent = onDialog<DialogState>(`
-            panel().querySelector('.tv-form__buttons .mod-cta').click();
+            act().click();
             await until(() => !panel());
             await sleep(300);
             return JSON.stringify(state());
@@ -415,46 +420,12 @@ describe('the send dialog', () => {
         deleteTestFile(`${NEW}.md`);
     });
 
-    it('says why each row\'s draft cannot be written under that row, two rows of the same reason each', async () => {
-        await writeIndexedTestFile(SRC, ['- [ ] 一つ目', '- [ ] 二つ目', ''].join('\n'));
-        const said = onDialog<{ rows: string[][]; canSend: boolean }>(`
-            // The menu sends one row; the dialog is asked for both, as a send of two rows is made.
-            const ops = plugin.getNoteOps();
-            const rows = ['一つ目', '二つ目'].map(name => plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === name));
-            const previewSend = ops.previewSend;
-            ops.previewSend = () => previewSend.call(ops, rows.map(row => row.id));
-            try {
-                if (!plugin.taskHub.cards) {
-                    plugin.openTaskHub(rows[0].id);
-                    await until(() => document.querySelector('.task-hub'));
-                    document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
-                    await until(() => !document.querySelector('.task-hub'));
-                }
-                await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, rows[0]);
-                menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
-                await until(() => panel() && panel().querySelectorAll('.tv-source-editor__parent .cm-content').length === 2);
-            } finally {
-                ops.previewSend = previewSend;
-            }
-            // Each row's first line made no task line.
-            for (const content of panel().querySelectorAll('.tv-source-editor__parent .cm-content')) {
-                const view = content.cmTile?.view ?? content.cmView?.rootView?.view;
-                view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'ただの行' } });
-            }
-            await sleep(200);
-            const rowSays = [...panel().querySelectorAll('.tv-send__row-says')].map(el => [...el.children].map(c => c.className + ': ' + c.textContent));
-            return JSON.stringify({ rows: rowSays, canSend: state().canSend });
-        `);
-        const notTask = `tv-form__error: ${tr('modal.send.notTask')}`;
-        expect(said).toEqual({ rows: [[notTask], [notTask]], canSend: false });
-    });
-
-    it('shows a subtree it cannot open in the editor as it stands, from the first column, and sends it so', async () => {
-        await writeIndexedTestFile(SRC, ['## Done', '- [x] 済み', '    - [ ] 浅い', '      続き', '        - [ ] 子', ''].join('\n'));
+    it('moves a row whose subtree the source cannot open, as it stands, the focus on the note field', async () => {
+        // Moved out from under its parent to another heading: where it stands, under Done, is not offered.
+        await writeIndexedTestFile(SRC, ['## Done', '- [x] 済み', '    - [ ] 浅い', '      続き', '        - [ ] 子', '## Later', ''].join('\n'));
         const opened = openDialog('浅い');
-        expect(opened).toMatchObject({ open: true, editors: 0, fixed: '- [ ] 浅い\n  続き\n    - [ ] 子' });
-        expect(opened.why).toBe(tr('modal.send.shallow', { line: 1 }));
-        // No editor takes the focus, so the note field does, the caret after its name.
+        expect(opened).toMatchObject({ open: true, tab: 'basic', focusOnNote: true });
+        // The note field takes the focus, the caret after its name.
         const focused = onDialog<{ value: string; start: number | null; end: number | null }>(`
             await until(() => document.activeElement === inputs()[0], 3000, 'the note field is not focused');
             const note = inputs()[0];
@@ -467,15 +438,15 @@ describe('the send dialog', () => {
             const [note, heading] = inputs();
             note.value = ${JSON.stringify(SRC.slice(0, -3))};
             note.dispatchEvent(new Event('input', { bubbles: true }));
-            heading.value = 'Done';
+            heading.value = 'Later';
             heading.dispatchEvent(new Event('input', { bubbles: true }));
-            await until(() => state().says?.includes('Done') && state().canSend);
-            panel().querySelector('.tv-form__buttons .mod-cta').click();
+            await until(() => state().says?.includes('Later') && state().canSend);
+            act().click();
             await until(() => !panel());
             return JSON.stringify(state());
         `);
         expect(sent.open).toBe(false);
-        expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 浅い', '  続き', '    - [ ] 子', '- [x] 済み', ''].join('\n'));
+        expect(readTestFile(SRC)).toBe(['## Done', '- [x] 済み', '## Later', '- [ ] 浅い', '  続き', '    - [ ] 子', ''].join('\n'));
     });
 });
 
@@ -531,7 +502,7 @@ describe('the send dialog\'s note field', () => {
     `);
     /** Press send, and wait for the dialog to close. */
     const sendNow = () => onDialog<DialogState>(`
-        panel().querySelector('.tv-form__buttons .mod-cta').click();
+        act().click();
         await until(() => !panel());
         await sleep(300);
         return JSON.stringify(state());

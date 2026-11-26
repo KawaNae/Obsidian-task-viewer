@@ -5,7 +5,6 @@ import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
 import { confirm } from '../../../modals/ask/askChoice';
 import { askFlowDelete } from '../../../modals/ask/flowDeleteChoice';
-import { SendModal } from '../../../modals/noteops/SendModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
 import { openTaskInEditor } from '../../../utils/NavigationUtils';
@@ -48,11 +47,12 @@ export class TaskActionsMenuBuilder {
     /**
      * G5: 破壊的変更 — Open in Editor / Change Task Location | Delete
      * 行を消す Delete だけを、区切り線で前の2つから分ける。
-     * onDestructive が渡されているとき各アクション実行後に invoke する。
+     * Change Task Location は beginMove を呼ぶ（行のハブの移動に入る）。
+     * onDestructive が渡されているとき Open in Editor と Delete の実行後に invoke する。
      */
-    addDestructiveActions(menu: Menu, task: Task, onDestructive?: () => void): void {
+    addDestructiveActions(menu: Menu, task: Task, beginMove: () => void, onDestructive?: () => void): void {
         this.addOpenInEditorItem(menu, task, onDestructive);
-        this.addSendItem(menu, task, onDestructive);
+        this.addMoveItem(menu, beginMove);
         menu.addSeparator();
         this.addDeleteItem(menu, task, onDestructive);
     }
@@ -120,23 +120,17 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * "Change Task Location": the row and its subtree, sent to a note the
-     * dialog names (`SendModal`). It opens on the row as the disk holds it
-     * (`NoteOps.previewSend`), and not when the row is not the one there,
-     * which the user is told. The row leaves where it stood once it went,
-     * all of it or some (`onDestructive`); a send not made keeps the dialog
-     * open.
+     * "Change Task Location": the row and its subtree moved from the row's
+     * hub (`beginMove`: the hub opened in a move, or the hub the menu is in
+     * going into one). The hub closes once the row went.
      */
-    private addSendItem(menu: Menu, task: Task, onDestructive?: () => void): void {
+    private addMoveItem(menu: Menu, beginMove: () => void): void {
         menu.addItem((item) => {
             item.setTitle(t('menu.sendToNote'))
                 .setIcon('send')
-                .onClick(async () => {
+                .onClick(() => {
                     menu.close();
-                    const ops = this.plugin.getNoteOps();
-                    const preview = await ops.previewSend([task.id]);
-                    if (!preview) return;
-                    new SendModal(this.app, ops, preview, () => onDestructive?.()).open();
+                    beginMove();
                 });
         });
     }
