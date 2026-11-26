@@ -24,9 +24,9 @@ vi.mock('../../../src/modals/hub/SourceLine', () => ({ openSourceLine }));
  * before is taken back. A refusal after the hub closed is told by a notice.
  *
  * The host follows the row in the index once the hub has opened: a change of
- * it is drawn in the card, then in the form, then told to what the host was
- * made to tell (the source mode); a row the index no longer holds shuts the
- * form until it comes back.
+ * it is drawn in the card, then in the form, then the source mode is told to
+ * draw again, from the row its seat answers; a row the index no longer holds
+ * shuts the form until it comes back.
  *
  * Where the row stands (`shown`) is its note and its parent's text from the
  * index, and the heading it stands under, read from the note's lines once the
@@ -58,7 +58,8 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
     });
 
     const told: string[] = [];
-    const follow = vi.fn((row: Task | undefined) => { told.push(`follow:${row?.content ?? 'none'}`); });
+    // The source mode draws the row its seat answers.
+    const redraw = vi.fn(() => { told.push(`source:${host.seat().row()?.task.content ?? 'none'}`); });
     const cachedRead = vi.fn(async (file: TFile) => notes[file.path]);
     const vault = {
         getAbstractFileByPath: (path: string) => (path in notes ? Object.assign(new TFile(), { path }) : null),
@@ -71,7 +72,7 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         operations: { updateTask } as never,
         noteOps: {} as never,
         indentUnit: () => '    ',
-    }, { follow, hold: vi.fn() });
+    }, { redraw, hold: vi.fn() });
     copy = fresh;
 
     const form: HubForm & { said: (string | null)[] } = {
@@ -225,7 +226,7 @@ describe('RowHost following the row', () => {
         h.change(fresh);
 
         expect(h.host.task()).toBe(fresh);
-        expect(h.told).toEqual(['preview', 'form', 'follow:外の名前']);
+        expect(h.told).toEqual(['preview', 'form', 'source:外の名前']);
     });
 
     it('follows no other row, and every row when the index does not say which', () => {
@@ -235,7 +236,7 @@ describe('RowHost following the row', () => {
         h.change(makeTask({ id: 'task-1', content: '外の名前' }), 'task-2');
         expect(h.told).toEqual([]);
         h.change(makeTask({ id: 'task-1', content: '外の名前' }), undefined);
-        expect(h.told).toEqual(['preview', 'form', 'follow:外の名前']);
+        expect(h.told).toEqual(['preview', 'form', 'source:外の名前']);
     });
 
     it('shuts the form once the index no longer holds the row, and opens it again when the row comes back', () => {
@@ -246,12 +247,12 @@ describe('RowHost following the row', () => {
         h.change(undefined);
         expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
         // Drawn again with it, where the row stood is no longer said.
-        expect(h.told).toEqual([`shut:${t('modal.hub.taskMissing')}`, 'form', 'follow:none', 'follow:none']);
+        expect(h.told).toEqual([`shut:${t('modal.hub.taskMissing')}`, 'form', 'source:none', 'source:none']);
 
         h.told.length = 0;
         h.change(makeTask({ id: 'task-1', content: '戻った' }));
         expect(h.host.shut()).toBeNull();
-        expect(h.told).toEqual(['preview', 'shut:null', 'form', 'follow:戻った']);
+        expect(h.told).toEqual(['preview', 'shut:null', 'form', 'source:戻った']);
     });
 
     it('does not show the shut again on a change while the row is held', () => {
@@ -271,7 +272,7 @@ describe('RowHost following the row', () => {
         h.change(undefined);
         h.change(makeTask({ id: 'task-1', content: '戻った' }));
 
-        expect(h.told).toEqual(['preview', 'follow:外の名前', 'follow:none', 'preview', 'follow:戻った']);
+        expect(h.told).toEqual(['preview', 'source:外の名前', 'source:none', 'preview', 'source:戻った']);
         expect(h.host.shut()).toBeNull();
     });
 

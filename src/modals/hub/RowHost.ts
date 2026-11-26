@@ -17,6 +17,8 @@ import type { NoteOps, SendPreview } from '../../services/data/NoteOps';
 import { splitLines } from '../../services/persistence/FileLines';
 import { RowMove, type MoveHost, type MoveStart } from './RowMove';
 import type { RowPlaceHost } from './RowPlace';
+import { SourceApply } from './SourceApply';
+import type { SourceSeat } from './TaskHubSource';
 
 export interface RowHostDeps {
     app: App;
@@ -31,8 +33,8 @@ export interface RowHostDeps {
 
 /** The hub's source mode as the host tells it of the row. */
 export interface RowSourceLink {
-    /** Each change of the row after the card and the fields are told of it; undefined once the index no longer holds it. */
-    follow(row: Task | undefined): void;
+    /** The row changed, after the card and the fields are told of it: the switch is drawn again from its seat's row. */
+    redraw(): void;
     /** The host holds the row for its move, or lets it go: the source does not open meanwhile. */
     hold(held: boolean): void;
 }
@@ -48,8 +50,8 @@ export interface MoveOpening {
  * states: it writes each change handed on to the row at once, or, while it
  * moves the row (`RowMove`), holds the changes in a draft and writes them
  * with the move, at once. Which it is in is whether it holds a move; `task`,
- * `put`, `draft`, `closing`, `openSource` and the following of the index
- * answer by it.
+ * `put`, `draft`, `closing`, `openSource`, the source's row and the following
+ * of the index answer by it.
  *
  * Out of a move, each change handed on is written to the row at once
  * (`Operations.updateTask`), and the row is followed in the index.
@@ -65,9 +67,11 @@ export interface MoveOpening {
  * form's tabs once and the value goes back to the index's copy; once the hub
  * has closed, a refusal is told by a notice, as any write's is.
  *
- * The fields are shut while the source mode holds the row (two ways of
- * writing one row would have one of them refused, and the draft is the
- * user's work) and while the index no longer holds it (nothing to write to).
+ * The source opens on the row the note holds, its draft written when it is
+ * applied (`SourceApply`): the seat the host answers (`seat`). The fields are
+ * shut while the source holds the row (two ways of writing one row would
+ * have one of them refused, and the draft is the user's work) and while the
+ * index no longer holds it (nothing to write to).
  *
  * Where the row stands is shown with no field (`shown`): its note and its
  * parent from the value, the heading it stands under from the note's lines,
@@ -113,6 +117,8 @@ export class RowHost implements PanelHost, RowPlaceHost {
      * is in neither state meanwhile, and takes no change of the fields.
      */
     private beginning = false;
+    /** The source's seat on the row the note holds: its draft is written when it is applied. */
+    readonly sourceApply: SourceApply;
 
     /**
      * @param source the hub's source mode, told of the row and held while the row moves
@@ -128,6 +134,31 @@ export class RowHost implements PanelHost, RowPlaceHost {
         // works on its row, by the row's name.
         const originalId = getOriginalTaskId(task);
         this.value = deps.index.getTask(originalId) ?? { ...task, id: originalId };
+        this.sourceApply = new SourceApply({
+            row: () => this.sourceRow(),
+            drained: () => this.drained(),
+            confirm: (id) => deps.operations.confirmTask(id),
+            reread: (id) => deps.index.getTask(id),
+            // The refusal is shown under the draft it leaves; a notice would say it twice.
+            replace: (id, base, replacement) => deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
+            lockForm: (locked) => this.setSourceOpen(locked),
+            closeHub: () => this.panel?.close(),
+        });
+    }
+
+    /** Whose the source's text is if it opens now. */
+    seat(): SourceSeat {
+        return this.sourceApply;
+    }
+
+    /**
+     * The row the source is drawn for, as the index holds it: the value out
+     * of a move, none once the row is lost; in a move, the index's copy,
+     * which the value does not follow while the draft is the value.
+     */
+    private sourceRow(): Task | undefined {
+        if (this.move) return this.deps.index.getTask(this.value.id);
+        return this.missing ? undefined : this.value;
     }
 
     /** The value: the move's draft while the hub is in one. */
@@ -374,7 +405,6 @@ export class RowHost implements PanelHost, RowPlaceHost {
         if (!move) return;
         move.dispose();
         this.move = null;
-        this.source.hold(false);
         const fresh = this.deps.index.getTask(this.value.id);
         this.missing = fresh === undefined;
         if (fresh) {
@@ -383,6 +413,8 @@ export class RowHost implements PanelHost, RowPlaceHost {
         } else {
             this.forgetHeading();
         }
+        // Let go once the value is the row the source is drawn for.
+        this.source.hold(false);
         this.form?.sayPlace([]);
         this.form?.sayPut(null);
         this.form?.showShut();
@@ -401,7 +433,7 @@ export class RowHost implements PanelHost, RowPlaceHost {
     /**
      * Follow the row in the index for the hub that has opened: each change of
      * it (our own writes' echoes among them) becomes the value, drawn in the
-     * card and the fields, then told to `follow`; a row the index no longer
+     * card and the fields, then the source is drawn again; a row the index no longer
      * holds shuts the fields. A hub that opens in a move holds it once the
      * hub has opened, the form built; none on a row read only, or with the
      * fields shut.
@@ -428,7 +460,7 @@ export class RowHost implements PanelHost, RowPlaceHost {
             } else {
                 this.lose();
             }
-            this.source.follow(fresh);
+            this.source.redraw();
         });
         const opening = this.opening;
         this.opening = null;
@@ -511,6 +543,7 @@ export class RowHost implements PanelHost, RowPlaceHost {
         this.unsubscribe?.();
         this.unsubscribe = null;
         this.closed = true;
+        this.sourceApply.dispose();
         this.move?.dispose();
     }
 }
