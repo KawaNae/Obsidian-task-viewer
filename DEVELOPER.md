@@ -649,7 +649,7 @@ Merge rules: style is the row's own where it says one, a value or none (null), e
 
 ### ハブのプロパティの欄
 
-ハブ（`TaskHubForm`）は、タスク自身のプロパティ行を欄から書く。欄は、組み込みの色、線種、マスク（`StyleFieldGroup`）、タグ（`TagsFieldGroup`）、カスタムプロパティ（`PropertiesFieldGroup`、リストは `PropertyListField`）である。節、根、frontmatter の値を編集する欄は無い。受け継いだ値は出所のラベル（`CascadeSource`）で示し、ラベルから値を書いた行を開く。ラベルは、frontmatter と根の行の値を「継承: ファイル」、見出しの節の値を「継承: セクション」と言う。根も frontmatter もノート全体の値で、どちらの行かはラベルから行を開けば分かる
+ハブ（`TaskHubForm`）は、タスク自身のプロパティ行を欄から書く。欄は、組み込みの色、線種、マスク（`StyleFieldGroup`）、タグ（`TagsFieldGroup`）、カスタムプロパティ（`PropertiesFieldGroup`、リストは `PropertyListField`）である。カスタムプロパティの行の並びと、各行が自分の値と継承した値をそれぞれ持つかは `PropertyRows` が決め、`PropertiesFieldGroup` はそれを描く。節、根、frontmatter の値を編集する欄は無い。受け継いだ値は出所のラベル（`CascadeSource`）で示し、ラベルから値を書いた行を開く。ラベルは、frontmatter と根の行の値を「継承: ファイル」、見出しの節の値を「継承: セクション」と言う。根も frontmatter もノート全体の値で、どちらの行かはラベルから行を開けば分かる
 
 - 欄の文字は、行に書く綴り（`spelling`）である。`- id:: "123"` の欄は `"123"` を出す。欄は入力の場所で、引用符を外して出すと、`124` に直したときに型が数に変わるからである。カード、メニュー、候補は引用符を外した表示（`display`）を出す
 - 欄の確定は `bindField`（`modals/form/bindField.ts`）が決める。blur とフォームの Enter で確定し、読めない文字は欄の下に理由を出して確定しない
