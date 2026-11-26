@@ -1,7 +1,7 @@
 import type { ScopeKeys, Task } from '../../types';
 import { formatRow } from '../parsing/TaskLineFormat';
-import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import type { UpdateOp } from '../persistence/UpdateRow';
+import { PropertyUpdatePlanner } from './PropertyUpdatePlanner';
+import type { UpdateOp } from './UpdateRow';
 
 /**
  * What writing `updates` to the row `task` reads as writes: the row's line

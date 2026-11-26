@@ -2,7 +2,7 @@ import { type App, Notice, TFile } from 'obsidian';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
-import { planUpdate } from './UpdatePlan';
+import { planUpdate } from '../persistence/UpdatePlan';
 import { FlowExecutor, type FireOp } from '../flow/FlowExecutor';
 import { FlowNotices } from '../flow/FlowNotices';
 import { completes } from '../flow/FlowTrigger';

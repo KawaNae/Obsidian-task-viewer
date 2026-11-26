@@ -253,6 +253,117 @@ describe('a draft of the source, taken in', () => {
     });
 });
 
+describe('a draft of the source whose row reads as no row in the note', () => {
+    // An ordered list that starts at another number than 1 cannot interrupt
+    // a paragraph: the line goes on the text above it, though it reads as a
+    // task line alone.
+    const cases: [string, string[], string][] = [
+        ['under its parent\'s text', ['- [ ] P', '    1. [ ] R', '- [ ] After', ''], '2. [ ] R'],
+        ['right after a paragraph', ['text', '1. [ ] R', '', '- [ ] After', ''], '3. [ ] R'],
+        ['with a child, under its parent\'s text', ['- [ ] P', '    1. [ ] R', '        - [ ] C', '- [ ] After', ''], '2. [ ] R'],
+    ];
+    for (const [name, lines, row] of cases) {
+        it(`${name}: is refused as no task, and the draft is as it was, its values read`, async () => {
+            const note = await open(lines);
+            const draft = await note.draftOf(note.rowOf('R'));
+            const unit = indentUnit(note.session.app);
+            const children = SubtreeFrame.open(draft.subtree(), unit);
+            if (!children.open) throw new Error('the source does not open');
+
+            const taken = draft.take(sourceOf(draft, unit, row, children.frame.children.map((text, i) => [text, i + 1])));
+            expect(taken).toEqual({ kind: 'not-task' });
+            expect(draft.lines()).toEqual(lines);
+            expect(draft.replacement()).toBeNull();
+            expect(draft.task().content).toBe('R');
+            expect(draft.apply({ content: 'Renamed' })).toBeNull();
+            expect(draft.descendants().map(child => child.content)).toEqual(lines.some(line => line.includes('[ ] C')) ? ['C'] : []);
+        });
+    }
+});
+
+describe('a draft of the subtree whose child line ends the row\'s item', () => {
+    it('is refused as unplaceable, and the draft is as it was', async () => {
+        const lines = ['# Note', '- [ ] R', '    - [ ] C', '- [ ] After', ''];
+        const note = await open(lines);
+        const draft = await note.draftOf(note.rowOf('R'));
+
+        // A child at the row's own indentation is its sibling: the row's item ends above it.
+        expect(draft.take({ text: '- [ ] R', children: [{ text: '    - [ ] C', was: 1 }, { text: '- [ ] Sibling', was: null }] }))
+            .toEqual({ kind: 'unplaceable', fence: null });
+        expect(draft.lines()).toEqual(lines);
+        expect(draft.replacement()).toBeNull();
+    });
+});
+
+describe('field changes and drafts of the source in turn', () => {
+    // A fixed run of five changes per note, each a field's change or a draft
+    // of the source (a line added, taken out, swapped with the next, indented
+    // one level more, or its text changed): the draft's lines are what the
+    // write of its replacement to the note leaves.
+    const notes: string[][] = [
+        NOTE,
+        ['- [ ] A', '    - [ ] B', '        - [ ] C', '            - [ ] Row', '                - x', '                - tv-mask:: q', '```', 'code', '```', ''],
+        ['---', 'tv-color: red', '---', '## S', '- tags:: #sec', '', '- [ ] Row #own', '  - k:: v', '  - [ ] sub', '    - sk:: 1', '1. next', ''],
+    ];
+    const fields: ((row: Task) => Partial<Task> | null)[] = [
+        row => TaskUpdateBuilder.content(row, `${row.content}z`),
+        row => TaskUpdateBuilder.due(row, '2026-11-30', ''),
+        row => TaskUpdateBuilder.tags(row, ['a', 'b']),
+        row => TaskUpdateBuilder.styleField(row, 'color', 'blue'),
+        row => TaskUpdateBuilder.styleHidden(row, 'color'),
+        row => TaskUpdateBuilder.styleField(row, 'linestyle', 'dashed'),
+        row => TaskUpdateBuilder.customProperties(row, { ...row.properties, n: { key: 'n', value: PropertyValues.fromText('007') } }),
+        row => TaskUpdateBuilder.customProperties(row, {}),
+    ];
+    /** A small generator of fixed numbers (mulberry32), so each run is the same. */
+    const numbers = (seed: number) => (n: number): number => {
+        seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
+    };
+
+    notes.forEach((lines, n) => {
+        it(`over note ${n + 1}: the write of the replacement leaves the draft's lines`, async () => {
+            const pick = numbers(n + 1);
+            for (let run = 0; run < 6; run++) {
+                live?.dispose();
+                const note = await open(lines);
+                const row = note.rowOf(note.session.index.getTasks().find(task => task.content.startsWith('Row'))!.content);
+                const draft = await note.draftOf(row);
+                const unit = indentUnit(note.session.app);
+                for (let step = 0; step < 5; step++) {
+                    if (pick(2) === 0) {
+                        const updates = fields[pick(fields.length)](draft.task());
+                        if (updates) draft.apply(updates);
+                        continue;
+                    }
+                    const opening = SubtreeFrame.open(draft.subtree(), unit);
+                    if (!opening.open) continue;
+                    const children: [string, number | null][] = opening.frame.children.map((text, i) => [text, i + 1]);
+                    const at = children.length > 0 ? pick(children.length) : 0;
+                    const kind = pick(5);
+                    if (kind === 0) children.splice(at, 0, [pick(2) ? `- new ${step}` : `- [ ] T${step}`, null]);
+                    else if (children.length === 0) continue;
+                    else if (kind === 1) children.splice(at, 1);
+                    else if (kind === 2) {
+                        const next = (at + 1) % children.length;
+                        [children[at], children[next]] = [children[next], children[at]];
+                    } else if (kind === 3) children[at] = [`\t${children[at][0]}`, children[at][1]];
+                    else children[at] = [`${children[at][0]} e`, children[at][1]];
+                    const checked = opening.frame.check({ parent: opening.frame.parent, children: children.map(([text, was]) => ({ text, was })) });
+                    if (checked.kind === 'write') draft.take(checked.replacement);
+                }
+                const replacement = draft.replacement();
+                if (!replacement) continue;
+                expect(await note.session.ops.replaceSubtree(row.id, row.subtreeLines!, replacement, { tellRefusal: false })).toEqual({ written: true });
+                await note.session.settle(FILE);
+                expect(note.lines()).toEqual(draft.lines());
+            }
+        });
+    });
+});
+
 describe('a change the draft cannot take in', () => {
     it('over a property whose lines are wrong is refused as the write refuses it, and the draft is as it was', async () => {
         const wrong = ['# Note', '- [ ] Row', '\t- tv-color:: red', '\t- tv-color:: green', ''];

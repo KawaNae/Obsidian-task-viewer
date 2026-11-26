@@ -1,11 +1,11 @@
 import type { Task, TaskViewerSettings } from '../../types';
 import { namesOutsideIndex } from '../core/RowNames';
 import type { RowSnapshot } from '../operations/Operations';
-import { planUpdate } from '../operations/UpdatePlan';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
-import { Outline } from '../parsing/utils/Outline';
+import { Outline, type OutlineReading } from '../parsing/utils/Outline';
 import { draftOver, replayEdits, UnfollowableDraft, type RefusalReason } from '../persistence/FileLines';
 import type { SubtreeReplacement } from '../persistence/TaskOps';
+import { planUpdate } from '../persistence/UpdatePlan';
 import { updateRow } from '../persistence/UpdateRow';
 import type { PropertyRefusal } from '../persistence/utils/ChildPropertyLineEditor';
 
@@ -13,11 +13,21 @@ import type { PropertyRefusal } from '../persistence/utils/ChildPropertyLineEdit
  * Why a change was not taken into a {@link RowDraft}, which stays as it
  * was: a property whose lines the reading finds wrong (`property`, as a
  * write to the note refuses it), or a source draft whose lines are not the
- * row's subtree once in the note — a line that ends the row's item
- * (`unplaceable`), lines below it taken in (`disturbs`), as a write of the
- * same replacement refuses them (`replaceSubtree`).
+ * row's subtree once in the note — the row's line read as no task there
+ * (`not-task`, as the source's own check of the line says it:
+ * `SubtreeFrame.check`), a line that ends the row's item (`unplaceable`),
+ * lines below it taken in (`disturbs`), as a write of the same replacement
+ * refuses the last two (`replaceSubtree`).
+ *
+ * The row's line can read as a task alone and as none among the note's
+ * lines: an ordered list that starts at another number than 1 cannot
+ * interrupt a paragraph, so under a parent's text, or right after a
+ * paragraph, it goes on that paragraph.
  */
-export type RowDraftRefusal = PropertyRefusal | Extract<RefusalReason, { kind: 'unplaceable' | 'disturbs' }>;
+export type RowDraftRefusal =
+    | PropertyRefusal
+    | { kind: 'not-task' }
+    | Extract<RefusalReason, { kind: 'unplaceable' | 'disturbs' }>;
 
 /** What a {@link RowDraft} reads as: the row, and the rows of its subtree. */
 interface DraftReading {
@@ -156,6 +166,10 @@ export class RowDraft {
      * on {@link subtree}: its `was` say which line of the subtree then each
      * line is, which is told here as the line of the disk's subtree it is.
      *
+     * The lines are read once, as {@link task} reads them, and taken in
+     * only when the row's line reads as a row there: a draft taken in
+     * always has values.
+     *
      * @returns null when taken in; else why its lines are not the row's
      * subtree in the note, and the draft is as it was.
      */
@@ -168,11 +182,15 @@ export class RowDraft {
             }
             return this.was[child.was - 1];
         });
-        const end = Outline.read([...this.above, ...rows, ...this.below]).subtreeEnd(this.line);
+        const lines = [...this.above, ...rows, ...this.below];
+        const outline = Outline.read(lines);
+        const reading = this.readOf(lines, rows.length, outline);
+        if (!reading) return { kind: 'not-task' };
+        const end = outline.subtreeEnd(this.line);
         const last = this.line + rows.length;
         if (end < last) return { kind: 'unplaceable', fence: null };
         if (end > last) return { kind: 'disturbs', fence: null };
-        this.set(rows, was);
+        this.set(rows, was, reading);
         return null;
     }
 
@@ -188,10 +206,11 @@ export class RowDraft {
         };
     }
 
-    private set(rows: readonly string[], was: readonly (number | null)[]): void {
+    /** The lines now, and what they read as when that is known already. */
+    private set(rows: readonly string[], was: readonly (number | null)[], reading: DraftReading | null = null): void {
         this.rows = rows;
         this.was = was;
-        this.reading = null;
+        this.reading = reading;
     }
 
     /**
@@ -210,16 +229,27 @@ export class RowDraft {
 
     private read(): DraftReading {
         if (this.reading) return this.reading;
+        const reading = this.readOf(this.lines(), this.rows.length);
+        if (!reading) throw new RangeError(`the draft's line ${this.line} does not read as a row`);
+        this.reading = reading;
+        return reading;
+    }
+
+    /**
+     * What `lines`, the note's lines with a subtree of `count` lines at the
+     * row's line, read as (`outline`, their reading, when it is made
+     * already): null when the row's line reads as no row there.
+     */
+    private readOf(lines: string[], count: number, outline?: OutlineReading): DraftReading | null {
         const line = this.line;
-        const end = line + this.rows.length;
-        const { tasks } = FileParsePipeline.parse(this.path, this.lines(), this.settings, namesOutsideIndex(this.path));
+        const end = line + count;
+        const { tasks } = FileParsePipeline.parse(this.path, lines, this.settings, namesOutsideIndex(this.path), outline);
         const read = tasks.find(task => task.line === line);
-        if (!read) throw new RangeError(`the draft's line ${line} does not read as a row`);
+        if (!read) return null;
         const named = (task: Task): Task => (task.parentId === read.id ? { ...task, parentId: this.name } : task);
-        this.reading = {
+        return {
             task: { ...read, id: this.name },
             descendants: tasks.filter(task => task.line > line && task.line < end).map(named),
         };
-        return this.reading;
     }
 }
