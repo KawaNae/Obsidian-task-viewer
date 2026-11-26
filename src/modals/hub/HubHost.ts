@@ -1,4 +1,5 @@
 import type { Task } from '../../types';
+import type { TaskLookup } from '../../services/display/DisplayTaskConverter';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import type { FieldFocus } from '../../utils/FieldFocus';
 import type { FormIssue } from '../form/FormIssue';
@@ -181,6 +182,14 @@ export type PlaceMaker = (parent: HTMLElement) => HubPlace;
 
 /** A hub's host as its panel sees it: the form's host, told when the hub has opened and when it has closed. */
 export interface PanelHost extends HubHost {
+    /**
+     * The rows the card is drawn from, the value's own and its subtree's,
+     * where the index holds none of them as the value has them (a task not
+     * written yet, a row's draft): the card shows the children of these and
+     * takes no act, as there is no row of theirs to write to
+     * (`RenderOptions.rows`). Null, the card reads the index.
+     */
+    cardRows(): TaskLookup | null;
     /** The hub has opened in `panel`: what the host follows from now on is drawn there. */
     attach(panel: HubPanel): void;
     /** The hub has closed: the host follows nothing more, and a refusal that comes after is told by a notice. */

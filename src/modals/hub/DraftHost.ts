@@ -12,6 +12,7 @@ import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import type { FormIssue, Tone } from '../form/FormIssue';
 import { DestinationText } from '../noteops/DestinationText';
 import type { ShownPlace } from '../place/PlaceShown';
+import type { TaskLookup } from '../../services/display/DisplayTaskConverter';
 import type { HubDraft, HubForm, HubPanel, PanelHost } from './HubHost';
 
 export interface DraftHostDeps {
@@ -137,6 +138,12 @@ export class DraftHost implements PanelHost {
 
     task(): Task {
         return this.value;
+    }
+
+    /** The draft alone: the index holds no row of a task not written yet. */
+    cardRows(): TaskLookup {
+        const value = this.value;
+        return (id) => (id === value.id ? value : undefined);
     }
 
     draft(): HubDraft {

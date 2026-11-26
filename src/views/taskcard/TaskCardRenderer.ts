@@ -31,13 +31,17 @@ export interface RenderOptions {
     /** The view's mask mode applies to the card. Default true. */
     mask?: boolean;
     /**
-     * Nothing is done on the card: no menu, no double tap, no checkbox, no
-     * child's ⋯, and its links are not followed, whatever the policies above
-     * say. For a card of a task that is not a line yet, which there is
-     * nothing to act on. Its checkboxes and links take no press, drawn as
-     * they are (not faded as a read-only card's). Default false.
+     * The rows the card reads in place of the index: the task's row, its
+     * children and theirs, and whether each is done (`CardRows`), all of
+     * them from these. For a task the index does not hold as the card shows
+     * it: one not written yet, or a row's draft. The index has no row of
+     * theirs to write to, so nothing is done on such a card: no menu, no
+     * double tap, no checkbox, no child's ⋯, and its links are not followed,
+     * whatever the policies above say. Its checkboxes and links take no
+     * press, drawn as they are (not faded as a read-only card's). Default:
+     * the index, and the card is acted on as its policies say.
      */
-    inert?: boolean;
+    rows?: TaskLookup;
     hooks?: {
         /** A link in the card was followed. */
         onNavigate?: () => void;
@@ -91,7 +95,8 @@ function policiesOf(options: RenderOptions) {
         alwaysLinks: options.alwaysLinks ?? false,
         doubleTap: options.doubleTap ?? true,
         mask: options.mask ?? true,
-        inert: options.inert ?? false,
+        // A card of rows the index does not hold has nothing to act on (`RenderOptions.rows`).
+        inert: options.rows !== undefined,
     };
 }
 
@@ -140,6 +145,8 @@ import { ExpandedCards, stampCardKey, type CardKey } from './CardKey';
 import { holdCard, type CardHold } from './CardHold';
 import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
 import { appendToLine, renderCardMarkdown, type LateContent } from './CardMarkdown';
+import { cardRowsOf, type CardRows } from './CardRows';
+import type { TaskLookup } from '../../services/display/DisplayTaskConverter';
 
 /**
  * Draws a card's top right (`composeTopRight`), each piece with the class of
@@ -263,12 +270,19 @@ export function computeContentSignature(
 export function cardOverdueLevel(
     task: DisplayTask,
     defs: StatusDefinition[],
-    readService: Pick<TaskReadService, 'getDisplayTask'>,
+    rows: Pick<CardRows, 'getDisplayTask'>,
     now: number = Date.now(),
 ): OverdueLevel {
-    const level = getOverdueLevel(task, defs, readService, now);
+    const level = getOverdueLevel(task, defs, rows, now);
     if (level === 'past-due') return level;
-    return exceedsDue(task, defs, readService) ? 'past-due' : level;
+    return exceedsDue(task, defs, rows) ? 'past-due' : level;
+}
+
+/** The icon of an overdue level: 🚨 past the due, ⚠️ past the end. */
+function overdueIcon(level: OverdueLevel): string {
+    return level === 'past-due' ? '🚨 '
+        : level === 'past-end' ? '⚠️ '
+        : '';
 }
 
 export class TaskCardRenderer extends Component {
@@ -278,8 +292,9 @@ export class TaskCardRenderer extends Component {
     private checkboxWiring: CheckboxWiring;
     private linkInteractionManager: TaskLinkInteractionManager;
     private readonly app: App;
-    private readonly readService: TaskReadService;
     private readonly index: IndexReads;
+    /** The reads of a card drawn from the index, the default. */
+    private readonly indexRows: CardRows;
     private readonly linkRuntime: TaskCardLinkRuntime;
     private readonly getMaskMode: () => boolean;
     private readonly actions: CardActions;
@@ -290,14 +305,18 @@ export class TaskCardRenderer extends Component {
         super();
         const { app, readService, index } = deps;
         this.app = app;
-        this.readService = readService;
         this.index = index;
+        this.indexRows = {
+            getTask: (id) => index.getTask(id),
+            getChildEntries: (task) => readService.getChildEntries(task),
+            getDisplayTask: (id) => readService.getDisplayTask(id),
+        };
         this.linkRuntime = deps.linkRuntime;
         this.getMaskMode = deps.getMaskMode;
         this.actions = deps.actions;
         this.checkboxWiring = new CheckboxWiring(deps.operations, deps.menuPresenter);
-        this.childItemBuilder = new ChildItemBuilder(readService, index);
-        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, index, deps.actions.showChildMenu);
+        this.childItemBuilder = new ChildItemBuilder();
+        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, deps.actions.showChildMenu);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, deps.getSettings);
         // Forget the opened cards of rows whose names ended (the index's
         // delete notification), segments included, in every place, so the
@@ -334,11 +353,13 @@ export class TaskCardRenderer extends Component {
         const enableLinks = !policies.inert && (policies.alwaysLinks || settings.enableCardFileLink);
         const masked = policies.mask && this.getMaskMode();
         const onNavigate = options.hooks?.onNavigate;
+        // The one source of every read below: its children, their counts and the overdue mark.
+        const rows = options.rows ? cardRowsOf(options.rows, settings.startHour) : this.indexRows;
 
         // What the card shows of its children, and the names behind them. A
         // compact card shows only their count, which the items still decide.
         const children = task.childEntries.length > 0
-            ? this.childItemBuilder.buildChildItems(task, '')
+            ? this.childItemBuilder.buildChildItems(task, rows)
             : [];
         // Every draw puts the task it draws in the hold, whether or not the
         // card is drawn anew: a kept card acts on the task it shows.
@@ -359,7 +380,7 @@ export class TaskCardRenderer extends Component {
             : [];
         const topRightResolved = topRightText(topRightPieces);
         const isExpanded = this.expanded.isOpen(key, row => this.index.getTask(row)?.id);
-        const overdueLevel = cardOverdueLevel(task, settings.statusDefinitions, this.readService);
+        const overdueLevel = cardOverdueLevel(task, settings.statusDefinitions, rows);
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
             masked, isExpanded, children,
@@ -419,7 +440,7 @@ export class TaskCardRenderer extends Component {
         // Timeline reads where a name is laid out off a frame of this body
         // (`measureLegibleCardPx`), which builds the body as this does.
         const contentContainer = container.createDiv('task-card__content');
-        const parentMarkdown = this.buildParentMarkdown(task, settings);
+        const parentMarkdown = this.buildParentMarkdown(task, settings, overdueLevel);
 
         let late: LateContent;
         if (compact) {
@@ -427,12 +448,12 @@ export class TaskCardRenderer extends Component {
             // The bar is there with or without children, so compact cards
             // of one lane keep one height.
             const countLabelSpan = container.createDiv('task-card__child-count').createSpan();
-            const { completed, total } = this.getChildCompletion(task, settings);
+            const { completed, total } = this.getChildCompletion(task, settings, rows);
             if (total > 0) {
-                countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
+                countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings, overdueLevel)}${completed}/${total}`);
             }
         } else if (task.childEntries.length > 0) {
-            late = this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, policies.expandChildren, policies.inert);
+            late = this.renderInlineChildren(contentContainer, task, children, rows, hold, cardComp, settings, parentMarkdown, overdueLevel, policies.expandChildren, policies.inert);
         } else {
             late = renderCardMarkdown(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
@@ -498,29 +519,22 @@ export class TaskCardRenderer extends Component {
             isCompleteStatusChar(task.statusChar, settings.statusDefinitions) ? 'child' : 'self';
     }
 
-    private getOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
-        const level = cardOverdueLevel(task, settings.statusDefinitions, this.readService);
-        return level === 'past-due' ? '🚨 '
-            : level === 'past-end' ? '⚠️ '
-            : '';
-    }
-
     /**
      * Overdue icon shown next to the n/m child counter — only when the
      * overdue is child-caused (parent's own status is complete but an
      * unchecked child keeps the task incomplete).
      */
-    private getChildOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
+    private getChildOverdueIcon(task: DisplayTask, settings: TaskViewerSettings, level: OverdueLevel): string {
         if (!isCompleteStatusChar(task.statusChar, settings.statusDefinitions)) return '';
-        return this.getOverdueIcon(task, settings);
+        return overdueIcon(level);
     }
 
-    private getChildCompletion(task: DisplayTask, settings: TaskViewerSettings): { completed: number; total: number } {
+    private getChildCompletion(task: DisplayTask, settings: TaskViewerSettings, rows: Pick<CardRows, 'getTask'>): { completed: number; total: number } {
         let completed = 0;
         let total = 0;
         for (const entry of task.childEntries) {
             if (entry.kind !== 'task') continue;
-            const child = this.index.getTask(entry.taskId);
+            const child = rows.getTask(entry.taskId);
             if (!child) continue;
             total++;
             if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
@@ -534,20 +548,20 @@ export class TaskCardRenderer extends Component {
      * and its name, the user's markdown. The link to its note is put in
      * after the draw (`appendFileLink`).
      */
-    private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings): string {
+    private buildParentMarkdown(task: DisplayTask, settings: TaskViewerSettings, level: OverdueLevel): string {
         const statusChar = task.statusChar || ' ';
 
         // Icon placement disambiguates the overdue cause: the parent line
         // only carries the icon when the parent's own status is incomplete;
         // child-caused overdue (parent complete, child unchecked) shows the
         // icon next to the n/m child counter instead.
-        const overdueIcon = isCompleteStatusChar(task.statusChar, settings.statusDefinitions)
+        const icon = isCompleteStatusChar(task.statusChar, settings.statusDefinitions)
             ? ''
-            : this.getOverdueIcon(task, settings);
+            : overdueIcon(level);
 
         // The space after the box stays with no name: Obsidian draws `- [ ] `
         // as a task item, `- [ ]` as a list item that reads `[ ]`.
-        return `- [${statusChar}] ${overdueIcon}${hasTaskContent(task) ? task.content : ''}`;
+        return `- [${statusChar}] ${icon}${hasTaskContent(task) ? task.content : ''}`;
     }
 
     /**
@@ -590,10 +604,12 @@ export class TaskCardRenderer extends Component {
         contentContainer: HTMLElement,
         task: DisplayTask,
         items: ChildRenderItem[],
+        rows: CardRows,
         hold: CardHold,
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
+        level: OverdueLevel,
         expandChildren: boolean,
         inert: boolean,
     ): LateContent {
@@ -603,6 +619,7 @@ export class TaskCardRenderer extends Component {
             const childrenLate = this.childSectionRenderer.renderCollapsed(
                 contentContainer,
                 items,
+                rows,
                 nameAt,
                 this.expanded,
                 () => hold.key,
@@ -611,7 +628,7 @@ export class TaskCardRenderer extends Component {
                 settings,
                 inert,
                 task.startDate,
-                this.getChildOverdueIcon(task, settings)
+                this.getChildOverdueIcon(task, settings, level)
             );
             return Promise.all([parentLate, childrenLate]).then(() => undefined);
         }

@@ -1,5 +1,6 @@
 import { t } from '../../i18n';
 import type { Task, TaskViewerSettings } from '../../types';
+import type { TaskLookup } from '../../services/display/DisplayTaskConverter';
 import { sectionAt } from '../../services/data/CreatePlaces';
 import { NoteName } from '../../services/data/NoteName';
 import type { NoteOps, SendPreview, SendResult } from '../../services/data/NoteOps';
@@ -118,6 +119,16 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
     /** The row as the draft reads: what the card and the fields show. */
     task(): Task {
         return this.draft.task();
+    }
+
+    /**
+     * The rows of the draft as it reads now, by name: the row, and the rows
+     * of its subtree (`RowDraft.descendants`), whose names are those the
+     * row's children name. The card draws its children from these.
+     */
+    cardRows(): TaskLookup {
+        const rows = new Map([this.draft.task(), ...this.draft.descendants()].map(row => [row.id, row]));
+        return (id) => rows.get(id);
     }
 
     /** Take a field's change into the draft: whether it was taken, why not said by the host. None while the move is under way. */

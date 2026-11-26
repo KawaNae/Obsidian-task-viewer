@@ -1,7 +1,7 @@
 import { type App, type Component, setIcon } from 'obsidian';
 import { type TaskViewerSettings, isCompleteStatusChar } from '../../types';
-import type { IndexReads } from '../../services/core/TaskIndex';
 import type { ChildRenderItem } from './types';
+import type { CardRows } from './CardRows';
 import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
 import { touchCard } from './CardHold';
@@ -13,7 +13,7 @@ export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
 
 function countChildCompletion(
     items: ChildRenderItem[],
-    index: Pick<IndexReads, 'getTask'>,
+    rows: Pick<CardRows, 'getTask'>,
     settings: TaskViewerSettings
 ): { completed: number; total: number } {
     let completed = 0;
@@ -21,7 +21,7 @@ function countChildCompletion(
     for (const item of items) {
         if (!item.isCheckbox || !item.handler) continue;
         total++;
-        const child = index.getTask(item.handler.taskId);
+        const child = rows.getTask(item.handler.taskId);
         if (child && isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) {
             completed++;
         }
@@ -41,20 +41,23 @@ function countChildCompletion(
  * checkboxes are laid on the markdown at once (`renderCardMarkdown`). What a
  * draw returns tells only when the late content is in (`LateContent`).
  *
- * On a card nothing is done on (`RenderOptions.inert`), no checkbox is wired
+ * The count of a collapsed section reads whether each child is done from
+ * the card's rows (`CardRows`), as its items were built from them.
+ *
+ * On a card nothing is done on (`RenderOptions.rows`), no checkbox is wired
  * and no child's ⋯ is drawn.
  */
 export class ChildSectionRenderer {
     constructor(
         private app: App,
         private checkboxWiring: CheckboxWiring,
-        private index: Pick<IndexReads, 'getTask'>,
         private readonly onChildMenuClick: ChildMenuCallback,
     ) {}
 
     renderCollapsed(
         contentContainer: HTMLElement,
         items: ChildRenderItem[],
+        rows: Pick<CardRows, 'getTask'>,
         nameAt: (index: number) => string | undefined,
         expanded: ExpandedCards,
         keyOf: () => CardKey,
@@ -65,7 +68,7 @@ export class ChildSectionRenderer {
         parentStartDate?: string,
         warnIcon = ''
     ): LateContent {
-        const { completed, total } = countChildCompletion(items, this.index, settings);
+        const { completed, total } = countChildCompletion(items, rows, settings);
         const label = `${warnIcon}${completed}/${total}`;
         const wasExpanded = expanded.has(keyOf());
 

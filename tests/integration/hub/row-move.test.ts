@@ -5,7 +5,8 @@
  * fields then is held, not written; [Move] writes it and where the row goes
  * at once and closes the hub, and [Cancel], once it asked whether to throw
  * the change and the destination away, leaves the note as it was and shows
- * where the row stands again.
+ * where the row stands again. While it moves, the card is drawn from the
+ * draft, its children too, and nothing is done on it.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -43,6 +44,9 @@ const moveButton = () => hub().querySelector('.task-hub__move');
 const act = () => formRow(hub()).querySelector('.mod-cta');
 const ask = () => formRow(hub()).querySelector('.tv-form__ask')?.textContent ?? null;
 const type = (input, text) => { input.focus(); input.value = text; input.dispatchEvent(new InputEvent('input', { bubbles: true })); };
+const card = () => hub().querySelector('.task-hub__preview .task-card');
+/** What is done on the card: whether it is marked as one nothing is done on, and its children's ⋯. */
+const cardActs = () => ({ inert: card().dataset.inert === 'true', childMenus: card().querySelectorAll('.task-card__child-menu-btn').length });
 const disk = () => app.vault.adapter.read(${JSON.stringify(TEST_FILE)});
 /** Open the hub on the row, wait for the heading it stands under, and begin a move by the button: the fields opened. */
 const beginMove = async () => {
@@ -146,5 +150,47 @@ describe('a row moved from its hub', () => {
             act: false,
             disk: NOTE,
         });
+    });
+
+    it('draws the card from the draft while it moves, its children too, nothing done on it, and from the note again by [Cancel]', async () => {
+        const TREE = ['# 予定', '- [ ] 子のある行', '    - [ ] 子の行', '# 済み', '- [ ] ほかの行', ''].join('\n');
+        await writeIndexedTestFile(TEST_FILE, TREE);
+        const seen = run<Record<string, unknown>>(`
+            plugin.openTaskHub(rowNamed('子のある行').id);
+            await until(() => card()?.querySelector('.task-card__child-menu-btn') && moveButton());
+            const before = cardActs();
+            moveButton().click();
+            await until(() => placeInputs().length === 2 && act());
+            const moving = cardActs();
+            // A press on the child's checkbox writes nothing.
+            card().querySelectorAll('input[type="checkbox"]')[1].click();
+            await sleep(300);
+            const afterPress = await disk();
+            // A property put in on the details tab is a line of the draft's, shown on the card.
+            chooseHubTab(hub(), 'detail');
+            const key = hub().querySelector('.task-hub__prop-add .tv-form__label input');
+            const value = hub().querySelector('.task-hub__prop-add input.tv-form__control');
+            type(key, 'area');
+            type(value, 'lab');
+            value.dispatchEvent(new FocusEvent('blur'));
+            await until(() => card().textContent.includes('area'), 3000);
+            const shown = { property: card().textContent.includes('lab'), child: card().textContent.includes('子の行'), acts: cardActs() };
+            const held = await disk();
+            formRow(hub()).querySelector('.tv-form__cancel').click();
+            await until(() => ask());
+            formRow(hub()).querySelector('.tv-form__discard').click();
+            await until(() => hub().querySelector('.task-hub__shown') && card()?.querySelector('.task-card__child-menu-btn'));
+            return JSON.stringify({ before, moving, afterPress, shown, held, after: cardActs(), property: card().textContent.includes('lab') });
+        `);
+        expect(seen).toEqual({
+            before: { inert: false, childMenus: 1 },
+            moving: { inert: true, childMenus: 0 },
+            afterPress: TREE,
+            shown: { property: true, child: true, acts: { inert: true, childMenus: 0 } },
+            held: TREE,
+            after: { inert: false, childMenus: 1 },
+            property: false,
+        });
+        expect(readTestFile(TEST_FILE)).toBe(TREE);
     });
 });

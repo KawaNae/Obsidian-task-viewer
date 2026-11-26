@@ -8,6 +8,7 @@ import type { SourceHost } from '../../../src/modals/hub/TaskHubSource';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
 import type { SendPreview } from '../../../src/services/data/NoteOps';
 import type { TaskMenuHooks } from '../../../src/interaction/menu/MenuHandler';
+import type { RenderOptions } from '../../../src/views/taskcard/TaskCardRenderer';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import { t } from '../../../src/i18n';
 import ja from '../../../src/i18n/locales/ja.json';
@@ -196,9 +197,13 @@ const handedOf = (n: number) => {
     return { place: deps.place, opensOn: deps.opensOn };
 };
 
-/** What each draw of the card was given: its content, and whether it is one nothing is done on. */
+/**
+ * What each draw of the card was given: its content, and the rows it reads
+ * in place of the index (`RenderOptions.rows`), which make it one nothing is
+ * done on; undefined, it reads the index.
+ */
 const draws = (deps: TaskHubDeps) => (deps.taskRenderer.render as ReturnType<typeof vi.fn>).mock.calls
-    .map(([, dt, , options]) => ({ content: (dt as Task).content, inert: (options as { inert?: boolean }).inert }));
+    .map(([, dt, , options]) => ({ task: dt as Task, content: (dt as Task).content, rows: (options as RenderOptions).rows }));
 
 describe('a hub with nothing to wait for', () => {
     /** Whether shell `n` is open with its card drawn, read the moment the call returns. */
@@ -241,7 +246,7 @@ describe('the hub on a task not written yet', () => {
         expect(forms).toHaveLength(1);
         // Drawn as it opens, and again once the place has answered.
         expect(draws(r.deps).length).toBeGreaterThan(0);
-        expect(draws(r.deps).every(draw => draw.content === '下書き' && draw.inert === true)).toBe(true);
+        expect(draws(r.deps).every(draw => draw.content === '下書き' && draw.rows?.(draw.task.id)?.content === '下書き')).toBe(true);
     });
 
     it('is titled as the task it creates, above the body, the title alone on its line', async () => {
@@ -608,7 +613,20 @@ describe('the hub on a row in a move', () => {
         expect(shells[0].opts).not.toBeNull();
     });
 
-    it('has the card\'s menu move the row in this hub, where a send goes, and not again while it moves', async () => {
+    it('draws its card from the index out of a move, from the move\'s draft in it, and from the index again once it is thrown away', async () => {
+        const r = moveRig();
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps, { move: 'defaults' });
+        const host = forms[0].host as PanelHost;
+        const inMove = draws(r.deps).at(-1)!;
+        expect(inMove.rows).toBeDefined();
+        expect(inMove.rows!('task-1')).toEqual(host.task());
+
+        host.draft()!.discard!();
+        expect(draws(r.deps).at(-1)!.rows).toBeUndefined();
+        expect(host.cardRows()).toBeNull();
+    });
+
+    it('has the card\'s menu move the row in this hub, where a send goes, and not again from a menu opened before it moved', async () => {
         const r = moveRig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
         const host = forms[0].host as PanelHost;
@@ -621,6 +639,9 @@ describe('the hub on a row in a move', () => {
         const move = (host as unknown as { moving(): { initial: DestinationAsk } }).moving();
         expect(move.initial).toEqual({ note: { text: 'Plan', picked: null }, heading: 'Tasks' });
 
+        // The card in the move is drawn from the draft, which binds no menu (`RenderOptions.rows`):
+        // a menu opened on the card before the move was held is what can still ask.
+        expect(draws(r.deps).at(-1)!.rows).toBeDefined();
         menuOf(r.deps).onBeginMove!();
         await Promise.resolve();
         expect(r.noteOps.previewSend).toHaveBeenCalledTimes(1);

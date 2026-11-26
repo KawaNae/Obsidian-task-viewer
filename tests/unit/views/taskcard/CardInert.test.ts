@@ -5,7 +5,8 @@ import type { ChildEntry, DisplayTask, Task, TaskViewerSettings } from '../../..
 import { FakeEl, stubCardDocument } from '../../helpers/cardDom';
 
 /**
- * A card nothing is done on (`RenderOptions.inert`): none of what a card
+ * A card nothing is done on, one drawn from its caller's rows
+ * (`RenderOptions.rows`), which the index has none of to act on: none of what a card
  * binds to act on its task is bound, whatever the other policies say. Its
  * menu, its double tap, its checkbox and its children's, a child's ⋯, and
  * its links: a link is not followed. The card says so (`data-inert`), which
@@ -50,11 +51,15 @@ const settings = {
     ],
 } as unknown as TaskViewerSettings;
 
-/** A card of a parent with one child task, drawn with `options`; `collapse` draws its children in the collapsed section. */
-function draw(options: Partial<RenderOptions>, collapse = false) {
+/**
+ * A card of a parent with one child task, drawn with `options`; `collapse`
+ * draws its children in the collapsed section, and `fromRows` draws it from
+ * its rows handed in (`RenderOptions.rows`) in place of the index.
+ */
+function draw(options: Partial<RenderOptions>, collapse = false, fromRows = false) {
     const child = { ...makeTask({ id: CHILD, file: 'a.md', line: 1, content: 'child' }), childEntries: [] as ChildEntry[] };
     const parent = {
-        ...makeTask({ id: PARENT, file: 'a.md', line: 0, content: 'parent [[b]]' }),
+        ...makeTask({ id: PARENT, file: 'a.md', line: 0, content: 'parent [[b]]', childIds: [CHILD] }),
         childEntries: [{ kind: 'task', taskId: CHILD, bodyLine: 1 }] as ChildEntry[],
     };
     const tasks = new Map<string, Task>([[PARENT, parent], [CHILD, child]]);
@@ -90,6 +95,7 @@ function draw(options: Partial<RenderOptions>, collapse = false) {
         topRight: { mode: 'none' },
         alwaysLinks: true,
         ...options,
+        ...(fromRows && { rows: (id: string) => tasks.get(id) }),
     });
     return {
         card,
@@ -120,10 +126,10 @@ describe('a card things are done on', () => {
     });
 });
 
-describe('a card nothing is done on', () => {
+describe('a card drawn from rows handed in, nothing done on it', () => {
     for (const collapse of [false, true]) {
         it(`binds no menu nor double tap, wires no checkbox, draws no child's ⋯, and follows no link${collapse ? ', its children collapsed' : ''}`, () => {
-            const c = draw({ inert: true, doubleTap: true }, collapse);
+            const c = draw({ doubleTap: true }, collapse, true);
             expect(c.card.dataset.inert).toBe('true');
             expect(c.actions.bindMenu).not.toHaveBeenCalled();
             expect(clickListeners(c.card)).toBe(0);
