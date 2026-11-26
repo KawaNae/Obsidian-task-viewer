@@ -29,8 +29,8 @@ export interface SendFieldsOptions {
  * heading). It draws what the send's logic says of them (`SendViewState`:
  * the note's headings, the values offered and their checks) and holds
  * nothing of a send; what is said of a field goes under its row, where the
- * form that holds it puts it ({@link slot}). The send dialog and the hub
- * moving a row hold it.
+ * form that holds it puts it ({@link slot}). The hub moving a row holds
+ * it, in the place of where the row stands (`RowPlace`).
  *
  * A section of the values offered is out of the form while it offers none,
  * put in and taken out rather than hidden: the last group in the form draws

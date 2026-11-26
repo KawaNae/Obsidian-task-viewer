@@ -2,9 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { t } from '../../../src/i18n';
 import { SendDialog, initialAsk, lineValue, yamlValue, type SendHost, type SendOptions, type SendViewState } from '../../../src/modals/noteops/SendDialog';
-import { SendEditors } from '../../../src/modals/noteops/SendEditors';
-import type { DraftEditor, EditorOnHooks, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
-import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
+import type { SubtreeReplacement } from '../../../src/services/persistence/TaskOps';
 import type { InheritedValue } from '../../../src/services/data/InheritedValues';
 import type {
     DestinationFacts, NoteFacts, SendingLines, SendPreview, SendRequest, SendResult,
@@ -13,39 +11,13 @@ import type { DestinationAsk } from '../../../src/services/data/NotePlaces';
 import { makeTask } from '../helpers/makeTask';
 
 /**
- * The send dialog as logic (`SendDialog`), apart from the DOM, with the rows'
- * editors that hand it their drafts (`SendEditors`), wired as the send modal
- * wires them: the editor is a stand-in holding a draft, the host answers the
- * destination and the send as told, and the surface records what it was told
- * to show. `SubtreeFrame` is the real one, so a draft comes to what the send
- * would be handed.
+ * The send dialog as logic (`SendDialog`), apart from the DOM: the host holds
+ * the rows' drafts as the test says, answers the destination and the send as
+ * told, and the surface records what it was told to show.
  */
 
 const SUBTREE = ['- [ ] A', '    - [ ] a'];
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
-
-class FakeEditor implements DraftEditor {
-    parent: string;
-    children: SourceDraft['children'];
-    completing = false;
-    focused = 0;
-    destroyed = false;
-    constructor(private readonly frame: SubtreeFrame, readonly hooks: EditorOnHooks) {
-        this.parent = frame.parent;
-        this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
-    }
-    draft(): SourceDraft { return { parent: this.parent, children: this.children.map(line => ({ ...line })) }; }
-    isCompleting(): boolean { return this.completing; }
-    closeCompletion(): boolean {
-        const was = this.completing;
-        this.completing = false;
-        return was;
-    }
-    focus(): void { this.focused++; }
-    destroy(): void { this.destroyed = true; }
-    /** Change the parent's text as the user would, the editor telling of it. */
-    type(parent: string): void { this.parent = parent; this.hooks.edited(); }
-}
 
 /** A value the rows inherit: a frontmatter key by default, a line above the first heading when `to` says so. */
 function value(key: string, opts: Partial<InheritedValue> = {}): InheritedValue {
@@ -105,29 +77,12 @@ function typed(text: string) {
 function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (sending: SendingLines) => string | null; options?: SendOptions } = {}) {
     const preview = opts.preview ?? previewOf();
     const states: SendViewState[] = [];
-    const editors: FakeEditor[] = [];
-    const fixed: { lines: readonly string[]; why: string }[] = [];
     const asks: { ask: DestinationAsk; answer(f: DestinationFacts): Promise<void> }[] = [];
-    let asked = 0;
     const results = [...(opts.results ?? [])];
     const send = vi.fn(async (_req: SendRequest): Promise<SendResult> => results.shift() ?? { kind: 'done', note: new TFile() });
-    const sent = vi.fn();
     const close = vi.fn();
-    let dialog: SendDialog | null = null;
-    /** Send as the modal does: a send that may be asked withdraws the question a close put. */
-    const sendNow = () => {
-        if (dialog!.request() && dialog!.state().canSend) rows.withdraw();
-        return dialog!.send();
-    };
-    const rows = new SendEditors(preview, '    ', {
-        openEditor: (frame, hooks) => { const editor = new FakeEditor(frame, hooks); editors.push(editor); return editor; },
-        showFixed: (lines, why) => { fixed.push({ lines, why }); },
-        submit: () => { void sendNow(); },
-        linkSource: (rowFile) => dialog?.notePath() ?? rowFile,
-        changed: () => dialog?.draftsChanged(),
-        asked: () => { asked++; },
-        close,
-    });
+    /** Each row's draft as the host holds it: none for any at first. */
+    let drafts: (SubtreeReplacement | null)[] | null = preview.rows.map(() => null);
     const host: SendHost = {
         facts: (ask) => new Promise<DestinationFacts>((resolve) => {
             asks.push({
@@ -137,30 +92,29 @@ function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (
         }),
         timers: opts.timers ?? (() => null),
         send,
-        drafts: () => rows.drafts(),
-        sent,
+        drafts: () => drafts,
         close,
     };
-    dialog = new SendDialog(preview, host, {
+    const dialog = new SendDialog(preview, host, {
         render: (state) => { states.push(state); },
     }, opts.options);
     return {
-        dialog, rows, send, sent, close, editors, fixed, asks,
+        dialog, send, close, asks,
         /** Send as the send button does. */
-        sendNow,
-        editor: () => editors[0],
+        sendNow: () => dialog.send(),
+        /** The host holds `next` now, and tells the dialog. */
+        hold: (next: typeof drafts) => { drafts = next; dialog.draftsChanged(); },
         /** How many times the dialog was drawn. */
         drawn: () => states.length,
-        /** What was drawn last, with what the editors say under their rows, as the modal draws them together. */
-        state: () => {
-            const last = states[states.length - 1];
-            return { ...last, issues: [...last.issues, ...rows.issues()] };
-        },
-        asked: () => asked,
+        /** What was drawn last. */
+        state: () => states[states.length - 1],
         /** Answer the last asking of the destination. */
         answer: (f: DestinationFacts) => asks[asks.length - 1].answer(f),
     };
 }
+
+/** A draft of the row `- [ ] A` with its child as `child` reads. */
+const draftOf = (text: string, child = '    - [ ] a'): SubtreeReplacement => ({ text, children: [{ text: child, was: 1 }] });
 
 /** A dialog whose destination is answered: `f`, or a new note. */
 async function answered(f: DestinationFacts = facts(), opts: Parameters<typeof setUp>[0] = {}) {
@@ -187,26 +141,15 @@ function noteSays(state: SendViewState): { text: string; tone: string }[] {
 }
 
 describe('opening', () => {
-    it('opens the row in the editor, asks the default note under the settings\' heading, and offers no send until answered', async () => {
+    it('asks the default note under the settings\' heading, and offers no send until answered', async () => {
         const h = setUp();
 
-        expect(h.editor().draft()).toEqual({ parent: '- [ ] A', children: [{ text: '- [ ] a', was: 1 }] });
         expect(h.asks.map(one => one.ask)).toEqual([{ note: typed('A'), heading: 'Tasks' }]);
         expect(h.state().canSend).toBe(false);
         expect(destination(h.state())).toBeNull();
 
         await h.answer(facts());
         expect(h.state().canSend).toBe(true);
-    });
-
-    it('spells a link typed in a row from the note the fields name; from the row\'s own note while they name none', async () => {
-        const h = setUp();
-        expect(h.editor().hooks.linkSource()).toBe('note.md');
-        await h.answer(facts({ kind: 'existing', path: 'Projects/Plan.md' }));
-        expect(h.editor().hooks.linkSource()).toBe('Projects/Plan.md');
-        h.dialog.fieldsChanged({ note: typed('本'), heading: '' });
-        await h.answer({ kind: 'ambiguous', name: '本', files: [] });
-        expect(h.editor().hooks.linkSource()).toBe('note.md');
     });
 
     it('opens the note field as the preview says, a note picked kept picked, and the heading field on the settings\' heading', () => {
@@ -221,16 +164,6 @@ describe('opening', () => {
         expect(h.asks.map(one => one.ask.heading)).toEqual(['Tasks', '']);
     });
 
-    it('shows a subtree it cannot open as it stands, from the first column, and sends it so', async () => {
-        const subtree = ['    - [ ] A', '      going on', '        - [ ] a'];
-        const h = await answered(facts(), { preview: previewOf({ subtree }) });
-
-        expect(h.editors).toEqual([]);
-        expect(h.fixed).toEqual([{ lines: ['- [ ] A', '  going on', '    - [ ] a'], why: t('modal.send.shallow', { line: '1' }) }]);
-        expect(h.state()).toMatchObject({ canSend: true });
-        expect(h.dialog.request()?.rows).toEqual([{ taskId: 'row-1', base: subtree }]);
-        expect(h.rows.beforeClose()).toBe(true);
-    });
 });
 
 describe('which note the send goes to, said under the note field', () => {
@@ -458,37 +391,6 @@ describe('what keeps a send from being asked', () => {
         expect(h.state().issues.filter(one => one.tone === 'error')).toEqual([{ at: 'heading', tone: 'error', text: t('modal.send.headings', { note: 'Plan.md', heading: 'Done', count: '3' }) }]);
     });
 
-    it('a draft that cannot be written: said as it is edited', async () => {
-        const h = await answered();
-        h.editor().type('- [ ] A\nB');
-
-        expect(h.state().canSend).toBe(false);
-        expect(said(h.state(), { tone: 'error' })).toEqual([t('modal.send.parentBreak')]);
-        expect(said(h.state(), { at: 'row:0' })).toEqual([t('modal.send.parentBreak')]);
-        expect(h.dialog.request()).toBeNull();
-
-        h.editor().type('plain');
-        expect(errors(h.state())).toEqual([t('modal.send.notTask')]);
-        h.editor().type('- [ ] A!');
-        expect(h.state().canSend).toBe(true);
-        expect(errors(h.state())).toEqual([]);
-    });
-
-    it('drafts of two rows that cannot be written for the same reason: said under each row', async () => {
-        const two = previewOf();
-        const second = makeTask({ id: 'row-2', file: 'note.md', line: 2, content: 'B', subtreeLines: ['- [ ] B'] });
-        const preview = { ...two, rows: [...two.rows, { task: second, lines: ['- [ ] B', ''] }] };
-        const h = await answered(facts(), { preview });
-        h.editors[0].type('plain');
-        h.editors[1].type('also plain');
-
-        expect(h.state().issues.filter(one => one.tone === 'error')).toEqual([
-            { at: 'row:0', tone: 'error', text: t('modal.send.notTask') },
-            { at: 'row:1', tone: 'error', text: t('modal.send.notTask') },
-        ]);
-        expect(h.state().canSend).toBe(false);
-    });
-
     it('a timer the send would leave without its lines: said, asked with the draft as it is and the note\'s ^ids', async () => {
         const asked: SendingLines[] = [];
         const h = await answered(facts({ kind: 'existing', path: 'Plan.md', anchors: new Map([['x', 1]]) }), {
@@ -506,8 +408,7 @@ describe('what keeps a send from being asked', () => {
             from: [{ path: 'note.md', base: ['- [ ] A ^t', '    - [ ] a ^r'], sent: ['- [ ] A ^t', '    - [ ] a ^r'] }],
         });
 
-        h.editor().children = [{ text: '- [ ] a', was: 1 }];
-        h.editor().type('- [ ] A ^t');
+        h.hold([draftOf('- [ ] A ^t')]);
         expect(h.state().canSend).toBe(false);
         expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['lost']);
         await h.sendNow();
@@ -521,8 +422,8 @@ describe('what keeps a send from being asked', () => {
         await h.dialog.fieldsChanged({ note: typed('Plan'), heading: '' });
         await h.answer(facts());
         expect(errors(h.state())).toEqual(['kept']);
-        h.editor().type('plain');
-        expect(errors(h.state())).toEqual([t('modal.send.notTask')]);
+        h.hold(null);
+        expect(errors(h.state())).toEqual([]);
     });
 
     it('an answer for fields that changed since: not taken, and no send until the last is answered', async () => {
@@ -589,7 +490,7 @@ describe('a send', () => {
     it('asks for the row as opened, its draft, where the fields name, and the values checked', async () => {
         const f = facts({ kind: 'existing', path: 'Plan.md' });
         const h = await answered(f, { preview: previewOf({ candidates: [value('project')] }) });
-        h.editor().type('- [ ] A2');
+        h.hold([draftOf('- [ ] A2')]);
 
         await h.sendNow();
 
@@ -606,26 +507,23 @@ describe('a send', () => {
         expect(h.send.mock.calls[0][0].rows).toEqual([{ taskId: 'row-1', base: SUBTREE }]);
     });
 
-    it('made: told to the caller, and the dialog closes', async () => {
-        const note = new TFile();
-        const h = await answered(facts(), { results: [{ kind: 'done', note }] });
-        h.editor().type('- [ ] A2');
+    it('made: the dialog closes', async () => {
+        const h = await answered(facts(), { results: [{ kind: 'done', note: new TFile() }] });
+        h.hold([draftOf('- [ ] A2')]);
 
         await h.sendNow();
 
-        expect(h.sent).toHaveBeenCalledWith({ kind: 'done', note });
         expect(h.close).toHaveBeenCalledTimes(1);
     });
 
     it('not made: the draft kept with why under it, the destination asked again, and sent again when asked', async () => {
         const h = await answered(facts(), { results: [{ kind: 'not-done', why: 'Not sent: changed' }] });
-        h.editor().type('- [ ] A2');
+        h.hold([draftOf('- [ ] A2')]);
 
         const sending = h.sendNow();
         expect(h.state()).toMatchObject({ phase: 'sending', canSend: false });
         await sending;
 
-        expect(h.sent).not.toHaveBeenCalled();
         expect(h.close).not.toHaveBeenCalled();
         expect(h.state()).toMatchObject({ phase: 'open', canSend: false });
         expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Not sent: changed']);
@@ -634,101 +532,29 @@ describe('a send', () => {
         // The last send's answer is still said, and keeps no send from being asked again.
         expect(h.state().canSend).toBe(true);
         expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Not sent: changed']);
-        expect(h.editor().destroyed).toBe(false);
+        expect(h.send.mock.calls[0][0].rows[0].draft).toEqual(draftOf('- [ ] A2'));
 
         await h.sendNow();
         expect(h.send).toHaveBeenCalledTimes(2);
         expect(h.close).toHaveBeenCalledTimes(1);
     });
 
-    it('made for some rows: told to the caller, why under the draft, open, and no send again', async () => {
+    it('made for some rows: why said, open, and no send again', async () => {
         const h = await answered(facts(), { results: [{ kind: 'partly', note: new TFile(), refused: ['b.md'], why: 'Sent some' }] });
 
         await h.sendNow();
 
-        expect(h.sent).toHaveBeenCalledTimes(1);
         expect(h.close).not.toHaveBeenCalled();
         expect(h.state()).toMatchObject({ phase: 'spent', canSend: false });
         expect(said(h.state(), { at: 'form', tone: 'error' })).toEqual(['Sent some']);
     });
 
-    it('Mod+Enter in the editor sends', async () => {
-        const h = await answered();
-        h.editor().hooks.submit();
-        await Promise.resolve();
-        expect(h.send).toHaveBeenCalledTimes(1);
-    });
 });
 
 describe('closing', () => {
-    it('closes at once with no draft', async () => {
-        const h = await answered();
-        expect(h.rows.beforeClose()).toBe(true);
-        expect(h.asked()).toBe(0);
-    });
-
-    it('a draft: asks, and asks again on another close; throwing it away closes', async () => {
-        const h = await answered();
-        h.editor().type('- [ ] A2');
-
-        expect(h.rows.beforeClose()).toBe(false);
-        expect(h.rows.asking()).toBe(true);
-        expect(h.rows.beforeClose()).toBe(false);
-        expect(h.asked()).toBe(2);
-
-        h.rows.discard();
-        expect(h.close).toHaveBeenCalledTimes(1);
-    });
-
-    it('keeping the draft, or editing it, withdraws the question', async () => {
-        const h = await answered();
-        h.editor().type('- [ ] A2');
-        h.rows.beforeClose();
-
-        h.rows.keep();
-        expect(h.rows.asking()).toBe(false);
-        expect(h.editor().focused).toBe(1);
-
-        h.rows.beforeClose();
-        h.editor().type('- [ ] A3');
-        expect(h.rows.asking()).toBe(false);
-    });
-
-    it('a keep with no question to withdraw puts no focus on the editor', async () => {
-        const h = await answered();
-        h.editor().type('- [ ] A2');
-
-        h.rows.keep();
-        expect(h.editor().focused).toBe(0);
-    });
-
-    it('a draft edited back to the lines opened is none', async () => {
-        const h = await answered();
-        h.editor().type('- [ ] A2');
-        h.editor().type('- [ ] A');
-        expect(h.rows.beforeClose()).toBe(true);
-    });
-
-    it('a draft that cannot be written is a draft', async () => {
-        const h = await answered();
-        h.editor().type('plain');
-        expect(h.rows.beforeClose()).toBe(false);
-    });
-
-    it('an Escape or a back an editor\'s completion list takes', async () => {
-        const h = await answered();
-        expect(h.rows.yieldsEscape()).toBe(false);
-        h.editor().completing = true;
-        expect(h.rows.yieldsEscape()).toBe(true);
-        expect(h.rows.takesBack()).toBe(true);
-        expect(h.rows.takesBack()).toBe(false);
-    });
-
     it('once closed, an answer or a result comes to nothing', async () => {
         const h = setUp();
         h.dialog.dispose();
-        h.rows.dispose();
-        expect(h.editor().destroyed).toBe(true);
         const drawn = h.drawn();
         await h.answer(facts());
         expect(h.drawn()).toBe(drawn);
@@ -748,7 +574,6 @@ describe('drafts its host holds', () => {
             timers,
             send,
             drafts: () => drafts,
-            sent: () => { },
             close: () => { },
         }, { render: (state) => { states.push(state); } });
         answer(facts());

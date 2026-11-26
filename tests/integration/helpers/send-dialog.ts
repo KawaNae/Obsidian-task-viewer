@@ -2,27 +2,31 @@ import { obsidianEval } from './cli-helper';
 import { tr } from './view-helper';
 import { UNTIL } from './waits';
 import { MENUS } from './menus';
+import { DIALOG_ROWS } from './dialog-rows';
 
 /**
- * The send dialog driven in the running E2E vault, as a person drives it:
- * opened from a card's menu, fields typed in, items of their lists pressed
- * with the pointer. `send.test.ts` and `note-candidates.test.ts` share it.
+ * A row moved from its hub in the running E2E vault, as a person moves it:
+ * the hub opened in the move from a card's menu ("Change Task Location"),
+ * the destination's fields in the place of where the row stands, typed in,
+ * items of their lists pressed with the pointer, and [Move] pressed.
+ * `send.test.ts` and `note-candidates.test.ts` share it.
  *
- * What every snippet on the dialog starts with: the plugin, the dialog as it
- * is drawn, and a press of the pointer as a mouse makes one.
+ * What every snippet on the move starts with: the plugin, the hub as it is
+ * drawn, and a press of the pointer as a mouse makes one.
  */
 export const DIALOG = `
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 ${UNTIL}
 ${MENUS}
+${DIALOG_ROWS}
 const plugin = app.plugins.plugins['obsidian-task-viewer'];
-const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-send');
-const inputs = () => [...(panel()?.querySelectorAll('.tv-send__destination input') ?? [])];
+const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .task-hub');
+/** The destination's fields, the note's and the heading's. */
+const inputs = () => [...(panel()?.querySelectorAll('.task-hub__place input') ?? [])];
+/** [Move]. */
+const act = () => formRow(panel())?.querySelector('.mod-cta') ?? null;
+const nameInput = () => panel()?.querySelector('.tv-form__name-section input') ?? null;
 const shown = el => !!el && getComputedStyle(el).display !== 'none';
-const viewOf = which => {
-    const el = panel()?.querySelector('.tv-source-editor__' + which + ' .cm-content');
-    return el ? (el.cmTile?.view ?? el.cmView?.rootView?.view ?? null) : null;
-};
 /** What is said under the row of \`input\`: its errors, or what is not an error. */
 const saidUnder = (input, errors) => {
     const el = input?.closest('.tv-form__row')?.nextElementSibling;
@@ -36,11 +40,10 @@ const state = () => ({
     noteSays: saidUnder(inputs()[0], false).join(' ') || null,
     noteErrors: saidUnder(inputs()[0], true).join(' ') || null,
     says: saidUnder(inputs()[1], false).join(' ') || null,
-    asking: shown(panel()?.querySelector('.tv-form__ask')),
-    canSend: panel() ? !panel().querySelector('.tv-form__buttons .mod-cta').disabled : false,
-    editors: panel()?.querySelectorAll('.tv-send__rows .cm-content').length ?? 0,
-    fixed: panel()?.querySelector('.tv-send__fixed pre')?.textContent ?? null,
-    why: panel()?.querySelector('.tv-send__fixed .tv-form__info')?.textContent ?? null,
+    asking: shown(formRow(panel())?.querySelector('.tv-form__ask')),
+    canSend: act() ? !act().disabled : false,
+    tab: hubTabOn(panel()),
+    focusOnNote: !!inputs()[0] && document.activeElement === inputs()[0],
 });
 const press = el => {
     const r = el.getBoundingClientRect();
@@ -98,14 +101,15 @@ export interface DialogState {
     says: string | null;
     asking: boolean;
     canSend: boolean;
-    editors: number;
-    fixed: string | null;
-    why: string | null;
+    /** The hub's tab chosen. */
+    tab: string | null;
+    focusOnNote: boolean;
 }
 
 /**
- * Open the dialog on the row of the note `file` whose text is `name`, from
- * its card's menu (a card of the hub's), once the destination is answered.
+ * Open the hub in a move of the row of the note `file` whose text is `name`,
+ * from its card's menu (a card of a view's, outside the hub), once the
+ * destination is answered.
  */
 export function openDialog(file: string, name: string): DialogState {
     return onDialog<DialogState>(`
@@ -120,22 +124,23 @@ export function openDialog(file: string, name: string): DialogState {
         }
         await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
         menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
-        await until(() => panel() && (state().canSend || state().noteErrors));
+        await until(() => panel() && inputs().length === 2 && act() && (state().canSend || state().noteErrors));
+        await until(() => state().focusOnNote, 3000, 'the note field is not focused');
         return JSON.stringify(state());
     `);
 }
 
 /**
- * Close the dialog if it is open, throwing its draft away if it asks, and
- * wait until it has left the DOM: a list open on one of its fields closes
- * as its field is taken away, at the end of the overlay's closing.
+ * Close the hub if it is open, throwing the move away if it asks, and wait
+ * until it has left the DOM: a list open on one of its fields closes as its
+ * field is taken away, at the end of the overlay's closing.
  */
 export function closeDialog(): void {
     onDialog(`
         panel()?.querySelector('.tv-overlay__close')?.click();
         await sleep(100);
         panel()?.querySelector('.tv-form__discard')?.click();
-        await until(() => !document.querySelector('.tv-overlay .tv-send') && !document.querySelector('.suggestion-container'));
+        await until(() => !document.querySelector('.tv-overlay .task-hub') && !document.querySelector('.suggestion-container'));
         return 'ok';
     `);
 }

@@ -46,7 +46,7 @@ import { DestinationText } from './DestinationText';
  *   offered, and why is said. A timer that changes by itself while the
  *   dialog is open (an interval's record) is seen at the next showing; the
  *   send asks again as it is made.
- * - What the dialog says is of a field, a row or the form (`FormIssue`):
+ * - What the dialog says is of a field or the form (`FormIssue`):
  *   under the note, which note the rows go to, always: the note there is,
  *   the rows' own note, or the note the send makes (and its folder), or why
  *   the field names none — a name or a path no note can be made at, or more
@@ -84,8 +84,8 @@ export interface CandidateView {
     shut: string | null;
 }
 
-/** What the dialog's issues are said of: the note, the heading, a row's draft (`row:<i>`, in the order of the rows: its host's to say). */
-export type SendField = 'note' | 'heading' | `row:${number}`;
+/** What the dialog's issues are said of, besides the form: the note field, or the heading field. */
+export type SendField = 'note' | 'heading';
 
 /** What the surface shows. */
 export interface SendViewState {
@@ -136,14 +136,12 @@ export interface SendHost {
      * the host, which holds the drafts.
      */
     drafts(): readonly (SubtreeReplacement | null)[] | null;
-    /** The rows went, all or some: what the caller does once they left where they stood. */
-    sent(result: Exclude<SendResult, { kind: 'not-done' }>): void;
     /** The send was made for every row: what the dialog is shown in goes, asking nothing more. */
     close(): void;
 }
 
 /** The lines a row of `preview` goes as when it has no draft: its subtree as the preview read it, or its line alone. */
-export function rowBase(row: SendPreview['rows'][number]): readonly string[] {
+function rowBase(row: SendPreview['rows'][number]): readonly string[] {
     return row.task.subtreeLines ?? row.lines.slice(row.task.line, row.task.line + 1);
 }
 
@@ -179,14 +177,6 @@ export class SendDialog {
     /** A row's draft changed: what the dialog says, and whether a send may be asked, is drawn again. */
     draftsChanged(): void {
         this.render();
-    }
-
-    /**
-     * The note the fields name now, as last answered: where a link typed in
-     * a draft is spelt from. Null while they name no one note.
-     */
-    notePath(): string | null {
-        return oneNote(this.answer.value)?.path ?? null;
     }
 
     /** The user checked or unchecked the value `key` offered. */
@@ -242,15 +232,12 @@ export class SendDialog {
 
         const result = await this.host.send(req);
         if (this.disposed) return;
-        if (result.kind === 'done') {
-            this.host.sent(result);
-            return this.host.close();
-        }
+        if (result.kind === 'done') return this.host.close();
         this.message = result.why;
         if (result.kind === 'partly') {
             this.phase = 'spent';
             this.render();
-            return this.host.sent(result);
+            return;
         }
         this.phase = 'open';
         // The note may have changed under the send: its headings, its keys.

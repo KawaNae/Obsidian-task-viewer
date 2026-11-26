@@ -28,8 +28,8 @@ import { createPickerTextField, type PickerTextField } from './form/PickerTextFi
  * - 決定は書き込みの答えを待つ。書けたら閉じ、書けなければ開いたまま、理由を
  *   ボタンの上に1回だけ出す（通知は出ない）。待つ間は決定を押せない
  *
- * 送るダイアログ（`SendModal`）と同じく、フォームの共通の部品（`_form.css`、
- * `FormActions`）で組み、OverlayShell の上に立つ。
+ * タスクハブと同じく、フォームの共通の部品（`_form.css`、`FormActions`）で
+ * 組み、OverlayShell の上に立つ。
  */
 export class TimerStartOffsetModal {
     private readonly overlay = new OverlayShell();

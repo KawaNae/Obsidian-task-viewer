@@ -13,6 +13,7 @@ import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
 import { ValidationMenuBuilder } from './builders/ValidationMenuBuilder';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import type { TaskHubFocusField } from '../../modals/hub/TaskHubForm';
+import type { RowHubOptions } from '../../modals/hub/TaskHubPanel';
 import { t } from '../../i18n';
 import { heldBy } from '../../views/taskcard/CardHold';
 
@@ -25,9 +26,15 @@ export type TaskMenuHooks = {
      * へ focus する（modal on modal の解消）。
      */
     onOpenPropertiesFocus?: (field: TaskHubFocusField) => void;
+    /**
+     * Change Task Location の行き先の差し替え。タスクハブ内のカードから開いた
+     * メニューでは、ハブを重ねず、そのハブが移動に入る。
+     */
+    onBeginMove?: () => void;
 };
 
-export type TaskHubOpener = (taskId: string, options?: { focusField?: TaskHubFocusField }) => void;
+/** Open the hub on the row `taskId`: on a field, or in a move of the row (`RowHubOptions`). */
+export type TaskHubOpener = (taskId: string, options?: RowHubOptions) => void;
 
 /**
  * MenuHandler - タスクコンテキストメニューの統括ファサード
@@ -53,7 +60,7 @@ export class MenuHandler {
     private readonly index: IndexReads;
 
     /**
-     * @param taskHubOpener where the menu's Properties items open the hub
+     * @param taskHubOpener where the menu's Properties items and its move open the hub
      *   (the hub of the view the menu is in; `createCardRendering`)
      */
     constructor(
@@ -160,6 +167,9 @@ export class MenuHandler {
             }
             this.taskHubOpener(task.id, { focusField: field });
         };
+        // Change Task Location の行き先: hub 内メニューならそのハブが移動に入り、
+        // それ以外は移動に入った形でハブを開く。
+        const beginMove = hooks?.onBeginMove ?? (() => this.taskHubOpener(task.id, { move: 'defaults' }));
 
         this.plugin.menuPresenter.present((menu) => {
             // 0. Validation warning (if any)
@@ -184,7 +194,7 @@ export class MenuHandler {
             menu.addSeparator();
 
             // G5: 破壊的変更 — open in editor / convert to file / delete (closes hub panel)
-            this.taskActionsMenuBuilder.addDestructiveActions(menu, task, hooks?.onDestructiveAction);
+            this.taskActionsMenuBuilder.addDestructiveActions(menu, task, beginMove, hooks?.onDestructiveAction);
         }, { kind: 'position', x, y });
     }
 }

@@ -1,27 +1,8 @@
 /* ======================================================
-   Send dialog (tv-send__*): rows sent to a note (SendModal).
-   Its frame is the form's shared pieces (_form.css: sections,
-   rows, section label, the row of buttons), as the task hub's
-   is; the editor is _source-editor.css. This file holds what
-   only this dialog has.
+   The values a send offers to write into the note (tv-send__*,
+   SendFields), as a row's hub moving the row draws them. The
+   rows they stand in are the form's shared pieces (_form.css).
    ====================================================== */
-
-.tv-send__rows {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-/* A row the editor cannot open: its lines as they go, and why. */
-.tv-send__fixed {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.tv-send__fixed > * {
-    margin: 0;
-}
 
 /* A value offered for the frontmatter: the box, the value, and where it
  * comes from as the hub says where a value is inherited from

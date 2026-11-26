@@ -6,6 +6,8 @@ import type { DestinationAsk, NoteRead } from '../../../src/services/data/NotePl
 import type { CreatePlace, CreatePlaces, PlaceFacts } from '../../../src/services/data/CreatePlaces';
 import type { SourceHost } from '../../../src/modals/hub/TaskHubSource';
 import type { WriteAnswer } from '../../../src/services/operations/WriteAnswer';
+import type { SendPreview } from '../../../src/services/data/NoteOps';
+import type { TaskMenuHooks } from '../../../src/interaction/menu/MenuHandler';
 import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import { t } from '../../../src/i18n';
 import ja from '../../../src/i18n/locales/ja.json';
@@ -76,8 +78,10 @@ vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
         refresh() { this.place?.refresh(); }
         showShut() { }
         showDraft() { }
+        sayPut() { }
         sayWrite() { }
         sayPlace() { }
+        putTyped() { return true; }
         create() { }
         notWritten = vi.fn();
         dispose = vi.fn(() => { this.place?.dispose(); });
@@ -86,6 +90,7 @@ vi.mock('../../../src/modals/hub/TaskHubForm', () => ({
 vi.mock('../../../src/modals/hub/TaskHubSource', () => ({
     TaskHubSource: class {
         follow = vi.fn();
+        hold = vi.fn();
         dispose = vi.fn();
         beforeClose() { return true; }
         yieldsEscape() { return false; }
@@ -125,7 +130,7 @@ afterEach(() => {
 });
 
 /** A body to build in, and the panel's deps, the card's draws counted by the content each drew. */
-function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: true })) {
+function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: true }), noteOps: object = {}) {
     const doc = new FocusDoc();
     // The overlay's panel: its head, its body and its foot in it.
     body.panel = doc.root();
@@ -150,7 +155,7 @@ function rig(updateTask: () => Promise<WriteAnswer> = async () => ({ written: tr
         } as never,
         index: index as never,
         operations: { updateTask: vi.fn(updateTask) } as never,
-        plugin: { settings: DEFAULT_SETTINGS, getNoteOps: () => ({}) } as never,
+        plugin: { settings: DEFAULT_SETTINGS, getNoteOps: () => noteOps } as never,
     };
     // The row's note, the row above its first heading: read for the heading the row stands under.
     const notes: Record<string, string> = { 'note.md': '- [ ] Test task @2026-03-11\n# 見出し\n' };
@@ -538,5 +543,92 @@ describe('the hub on a row', () => {
 
         expect(r.listeners).toHaveLength(0);
         expect(sources[0].dispose).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('the hub on a row in a move', () => {
+    /** The row on the disk: its line, and the heading under it. */
+    const LINES = ['- [ ] Test task @2026-03-11', '# 見出し', ''];
+    const ROW = makeTask({ id: 'task-1', subtreeLines: [LINES[0]] });
+    const PREVIEW: SendPreview = {
+        rows: [{ task: ROW, lines: LINES }],
+        defaults: { note: { text: 'Plan', picked: null }, section: { heading: 'Tasks', level: 2, side: 'head' } },
+        candidates: [],
+        links: [],
+    };
+
+    /** A rig whose row is read from the disk as `read` answers, the index holding the row as the disk does. */
+    function moveRig(read: SendPreview | null = PREVIEW) {
+        const noteOps = {
+            previewSend: vi.fn(async () => read),
+            // Where the fields name is never answered: the move offers no write meanwhile.
+            destinationFacts: () => new Promise(() => { }),
+            timersRefuse: () => null,
+            send: vi.fn(),
+        };
+        const r = rig(undefined, noteOps);
+        r.change(ROW);
+        return { ...r, noteOps };
+    }
+
+    /** The card's menu as the hub hands it to the card it draws last. */
+    const menuOf = (deps: TaskHubDeps) => {
+        const calls = (deps.taskRenderer.render as ReturnType<typeof vi.fn>).mock.calls;
+        return (calls.at(-1)![3] as { hooks: { menu: TaskMenuHooks } }).hooks.menu;
+    };
+
+    it('reads the row from the disk first, and opens in the move: the basic tab, the fields of where the row goes where a send goes, the focus on the note', async () => {
+        const r = moveRig();
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps, { move: 'defaults' });
+
+        expect(r.noteOps.previewSend).toHaveBeenCalledWith(['task-1']);
+        expect(handedOf(0).opensOn).toBe('place');
+        expect((forms[0].host as PanelHost).draft()).not.toBeNull();
+        expect(r.body.find('task-hub__shown')).toBeNull();
+        const focus = shells[0].opts!.initialFocus!() as { to: FocusEl };
+        expect(r.body.find('task-hub__place')!.contains(focus.to)).toBe(true);
+        expect(focus.to.value).toBe('Plan');
+    });
+
+    it('opens nothing on a row the disk does not hold as the index read it', async () => {
+        const r = moveRig(null);
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps, { move: 'defaults' });
+
+        expect(shells).toHaveLength(0);
+        expect(forms).toHaveLength(0);
+    });
+
+    it('thrown away, shows where the row stands again, the hub open', async () => {
+        const r = moveRig();
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps, { move: 'defaults' });
+
+        (forms[0].host as PanelHost).draft()!.discard!();
+        expect((forms[0].host as PanelHost).draft()).toBeNull();
+        expect(r.body.find('task-hub__shown')).not.toBeNull();
+        expect(shells[0].opts).not.toBeNull();
+    });
+
+    it('has the card\'s menu move the row in this hub, where a send goes, and not again while it moves', async () => {
+        const r = moveRig();
+        await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
+        const host = forms[0].host as PanelHost;
+        expect(host.draft()).toBeNull();
+
+        menuOf(r.deps).onBeginMove!();
+        await vi.waitFor(() => expect(host.draft()).not.toBeNull());
+        expect(shells).toHaveLength(1);
+        expect(r.body.find('task-hub__place')).not.toBeNull();
+        const move = (host as unknown as { moving(): { initial: DestinationAsk } }).moving();
+        expect(move.initial).toEqual({ note: { text: 'Plan', picked: null }, heading: 'Tasks' });
+
+        menuOf(r.deps).onBeginMove!();
+        await Promise.resolve();
+        expect(r.noteOps.previewSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('a hub on a task not written yet hands its card\'s menu no move', async () => {
+        const r = rig();
+        await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
+        expect(menuOf(r.deps).onBeginMove).toBeUndefined();
     });
 });

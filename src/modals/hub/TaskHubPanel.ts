@@ -10,7 +10,9 @@ import { OverlayShell, type OverlayFrame } from '../../views/sharedUI/OverlayShe
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
 import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
-import { RowHost } from './RowHost';
+import { RowHost, type MoveOpening } from './RowHost';
+import type { MoveStart } from './RowMove';
+import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import { RowPlace } from './RowPlace';
 import { DraftHost } from './DraftHost';
 import type { HubForm, HubPlace, PlaceMaker, PanelHost } from './HubHost';
@@ -32,6 +34,12 @@ export interface TaskHubDeps {
 export interface TaskHubPanelOptions {
     focusField?: TaskHubFocusField;
 }
+
+/**
+ * How a hub on a row opens: on a field (`focusField`), or in a move of the
+ * row (`move`), the fields of where it goes opened as `MoveStart` says.
+ */
+export type RowHubOptions = TaskHubPanelOptions | { move: MoveStart };
 
 /** Where the panel lets a source mode be built, and what it may ask of the panel. */
 export interface SourceSlots {
@@ -67,6 +75,8 @@ interface HubShape {
     place: PlaceMaker | null;
     /** The hub's title: what kind of hub it is, whatever its host holds not written yet. */
     title: string;
+    /** What the card menu's item that moves the row does in this hub; null, the item opens a hub of its own. */
+    beginMove: (() => void) | null;
 }
 
 /** A hub as the hubs it opens one at a time with see it: what closing it as the user would does. */
@@ -175,17 +185,32 @@ export class TaskHubPanel {
      * where the row stands with no field: the note, the heading and the
      * parent the host reads (`RowPlace`). On a row that is not read only, a
      * button there begins a move, the fields of where the row goes in the
-     * place's stead, the changes held until the move (`RowHost.beginMove`).
+     * place's stead, the changes held until the move (`RowHost.beginMove`);
+     * the card menu's item that moves the row begins one too, on where a send
+     * goes (`'defaults'`).
+     *
+     * Opened in a move (`RowHubOptions.move`), the row is read from the disk
+     * first (`NoteOps.previewSend`), and the hub opens only on a row read as
+     * the index's copy, which the user is told otherwise: the basic tab chosen
+     * and the fields of where the row goes in the place, the focus on the note.
      */
-    static openRowHub(app: App, task: Task, deps: TaskHubDeps, options: TaskHubPanelOptions = {}): Promise<void> {
+    static async openRowHub(app: App, task: Task, deps: TaskHubDeps, options: RowHubOptions = {}): Promise<void> {
+        const noteOps = deps.plugin.getNoteOps();
+        let opening: MoveOpening | null = null;
+        if ('move' in options) {
+            const preview = await noteOps.previewSend([getOriginalTaskId(task)]);
+            if (!preview) return;
+            opening = { preview, start: options.move };
+        }
         let source: TaskHubSource | null = null;
         const host = new RowHost(
             task,
             {
                 app, plugin: deps.plugin, index: deps.index, operations: deps.operations,
-                noteOps: deps.plugin.getNoteOps(), indentUnit: () => indentUnit(app),
+                noteOps, indentUnit: () => indentUnit(app),
             },
             { follow: (row) => source?.follow(row), hold: (held) => source?.hold(held) },
+            opening,
         );
         const makeSource: SourceMaker = (slots) => {
             const view = new TaskHubSourceView(app, slots, {
@@ -209,8 +234,10 @@ export class TaskHubPanel {
             return source;
         };
         const makePlace: PlaceMaker = (parent) => new RowPlace(app, parent, host, !host.task().isReadOnly);
-        return new TaskHubPanel(app, host, deps, options, {
+        const panelOptions: TaskHubPanelOptions = 'move' in options ? { focusField: 'place' } : options;
+        return new TaskHubPanel(app, host, deps, panelOptions, {
             source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: makePlace, title: t('modal.hub.title'),
+            beginMove: () => { void host.beginMove('defaults'); },
         }).open();
     }
 
@@ -257,7 +284,7 @@ export class TaskHubPanel {
             : (parent) => new PlaceShown(parent, () => host.shown(), { why: t('modal.newTask.childFixed') });
         const options: TaskHubPanelOptions = { focusField: place === null ? 'place' : 'name' };
         return new TaskHubPanel(app, host, deps, options, {
-            source: null, inert: true, turns: null, place: makePlace, title: t('modal.newTask.title'),
+            source: null, inert: true, turns: null, place: makePlace, title: t('modal.newTask.title'), beginMove: null,
         }).open();
     }
 
@@ -384,10 +411,11 @@ export class TaskHubPanel {
             hooks: {
                 onNavigate: closePanel,
                 // The menu's destructive items close the hub, and its
-                // Properties items go to this hub's form, not a hub on top.
+                // Properties items and its move go to this hub, not a hub on top.
                 menu: {
                     onDestructiveAction: closePanel,
                     onOpenPropertiesFocus: (field) => this.form?.focusField(field),
+                    ...(this.shape.beginMove && { onBeginMove: this.shape.beginMove }),
                 },
             },
         });

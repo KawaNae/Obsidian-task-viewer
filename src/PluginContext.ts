@@ -7,7 +7,7 @@ import type { NoteOps } from './services/data/NoteOps';
 import type { NotePlaces } from './services/data/NotePlaces';
 import type { CreatePlace, CreatePlaces } from './services/data/CreatePlaces';
 import type { DraftSeed } from './services/data/TaskDraft';
-import type { TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
+import type { RowHubOptions } from './modals/hub/TaskHubPanel';
 import type { MenuPresenter } from './interaction/menu/MenuPresenter';
 import type { LogManager } from './log/log-manager';
 
@@ -83,7 +83,7 @@ export interface PluginContext {
      * Open the hub on the row `taskId`, from outside the views: no selection
      * to clear and no mask. Nothing opens when the index no longer has it.
      */
-    openTaskHub(taskId: string, options?: TaskHubPanelOptions): void;
+    openTaskHub(taskId: string, options?: RowHubOptions): void;
 
     /**
      * Open the hub on a task not written yet, to be put in `place`, holding

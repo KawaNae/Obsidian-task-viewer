@@ -9,8 +9,8 @@
  * range of the settings' table (a work of a minute or more).
  *
  * The forms that ask in their row of buttons whether to throw a draft away
- * (the hub of a task not written yet, the hub's source mode, the send
- * dialog) stand the question on a line of its own on the centered box,
+ * (the hub of a task not written yet, the hub's source mode, the hub moving
+ * a row) stand the question on a line of its own on the centered box,
  * whatever its width: discard at the start of the next line, back and the
  * act at its end.
  *
@@ -402,11 +402,14 @@ describe('the row that asks whether to throw a draft away, on the centered box',
 
             await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, task);
             menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.sendToNote'))});
-            await until(() => top()?.querySelector('.tv-send .tv-source-editor__children .cm-content') && !top().querySelector('.tv-form__buttons .mod-cta').disabled);
-            const sent = editorOf(top().querySelector('.tv-send .tv-source-editor__children .cm-content'));
-            sent.dispatch({ changes: { from: sent.state.doc.line(1).to, insert: '2' } });
+            // The hub opens in the move of the row; a change of the name is held in its draft.
+            await until(() => top()?.querySelectorAll('.task-hub__place input').length === 2 && top().querySelector('.tv-form__name-section input'));
+            const moved = top().querySelector('.tv-form__name-section input');
+            moved.focus();
+            moved.value = '行2';
+            moved.dispatchEvent(new Event('input', { bubbles: true }));
             top().querySelector('.tv-overlay__close').click();
-            out.send = await shape();
+            out.move = await shape();
         } finally {
             win.setBounds(bounds);
             await until(() => innerWidth === was);
@@ -414,13 +417,13 @@ describe('the row that asks whether to throw a draft away, on the centered box',
         return JSON.stringify(out);
     `);
 
-    it.each(WIDTHS)('stands the question on a line of its own, discard at the start of the next and back and the act at its end, in the hub, its source mode and the send dialog (window %ipx wide)', async (width) => {
+    it.each(WIDTHS)('stands the question on a line of its own, discard at the start of the next and back and the act at its end, in the hub, its source mode and its move (window %ipx wide)', async (width) => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const seen = shapes(width);
-        expect(Object.keys(seen)).toEqual(['hub', 'source', 'send']);
+        expect(Object.keys(seen)).toEqual(['hub', 'source', 'move']);
         expect(seen.hub).toMatchObject({ width, ask: tr('modal.newTask.discardAsk'), discard: tr('modal.hub.unsavedDiscard'), act: tr('modal.create') });
         expect(seen.source).toMatchObject({ width, ask: tr('modal.draft.discardAsk'), discard: tr('modal.draft.discard') });
-        expect(seen.send).toMatchObject({ width, ask: tr('modal.draft.discardAsk'), discard: tr('modal.draft.discard') });
+        expect(seen.move).toMatchObject({ width, ask: tr('modal.hub.move.discardAsk'), discard: tr('modal.hub.unsavedDiscard'), act: tr('modal.send.send') });
         for (const [form, shape] of Object.entries(seen)) {
             // The question ends above the line of buttons, discard first on that line, back and the act last.
             expect(shape.askBottom, form).toBeLessThanOrEqual(0);

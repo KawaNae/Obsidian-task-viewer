@@ -6,7 +6,7 @@ import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler, type TaskHubOpener } from '../../interaction/menu/MenuHandler';
-import { TaskHubPanel, type TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
+import { TaskHubPanel, type RowHubOptions } from '../../modals/hub/TaskHubPanel';
 import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -26,7 +26,7 @@ export interface CardRenderingDeps {
 export interface CardRendering {
     taskRenderer: TaskCardRenderer;
     menuHandler: MenuHandler;
-    openTaskHub: (task: Task, options?: TaskHubPanelOptions) => void;
+    openTaskHub: (task: Task, options?: RowHubOptions) => void;
 }
 
 /**
@@ -43,7 +43,7 @@ export function createCardRendering(deps: CardRenderingDeps): CardRendering {
     const index = plugin.getIndex();
     const operations = plugin.getOperations();
 
-    const openTaskHub = (task: Task, options?: TaskHubPanelOptions): void => {
+    const openTaskHub = (task: Task, options?: RowHubOptions): void => {
         void TaskHubPanel.openRowHub(app, task, {
             taskRenderer,
             index,
