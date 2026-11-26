@@ -454,6 +454,21 @@ export class PropertiesFieldGroup implements ClosingPart {
     }
 
     /**
+     * Throw away all that is typed, read or not: the values' fields and the
+     * lists' show the values again, the add row is emptied, and an inherited
+     * list made the row's own and not written yet is let go. The rows are
+     * built anew from the value.
+     */
+    discardTyped(): void {
+        for (const bound of this.valueBound.values()) bound.discard();
+        for (const list of this.lists.values()) list.discardTyped();
+        this.draft = { key: '', value: '' };
+        this.drafts.clear();
+        this.ctx.issues.set('propKey', []);
+        this.render(true);
+    }
+
+    /**
      * Save what is typed and reads. The lists are taken first: a write
      * builds the rows anew, and each list saves what its own inputs hold, in
      * one write of its own (`PropertyListField.save`).

@@ -75,8 +75,11 @@ export interface HubForm {
 export interface HubShut {
     /**
      * What is shut. `'form'`: every field, the place's among them; the form
-     * saves nothing and asks nothing, cancel throwing away what is held at
-     * once and a close asking the host at once. `'values'`: the fields of
+     * saves nothing and asks nothing, a close asking the host at once. While
+     * the host holds what is not written yet, it is so only while its write
+     * is under way (`HubDraft.writing`): cancel is a close asked then, which
+     * waits for the write, closing once it is made and withdrawn once it is
+     * not. `'values'`: the fields of
      * the row's values (the name, the status, the dates, the style, the
      * tags, the properties); the place's fields take edits, and cancel and
      * a close ask whether to throw away what is held (`HubDraft.changed`),
@@ -120,8 +123,8 @@ export interface HubDraft {
     /**
      * Throw away what is held, as cancel asks once the form has saved its
      * fields and the user has said to throw it away where anything would be
-     * lost (`changed`); asked at once while the whole form is shut. The hub
-     * stays open, and the host tells the form what it holds now. Null where
+     * lost (`changed`); never while the write is under way. The hub stays
+     * open, and the host tells the form what it holds now. Null where
      * what is held is all the hub is (a task not written yet): cancel is the
      * close the user asks for, which asks of the same loss.
      */

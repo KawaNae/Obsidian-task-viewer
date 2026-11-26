@@ -23,11 +23,14 @@ export interface UnsavedField {
 /**
  * What the hub's close asks of a part of its form (`TaskHubForm.beforeClose`):
  * the fields whose text cannot be saved, throwing that text away, and saving
- * what is typed and reads, as a blur would.
+ * what is typed and reads, as a blur would. Throwing away what the host
+ * holds (cancel) throws away all that is typed, read or not
+ * (`discardTyped`): the fields show the value again.
  */
 export interface ClosingPart {
     unsaved(): UnsavedField[];
     discardUnsaved(): void;
+    discardTyped(): void;
     save(): void;
 }
 

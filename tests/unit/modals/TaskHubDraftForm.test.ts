@@ -959,7 +959,7 @@ describe('a hub whose host comes to hold something not written yet and lets it g
         expect(row.children.indexOf(s.cancel())).toBeLessThan(row.children.indexOf(s.act()!));
     });
 
-    it('says a refusal of the write above the write, and of a change the fields handed on above the tabs, whatever is held', () => {
+    it('says a refusal of the write above the write, and of a change the fields handed on above the tabs, whatever is held', async () => {
         const s = setUpHeld();
         s.hold(s.draftOf('移動'));
         s.form.sayWrite('write refused');
@@ -972,7 +972,9 @@ describe('a hub whose host comes to hold something not written yet and lets it g
         expect(said(s.line()!)).toContain('write refused');
         expect(said(s.line()!)).not.toContain('change refused');
 
+        // Taken back once what the fields hold is put again, nothing refused then.
         s.form.sayPut(null);
+        await Promise.resolve();
         expect(s.body.find('tv-form__says--form')!.children).toEqual([]);
         s.hold(null);
         s.form.sayPut('refused again');

@@ -9,8 +9,9 @@ import { FakeEl, stubCardDocument } from '../../helpers/cardDom';
  * (`RenderOptions.rows`), which the index has none of to act on: none of what a card
  * binds to act on its task is bound, whatever the other policies say. Its
  * menu, its double tap, its checkbox and its children's, a child's ⋯, and
- * its links: a link is not followed. The card says so (`data-inert`), which
- * the stylesheet makes its checkboxes and links take no press by.
+ * its links: a link is not followed. The card says so (`data-inert`), and
+ * is inert (`inert`): its checkboxes and links take no press, nor the focus
+ * a keyboard would press them by.
  *
  * Each is checked against the same card drawn with things done on it, so a
  * binding the test does not see would show there.
@@ -113,6 +114,7 @@ describe('a card things are done on', () => {
     it('binds its menu and its double tap, wires each checkbox, draws a child\'s ⋯, and follows its links', () => {
         const c = draw({});
         expect(c.card.dataset.inert).toBeUndefined();
+        expect(c.card.getAttribute('inert')).toBeNull();
         expect(c.actions.bindMenu).toHaveBeenCalledTimes(1);
         expect(clickListeners(c.card)).toBeGreaterThan(0);
         expect(c.boxes).toHaveLength(2);
@@ -131,6 +133,7 @@ describe('a card drawn from rows handed in, nothing done on it', () => {
         it(`binds no menu nor double tap, wires no checkbox, draws no child's ⋯, and follows no link${collapse ? ', its children collapsed' : ''}`, () => {
             const c = draw({ doubleTap: true }, collapse, true);
             expect(c.card.dataset.inert).toBe('true');
+            expect(c.card.getAttribute('inert')).toBe('');
             expect(c.actions.bindMenu).not.toHaveBeenCalled();
             expect(clickListeners(c.card)).toBe(0);
             expect(c.boxes).toHaveLength(2);

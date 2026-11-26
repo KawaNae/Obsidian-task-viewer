@@ -21,7 +21,7 @@ import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
 import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
-import type { HubForm, HubHost, HubPlace, HubShut, PlaceMaker } from './HubHost';
+import type { HubDraft, HubForm, HubHost, HubPlace, HubShut, PlaceMaker } from './HubHost';
 import type { FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 import { placeFocus } from '../../views/sharedUI/FocusPlacement';
 import { TabStrip } from '../../views/sharedUI/TabStrip';
@@ -120,7 +120,9 @@ export interface TaskHubFormDeps {
  *
  * 欄から渡した変更の拒否はホストが言う（`HubForm.sayPut`）。拒まれた理由は
  * フォーム全体の文の場所に出す。拒まれた欄は打った値のまま残り（`bindField`）、
- * もう一度確定すれば新しい版へ書く。
+ * もう一度確定すれば新しい版へ書く。ホストがまだ書いていないものを持つ間は、
+ * 拒否が取り下げられると、残っている値をもう一度渡す（`sayPut`）。欄に見える
+ * 値は、ホストの値か、拒まれた理由が出ている値である。
  *
  * ホストがまだ書いていないもの（`HubHost.draft`）を持つ間は、右のボタン（まだ
  * 書いていないタスクでは [作成]、移動の間の行では [移動]）を押すと何が起きるか
@@ -153,9 +155,11 @@ export interface TaskHubFormDeps {
  * フォームは、作るときに形を決めず、ホストが描き直させるたび（`showDraft`）に
  * ホストに聞き直して出し隠しする。欄の打ちかけ、フォーカス、タブ、出ている
  * 問いはそのまま残る。[キャンセル]（{@link cancel}）は、まだ書いていないものを
- * 捨てることを頼む。それがハブの全部であるとき（まだ書いていないタスク）は、×
- * と同じ閉じる手順を通る（`requestClose`）。そうでなければ、閉じるときと同じく
- * 欄を保存し、失うものがあれば捨てるかを問うてから、ハブを開いたまま捨てさせる。
+ * 捨てることを頼む。それがハブの全部であるとき（まだ書いていないタスク）と、
+ * その書き込みの途中は、× と同じ閉じる手順を通る（`requestClose`）。途中に
+ * 頼んだものは書き込みの終わりを待ち、書かずに終われば取り消される。そうで
+ * なければ、閉じるときと同じく欄を保存し、失うものがあれば捨てるかを問うてから、
+ * ハブを開いたまま捨てさせ、欄に打った値を全部捨てる。
  * 右のボタン（{@link write}）は、読めない打ちかけの欄があれば書かずにその欄へ
  * フォーカスを置く。次に、今の受け継ぐ値で日付の規則が破れた欄があれば、同じく
  * 書かずにその欄へフォーカスを置く。どちらも無ければ打ちかけの欄を保存してから
@@ -176,6 +180,10 @@ export class TaskHubForm implements HubForm {
     private readonly guard: DraftGuard<'close' | 'discard'>;
     /** The user said to throw away what the close would lose: the close that goes on asks nothing more. */
     private thrownAway = false;
+    /** Why a change handed on was not taken, as said now; null while nothing is said. */
+    private refusal: string | null = null;
+    /** The fields' values are being put again ({@link putAgain}): the last refusal said meanwhile, which is said once it is done. */
+    private again: { refusal: string | null } | null = null;
     private actions!: FormActions;
     /** The line above the write, shown while the host holds something not written yet: where it goes, and why a write was refused. */
     private createLine!: CreateLine;
@@ -212,13 +220,14 @@ export class TaskHubForm implements HubForm {
             render: () => this.renderActions(),
             asked: () => this.actions.focusKeep(),
             goOn: (after) => {
-                this.discardUnsaved();
                 if (after === 'discard') {
                     // The hub stays open: the row no longer asks.
                     this.renderActions();
-                    this.host.draft()?.discard?.();
+                    const draft = this.host.draft();
+                    if (draft) this.throwAway(draft);
                     return;
                 }
+                this.discardUnsaved();
                 this.thrownAway = true;
                 this.deps.requestClose?.();
             },
@@ -470,22 +479,34 @@ export class TaskHubForm implements HubForm {
 
     /**
      * Cancel: throw away what the host holds not written yet. Where that is
-     * all the hub is (`HubDraft.discard` null), it is the close the user
-     * asks for, as ×: it asks of what it would lose. Otherwise the fields
-     * are saved as for a close, and what would be lost asked about (the
-     * answer that throws it away goes on to throw it away); then the host
-     * throws it away with the hub left open. While the whole form is shut
-     * nothing is saved and nothing asked; while only the row's values are,
-     * their fields are not saved, and what the host holds is asked of.
+     * all the hub is (`HubDraft.discard` null), and while its write is under
+     * way, it is the close the user asks for, as ×: one asked during the
+     * write waits for it, and is withdrawn once it ends unwritten, what is
+     * held kept. Otherwise the fields are saved as for a close, and what
+     * would be lost asked about (the answer that throws it away goes on to
+     * throw it away); then the host throws it away with the hub left open
+     * ({@link throwAway}). While only the row's values are shut, their
+     * fields are not saved, and what the host holds is asked of.
      */
     private cancel(): void {
         const draft = this.host.draft();
         if (!draft) return;
-        if (!draft.discard) {
+        if (!draft.discard || draft.writing()) {
             this.deps.requestClose?.();
             return;
         }
-        if (this.reach === 'form' || this.saveFor('discard')) draft.discard();
+        if (this.saveFor('discard')) this.throwAway(draft);
+    }
+
+    /**
+     * Have the host throw away what it holds (`HubDraft.discard`), and
+     * throw away all that is typed in the fields, those shut among them:
+     * what was typed was of what is thrown away, a value the host refused
+     * too, and the fields show the host's value as it is now.
+     */
+    private throwAway(draft: HubDraft): void {
+        draft.discard?.();
+        for (const part of this.fields()) part.discardTyped();
     }
 
     /**
@@ -515,10 +536,15 @@ export class TaskHubForm implements HubForm {
      * takes no edit is neither saved nor asked of.
      */
     private parts(): ClosingPart[] {
-        if (this.reach !== null) return [];
+        return this.reach !== null ? [] : this.fields();
+    }
+
+    /** The parts of the form, shut or not. */
+    private fields(): ClosingPart[] {
         const dates: ClosingPart = {
             unsaved: () => this.dateGroup.unsaved().map(key => ({ label: this.dateGroup.labelOf(key), input: this.dateGroup.getInput(key) })),
             discardUnsaved: () => this.dateGroup.discardUnsaved(),
+            discardTyped: () => this.dateGroup.discardTyped(),
             save: () => this.dateGroup.save(),
         };
         return [this.nameField, dates, this.styleField, this.tagsField, this.propsField];
@@ -533,14 +559,15 @@ export class TaskHubForm implements HubForm {
      * as it comes, the values that cannot be saved, by their fields' names:
      * the rest is written as it is saved. While it holds something not
      * written yet, the whole of it, once it was given anything: a value typed
-     * that cannot be saved, or a change saved (`HubDraft.changed`). Nothing
-     * while the whole form is shut, nor once the user said to throw it away.
+     * that cannot be saved, a value typed it refused (said refused), or a
+     * change saved (`HubDraft.changed`). Nothing while the whole form is
+     * shut, nor once the user said to throw it away.
      */
     private loss(): Loss | null {
         if (this.reach === 'form' || this.thrownAway) return null;
         const fields = this.unsaved();
         const draft = this.host.draft();
-        if (draft) return fields.length > 0 || draft.changed() ? { kind: 'draft' } : null;
+        if (draft) return fields.length > 0 || this.refusal !== null || draft.changed() ? { kind: 'draft' } : null;
         return fields.length > 0 ? { kind: 'unsaved', fields: fields.map(one => one.label) } : null;
     }
 
@@ -606,8 +633,50 @@ export class TaskHubForm implements HubForm {
         this.sayFindings();
     }
 
+    /**
+     * While the host holds what is not written yet, a refusal taken back
+     * (the value changed) is not taken back at once: the values the fields
+     * hold and the host has not taken are put again on the value as it is
+     * now ({@link putAgain}), and are taken, or said refused again. A value
+     * typed is the host's, or said refused, never neither.
+     */
     sayPut(refusal: string | null): void {
+        if (this.again) {
+            if (refusal !== null) this.again.refusal = refusal;
+            return;
+        }
+        if (refusal === null && this.host.draft()) {
+            // Once the change that took it back is done: the field that handed it on shows it as its value then.
+            queueMicrotask(() => this.putAgain());
+            return;
+        }
+        this.showRefusal(refusal);
+    }
+
+    private showRefusal(refusal: string | null): void {
+        this.refusal = refusal;
         this.issues.set('put', refusal === null ? [] : [{ at: 'form', tone: 'error', text: refusal }]);
+    }
+
+    /**
+     * Put the values the fields hold that the host has not taken in again,
+     * as a close saves them: what is said refused after is the last refusal
+     * said meanwhile, none where all were taken. While the fields are shut
+     * none is put, and what was said stays: the values stay in the fields,
+     * put again once a refusal is taken back with the fields open.
+     */
+    private putAgain(): void {
+        if (this.again) return;
+        const parts = this.parts();
+        if (parts.length === 0) return;
+        const again = { refusal: null as string | null };
+        this.again = again;
+        try {
+            for (const part of parts) part.save();
+        } finally {
+            this.again = null;
+        }
+        this.showRefusal(again.refusal);
     }
 
     sayWrite(refusal: string | null): void {

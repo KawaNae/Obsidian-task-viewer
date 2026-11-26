@@ -93,6 +93,7 @@ function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (
         timers: opts.timers ?? (() => null),
         send,
         drafts: () => drafts,
+        draftsTaken: () => true,
         close,
     };
     const dialog = new SendDialog(preview, host, {
@@ -586,18 +587,25 @@ describe('drafts its host holds', () => {
         const states: SendViewState[] = [];
         const send = vi.fn(async (_req: SendRequest): Promise<SendResult> => ({ kind: 'done', note: new TFile() }));
         let answer: (f: DestinationFacts) => void = () => { };
-        const timers = vi.fn((_sending: SendingLines) => null);
+        let taken = true;
+        const timers = vi.fn((_sending: SendingLines): string | null => null);
         const dialog = new SendDialog(previewOf(), {
             facts: () => new Promise<DestinationFacts>((resolve) => { answer = resolve; }),
             timers,
             send,
             drafts: () => drafts,
+            draftsTaken: () => taken,
             close: () => { },
         }, { render: (state) => { states.push(state); } });
         answer(facts());
         await Promise.resolve();
         await Promise.resolve();
-        return { dialog, send, timers, states, hold: (next: typeof drafts) => { drafts = next; } };
+        return {
+            dialog, send, timers, states,
+            hold: (next: typeof drafts) => { drafts = next; },
+            /** Whether the host holds a text not taken into its drafts. */
+            untaken: (untaken: boolean) => { taken = !untaken; },
+        };
     }
 
     it('are asked as they are now: as a send is asked, and as the timers are', async () => {
@@ -620,6 +628,23 @@ describe('drafts its host holds', () => {
         expect(h.dialog.request()).toBeNull();
         await h.dialog.send();
         expect(h.send).not.toHaveBeenCalled();
+    });
+
+    it('while the host holds a text not taken into them, a send is asked as where it goes says, the timers not asked; once taken, as the timers say', async () => {
+        const h = await held([null]);
+        h.timers.mockReturnValue('kept');
+        h.untaken(true);
+        h.timers.mockClear();
+        h.dialog.draftsChanged();
+        expect(h.timers).not.toHaveBeenCalled();
+        expect(h.states.at(-1)!.canSend).toBe(true);
+        expect(h.states.at(-1)!.issues.map(one => one.text)).not.toContain('kept');
+        h.untaken(false);
+        await h.dialog.send();
+        expect(h.send).not.toHaveBeenCalled();
+        h.dialog.draftsChanged();
+        expect(h.states.at(-1)!.canSend).toBe(false);
+        expect(h.states.at(-1)!.issues).toContainEqual({ at: 'form', tone: 'error', text: 'kept' });
     });
 
     it('a change of them drawn again as the host tells it', async () => {

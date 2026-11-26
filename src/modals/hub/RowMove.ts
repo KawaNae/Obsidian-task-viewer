@@ -90,6 +90,12 @@ export interface MoveDeps {
  * - Throwing it away (cancel) asks of what it would lose where the draft,
  *   or where it goes, is not what it opened with, or the source holds what
  *   the draft has not taken in (`changed`); thrown away, the source closes.
+ *   It is not thrown away while the move is under way: cancel then is a
+ *   close, which waits for it (`HubDraft.writing`).
+ * - While the source holds a text the draft has not taken in, a move is
+ *   asked as where the row goes and the row say, what the timers keep of
+ *   the draft's lines asked once [Move] has taken the text in
+ *   (`draftsTaken`): a text typed back after a move they kept may be moved.
  * - A move made for the row closes the hub; one not made keeps the draft
  *   and says why above the write; one made in part (the row landed and its
  *   note refused to let it go) says why and offers no move again.
@@ -120,6 +126,8 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
     private asked: Promise<boolean> | null = null;
     /** The move was made for the row: the hub closes. */
     private made = false;
+    /** Whether the send was last drawn with the source's text all taken into the draft (`draftsTaken`). */
+    private judgedTaken = true;
 
     constructor(private readonly preview: SendPreview, start: MoveStart, private readonly deps: MoveDeps) {
         const snapshot = preview.rows[0];
@@ -146,7 +154,11 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
             drafted: () => this.drafted(),
             changed: () => host.sourceChanged(),
             submit: () => host.submit(),
-            edited: () => host.edited(),
+            edited: () => {
+                host.edited();
+                // A text not taken in leaves what the timers keep unasked until [Move]: whether a move may be asked is drawn again.
+                if (this.draftsTaken() !== this.judgedTaken) this.dialog.draftsChanged();
+            },
         });
         this.dialog = new SendDialog(preview, this, this, { initial: this.initial, stands });
     }
@@ -314,6 +326,11 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
         return this.stale === null ? [this.draft.replacement()] : null;
     }
 
+    /** Not while the source holds a text the draft has not taken in: [Move] takes it in first. */
+    draftsTaken(): boolean {
+        return !this.seat.pending();
+    }
+
     close(): void {
         this.made = true;
         this.deps.host.close();
@@ -328,6 +345,7 @@ export class RowMove implements HubDraft, SendHost, SendSurface {
      */
     render(state: SendViewState): void {
         this.shown = state;
+        this.judgedTaken = this.draftsTaken();
         this.view?.render(state);
         const host = this.deps.host;
         const issues: FormIssue<never>[] = state.issues
