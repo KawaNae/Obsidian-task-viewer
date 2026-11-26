@@ -29,6 +29,21 @@ export type RowDraftRefusal =
     | { kind: 'not-task' }
     | Extract<RefusalReason, { kind: 'unplaceable' | 'disturbs' }>;
 
+/**
+ * A {@link RowDraft} as a source editor was opened on it (`RowDraft.mark`):
+ * the row and its subtree then, which the editor opens on
+ * (`SubtreeFrame.open`), and for each child line the line of the disk's
+ * subtree it is (null: a line the draft made).
+ *
+ * The editor says which line each of its lines was by these lines, however
+ * many of its drafts are taken in (`RowDraft.take`): a mark is what a draft
+ * of the editor is told against, for as long as the editor stays open.
+ */
+export interface DraftMark {
+    readonly rows: readonly string[];
+    readonly was: readonly (number | null)[];
+}
+
 /** What a {@link RowDraft} reads as: the row, and the rows of its subtree. */
 interface DraftReading {
     task: Task;
@@ -61,6 +76,14 @@ interface DraftReading {
  */
 export class RowDraft {
     private reading: DraftReading | null = null;
+    /** How many times the lines have changed. */
+    private changes = 0;
+    /**
+     * For each mark this draft made, the count of {@link changes} after the
+     * last change taken in on it, or when it was made: while that is the
+     * count now, the draft is as the mark and its own drafts left it.
+     */
+    private readonly marks = new WeakMap<DraftMark, number>();
 
     private constructor(
         private readonly settings: TaskViewerSettings,
@@ -111,9 +134,21 @@ export class RowDraft {
         return [...this.above, ...this.rows, ...this.below];
     }
 
-    /** The row and its subtree as the draft has them: what the source opens on (`SubtreeFrame.open`). */
+    /** The row and its subtree as the draft has them now. */
     subtree(): readonly string[] {
         return this.rows;
+    }
+
+    /**
+     * The draft as a source editor opens on it now: the mark its drafts are
+     * taken in on ({@link take}). A mark holds while only drafts taken in on
+     * it change the draft; a field's change ({@link apply}), or a draft taken
+     * in on another mark, ends it.
+     */
+    mark(): DraftMark {
+        const mark: DraftMark = { rows: this.rows, was: this.was };
+        this.marks.set(mark, this.changes);
+        return mark;
     }
 
     /**
@@ -162,25 +197,35 @@ export class RowDraft {
     }
 
     /**
-     * Take in a draft of the source (`SubtreeFrame.check`'s `write`), opened
-     * on {@link subtree}: its `was` say which line of the subtree then each
+     * Take in a draft of the source (`SubtreeFrame.check`'s `write`, or
+     * `SubtreeFrame.unchanged` to go back to the lines it opened on) from an
+     * editor opened on `mark`: its `was` say which line of `mark.rows` each
      * line is, which is told here as the line of the disk's subtree it is.
+     * The same editor's drafts are taken in on the same mark, one after
+     * another, each in place of the one before.
      *
      * The lines are read once, as {@link task} reads them, and taken in
      * only when the row's line reads as a row there: a draft taken in
      * always has values.
      *
+     * A mark this draft did not make, or one whose draft has changed by
+     * other means since ({@link mark}), would tell the lines as the wrong
+     * ones of the disk: a caller's bug, thrown.
+     *
      * @returns null when taken in; else why its lines are not the row's
-     * subtree in the note, and the draft is as it was.
+     * subtree in the note, and the draft and the mark are as they were.
      */
-    take(replacement: SubtreeReplacement): RowDraftRefusal | null {
-        const rows = [Outline.indentOf(this.rows[0]) + Outline.dedent(replacement.text), ...replacement.children.map(child => child.text)];
+    take(replacement: SubtreeReplacement, mark: DraftMark): RowDraftRefusal | null {
+        const since = this.marks.get(mark);
+        if (since === undefined) throw new UnfollowableDraft('a source draft was taken in on a mark this draft did not make');
+        if (since !== this.changes) throw new UnfollowableDraft('a source draft was taken in on a mark the draft has changed past');
+        const rows = [Outline.indentOf(mark.rows[0]) + Outline.dedent(replacement.text), ...replacement.children.map(child => child.text)];
         const was = replacement.children.map(child => {
             if (child.was === null) return null;
-            if (!Number.isInteger(child.was) || child.was < 1 || child.was >= this.rows.length) {
-                throw new UnfollowableDraft(`a subtree line was line ${child.was} of a subtree of ${this.rows.length} lines`);
+            if (!Number.isInteger(child.was) || child.was < 1 || child.was >= mark.rows.length) {
+                throw new UnfollowableDraft(`a subtree line was line ${child.was} of a subtree of ${mark.rows.length} lines`);
             }
-            return this.was[child.was - 1];
+            return mark.was[child.was - 1];
         });
         const lines = [...this.above, ...rows, ...this.below];
         const outline = Outline.read(lines);
@@ -191,6 +236,7 @@ export class RowDraft {
         if (end < last) return { kind: 'unplaceable', fence: null };
         if (end > last) return { kind: 'disturbs', fence: null };
         this.set(rows, was, reading);
+        this.marks.set(mark, this.changes);
         return null;
     }
 
@@ -211,6 +257,7 @@ export class RowDraft {
         this.rows = rows;
         this.was = was;
         this.reading = reading;
+        this.changes++;
     }
 
     /**

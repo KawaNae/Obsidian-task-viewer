@@ -187,3 +187,20 @@ describe('SubtreeFrame: a draft back to the file\'s lines', () => {
         expect(() => frame.check({ parent: frame.parent, children: [{ text: 'x', was: 2 }] })).toThrow(RangeError);
     });
 });
+
+describe('SubtreeFrame: the subtree as it was opened, as a replacement', () => {
+    it('is the row\'s line and each child line as the file has them, each the line it was', () => {
+        expect(opened(['\t- [ ] T', '\t\t- [ ] a', '', '\t\t  more']).unchanged()).toEqual({
+            text: '\t- [ ] T',
+            children: [{ text: '\t\t- [ ] a', was: 1 }, { text: '', was: 2 }, { text: '\t\t  more', was: 3 }],
+        });
+    });
+
+    it.each(SUBTREES)('%s: is the subtree opened, byte for byte, whatever the editor holds now', (_name, base) => {
+        const frame = opened(base);
+        frame.check({ parent: `${frame.parent} changed`, children: [] });
+        const { text, children } = frame.unchanged();
+        expect([text, ...children.map(child => child.text)]).toEqual(base);
+        expect(children.map(child => child.was)).toEqual(base.slice(1).map((_, i) => i + 1));
+    });
+});
