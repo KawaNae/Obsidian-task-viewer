@@ -93,8 +93,8 @@ const PLACES: Array<{ file: string; line: string; why: string }> = [
     },
     {
         file: 'modals/hub/fields/PropertiesFieldGroup.ts',
-        line: 'if (held) this.addRow?.[held === \'key\' ? \'keyInput\' : \'valueInput\'].focus();',
-        why: 'the rows drawn again on a property added by Enter: the add row\'s field keeps the focus it held',
+        line: 'if (held && (!active || active === doc.body)) this.addRow?.[held === \'key\' ? \'keyInput\' : \'valueInput\'].focus();',
+        why: 'the rows drawn again on a property added by Enter that the draft refused: the add row\'s field takes back the focus it held',
     },
     {
         file: 'modals/hub/fields/PropertiesFieldGroup.ts',

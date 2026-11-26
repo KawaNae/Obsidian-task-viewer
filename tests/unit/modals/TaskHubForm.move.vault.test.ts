@@ -176,6 +176,9 @@ const AREA_REFUSED = ['1', '2'].map(line => t('modal.hub.move.refusedProperty', 
 /** Whether the draft's refusal of a change of `area` is said under a field (beside the finding of its key written twice). */
 const saysArea = (h: Hub) => rowSays(h).some(text => AREA_REFUSED.includes(text));
 
+/** The property row labelled `key`. */
+const rowOf = (h: Hub, key: string) => h.root.findAll('tv-form__row').find(row => row.find('tv-form__label')?.children.some(c => c.text === key));
+
 /** The element the focus is on. */
 const focused = (h: Hub) => (h.root as unknown as { ownerDocument: { activeElement: unknown } }).ownerDocument.activeElement;
 
@@ -410,12 +413,34 @@ describe('the source\'s text and the draft', () => {
     });
 });
 
+describe('a property the note refuses to add, out of a move', () => {
+    it('committed by Enter, shows the index\'s rows once refused, the add row holding what was typed, and closes once the add row is emptied', async () => {
+        const h = await open(TWICE);
+        const [keyInput, valueInput] = addRow(h);
+        keyInput.focus();
+        keyInput.type('area');
+        valueInput.focus();
+        valueInput.type('zz');
+        valueInput.enter();
+        await tick(60);
+        expect(h.lines()).toEqual(TWICE);
+        expect(h.formSays().some(text => text.includes('area'))).toBe(true);
+        expect(rowOf(h, 'area')!.find('tv-form__control')!.value).toBe('');
+        const [keyNow, valueNow] = addRow(h);
+        expect([keyNow.value, valueNow.value]).toEqual(['area', 'zz']);
+        keyNow.focus();
+        keyNow.type('');
+        valueNow.focus();
+        valueNow.type('');
+        expect(await h.form.beforeClose()).toBe('close');
+        expect(h.lines()).toEqual(TWICE);
+    });
+});
+
 describe('the move thrown away', () => {
     /** A row with a list of its own, in a section whose list it inherits. */
     const LISTS = ['# Tasks', '- area::', '    - lab', '    - desk', '- [ ] Row @2026-11-26', '    - l::', '        - p', '# Done', ''];
 
-    /** The property row labelled `key`. */
-    const rowOf = (h: Hub, key: string) => h.root.findAll('tv-form__row').find(row => row.find('tv-form__label')?.children.some(c => c.text === key));
 
     it('shows the index\'s row in every field that held a text it could not save, and says nothing of them', async () => {
         const h = await open(LISTS, { rowName: 'Row' });
