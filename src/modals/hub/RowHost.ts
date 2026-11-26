@@ -1,4 +1,4 @@
-import { Notice, type App } from 'obsidian';
+import { Notice, TFile, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
@@ -11,6 +11,9 @@ import { logError } from '../../log/log';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
 import type { HubForm, HubPanel, PanelHost } from './HubHost';
 import { openSourceLine, type LineTarget } from './SourceLine';
+import type { ShownPlace } from '../place/PlaceShown';
+import { sectionAt } from '../../services/data/CreatePlaces';
+import { splitLines } from '../../services/persistence/FileLines';
 
 export interface RowHostDeps {
     app: App;
@@ -38,6 +41,10 @@ export interface RowHostDeps {
  * The fields are shut while the source mode holds the row (two ways of
  * writing one row would have one of them refused, and the draft is the
  * user's work) and while the index no longer holds it (nothing to write to).
+ *
+ * Where the row stands is shown with no field (`shown`): its note and its
+ * parent from the value, the heading it stands under from the note's lines,
+ * read again as the row changes (`readHeading`).
  */
 export class RowHost implements PanelHost {
     private value: Task;
@@ -52,6 +59,12 @@ export class RowHost implements PanelHost {
     private missing = false;
     /** The source mode holds the row: its draft is the one way to write it until it closes. */
     private sourceOpen = false;
+    /** The heading the row stands under, as last read: null above the note's first heading, undefined until read or once a read failed. */
+    private heading: string | null | undefined = undefined;
+    /** The row's line in the reading the heading was read for; a change that leaves it so needs no read. */
+    private headingOf: string | null = null;
+    /** Reads of the heading asked: only the last one's answer is taken. */
+    private headingReads = 0;
 
     /**
      * @param follow told of each change of the row after the card and the
@@ -183,13 +196,20 @@ export class RowHost implements PanelHost {
      */
     attach(panel: HubPanel): void {
         this.panel = panel;
+        this.readHeading();
         this.unsubscribe = this.deps.index.onChange((taskId) => {
+            // The parent's text is shown where the row stands.
+            if (taskId !== undefined && taskId === this.value.parentId) {
+                this.form?.refresh();
+                return;
+            }
             if (taskId !== undefined && taskId !== this.value.id) return;
             const fresh = this.deps.index.getTask(this.value.id);
             if (fresh) {
                 this.value = fresh;
                 panel.redrawPreview();
                 this.take(fresh);
+                this.readHeading();
             } else {
                 this.lose();
             }
@@ -197,11 +217,65 @@ export class RowHost implements PanelHost {
         });
     }
 
-    /** The row is gone from the index (deleted, or its name changed): the fields are shut. */
+    /** The row is gone from the index (deleted, or its name changed): the fields are shut, and where it stood is no longer said. */
     private lose(): void {
         if (this.missing) return;
         this.missing = true;
+        this.headingReads++;
+        this.heading = undefined;
+        this.headingOf = null;
         this.form?.showShut();
+        this.form?.refresh();
+    }
+
+    /**
+     * Where the row stands, as a place shown with no field: its note, the
+     * heading it stands under as last read, and its parent's text where it
+     * has a parent (the index's copy of it). Null once the row is gone.
+     */
+    shown(): ShownPlace | null {
+        if (this.missing) return null;
+        const task = this.value;
+        const parent = task.parentId === undefined ? null : this.deps.index.getTask(task.parentId)?.content ?? null;
+        return { note: task.file, heading: this.heading, parent };
+    }
+
+    /**
+     * Read the heading the row stands under from the note's lines, unless
+     * the row stands where it was read for (the same line of the same
+     * reading). The lines are taken only while the row's line in them is
+     * the row the index read: a note written since is read again once the
+     * index has read it, which tells of the row. The last read asked
+     * answers; a note that cannot be read leaves the heading unread.
+     */
+    private readHeading(): void {
+        const task = this.value;
+        const at = `${task.file}\n${task.reading ?? ''}\n${task.line}`;
+        if (at === this.headingOf) return;
+        const asked = ++this.headingReads;
+        const file = this.deps.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return this.readHeadingAs(asked, undefined, null);
+        this.deps.app.vault.cachedRead(file).then(
+            (content) => {
+                const { lines } = splitLines(content);
+                if (lines[task.line] !== task.originalText) return;
+                const section = sectionAt(lines, task.line, this.deps.plugin.settings);
+                this.readHeadingAs(asked, section?.heading?.text ?? null, at);
+            },
+            (e) => {
+                logError(`[RowHost] the heading of ${task.file} could not be read: ${e instanceof Error ? e.message : String(e)}`);
+                this.readHeadingAs(asked, undefined, null);
+            },
+        );
+    }
+
+    /** The answer of the read `asked`, taken if it is the last one asked and the hub is open: the form draws where the row stands again. */
+    private readHeadingAs(asked: number, heading: string | null | undefined, at: string | null): void {
+        if (asked !== this.headingReads || this.closed) return;
+        this.headingOf = at;
+        if (heading === this.heading) return;
+        this.heading = heading;
+        this.form?.refresh();
     }
 
     /** The hub closed: the row is no longer followed, and a refusal that comes after is told by a notice. */

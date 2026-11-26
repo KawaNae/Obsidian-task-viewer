@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Notice } from '../mocks/obsidian';
+import { Notice, TFile } from '../mocks/obsidian';
+import { DEFAULT_SETTINGS } from '../../../src/types/Settings';
 import { RowHost } from '../../../src/modals/hub/RowHost';
 import type { HubForm, HubPanel } from '../../../src/modals/hub/HubHost';
 import { t } from '../../../src/i18n';
@@ -26,17 +27,30 @@ vi.mock('../../../src/modals/hub/SourceLine', () => ({ openSourceLine }));
  * it is drawn in the card, then in the form, then told to what the host was
  * made to tell (the source mode); a row the index no longer holds shuts the
  * form until it comes back.
+ *
+ * Where the row stands (`shown`) is its note and its parent's text from the
+ * index, and the heading it stands under, read from the note's lines once the
+ * hub has opened and again as the row moves; the form is drawn again as the
+ * read answers.
  */
 
 const REFUSED: IndexRefusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '元の名前' };
 
-/** A host on a row, its writes answered as `written` says; `bound` false for a hub with no form (a read-only row). */
-function hostAnswering(written: boolean, fresh: Task | undefined, refused: IndexRefusal | null = REFUSED, bound = true) {
-    const opened = makeTask({ id: 'task-1', content: '元の名前' });
+/** The note the row stands in, as the vault holds it: the row on its first line, above any heading. */
+const NOTE = '- [ ] Test task @2026-03-11\n';
+
+/**
+ * A host on a row, its writes answered as `written` says; `bound` false for a
+ * hub with no form (a read-only row). The vault holds `notes`, each path to its
+ * content, read as `read` answers.
+ */
+function hostAnswering(written: boolean, fresh: Task | undefined, refused: IndexRefusal | null = REFUSED, bound = true, opened = makeTask({ id: 'task-1', content: '元の名前' }), notes: Record<string, string> = { 'note.md': NOTE }) {
     const updateTask = vi.fn(async (): Promise<WriteAnswer> => (written ? { written: true } : { written: false, refused }));
     /** The index's copy of the row; the host reads it once as it is made. */
     let copy: Task | undefined = opened;
-    const getTask = vi.fn((_id: string) => copy);
+    /** Rows other than the one the hub is on, by name: its parent. */
+    const others = new Map<string, Task>();
+    const getTask = vi.fn((id: string) => (id === 'task-1' ? copy : others.get(id)));
     const listeners: ((taskId?: string) => void)[] = [];
     const onChange = vi.fn((listener: (taskId?: string) => void) => {
         listeners.push(listener);
@@ -45,9 +59,14 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
 
     const told: string[] = [];
     const follow = vi.fn((row: Task | undefined) => { told.push(`follow:${row?.content ?? 'none'}`); });
+    const cachedRead = vi.fn(async (file: TFile) => notes[file.path]);
+    const vault = {
+        getAbstractFileByPath: (path: string) => (path in notes ? Object.assign(new TFile(), { path }) : null),
+        cachedRead,
+    };
     const host = new RowHost(opened, {
-        app: {} as never,
-        plugin: { settings: { reuseExistingTab: true } } as never,
+        app: { vault } as never,
+        plugin: { settings: { ...DEFAULT_SETTINGS, reuseExistingTab: true } } as never,
         index: { getTask, onChange } as never,
         operations: { updateTask } as never,
     }, follow);
@@ -74,7 +93,7 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
         copy = row;
         for (const listener of [...listeners]) listener(taskId);
     };
-    return { host, form, panel, told, change, listeners, updateTask, getTask };
+    return { host, form, panel, told, change, listeners, updateTask, getTask, others, notes, cachedRead };
 }
 
 describe('RowHost.put', () => {
@@ -222,7 +241,8 @@ describe('RowHost following the row', () => {
         h.change(undefined);
         h.change(undefined);
         expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
-        expect(h.told).toEqual([`shut:${t('modal.hub.taskMissing')}`, 'follow:none', 'follow:none']);
+        // Drawn again with it, where the row stood is no longer said.
+        expect(h.told).toEqual([`shut:${t('modal.hub.taskMissing')}`, 'form', 'follow:none', 'follow:none']);
 
         h.told.length = 0;
         h.change(makeTask({ id: 'task-1', content: '戻った' }));
@@ -258,6 +278,113 @@ describe('RowHost following the row', () => {
 
         expect(h.listeners).toHaveLength(0);
         h.change(makeTask({ id: 'task-1', content: '外の名前' }));
+        expect(h.told).toEqual([]);
+    });
+});
+
+/** Let the reads the host asked of the vault answer. */
+async function settle(): Promise<void> {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+}
+
+describe('RowHost.shown', () => {
+    const NOTE_UNDER = ['# 予定', '- [ ] 親', '    - [ ] 子', '## 来週', '- [ ] 下', ''].join('\n');
+    const child = (over: Partial<Task> = {}) => makeTask({ id: 'task-1', file: 'n.md', line: 2, originalText: '    - [ ] 子', content: '子', parentId: 'parent', reading: 'r1', ...over });
+
+    it('says the note and, once the hub has opened and the note is read, the heading the row stands under, drawing the form again', async () => {
+        const opened = makeTask({ id: 'task-1', file: 'n.md', line: 4, originalText: '- [ ] 下', content: '下', reading: 'r1' });
+        const h = hostAnswering(true, opened, REFUSED, true, opened, { 'n.md': NOTE_UNDER });
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: undefined, parent: null });
+
+        h.host.attach(h.panel);
+        await settle();
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: '来週', parent: null });
+        expect(h.told).toEqual(['form']);
+    });
+
+    it('says the parent\'s text for a row under a parent, and draws the form again as the parent changes', async () => {
+        const h = hostAnswering(true, child(), REFUSED, true, child(), { 'n.md': NOTE_UNDER });
+        h.others.set('parent', makeTask({ id: 'parent', content: '親' }));
+        h.host.attach(h.panel);
+        await settle();
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: '予定', parent: '親' });
+
+        h.told.length = 0;
+        h.others.set('parent', makeTask({ id: 'parent', content: '親2' }));
+        h.change(child(), 'parent');
+        expect(h.told).toEqual(['form']);
+        expect(h.host.shown()?.parent).toBe('親2');
+    });
+
+    it('says none for a row above the note\'s first heading', async () => {
+        const h = hostAnswering(true, undefined);
+        h.host.attach(h.panel);
+        await settle();
+        expect(h.host.shown()).toEqual({ note: 'note.md', heading: null, parent: null });
+    });
+
+    it('reads the heading again as the row moves, not on a change that leaves it where it was read', async () => {
+        const h = hostAnswering(true, child(), REFUSED, true, child(), { 'n.md': NOTE_UNDER });
+        h.host.attach(h.panel);
+        await settle();
+        expect(h.cachedRead).toHaveBeenCalledTimes(1);
+
+        h.change(child({ content: '子2' }));
+        await settle();
+        expect(h.cachedRead).toHaveBeenCalledTimes(1);
+
+        // Moved under the next heading, a parent no more, in the note as written.
+        h.notes['n.md'] = ['# 予定', '- [ ] 親', '## 来週', '- [ ] 子', '- [ ] 下', ''].join('\n');
+        h.change(child({ line: 3, originalText: '- [ ] 子', parentId: undefined, reading: 'r2' }));
+        await settle();
+        expect(h.cachedRead).toHaveBeenCalledTimes(2);
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: '来週', parent: null });
+    });
+
+    it('keeps the heading as it was while the note holds lines the index has not read, reading it again once the index tells of the row', async () => {
+        const h = hostAnswering(true, child(), REFUSED, true, child(), { 'n.md': NOTE_UNDER });
+        h.host.attach(h.panel);
+        await settle();
+
+        // The note written with a heading above the row; the index tells of the row before it has read the note.
+        h.notes['n.md'] = ['# 予定', '- [ ] 親', '## 今日', '    - [ ] 子', ''].join('\n');
+        h.change(child({ reading: 'r2' }));
+        await settle();
+        expect(h.host.shown()?.heading).toBe('予定');
+
+        h.change(child({ line: 3, reading: 'r3' }));
+        await settle();
+        expect(h.host.shown()?.heading).toBe('今日');
+    });
+
+    it('says nothing once the row is gone, and the heading again once it is back', async () => {
+        const h = hostAnswering(true, child(), REFUSED, true, child(), { 'n.md': NOTE_UNDER });
+        h.host.attach(h.panel);
+        await settle();
+
+        h.change(undefined);
+        expect(h.host.shown()).toBeNull();
+
+        h.change(child());
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: undefined, parent: null });
+        await settle();
+        expect(h.host.shown()?.heading).toBe('予定');
+    });
+
+    it('leaves the heading unread for a note it cannot read', async () => {
+        const h = hostAnswering(true, child(), REFUSED, true, child(), {});
+        h.host.attach(h.panel);
+        await settle();
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: undefined, parent: null });
+        expect(h.told).toEqual([]);
+    });
+
+    it('takes no answer that comes once the hub has closed', async () => {
+        const h = hostAnswering(true, child(), REFUSED, true, child(), { 'n.md': NOTE_UNDER });
+        h.host.attach(h.panel);
+        h.host.dispose();
+        await settle();
+        expect(h.host.shown()?.heading).toBeUndefined();
         expect(h.told).toEqual([]);
     });
 });

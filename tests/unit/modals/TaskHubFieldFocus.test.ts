@@ -33,7 +33,8 @@ function setUp(opensOn?: TaskHubFocusField) {
     Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
     const root = doc.root();
     const task = makeTask({ id: 'task-1', content: 'とても長い名前のタスク', properties: byKey({ owner: { type: 'text', text: 'you', spelling: 'you' } }) });
-    const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
+    // No note to read the heading the row stands under from.
+    const app = { keymap: { pushScope: () => { }, popScope: () => { } }, vault: { getAbstractFileByPath: () => null } } as never;
     const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } } as never;
     const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
     const host = new RowHost(task, { app, plugin, index, operations: { updateTask: vi.fn(async () => ({ written: true })) } as never }, () => { });

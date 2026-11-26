@@ -12,7 +12,7 @@ import { TaskHubSource } from './TaskHubSource';
 import { TaskHubSourceView } from './TaskHubSourceView';
 import { RowHost } from './RowHost';
 import { DraftHost } from './DraftHost';
-import type { PlaceMaker, PanelHost } from './HubHost';
+import type { HubForm, HubPlace, PlaceMaker, PanelHost } from './HubHost';
 import type { CreatePlace, CreatePlaces } from '../../services/data/CreatePlaces';
 import type { DraftSeed } from '../../services/data/TaskDraft';
 import { indentUnit } from '../../utils/ObsidianConfig';
@@ -159,13 +159,18 @@ export class TaskHubPanel {
     private readonly turn: Turn = { requestClose: () => this.overlay.requestClose() };
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
+    /** A row read only: where it stands, in the form's place, which has no field. */
+    private placeOnly: PlaceOnly | null = null;
     private source: HubSource | null = null;
 
     /**
      * Open the hub on a row the note already has (a segment of a split task
      * opens its row's): its host writes each change to the row at once and
      * follows the row in the index (`RowHost`), and the source mode edits
-     * the row and its subtree, following the row as the host does.
+     * the row and its subtree, following the row as the host does. Its basic
+     * tab, or, on a row that is read only, the place under the notice, shows
+     * where the row stands with no field (`PlaceShown`): the note, the
+     * heading and the parent the host reads.
      */
     static openRowHub(app: App, task: Task, deps: TaskHubDeps, options: TaskHubPanelOptions = {}): Promise<void> {
         let source: TaskHubSource | null = null;
@@ -195,7 +200,8 @@ export class TaskHubPanel {
             }, view);
             return source;
         };
-        return new TaskHubPanel(app, host, deps, options, { source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: null }).open();
+        const makePlace: PlaceMaker = (parent) => new PlaceShown(parent, () => host.shown());
+        return new TaskHubPanel(app, host, deps, options, { source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: makePlace }).open();
     }
 
     /**
@@ -238,7 +244,7 @@ export class TaskHubPanel {
                     answered: (answer) => host.answered(answer),
                 },
             })
-            : (parent) => new PlaceShown(parent, () => host.shown());
+            : (parent) => new PlaceShown(parent, () => host.shown(), { why: t('modal.newTask.childFixed') });
         const options: TaskHubPanelOptions = { focusField: place === null ? 'place' : 'name' };
         return new TaskHubPanel(app, host, deps, options, { source: null, inert: true, turns: null, place: makePlace }).open();
     }
@@ -313,6 +319,10 @@ export class TaskHubPanel {
                 cls: 'task-hub__read-only-notice',
                 text: t('modal.hub.readOnlyNotice'),
             });
+            if (this.shape.place) {
+                this.placeOnly = new PlaceOnly(this.shape.place(formHost));
+                this.host.bind(this.placeOnly);
+            }
         } else {
             // The body lays the form's tabs out with the card (`_task-hub.css`).
             bodyEl.addClass('task-hub__body--tabs');
@@ -380,6 +390,8 @@ export class TaskHubPanel {
         this.source?.dispose();
         this.source = null;
         this.form?.dispose();
+        this.placeOnly?.dispose();
+        this.placeOnly = null;
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
         this.form = null;
@@ -388,5 +400,29 @@ export class TaskHubPanel {
     /** Close now, asking nothing: a navigation away, or a destructive action. */
     close(): void {
         this.overlay.close();
+    }
+}
+
+/**
+ * The form of a hub on a row that is read only: no field, only where the
+ * task stands (the entry's place), drawn again as the host tells a form to.
+ * There is nothing to shut, to write or to create.
+ */
+class PlaceOnly implements HubForm {
+    constructor(private readonly place: HubPlace) { }
+
+    refresh(): void {
+        this.place.refresh();
+    }
+
+    showShut(): void { }
+    sayWrite(): void { }
+    sayPlace(): void { }
+    showDraft(): void { }
+    create(): void { }
+    notCreated(): void { }
+
+    dispose(): void {
+        this.place.dispose();
     }
 }
