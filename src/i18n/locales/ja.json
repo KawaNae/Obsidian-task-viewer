@@ -702,7 +702,7 @@
     "reserved": "予約されたキーです。",
     "reservedField": "{{key}} は {{field}} の欄で入力してください。",
     "keyListMark": "箇条書きや引用の記号、#、コードの囲み（~~~）で始まるキーは使えません。",
-    "keyHasRow": "{{key}} にはもう欄があります。その欄で直してください。",
+    "keyHasRow": "{{key}} というキーは既にあるため追加できません。",
     "duplicate": "同じ値がほかにあります。"
   },
   "validation": {

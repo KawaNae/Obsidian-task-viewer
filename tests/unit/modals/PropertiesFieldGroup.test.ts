@@ -160,12 +160,12 @@ describe('the add row takes only a key no row stands for', () => {
         s.addKey().focus();
         s.addKey().type('AREA');
         s.addValue().type('x');
-        expect(s.keySays()).toEqual(['Area already has a field. Edit it there.']);
+        expect(s.keySays()).toEqual(['The key Area already exists, so it cannot be added.']);
         s.addKey().enter();
         s.leave();
         expect(s.writes).toEqual([]);
         expect([s.addKey().value, s.addValue().value]).toEqual(['AREA', 'x']);
-        expect(s.keySays()).toEqual(['Area already has a field. Edit it there.']);
+        expect(s.keySays()).toEqual(['The key Area already exists, so it cannot be added.']);
     });
 
     it('refuses a key as the hub closes: saved nothing, and listed as what cannot be saved', () => {
@@ -186,7 +186,7 @@ describe('the add row takes only a key no row stands for', () => {
             s.addKey().focus();
             s.addKey().type(typed);
             s.addKey().enter();
-            expect(s.keySays(), typed).toEqual([`${row} already has a field. Edit it there.`]);
+            expect(s.keySays(), typed).toEqual([`The key ${row} already exists, so it cannot be added.`]);
         }
         expect(s.writes).toEqual([]);
     });
@@ -198,7 +198,7 @@ describe('the add row takes only a key no row stands for', () => {
         s.addKey().type('Tags2');
         s.addKey().enter();
         expect(s.writes).toEqual([]);
-        expect(s.keySays()).toEqual(['tags2 already has a field. Edit it there.']);
+        expect(s.keySays()).toEqual(['The key tags2 already exists, so it cannot be added.']);
     });
 
     it('refuses a key starting as a list item, a # or a code fence does, and a reserved key naming the field that edits it', () => {
