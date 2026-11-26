@@ -5,6 +5,7 @@ import { editorOn, type DraftEditor, type EditorOnHooks } from '../form/source/S
 import { FormActions } from '../form/FormActions';
 import { IssueBoard } from '../form/FormIssue';
 import type { SourceSurface, SourceViewState } from './TaskHubSource';
+import type { SourceSlots } from './TaskHubPanel';
 
 /** What the view's controls do: the source mode's operations (`TaskHubSource`). */
 export interface SourceViewActions {
@@ -19,16 +20,17 @@ export interface SourceViewActions {
 
 /**
  * The hub's source mode as it looks: the switch between the form and the
- * source at the end of the bar above them, and, in the source, the editor with one row of controls
- * under it, why the last apply wrote nothing, and what is left once the row
- * is lost. It draws what the mode's state says (`SourceViewState`) and does
- * nothing of its own.
+ * source on the title's line, why the source cannot open above the card,
+ * and, in the source, the editor with one row of controls under it, why the
+ * last apply wrote nothing, and what is left once the row is lost. It draws
+ * what the mode's state says (`SourceViewState`) and does nothing of its own.
  *
  * The switch is two icon buttons, the one shown marked active: the form by
  * the pencil and the source by the code icon, the icons Obsidian's status bar
  * tells Live Preview and the source mode by. Their names are their labels
- * and tooltips (`aria-label`). It stands at the bar's end, below the
- * dialog's ×, and why the source cannot open is said at the bar's start.
+ * and tooltips (`aria-label`). Why the source cannot open is the source
+ * button's tooltip, and a line of its own above the card while there is a
+ * reason: the line takes no room otherwise.
  *
  * The row of controls is cancel and apply at its end (`FormActions`), which
  * asks whether to throw the draft away as every form's row does. It stands in
@@ -49,23 +51,19 @@ export class TaskHubSourceView implements SourceSurface {
     private readonly actionsHost: HTMLElement;
     private readonly actions: FormActions;
 
-    /**
-     * @param bar where the switch goes, above the card
-     * @param card the card's element, hidden while the source is open
-     * @param paneHost where the source goes, in the card's place
-     * @param foot where the row of controls goes: the overlay's foot, below the body
-     */
+    private readonly card: HTMLElement;
+
+    /** Built in the panel's slots (`SourceSlots`): the switch, why it cannot open, the card, the source's place and the foot. */
     constructor(
         private readonly app: App,
-        bar: HTMLElement,
-        private readonly card: HTMLElement,
-        paneHost: HTMLElement,
-        foot: HTMLElement,
+        slots: Pick<SourceSlots, 'toggle' | 'shut' | 'card' | 'pane' | 'foot'>,
         actions: SourceViewActions,
     ) {
-        bar.addClass('task-hub__mode-bar');
-        this.shutEl = bar.createSpan({ cls: 'task-hub__mode-shut' });
-        const toggle = bar.createDiv({ cls: 'task-hub__mode-toggle tv-ctrl__segments' });
+        const { toggle, card, pane: paneHost, foot } = slots;
+        this.card = card;
+        this.shutEl = slots.shut;
+        this.shutEl.addClass('task-hub__mode-shut');
+        toggle.addClass('task-hub__mode-toggle', 'tv-ctrl__segments');
         this.viewBtn = modeButton(toggle, 'edit-3', t('modal.hub.source.view'));
         this.sourceBtn = modeButton(toggle, 'code-2', t('modal.hub.source.source'));
         this.viewBtn.addEventListener('click', () => actions.cancel());

@@ -498,7 +498,7 @@
     },
     "sourceChildren": "子の行",
     "hub": {
-      "title": "プロパティを編集",
+      "title": "タスクを編集",
       "unsavedAsk": "保存できない値があります（{{fields}}）",
       "unsavedDiscard": "捨てて閉じる",
       "unsavedFix": "直す",

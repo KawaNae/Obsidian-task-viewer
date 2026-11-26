@@ -15,8 +15,8 @@
     padding: 8px 0;
 }
 
-/* A hub with a form: the body a grid of the source's switch, the card, the
-   source, what the form says of itself, the row of the form's tabs and its
+/* A hub with a form: the body a grid of why the source cannot open, the
+   card, the source, what the form says of itself, the row of the form's tabs and its
    panes, each in an area of its own. The form and the panes' element give
    no box, so their children are the grid's. An area with nothing in it
    takes no height.
@@ -32,13 +32,13 @@
 .tv-overlay__body.task-hub__body--tabs {
     position: relative;
     display: grid;
-    grid-template-areas: "bar" "card" "source" "says" "tabs" "panes";
+    grid-template-areas: "shut" "card" "source" "says" "tabs" "panes";
     grid-template-columns: minmax(0, 1fr);
     align-content: start;
 }
 
-.task-hub__body--tabs > .task-hub__mode-bar {
-    grid-area: bar;
+.task-hub__body--tabs > .task-hub__mode-shut {
+    grid-area: shut;
 }
 
 .task-hub__body--tabs > .task-hub__preview {
@@ -101,17 +101,26 @@
 }
 
 /* --- Preview / source switch (TaskHubSourceView) ---
- * The switch stands at the bar's end, why the source cannot open at its
- * start. The bar is the body's first row, under the head whose title shares
- * its line with the desktop's ×, so the switch meets neither. */
-.task-hub__mode-bar {
+ * The switch stands on the title's line, at its end: before the desktop's ×,
+ * whose room the head keeps at its end (_overlay.css), and alone after the
+ * title in the phone's sheet, which has no ×. The title and the switch are
+ * centred on one another, the title losing its own margin to the line's, so
+ * the line stays centred on the ×. Why the source cannot open is the body's
+ * first row, above the card, shown only while there is a reason. */
+.tv-overlay__panel--dialog .tv-overlay__head.task-hub__head {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding-top: 4px;
+    margin-bottom: 12px;
 }
 
-.task-hub__mode-toggle {
+.task-hub__head > .tv-form__title {
+    margin: 0;
+    min-width: 0;
+}
+
+.task-hub__head > .task-hub__mode-toggle {
+    flex: none;
     margin-inline-start: auto;
 }
 
