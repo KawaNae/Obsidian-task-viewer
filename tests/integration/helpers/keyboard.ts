@@ -18,18 +18,25 @@ import { UNTIL } from './waits';
  *   did show 440ms after the will show (the overlap's transition, 250ms, has
  *   ended long before). Resolves once the did show has been sent
  * - `hideKeyboard()`: the keyboard going (the will hide, then the did hide)
- * - `overlapSettled(root, px)`: wait until the overlap the overlay's root
- *   is laid out by (`--tv-keyboard-overlap`) has come to `px` and no
- *   transition of it runs. The root moves the overlap over a transition, so
- *   what the overlap lays out is read at its end, not after a set time
+ * - `overlapMoving(root)`: whether the overlap the overlay's root is laid
+ *   out by (`--tv-keyboard-overlap`) moves over its transition now
+ * - `keyboardMoving(root)`: whether anything the root moves with the
+ *   keyboard moves over its transition now: the overlap, or the box's
+ *   shift from where it is laid out (`--tv-box-shift`), where the
+ *   stylesheet has one
+ * - `overlapSettled(root, px)`: wait until the overlap has come to `px` and
+ *   nothing the root moves with the keyboard moves (`keyboardMoving`). The
+ *   root moves them over transitions, so what they lay out is read at their
+ *   end, not after a set time
  * - `recordFrames(root, body, field, px, { after, each, ms })`: what is seen
  *   at each animation frame, from the next one on, while the body moves
  *   with the keyboard: the overlap shown (`--tv-keyboard-overlap` as the
  *   root's computed style has it at that frame), the body's `scrollTop`, the
  *   field's bottom (`field`, an element or a function giving one, or null),
- *   the keyboard's top as the overlap lays it out (`innerHeight - overlap`)
- *   and the body's bottom. Resolves to the frames once the overlap has come
- *   to `px` and no transition of it runs (as `overlapSettled` waits), the
+ *   the keyboard's top as the overlap lays it out (`innerHeight - overlap`),
+ *   the body's bottom, and the panel's top as it is seen (`panelTop`, its
+ *   translate and transform among it). Resolves to the frames once the
+ *   overlap has come to `px` and nothing moves (as `overlapSettled` waits), the
  *   `scrollTop` has stayed the same over the last 3 frames, and, given a
  *   promise `after` (`showKeyboardAsIPad`'s), a frame has been seen after it
  *   settled. `each(i, frames)` is called at each frame once it is recorded,
@@ -63,10 +70,12 @@ const hideKeyboard = () => {
 };
 const overlapOf = root => getComputedStyle(root).getPropertyValue('--tv-keyboard-overlap').trim();
 const overlapMoving = root => root.getAnimations().some(a => a.transitionProperty === '--tv-keyboard-overlap');
+const KEYBOARD_MOVES = ['--tv-keyboard-overlap', '--tv-box-shift'];
+const keyboardMoving = root => root.getAnimations().some(a => KEYBOARD_MOVES.includes(a.transitionProperty));
 const overlapSettled = (root, px) => until(
-    () => !overlapMoving(root) && overlapOf(root) === px + 'px',
+    () => !keyboardMoving(root) && overlapOf(root) === px + 'px',
     3000,
-    () => 'the overlap is ' + overlapOf(root) + (overlapMoving(root) ? ', moving' : ''),
+    () => 'the overlap is ' + overlapOf(root) + (keyboardMoving(root) ? ', moving' : ''),
 );
 const recordFrames = (root, body, field, px, { after = null, each = null, ms = 3000 } = {}) => new Promise((resolve, reject) => {
     const frames = [];
@@ -84,6 +93,7 @@ const recordFrames = (root, body, field, px, { after = null, each = null, ms = 3
             field: el ? el.getBoundingClientRect().bottom : null,
             keyboardTop: innerHeight - overlap,
             bodyBottom: body.getBoundingClientRect().bottom,
+            panelTop: body.closest('.tv-overlay__panel').getBoundingClientRect().top,
         });
         try {
             each?.(frames.length - 1, frames);
@@ -94,11 +104,11 @@ const recordFrames = (root, body, field, px, { after = null, each = null, ms = 3
         const last = frames.slice(-3);
         const still = last.length === 3 && last.every(f => f.scrollTop === last[2].scrollTop);
         if (afterFrom !== null && frames.length > afterFrom && still
-            && !overlapMoving(root) && overlapOf(root) === px + 'px') {
+            && !keyboardMoving(root) && overlapOf(root) === px + 'px') {
             resolve(frames);
         } else if (performance.now() - t0 > ms) {
             reject(new Error('timed out after ' + ms + ' ms recording frames: the overlap is ' + overlapOf(root)
-                + (overlapMoving(root) ? ', moving' : '') + ', the scrollTops last ' + last.map(f => f.scrollTop).join(',')
+                + (keyboardMoving(root) ? ', moving' : '') + ', the scrollTops last ' + last.map(f => f.scrollTop).join(',')
                 + (afterFrom === null ? ', waiting for what came after' : '')));
         } else {
             requestAnimationFrame(step);
