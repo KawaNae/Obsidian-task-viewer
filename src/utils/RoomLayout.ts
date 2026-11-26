@@ -5,8 +5,26 @@
  * the body. Nothing here decides; the room asks.
  */
 
-/** The CSS variable on the overlay's root: how much of the window the keyboard covers (px). */
+/**
+ * The CSS variable on the overlay's root: how much of the window the
+ * keyboard covers (px). The stylesheet moves it over a transition, and
+ * lays the sheet out by it as it moves.
+ */
 export const KEYBOARD_OVERLAP_VAR = '--tv-keyboard-overlap';
+
+/**
+ * The CSS variable on the root: the overlap where its move ends (px), with
+ * no transition. The stylesheet lays the centred box out by it, so the box
+ * is laid out where it goes at once.
+ */
+export const KEYBOARD_OVERLAP_TO_VAR = '--tv-keyboard-overlap-to';
+
+/**
+ * The CSS variable on the root: how far the centred box is drawn from where
+ * it is laid out (px, its translate). The stylesheet moves it over the same
+ * transition as the overlap; it is 0 while nothing moves.
+ */
+export const BOX_SHIFT_VAR = '--tv-box-shift';
 
 /** Where the body and what is typed at stand, under one overlap. */
 export interface Place {
@@ -33,10 +51,20 @@ export class RoomLayout {
     private basePad = 0;
     /** The overlap last written on the root (px), 0 while none is. */
     private written = 0;
+    /** The overlap the box is laid out by, last written on the root (px). */
+    private writtenTo = 0;
+    /** The shift the last write of the overlap moved the box from (px), 0 where it moved nothing. */
+    private shiftedFrom = 0;
 
+    /**
+     * `panel` is the panel `body` stands in, as the box: what it moved by is
+     * read from where it is laid out (its `offsetTop`, which neither its
+     * translate nor its transform moves).
+     */
     constructor(
         private readonly root: HTMLElement,
         private readonly win: Window,
+        private readonly panel: HTMLElement,
         private readonly body: HTMLElement,
     ) {}
 
@@ -45,16 +73,108 @@ export class RoomLayout {
         return this.written;
     }
 
-    /** Give the root an overlap: none at 0. The stylesheet moves what it lays out over its transition. */
+    /** The shift the last write of the overlap moved the box from (px): 0 where it moved nothing. */
+    shiftWritten(): number {
+        return this.shiftedFrom;
+    }
+
+    /**
+     * Give the root an overlap: none at 0. The overlap moves to it over its
+     * transition, and the sheet with it. The box is laid out where the
+     * overlap ends at once, and drawn from where it was seen: its shift is
+     * given what the box moved by, and moves to 0 over the same transition.
+     * So the box moves from where it is seen, at rest or on its way, over
+     * the whole of the transition, slowing to its stop. Where it rests is
+     * the stylesheet's alone: the shift is 0 there.
+     *
+     * A root that shows the overlap at once has the box laid out there at
+     * once too, with no shift: one not laid out yet (an overlay opened over
+     * the keyboard), or a browser that cannot register the variables.
+     */
     writeOverlap(px: number): void {
         this.written = px;
+        this.shiftedFrom = 0;
+        // Written before anything is read: a root not laid out yet is laid
+        // out first with it, and shows it with no transition.
         this.put(px);
+        const shown = this.shownOverlap();
+        if (Math.abs(shown - px) < 0.5) {
+            this.putTo(px);
+            this.putShift(0);
+            return;
+        }
+        const from = this.shownShift() + this.layBox(px);
+        if (Math.abs(from) < 0.5) {
+            this.putShift(0);
+            return;
+        }
+        // The shift is put where the box was seen with the transition held
+        // off, so it is shown there at once, and given 0 once the transition
+        // runs again: it moves from there. The overlap is held where it is
+        // shown meanwhile, the hold cancelling its transition, and given `px`
+        // again with the shift, so the two move together.
+        this.held(() => {
+            this.put(shown);
+            this.putShift(from);
+        });
+        this.put(px);
+        this.putShift(0);
+        this.shiftedFrom = from;
+    }
+
+    /** Lay the box out where the overlap `px` ends, and give how far that moved it (px: where it stood less where it stands). */
+    private layBox(px: number): number {
+        const before = this.panel.offsetTop;
+        this.putTo(px);
+        // A panel not laid out gives no number: nothing moved.
+        return (before - this.panel.offsetTop) || 0;
     }
 
     private put(px: number): void {
+        this.putVar(KEYBOARD_OVERLAP_VAR, px > 0 ? px : 0);
+    }
+
+    private putTo(px: number): void {
+        this.writtenTo = px;
+        this.putVar(KEYBOARD_OVERLAP_TO_VAR, px > 0 ? px : 0);
+    }
+
+    private putShift(px: number): void {
+        this.putVar(BOX_SHIFT_VAR, px);
+    }
+
+    /** Write `name` on the root as `px`: none at 0, the stylesheet's own 0 then. */
+    private putVar(name: string, px: number): void {
         const style = this.root.style;
-        if (px > 0) style.setProperty(KEYBOARD_OVERLAP_VAR, `${px}px`);
-        else style.removeProperty(KEYBOARD_OVERLAP_VAR);
+        if (px !== 0) style.setProperty(name, `${px}px`);
+        else style.removeProperty(name);
+    }
+
+    /**
+     * Run `write` with the root's transition held off, and have the browser
+     * compute the root's style as written before it runs again: a
+     * transition started after moves from what was written here. Holding it
+     * off cancels the transitions under way, and has what is written shown
+     * at once.
+     */
+    private held<T>(write: () => T): T {
+        const style = this.root.style;
+        const transition = style.transition;
+        style.transition = 'none';
+        try {
+            return write();
+        } finally {
+            const computed = this.win.getComputedStyle?.(this.root);
+            computed?.getPropertyValue?.(KEYBOARD_OVERLAP_VAR);
+            computed?.getPropertyValue?.(BOX_SHIFT_VAR);
+            style.transition = transition;
+        }
+    }
+
+    /** `name` as the root's computed style has it now, '' where it cannot be read. */
+    private computed(name: string): string {
+        const style = this.win.getComputedStyle?.(this.root);
+        return typeof style?.getPropertyValue === 'function' ? style.getPropertyValue(name).trim() : '';
     }
 
     /**
@@ -63,19 +183,27 @@ export class RoomLayout {
      * read.
      */
     shownOverlap(): number {
-        const style = this.win.getComputedStyle?.(this.root);
-        const raw = typeof style?.getPropertyValue === 'function'
-            ? style.getPropertyValue(KEYBOARD_OVERLAP_VAR).trim()
-            : '';
+        const raw = this.computed(KEYBOARD_OVERLAP_VAR);
         if (raw === '') return this.written;
         const px = parseFloat(raw);
         return Number.isFinite(px) ? px : this.written;
     }
 
     /**
-     * Where things stand now. The keyboard's top is read where the overlap
-     * shown lays it out, unless `overlap` is given: a panel placed by script
-     * stands over the keyboard's own top, whatever the root shows.
+     * How far the box is drawn from where it is laid out now (px): midway
+     * through its transition while that runs, 0 at rest. 0 where the
+     * computed style cannot be read.
+     */
+    shownShift(): number {
+        const px = parseFloat(this.computed(BOX_SHIFT_VAR));
+        return Number.isFinite(px) ? px : 0;
+    }
+
+    /**
+     * Where things stand now, the box where it is seen. The keyboard's top is
+     * read where the overlap shown lays it out, unless `overlap` is given: a
+     * panel placed by script stands over the keyboard's own top, whatever
+     * the root shows.
      */
     read(field: HTMLElement | null, overlap = this.shownOverlap()): Place {
         return this.measure(field, overlap);
@@ -83,30 +211,39 @@ export class RoomLayout {
 
     /**
      * Where things will stand once the overlap has come to `overlap`, then
-     * the root given `overlap`, moving there from what it shows now.
+     * the root given `overlap` (`writeOverlap`), moving there from what it
+     * shows now.
      *
      * The root's transition is held off while `overlap` is laid out and
-     * read, and the overlap shown is given back before it is let run again:
-     * a transition is started only by a change of the value with it on, so
+     * read, the box laid out by it with no shift, where it comes to rest;
+     * what the root shows is given back before the transition runs again: a
+     * transition is started only by a change of the value with it on, so
      * the root left at `overlap` would show it at once. Holding it off
-     * cancels a transition under way; the one started after runs again from
-     * where that one stood, over the whole of its length.
+     * cancels the transitions under way; those started after run again from
+     * where they stood, over the whole of their length.
      */
     readAt(overlap: number, field: HTMLElement | null): Place {
         const shown = this.shownOverlap();
+        const shift = this.shownShift();
+        const to = this.writtenTo;
         const scrollTop = this.body.scrollTop;
-        const style = this.root.style;
-        const transition = style.transition;
-        style.transition = 'none';
         try {
-            this.put(overlap);
-            return this.measure(field, overlap);
+            return this.held(() => {
+                try {
+                    this.put(overlap);
+                    this.putTo(overlap);
+                    this.putShift(0);
+                    return this.measure(field, overlap);
+                } finally {
+                    // Given back however the read ends, a throw among it, so
+                    // the root is not left laid out at `overlap`, the box
+                    // where it rests.
+                    this.put(shown);
+                    this.putTo(to);
+                    this.putShift(shift);
+                }
+            });
         } finally {
-            // Given back however the read ends, a throw among it, so the
-            // root is not left at `overlap` with its transition held off.
-            this.put(shown);
-            this.win.getComputedStyle?.(this.root)?.getPropertyValue?.(KEYBOARD_OVERLAP_VAR);
-            style.transition = transition;
             this.writeOverlap(overlap);
             // A body laid out shorter for the read may have had its scroll cut.
             if (this.body.scrollTop !== scrollTop) this.scrollTop = scrollTop;

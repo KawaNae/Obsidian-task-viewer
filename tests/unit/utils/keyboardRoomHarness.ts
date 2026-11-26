@@ -15,10 +15,18 @@
  * it move over a 250ms transition, which the root lists among its animations
  * while it runs. The model keeps the two apart: what was written last
  * (`writtenOverlap`) and what is shown at the time read (`shownOverlap`).
- * As a browser does, the root's inline `transition: none` cancels the
- * transition under way, the overlap shown jumping to what is written, and
- * has what is written while it holds shown at once; a write once the
- * transition is let run again moves from what is shown then.
+ * The box's shift (`--tv-box-shift`, its translate) moves over a transition
+ * of its own, as long and with the same curve. As a browser does, the
+ * root's inline `transition: none` cancels the transitions under way, what
+ * is shown jumping to what is written, and has what is written while it
+ * holds shown at once; a write once the transition is let run again moves
+ * from what is shown then.
+ *
+ * The sheet is laid out by the overlap shown. The box is laid out by the
+ * overlap where the move ends (`--tv-keyboard-overlap-to`, no transition),
+ * and drawn from there by its shift; its panel's `offsetTop` is where it is
+ * laid out, its shift and the opening's scale left out, as a browser gives
+ * it.
  *
  * Time is one fake clock (vitest's fake timers): `setTimeout`, `Date`, the
  * window's `performance.now()` and its animation frames (every 16ms) run on
@@ -31,13 +39,15 @@ import { KeyboardRoom } from '../../../src/utils/KeyboardRoom';
 import { trackKeyboard, untrackAllKeyboards, type KeyboardCause } from '../../../src/utils/KeyboardWatch';
 
 export const OVERLAP_VAR = '--tv-keyboard-overlap';
+export const OVERLAP_TO_VAR = '--tv-keyboard-overlap-to';
+export const SHIFT_VAR = '--tv-box-shift';
 
 /** The room kept between the box and the window's edges, and the least kept above the sheet (`--tv-overlay-edge`). */
 const EDGE = 32;
 /** The room kept above the sheet with no keyboard (`--tv-sheet-room-above`). */
 const SHEET_ROOM_ABOVE = 120;
-/** The overlap's transition (`.tv-overlay { transition: --tv-keyboard-overlap 250ms … }`). */
-const OVERLAP_MS = 250;
+/** The keyboard's move, which the overlap and the box's shift move over (`--tv-keyboard-move: 250ms …`). */
+export const MOVE_MS = 250;
 /** How long an overlay's panel takes to come in (`tv-overlay-slide`, `tv-overlay-pop`). */
 const OPENING_MS = 150;
 /** How long a field's focus ring takes. */
@@ -66,7 +76,7 @@ function cubicBezier(x1: number, y1: number, x2: number, y2: number): (t: number
     };
 }
 
-const OVERLAP_EASE = cubicBezier(0.25, 0.1, 0.25, 1);
+const MOVE_EASE = cubicBezier(0.25, 0.1, 0.25, 1);
 const SLIDE_EASE = cubicBezier(0, 0.55, 0.45, 1);
 const POP_EASE = cubicBezier(0.33, 1, 0.68, 1);
 
@@ -270,6 +280,12 @@ class FakeBody extends FakeNode {
     }
 }
 
+/** The panel the body stands in: its `offsetTop` is where it is laid out, its shift and transform left out. */
+class FakePanel extends FakeNode {
+    constructor(doc: FakeDocument, private readonly room: Room) { super(doc, 'tv-overlay__panel'); }
+    get offsetTop(): number { return this.room.laidOut().panelTop; }
+}
+
 /** An input or a textarea in the body: its bottom stands `at` px from the top of the body's content. */
 export class FakeField extends FakeInputElement {
     constructor(doc: FakeDocument, private readonly room: Room, public at: number, readonly height: number) {
@@ -360,7 +376,10 @@ class FakeWindow extends FakeTarget {
         return {
             get paddingBottom() { return `${room.bodyPadding()}px`; },
             getPropertyValue(name: string) {
-                return el === room.root && name === OVERLAP_VAR ? `${room.shownOverlap()}px` : '';
+                if (el !== room.root) return '';
+                if (name === OVERLAP_VAR) return `${room.shownOverlap()}px`;
+                if (name === SHIFT_VAR) return `${room.shownShift()}px`;
+                return '';
             },
         } as unknown as CSSStyleDeclaration;
     }
@@ -373,7 +392,8 @@ class FakeWindow extends FakeTarget {
  * - `centered`: the desktop's box. The panel is `panel` tall, at most the
  *   window less 64px, its body `bodyHeight` tall starting `bodyOffset` below
  *   the panel's top; the body is all that shrinks where the panel is bound.
- *   The panel stands at max(32, min((H - h) / 2, H - K - 32 - h)).
+ *   The panel is laid out at max(32, min((H - h) / 2, H - K - 32 - h)), K the
+ *   overlap where the move ends, and drawn its shift below that.
  * - `sheet`: the phone's sheet. `above` and `below` are what the panel holds
  *   above and under its body (the head, the row of buttons and their
  *   margins). Its contents stand on the keyboard (the panel's bottom padding
@@ -411,8 +431,10 @@ export interface RoomOptions {
     gives?: number;
     /** Whether the window has a visualViewport. */
     viewport?: boolean;
-    /** Whether the overlap moves over its transition: not where the browser cannot register it (`@property`). */
+    /** Whether the overlap and the shift move over their transitions: not where the browser cannot register them (`@property`). */
     transitions?: boolean;
+    /** How long the box's shift moves (ms): as long as the overlap where not given. */
+    shiftMs?: number;
 }
 
 /** Where the panel and the body stand (client px). */
@@ -424,6 +446,48 @@ export interface RoomLayout {
     /** The body's visible height (its clientHeight). */
     bodyHeight: number;
     scrollHeight: number;
+}
+
+/**
+ * A length on the root that the stylesheet moves over a transition of the
+ * keyboard's move: what was written last, and what is shown at the time read.
+ */
+class Moving {
+    private written = 0;
+    private from = 0;
+    private move: FakeAnimation | null = null;
+    constructor(
+        private readonly clock: () => number,
+        private readonly root: FakeNode,
+        private readonly name: string,
+        private readonly ms: number,
+    ) {}
+
+    shown(): number {
+        const move = this.move;
+        if (!move || move.playState !== 'running') return this.written;
+        return this.from + (this.written - this.from) * MOVE_EASE(move.progress());
+    }
+
+    moving(): boolean {
+        return this.move?.playState === 'running';
+    }
+
+    /** Written `to`: moved there from where it is shown over the transition where `transitions`, else shown there at once. */
+    write(to: number, transitions: boolean): void {
+        const from = this.shown();
+        this.stop();
+        this.written = to;
+        if (!transitions || from === to) return;
+        this.from = from;
+        this.move = new FakeAnimation(this.clock, this.root, this.ms, { transition: this.name });
+    }
+
+    /** The transition under way cancelled: what is written shown at once. */
+    stop(): void {
+        this.move?.cancel();
+        this.move = null;
+    }
 }
 
 /** The part mounted on a room. */
@@ -441,7 +505,7 @@ export class Room {
     readonly doc: FakeDocument;
     readonly win: FakeWindow;
     readonly root: FakeNode & { style: RootStyle };
-    readonly panel: FakeNode;
+    readonly panel: FakePanel;
     readonly body: FakeBody;
 
     /** Every scrollTop asked of the body, as asked: the browser cuts it to how far the body scrolls, and `scrollTop` reads it cut. */
@@ -449,11 +513,10 @@ export class Room {
 
     private readonly t0: number;
     private scroll = 0;
-    /** The overlap last written on the root, 0 while none is (px). */
-    private written = 0;
-    /** The overlap the transition under way starts from, and the transition. */
-    private overlapFrom = 0;
-    private overlapMove: FakeAnimation | null = null;
+    /** The overlap, moving over its transition. */
+    private readonly overlap: Moving;
+    /** The box's shift from where it is laid out, moving over its transition. */
+    private readonly shift: Moving;
     /** The root is laid out once it is in a frame: what is written before then is shown at once, with no transition. */
     private styled = false;
     private opening: FakeAnimation | null = null;
@@ -484,11 +547,16 @@ export class Room {
         if (opts.viewport !== false) this.win.visualViewport = new FakeViewport(this.H);
         const root = new FakeNode(this.doc, 'tv-overlay') as FakeNode & { style: RootStyle };
         root.style = new RootStyle(
-            (name) => { if (name === OVERLAP_VAR) this.overlapWritten(); },
+            (name) => {
+                if (name === OVERLAP_VAR) this.overlap.write(px(root.style.getPropertyValue(name)) ?? 0, this.moves());
+                if (name === SHIFT_VAR) this.shift.write(px(root.style.getPropertyValue(name)) ?? 0, this.moves());
+            },
             () => this.transitionWritten(),
         );
         this.root = root;
-        this.panel = new FakeNode(this.doc, 'tv-overlay__panel');
+        this.overlap = new Moving(clock, root, OVERLAP_VAR, MOVE_MS);
+        this.shift = new Moving(clock, root, SHIFT_VAR, opts.shiftMs ?? MOVE_MS);
+        this.panel = new FakePanel(this.doc, this);
         this.body = new FakeBody(this.doc, this);
         this.root.append(this.panel);
         this.panel.append(this.body);
@@ -535,6 +603,7 @@ export class Room {
         const part = new KeyboardRoom(
             this.root as unknown as HTMLElement,
             this.win as unknown as Window,
+            this.panel as unknown as HTMLElement,
             this.body as unknown as HTMLElement,
             { opening: () => this.opened(), movesWithOverlap: () => movesWithOverlap },
         );
@@ -606,36 +675,46 @@ export class Room {
         return this.root.style.vars.get(OVERLAP_VAR);
     }
 
-    /** The overlap the stylesheet lays out now, midway through its transition or at rest (px). */
+    /** The overlap the stylesheet shows now, midway through its transition or at rest (px). */
     shownOverlap(): number {
-        const move = this.overlapMove;
-        if (!move || move.playState !== 'running') return this.written;
-        return this.overlapFrom + (this.written - this.overlapFrom) * OVERLAP_EASE(move.progress());
+        return this.overlap.shown();
     }
 
-    /** A write on the root: the overlap moves from where it is shown to what was written. */
-    private overlapWritten(): void {
-        const value = this.root.style.vars.get(OVERLAP_VAR);
-        const to = value === undefined ? 0 : (px(value) ?? 0);
-        const from = this.shownOverlap();
-        this.overlapMove?.cancel();
-        this.overlapMove = null;
-        this.written = to;
-        if (!this.styled || !this.transitions || this.root.style.transition === 'none' || from === to) return;
-        this.overlapFrom = from;
-        this.overlapMove = new FakeAnimation(() => this.now(), this.root, OVERLAP_MS, { transition: OVERLAP_VAR });
+    /** The overlap where the move ends, as written for the box (px): 0 while none is. */
+    overlapTo(): number {
+        return px(this.root.style.vars.get(OVERLAP_TO_VAR) ?? '') ?? 0;
     }
 
-    /** The root's transition held off: the one under way is cancelled, what is written shown at once. */
+    /** The box's shift as written on the root; undefined while none is. */
+    writtenShift(): string | undefined {
+        return this.root.style.vars.get(SHIFT_VAR);
+    }
+
+    /** The box's shift shown now, midway through its transition or at rest (px). */
+    shownShift(): number {
+        return this.shift.shown();
+    }
+
+    /** Whether a write on the root moves over the transition now: not before the root is laid out, nor while it is held off. */
+    private moves(): boolean {
+        return this.styled && this.transitions && this.root.style.transition !== 'none';
+    }
+
+    /** The root's transition held off: those under way are cancelled, what is written shown at once. */
     private transitionWritten(): void {
         if (this.root.style.transition !== 'none') return;
-        this.overlapMove?.cancel();
-        this.overlapMove = null;
+        this.overlap.stop();
+        this.shift.stop();
     }
 
     /** Whether the overlap moves over its transition now. */
     overlapMoving(): boolean {
-        return this.overlapMove?.playState === 'running';
+        return this.overlap.moving();
+    }
+
+    /** Whether the box's shift moves over its transition now. */
+    shiftMoving(): boolean {
+        return this.shift.moving();
     }
 
     // --- Other things that move in the root ---
@@ -801,27 +880,40 @@ export class Room {
         return { height: s.height, maxHeight: s.maxHeight, paddingBottom: s.paddingBottom };
     }
 
-    /** Where the panel and the body stand now: under the overlap shown, the panel moved as far as it has come in. */
+    /** Where the panel and the body are laid out now: the sheet under the overlap shown, the box under where it ends; no shift nor transform. */
+    laidOut(): RoomLayout {
+        return this.layoutAt(this.shownOverlap(), this.overlapTo());
+    }
+
+    /**
+     * Where the panel and the body are seen now: as laid out, the panel
+     * moved as far as it has come in, and the box drawn its shift from there
+     * (a translate, applied after the transform's scale about the laid-out
+     * box's middle).
+     */
     layout(): RoomLayout {
-        const l = this.layoutAt(this.shownOverlap());
+        const l = this.laidOut();
         const a = this.opening;
-        if (!a || a.playState !== 'running') return l;
+        const opening = a !== null && a.playState === 'running';
         if (this.shape.kind === 'sheet') {
+            if (!opening) return l;
             const dy = (1 - SLIDE_EASE(a.progress())) * (l.panelBottom - l.panelTop);
             return { ...l, panelTop: l.panelTop + dy, panelBottom: l.panelBottom + dy, bodyTop: l.bodyTop + dy, bodyBottom: l.bodyBottom + dy };
         }
-        const scale = 0.96 + 0.04 * POP_EASE(a.progress());
+        const scale = opening ? 0.96 + 0.04 * POP_EASE(a.progress()) : 1;
         const mid = (l.panelTop + l.panelBottom) / 2;
-        const at = (y: number) => mid + (y - mid) * scale;
+        const dy = this.shownShift();
+        const at = (y: number) => mid + (y - mid) * scale + dy;
         return { ...l, panelTop: at(l.panelTop), panelBottom: at(l.panelBottom), bodyTop: at(l.bodyTop), bodyBottom: at(l.bodyBottom) };
     }
 
     /**
      * Where the panel and the body stand at rest under an overlap of
      * `overlap` px, with the body's inline height and padding as they are
-     * now: the stylesheet's layout, in one place.
+     * now: the stylesheet's layout, in one place. The box is laid out by
+     * `to`, the overlap where the move ends, which is `overlap` at rest.
      */
-    layoutAt(overlap: number): RoomLayout {
+    layoutAt(overlap: number, to = overlap): RoomLayout {
         const H = this.H;
         const pad = this.bodyPadding();
         const s = this.body.style;
@@ -836,7 +928,7 @@ export class Room {
             const { panel, bodyOffset, bodyHeight } = this.shape;
             const h = Math.min(panel, H - 2 * EDGE);
             const free = H - 2 * EDGE - h;
-            const panelTop = EDGE + Math.max(0, Math.min(free / 2, free - overlap));
+            const panelTop = EDGE + Math.max(0, Math.min(free / 2, free - to));
             const height = lockedHeight(bodyHeight - (panel - h));
             const bodyTop = panelTop + bodyOffset;
             const given = this.gives * (pad - this.basePadding);

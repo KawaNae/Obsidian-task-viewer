@@ -407,7 +407,7 @@ export class OverlayShell implements ClosableOverlay {
         // before the opening is watched, so it is asked of as a function.
         // An anchored panel is placed by script on the keyboard's events,
         // unless it is a phone's sheet (its handle shown).
-        this.keyboardRoom = new KeyboardRoom(root, hostWin, body, {
+        this.keyboardRoom = new KeyboardRoom(root, hostWin, panel, body, {
             opening: () => this.opening(),
             movesWithOverlap: () => this.mode !== 'anchored' || (this.handleEl?.offsetHeight ?? 0) > 0,
         });

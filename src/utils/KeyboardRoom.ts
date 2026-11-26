@@ -10,9 +10,10 @@ const REST_SLACK = 1;
 
 /**
  * How long the body is moved along with the keyboard at most (ms): far past
- * the overlap's transition (250ms) and the keyboard's own slide (on iPad its
- * did show comes about 440ms after the will show), so it is reached only
- * where the overlap never gets where it was given.
+ * the keyboard's move in the stylesheet (`--tv-keyboard-move`, 250ms), which
+ * the overlap and the box's shift move over, and the keyboard's own slide
+ * (on iPad its did show comes about 440ms after the will show), so it is
+ * reached only where the overlap or the shift never gets where it was given.
  */
 const MOVE_LIMIT_MS = 1000;
 
@@ -22,7 +23,8 @@ export interface KeyboardRoomOptions {
     opening?: () => Promise<void> | null;
     /**
      * Whether the panel's place follows the overlap alone (the box, the
-     * sheet). Not for a panel placed by script on the keyboard's events (an
+     * sheet: the box by where it ends and its shift, the sheet by the overlap
+     * shown). Not for a panel placed by script on the keyboard's events (an
      * anchored popover), which is measured a frame after each.
      */
     movesWithOverlap?: () => boolean;
@@ -192,8 +194,12 @@ function restOf(place: Place, ref: number, room: Room, scroll: Scroll): Rest {
  * root is told how much of it the keyboard covers, as the CSS variable
  * `--tv-keyboard-overlap` (`keyboardOverlap`: `innerHeight - keyboardTop` in
  * whole px), written as the keyboard is told. The stylesheet lays out the
- * sheet and the box by it, and moves it over a transition of 250ms, so they
- * move with the keyboard. With no keyboard, nothing is set.
+ * sheet by it, and moves it over a transition of 250ms, so the sheet moves
+ * with the keyboard. The box is laid out at once where the overlap ends, and
+ * drawn from where it was seen by a shift that moves to 0 over the same
+ * transition (`RoomLayout.writeOverlap`), so it moves the whole of the
+ * transition, whichever way the keyboard goes. With no keyboard, nothing is
+ * set.
  *
  * Where the body rests once the keyboard is up (its scrollTop, its height
  * locked or not and its padding) is the body as it last stood at rest, the
@@ -219,10 +225,10 @@ function restOf(place: Place, ref: number, room: Room, scroll: Scroll): Rest {
  * held where it stood: the browser scrolling it meanwhile (on iPad, by tens
  * of px as the keyboard rises) is written over at the next frame. The body
  * is held so from the keyboard's will show until its did show and the
- * overlap's transition have both ended, at most 1000ms. While the overlay
- * still opens (its panel sliding up), the body is held and nothing is read,
- * since the field stands midway; once it has opened, the body moves along
- * from there.
+ * transitions of the overlap and the box's shift have all ended, at most
+ * 1000ms. While the overlay still opens (its panel sliding up), the body is
+ * held and nothing is read, since the field stands midway; once it has
+ * opened, the body moves along from there.
  *
  * Once the keyboard is up, a field focused or a caret moving below the
  * keyboard's top has the body measured so at the next frame, and scrolled
@@ -276,17 +282,19 @@ export class KeyboardRoom {
     private readonly gestureHandler = () => this.onGesture();
 
     /**
-     * `body` is the body that scrolls in the overlay `root`. It is given
-     * here, before `attach`, so a keyboard already open as the overlay
-     * attaches has the body's scrollTop kept from the start.
+     * `body` is the body that scrolls in the overlay `root`, and `panel` the
+     * panel it stands in, which the box moves. They are given here, before
+     * `attach`, so a keyboard already open as the overlay attaches has the
+     * body's scrollTop kept from the start.
      */
     constructor(
         private readonly root: HTMLElement,
         private readonly win: Window,
+        panel: HTMLElement,
         private readonly body: HTMLElement,
         private readonly options: KeyboardRoomOptions = {},
     ) {
-        this.layout = new RoomLayout(root, win, body);
+        this.layout = new RoomLayout(root, win, panel, body);
     }
 
     attach(): void {
@@ -454,6 +462,9 @@ export class KeyboardRoom {
 
         if (read === null) {
             this.layout.writeOverlap(overlap);
+            logDebug(
+                `[kb] plan ${opening ? 'deferred opening' : 'held'}` +
+                ` overlap=${Math.round(shown)}->${overlap}${this.shiftNote()}`);
             const run = this.startRun('show', {
                 fromTop, toTop: fromTop, ref, lackFrom: 0, lackTo: 0,
                 overlapFrom: shown, overlapTo: overlap, since, deferred: opening !== null, subjectAt: null,
@@ -462,7 +473,6 @@ export class KeyboardRoom {
                 roomBefore, roomAfter: roomBefore,
             });
             if (opening) {
-                logDebug(`[kb] plan deferred opening overlap=${Math.round(shown)}->${overlap}`);
                 void opening.then(() => {
                     if (this.run === run && this.attached) this.show(this.layout.writtenOverlap());
                 });
@@ -479,15 +489,20 @@ export class KeyboardRoom {
             this.planned = end.top;
             logDebug(
                 `[kb] plan lack=${Math.round(end.lack)} covered=${covered(rest)} pad=${Math.round(end.pad)}` +
-                ` scroll=${tenth(fromTop)}->${tenth(end.top)} overlap=${Math.round(shown)}->${overlap}`);
+                ` scroll=${tenth(fromTop)}->${tenth(end.top)} overlap=${Math.round(shown)}->${overlap}${this.shiftNote()}`);
         } else {
-            logDebug(`[kb] plan none overlap=${Math.round(shown)}->${overlap}`);
+            logDebug(`[kb] plan none overlap=${Math.round(shown)}->${overlap}${this.shiftNote()}`);
         }
         this.startRun('show', {
             fromTop, toTop: end.top, ref: from, lackFrom: lack(now, from), lackTo: lack(rest, from),
             overlapFrom: shown, overlapTo: overlap, since, deferred: false,
             subjectAt: contentAt(rest), roomBefore, roomAfter: { locked: end.locked, pad: end.pad },
         });
+    }
+
+    /** The shift the box was last given to move from, for the log. */
+    private shiftNote(): string {
+        return ` shift=${tenth(this.layout.shiftWritten())}`;
     }
 
     /** The body's lock and padding as they stand. */
@@ -532,15 +547,17 @@ export class KeyboardRoom {
         this.state = 'hiding';
         this.restoreWhenShown = false;
         const ref = this.returnTo;
-        logDebug(
-            `[kb] back from=${tenth(this.layout.scrollTop)} to=${ref === null ? 'none' : tenth(ref)}` +
-            ` planned=${this.planned === null ? 'none' : tenth(this.planned)}`);
         const shown = this.layout.shownOverlap();
+        const log = () => logDebug(
+            `[kb] back from=${tenth(this.layout.scrollTop)} to=${ref === null ? 'none' : tenth(ref)}` +
+            ` planned=${this.planned === null ? 'none' : tenth(this.planned)}` +
+            ` overlap=${Math.round(shown)}->0${this.shiftNote()}`);
         const field = this.activeField();
         this.subject = field;
         // Read only once the overlay has opened, where the field stands at rest.
         if (ref === null || field === null || this.opening() !== null) {
             this.layout.writeOverlap(0);
+            log();
             this.startRun('hide', {
                 fromTop, toTop: ref ?? fromTop, ref: ref ?? fromTop, lackFrom: 0, lackTo: 0,
                 overlapFrom: shown, overlapTo: 0, since: this.now(), deferred: false, subjectAt: null,
@@ -550,6 +567,7 @@ export class KeyboardRoom {
         }
         const now = this.layout.read(field);
         const rest = this.layout.readAt(0, field);
+        log();
         this.startRun('hide', {
             fromTop, toTop: ref, ref, lackFrom: lack(now, ref), lackTo: lack(rest, ref),
             overlapFrom: shown, overlapTo: 0, since: this.now(), deferred: false, subjectAt: null,
@@ -607,8 +625,11 @@ export class KeyboardRoom {
         run.frames++;
 
         const capped = this.now() - run.since > MOVE_LIMIT_MS;
+        // The box still moving by its shift keeps the body's lock and padding
+        // and has it moved along, until the box stands where it rests.
         const arrived = !run.deferred
             && Math.abs(place.overlap - run.overlapTo) < 0.5
+            && Math.abs(this.layout.shownShift()) < 0.5
             && (run.kind === 'hide' || !keyboardMoving(this.win));
         const done = capped || arrived;
         if (run.writes) {
