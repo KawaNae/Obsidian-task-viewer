@@ -8,20 +8,22 @@ import { PropertyKey } from './PropertyKey';
 
 /**
  * A key that starts as a list item's marker does (`- x`, `* x`, `+ x`,
- * `1. x`, `1) x`: the marker and a space or a tab), or with a `#`. The
- * plugin's own reading takes `- - x:: v` as the key `- x`, but written
- * after a property line's bullet, Markdown and Obsidian read the line as
- * a list nested in the item, a heading in it (`# x`), or a tag (`#x`).
- * A marker with no gap after it (`-x`, `1.x`) opens no list, and is taken.
+ * `1. x`, `1) x`: the marker and a space or a tab), with a `#`, or with a
+ * `>`. The plugin's own reading takes `- - x:: v` as the key `- x`, but
+ * written after a property line's bullet, Markdown and Obsidian read the
+ * line as a list nested in the item, a heading in it (`# x`), a tag
+ * (`#x`), or a quote (`> x`, and `>x` too: a quote's `>` needs no space
+ * after it). A list marker with no gap after it (`-x`, `1.x`) opens no
+ * list, and is taken.
  */
-const LIST_MARK = new RegExp(`^(?:${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}|#)`);
+const LIST_MARK = new RegExp(`^(?:${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}|[#>])`);
 
 /**
  * A property's key typed in a field (the hub's new property): the space
  * around it taken off, and refused when
  * - the property line would not read it as the key
  *   (`PROPERTY_KEY_SOURCE`: empty, `:`, `[`, `]`, a backquote)
- * - it starts as a list item's marker or a `#` does ({@link LIST_MARK})
+ * - it starts as a list item's marker, a `#` or a quote's `>` does ({@link LIST_MARK})
  * - the plugin keeps it for itself (`reservedPropertyKeys`: the scope keys,
  *   `tags`), said with the built-in's field when one edits it
  *   (`builtinsByKey`; the scope keys as the settings name them)

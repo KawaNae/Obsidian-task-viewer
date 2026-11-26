@@ -177,9 +177,9 @@ describe('the add row takes only a key no row stands for', () => {
     it('refuses a key starting as a list item or a # does, and a reserved key naming the field that edits it', () => {
         const s = setUp();
         for (const [typed, says] of [
-            ['- x', 'A key cannot start with a list marker or #.'],
-            ['1. x', 'A key cannot start with a list marker or #.'],
-            ['#x', 'A key cannot start with a list marker or #.'],
+            ['- x', 'A key cannot start with a list or quote marker, or #.'],
+            ['1. x', 'A key cannot start with a list or quote marker, or #.'],
+            ['#x', 'A key cannot start with a list or quote marker, or #.'],
             ['TV-COLOR', 'Enter TV-COLOR in the Color field.'],
             ['tags', 'Enter tags in the Tags field.'],
             ['position', 'This key is reserved.'],
