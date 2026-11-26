@@ -16,6 +16,18 @@
  *   A box holding more than the window less 64px (the hub of a row with
  *   many properties, in a window made too low for it) is that tall, at 32px
  *   from the top, under keyboards of any height as with none.
+ * - The box moves there, and back, over the whole of the keyboard's move,
+ *   frame by frame (the panel's top as it is seen, `recordFrames`): from the
+ *   frame after the keyboard is told, toward where it goes only, still on
+ *   its way 200ms on, and slowing to its stop. The keyboard going midway has
+ *   it move on from where it is seen, no frame moving it further than the
+ *   curve can (`frameBound`), back to where it stood. The bounds are kept
+ *   wide (times at least, moves only one way or under a bound that grows
+ *   with a frame's length), so frames dropped under load still pass.
+ * - A box opened over the keyboard (the delete's question, the hub), its
+ *   root laid out by the time the keyboard's room attaches, is laid out
+ *   where the keyboard puts it from its first frame and drawn up from the
+ *   middle by its shift, which moves to 0 over the keyboard's move.
  * - A phone's sheet stands on the keyboard: it keeps its bottom at the
  *   window's and takes the overlap as a padding of its own, its height at
  *   most the window's less the room kept above it, 120px less the overlap
@@ -23,7 +35,8 @@
  *   anchored to a view's toolbar, the hub of the row with many properties in
  *   the low window) leaves max(32, 120 - K) above it; one with
  *   little in it (the delete's question) is as tall as what it holds, which
- *   stands right on the keyboard.
+ *   stands right on the keyboard. It moves by the overlap alone, the box's
+ *   shift 0 at every frame.
  * - A keyboard covering 31px of the window is a keyboard as any other: the
  *   sheet takes its 31px as a padding, its contents raised by that much.
  *
@@ -117,6 +130,43 @@ const lowWindow = async height => {
     };
 };
 const rectOf = el => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; };
+const body = () => panel()?.querySelector('.tv-overlay__body') ?? null;
+/** How far the box is drawn from where it is laid out (\`--tv-box-shift\`, px). */
+const shiftOf = () => parseFloat(getComputedStyle(root()).getPropertyValue('--tv-box-shift')) || 0;
+/** Close the overlay open, and wait for it to have gone. */
+const closeOverlay = async () => {
+    panel().querySelector('.tv-overlay__close').click();
+    await until(() => !document.querySelector('.tv-overlay'));
+};
+/**
+ * What is seen at each animation frame from the next one on, while \`open()\`
+ * opens an overlay: its panel's top as laid out (\`offsetTop\` from the
+ * root's top, which neither the shift nor the open animation moves), the
+ * shift, and whether the panel's open animation runs. Frames with no panel
+ * yet are not recorded. Resolves to the frames once the open animation has
+ * ended and nothing the root moves with the keyboard moves.
+ */
+const recordOpening = open => new Promise((resolve, reject) => {
+    const frames = [];
+    const t0 = performance.now();
+    const step = () => {
+        const p = panel();
+        if (p) {
+            frames.push({
+                t: performance.now() - t0,
+                laidOut: root().getBoundingClientRect().top + p.offsetTop,
+                shift: shiftOf(),
+                opening: p.getAnimations().some(a => a.playState === 'running'),
+            });
+        }
+        const last = frames[frames.length - 1];
+        if (frames.length >= 3 && !last.opening && !keyboardMoving(root())) resolve(frames);
+        else if (performance.now() - t0 > 3000) reject(new Error('timed out recording the opening: ' + frames.length + ' frames'));
+        else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    Promise.resolve().then(open).catch(reject);
+});
 `;
 
 /** What opens each overlay seen, in a snippet after the prelude. */
@@ -366,6 +416,192 @@ describe("the desktop's centered box stays in the window's middle and rises only
     });
 });
 
+/** One frame as `recordFrames` saw it, of what is read here. */
+interface Frame {
+    /** When it was seen, from the keyboard told (ms). */
+    t: number;
+    overlap: number;
+    /** The panel's top as it is seen. */
+    panelTop: number;
+}
+
+/**
+ * The most the box's top may move between two frames `dt` ms apart, the
+ * box moving `distance` px over the keyboard's move (250ms, the stylesheet's
+ * cubic-bezier(0.25, 0.1, 0.25, 1)). That curve is at its steepest 2.29
+ * times its mean, so the box covers at most 2.29 * distance / 250 px a ms.
+ * The frames' times are read in their callbacks, a few ms off the times the
+ * transition was sampled at, so 4ms is added to `dt`, and a quarter and 1px
+ * over all. A frame dropped under load widens `dt` and so the bound with it;
+ * on the Mac at 120 frames a second a move of 168px took 13 to 15px a frame
+ * at most, under the bound's 22px. A box laid out where it goes at once
+ * covers the whole distance in one frame, far over it.
+ */
+function frameBound(distance: number, dt: number): number {
+    return 2.29 * distance / 250 * (dt + 4) * 1.25 + 1;
+}
+
+/** How far each frame's top moved from the one before, from `from` for the first. */
+function stepsOf(frames: Frame[], from: number): number[] {
+    return frames.map((f, i) => f.panelTop - (i === 0 ? from : frames[i - 1].panelTop));
+}
+
+/**
+ * Expect the box's move over `frames`, from `from` to `to`: it has moved by
+ * the second frame and is not where it goes at the first, it moves only
+ * toward `to`, it is still more than 0.5px off `to` at a frame 200ms or more
+ * after the keyboard was told, it stops at `to`, and the last frame it moved
+ * at moved less than the frame it moved most at.
+ */
+function expectOneCurve(frames: Frame[], from: number, to: number): void {
+    const toward = Math.sign(to - from);
+    expect(Math.abs(to - from)).toBeGreaterThan(50);
+    expect(frames.length).toBeGreaterThan(2);
+    expect(Math.abs(frames[0].panelTop - to)).toBeGreaterThan(1);
+    expect(Math.abs(frames[1].panelTop - from)).toBeGreaterThan(0.5);
+    const steps = stepsOf(frames, from);
+    for (const step of steps) expect(step * toward).toBeGreaterThanOrEqual(-0.5);
+    expect(frames.some((f) => f.t >= 200 && Math.abs(f.panelTop - to) > 0.5)).toBe(true);
+    expect(Math.abs(frames[frames.length - 1].panelTop - to)).toBeLessThanOrEqual(1);
+    const moved = steps.map(Math.abs).filter((s) => s > 0.01);
+    expect(moved[moved.length - 1]).toBeLessThan(Math.max(...moved));
+}
+
+describe("the desktop's centered box moves over the whole of the keyboard's move, from the frame after it is told, slowing to its stop", () => {
+    /** The low box (the delete's question) under a keyboard putting it at 32px, the keyboard rising and going, frame by frame. */
+    interface Move {
+        H: number;
+        h: number;
+        /** The box's top as it opened, with no keyboard. */
+        top: number;
+        k: number;
+        show: Frame[];
+        hide: Frame[];
+    }
+
+    it("rises from where it stands to where the keyboard puts it, and goes back the same way as the keyboard goes", () => {
+        const seen = run<Move>(`
+            ${OPEN.question()}
+            const H = innerHeight;
+            const first = rectOf(panel());
+            const k = Math.round(H - 64 - first.height + 100);
+            showKeyboard(k);
+            const show = await recordFrames(root(), body(), null, k);
+            hideKeyboard();
+            const hide = await recordFrames(root(), body(), null, 0);
+            return JSON.stringify({ H, h: first.height, top: first.top, k, show, hide });
+        `);
+        const rest = boxTop(seen.H, seen.h, seen.k);
+        expect(rest).toBeCloseTo(32, 0);
+        expectOneCurve(seen.show, seen.top, rest);
+        expectOneCurve(seen.hide, rest, seen.top);
+    });
+
+    it('turned back midway by the keyboard going, moves on from where it is seen, never jumping a frame, and stops where it stood', () => {
+        const seen = run<Move & { hidAt: number }>(`
+            ${OPEN.question()}
+            const H = innerHeight;
+            const first = rectOf(panel());
+            const k = Math.round(H - 64 - first.height + 100);
+            let hidAt = -1;
+            showKeyboard(k);
+            // The keyboard goes at the first frame some tens of ms on, the box midway.
+            const frames = await recordFrames(root(), body(), null, 0, {
+                each: (i, fs) => {
+                    if (hidAt >= 0 || fs[i].t < 40) return;
+                    hideKeyboard();
+                    hidAt = i;
+                },
+            });
+            return JSON.stringify({ H, h: first.height, top: first.top, k, show: frames, hide: [], hidAt });
+        `);
+        const rest = boxTop(seen.H, seen.h, seen.k);
+        const frames = seen.show;
+        expect(seen.hidAt).toBeGreaterThanOrEqual(0);
+        const turn = frames[seen.hidAt].panelTop;
+        // Midway: moved off where it stood, and short of where the keyboard put it.
+        expect(turn).toBeLessThan(seen.top - 1);
+        expect(turn).toBeGreaterThan(rest + 1);
+        const distance = seen.top - rest;
+        frames.forEach((f, i) => {
+            const before = i === 0 ? null : frames[i - 1];
+            if (before) expect(Math.abs(f.panelTop - before.panelTop)).toBeLessThanOrEqual(frameBound(distance, f.t - before.t));
+        });
+        // Up until it turns, then down only, to where it stood.
+        const low = frames.reduce((at, f, i) => (f.panelTop < frames[at].panelTop ? i : at), 0);
+        expect(low).toBeGreaterThanOrEqual(seen.hidAt);
+        const steps = stepsOf(frames, seen.top);
+        steps.forEach((s, i) => expect(i <= low ? s : -s).toBeLessThanOrEqual(0.5));
+        expect(Math.abs(frames[frames.length - 1].panelTop - seen.top)).toBeLessThanOrEqual(1);
+    });
+});
+
+/** Each frame `recordOpening` saw. */
+interface OpeningFrame {
+    t: number;
+    /** The panel's top as laid out (px from the window's top). */
+    laidOut: number;
+    shift: number;
+    opening: boolean;
+}
+
+describe("the desktop's centered box opened over the keyboard", () => {
+    interface Opened {
+        H: number;
+        /** The box's height, read as it opened with no keyboard first. */
+        h: number;
+        k: number;
+        frames: OpeningFrame[];
+        /** The box's top once it has opened and nothing moves. */
+        rest: number;
+    }
+
+    /**
+     * Open the overlay `open` names with no keyboard to read its height, close
+     * it, tell a keyboard putting it at 32px, and open it again, frame by frame.
+     */
+    function openOverKeyboard(open: 'hub' | 'question', reopen: string): Opened {
+        return run<Opened>(`
+            ${OPEN[open]()}
+            const H = innerHeight;
+            const h = rectOf(panel()).height;
+            await closeOverlay();
+            const k = Math.round(H - 64 - h + 100);
+            showKeyboard(k);
+            const frames = await recordOpening(async () => { ${reopen} });
+            return JSON.stringify({ H, h, k, frames, rest: rectOf(panel()).top });
+        `);
+    }
+
+    /** What opens each box again over the keyboard, in the snippet. */
+    const REOPEN = {
+        question: `
+            await plugin.taskHub.cards.menuHandler.showContextMenu(0, 0, row());
+            menuItem(one => one.titleEl?.textContent === ${JSON.stringify(tr('menu.deleteTask'))});
+        `,
+        hub: 'plugin.openTaskHub(row().id);',
+    } as const;
+
+    for (const [open, name] of [['question', "the delete's question"], ['hub', 'the hub']] as const) {
+        it(`${name}, its root laid out by the time it attaches, is laid out where the keyboard puts it from its first frame and drawn up from the middle over the keyboard's move`, () => {
+            const seen = openOverKeyboard(open, REOPEN[open]);
+            const to = boxTop(seen.H, seen.h, seen.k);
+            const middle = (seen.H - seen.h) / 2;
+            expect(to).toBeCloseTo(32, 0);
+            expect(middle - to).toBeGreaterThan(50);
+            expect(seen.rest).toBeCloseTo(to, 0);
+            expect(seen.frames.some((f) => f.opening)).toBe(true);
+            for (const f of seen.frames) expect(Math.abs(f.laidOut - to)).toBeLessThanOrEqual(1);
+            const shifts = seen.frames.map((f) => f.shift);
+            expect(shifts[0]).toBeGreaterThan((middle - to) / 2);
+            expect(shifts[0]).toBeLessThanOrEqual(middle - to + 1);
+            shifts.forEach((s, i) => { if (i > 0) expect(s).toBeLessThanOrEqual(shifts[i - 1] + 0.5); });
+            expect(seen.frames.some((f) => f.t >= 200 && f.shift > 0.5)).toBe(true);
+            expect(Math.abs(shifts[shifts.length - 1])).toBeLessThan(0.5);
+        });
+    }
+});
+
 /** The room a sheet at its greatest height leaves above it under a keyboard `k` tall. */
 function roomAbove(k: number): number {
     return Math.max(32, 120 - k);
@@ -405,6 +641,27 @@ describe("a phone's sheet stands on the keyboard, the room above it giving way t
         expect(seen.under.top).toBeCloseTo(seen.H - seen.k - held, 0);
         expect(seen.under.top).toBeGreaterThan(121);
         expect(seen.contentsBottom).toBeCloseTo(seen.H - seen.k, 0);
+    });
+
+    it('moves by the overlap alone as the keyboard rises and goes, the box\'s shift 0 at every frame', () => {
+        const seen = run<{ k: number; show: (Frame & { shift: number })[]; hide: (Frame & { shift: number })[] }>(`
+            phoneLayout();
+            await openHub();
+            const k = Math.round(innerHeight / 3);
+            const withShift = (i, fs) => { fs[i].shift = shiftOf(); };
+            showKeyboard(k);
+            const show = await recordFrames(root(), body(), null, k, { each: withShift });
+            hideKeyboard();
+            const hide = await recordFrames(root(), body(), null, 0, { each: withShift });
+            return JSON.stringify({ k, show, hide });
+        `);
+        for (const frames of [seen.show, seen.hide]) {
+            // The overlap moves over frames, the sheet with it.
+            expect(frames.some((f) => f.overlap > 0 && f.overlap < seen.k)).toBe(true);
+            for (const f of frames) expect(f.shift).toBe(0);
+        }
+        const tops = seen.show.map((f) => f.panelTop);
+        expect(tops.some((top, i) => i > 0 && top < tops[i - 1] - 0.5)).toBe(true);
     });
 
     describe('the filter menu anchored to a view\'s toolbar, a sheet on the phone', () => {
