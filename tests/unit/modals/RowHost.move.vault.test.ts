@@ -94,7 +94,7 @@ async function open(lines: string[] = NOTE, opts: { opening?: MoveStart; beforeA
     let typed = true;
     const form: HubForm = {
         refresh: vi.fn(() => { told.push('refresh'); }),
-        showShut: vi.fn(() => { told.push(`shut:${host.shut()}`); }),
+        showShut: vi.fn(() => { const shut = host.shut(); told.push(`shut:${shut && `${shut.reach}:${shut.why}`}`); }),
         sayPut: (why) => { put.push(why); },
         sayWrite: vi.fn(),
         sayPlace: (issues) => { place.push(issues); },
@@ -186,8 +186,8 @@ describe('beginning a move', () => {
         const wait = gate();
         holdRead(h.noteOps, wait.shut);
         const begun = h.host.beginMove('here');
-        expect(h.host.shut()).toBe('');
-        expect(h.told).toContain('shut:');
+        expect(h.host.shut()).toEqual({ reach: 'form', why: null });
+        expect(h.told).toContain('shut:form:null');
         expect(await h.host.put({ content: 'Typed' })).toBe(false);
         wait.open();
         await begun;
@@ -256,7 +256,7 @@ describe('beginning a move', () => {
             await begun;
             expect(h.host.draft()).toBeNull();
             expect(h.source.hold.mock.calls.at(-1)).toEqual([false]);
-            if (meanwhile === 'lost') expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
+            if (meanwhile === 'lost') expect(h.host.shut()).toEqual({ reach: 'form', why: t('modal.hub.taskMissing') });
             live?.dispose();
             live = undefined;
         }
@@ -350,7 +350,7 @@ describe('the move', () => {
         h.move().fieldsChanged({ ...h.move().initial, heading: 'Done' });
         await settle();
         h.form.write();
-        expect(h.host.shut()).toBe(t('modal.hub.move.formShut'));
+        expect(h.host.shut()).toEqual({ reach: 'form', why: t('modal.hub.move.formShut') });
         await vi.waitFor(() => expect(h.panel.close).toHaveBeenCalled());
         expect(h.lines()).toEqual(['# Tasks', '- [ ] Parent', '# Done', '- [ ] Renamed @2026-11-26', '- [ ] Other', '']);
     });
@@ -433,7 +433,7 @@ describe('throwing the move away', () => {
         await h.begin();
         await h.writeOutside(['# Tasks', '- [ ] Other', '']);
         h.host.draft()!.discard!();
-        expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
+        expect(h.host.shut()).toEqual({ reach: 'form', why: t('modal.hub.taskMissing') });
     });
 });
 

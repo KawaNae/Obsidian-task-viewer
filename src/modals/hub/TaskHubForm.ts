@@ -21,7 +21,7 @@ import { TagsFieldGroup } from './fields/TagsFieldGroup';
 import { StyleFieldGroup } from './fields/StyleFieldGroup';
 import { PropertiesFieldGroup } from './fields/PropertiesFieldGroup';
 import { hubFindings, lineOfFinding, lockedFields, type FindingField, type HubFinding } from './HubFindings';
-import type { HubForm, HubHost, HubPlace, PlaceMaker } from './HubHost';
+import type { HubForm, HubHost, HubPlace, HubShut, PlaceMaker } from './HubHost';
 import type { FieldFocus, SelectionOnFocus } from '../../utils/FieldFocus';
 import { placeFocus } from '../../views/sharedUI/FocusPlacement';
 import { TabStrip } from '../../views/sharedUI/TabStrip';
@@ -84,9 +84,9 @@ export interface TaskHubFormDeps {
     foot: HTMLElement;
     /**
      * Builds where the task goes, as the last group of the basic tab: its
-     * fields are shut with the form's, focused as `'place'`, and typing in
-     * them withdraws a close's question as the form's own do. None on a hub
-     * that says no place.
+     * fields are shut only with the whole form (`HubShut.reach`), focused
+     * as `'place'`, and typing in them withdraws a close's question as the
+     * form's own do. None on a hub that says no place.
      */
     place?: PlaceMaker;
     /** The field the hub opens on: the form is built on its tab. None: the basic tab. */
@@ -139,8 +139,11 @@ export interface TaskHubFormDeps {
  * 名前を打って blur せずに閉じたときに、問わずに名前を失わないためである。
  * [戻る] は保存できない欄に、無ければ名前の欄にフォーカスを置く。どちらの
  * ハブでも、[捨てて閉じる] と答えた後はその閉じる手順の中でもう問わない。
- * 最後に、閉じてよいかをホストに聞く（`HubHost.closing`）。欄が止まって
- * いる間は、何も保存せず、問わずにホストに聞く。
+ * 最後に、閉じてよいかをホストに聞く（`HubHost.closing`）。フォームの全部が
+ * 止まっている間は、何も保存せず、問わずにホストに聞く。行の値の欄だけが
+ * 止まっている間は、止まっている欄を保存せず、ホストがまだ書いていないもの
+ * （`HubDraft.changed`）を見て問う。[戻る] は、ホストが編集している所に
+ * フォーカスを引き受ければ（`HubDraft.keep`）そこに、そうでなければ名前の欄に置く。
  *
  * [キャンセル] と右のボタンは、ホストがまだ書いていないものを持つ間だけ出す。
  * フォームは、作るときに形を決めず、ホストが描き直させるたび（`showDraft`）に
@@ -218,7 +221,7 @@ export class TaskHubForm implements HubForm {
         });
         this.fieldCtx = {
             task: () => this.host.task(),
-            isShut: () => this.shut,
+            isShut: () => this.reach !== null,
             put: (updates) => this.host.put(updates),
             app: deps.app,
             plugin: deps.plugin,
@@ -371,7 +374,7 @@ export class TaskHubForm implements HubForm {
     // ==================== コミット ====================
 
     private commitDates(group: DateGroupKey, f: DateTimeFields): Promise<boolean> | void {
-        if (this.shut) return;
+        if (this.reach !== null) return;
         const task = this.host.task();
         const updates =
             group === 'start' ? TaskUpdateBuilder.dateGroup(task, 'start', f.startDate, f.startTime)
@@ -388,12 +391,13 @@ export class TaskHubForm implements HubForm {
      * blur waited for. A value that cannot be saved keeps the hub open and asks
      * whether to throw it away (`'stay'`); on a task not written yet, so does
      * anything it was given, and what is asked about is the whole task. Saved, the host
-     * answers (`HubHost.closing`). While the form is shut nothing is saved
-     * and nothing asked: the host answers at once (a create under way is
-     * waited for).
+     * answers (`HubHost.closing`). While the whole form is shut nothing is
+     * saved and nothing asked: the host answers at once (a create under way
+     * is waited for). While only the row's values are, their fields are not
+     * saved, and what the host holds is asked of.
      */
     beforeClose(): CloseAnswer {
-        const goes = this.shut || this.saveForClose();
+        const goes = this.reach === 'form' || this.saveForClose();
         // What the user said to throw away is thrown away for the close it was said for, and no later one.
         this.thrownAway = false;
         return goes ? this.host.closing() : 'stay';
@@ -424,13 +428,15 @@ export class TaskHubForm implements HubForm {
      * dates do not let be written as it is inherited now, keeps it from
      * being written, and takes the focus (why is said under it); what is
      * typed and reads is put in first, as a close saves it. A question a
-     * close put is withdrawn: writing is acting on what it was about.
+     * close put is withdrawn: writing is acting on what it was about. While
+     * the row's values are shut their fields are neither seen nor put in:
+     * the host's write is asked as it holds them.
      */
     write(): void {
         const draft = this.host.draft();
         if (!draft?.canWrite()) return;
         this.guard.withdraw();
-        const broken = this.dateGroup.ruleBroken()[0];
+        const broken = this.reach === null ? this.dateGroup.ruleBroken()[0] : undefined;
         const first = this.unsaved()[0]?.input ?? (broken && this.dateGroup.getInput(broken));
         if (first) {
             this.focusTo({ to: first });
@@ -444,7 +450,8 @@ export class TaskHubForm implements HubForm {
      * Put in what is typed in every field, as a close saves it, with no
      * question (`HubForm.putTyped`): a value that cannot be saved keeps all
      * of it, and takes the focus. A question a close put is withdrawn once
-     * all is put in: nothing it asked of is left.
+     * all is put in: nothing it asked of is left. While the row's values
+     * are shut nothing is put in from their fields, and all is.
      */
     putTyped(): boolean {
         const first = this.unsaved()[0];
@@ -463,8 +470,9 @@ export class TaskHubForm implements HubForm {
      * asks for, as ×: it asks of what it would lose. Otherwise the fields
      * are saved as for a close, and what would be lost asked about (the
      * answer that throws it away goes on to throw it away); then the host
-     * throws it away with the hub left open. While the fields are shut
-     * nothing is saved and nothing asked.
+     * throws it away with the hub left open. While the whole form is shut
+     * nothing is saved and nothing asked; while only the row's values are,
+     * their fields are not saved, and what the host holds is asked of.
      */
     private cancel(): void {
         const draft = this.host.draft();
@@ -473,7 +481,7 @@ export class TaskHubForm implements HubForm {
             this.deps.requestClose?.();
             return;
         }
-        if (this.shut || this.saveFor('discard')) draft.discard();
+        if (this.reach === 'form' || this.saveFor('discard')) draft.discard();
     }
 
     /**
@@ -497,8 +505,13 @@ export class TaskHubForm implements HubForm {
         else this.tabs.focusTab('basic');
     }
 
-    /** The parts of the form a close asks: the name, the dates, the style, the tags and the properties. */
+    /**
+     * The parts of the form a close asks: the name, the dates, the style,
+     * the tags and the properties. None while they are shut: a field that
+     * takes no edit is neither saved nor asked of.
+     */
     private parts(): ClosingPart[] {
+        if (this.reach !== null) return [];
         const dates: ClosingPart = {
             unsaved: () => this.dateGroup.unsaved().map(key => ({ label: this.dateGroup.labelOf(key), input: this.dateGroup.getInput(key) })),
             discardUnsaved: () => this.dateGroup.discardUnsaved(),
@@ -517,10 +530,10 @@ export class TaskHubForm implements HubForm {
      * the rest is written as it is saved. While it holds something not
      * written yet, the whole of it, once it was given anything: a value typed
      * that cannot be saved, or a change saved (`HubDraft.changed`). Nothing
-     * once the user said to throw it away.
+     * while the whole form is shut, nor once the user said to throw it away.
      */
     private loss(): Loss | null {
-        if (this.shut || this.thrownAway) return null;
+        if (this.reach === 'form' || this.thrownAway) return null;
         const fields = this.unsaved();
         const draft = this.host.draft();
         if (draft) return fields.length > 0 || draft.changed() ? { kind: 'draft' } : null;
@@ -534,12 +547,14 @@ export class TaskHubForm implements HubForm {
 
     /**
      * Keep, as asked: the question is withdrawn, and the first field that
-     * cannot be saved takes the focus; with none (a task not written yet
-     * kept), the name, the first of the fields.
+     * cannot be saved takes the focus; with none (what is held kept), where
+     * the host takes it (`HubDraft.keep`), else the name, the first of the
+     * fields.
      */
     private fix(): void {
         const first = this.unsaved()[0];
         this.guard.keep();
+        if (!first && this.host.draft()?.keep?.()) return;
         const to = first?.input ?? this.nameField.fieldElement();
         if (to) this.focusTo({ to });
     }
@@ -601,27 +616,31 @@ export class TaskHubForm implements HubForm {
         this.renderActions();
     }
 
-    /** Whether the form takes no edit: the host says why (`HubHost.shut`). */
-    private get shut(): boolean {
-        return this.host.shut() !== null;
+    /** How far the form takes no edit now, as the host answers (`HubHost.shut`); null while it takes them all. */
+    private get reach(): HubShut['reach'] | null {
+        return this.host.shut()?.reach ?? null;
     }
 
     /**
      * The fields enabled or not, and the notice of why not, as the host says.
-     * Shut, the form loses nothing to a close (`loss`), so a question a close
-     * put is withdrawn: it would ask of fields that take no answer, beside
-     * the row of what shut them (the source mode's). The values typed stay,
-     * and a close once the form opens again asks of them anew.
+     * Wholly shut, the form loses nothing to a close (`loss`), so a question
+     * a close put is withdrawn: it would ask of fields that take no answer,
+     * beside the row of what shut them. With only the row's values shut, a
+     * question of values that cannot be saved is withdrawn as well, and one
+     * of what the host holds stays: it is still to be answered. The values
+     * typed stay, and a close once the fields open again asks of them anew.
      */
     showShut(): void {
-        const notice = this.host.shut();
-        this.setEnabled(notice === null);
-        this.issues.set('shut', notice ? [{ at: 'form', tone: 'warning', text: notice }] : []);
-        if (notice !== null) this.guard.withdraw();
+        const shut = this.host.shut();
+        this.setEnabled(shut?.reach ?? null);
+        this.issues.set('shut', shut && shut.why !== null ? [{ at: 'form', tone: 'warning', text: shut.why }] : []);
+        if (shut && (shut.reach === 'form' || this.guard.asking?.kind === 'unsaved')) this.guard.withdraw();
     }
 
-    private setEnabled(enabled: boolean): void {
-        this.place?.setEnabled(enabled);
+    /** Each field enabled unless `reach` shuts it: the place's only with the whole form. */
+    private setEnabled(reach: HubShut['reach'] | null): void {
+        this.place?.setEnabled(reach !== 'form');
+        const enabled = reach === null;
         this.nameField?.setEnabled(enabled);
         this.statusField?.setEnabled(enabled);
         this.dateGroup?.setEnabled(enabled);

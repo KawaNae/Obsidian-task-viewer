@@ -228,7 +228,7 @@ describe('DraftHost', () => {
         r.told.length = 0;
         r.host.create();
 
-        expect(r.host.shut()).toBe(t('modal.newTask.formShut'));
+        expect(r.host.shut()).toEqual({ reach: 'form', why: t('modal.newTask.formShut') });
         expect(r.host.creating()).toBe(true);
         expect(r.host.canCreate()).toBe(false);
         expect(r.told).toEqual(['shut:true', 'draft:false:true']);
@@ -451,7 +451,7 @@ describe('DraftHost moved by the place fields', () => {
         expect(r.places.create).not.toHaveBeenCalled();
         expect(r.host.creating()).toBe(true);
         expect(r.host.canCreate()).toBe(false);
-        expect(r.host.shut()).toBe(t('modal.newTask.formShut'));
+        expect(r.host.shut()).toEqual({ reach: 'form', why: t('modal.newTask.formShut') });
         expect(r.told).toEqual(['shut:true', 'draft:false:true']);
         expect(await r.host.put({ content: '後から' })).toBe(false);
         r.host.create();
