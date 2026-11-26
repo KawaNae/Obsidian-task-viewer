@@ -34,8 +34,10 @@ export interface TaskHubPanelOptions {
 
 /** Where the panel lets a source mode be built, and what it may ask of the panel. */
 export interface SourceSlots {
-    /** Where its switch goes, above the card. */
-    bar: HTMLElement;
+    /** Where its switch goes: on the title's line, after the title. */
+    toggle: HTMLElement;
+    /** Where it says why it cannot open: the body's first row, above the card. */
+    shut: HTMLElement;
     /** The card's element, hidden while the source is open. */
     card: HTMLElement;
     /** Where the source goes, in the card's place. */
@@ -119,14 +121,14 @@ class OneAtATime {
  * フォーム（値の読み書きはホスト `PanelHost`）。フォームは欄を「基本」と
  * 「詳細」のタブに分けて持ち、パネルはタブを知らない。read-only タスクは
  * プレビューのみに縮退。ソースモードを作る関数を入口が渡したときだけ、
- * プレビューの上の切り替えで、カードの代わりに行と部分木のソースを編集
- * できる（TaskHubSource）。渡さなければ切り替えの bar も作らない。
+ * 題の行の切り替えで、カードの代わりに行と部分木のソースを編集
+ * できる（TaskHubSource）。渡さなければ切り替えも作らない。
  * 位置を作る関数（`PlaceMaker`）を入口が渡したときは、それをフォームへ
  * 渡し、フォームが「基本」の日付の後ろで呼ぶ。初めのフォーカスの欄も
  * フォームへ渡し、フォームはその欄のタブで開く。
  * 殻の上の場所に題を出す。まだ書いていないタスクのハブは「新しいタスクを作成」
  * （子を作るときも同じ題）、今あるタスクのハブは、どの入口から開いても
- * 「プロパティを編集」である。
+ * 「タスクを編集」である。
  * 開く入口は2つある。今あるタスクのハブ（`openRowHub`）は、今あるタスクの
  * ハブどうしで同時に1つだけ開く（`OneAtATime`）。まだ書いていないタスクの
  * ハブ（`openDraftHub`）は、その規則に入らず、開いているハブの上に重なって
@@ -172,8 +174,8 @@ export class TaskHubPanel {
             { app, plugin: deps.plugin, index: deps.index, operations: deps.operations },
             (row) => source?.follow(row),
         );
-        const makeSource: SourceMaker = ({ bar, card, pane, foot, close }) => {
-            const view = new TaskHubSourceView(app, bar, card, pane, foot, {
+        const makeSource: SourceMaker = (slots) => {
+            const view = new TaskHubSourceView(app, slots, {
                 enter: () => { void source?.enter(); },
                 apply: () => { void source?.apply(); },
                 cancel: () => source?.cancel(),
@@ -189,7 +191,7 @@ export class TaskHubPanel {
                 replace: (id, base, replacement) => deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
                 indentUnit: () => indentUnit(app),
                 lockForm: (locked) => host.setSourceOpen(locked),
-                closeHub: close,
+                closeHub: slots.close,
             }, view);
             return source;
         };
@@ -287,14 +289,18 @@ export class TaskHubPanel {
 
     private buildContent(bodyEl: HTMLElement, frame: OverlayFrame): void {
         // The hub is named for what it does: creating a task not written
-        // yet, or editing the properties of a row.
+        // yet, or editing a row.
         frame.head.createEl('h2', {
             text: t(this.host.draft ? 'modal.newTask.title' : 'modal.hub.title'),
             cls: 'tv-form__title',
         });
 
+        // The source's switch shares the title's line, so the body starts
+        // with the card; why the source cannot open is the body's first row.
         const makeSource = this.shape.source;
-        const bar = makeSource ? bodyEl.createDiv() : null;
+        if (makeSource) frame.head.addClass('task-hub__head');
+        const toggle = makeSource ? frame.head.createDiv() : null;
+        const shut = makeSource ? bodyEl.createDiv() : null;
         const card = bodyEl.createDiv({ cls: 'task-hub__preview' });
         this.previewEl = card;
         const pane = makeSource ? bodyEl.createDiv() : null;
@@ -323,8 +329,8 @@ export class TaskHubPanel {
             });
         }
 
-        if (makeSource && bar && pane) {
-            this.source = makeSource({ bar, card, pane, foot: frame.foot, close: () => this.close() });
+        if (makeSource && toggle && shut && pane) {
+            this.source = makeSource({ toggle, shut, card, pane, foot: frame.foot, close: () => this.close() });
         }
     }
 

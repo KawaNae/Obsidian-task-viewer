@@ -498,7 +498,7 @@
     },
     "sourceChildren": "Child lines",
     "hub": {
-      "title": "Edit properties",
+      "title": "Edit task",
       "unsavedAsk": "Some values cannot be saved ({{fields}})",
       "unsavedDiscard": "Discard and close",
       "unsavedFix": "Fix",

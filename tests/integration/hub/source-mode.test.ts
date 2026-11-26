@@ -82,6 +82,36 @@ const state = () => ({
     shut: shown('.task-hub__mode-shut') ? document.querySelector('.task-hub__mode-shut').textContent : null,
     notices: document.querySelectorAll('.notice').length,
 });
+/**
+ * Where the switch stands: on the title's line after the title and before the
+ * ×, centred on the title; whether a row of its own is left above the card;
+ * and the line saying why the source cannot open, its text and whether it
+ * stands between the body's top and the card, or takes no room.
+ */
+const layout = () => {
+    const panel = document.querySelector('.task-hub');
+    const head = panel.querySelector('.tv-overlay__head');
+    const title = head.querySelector('.tv-form__title').getBoundingClientRect();
+    const toggleEl = panel.querySelector('.task-hub__mode-toggle');
+    const toggle = toggleEl.getBoundingClientRect();
+    const close = panel.querySelector('.tv-overlay__close').getBoundingClientRect();
+    const bodyEl = panel.querySelector('.tv-overlay__body');
+    const body = bodyEl.getBoundingClientRect();
+    const card = panel.querySelector('.task-hub__preview').getBoundingClientRect();
+    const shutEl = panel.querySelector('.task-hub__mode-shut');
+    const shutBox = shutEl.getBoundingClientRect();
+    return {
+        inHead: toggleEl.parentElement === head,
+        afterTitle: toggle.left >= title.right,
+        beforeClose: toggle.right <= close.left,
+        centred: Math.abs((toggle.top + toggle.bottom) / 2 - (title.top + title.bottom) / 2) < 1,
+        modeBar: !!panel.querySelector('.task-hub__mode-bar'),
+        shut: shown('.task-hub__mode-shut') ? shutEl.textContent : null,
+        shutAboveCard: shown('.task-hub__mode-shut') ? shutBox.bottom <= card.top + 0.5 && shutBox.top >= body.top : null,
+        shutHeight: Math.round(shutBox.height),
+        first: [...bodyEl.children].find(el => getComputedStyle(el).display !== 'none')?.classList[0] ?? null,
+    };
+};
 ${UNTIL}
 ${DIALOG_ROWS}
 const KEY_CODES = { Enter: 13, Tab: 9, ArrowUp: 38, ArrowDown: 40 };
@@ -640,8 +670,33 @@ describe('the hub\'s source mode', () => {
 
         const discarded = click('.task-hub__source-lost .mod-warning');
         expect(discarded.source).toBe(false);
-        expect(discarded.shut).toBeTruthy();
+        expect(discarded.shut).toBe(tr('modal.hub.taskMissing'));
+        // Why it cannot open is a line of its own above the card; the switch stays on the title's line.
+        expect(run<Record<string, unknown>>('return JSON.stringify(layout());')).toMatchObject({ inHead: true, modeBar: false, shut: tr('modal.hub.taskMissing'), shutAboveCard: true, first: 'task-hub__mode-shut' });
         expect(readTestFile(TEST_FILE)).toBe(NOTE + '- [ ] 外で足した行\n');
+    });
+});
+
+describe('the hub\'s switch between the form and the source', () => {
+    it('stands on the title\'s line, after the title and clear of the ×, in the form and in the source, the body starting with the card while the source can open', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const steps = run<Record<string, unknown>>(`
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+            plugin.openTaskHub(task.id);
+            await until(() => document.querySelector('.task-hub__mode-toggle'));
+            await sleep(300);
+            const out = { title: document.querySelector('.task-hub .tv-form__title').textContent, view: layout() };
+            document.querySelectorAll('.task-hub__mode-toggle button')[1].click();
+            await until(() => viewOf('children'));
+            out.source = layout();
+            return JSON.stringify(out);
+        `);
+        const onTitleLine = { inHead: true, afterTitle: true, beforeClose: true, centred: true, modeBar: false, shut: null, shutHeight: 0 };
+        expect(steps).toEqual({
+            title: tr('modal.hub.title'),
+            view: { ...onTitleLine, shutAboveCard: null, first: 'task-hub__preview' },
+            source: { ...onTitleLine, shutAboveCard: null, first: 'task-hub__source-pane' },
+        });
     });
 });
 

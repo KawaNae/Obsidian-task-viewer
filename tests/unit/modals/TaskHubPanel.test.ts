@@ -31,7 +31,7 @@ const { shells, forms, sources, views, panes, paneHas } = vi.hoisted(() => ({
     shells: [] as { opts: { build(body: unknown, frame: unknown): void; onClose?: () => void; beforeClose?: () => unknown; initialFocus?: () => unknown } | null; close(): void }[],
     forms: [] as { el: unknown; host: unknown; deps: Record<string, unknown>; beforeClose: ReturnType<typeof vi.fn>; focusOf: ReturnType<typeof vi.fn>; notCreated: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     sources: [] as { task: unknown; host: unknown; follow: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
-    views: [] as { bar: unknown; card: unknown; pane: unknown; foot: unknown }[],
+    views: [] as { slots: Record<string, unknown> }[],
     panes: [] as { el: unknown; input: unknown; opts: { initial: unknown; host: unknown }; setEnabled: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }[],
     /** Whether the place's fields built next have a field: a place shown with none focuses nothing. */
     paneHas: { field: true },
@@ -94,7 +94,7 @@ vi.mock('../../../src/modals/hub/TaskHubSource', () => ({
 }));
 vi.mock('../../../src/modals/hub/TaskHubSourceView', () => ({
     TaskHubSourceView: class {
-        constructor(_app: unknown, readonly bar: unknown, readonly card: unknown, readonly pane: unknown, readonly foot: unknown) { views.push(this); }
+        constructor(_app: unknown, readonly slots: Record<string, unknown>) { views.push(this); }
     },
 }));
 
@@ -232,11 +232,12 @@ describe('the hub on a task not written yet', () => {
         expect(draws(r.deps).every(draw => draw.content === '下書き' && draw.inert === true)).toBe(true);
     });
 
-    it('is titled as the task it creates, above the body', async () => {
+    it('is titled as the task it creates, above the body, the title alone on its line', async () => {
         const r = rig();
         await TaskHubPanel.openDraftHub(r.app, PLACE, {}, { ...r.deps, places, notePlaces });
 
         expect(body.head!.children.map(child => child.text)).toEqual([t('modal.newTask.title')]);
+        expect(body.head!.classes.has('task-hub__head')).toBe(false);
         // The one dialog that creates the task: its properties and its place both.
         expect([ja.modal.newTask.title, en.modal.newTask.title]).toEqual(['新しいタスクを作成', 'Create new task']);
     });
@@ -404,11 +405,14 @@ describe('the hub on a task not written yet, its place', () => {
 });
 
 describe('the hub on a row', () => {
-    it('is titled as editing the properties, above the body', async () => {
+    it('is titled as editing the task, above the body, the source\'s switch on the title\'s line after the title', async () => {
         const r = rig();
         await TaskHubPanel.openRowHub(r.app, makeTask({ id: 'task-1' }), r.deps);
 
-        expect(body.head!.children.map(child => child.text)).toEqual([t('modal.hub.title')]);
+        expect(body.head!.children.map(child => child.text)).toEqual([t('modal.hub.title'), '']);
+        expect(body.head!.classes.has('task-hub__head')).toBe(true);
+        expect(views[0].slots.toggle).toBe(body.head!.children[1]);
+        expect([ja.modal.hub.title, en.modal.hub.title]).toEqual(['タスクを編集', 'Edit task']);
     });
 
     it('lays the form out with the card as the hub on a task not written yet does, handing it no place and the field it opens on', async () => {
@@ -437,8 +441,9 @@ describe('the hub on a row', () => {
 
         expect(sources).toHaveLength(1);
         expect(sources[0].task).toMatchObject({ id: 'task-1', content: '元の名前' });
-        const [bar, card, pane] = r.body.children;
-        expect(views[0]).toMatchObject({ bar, card, pane, foot: body.foot });
+        // Why the source cannot open first, above the card: the body starts with no row of the switch's.
+        const [shut, card, pane] = r.body.children;
+        expect(views[0].slots).toMatchObject({ toggle: body.head!.children[1], shut, card, pane, foot: body.foot });
     });
 
     it('closes when the source mode asks it to', async () => {
