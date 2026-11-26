@@ -6,8 +6,8 @@ import type { LineTarget } from './SourceLine';
 
 /**
  * What the hub's form is to its host: the host tells it to take the value
- * again, to show whether its fields are shut, what of a write to say, and,
- * for a task not written yet, where it goes and whether it can be created.
+ * again, to show whether its fields are shut, what of a write to say, where
+ * what it holds goes, and to ask again what it holds not written yet.
  */
 export interface HubForm {
     /** Take the host's value (`HubHost.task`) into every field again, and read its findings from it. */
@@ -15,56 +15,75 @@ export interface HubForm {
     /** Enable the fields or not, and say why not above the form's tabs, as `HubHost.shut` says now. */
     showShut(): void;
     /**
-     * Say why a write was refused, above the form's tabs; on a task not written
-     * yet, above the create, as what the create did. Null takes back what was said.
+     * Say why a write was refused: while the host holds something not
+     * written yet (`HubHost.draft`), above its write, as what the write did;
+     * otherwise above the form's tabs. Null takes back what was said.
      */
     sayWrite(refusal: string | null): void;
-    /** Say above the create where the task goes, and what of that place to heed; none takes back what was said. */
+    /** Say above the write where what is held goes, and what of that place to heed; none takes back what was said. */
     sayPlace(issues: readonly FormIssue<never>[]): void;
-    /** Draw the create again as `HubHost.draft` says now: whether it may be asked, and whether one is under way. */
+    /**
+     * Ask `HubHost.draft` again and draw the row of buttons as it answers
+     * now: with something held, cancel, its write (whether it may be asked,
+     * whether one is under way, what it reads) and the line above it; with
+     * nothing, none of them, taking no room. What is typed in the fields,
+     * the focus, the tab chosen and a question put stay as they are.
+     */
     showDraft(): void;
     /**
-     * Create as the create button does: the fields seen first, what is typed
-     * put in, and the host's create asked (`HubDraft.create`). The host asks
-     * it again for a create that waited for its place to be read, the fields
+     * Write as the write button does: the fields seen first, what is typed
+     * put in, and the host's write asked (`HubDraft.write`). The host asks
+     * it again for a write that waited for its place to be read, the fields
      * opened for it, so they are seen under what the place gives now: one
-     * they break takes the focus, and the host's create is not asked.
+     * they break takes the focus, and the host's write is not asked.
      */
-    create(): void;
+    write(): void;
     /**
-     * A create ended unwritten, the fields open again and the place read:
-     * the focus goes where what keeps the task from being created is, unless
-     * it is in the hub already. Where a create may be asked again
-     * (`HubDraft.canCreate`), nothing is to be fixed: the create. Where it
-     * may not, what keeps it is the place: the place's group, where it says.
-     * Not told where the form itself found a field to fix and focused it.
+     * A write ended unwritten, the fields open again and the place read:
+     * the focus goes where what keeps it from being written is, unless it is
+     * in the hub already. Where a write may be asked again
+     * (`HubDraft.canWrite`), nothing is to be fixed: the write. Where it may
+     * not, what keeps it is the place: the place's group, where it says. Not
+     * told where the form itself found a field to fix and focused it.
      */
-    notCreated(): void;
+    notWritten(): void;
 }
 
 /**
- * What a hub on a task not written yet has that a hub on a row has not: the
- * create, which writes the task as the fields hold it, and whether anything
- * was given that a close would lose.
+ * What a hub's host holds that is not written yet, and its write, which
+ * writes all of it at once: a task to be created, as the fields hold it.
+ * The form shows cancel and the write only while the host holds one.
  */
 export interface HubDraft {
+    /** What the write reads, and what it reads while it is under way. */
+    readonly label: string;
+    readonly busyLabel: string;
     /**
-     * Whether a create may be asked now: the place has answered, the task can
-     * go there, and none is under way. While the place is being read again,
-     * as the place last read says.
+     * Whether the write may be asked now: where it goes has answered, what
+     * is held can go there, and none is under way. While the place is being
+     * read again, as the place last read says.
      */
-    canCreate(): boolean;
-    /** Whether a create is under way: from its press until it is written or found not to be, the fields shut. */
-    creating(): boolean;
+    canWrite(): boolean;
+    /** Whether the write is under way: from its press until it is written or found not to be, the fields shut. */
+    writing(): boolean;
     /**
-     * Write the task as it stands now; asked once the form has put in what is
-     * typed. It is under way from now, and the hub closes once it is written.
-     * Asked while the place is being read, it waits, and asks the form's
-     * create again once it is read where the task can go; it ends unwritten
-     * otherwise, why said above the create.
+     * Write what is held as it stands now; asked once the form has put in
+     * what is typed. It is under way from now. Asked while the place is
+     * being read, it waits, and asks the form's write again once it is read
+     * where what is held can go; it ends unwritten otherwise, why said above
+     * the write.
      */
-    create(): void;
-    /** Whether a write now would write anything other than the task as it opened: what a close asks about throwing away. */
+    write(): void;
+    /**
+     * Throw away what is held, as cancel asks once the form has saved its
+     * fields and the user has said to throw it away where anything would be
+     * lost (`changed`); asked at once while the fields are shut. The hub
+     * stays open, and the host tells the form what it holds now. Null where
+     * what is held is all the hub is (a task not written yet): cancel is the
+     * close the user asks for, which asks of the same loss.
+     */
+    readonly discard: (() => void) | null;
+    /** Whether a write now would write anything other than what was held as it began: what throwing it away asks about. */
     changed(): boolean;
 }
 
@@ -93,11 +112,13 @@ export interface HubHost {
      */
     readonly openSource: ((locate: (task: Task) => LineTarget | null) => void) | null;
     /**
-     * The task not written yet, and its create. Null for a host that writes
-     * what is handed on as it comes (a row the note has): nothing to create,
-     * and nothing a close loses but what cannot be saved.
+     * What is held not written yet, and its write, as it is now: the form
+     * asks it each time it is told to draw it (`HubForm.showDraft`), and as
+     * it acts on it. Null while the host writes what is handed on as it
+     * comes (a row the note has): nothing to write but that, and nothing a
+     * close loses but what cannot be saved.
      */
-    readonly draft: HubDraft | null;
+    draft(): HubDraft | null;
     /**
      * Whether the hub may close, asked once the form has saved its fields,
      * or at once while they are shut: what is under way is waited for.

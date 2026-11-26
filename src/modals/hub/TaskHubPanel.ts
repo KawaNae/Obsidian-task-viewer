@@ -64,6 +64,8 @@ interface HubShape {
     turns: OneAtATime | null;
     /** Builds where the task goes, in the form's basic tab; null, the hub says no place. */
     place: PlaceMaker | null;
+    /** The hub's title: what kind of hub it is, whatever its host holds not written yet. */
+    title: string;
 }
 
 /** A hub as the hubs it opens one at a time with see it: what closing it as the user would does. */
@@ -201,7 +203,9 @@ export class TaskHubPanel {
             return source;
         };
         const makePlace: PlaceMaker = (parent) => new PlaceShown(parent, () => host.shown());
-        return new TaskHubPanel(app, host, deps, options, { source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: makePlace }).open();
+        return new TaskHubPanel(app, host, deps, options, {
+            source: makeSource, inert: false, turns: TaskHubPanel.rowHubs, place: makePlace, title: t('modal.hub.title'),
+        }).open();
     }
 
     /**
@@ -246,7 +250,9 @@ export class TaskHubPanel {
             })
             : (parent) => new PlaceShown(parent, () => host.shown(), { why: t('modal.newTask.childFixed') });
         const options: TaskHubPanelOptions = { focusField: place === null ? 'place' : 'name' };
-        return new TaskHubPanel(app, host, deps, options, { source: null, inert: true, turns: null, place: makePlace }).open();
+        return new TaskHubPanel(app, host, deps, options, {
+            source: null, inert: true, turns: null, place: makePlace, title: t('modal.newTask.title'),
+        }).open();
     }
 
     private constructor(
@@ -294,12 +300,10 @@ export class TaskHubPanel {
     }
 
     private buildContent(bodyEl: HTMLElement, frame: OverlayFrame): void {
-        // The hub is named for what it does: creating a task not written
-        // yet, or editing a row.
-        frame.head.createEl('h2', {
-            text: t(this.host.draft ? 'modal.newTask.title' : 'modal.hub.title'),
-            cls: 'tv-form__title',
-        });
+        // The hub is named for what it does, by its entry: creating a task
+        // not written yet, or editing a row, whatever its host holds not
+        // written yet meanwhile.
+        frame.head.createEl('h2', { text: this.shape.title, cls: 'tv-form__title' });
 
         // The source's switch shares the title's line, so the body starts
         // with the card; why the source cannot open is the body's first row.
@@ -419,8 +423,8 @@ class PlaceOnly implements HubForm {
     sayWrite(): void { }
     sayPlace(): void { }
     showDraft(): void { }
-    create(): void { }
-    notCreated(): void { }
+    write(): void { }
+    notWritten(): void { }
 
     dispose(): void {
         this.place.dispose();

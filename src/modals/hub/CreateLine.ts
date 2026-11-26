@@ -6,11 +6,13 @@ import { IssueBoard, type FormIssue } from '../form/FormIssue';
 export type CreateLineSource = 'place' | 'write';
 
 /**
- * The line above the create of a hub on a task not written yet, in the
- * overlay's foot: what pressing create does, why it cannot be pressed, and
- * why a create was refused. It stands over the row of buttons, so the
- * sentence that keeps the create from being pressed is beside the create
- * however the body is scrolled.
+ * The line above the write of a hub whose host holds something not written
+ * yet (a task to create), in the overlay's foot: what pressing the write
+ * does, why it cannot be pressed, and why a write was refused. It stands
+ * over the row of buttons, so the sentence that keeps the write from being
+ * pressed is beside it however the body is scrolled. While the host holds
+ * nothing to write, the line is taken out of the foot ({@link offer}),
+ * keeping what it says.
  *
  * A button at the row's start ({@link drawToggle}) shows the line or hides
  * it, all of it, errors and warnings too: hidden, the foot is the row alone.
@@ -28,14 +30,19 @@ export type CreateLineSource = 'place' | 'write';
  */
 export class CreateLine {
     private readonly line: HTMLElement;
+    /** The line's place among the foot's children, which it is put back at: nothing before it comes or goes. */
+    private readonly at: number;
     private readonly says: IssueBoard<never>;
     private toggle: HTMLButtonElement | null = null;
     private shown = true;
+    /** Whether the host holds something to write, which the line is of. */
+    private offered = true;
     /** What the line says, as last drawn: a change shows the line again. */
     private said = '';
 
     /** @param foot the overlay's foot: the line goes there, before the row of buttons. */
-    constructor(foot: HTMLElement) {
+    constructor(private readonly foot: HTMLElement) {
+        this.at = foot.children.length;
         this.line = foot.createDiv({ cls: 'task-hub__create-line' });
         const texts = this.line.createDiv({ cls: 'tv-form__says task-hub__create-says' });
         this.says = new IssueBoard<never>({ field: () => null, form: texts });
@@ -61,6 +68,14 @@ export class CreateLine {
         if (now !== this.said) this.shown = true;
         this.said = now;
         this.render();
+    }
+
+    /** Whether the host holds something to write now: with nothing, the line is out of the foot, and keeps what it says. */
+    offer(offered: boolean): void {
+        if (offered === this.offered) return;
+        this.offered = offered;
+        if (offered) this.foot.insertBefore(this.line, this.foot.children[this.at] ?? null);
+        else this.foot.removeChild(this.line);
     }
 
     private render(): void {
