@@ -7,7 +7,9 @@
  * of its items by its menu, written by the first edit. A list, the row's
  * own or inherited, is made no value by its menu. A text value is converted
  * to a list of it, and a list of one item to its text, by the row's menu,
- * whose head says the value's type greyed.
+ * whose head says the value's type greyed. A value an Enter wrote, the
+ * field keeping the focus, is drawn and offered by the menu as the row is
+ * now.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -319,5 +321,51 @@ describe('the hub edits a list item by item', () => {
             chips: 2,
         });
         expect(readTestFile(TEST_FILE)).toBe(LINES.join('\n'));
+    });
+
+    it('converts the value an Enter wrote, the field keeping the focus, from the menu opened once the focus has gone to another field', () => {
+        openHub('親');
+        const kept = run<boolean>(`
+            const input = rowOf('memo').querySelector('input.task-hub__value');
+            type(input, 'zq7');
+            await enter(input);
+            return document.activeElement === input && rowOf('memo').querySelector('input.task-hub__value') === input;
+        `);
+        expect(kept).toBe(true);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(8, 9, '\t- memo:: zq7'));
+        run(`chooseTabOf(nameInput()).focus(); await sleep(600); pickOf('memo', ${JSON.stringify(tr('modal.hub.toList'))}); await sleep(600); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(8, 9, '\t- memo::', '\t\t- zq7'));
+    });
+});
+
+describe('an inherited text an Enter makes the row\'s own', () => {
+    const INHERITED = ['# 見出し', '- place:: home', '- [ ] 親 @2026-10-01', '- [ ] 次', ''];
+
+    beforeEach(async () => { await writeIndexedTestFile(TEST_FILE, INHERITED.join('\n')); });
+
+    it('is drawn as the row\'s own at once, the field keeping the focus, and its menu offers to revert to the inherited value', () => {
+        openHub('親');
+        const shown = run<Record<string, unknown>>(`
+            const input = rowOf('place').querySelector('input.task-hub__value');
+            type(input, 'zq8');
+            await enter(input);
+            const row = rowOf('place');
+            const look = { focused: document.activeElement === input, dashed: row.classList.contains('task-hub__row--inherited'), mark: !!row.querySelector('.task-hub__prop-mark') };
+            chooseTabOf(nameInput()).focus();
+            await sleep(600);
+            return JSON.stringify({ ...look, menu: menuOf('place') });
+        `);
+        expect(shown).toEqual({
+            focused: true,
+            dashed: false,
+            mark: false,
+            menu: [
+                tr('modal.hub.typeText'), tr('modal.hub.fromSection'),
+                tr('modal.hub.openInheritedLine'), tr('modal.hub.toList'), tr('modal.hub.revertToInherited'),
+            ],
+        });
+        const lines = [...INHERITED];
+        lines.splice(3, 0, '\t- place:: zq8');
+        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
     });
 });

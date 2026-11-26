@@ -98,6 +98,11 @@ function setUp(properties: Properties = {}, opts: SetUpOptions = {}) {
         keySays: () => (said.get('propKey') ?? []).map(issue => issue.text),
         /** Take the focus out of the properties, as a tap elsewhere does. */
         leave: () => away.focus(),
+        /** The task's own properties written from outside, and the hub told, as an echo tells it. */
+        outside: (next: Properties) => {
+            task = { ...task, properties: next };
+            group.refresh();
+        },
     };
 }
 
@@ -306,6 +311,22 @@ describe('a property\'s row: the key and its mark, the field with its ×, and th
         expect(s.valueOf('Area').placeholder).toBe('No value');
         // An empty field has no ×.
         expect(shown(xOf(s, 'Area'))).toBe(false);
+    });
+
+    it('draws a row written from outside as it is now while the focus is in another, which keeps what is typed; a row added is built once the focus leaves', async () => {
+        const s = setUp(byKey({ m: text('1') }), { inherited: byKey({ k: text('s') }) });
+        const field = s.valueOf('m');
+        field.focus();
+        field.type('2');
+        s.outside(byKey({ m: text('1'), k: text('o'), n: text('x') }));
+        expect(s.valueOf('m')).toBe(field);
+        expect([s.doc.activeElement, field.value]).toEqual([field, '2']);
+        expect([markOf(s, 'k'), s.rowOf('k')!.classes.has('task-hub__row--inherited'), s.valueOf('k').value]).toEqual([null, false, 'o']);
+        expect(s.rowOf('n')).toBeUndefined();
+        s.leave();
+        await Promise.resolve();
+        expect(s.valueOf('n').value).toBe('x');
+        expect(valuesOf(s.writes.at(-1)!)).toEqual({ m: { type: 'number', number: 2, spelling: '2' }, k: text('o'), n: text('x') });
     });
 
     it('hides an inherited text with no value as the × in its field is pressed, the value hidden shown struck through', () => {
