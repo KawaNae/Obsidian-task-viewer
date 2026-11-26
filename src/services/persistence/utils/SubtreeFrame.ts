@@ -141,6 +141,16 @@ export class SubtreeFrame {
     }
 
     /**
+     * The subtree as it was opened, as a draft's replacement: each child
+     * line the line it was. A draft taken in can be typed back to the lines
+     * opened, which {@link check} answers as `same`; what was taken in from
+     * the editor before goes back to the lines opened by this one.
+     */
+    unchanged(): SubtreeReplacement {
+        return { text: this.base[0], children: this.base.slice(1).map((text, i) => ({ text, was: i + 1 })) };
+    }
+
+    /**
      * The file's line for a line of the child editor, B being `to` where it
      * was `from`: the line opened, where the editor kept it; its
      * indentation's characters and the new text, where only the text
