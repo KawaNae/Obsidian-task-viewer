@@ -28,6 +28,9 @@ export type ShapeKind = 'date' | 'time' | 'dateTime' | 'dateTimeOrTime' | 'int' 
  */
 export type NotationKind = 'dateBlock' | 'command' | 'blockId' | 'headingMark' | 'listItem';
 
+/** The built-ins a property key may name, each edited by a field of its own (`Builtin`). */
+export type ReservedBuiltin = 'color' | 'linestyle' | 'mask' | 'tags' | 'start' | 'end' | 'due';
+
 export type Issue =
     /** Nothing was given (only space, once normalized). */
     | { readonly code: 'empty' }
@@ -47,8 +50,20 @@ export type Issue =
     | { readonly code: 'chars'; readonly chars: string }
     /** A word of digits alone where a tag is wanted (`123`): Obsidian takes `#123` for no tag. */
     | { readonly code: 'digitsOnly' }
-    /** A name the plugin keeps for itself (a property key that is a scope key, `tags`). */
-    | { readonly code: 'reserved' }
+    /**
+     * A name the plugin keeps for itself (a property key that is a scope key,
+     * `tags`). `field`, when a field of its own edits what the name holds (a
+     * built-in): the key as given, and which built-in it is.
+     */
+    | { readonly code: 'reserved'; readonly field?: { readonly key: string; readonly builtin: ReservedBuiltin } }
+    /**
+     * A property key that starts as a list item's marker (`- `, `* `, `+ `,
+     * `1. `, `1) `) or a `#` does: written after a property line's bullet,
+     * Markdown reads a nested list, a heading or a tag there.
+     */
+    | { readonly code: 'listMark' }
+    /** A property key a row stands for already (`key`, as the row shows it), its case aside: its value is edited there. */
+    | { readonly code: 'hasRow'; readonly key: string }
     /** A value that must differ from the others of its set and is one of them (a scope key, a status's character). */
     | { readonly code: 'duplicate' };
 

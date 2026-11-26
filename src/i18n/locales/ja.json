@@ -685,6 +685,9 @@
     "chars": "使えない文字があります: {{chars}}",
     "digitsOnly": "数字だけの語はタグになりません。",
     "reserved": "予約されたキーです。",
+    "reservedField": "{{key}} は {{field}} の欄で入力してください。",
+    "keyListMark": "箇条書きの記号や # で始まるキーは使えません。",
+    "keyHasRow": "{{key}} にはもう欄があります。その欄で直してください。",
     "duplicate": "同じ値がほかにあります。"
   },
   "validation": {

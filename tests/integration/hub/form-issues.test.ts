@@ -96,7 +96,7 @@ afterAll(async () => {
 });
 
 describe('the hub\'s form', () => {
-    it('says a reserved key under the new property\'s row, keeps it while a date is fixed, and takes it back once the key is', async () => {
+    it('says a reserved key under the new property\'s row with the field to enter it in, keeps it while a date is fixed, and takes it back once the key is', async () => {
         openHub('親');
         const steps = run<Record<string, unknown>>(`
             const out = {};
@@ -121,7 +121,7 @@ describe('the hub\'s form', () => {
             await leave(keyInput());
             return JSON.stringify(out);
         `);
-        const reserved = `${ERROR}: ${tr('issue.reserved')}`;
+        const reserved = `${ERROR}: ${tr('issue.reservedField', { key: 'tv-start', field: START() })}`;
         expect(steps.reserved).toEqual({ says: [reserved], invalid: true });
         expect(steps.badDate).toEqual({ date: [`${ERROR}: ${tr('issue.noSuchDay')}`], key: [reserved] });
         expect(steps.fixedDate).toEqual({ date: [], key: [reserved], keyText: 'tv-start', keyInvalid: true });

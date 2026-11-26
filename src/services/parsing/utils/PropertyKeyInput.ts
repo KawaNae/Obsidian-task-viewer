@@ -1,25 +1,52 @@
 import type { ScopeKeys } from '../../../types';
 import type { FieldCodec, Read } from '../../../utils/values/Read';
 import { readFail, readOk } from '../../../utils/values/Read';
+import { builtinsByKey } from './BuiltinValues';
 import { KEYS_NOT_SCOPE, reservedPropertyKeys } from './FrontmatterPolicy';
+import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { PropertyKey } from './PropertyKey';
 
 /**
+ * A key that starts as a list item's marker does (`- x`, `* x`, `+ x`,
+ * `1. x`, `1) x`: the marker and a space or a tab), or with a `#`. The
+ * plugin's own reading takes `- - x:: v` as the key `- x`, but written
+ * after a property line's bullet, Markdown and Obsidian read the line as
+ * a list nested in the item, a heading in it (`# x`), or a tag (`#x`).
+ * A marker with no gap after it (`-x`, `1.x`) opens no list, and is taken.
+ */
+const LIST_MARK = new RegExp(`^(?:${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}|#)`);
+
+/**
  * A property's key typed in a field (the hub's new property): the space
- * around it taken off, and refused when the property line would not read it
- * as the key (`PROPERTY_KEY_SOURCE`: empty, `:`, `[`, `]`, a backquote), or
- * when the plugin keeps it for itself
- * (`reservedPropertyKeys`: the scope keys, `tags`), its case aside
- * (`PropertyKey`): `Tags` and `TV-COLOR` are refused as `tags` is.
+ * around it taken off, and refused when
+ * - the property line would not read it as the key
+ *   (`PROPERTY_KEY_SOURCE`: empty, `:`, `[`, `]`, a backquote)
+ * - it starts as a list item's marker or a `#` does ({@link LIST_MARK})
+ * - the plugin keeps it for itself (`reservedPropertyKeys`: the scope keys,
+ *   `tags`), said with the built-in's field when one edits it
+ *   (`builtinsByKey`; the scope keys as the settings name them)
+ * - a row stands for it already (`rowOf`, the key as that row shows it),
+ *   whose value is edited there
+ *
+ * Keys are compared their case aside (`PropertyKey`): `Tags` and `TV-COLOR`
+ * are refused as `tags` is.
  */
 export const PropertyKeyInput = {
-    of(scopeKeys: ScopeKeys): FieldCodec<string> {
+    of(scopeKeys: ScopeKeys, rowOf: (key: string) => string | null): FieldCodec<string> {
         const reserved = reservedPropertyKeys(scopeKeys);
+        const builtins = builtinsByKey(scopeKeys);
         return {
             read(text: string): Read<string> {
                 const key = readKey(text);
                 if (!key.ok) return key;
-                return reserved.has(PropertyKey.fold(key.value)) ? readFail({ code: 'reserved' }) : key;
+                if (LIST_MARK.test(key.value)) return readFail({ code: 'listMark' });
+                const folded = PropertyKey.fold(key.value);
+                if (reserved.has(folded)) {
+                    const builtin = builtins.get(folded);
+                    return readFail(builtin ? { code: 'reserved', field: { key: key.value, builtin } } : { code: 'reserved' });
+                }
+                const row = rowOf(key.value);
+                return row === null ? key : readFail({ code: 'hasRow', key: row });
             },
             show: (key) => key,
         };

@@ -5,7 +5,7 @@ import { PropertyKey } from '../../../services/parsing/utils/PropertyKey';
 import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
 import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
-import { FreeText } from '../../../utils/values/TextValues';
+import { PropertyValueInput, type PropertyLineValue } from '../../../services/parsing/utils/PropertyItemInput';
 import type { Read } from '../../../utils/values/Read';
 import { CascadeSource, type CascadeSourceKind } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
@@ -31,13 +31,18 @@ import { PropertyRows, type PropertyRow, type PropertyRowField } from './Propert
  * 行はキーを大文字と小文字を区別せずに1つずつ出し（`PropertyKey`）、キーは
  * 効いている値を書いた層の綴りで出す。
  *
- * 追加行のキーは `PropertyKeyInput` で読み（空のキー、`:`、`[`、`]`、`` ` `` と予約されたキーを
- * 拒む）、読めないキーは欄の下に理由を出して足さない。理由は打ち直すと
+ * 追加行は、まだ行の無いキーだけを足す。キーは `PropertyKeyInput` で読み、
+ * 空のキー、`:`、`[`、`]`、`` ` ``、箇条書きの記号か `#` で始まるキー、
+ * 予約されたキー、行のあるキー（`PropertyRows.takenBy`。キーの候補が除くのと
+ * 同じ答え）を拒む。読めないキーは欄の下に理由を出して足さない。確定の
+ * 3 つの道（blur、Enter、閉じるときの保存）は同じ読みを通り、閉じるときは
+ * 読めないキーを保存できない値として出す（`unsaved`）。理由は打ち直すと
  * 消え、ほかの欄の確定では消えない。行の増減で組み直しても、追加行の
  * 打ちかけの字は残す。足す書き込みが拒まれ、ホストが打った字を欄に残して
- * よいと答えたら（`HubHost.put`）、打った字を追加行に戻す。残さないと
- * 答えたら、追加行は空のままにし、Enter で足したときは、組み直した追加行の
- * 同じ欄にフォーカスを戻す。
+ * よいと答えたら（`HubHost.put`）、打った字を追加行に戻す。
+ *
+ * 値は、値の欄も追加行も `PropertyValueInput` で読む（前後の空白を落とし、
+ * 行が読むとおりに読む）。リストの項目は `PropertyItemInput` が同じく読む。
  *
  * 行は組み立てごとに1つの `AbortSignal`（`built`）を持ち、その組み立てで
  * 付けた listener、候補の一覧、リストの欄はすべてそれに掛ける。組み直す前に
@@ -53,7 +58,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     private valueInputs = new Map<string, HTMLInputElement>();
     private valueSays = new Map<string, HTMLElement>();
     /** Each property's value field, bound: what a close saves. */
-    private valueBound = new Map<string, BoundField<string>>();
+    private valueBound = new Map<string, BoundField<PropertyLineValue>>();
     /** The add row as last built: its fields, what its key reads, and its commit. */
     private addRow: { keyInput: HTMLInputElement; valueInput: HTMLInputElement; readKey(): Read<string> | null; commit(): void } | null = null;
     /** What is typed in the add row and not yet added: kept across a rebuild. */
@@ -123,7 +128,12 @@ export class PropertiesFieldGroup implements ClosingPart {
         this.addKeyInput = keyInput;
         keyInput.value = this.draft.key;
         valueInput.value = this.draft.value;
-        const keyCodec = PropertyKeyInput.of(this.ctx.plugin.settings.scopeKeys);
+        // A row is asked of as the key is read: one added or gone since the
+        // rows were built is told.
+        const keyCodec = PropertyKeyInput.of(
+            this.ctx.plugin.settings.scopeKeys,
+            (key) => PropertyRows.takenBy(this.rows(), key)?.key ?? null,
+        );
         /** The key typed, read; null while none is typed. Its issue is said as it is typed. */
         const readKey = () => {
             const read = keyInput.value.trim() === '' ? null : keyCodec.read(keyInput.value);
@@ -167,28 +177,18 @@ export class PropertiesFieldGroup implements ClosingPart {
         const commitAdd = () => {
             const key = readKey();
             if (!key?.ok) return;
-            const raw = valueInput.value;
-            const typed = { key: keyInput.value, value: raw };
-            const doc = keyInput.ownerDocument;
-            // An Enter leaves the focus in the add row; a blur has taken it elsewhere already.
-            const held = doc.activeElement === keyInput ? 'key' : doc.activeElement === valueInput ? 'value' : null;
-            const write = this.set(key.value, raw, 'propKey');
+            const value = PropertyValueInput.read(valueInput.value);
+            if (!value.ok) return;
+            const typed = { key: keyInput.value, value: valueInput.value };
+            const write = this.setValue(key.value, value.value, 'propKey');
             this.draft = { key: '', value: '' };
             this.render(true);
             void write?.then((written) => {
-                // Dropped, the row stays empty, and the focus an Enter left in
-                // it goes back, unless it went elsewhere meanwhile. Not before
-                // the answer: the rows are drawn from the value with the
-                // property added, which a write refused takes back, and with
-                // the focus in them the rows are not built anew from the
-                // value taken back.
-                if (written === 'dropped') {
-                    const active = doc.activeElement;
-                    if (held && (!active || active === doc.body)) this.addRow?.[held === 'key' ? 'keyInput' : 'valueInput'].focus();
-                    return;
-                }
                 // Refused where it may be taken once added again: what was
-                // typed is the add row's again, unless something was typed since.
+                // typed is the add row's again, unless something was typed
+                // since. A change the draft of a move refuses is refused for
+                // its own lines, and a key whose lines it refuses has a row
+                // (`PropertyRows`): the key is refused as it is read.
                 if (written !== false || this.draft.key !== '' || this.draft.value !== '') return;
                 this.draft = typed;
                 const row = this.addRow;
@@ -280,7 +280,7 @@ export class PropertiesFieldGroup implements ClosingPart {
     private textField(row: HTMLElement, folded: string, key: string, field: PropertyRowField & { kind: 'text' }, disabled: boolean): void {
         const { shown, editsOwn } = field;
         const valueInput = row.createEl('input', { type: 'text', cls: VALUE_INPUT_CLS });
-        valueInput.value = shownText(shown);
+        valueInput.value = PropertyValueInput.show(lineValueOf(shown));
         // No value written as none (`- key::`): the field is empty, and says so.
         if (shown.type === 'null') valueInput.placeholder = t('modal.hub.noValue');
         valueInput.disabled = disabled;
@@ -294,18 +294,15 @@ export class PropertiesFieldGroup implements ClosingPart {
         // The value the row shows, as a line spells it: its own, or the
         // inherited one. Left as it is, no own value is made; typed again,
         // the inherited value is written as the row's own (`takesSame`).
-        // What is typed is written as typed, and reads as a line reads it
-        // (`PropertyValues.fromText`); nothing typed takes the row's own line
-        // out, and the value above comes through.
+        // What is typed reads as a line reads it (`PropertyValueInput`);
+        // nothing typed takes the row's own line out, and the value above
+        // comes through.
         const value = bindField(valueInput, {
-            codec: FreeText,
-            current: () => {
-                const now = editsOwn ? PropertyKey.get(this.ctx.task().properties, key)?.value : shown;
-                return now ? shownText(now) : '';
-            },
+            codec: PropertyValueInput,
+            current: () => lineValueOf(editsOwn ? PropertyKey.get(this.ctx.task().properties, key)?.value : shown),
             // An own line keeps its key as written; an inherited value made
             // the task's own is written under the key it was inherited by.
-            commit: (raw) => raw.trim() === '' ? this.remove(key) : this.set(key, raw),
+            commit: (typed) => typed.type === 'null' && typed.spelling === '' ? this.remove(key) : this.setValue(key, typed),
             issues: () => { /* any text is a value */ },
             takesEnter: () => suggest.listShown,
             takesSame: () => !editsOwn,
@@ -398,15 +395,10 @@ export class PropertiesFieldGroup implements ClosingPart {
     }
 
     /**
-     * Write `raw` as the task's own value of the property `key`, its case
+     * Write `value` as the task's own value of the property `key`, its case
      * aside: a line the task has keeps its key as written, and a new line
      * takes `key`.
      */
-    private set(key: string, raw: string, at: HubField = propField(key)): Promise<Written> | undefined {
-        return this.setValue(key, PropertyValues.fromText(raw), at);
-    }
-
-    /** Write `value` as the task's own value of the property `key`, its key kept as {@link set} keeps it. */
     private setValue(key: string, value: PropertyValue, at: HubField = propField(key)): Promise<Written> | undefined {
         const own = this.ctx.task().properties ?? {};
         const written = PropertyKey.get(own, key)?.key ?? key;
@@ -515,11 +507,18 @@ function propField(key: string): HubField {
     return `prop:${PropertyKey.fold(key)}`;
 }
 
+const NO_VALUE: PropertyLineValue = { type: 'null', spelling: '' };
+
 /**
- * A value as its field shows it: as the line spells it (`"123"` a text,
- * `123` a number), since what the field holds is what is written. A list
- * has a field of its own (`PropertyListField`), and never shows here.
+ * A value as a text field stands for it, shown as the line spells it
+ * (`"123"` a text, `123` a number), since what the field holds is what is
+ * written: none for no line. A list has a field of its own
+ * (`PropertyListField`); one that comes in while the field holds the focus
+ * is shown as its items read, as a text.
  */
-function shownText(value: PropertyValue): string {
-    return value.type === 'list' ? PropertyValues.display(value) : PropertyValues.spelling(value);
+function lineValueOf(value: PropertyValue | undefined): PropertyLineValue {
+    if (value === undefined) return NO_VALUE;
+    if (value.type !== 'list') return value;
+    const text = PropertyValues.display(value);
+    return { type: 'text', text, spelling: text };
 }
