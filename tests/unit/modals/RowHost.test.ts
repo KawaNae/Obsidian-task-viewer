@@ -316,6 +316,32 @@ describe('RowHost.shown', () => {
         expect(h.host.shown()?.parent).toBe('親2');
     });
 
+    it('says no parent\'s text, and not that there is no parent, for a row whose parent the index does not hold', async () => {
+        const h = hostAnswering(true, child(), REFUSED, true, child(), { 'n.md': NOTE_UNDER });
+        h.host.attach(h.panel);
+        await settle();
+        const shown = h.host.shown();
+        expect(shown).toEqual({ note: 'n.md', heading: '予定' });
+        expect(shown && 'parent' in shown).toBe(false);
+    });
+
+    it('takes the answer of the read asked last when the reads come back out of order', async () => {
+        const answers: ((content: string) => void)[] = [];
+        const h = hostAnswering(true, child(), REFUSED, true, child(), { 'n.md': NOTE_UNDER });
+        h.cachedRead.mockImplementation(() => new Promise<string>((resolve) => { answers.push(resolve); }));
+        h.host.attach(h.panel);
+
+        // Moved under the next heading before the first read came back.
+        const moved = ['# 予定', '- [ ] 親', '## 来週', '- [ ] 子', '- [ ] 下', ''].join('\n');
+        h.change(child({ line: 3, originalText: '- [ ] 子', parentId: undefined, reading: 'r2' }));
+        expect(answers).toHaveLength(2);
+        answers[1](moved);
+        await settle();
+        answers[0](NOTE_UNDER);
+        await settle();
+        expect(h.host.shown()?.heading).toBe('来週');
+    });
+
     it('says none for a row above the note\'s first heading', async () => {
         const h = hostAnswering(true, undefined);
         h.host.attach(h.panel);
@@ -366,7 +392,7 @@ describe('RowHost.shown', () => {
         expect(h.host.shown()).toBeNull();
 
         h.change(child());
-        expect(h.host.shown()).toEqual({ note: 'n.md', heading: undefined, parent: null });
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: undefined });
         await settle();
         expect(h.host.shown()?.heading).toBe('予定');
     });
@@ -375,7 +401,7 @@ describe('RowHost.shown', () => {
         const h = hostAnswering(true, child(), REFUSED, true, child(), {});
         h.host.attach(h.panel);
         await settle();
-        expect(h.host.shown()).toEqual({ note: 'n.md', heading: undefined, parent: null });
+        expect(h.host.shown()).toEqual({ note: 'n.md', heading: undefined });
         expect(h.told).toEqual([]);
     });
 

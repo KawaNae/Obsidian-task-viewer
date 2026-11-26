@@ -95,6 +95,11 @@ describe('PlaceShown', () => {
         expect(r.rows().map(row => [row.label, row.value])).toEqual([[t('modal.note'), ''], [t('modal.heading'), '']]);
     });
 
+    it('keeps the parent\'s row with no value while the parent the task names is not known', () => {
+        const r = rig({ note: 'f/n.md', heading: 'Work' }, {});
+        expect(r.rows().map(row => [row.label, row.value])).toEqual([[t('modal.note'), 'f/n.md'], [t('modal.heading'), 'Work'], [t('modal.parentTask'), '']]);
+    });
+
     it('shows a heading not read yet with no value', () => {
         const r = rig({ note: 'f/n.md', parent: null }, {});
         expect(r.rows().map(row => row.value)).toEqual(['f/n.md', '']);

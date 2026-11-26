@@ -233,13 +233,16 @@ export class RowHost implements PanelHost {
     /**
      * Where the row stands, as a place shown with no field: its note, the
      * heading it stands under as last read, and its parent's text where it
-     * has a parent (the index's copy of it). Null once the row is gone.
+     * has a parent (the index's copy of it): none while the index holds no
+     * parent of that name, the row of the parent kept. Null once the row is
+     * gone.
      */
     shown(): ShownPlace | null {
         if (this.missing) return null;
         const task = this.value;
-        const parent = task.parentId === undefined ? null : this.deps.index.getTask(task.parentId)?.content ?? null;
-        return { note: task.file, heading: this.heading, parent };
+        if (task.parentId === undefined) return { note: task.file, heading: this.heading, parent: null };
+        const parent = this.deps.index.getTask(task.parentId);
+        return { note: task.file, heading: this.heading, ...(parent ? { parent: parent.content } : {}) };
     }
 
     /**

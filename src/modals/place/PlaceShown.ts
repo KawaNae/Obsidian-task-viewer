@@ -6,12 +6,13 @@ import type { HubPlace } from '../hub/HubHost';
  * Where a task stands, or goes, as a place shown with no field says it: the
  * note's path, the heading it stands under (null above the note's first
  * heading, absent while not read), and the parent task's text (null for a
- * task with no parent).
+ * task with no parent, absent while the task names a parent whose text is
+ * not known).
  */
 export interface ShownPlace {
     note: string;
     heading?: string | null;
-    parent: string | null;
+    parent?: string | null;
 }
 
 /** What a place shown with no field says besides the place: why it cannot be changed, under the rows; none, nothing. */
@@ -31,8 +32,8 @@ export interface PlaceShownOptions {
  * The parent's row is there while the value names a parent, and not for a
  * task with none. While `read` gives nothing (the place not read yet, the
  * row or the parent gone, the read failed) the rows stay as they were with
- * no values, so the group keeps its height; a heading not read yet is shown
- * so too. A value is shown whole, wrapped where it is long: nothing else in
+ * no values, so the group keeps its height; a heading not read yet, and a
+ * parent whose text is not known, are shown so too. A value is shown whole, wrapped where it is long: nothing else in
  * the hub says the note's path.
  */
 export class PlaceShown implements HubPlace {
