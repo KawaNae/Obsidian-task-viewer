@@ -9,7 +9,7 @@ import { refusalNotice } from '../../services/core/RefusalClause';
 import { refusalText, type WriteAnswer } from '../../services/operations/WriteAnswer';
 import { logError } from '../../log/log';
 import type { CloseAnswer } from '../../views/sharedUI/CloseGate';
-import type { HubForm, HubPanel, PanelHost } from './HubHost';
+import type { HubForm, HubPanel, HubShut, PanelHost } from './HubHost';
 import { openSourceLine, type LineTarget } from './SourceLine';
 import type { ShownPlace } from '../place/PlaceShown';
 import { sectionAt } from '../../services/data/CreatePlaces';
@@ -228,12 +228,15 @@ export class RowHost implements PanelHost, RowPlaceHost {
     }
 
     /**
-     * Shut while a move is begun, nothing said: the wait is a write's answer
-     * and a read of the note, gone before a sentence could be read. Else as
-     * the state the host is in says ({@link shutWhy}).
+     * The whole form shut while a move is begun, nothing said: the wait is a
+     * write's answer and a read of the note, gone before a sentence could be
+     * read. Else wholly, for as long as the state the host is in gives a
+     * reason ({@link shutWhy}).
      */
-    shut(): string | null {
-        return this.beginning ? '' : this.shutWhy();
+    shut(): HubShut | null {
+        if (this.beginning) return { reach: 'form', why: null };
+        const why = this.shutWhy();
+        return why === null ? null : { reach: 'form', why };
     }
 
     /**

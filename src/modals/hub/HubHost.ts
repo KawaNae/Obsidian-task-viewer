@@ -13,7 +13,7 @@ import type { LineTarget } from './SourceLine';
 export interface HubForm {
     /** Take the host's value (`HubHost.task`) into every field again, and read its findings from it. */
     refresh(): void;
-    /** Enable the fields or not, and say why not above the form's tabs, as `HubHost.shut` says now. */
+    /** Enable the fields or not, and say why not above the form's tabs, as `HubHost.shut` answers now. */
     showShut(): void;
     /**
      * Say why a change the fields handed on was not taken (`HubHost.put`):
@@ -63,6 +63,25 @@ export interface HubForm {
 }
 
 /**
+ * How far a hub's form takes no edit, and why, as its host answers
+ * (`HubHost.shut`).
+ */
+export interface HubShut {
+    /**
+     * What is shut. `'form'`: every field, the place's among them; the form
+     * saves nothing and asks nothing, cancel throwing away what is held at
+     * once and a close asking the host at once. `'values'`: the fields of
+     * the row's values (the name, the status, the dates, the style, the
+     * tags, the properties); the place's fields take edits, and cancel and
+     * a close ask whether to throw away what is held (`HubDraft.changed`),
+     * the fields shut saved by neither.
+     */
+    readonly reach: 'form' | 'values';
+    /** Why, said above the form's tabs; null, nothing is said: a wait too short to be read. */
+    readonly why: string | null;
+}
+
+/**
  * What a hub's host holds that is not written yet, and its write, which
  * writes all of it at once: a task to be created, as the fields hold it, or
  * a row's changes and where it goes, its move. The form shows cancel and
@@ -93,7 +112,7 @@ export interface HubDraft {
     /**
      * Throw away what is held, as cancel asks once the form has saved its
      * fields and the user has said to throw it away where anything would be
-     * lost (`changed`); asked at once while the fields are shut. The hub
+     * lost (`changed`); asked at once while the whole form is shut. The hub
      * stays open, and the host tells the form what it holds now. Null where
      * what is held is all the hub is (a task not written yet): cancel is the
      * close the user asks for, which asks of the same loss.
@@ -101,6 +120,13 @@ export interface HubDraft {
     readonly discard: (() => void) | null;
     /** Whether a write now would write anything other than what was held as it began: what throwing it away asks about. */
     changed(): boolean;
+    /**
+     * The question whether to throw it away was answered to keep it, with no
+     * field the form holds left to fix: whether the host put the focus where
+     * what is held is being edited. None, or false, the form's first field
+     * takes it.
+     */
+    keep?(): boolean;
 }
 
 /**
@@ -117,12 +143,8 @@ export interface HubHost {
      * by the host (`HubForm.sayPut`); a field refused keeps what was typed.
      */
     put(updates: Partial<Task> | null): Promise<boolean>;
-    /**
-     * Why the fields take no edit now, in the words the form says it in;
-     * empty, they take none and nothing is said (a wait too short to be
-     * read); null while they take them.
-     */
-    shut(): string | null;
+    /** How far the form takes no edit now, and why; null while it takes them all. */
+    shut(): HubShut | null;
     /**
      * Open a line of the row's note in the editor and light it: the line
      * `locate` finds on a copy of the row, asked again of a newer copy when
@@ -141,7 +163,8 @@ export interface HubHost {
     draft(): HubDraft | null;
     /**
      * Whether the hub may close, asked once the form has saved its fields,
-     * or at once while they are shut: what is under way is waited for.
+     * or at once while the whole form is shut: what is under way is waited
+     * for.
      */
     closing(): CloseAnswer;
     /** The form to tell, once it is built. */
@@ -159,8 +182,8 @@ export interface HubPanel {
 /**
  * What an entry builds of where a task goes, as a group of the form's basic
  * tab, after the dates: fields that say where the task goes, or a place
- * shown with no field. The form shuts it with its own fields and focuses it
- * (`'place'`).
+ * shown with no field. The form shuts it only as it shuts every field
+ * (`HubShut.reach`), and focuses it (`'place'`).
  */
 export interface HubPlace {
     /**

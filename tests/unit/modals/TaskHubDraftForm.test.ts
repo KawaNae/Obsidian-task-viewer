@@ -13,7 +13,7 @@ import { t } from '../../../src/i18n';
 import { refusalText } from '../../../src/services/operations/WriteAnswer';
 import { valuesOf } from '../helpers/properties';
 import { FocusDoc, FocusEl, asEl } from '../helpers/focusDom';
-import type { HubDraft, HubHost } from '../../../src/modals/hub/HubHost';
+import type { HubDraft, HubHost, HubShut } from '../../../src/modals/hub/HubHost';
 import type { Task } from '../../../src/types';
 
 // The icon a button shows, read back from its element.
@@ -1057,5 +1057,180 @@ describe('a hub whose host comes to hold something not written yet and lets it g
         s.press(s.cancel());
         expect(s.requestClose).toHaveBeenCalledTimes(1);
         expect(s.ask()).toBe('');
+    });
+});
+
+/**
+ * A host that holds something not written yet and shuts the form as far as
+ * it answers (`HubHost.shut`). With only the row's values shut, their fields
+ * take no edit and are neither saved nor asked of; the place's fields take
+ * edits, and cancel and a close ask whether to throw away what is held as it
+ * says it changed. Keeping it puts the focus where the host takes it, else
+ * on the name. With the whole form shut, the place's fields are shut too, and
+ * nothing is asked.
+ */
+describe('a hub whose host shuts the row\'s values only', () => {
+    function setUpShut(opts: { changed?: boolean; keep?: () => boolean } = {}) {
+        const doc = new FocusDoc();
+        Object.assign(doc, { createElement: () => ({ getContext: () => null }) });
+        const root = doc.root();
+        const body = root.createDiv();
+        const foot = root.createDiv();
+        let shut: HubShut | null = null;
+        let held: HubDraft | null = null;
+        const puts: Partial<Task>[] = [];
+        const host: HubHost = {
+            task: () => SIBLING,
+            put: async (updates) => { if (updates) puts.push(updates); return true; },
+            shut: () => shut,
+            openSource: null,
+            draft: () => held,
+            closing: vi.fn((): CloseAnswer => 'close'),
+            bind: () => { },
+        };
+        const draft = {
+            label: '移動',
+            busyLabel: '移動…',
+            discardAsk: '移動を捨てますか',
+            canWrite: () => true,
+            writing: () => false,
+            write: vi.fn(),
+            discard: vi.fn(),
+            changed: () => opts.changed ?? false,
+            ...(opts.keep && { keep: vi.fn(opts.keep) }),
+        };
+        let placeInput!: FocusEl;
+        const place = {
+            focus: () => ({ to: asEl(placeInput) }),
+            setEnabled: vi.fn(),
+            refresh: () => { },
+            dispose: () => { },
+        };
+        const app = { keymap: { pushScope: () => { }, popScope: () => { } } } as never;
+        const plugin = { settings: DEFAULT_SETTINGS, menuPresenter: { present: () => { } } } as never;
+        const index = { getTasks: () => [], getTask: () => undefined, onChange: () => () => { } } as never;
+        const requestClose = vi.fn();
+        const form = new TaskHubForm(asEl(body), host, {
+            app, plugin, index, foot: asEl(foot), requestClose,
+            place: (parent) => {
+                placeInput = (parent as unknown as FocusEl).createDiv({ cls: 'tv-form__group task-hub__place' }).createEl('input');
+                return place;
+            },
+        });
+        return {
+            doc, body, foot, host, form, puts, draft, place, placeInput, requestClose,
+            /** Shut the form as far as `to` says, and tell it to show so. */
+            shutBy: (to: HubShut | null) => { shut = to; form.showShut(); },
+            /** Hold `what` now, and tell the form to draw it. */
+            hold: (what: HubDraft | null) => { held = what; form.showDraft(); },
+            el: (field: Parameters<TaskHubForm['fieldElement']>[0]) => form.fieldElement(field) as unknown as FocusEl,
+            cancel: () => foot.find('tv-form__cancel')!,
+            ask: () => foot.find('tv-form__ask')?.text ?? '',
+            said: () => body.find('tv-form__says--form')!.children.map(c => c.text),
+            press: (target: FocusEl) => target.dispatchEvent(new Event('click')),
+        };
+    }
+    const VALUES: HubShut = { reach: 'values', why: 'ソースで編集中' };
+
+    it('shuts the fields of the row\'s values and leaves the place\'s open, saying why; shut whole, the place\'s too', () => {
+        const s = setUpShut();
+        s.shutBy(VALUES);
+        expect([s.el('name').disabled, s.el('start').disabled]).toEqual([true, true]);
+        expect(s.place.setEnabled).toHaveBeenLastCalledWith(true);
+        expect(s.said()).toEqual(['ソースで編集中']);
+
+        s.shutBy({ reach: 'form', why: null });
+        expect(s.place.setEnabled).toHaveBeenLastCalledWith(false);
+        expect(s.said()).toEqual([]);
+
+        s.shutBy(null);
+        expect([s.el('name').disabled, s.el('start').disabled]).toEqual([false, false]);
+        expect(s.place.setEnabled).toHaveBeenLastCalledWith(true);
+    });
+
+    it('asks of what is held at cancel and at a close as it says it changed, saving no field shut', () => {
+        const s = setUpShut({ changed: true });
+        s.hold(s.draft);
+        s.el('name').focus();
+        s.el('name').type('電話');
+        s.shutBy(VALUES);
+
+        s.press(s.cancel());
+        expect(s.ask()).toBe('移動を捨てますか');
+        expect(s.draft.discard).not.toHaveBeenCalled();
+        s.press(s.foot.find('tv-form__discard')!);
+        expect(s.draft.discard).toHaveBeenCalledTimes(1);
+
+        expect(s.form.beforeClose()).toBe('stay');
+        expect(s.ask()).toBe('移動を捨てますか');
+        expect(s.host.closing).not.toHaveBeenCalled();
+        expect(s.puts).toEqual([]);
+    });
+
+    it('throws away at cancel, and lets a close go, at once where what is held did not change, saving no field shut', () => {
+        const s = setUpShut();
+        s.hold(s.draft);
+        s.el('name').focus();
+        s.el('name').type('電話');
+        s.shutBy(VALUES);
+
+        s.press(s.cancel());
+        expect(s.draft.discard).toHaveBeenCalledTimes(1);
+        expect(s.form.beforeClose()).toBe('close');
+        expect(s.host.closing).toHaveBeenCalledTimes(1);
+        expect([s.ask(), s.puts]).toEqual(['', []]);
+    });
+
+    it('writes, and puts in what is typed, with nothing put in from a field shut', () => {
+        const s = setUpShut();
+        s.hold(s.draft);
+        s.el('name').focus();
+        s.el('name').type('電話');
+        s.el('start').type('not a date');
+        s.shutBy(VALUES);
+
+        expect(s.form.putTyped()).toBe(true);
+        s.press(s.foot.findAll('mod-cta')[0]);
+        expect(s.draft.write).toHaveBeenCalledTimes(1);
+        expect(s.puts).toEqual([]);
+    });
+
+    it('withdraws a question of values that cannot be saved as they are shut, and keeps one of what is held', () => {
+        const unsaved = setUpShut();
+        unsaved.el('start').focus();
+        unsaved.el('start').type('not a date');
+        expect(unsaved.form.beforeClose()).toBe('stay');
+        expect(unsaved.ask()).not.toBe('');
+        unsaved.shutBy(VALUES);
+        expect(unsaved.ask()).toBe('');
+
+        const held = setUpShut({ changed: true });
+        held.hold(held.draft);
+        held.shutBy(VALUES);
+        held.press(held.cancel());
+        held.shutBy(VALUES);
+        expect(held.ask()).toBe('移動を捨てますか');
+    });
+
+    it('keeps what is held where the host takes the focus, and on the name where it takes none', () => {
+        const taken = setUpShut({ changed: true, keep: () => true });
+        taken.hold(taken.draft);
+        taken.shutBy(VALUES);
+        taken.press(taken.cancel());
+        const asked = taken.doc.activeElement;
+        taken.press(taken.cancel());
+        expect(taken.draft.keep).toHaveBeenCalledTimes(1);
+        expect(taken.ask()).toBe('');
+        expect(taken.doc.activeElement).toBe(asked);
+
+        for (const keep of [undefined, () => false]) {
+            const s = setUpShut({ changed: true, keep });
+            s.hold(s.draft);
+            s.shutBy(VALUES);
+            s.press(s.cancel());
+            s.press(s.cancel());
+            expect(s.ask()).toBe('');
+            expect(s.doc.activeElement).toBe(s.el('name'));
+        }
     });
 });

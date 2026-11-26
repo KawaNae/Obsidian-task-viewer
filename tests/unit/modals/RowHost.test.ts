@@ -78,7 +78,7 @@ function hostAnswering(written: boolean, fresh: Task | undefined, refused: Index
     const form: HubForm & { said: (string | null)[] } = {
         said: [],
         refresh: vi.fn(() => { told.push('form'); }),
-        showShut: vi.fn(() => { told.push(`shut:${host.shut()}`); }),
+        showShut: vi.fn(() => { const shut = host.shut(); told.push(`shut:${shut && `${shut.reach}:${shut.why}`}`); }),
         sayPut(refusal) { this.said.push(refusal); },
         sayWrite: vi.fn(),
         sayPlace: vi.fn(),
@@ -245,9 +245,9 @@ describe('RowHost following the row', () => {
 
         h.change(undefined);
         h.change(undefined);
-        expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
+        expect(h.host.shut()).toEqual({ reach: 'form', why: t('modal.hub.taskMissing') });
         // Drawn again with it, where the row stood is no longer said.
-        expect(h.told).toEqual([`shut:${t('modal.hub.taskMissing')}`, 'form', 'source:none', 'source:none']);
+        expect(h.told).toEqual([`shut:form:${t('modal.hub.taskMissing')}`, 'form', 'source:none', 'source:none']);
 
         h.told.length = 0;
         h.change(makeTask({ id: 'task-1', content: '戻った' }));
@@ -428,11 +428,11 @@ describe('RowHost.shut', () => {
         h.host.setSourceOpen(true);
         h.host.setSourceOpen(true);
         h.change(undefined);
-        expect(h.host.shut()).toBe(t('modal.hub.source.formShut'));
+        expect(h.host.shut()).toEqual({ reach: 'form', why: t('modal.hub.source.formShut') });
         expect(h.form.showShut).toHaveBeenCalledTimes(2);
 
         h.host.setSourceOpen(false);
-        expect(h.host.shut()).toBe(t('modal.hub.taskMissing'));
+        expect(h.host.shut()).toEqual({ reach: 'form', why: t('modal.hub.taskMissing') });
     });
 });
 

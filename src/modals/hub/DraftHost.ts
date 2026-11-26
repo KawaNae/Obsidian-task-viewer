@@ -13,7 +13,7 @@ import type { FormIssue, Tone } from '../form/FormIssue';
 import { DestinationText } from '../noteops/DestinationText';
 import type { ShownPlace } from '../place/PlaceShown';
 import type { TaskLookup } from '../../services/display/DisplayTaskConverter';
-import type { HubDraft, HubForm, HubPanel, PanelHost } from './HubHost';
+import type { HubDraft, HubForm, HubPanel, HubShut, PanelHost } from './HubHost';
 
 export interface DraftHostDeps {
     /** What the place is, the note a line there is in, the write there, and the place the place fields' answer names. */
@@ -174,8 +174,9 @@ export class DraftHost implements PanelHost {
         });
     }
 
-    shut(): string | null {
-        return this.making ? t('modal.newTask.formShut') : null;
+    /** The whole form shut while a create is under way. */
+    shut(): HubShut | null {
+        return this.making ? { reach: 'form', why: t('modal.newTask.formShut') } : null;
     }
 
     /** Whether a create may be asked: while the fields or the place are being read, as the place last read says. */
