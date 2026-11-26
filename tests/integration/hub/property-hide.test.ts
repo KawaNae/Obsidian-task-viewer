@@ -117,6 +117,12 @@ describe('the hub hides an inherited value', () => {
         expect(after).toEqual({ value: '', placeholder: tr('modal.hub.noValue'), remove: true, hide: false });
     });
 
+    it('hides an inherited property by emptying its field, as its icon does', () => {
+        openHub('親');
+        run(`const input = rowOf('area').querySelector('input'); chooseTabOf(input).focus(); input.value = ''; input.dispatchEvent(new InputEvent('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('blur')); await sleep(600); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(5, 5, '\t- area::'));
+    });
+
     it('hides an inherited color', () => {
         openHub('親');
         run(`

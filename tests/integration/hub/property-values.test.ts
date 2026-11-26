@@ -147,12 +147,12 @@ describe('the hub writes a custom property back as it is spelled', () => {
         expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
     });
 
-    it('takes the line out when its value is emptied', () => {
+    it('keeps the line with no value when its value is emptied, and writes nothing for a field touched and left as it was', () => {
         openHub('親');
         run(`type(valueInput('memo'), ''); await leave(valueInput('memo')); return 'ok';`);
-        const lines = [...LINES];
-        lines.splice(7, 1);
-        expect(readTestFile(TEST_FILE)).toBe(lines.join('\n'));
+        expect(readTestFile(TEST_FILE)).toBe(withLine(7, '\t- memo::'));
+        run(`chooseTabOf(valueInput('memo')).focus(); await leave(valueInput('memo')); chooseTabOf(valueInput('e')).focus(); await leave(valueInput('e')); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(withLine(7, '\t- memo::'));
     });
 });
 

@@ -217,3 +217,49 @@ describe('a property\'s value field reads what is typed with the space around it
         expect(s.valueOf('Area').value).toBe('home');
     });
 });
+
+describe('a property\'s value emptied keeps its row: no value is written', () => {
+    const NONE = { type: 'null', spelling: '' } as const;
+    /** The × of the first item of a list that is the row's own. */
+    const firstItemX = (s: ReturnType<typeof setUp>) => s.root.findAll('task-hub__list-item').find(item => !item.classes.has('task-hub__list-item--add'))!.find('tv-ctrl__pill-remove')!;
+
+    it('writes no value for an own value emptied, the row standing with no value', () => {
+        const s = setUp(byKey({ Area: text('lab') }));
+        s.valueOf('Area').focus();
+        s.valueOf('Area').type('  ');
+        s.leave();
+        expect(s.writes.map(valuesOf)).toEqual([{ Area: NONE }]);
+        expect(s.valueOf('Area').value).toBe('');
+    });
+
+    it('writes no value for the last item of an own list taken out, the row standing', () => {
+        const s = setUp(byKey({ tags2: { type: 'list', items: [text('a')] } }));
+        firstItemX(s).dispatchEvent(new Event('click'));
+        expect(s.writes.map(valuesOf)).toEqual([{ tags2: NONE }]);
+        expect(s.valueOf('tags2').value).toBe('');
+    });
+
+    it('writes no value over an inherited value emptied, which it hides', () => {
+        const s = setUp({}, { inherited: byKey({ Place: text('home') }) });
+        s.valueOf('Place').focus();
+        s.valueOf('Place').type('');
+        s.leave();
+        expect(s.writes.map(valuesOf)).toEqual([{ Place: NONE }]);
+    });
+
+    it('writes no value for an inherited list made the row\'s own and emptied, which it hides', () => {
+        const s = setUp({}, { inherited: byKey({ tags2: { type: 'list', items: [text('a')] } }) });
+        s.root.find('task-hub__make-own')!.dispatchEvent(new Event('click'));
+        firstItemX(s).dispatchEvent(new Event('click'));
+        expect(s.writes.map(valuesOf)).toEqual([{ tags2: NONE }]);
+    });
+
+    it('writes nothing for a field touched and left as it was: an own value, an inherited one, no value', () => {
+        const s = setUp(byKey({ Area: text('lab'), none: NONE }), { inherited: byKey({ Place: text('home') }) });
+        for (const key of ['Area', 'Place', 'none']) {
+            s.valueOf(key).focus();
+            s.leave();
+        }
+        expect(s.writes).toEqual([]);
+    });
+});
