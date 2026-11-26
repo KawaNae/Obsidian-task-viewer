@@ -53,6 +53,8 @@ export interface SourceSlots {
     pane: HTMLElement;
     /** Where its row of controls goes: the overlay's foot, below the body. */
     foot: HTMLElement;
+    /** The overlay's body, which alone scrolls, holding the card and the source's place. */
+    body: HTMLElement;
 }
 
 /** What the panel asks of its source mode (`TaskHubSource`) as the hub closes. */
@@ -369,7 +371,7 @@ export class TaskHubPanel {
         }
 
         if (makeSource && toggle && shut && pane) {
-            this.source = makeSource({ toggle, shut, card, pane, foot: frame.foot });
+            this.source = makeSource({ toggle, shut, card, pane, foot: frame.foot, body: bodyEl });
         }
     }
 
