@@ -7,7 +7,7 @@ import { FilterValueCollector } from '../../../services/filter/FilterValueCollec
 import { PropertyKeyInput } from '../../../services/parsing/utils/PropertyKeyInput';
 import { PropertyValueInput, type PropertyLineValue } from '../../../services/parsing/utils/PropertyItemInput';
 import type { Read } from '../../../utils/values/Read';
-import { CascadeSource } from '../CascadeSource';
+import { CascadeSource, type CascadeSourceKind } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { ClearButton } from '../../form/ClearButton';
 import { createFormRow } from '../../form/formRow';
@@ -19,6 +19,7 @@ import type { ClosingPart, FieldGroupContext, HubField, UnsavedField } from './F
 import { PropertyListField, type ListFocus } from './PropertyListField';
 import {
     PropertyRows,
+    type PropertyMenu,
     type PropertyMenuAction,
     type PropertyMenuItem,
     type PropertyRow,
@@ -40,6 +41,9 @@ import {
  *   最後の項目を消すと値なしになる。継承しただけのリストはチップで出し、
  *   メニューの「このタスクの値にする」で項目を写した下書きになり、最初の確定で書く
  * - 所見のあるキー: 編集できない行（`FieldGroupContext.locked`）。メニューは無い
+ * - メニュー: 先頭に灰色で押せない属性の行（型、継承元）と区切り線を出す。自分の
+ *   文字の値は「リストに変換する」で 1 項目のリストに、項目が 1 つの自分のリストか
+ *   下書きは「文字の値に変換する」でその項目の文字の値になる。書く値は `menuOf` が返す
  *
  * 行はキーを大文字と小文字を区別せずに1つずつ出し（`PropertyKey`）、キーは
  * 効いている値を書いた層の綴りで出す。
@@ -281,17 +285,19 @@ export class PropertiesFieldGroup implements ClosingPart {
         }
 
         const menu = PropertyRows.menuOf(prop, { opensSource: this.ctx.openSource !== null });
-        if (menu.length > 0) this.menuButton(row, prop, menu, shut);
+        if (menu.items.length > 0) this.menuButton(row, prop, menu, shut);
         // A row with no menu keeps the button's room, so that its field ends where the others' do.
         else row.createSpan({ cls: 'task-hub__prop-more-room' });
     }
 
     /**
-     * The row's menu button (…), which shows its items under it as the hub's
-     * other menus are shown (`menuPresenter`). An item done builds the rows
-     * anew, and puts the focus in no field: a tap brings up no keyboard.
+     * The row's menu button (…), which shows its menu under it as the hub's
+     * other menus are shown (`menuPresenter`): the attributes' lines greyed,
+     * as the card's menu shows a line that only tells, a separator, then
+     * the items. An item done builds the rows anew, and puts the focus in no
+     * field: a tap brings up no keyboard.
      */
-    private menuButton(row: HTMLElement, prop: PropertyRow, items: readonly PropertyMenuItem[], shut: boolean): void {
+    private menuButton(row: HTMLElement, prop: PropertyRow, { attributes, items }: PropertyMenu, shut: boolean): void {
         const button = row.createEl('button', {
             cls: 'tv-icon-btn task-hub__prop-more',
             attr: { type: 'button', 'aria-label': t('modal.hub.propertyMenu', { key: prop.key }) },
@@ -301,25 +307,36 @@ export class PropertiesFieldGroup implements ClosingPart {
         button.addEventListener('click', () => {
             if (this.ctx.isShut()) return;
             this.ctx.plugin.menuPresenter.present((menu) => {
-                for (const { action, disabled } of items) {
-                    const [title, icon] = MENU_ITEMS[action];
+                for (const attribute of attributes) {
+                    const [title, icon] = attribute.kind === 'type' ? TYPE_LINES[attribute.type] : SOURCE_LINES[attribute.source];
+                    menu.addItem(item => item.setTitle(t(title)).setIcon(icon).setDisabled(true));
+                }
+                if (attributes.length > 0) menu.addSeparator();
+                for (const entry of items) {
+                    const [title, icon] = MENU_ITEMS[entry.action];
                     menu.addItem((item) => {
-                        item.setTitle(t(title)).setIcon(icon).setDisabled(disabled);
-                        if (!disabled) item.onClick(() => this.runMenu(prop, action));
+                        item.setTitle(t(title)).setIcon(icon).setDisabled(entry.disabled);
+                        if (!entry.disabled) item.onClick(() => this.runMenu(prop, entry));
                     });
                 }
             }, { kind: 'belowRect', rect: button.getBoundingClientRect() });
         }, { signal: this.built.signal });
     }
 
-    /** Do what the menu item `action` of the row `prop` does. */
-    private runMenu(prop: PropertyRow, action: PropertyMenuAction): void {
+    /** Do what the menu item `entry` of the row `prop` does. */
+    private runMenu(prop: PropertyRow, entry: PropertyMenuItem): void {
         if (this.ctx.isShut()) return;
         const { folded, key, own, inherited } = prop;
-        switch (action) {
+        switch (entry.action) {
             case 'openSource':
                 this.ctx.openSource?.(copy => CascadeSource.lineOfProperty(copy, key));
                 return;
+            case 'toList':
+            case 'toText':
+                // A draft converted is written as the value, and so let go.
+                this.drafts.delete(folded);
+                void this.setValue(key, entry.writes);
+                break;
             case 'makeOwn':
                 if (inherited.kind === 'value' && inherited.value.type === 'list') this.drafts.set(folded, [...inherited.value.items]);
                 break;
@@ -558,10 +575,26 @@ const MARKS: Record<PropertyRowMark, readonly [icon: string, label: string]> = {
 /** An item of a row's menu: its title, and its icon. */
 const MENU_ITEMS: Record<PropertyMenuAction, readonly [title: string, icon: string]> = {
     openSource: ['modal.hub.openInheritedLine', 'external-link'],
+    toList: ['modal.hub.toList', 'list'],
+    toText: ['modal.hub.toText', 'type'],
     makeOwn: ['modal.hub.makeOwn', 'copy'],
     noValue: ['modal.hub.setNoValue', 'ban'],
     remove: ['modal.hub.deleteProperty', 'trash'],
     revert: ['modal.hub.revertToInherited', 'undo-2'],
+};
+
+/** A menu's line of the type of the value a row shows: its title, and its icon, as the card's menu marks a property's type. */
+const TYPE_LINES: Record<Exclude<PropertyValue['type'], 'null'>, readonly [title: string, icon: string]> = {
+    text: ['modal.hub.typeText', 'type'],
+    number: ['modal.hub.typeNumber', 'hash'],
+    boolean: ['modal.hub.typeBoolean', 'toggle-left'],
+    list: ['modal.hub.typeList', 'list'],
+};
+
+/** A menu's line of where a row's inherited value is written: its title, and its icon. */
+const SOURCE_LINES: Record<CascadeSourceKind, readonly [title: string, icon: string]> = {
+    section: ['modal.hub.fromSection', 'heading'],
+    file: ['modal.hub.fromFile', 'file-text'],
 };
 
 /** The field of the property `key`'s row, as its issues are said of it. */

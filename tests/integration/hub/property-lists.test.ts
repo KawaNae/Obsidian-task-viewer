@@ -5,7 +5,9 @@
  * not read back as one is said under the row and not written. An inherited
  * list is shown as chips and not edited, and made the row's own from a copy
  * of its items by its menu, written by the first edit. A list, the row's
- * own or inherited, is made no value by its menu.
+ * own or inherited, is made no value by its menu. A text value is converted
+ * to a list of it, and a list of one item to its text, by the row's menu,
+ * whose head says the value's type greyed.
  *
  * Prerequisites:
  *   - Obsidian is running with the E2E vault (path in dev-paths.mjs) open
@@ -114,7 +116,10 @@ describe('the hub edits a list item by item', () => {
         `);
         expect(shown).toEqual({
             own: ['a', 'b'], add: true, inherited: ['lab', 'home'], inheritedInputs: 0,
-            inheritedMenu: [tr('modal.hub.openInheritedLine'), tr('modal.hub.makeOwn'), tr('modal.hub.setNoValue')],
+            inheritedMenu: [
+                tr('modal.hub.typeList'), tr('modal.hub.fromSection'),
+                tr('modal.hub.openInheritedLine'), tr('modal.hub.makeOwn'), tr('modal.hub.setNoValue'),
+            ],
         });
     });
 
@@ -142,7 +147,7 @@ describe('the hub edits a list item by item', () => {
         expect(shown).toEqual({
             itemXs: [tr('modal.hub.removeItem', { item: 'a' }), tr('modal.hub.removeItem', { item: 'b' })],
             addX: false,
-            ownMenu: [tr('modal.hub.setNoValue'), tr('modal.hub.deleteProperty')],
+            ownMenu: [tr('modal.hub.typeList'), tr('modal.hub.setNoValue'), tr('modal.hub.deleteProperty')],
             moreByFirst: true,
             moreLabel: tr('modal.hub.propertyMenu', { key: 'k' }),
             chipsBesideKey: true,
@@ -180,6 +185,43 @@ describe('the hub edits a list item by item', () => {
         expect(readTestFile(TEST_FILE)).toBe(withLines(7, 8));
         run(`items('k')[0].closest('.task-hub__list-item').querySelector('.tv-form__clear-button').click(); await sleep(600); return 'ok';`);
         expect(readTestFile(TEST_FILE)).toBe(withLines(6, 8));
+    });
+
+    it('converts a text value to a list of it from its menu, its type said greyed at the head, the focus put in no input', () => {
+        openHub('親');
+        const shown = run<Record<string, unknown>>(`
+            rowOf('memo').querySelector('.task-hub__prop-more').click();
+            const head = menuItems().slice(0, 1).map(i => [i.titleEl?.textContent, !!i.disabled]);
+            const menu = menuTitles();
+            closeMenus();
+            pickOf('memo', ${JSON.stringify(tr('modal.hub.toList'))});
+            await sleep(600);
+            return JSON.stringify({ head, menu, items: items('memo').map(i => i.value), inInput: document.activeElement instanceof HTMLInputElement });
+        `);
+        expect(shown).toEqual({
+            head: [[tr('modal.hub.typeText'), true]],
+            menu: [tr('modal.hub.typeText'), tr('modal.hub.toList'), tr('modal.hub.deleteProperty')],
+            items: ['x'],
+            inInput: false,
+        });
+        expect(readTestFile(TEST_FILE)).toBe(withLines(8, 9, '\t- memo::', '\t\t- x'));
+    });
+
+    it('converts a list of one item to the item as its text value from its menu', () => {
+        openHub('親');
+        run(`items('k')[1].closest('.task-hub__list-item').querySelector('.tv-form__clear-button').click(); await sleep(600); return 'ok';`);
+        expect(readTestFile(TEST_FILE)).toBe(withLines(7, 8));
+        const shown = run<Record<string, unknown>>(`
+            const menu = menuOf('k');
+            pickOf('k', ${JSON.stringify(tr('modal.hub.toText'))});
+            await sleep(600);
+            return JSON.stringify({ menu, value: rowOf('k').querySelector('input.task-hub__value')?.value ?? null });
+        `);
+        expect(shown).toEqual({
+            menu: [tr('modal.hub.typeList'), tr('modal.hub.toText'), tr('modal.hub.setNoValue'), tr('modal.hub.deleteProperty')],
+            value: 'a',
+        });
+        expect(readTestFile(TEST_FILE)).toBe(withLines(5, 8, '\t- k:: a'));
     });
 
     it('leaves the focus where it was when an item is taken out', () => {
@@ -269,7 +311,10 @@ describe('the hub edits a list item by item', () => {
             return JSON.stringify({ menu, inputs: rowOf('area').querySelectorAll('input').length, chips: rowOf('area').querySelectorAll('.task-hub__list-chip').length });
         `);
         expect(shown).toEqual({
-            menu: [tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.revertToInherited')],
+            menu: [
+                tr('modal.hub.typeList'), tr('modal.hub.fromSection'),
+                tr('modal.hub.openInheritedLine'), tr('modal.hub.setNoValue'), tr('modal.hub.revertToInherited'),
+            ],
             inputs: 0,
             chips: 2,
         });

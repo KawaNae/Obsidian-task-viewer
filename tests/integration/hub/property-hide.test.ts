@@ -168,7 +168,7 @@ describe('the hub hides an inherited value', () => {
         `);
         expect(before).toEqual({
             area: ['', 'lab'],
-            menu: [tr('modal.hub.openInheritedLine'), tr('modal.hub.revertToInherited')],
+            menu: [tr('modal.hub.fromSection'), tr('modal.hub.openInheritedLine'), tr('modal.hub.revertToInherited')],
             mask: [tr('modal.hub.noValue'), true, false],
         });
         run(`pickOf('area', ${JSON.stringify(tr('modal.hub.revertToInherited'))}); await sleep(600); return 'ok';`);
