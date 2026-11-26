@@ -14,6 +14,8 @@ export interface ClearButtonOptions {
      * picker beside it gives the value as often as typing does).
      */
     focusesField: boolean;
+    /** What the button is called (`aria-label`): "Clear" when none is given. */
+    label?: string;
 }
 
 /**
@@ -34,7 +36,7 @@ export class ClearButton {
         box.addClass('tv-form__clearable');
         this.button = box.createEl('button', { cls: 'tv-form__clear-button', attr: { type: 'button' } });
         this.button.tabIndex = -1;
-        this.button.setAttribute('aria-label', t('modal.clear'));
+        this.button.setAttribute('aria-label', opts.label ?? t('modal.clear'));
         // WebKit は inline-flex 要素直下の SVG を描画しないことがあるため span 経由で挿す
         setIcon(this.button.createSpan(), 'x');
         // mousedown の既定の動きがフォーカスをボタンへ移す。止めると欄に残り、

@@ -410,7 +410,7 @@ describe('Details taller than General (the child of a row whose section gives ma
                 const field = fieldsOf(paneOf('detail')).at(-1);
                 const last = [...paneOf('detail').children].filter(c => getComputedStyle(c).display !== 'none').at(-1);
                 const tops = () => ({ card: panel.querySelector('.task-hub__preview').getBoundingClientRect().top, tabs: panel.querySelector('.tv-tabs').getBoundingClientRect().top });
-                out.detail = { ...body(), height: paneOf('detail').getBoundingClientRect().height, properties: paneOf('detail').querySelectorAll('.task-hub__source').length, ...tops() };
+                out.detail = { ...body(), height: paneOf('detail').getBoundingClientRect().height, properties: paneOf('detail').querySelectorAll('.task-hub__prop-mark--inherited').length, ...tops() };
                 b.scrollTop = b.scrollHeight;
                 await nextFrame();
                 const bottom = b.getBoundingClientRect().bottom;

@@ -66,7 +66,7 @@ const IGNORED: PlaceFacts = {
 
 const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); };
 
-interface MenuItem { pick: () => void }
+interface MenuItem { title: string; pick: () => void }
 
 /** A form on a draft at a place that has answered, its writes held until the test answers them. */
 async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: PlaceFacts; place?: boolean; opensOn?: TaskHubFocusField } = {}) {
@@ -93,8 +93,14 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
         const items: MenuItem[] = [];
         const menu = {
             addItem: (cb: (item: unknown) => void) => {
-                const one: MenuItem = { pick: () => { } };
-                const item = { setTitle: () => item, setChecked: () => item, onClick: (fn: () => void) => { one.pick = fn; return item; } };
+                const one: MenuItem = { title: '', pick: () => { } };
+                const item = {
+                    setTitle: (title: string) => { one.title = title; return item; },
+                    setChecked: () => item,
+                    setIcon: () => item,
+                    setDisabled: () => item,
+                    onClick: (fn: () => void) => { one.pick = fn; return item; },
+                };
                 cb(item);
                 items.push(one);
                 return menu;
@@ -147,6 +153,11 @@ async function setUp(seed: DraftSeed = {}, opts: { hold?: boolean; facts?: Place
         press: (target: FocusEl) => target.dispatchEvent(new Event('click')),
         /** The row of the property `key`. */
         rowOf: (key: string) => root.findAll('tv-form__row').find(row => row.find('tv-form__label')?.children.some(c => c.text === key)),
+        /** Pick the item titled `title` from the menu of the property's row `row`. */
+        pick: (row: FocusEl, title: string) => {
+            row.find('task-hub__prop-more')!.dispatchEvent(new Event('click'));
+            menus.at(-1)!.find(item => item.title === title)!.pick();
+        },
     };
 }
 
@@ -190,8 +201,8 @@ describe('the fields of a hub on a task not written yet', () => {
 
     it('make an inherited value the task\'s own when it is typed again', async () => {
         const s = await setUp();
-        const input = s.rowOf('owner')!.find('tv-form__control')!;
-        expect(s.rowOf('owner')!.classes.has('task-hub__row--cascade')).toBe(true);
+        const input = s.rowOf('owner')!.find('task-hub__value')!;
+        expect(s.rowOf('owner')!.classes.has('task-hub__row--inherited')).toBe(true);
         input.focus();
         input.type('you');
         input.enter();
@@ -203,7 +214,7 @@ describe('the fields of a hub on a task not written yet', () => {
 
     it('make an inherited list the task\'s own from its items, written to the draft by its first edit', async () => {
         const s = await setUp();
-        s.press(s.rowOf('area')!.find('task-hub__make-own')!);
+        s.pick(s.rowOf('area')!, 'Make it this task\'s own');
         expect(s.host.task().properties).toEqual({});
 
         const add = s.rowOf('area')!.find('task-hub__list-add')!;
@@ -215,7 +226,7 @@ describe('the fields of a hub on a task not written yet', () => {
         expect(s.places.create).not.toHaveBeenCalled();
     });
 
-    it('take a property\'s row out with its ×, and the row does not come back as the fields are built anew', async () => {
+    it('take a property\'s row out from its menu, and the row does not come back as the fields are built anew', async () => {
         const s = await setUp();
         const addRow = () => s.root.find('task-hub__prop-add')!;
         const key = addRow().find('tv-form__label')!.children.find(c => c.placeholder !== '')!;
@@ -225,7 +236,7 @@ describe('the fields of a hub on a task not written yet', () => {
         key.enter();
         expect(Object.keys(valuesOf(s.host.task().properties))).toEqual(['memo']);
 
-        s.press(s.rowOf('memo')!.find('task-hub__prop-remove')!);
+        s.pick(s.rowOf('memo')!, 'Delete');
         await settle();
         s.form.refresh();
         expect(s.host.task().properties).toEqual({});

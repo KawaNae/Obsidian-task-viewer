@@ -395,14 +395,24 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
             const out = {
                 opened: view(),
                 color: { placeholder: colorInput().placeholder, from: colorInput().closest('.tv-form__row').querySelector('.task-hub__source').textContent },
-                property: { value: propRow.querySelector('input.tv-ctrl__text-input')?.value ?? null, from: propRow.querySelector('.task-hub__source').textContent },
+                property: {
+                    value: propRow.querySelector('input.tv-ctrl__text-input')?.value ?? null,
+                    mark: !!propRow.querySelector('.task-hub__prop-mark--inherited'),
+                    // No line to open: the menu's item is greyed, not left out.
+                    open: (() => {
+                        propRow.querySelector('.task-hub__prop-more').click();
+                        const item = menuItems().find(i => i.titleEl?.textContent === ${JSON.stringify(tr('modal.hub.openInheritedLine'))});
+                        const greyed = item ? !!item.disabled : null;
+                        closeMenus();
+                        return { greyed };
+                    })(),
+                },
                 tag: { text: chip.textContent, label: chip.getAttribute('aria-label') },
             };
             // Each label pressed: none has a line to open.
             R.leafCount = app.workspace.getLeavesOfType('markdown').length;
             R.activeFile = app.workspace.getActiveFile()?.path ?? null;
             colorInput().closest('.tv-form__row').querySelector('.task-hub__source').click();
-            propRow.querySelector('.task-hub__source').click();
             chip.click();
             return JSON.stringify(out);
         `);
@@ -429,7 +439,7 @@ describe('the hub on a task not written yet, under a row (a card\'s menu, Add ch
         });
         expect(steps.color).toEqual({ placeholder: 'red', from: section });
         // The inherited value is shown in the field, as a row's inherited property is.
-        expect(steps.property).toEqual({ value: 'lab', from: section });
+        expect(steps.property).toEqual({ value: 'lab', mark: true, open: { greyed: true } });
         expect(steps.tag).toEqual({ text: '#sec', label: tr('modal.hub.cascadeTagLocked', { source: section }) });
         expect(pressed).toMatchObject({ open: true, leaves: 0, activeFile: true });
         // Indented as Obsidian's settings say (a tab, Obsidian's default).
