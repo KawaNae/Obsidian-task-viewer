@@ -6,6 +6,9 @@
  * notes again once, on its commit; the load fills a key missing from a
  * group with its default. The filter's N and the interval template's
  * numbers say what does not read under their row, and keep it as typed.
+ * The button of the tab chosen stays in sight of a row of tabs narrower
+ * than the tabs, as an arrow goes round its end and as the settings open
+ * again on it.
  *
  * The settings are opened as a person opens them; fields are typed in as
  * a person types (the text, then its `input` event). Every test leaves
@@ -42,14 +45,14 @@ const settingsTab = () => app.setting.activeTab?.id === 'obsidian-task-viewer' ?
 const openSettings = async (tabId) => {
     app.setting.open();
     app.setting.openTabById('obsidian-task-viewer');
-    await until(() => settingsTab()?.isConnected && settingsTab().querySelector('.tv-settings__nav-btn'));
-    settingsTab().querySelector('.tv-settings__nav-btn[data-tab-id="' + tabId + '"]').click();
+    await until(() => settingsTab()?.isConnected && settingsTab().querySelector('[role="tab"]'));
+    settingsTab().querySelector('[role="tab"][data-tab="' + tabId + '"]').click();
     await sleep(100);
 };
 const closeSettings = async () => { app.setting.close(); await sleep(300); };
 /** The setting named \`name\` in the tab shown: its text field, and what it says under its description. */
 const settingOf = name => {
-    const panel = [...settingsTab().querySelectorAll('.tv-settings__panel')].find(p => p.style.display !== 'none');
+    const panel = settingsTab().querySelector('[role="tabpanel"]:not([inert])');
     const item = [...panel.querySelectorAll('.setting-item')].find(el => el.querySelector('.setting-item-name')?.textContent === name);
     if (!item) throw new Error('no setting ' + name);
     return {
@@ -317,6 +320,58 @@ describe('the interval template\'s numbers', () => {
         expect(result).toEqual({
             typed: { text: '60', says: tr('issue.rangeBetween', { min: 0, max: 59 }), marked: 'true' },
             saved: { open: true, text: '60', says: tr('issue.rangeBetween', { min: 0, max: 59 }), files: 0 },
+        });
+    });
+});
+
+describe('the settings\' tabs', () => {
+    it('keep the button of the tab chosen in sight of a row narrower than its tabs, as an arrow goes round its end and as the settings open again on it', () => {
+        const result = run<Record<string, unknown>>(`
+            // The tab's box made as narrow as a phone's, for the nine tabs to go past the row's edges.
+            const narrow = on => { const el = settingsTab(); el.style.width = on ? '360px' : ''; el.style.maxWidth = on ? '360px' : ''; };
+            const row = () => settingsTab().querySelector('[role="tablist"]');
+            const shown = () => {
+                const list = row();
+                const chosen = list.querySelector('[role="tab"][aria-selected="true"]');
+                const b = chosen.getBoundingClientRect();
+                const r = list.getBoundingClientRect();
+                return {
+                    chosen: chosen.dataset.tab,
+                    focused: chosen.ownerDocument.activeElement === chosen,
+                    inSight: b.left >= r.left - 0.5 && b.right <= r.right + 0.5,
+                    goesPast: list.scrollWidth > list.clientWidth,
+                };
+            };
+            try {
+                await openSettings('basic');
+                narrow(true);
+                await sleep(100);
+                const basic = row().querySelector('[role="tab"][data-tab="basic"]');
+                basic.focus();
+                key(basic, { key: 'ArrowLeft', code: 'ArrowLeft' });
+                await sleep(100);
+                const out = { arrow: shown() };
+                await closeSettings();
+                app.setting.open();
+                app.setting.openTabById('obsidian-task-viewer');
+                await until(() => settingsTab()?.isConnected && settingsTab().querySelector('[role="tab"]'));
+                await sleep(100);
+                const { focused: _f, ...reopened } = shown();
+                out.reopened = reopened;
+                key(row().querySelector('[role="tab"][data-tab="about"]'), { key: 'Home', code: 'Home' });
+                await sleep(100);
+                out.home = shown();
+                return JSON.stringify(out);
+            } finally {
+                if (settingsTab()) narrow(false);
+                if (app.setting.activeTab) app.setting.close();
+                await sleep(300);
+            }
+        `);
+        expect(result).toEqual({
+            arrow: { chosen: 'about', focused: true, inSight: true, goesPast: true },
+            reopened: { chosen: 'about', inSight: true, goesPast: true },
+            home: { chosen: 'basic', focused: true, inSight: true, goesPast: true },
         });
     });
 });
